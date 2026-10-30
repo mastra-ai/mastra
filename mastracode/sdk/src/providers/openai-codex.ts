@@ -215,6 +215,36 @@ async function getCodexBearer(
 }
 
 /**
+ * Make a Responses request body safe for Codex's stateless (`store: false`) mode.
+ *
+ * AI SDK replays earlier output items with their server ids (`rs_…`, `msg_…`,
+ * `fc_…`) even when `store` is false. Codex looks those ids up and answers
+ * 404 `Item with id 'rs_…' not found` once its short-lived item cache has
+ * expired, so every later request in the thread fails the same way. Like the
+ * Codex CLI, send items without ids (the encrypted reasoning content carries the
+ * reasoning chain) and drop `item_reference`s, which can never resolve.
+ */
+export function stripCodexInputItemIds(body: string): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return body;
+  }
+  if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as { input?: unknown }).input)) return body;
+  const request = parsed as { store?: unknown; input: unknown[] };
+  if (request.store !== false) return body;
+
+  request.input = request.input.flatMap(item => {
+    if (!item || typeof item !== 'object') return [item];
+    const { id: _id, ...rest } = item as Record<string, unknown>;
+    if (rest.type === 'item_reference') return [];
+    return [rest];
+  });
+  return JSON.stringify(request);
+}
+
+/**
  * Build a fetch function that handles OpenAI Codex OAuth.
  * Preserves non-authorization headers from init.
  * When rewriteUrl is true (default), rewrites /v1/responses and /chat/completions
@@ -258,7 +288,17 @@ export function buildOpenAICodexOAuthFetch(
       (parsed.pathname.includes('/v1/responses') || parsed.pathname.includes('/chat/completions'));
     const finalUrl = shouldRewrite ? new URL(CODEX_API_ENDPOINT) : parsed;
 
-    const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : request.body;
+    const hasBody = request.method !== 'GET' && request.method !== 'HEAD' && request.body !== null;
+    // Only JSON bodies are rewritten; anything else (e.g. multipart uploads) streams through untouched.
+    const mediaType = headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
+    const isJson = mediaType === 'application/json';
+    let body: RequestInit['body'];
+    if (hasBody && isJson) {
+      body = stripCodexInputItemIds(await request.text());
+      headers.delete('content-length');
+    } else if (hasBody) {
+      body = request.body!;
+    }
     const finalRequest = new Request(finalUrl, {
       method: request.method,
       headers,
@@ -266,7 +306,7 @@ export function buildOpenAICodexOAuthFetch(
       signal: request.signal,
       redirect: request.redirect,
       integrity: request.integrity,
-      ...(body ? ({ duplex: 'half' } as RequestInit) : {}),
+      ...(body instanceof ReadableStream ? ({ duplex: 'half' } as RequestInit) : {}),
     });
     try {
       return await rejectUnauthorizedResponse(await fetch(finalRequest), {

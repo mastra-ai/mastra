@@ -1,6 +1,6 @@
 {
   "attachment": [
-    "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
     "gemma-4-26b-a4b-it",
     "lightonocr-3-0.8b",
     "mistral-medium-3.5-128b",
@@ -12,7 +12,7 @@
   ],
   "temperature": [
     "deepseek-v4-flash-0731",
-    "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
     "glm-5.3",
@@ -28,7 +28,7 @@
   ],
   "structuredOutput": [
     "deepseek-v4-flash-0731",
-    "deepseek-v4.1-flash",
+    "deepseek-v4.1-flash-1017",
     "gemma-4-26b-a4b-it",
     "glm-5.2",
     "glm-5.3",
@@ -38,19 +38,25 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "mistral-medium-3.5-128b": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "gemma-4-26b-a4b-it": [
+    "deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3.5-397b-a17b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -62,24 +68,6 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "qwen3.5-397b-a17b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3.6-35b-a3b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "glm-5.3": [
       {
         "type": "effort",
@@ -87,6 +75,18 @@
       }
     ],
     "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "gemma-4-26b-a4b-it": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "qwen3.6-35b-a3b": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]

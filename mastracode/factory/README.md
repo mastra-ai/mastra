@@ -55,9 +55,76 @@ MASTRA_TELEMETRY_DISABLED=true
 
 `1`, `true`, and `yes` are accepted, ignoring case and surrounding whitespace. Older servers without the explicit capability do not receive browser telemetry requests. Custom auth providers are outside this initial measurement scope until they have a stable identity namespace. No names, emails, tokens, prompts, input values, raw URLs, session replay, or anonymous browser identity are collected by this event. Account IDs are identifiable account data, not anonymous data.
 
+### Stored boards
+
+Each project has two kinds of boards:
+
+- **Code boards**: the built-in Work and Review boards and the boards you pass to `new MastraFactory({ boards })`. Factory serves them to every project exactly as your code defines them. They are never written to the database and are read-only in the boards API.
+- **Stored boards**: boards an admin created for one project through the boards API. They live in that project's database.
+
+A project's boards are its code boards followed by its stored boards. The catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs and the attention views all read that list. When a stored board has the same key as a code board, the code board wins: the stored board is hidden and the catalog reports `Stored board "<key>" is hidden by the code board with the same key.` Existing apps need no change, and Factory writes nothing to the database at startup.
+
+**Data model.** A stored board has a `key` (the ID cards reference as `board`), `name`, optional `description`, and ordered phases. A phase has a `key` (the stage ID), `name`, optional `description`, `kind`, and for working phases `runner` (`{ skill?, context?, instructions? }`), `autoStart`, `autoStartWhen` and `exitTool`, plus `nextPhases`. The first phase is the initial phase and must be `resting`. Saved boards pass the same checks `defineBoard()` applies, with the same messages. A stored board has no code behaviors: no handlers, transition policy, `sourceClosed`, or tool and event rules. Its working phases start their `runner` on entry.
+
+`nextPhases` on a stored board: leaving it out (or `null`) on a resting or working phase allows moves to every other phase, `[]` allows none, and a terminal phase allows none unless it lists some.
+
+**Code boards are read-only.** The catalog and `GET …/boards/:boardKey` report each board's `source` (`builtin`, `app` or `stored`) and `editable` (`false` for code boards). Creating a board with a code board's key, or editing or deleting a code board, is refused with `409 code_board`. Change a code board in code; every project picks up the change when Factory restarts.
+
+**Editing rules for stored boards.**
+
+- Board and phase keys never change. Renaming changes `name`. Any phase may become the first phase, as long as it is `resting`.
+- Removing a phase, or changing its `kind`, while cards sit in it is refused with `409 phase_in_use` and the count per phase. Deleting a board that has cards is refused with `409 board_in_use`. Factory never moves cards for you. A card created between the check and the write can still land on a removed phase; it then shows as an unsupported item until it is moved.
+- A runner skill that does not exist is refused (`422 unknown_skill`). A review skill outside the `review` context is saved with a warning in `problems`. A skill that disappears later never stops a board from loading; it shows in the catalog's `problems`.
+
+**Replicas.** Each board write replaces the project's board version. The replica that wrote it sees the change at once; other replicas notice within a second, the next time they touch that project.
+
+**Integrations.** Integration event rules, reconcilers and the code that files new cards from integrations read only the code boards. Intake bindings and label routes can target only code boards. Every card move goes through the transition service, which checks it against the project's boards.
+
+**Routes.** All need project membership; changes need an organization admin when auth is enabled, and are recorded in the audit log as `factory.board.created`, `updated` and `deleted`.
+
+| Method   | Path                                                            | Body                                                    | Result                                                                                                 |
+| -------- | --------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `GET`    | `/web/factory/projects/:id/boards`                              | —                                                       | The catalog, with each board's `source`, `editable` and `problems`.                                    |
+| `GET`    | `/web/factory/projects/:id/boards/:boardKey`                    | —                                                       | The definition, `revision` (`null` for code boards), `source`, `editable` and `problems`.              |
+| `POST`   | `/web/factory/projects/:id/boards`                              | The board, with `key`.                                  | `201` and the board. `409 code_board` for a code board's key, `409 board_exists` for a stored board's. |
+| `PATCH`  | `/web/factory/projects/:id/boards/:boardKey`                    | The whole board without `key`, plus `expectedRevision`. | The board. Replaces every field. `409 code_board` for a code board.                                    |
+| `DELETE` | `/web/factory/projects/:id/boards/:boardKey?expectedRevision=n` | —                                                       | `204`. `409 code_board` for a code board.                                                              |
+
+A stale `expectedRevision` is refused with `409 revision_mismatch`; reload the board and try again.
+
+```bash
+# Create a board.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/boards" -H 'content-type: application/json' -d '{
+  "key": "bugs",
+  "name": "Bugs",
+  "phases": [
+    { "key": "reported", "name": "Reported", "kind": "resting" },
+    { "key": "fixing", "name": "Fixing", "kind": "working", "runner": { "context": "work" } },
+    { "key": "fixed", "name": "Fixed", "kind": "terminal" }
+  ]
+}'
+
+# Rename its Fixing phase: read the board, change it, send it back with its revision.
+curl "$FACTORY_URL/web/factory/projects/$PROJECT/boards/bugs" > bugs.json
+jq '.board | { name, description, phases: (.phases | map(if .key == "fixing" then .name = "Patching" else . end)), expectedRevision: .revision }' bugs.json \
+  | curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/boards/bugs" -H 'content-type: application/json' -d @-
+```
+
+### Migrating from `defineBoard()`
+
+`defineBoard()`, and the `boards` and `includeDefaultBoards` options of `MastraFactory`, are deprecated. Nothing breaks: the boards you pass keep working as read-only code boards, they are not stored, and Factory logs once per process:
+
+```text
+[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and these definitions are served read-only next to the boards each project stores. Manage boards through the boards API; see the README "Stored boards" section.
+```
+
+Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no handlers, policies or rules, can move off code: create it in each project with `POST /web/factory/projects/:id/boards` under a new key, move its cards, then stop passing the code board. Keep passing a board while integrations file cards onto it, intake bindings or label routes target it, or it needs code behaviors.
+
+Removing `defineBoard()` needs, among other things, a one-time copy of the code boards into each project's database, so built-in and app boards become editable stored boards. That work is tracked in [mastra-ai/mastra#28920](https://github.com/mastra-ai/mastra/issues/28920).
+
 ### Board lifecycle rules
 
-Installed board definitions exclusively own phase entry and exit handlers. Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`:
+Code boards own phase entry and exit handlers; stored boards have none (see [Stored boards](#stored-boards)). Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`, which is deprecated but still works:
 
 ```typescript
 import { MastraFactory } from '@mastra/factory';
@@ -66,12 +133,12 @@ import { defineBoard } from '@mastra/factory/boards';
 
 const releaseBoard = defineBoard({
   id: 'release',
-  title: 'Release',
-  initialPhase: 'queued',
+  name: 'Release',
+  initialPhase: 'backlog',
   phases: {
-    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
-    shipped: {
-      title: 'Shipped',
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done'] },
+    done: {
+      name: 'Done',
       kind: 'terminal',
       onEnter: {
         manual: () => ({ type: 'reject', code: 'release_held', reason: 'Release is held.' }),
@@ -126,13 +193,13 @@ When a tracked GitHub, GitLab, Linear, or Jira issue or incident.io follow-up is
 ```typescript
 const releaseBoard = defineBoard({
   id: 'release',
-  title: 'Release',
-  initialPhase: 'queued',
-  sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+  name: 'Release',
+  initialPhase: 'backlog',
+  sourceClosed: { completed: 'done', canceled: 'dropped' },
   phases: {
-    queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
-    shipped: { title: 'Shipped', kind: 'terminal' },
-    dropped: { title: 'Dropped', kind: 'terminal' },
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done', 'dropped'] },
+    done: { name: 'Done', kind: 'terminal' },
+    dropped: { name: 'Dropped', kind: 'terminal' },
   },
 });
 ```
@@ -148,17 +215,17 @@ import { defineBoard } from '@mastra/factory/boards';
 import type { BoardToolResultRuleHandler } from '@mastra/factory/boards';
 
 const shipIt: BoardToolResultRuleHandler = context => {
-  if (context.result.status !== 'success' || context.item.stages[0] !== 'queued') return;
+  if (context.result.status !== 'success' || context.item.stages[0] !== 'backlog') return;
   return { type: 'notify', idempotencyKey: `${context.ingress.id}:shipped`, title: 'Release shipped' };
 };
 
 const releaseBoard = defineBoard({
   id: 'release',
-  title: 'Release',
-  initialPhase: 'queued',
+  name: 'Release',
+  initialPhase: 'backlog',
   phases: {
-    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
-    shipped: { title: 'Shipped', kind: 'terminal' },
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done'] },
+    done: { name: 'Done', kind: 'terminal' },
   },
   tools: { ship_it: { onResult: shipIt } },
 });
@@ -166,7 +233,7 @@ const releaseBoard = defineBoard({
 
 The handler receives the bound item, actor, board, tool name, normalized result, and `configVersion`, and returns one decision or `undefined`. Tool names follow the identifier rules for decision roles; `onResult` must be a function and the leaf may contain nothing else. Violations are `BoardDefinitionError`s at definition time.
 
-The default Work board declares one rule: `submit_plan`. In an interactive session, a successful result whose content starts with `Plan approved.` transitions a Planning card to Execute when the actor is an agent in the `plan` role. Review declares none. Rules resolve from the installed board, so a replacement `work` board can declare its own `tools.submit_plan.onResult`. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule. Other boards inherit nothing from Work even if they reuse its phase names.
+The default Work board declares two rules. `submit_plan`: in an interactive session, a successful result whose content starts with `Plan approved.` transitions a Planning card to Execute when the actor is the planning agent (`work`, or `plan` for cards planned before Planning moved to `work`). `factory_record_review_verdict` tells the builder to open the change request once self-review approves. Review declares none. Rules resolve from the installed board, so a replacement `work` board can declare its own `tools.submit_plan.onResult`. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule. Other boards inherit nothing from Work even if they reuse its phase names.
 
 ### Board event rules
 
@@ -177,7 +244,7 @@ import { defineBoard } from '@mastra/factory';
 
 const deliveryBoard = defineBoard({
   id: 'delivery',
-  title: 'Delivery',
+  name: 'Delivery',
   initialPhase: 'triage',
   phases: {/* ... */},
   events: {
@@ -192,7 +259,7 @@ const deliveryBoard = defineBoard({
     },
     linear: {
       issueClosed: context =>
-        context.issue.stateType === 'canceled' && context.phase?.outcomes.includes('canceled')
+        context.issue.stateType === 'canceled' && context.phase?.nextPhases.includes('canceled')
           ? {
               type: 'transition',
               idempotencyKey: `${context.ingress.id}:canceled`,
@@ -215,7 +282,7 @@ For each event, Factory picks the handler in this order:
 
 A board handler that returns a decision replaces the default for that card. One that returns nothing lets the default run, so card-independent defaults such as dismissing stale Factory reviews still apply. The stock Work and Review behavior stays in the integration defaults and never acts on cards on other boards, so a custom board needs no board guards and no delegation to stock handlers.
 
-Every integration rule context bound to a card carries `phase`: `{ id, kind, role?, outcomes }`, describing what the card's current phase means on its board. `outcomes` lists the outcome names the phase declares. `phase` is absent when the card sits in more than one stage or its board does not declare the phase.
+Every integration rule context bound to a card carries `phase`: `{ id, kind, context?, nextPhases, outcomes }`, describing what the card's current phase means on its board. `context` is the session context of a working phase (`role` carries the same value and is deprecated), `nextPhases` lists the phases the card may move to, and `outcomes` lists the outcome names the phase declares, if any. `phase` is absent when the card sits in more than one stage or its board does not declare the phase.
 
 Unknown integrations, unknown event names, and handler values other than a function or `null` are rejected by `defineBoard` with a `BoardDefinitionError`.
 
@@ -236,7 +303,7 @@ new MastraFactory({ storage, rules: defaultFactoryRules({ version: 'v2', overrid
 new MastraFactory({ storage, configVersion: 'v2', boards: [defineBoard({ ..., tools: { my_tool: { onResult } } })] });
 ```
 
-Contexts that carried `ruleSetVersion` now carry `configVersion`. To customize Work's `submit_plan` rule, declare `tools.submit_plan.onResult` on the installed replacement `work` board.
+Contexts that carried `ruleSetVersion` now carry `configVersion`. To add a tool-result rule to Work, declare it under `tools` on the installed replacement `work` board.
 
 ### Board transition policy
 
@@ -249,19 +316,19 @@ import { defineBoard } from '@mastra/factory/boards';
 import type { BoardTransitionPolicy } from '@mastra/factory/boards';
 
 const releasePolicy: BoardTransitionPolicy = context => {
-  if (context.toStage === 'shipped' && !context.isHumanTransition) {
+  if (context.toStage === 'build' && !context.isHumanTransition) {
     return { type: 'reject', code: 'approval_required', reason: 'A person must approve this release.' };
   }
 };
 
 const releaseBoard = defineBoard({
   id: 'release',
-  title: 'Release',
+  name: 'Release',
   initialPhase: 'approval',
   transitionPolicy: releasePolicy,
   phases: {
-    approval: { title: 'Approval', kind: 'resting', next: 'shipped' },
-    shipped: { title: 'Shipped', kind: 'working', role: 'release' },
+    approval: { name: 'Approval', kind: 'resting', nextPhases: ['build'] },
+    build: { name: 'Build', kind: 'working', runner: { context: 'release' } },
   },
 });
 // Install through new MastraFactory({ storage, boards: [releaseBoard] }).
@@ -277,50 +344,151 @@ A policy cannot bypass topology, ingress authorization, board ownership, externa
 
 ### Board phase semantics
 
-Every phase declares what it _is_ with a required `kind`; `defineBoard()` rejects a phase without one.
+Every phase declares what it _is_ with a required `kind`; `defineBoard()` and the boards API reject a phase without one.
 
 - `resting` — the card is parked. A human move out of a resting phase arms autonomy; a move back into one disarms it. `initialPhase` must be resting: a card cannot arrive already seated or already finished.
-- `working` — an agent seat carries the card. `role` is required (same identifier rules as decision roles) and names the seat a human kickoff opens and the lane a rule-started run leaves rest for. Two working phases may share a role; `phaseForRole` returns the first in declaration order.
-- `terminal` — the card is finished. Entering it releases the sandbox and lets sweeps supersede stale decisions and revoke run bindings. `role` is not allowed.
+- `working` — an agent carries the card. `runner.context` (same identifier rules as decision roles, default `work`) names the session context a human kickoff opens and the lane a rule-started run leaves rest for. Two working phases may share a context, and then a session; `phaseForRole` returns the first in declaration order.
+- `terminal` — the card is finished. Entering it releases the sandbox and lets sweeps supersede stale decisions and revoke run bindings. `runner` is not allowed.
 
 ```typescript
 const releaseBoard = defineBoard({
   id: 'release',
-  title: 'Release',
-  initialPhase: 'queued',
+  name: 'Release',
+  initialPhase: 'backlog',
   phases: {
-    queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
-    shipping: { title: 'Shipping', kind: 'working', role: 'release', next: 'shipped' },
-    shipped: { title: 'Shipped', kind: 'terminal' },
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+    build: { name: 'Build', kind: 'working', runner: { context: 'release' }, nextPhases: ['done'] },
+    done: { name: 'Done', kind: 'terminal' },
   },
 });
 ```
 
-Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with roles `triage`, `plan`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with role `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
+Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with contexts `triage`, `work`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with context `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 
-Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
+Planning and Building on Work share the `work` session, so the builder keeps the planner's reasoning, branch and sandbox. Self-review still runs in its own `review` session. When the planner moves the card to Building, the build prompt is queued onto its own run, and the planner's run binding ends at that point: Factory tools it calls later in the same turn are rejected. When the builder moves a card back from Building to Planning, no new planning run starts; the builder keeps working in its run. When a person moves it back, Planning starts again, in the same `work` session. The old `plan` role still names Planning: a run requested or queued for `plan` starts Planning in a `plan` session, and the build then continues in that session. Cards planned before this change do the same.
+
+Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the project's board; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
 
 Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, and a rule-started run from rest with no lane for its role is rejected.
 
-**Migration:** Existing `defineBoard()` calls must add `kind` to every phase and `role` to working phases.
+**Migration:** Existing `defineBoard()` calls must add `kind` to every phase. Working phases name their session context with `runner.context`.
 
 ```typescript
 // before
-phases: { queued: { title: 'Queued', next: 'shipped' }, shipped: { title: 'Shipped' } }
+phases: { backlog: { title: 'Backlog', next: 'done' }, done: { title: 'Done' } }
 // after
 phases: {
-  queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
-  shipped: { title: 'Shipped', kind: 'terminal' },
+  backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done'] },
+  done: { name: 'Done', kind: 'terminal' },
 }
 ```
 
 **Remaining limitations:** Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline.
 
+### Phase runners, automatic starts and exit tools
+
+Boards and phases take `name` and an optional `description`. A phase lists the phases a card may move to in `nextPhases`. A working phase can also declare:
+
+- `runner` — `{ agentId?, skill?, context?, instructions? }`. `context` names the session the phase runs in (defaults to `work`); phases that share a context share a session. When the agent moves its own card into another phase of its context, that phase's `skill` still starts: its prompt is queued onto the agent's run. `skill` starts that skill when a card enters the phase from a source the phase has no `onEnter` handler for. It names a built-in Factory skill or one of your app's skills (see [Skills for custom boards](#skills-for-custom-boards)). `instructions` (up to 1,000 characters) are added to every run the phase starts. `agentId` defaults to `code-agent`, the only agent Factory runs today.
+- `autoStart` and `autoStartWhen` — the phase's runs start without a person's approval, for every card or only for cards matching the rule. Cards from outside the write-access circle still wait for a person.
+- `exitTool` — a tool name, or `{ id, autoApprove, autoApproveWhen }`, that ends the phase. The factory-phase signal tells the agent the phase ends when that tool succeeds and lists `nextPhases`; the agent then moves the card itself with `factory_transition_work_item`, so it picks where the card goes. The phase needs at least one next phase. `autoApprove` answers the person's approval the tool waits for, for every card or only cards matching `autoApproveWhen`. Factory sessions already run tools without asking, so today this matters for `submit_plan`: an auto-approved plan is accepted without a person. `defineBoard()` accepts `autoApprove` on any exit tool, and the catalog reports it, but on other tools it has no effect yet.
+
+Rules test a card's facts: `item.labels`, `item.title`, `item.author`, `source.kind` and `source.integration`.
+
+```typescript
+const LOW_EFFORT = {
+  operator: 'AND',
+  conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort:low' }],
+} as const;
+
+const releaseBoard = defineBoard({
+  id: 'release',
+  name: 'Release',
+  initialPhase: 'backlog',
+  phases: {
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['plan'] },
+    plan: {
+      name: 'Plan',
+      kind: 'working',
+      runner: { context: 'build', skill: 'factory-plan' },
+      autoStart: true,
+      autoStartWhen: LOW_EFFORT,
+      exitTool: { id: 'submit_plan', autoApprove: true },
+      nextPhases: ['build', 'canceled'],
+    },
+    build: { name: 'Build', kind: 'working', runner: { context: 'build' }, nextPhases: ['done'] },
+    done: { name: 'Done', kind: 'terminal' },
+    canceled: { name: 'Canceled', kind: 'terminal' },
+  },
+});
+```
+
+**Migration:** `defineBoard()` still accepts the old field names and maps them to the new ones straight away: `title` → `name`, `role` → `runner.context`, `next` → `nextPhases`. It logs one warning per board that still uses them. Setting both `title` and `name`, or `role` and `runner.context`, to different values is rejected. `outcomes` is not deprecated: its targets are added to `nextPhases` and outcome names keep working. The board `defineBoard()` returns still has the old names as read-only copies — `board.title` and `phase.title` equal `name`, a working phase's `role` equals `runner.context`, and `phase.next` is set when the phase declared `next` — so code that reads them, or passes a defined board's phases to `defineBoard()` again, keeps working. They are deprecated; read `name`, `runner.context` and `nextPhases` instead. The board catalog (`GET /web/factory/projects/:id/boards`) still sends `title` and `role` beside the new fields for older clients. Card session keys do not change: a phase's context is its old role.
+
+### Skills for custom boards
+
+A phase's `runner.skill` runs a skill when a card enters the phase. Use a built-in skill such as `factory-plan`, or write your own. Factory finds a skill in this order; the first match wins:
+
+1. **Code skills** — passed to `new MastraFactory({ skills })`, created with `createSkill()` from `@mastra/core/skills`.
+2. **Folder skills** — `src/mastra/factory-skills/<name>/SKILL.md` in your app. `mastra build` copies the folder into the build output. The older `src/mastra/public/factory-skills` still works; when both exist, `src/mastra/factory-skills` wins. Factory also looks in `public/factory-skills`, `factory-skills` and `output/factory-skills` under the working directory, and uses the first that exists. Supporting files, such as `references/`, can sit next to `SKILL.md`.
+3. **Built-in skills** shipped with `@mastra/factory`.
+
+A skill with the same name as a built-in skill replaces it, for the built-in boards too. A code skill replaces the whole folder skill of the same name, including its supporting files. Repository skills in a project's own repository never replace these.
+
+Skill names use 1–64 lowercase letters, digits and single hyphens, such as `release-notes`. A folder skill's `name` must match its directory name. Names in `skills` must be unique, or the constructor throws.
+
+```typescript
+import { createSkill } from '@mastra/core/skills';
+import { MastraFactory } from '@mastra/factory';
+import { defineBoard } from '@mastra/factory/boards';
+
+const releaseNotes = createSkill({
+  name: 'release-notes',
+  description: 'Draft release notes for a work item',
+  instructions: 'Group the release notes by package and end with a one-line summary. Then move the card to Published.',
+});
+
+const notesBoard = defineBoard({
+  id: 'notes',
+  name: 'Notes',
+  initialPhase: 'backlog',
+  phases: {
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['drafting'] },
+    drafting: {
+      name: 'Drafting',
+      kind: 'working',
+      runner: { context: 'writer', skill: 'release-notes' },
+      nextPhases: ['published'],
+    },
+    published: { name: 'Published', kind: 'terminal' },
+  },
+});
+
+const factory = new MastraFactory({ ...config, boards: [notesBoard], skills: [releaseNotes] });
+```
+
+The same skill as a folder skill is `src/mastra/factory-skills/release-notes/SKILL.md`:
+
+```markdown
+---
+name: release-notes
+description: Draft release notes for a work item
+---
+
+Group the release notes by package and end with a one-line summary. Then move the card to Published.
+```
+
+The skill receives the card's link, or its title when it has none, as arguments. Every Factory session can also load your skills on request, like the built-in ones.
+
+When a card enters the phase and the skill does not exist, no run starts and the card stays in the phase. The start fails with `Skill not found: <name>.`; after a few quick retries it stays failed, and you can retry it once the skill exists. The constructor logs a warning for each phase that names a missing skill. It also warns when a phase outside the `review` context runs a review skill (`factory-review`, `factory-rereview`, `factory-self-review`, `factory-gitlab-review`, `factory-gitlab-rereview`), because sessions only load those for reviews.
+
+Settings › Skills shows the skill each custom phase runs, marks a phase whose skill is missing, marks built-in skills your app replaces, and lists your other skills under **App skills**.
+
 ### Execute a custom board
 
-Installed custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.
+Custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.
 
-This configuration runs a release rehearsal through `queued → preparing → shipping → shipped`. Add it to an existing Factory host with configured storage, a GitHub integration, a connected project repository, a sandbox, and organization-scoped model credentials. Enable automatic runs for the project. The repository must contain a `release:check` package script; it should validate the release without publishing it.
+This configuration runs a release rehearsal through `backlog → preparing → build → done`. Add it to an existing Factory host with configured storage, a GitHub integration, a connected project repository, a sandbox, and organization-scoped model credentials. Enable automatic runs for the project. The repository must contain a `release:check` package script; it should validate the release without publishing it.
 
 ```typescript
 import { MastraFactory } from '@mastra/factory';
@@ -328,14 +496,14 @@ import type { MastraFactoryConfig } from '@mastra/factory';
 import { defineBoard } from '@mastra/factory/boards';
 import type { BoardPhaseDefinition } from '@mastra/factory/boards';
 
-type ReleasePhase = 'queued' | 'preparing' | 'shipping' | 'shipped';
+type ReleasePhase = 'backlog' | 'preparing' | 'build' | 'done';
 
 const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefinition<ReleasePhase>>>({
   id: 'release',
-  title: 'Release',
-  initialPhase: 'queued',
+  name: 'Release',
+  initialPhase: 'backlog',
   transitionPolicy: context => {
-    if (context.fromStage === 'queued' && context.toStage === 'preparing' && !context.isHumanTransition) {
+    if (context.fromStage === 'backlog' && context.toStage === 'preparing' && !context.isHumanTransition) {
       return {
         type: 'reject',
         code: 'approval_required',
@@ -344,27 +512,27 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
     }
   },
   phases: {
-    queued: { title: 'Queued', kind: 'resting', next: 'preparing' },
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['preparing'] },
     preparing: {
-      title: 'Preparing',
+      name: 'Preparing',
       kind: 'working',
-      role: 'release-preparer',
-      next: 'shipping',
+      runner: { context: 'release-preparer' },
+      nextPhases: ['build'],
       onEnter: {
         issue: context => ({
           type: 'invokeSkill',
           idempotencyKey: `${context.ingress.id}:prepare`,
           role: 'release-preparer',
           prompt:
-            'Inspect the release changes. When ready, call factory_transition_work_item with stage shipping and the current expectedRevision from the Factory phase signal.',
+            'Inspect the release changes. When ready, call factory_transition_work_item with stage build and the current expectedRevision from the Factory phase signal.',
         }),
       },
     },
-    shipping: {
-      title: 'Shipping',
+    build: {
+      name: 'Build',
       kind: 'working',
-      role: 'release-publisher',
-      next: 'shipped',
+      runner: { context: 'release-publisher' },
+      nextPhases: ['done'],
       onEnter: {
         issue: context => ({
           type: 'invokeSkill',
@@ -375,13 +543,13 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
         }),
       },
     },
-    shipped: { title: 'Shipped', kind: 'terminal' },
+    done: { name: 'Done', kind: 'terminal' },
   },
   tools: {
     execute_command: {
       onResult: context => {
         if (
-          context.item.stages[0] !== 'shipping' ||
+          context.item.stages[0] !== 'build' ||
           context.result.status !== 'success' ||
           typeof context.result.value !== 'string' ||
           !context.result.value.trimEnd().endsWith('RELEASE_CHECK_PASSED')
@@ -392,7 +560,7 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
           type: 'transition',
           idempotencyKey: `${context.ingress.id}:checked`,
           board: 'release',
-          stage: 'shipped',
+          stage: 'done',
         };
       },
     },
@@ -406,7 +574,7 @@ export function createFactory(config: Omit<MastraFactoryConfig, 'boards' | 'incl
 
 Use the host's normal `prepare()`, `new Mastra(...)`, and `finalize()` sequence. Change the hardcoded `includeDefaultBoards: true` in `createFactory` to `false` to run without Work or Review. Working roles name bindings on the shared Code Agent; they do not register separate agents. Factory has no per-role agent configuration option. The board's kickoff prompts supply the role-specific instructions.
 
-Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `queued`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The human transition satisfies this board's policy and starts the preparer. Its bound tool advances to `shipping`; the publisher's completed check produces a deferred transition to `shipped`. Terminal entry revokes the binding and releases the sandbox. The Factory UI performs the same operations against installed boards (see below); verify the persisted card's board, phase, and deferred decision status either way.
+Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `backlog`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The human transition satisfies this board's policy and starts the preparer. Its bound tool advances to `build`; the publisher's completed check produces a deferred transition to `done`. Terminal entry revokes the binding and releases the sandbox. The Factory UI performs the same operations against installed boards (see below); verify the persisted card's board, phase, and deferred decision status either way.
 
 Lifecycle, tool-result, and integration handlers may return `upsertLinkedWorkItem` targeting a different installed board. Linked cards enter that board's declared initial phase before moving to the requested phase. Existing cards cannot be reassigned to another board through either decision type. Targets are validated against their own installed board before acceptance and again before uncommitted deferred effects execute; a phase declared only on another board is not valid. Committed replay retains its recorded result and original `configVersion`.
 
@@ -414,12 +582,12 @@ Custom phase signals and persisted tool-result ingestion use the item's installe
 
 ### Custom boards in the Factory UI
 
-`GET /web/factory/projects/:id/boards` returns the installed board catalog for an authorized project: each board's `id`, `title`, `initialPhase`, declaration-ordered `phases` (with `kind` and working `role`), and transition topology. Handlers, policies, and prompts are never serialized. The Factory UI reads this catalog instead of assuming Work and Review:
+`GET /web/factory/projects/:id/boards` returns the project's boards (its code boards, then its stored boards) for an authorized user: each board's `id`, `title`, `initialPhase`, declaration-ordered `phases` (with `kind`, and for working phases `role` and the `skill` the runner starts), and transition topology. Handlers, policies, and prompts are never serialized. The Factory UI reads this catalog instead of assuming Work and Review:
 
 - Installed boards appear in the sidebar — built-ins first, then custom boards in registry order. Work and Review keep `/factories/:id/work` and `/factories/:id/review`; custom boards open at `/factories/:id/boards/:boardId`. An unknown board ID or a failed catalog request shows an explicit unavailable state rather than falling back to Work.
 - Columns, phase labels, and working/terminal presentation come from the phase definitions. Card creation sends the selected `board`, so the server picks the initial phase. Card menus offer only moves the topology declares; the server still enforces policy, authorization, and revisions.
 - A card's persisted `board` decides which board it belongs to. UI actions cannot move a card to a different board.
-- Settings › Skills groups built-in skills under Work and Review and lists each custom board's declared roles. Custom-board kickoff instructions live in code; there is no skill or per-role agent configuration for them.
+- Settings › Skills groups built-in skills under Work and Review. For each custom board it shows the skill each phase runs (`runner.skill`) and the roles of phases that run no skill; those phases' kickoff instructions live in the board definition. Your app's other skills appear under App skills.
 - Not yet board-aware: the Overview funnel and stage-hold metrics (Work-only), search scopes (Work/Review sessions), and the automation toggles that are specific to Work triage and Review. Custom-board cards still count toward in-flight totals and appear in activity and audit logs.
 
 ### Route intake to custom boards
@@ -427,7 +595,7 @@ Custom phase signals and persisted tool-result ingestion use the item's installe
 Intake bindings are explicit. A Linear project, Jira project, or GitHub repository is only offered as a candidate feed once it is bound to a board; nothing is materialized just by opening a board. Review only accepts pull requests and is not offered for issue routing.
 
 - **Linear:** each project binding selects one installed board. Changing the board moves that source's existing cards to the new board's initial phase, skipping terminal cards and cards with an active session.
-- **Jira:** each connected-site project binding selects one installed board. The create-Factory flow can select a Jira project and initially binds it to Work. The browser checks routed projects for new issues every 30 seconds and on window focus; issues observed for a routed project materialize automatically as work items on the bound board (mirroring Linear), and closed issues transition their linked card to done or canceled. Both `JiraIntegration` and `PlatformJiraIntegration` reconcile imported cards every five minutes by default so status and metadata continue to refresh without an open browser, and both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_ENABLED=false` to disable reconciliation or `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
+- **Jira:** each connected-site project binding selects one installed board. One Jira project can feed several Factory projects: each binding takes either all issues or only issues carrying its labels (Settings › Intake › Jira routing, or `labels` on `PUT /web/intake/bindings`). Each label belongs to one binding per Jira project, and only one binding per project can take all issues. Label bindings win over the all-issues binding; an issue carrying labels of two label bindings goes to the binding created first. The split happens in the JQL each Factory sends, so every issue is filed in exactly one Factory. Labels only decide placement when an issue is first filed: relabelling an issue, or editing a binding's labels, does not move existing cards. Remove one Factory's binding with `DELETE /web/intake/bindings?integrationId=jira&sourceId=…&factoryProjectId=…`. The create-Factory flow can select a Jira project and initially binds it to Work. The browser checks routed projects for new issues every 30 seconds and on window focus; issues observed for a routed project materialize automatically as work items on the bound board (mirroring Linear), and closed issues transition their linked card to done or canceled. Both `JiraIntegration` and `PlatformJiraIntegration` reconcile imported cards every five minutes by default so status and metadata continue to refresh without an open browser, and both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_ENABLED=false` to disable reconciliation or `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
 - **GitHub:** Settings › Intake › GitHub routing maps a label to a board per Factory project (`GET`/`PUT /web/intake/label-routes`). Labels match case-insensitively; unrouted issues go to Work. Saving a route relocates matching cards the same way, and `issues.labeled` / `issues.unlabeled` webhooks move a card between its routed board and Work while refreshing its label metadata. Routes apply to every repository linked to the project; label input is free text (no repository label autocomplete yet).
 
 ### GitHub event rules

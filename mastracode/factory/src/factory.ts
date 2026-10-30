@@ -33,6 +33,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
+import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { describeFactorySandbox, isFactorySandbox } from '@mastra/core/workspace';
@@ -47,8 +48,11 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import { isDefinedBoard } from './boards/define-board.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { ProjectBoardCache } from './boards/project-boards.js';
+import type { ProjectBoardSource } from './boards/project-boards.js';
 import { boardForWorkItem } from './boards/semantics.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
@@ -124,11 +128,13 @@ import { createSourceControlTools } from './session/source-control-tools.js';
 import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
+import { assertFactorySkills, findBoardSkillProblems } from './skills/app-skills.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
+import { StoredBoardsStorage } from './storage/domains/boards/base.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import { CommentsDomain } from './storage/domains/comments/domain.js';
@@ -302,9 +308,27 @@ export interface MastraFactoryConfig {
    * Default: `factory-config-v1`.
    */
   configVersion?: string;
-  /** Board definitions installed for this Factory instance. */
+  /**
+   * Boards served to every project, read-only, next to the boards each project stored.
+   *
+   * @deprecated Boards are stored per project; manage them with `/web/factory/projects/:id/boards`
+   * (README § Stored boards). Boards passed here still work: code boards are read-only and served
+   * alongside each project's stored boards.
+   */
   boards?: readonly InstalledBoard[];
-  /** Whether the built-in Work and Review boards are installed. Default: true. */
+  /**
+   * App skills written in code with `createSkill()` from `@mastra/core/skills`.
+   * Every Factory session can load them, and a board phase runs one through
+   * `runner.skill`. A skill here wins over a `factory-skills/` folder skill or
+   * a bundled skill of the same name. Names must be unique.
+   */
+  skills?: readonly InlineSkill[];
+  /**
+   * Whether every project gets the built-in Work and Review boards, read-only. Default: true.
+   *
+   * @deprecated Will be replaced by a one-time copy of the built-in boards into each project's
+   * database (mastra-ai/mastra#28920). It still decides whether projects get them until then.
+   */
   includeDefaultBoards?: boolean;
 
   /**
@@ -416,6 +440,17 @@ function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'
   return liveSessions;
 }
 
+let warnedDefinedBoards = false;
+
+/** Warns once per process when the app declares boards in code; Factory's own boards never warn. */
+function warnDefinedBoards(boards: BoardRegistry): void {
+  if (warnedDefinedBoards || ![...boards.values()].some(isDefinedBoard)) return;
+  warnedDefinedBoards = true;
+  console.warn(
+    '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and these definitions are served read-only next to the boards each project stores. Manage boards through the boards API; see the README "Stored boards" section.',
+  );
+}
+
 /**
  * The fleet-era `sandbox` options and what replaced each one. Only the keys
  * the host actually passed are explained, so a host that never used the fleet
@@ -450,7 +485,11 @@ export class MastraFactory {
   /** The normalized sandbox, set by `prepare()`. Undefined until then and when sandboxes are disabled. */
   #sandbox: FactorySandbox | undefined;
   #sandboxDescription: FactorySandboxDescription | undefined;
+  /** The code boards (built-in and app boards), served to every project and never stored. */
   readonly #boards: BoardRegistry;
+  /** Each project's boards: the code boards plus the boards it stored. Undefined until `prepare()` or when the boards domain is down. */
+  #projectBoards: ProjectBoardCache | undefined;
+  readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
@@ -476,11 +515,16 @@ export class MastraFactory {
       boards: config.boards,
       includeDefaultBoards: config.includeDefaultBoards,
     });
+    warnDefinedBoards(this.#boards);
     if ('rules' in config) {
       throw new Error(
         "MastraFactory: 'rules' was removed. Set 'configVersion' for the audit label and declare tool-result " +
-          'rules on the owning board via defineBoard({ tools }).',
+          'rules on the owning board (`tools`).',
       );
+    }
+    this.#skills = assertFactorySkills(config.skills);
+    for (const problem of findBoardSkillProblems(this.#boards, this.#skills)) {
+      console.warn(`[factory] ${problem}`);
     }
     this.#configVersion = assertFactoryConfigVersion(config.configVersion ?? DEFAULT_FACTORY_CONFIG_VERSION);
     this.#config = config;
@@ -612,10 +656,13 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
-    workItemsStorage.useTerminalPhasePredicate(item => isTerminalWorkItem(this.#boards, item));
+    workItemsStorage.useTerminalPhasePredicate(item =>
+      isTerminalWorkItem(this.#projectBoards?.forProject(item) ?? this.#boards, item),
+    );
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelDefaultsStorage = storage.registerDomain(new ModelDefaultsStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
+    const storedBoardsStorage = storage.registerDomain(new StoredBoardsStorage());
     const customProvidersStorage = storage.registerDomain(new CustomProvidersStorage(secretEncryption));
     const queueHealthStorage = storage.registerDomain(new QueueHealthStorage());
     // Generic integration storage (connections/subscriptions/settings) — the
@@ -701,6 +748,28 @@ export class MastraFactory {
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
     await timedPhase('prepare.storage.init', () => storage.init());
+
+    // Each project's boards are the code boards plus the boards it stored. Load every project
+    // before anything reads its boards; without the boards domain the code boards serve directly.
+    if (storage.isDomainReady('boards') && storage.isDomainReady('projects')) {
+      const projectBoards = new ProjectBoardCache({
+        codeRegistry: this.#boards,
+        storage: storedBoardsStorage,
+        projects: factoryProjectsStorage,
+        codeSkills: this.#skills,
+      });
+      this.#projectBoards = projectBoards;
+      await timedPhase('prepare.boards.preload', () =>
+        projectBoards
+          .preload()
+          .catch(error =>
+            console.warn(
+              `[factory] loading project boards at startup failed; each project loads on first use: ${error instanceof Error ? error.message : error}`,
+            ),
+          ),
+      );
+    }
+    const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
 
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
@@ -965,7 +1034,7 @@ export class MastraFactory {
     const transitionService = workItemsReady
       ? new FactoryTransitionService({
           configVersion,
-          boards: this.#boards,
+          boards: boards,
           storage: workItemsStorage,
           audit: auditDomain,
           autoApprovePlans: async ({ orgId, factoryProjectId }) => {
@@ -1001,7 +1070,7 @@ export class MastraFactory {
       comments: workItemCommentsStorage,
       feed: commentsDomain,
       audit: auditStorage,
-      boards: this.#boards,
+      boards: boards,
       transitionService,
       auditRecorder: auditDomain,
       sessions: sourceControlSessions,
@@ -1048,6 +1117,7 @@ export class MastraFactory {
       ...(environmentBuilds ? { environmentBuilds } : {}),
       projects: factoryProjectsStorage,
       sourceControl: sourceControlStorage,
+      intake: intakeStorage,
       versionControlIntegrationIds: integrations
         .filter(integration => integration.versionControl)
         .map(integration => integration.id),
@@ -1060,9 +1130,8 @@ export class MastraFactory {
                   id: installationId,
                 });
                 if (!installation) return null;
-                const repositories = await githubIntegration.listInstallationRepos(Number(installation.externalId));
-                const selected = repositories.find(repo => repo.id.toString() === externalId && repo.fullName === slug);
-                if (!selected) return null;
+                const selected = await githubIntegration.getInstallationRepo(Number(installation.externalId), slug);
+                if (!selected || selected.id.toString() !== externalId || selected.fullName !== slug) return null;
                 return githubIntegration.sourceControlStorage.repositories.upsert({
                   orgId,
                   input: {
@@ -1198,7 +1267,7 @@ export class MastraFactory {
       ? new FactoryPhaseStateProcessor({
           configVersion,
           storage: workItemsStorage,
-          boards: this.#boards,
+          boards: boards,
           loadMemorySettings,
           defaultThinkingLevel: resolveDefaultThinkingLevel,
           ...(transitionService ? { transitionService } : {}),
@@ -1282,6 +1351,7 @@ export class MastraFactory {
         subagents: [],
         resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
         workspace: createWorkspaceFactory({
+          skills: this.#skills,
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
           sourceControls: integrations.flatMap(integration =>
@@ -1441,7 +1511,7 @@ export class MastraFactory {
                     sessions: sourceControlSessions,
                     projects: factoryProjectsStorage,
                     workItems: workItemsStorage,
-                    boards: this.#boards,
+                    boards: boards,
                     isRunning: async sessionId => {
                       const session = await this.#prepared?.base.controller.getSession(sessionId);
                       return session?.stream.isActive() ?? false;
@@ -1550,7 +1620,7 @@ export class MastraFactory {
                 requestContext,
                 storage: workItemsStorage,
                 transitionService,
-                boards: this.#boards,
+                boards: boards,
                 // Heals crash-resumed sessions: recovered addresses re-seed
                 // projectRepositoryId/baseRef from the source session record.
                 // Only offered while the source-control domain is ready — a
@@ -1715,9 +1785,13 @@ export class MastraFactory {
             knowledgeEnabled,
             mcpEnabled,
             deploymentModelProviders,
+            skills: this.#skills,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
-            boardRegistry: this.#boards,
+            boardRegistry: boards,
+            ...(this.#projectBoards
+              ? { storedBoards: { storage: storedBoardsStorage, cache: this.#projectBoards } }
+              : {}),
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;
@@ -1726,7 +1800,7 @@ export class MastraFactory {
                 transitionService: runtimeTransitionService,
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
-                boards: this.#boards,
+                boards: boards,
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();

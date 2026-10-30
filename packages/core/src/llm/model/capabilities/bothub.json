@@ -19,24 +19,19 @@
     "muse-spark-1.3-contributor"
   ],
   "reasoning": {
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "nemotron-3-ultra-550b-a55b:free": [
       {
         "type": "effort",
         "values": ["none", "medium", "high"]
       }
     ],
-    "gemma-4-31b-it:free": [
+    "glm-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -48,10 +43,15 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "muse-spark-1.3-contributor": [
+    "gemma-4-31b-it:free": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gpt-5.6-luna": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-v4-flash-0731": [
@@ -60,10 +60,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "gpt-5.6-luna": [
+    "muse-spark-1.3-contributor": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ]
   }

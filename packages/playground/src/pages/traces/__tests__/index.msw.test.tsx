@@ -440,7 +440,7 @@ describe('Traces page list source', () => {
       );
 
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
-      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      expect(await screen.findByRole('region', { name: 'Studio preview agent' })).not.toBeNull();
       await waitFor(() => {
         expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
@@ -471,7 +471,7 @@ describe('Traces page list source', () => {
       );
 
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
-      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      expect(await screen.findByRole('region', { name: 'Studio preview agent' })).not.toBeNull();
       await waitFor(() => {
         expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
@@ -772,7 +772,7 @@ describe('Traces side panel scores tab', () => {
       );
 
       const { queryClient } = renderPage('/traces?traceId=trace-a&spanId=span-a');
-      expect(await screen.findByRole('heading', { name: /^Span/ })).not.toBeNull();
+      expect(await screen.findByRole('region', { name: 'Studio preview agent' })).not.toBeNull();
       await waitFor(() => {
         expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
         expect(queryClient.isFetching()).toBe(0);
@@ -782,7 +782,7 @@ describe('Traces side panel scores tab', () => {
       const scoresTab = traceSideColumn();
 
       expect(await within(scoresTab).findByText(/no scores/i)).not.toBeNull();
-      expect(screen.getByRole('heading', { name: /^Span/ })).not.toBeNull();
+      expect(screen.getByRole('region', { name: 'Studio preview agent' })).not.toBeNull();
     });
   });
 
@@ -840,6 +840,23 @@ describe('Traces page columns menu', () => {
   afterEach(() => {
     layoutStubs.rects.forEach(stub => stub.mockRestore());
     globalThis.ResizeObserver = layoutStubs.resizeObserver;
+  });
+
+  describe('when the page has loaded', () => {
+    it('puts the Columns button ahead of the filters', async () => {
+      setTracePageHandlers(metricsCapableCapabilities);
+
+      const { queryClient } = renderPage();
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      const columns = screen.getByRole('button', { name: 'Columns' });
+      const dateChip = document.querySelector('[data-slot="filter-bar-chip"]');
+      if (!dateChip) throw new Error('date chip not rendered');
+      expect(columns.compareDocumentPosition(dateChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
   });
 
   describe('when the columns menu enables Environment', () => {

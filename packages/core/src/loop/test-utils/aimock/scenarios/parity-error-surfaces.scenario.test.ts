@@ -23,8 +23,16 @@ import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
+import { MessageHistory } from '../../../../processors/memory';
+import type { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools';
-import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  getScenarioEngineHost,
+  runLoopScenario,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 import {
   type EngineParityScenario,
   type EngineParityResults,
@@ -34,6 +42,7 @@ import {
   describeParity,
   expectParity,
 } from '../parity';
+import { MastraTimeoutError } from '../../../timeout';
 
 const THREAD = 'thread-t37';
 const RESOURCE = 'resource-t37';
@@ -190,11 +199,29 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     TEST_TIMEOUT_MS,
   );
 
-  it.each([false, true])(
-    'only completed steps reach memory at the deadline (savePerStep: %s)',
-    async savePerStep => {
+  it.each([
+    { savePerStep: false, readOnly: false },
+    { savePerStep: true, readOnly: false },
+    { savePerStep: false, readOnly: true },
+    // History disabled in config, but the agent saves through an explicitly configured MessageHistory.
+    { savePerStep: false, readOnly: false, explicitHistory: true },
+    // Same, but that MessageHistory writes to its own store, not the agent memory store.
+    { savePerStep: false, readOnly: false, explicitHistory: true, historyStore: true },
+    // Same, but the agent picks MessageHistory from requestContext, and a tool changes that context
+    // mid-run. The deadline save must use the processors the run started with.
+    { savePerStep: false, readOnly: false, dynamicHistory: true },
+    // A custom processor takes the message-history id, so memory adds no MessageHistory and the
+    // finish path would not save to agent memory. The deadline save must not either.
+    { savePerStep: false, readOnly: false, customHistory: true },
+    // History disabled in config and no MessageHistory configured, so the finish path saves nothing.
+    // The deadline save must not either.
+    { savePerStep: false, readOnly: false, historyOff: true },
+  ])(
+    'only completed steps reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory, dynamicHistory: $dynamicHistory, historyStore: $historyStore, customHistory: $customHistory, historyOff: $historyOff)',
+    async ({ savePerStep, readOnly, explicitHistory, dynamicHistory, historyStore, customHistory, historyOff }) => {
       const memory = new MockMemory();
-      const threadId = `deadline-memory-${engine}-${savePerStep}`;
+      const historyMemory = historyStore ? new MockMemory() : memory;
+      const threadId = `deadline-memory-${engine}-${savePerStep}-${readOnly}-${!!explicitHistory}-${!!dynamicHistory}-${!!historyStore}-${!!customHistory}-${!!historyOff}`;
       const resourceId = RESOURCE;
       const llm = getMock();
       let completedTool = false;
@@ -208,6 +235,22 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         prompt: 'Look up the order, then check the courier.',
         maxSteps: 3,
         savePerStep,
+        ...(readOnly && { memoryOptions: { readOnly } }),
+        ...(explicitHistory && {
+          memoryOptions: { lastMessages: false },
+          outputProcessors: [new MessageHistory({ storage: (await historyMemory.storage.getStore('memory'))! })],
+        }),
+        ...(dynamicHistory && {
+          memoryOptions: { lastMessages: false },
+          agentOutputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
+            requestContext.get('history') === 'off'
+              ? []
+              : [new MessageHistory({ storage: (await memory.storage.getStore('memory'))! })],
+        }),
+        ...(historyOff && { memoryOptions: { lastMessages: false } }),
+        ...(customHistory && {
+          outputProcessors: [{ id: 'message-history', processOutputResult: ({ messages }: any) => messages }],
+        }),
         modelSettings: { timeout: { totalMs: DEADLINE_MS } },
         collectChunks: true,
         tools: {
@@ -215,7 +258,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
             id: 'lookup',
             description: 'Look up an order.',
             inputSchema: z.object({}),
-            execute: async () => {
+            execute: async (_input, context) => {
+              context?.requestContext?.set('history', 'off');
               completedTool = true;
               return { status: 'shipped' };
             },
@@ -254,15 +298,309 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       const errors = result.chunks!.filter(chunk => chunk.type === 'error');
       expect(errors).toHaveLength(1);
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
-      const { messages } = await memory.recall({ threadId, resourceId });
+      // The durable engines persist the input through agent memory regardless of the configured
+      // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
+      const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
+      const inputSaved = !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
+      const { messages } = await historyMemory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
-      expect(saved.includes('Look up the order, then check the courier.')).toBe(
-        savePerStep || engine === 'durable' || engine === 'evented',
-      );
-      expect(saved.includes('The order lookup is complete.')).toBe(savePerStep);
+      expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);
+      expect(saved.includes('The order lookup is complete.')).toBe(savePerStep && !readOnly);
       expect(saved.includes('Checking the courier now.')).toBe(false);
     },
     TEST_TIMEOUT_MS,
+  );
+
+  // The tool ignores cancellation and finishes after the deadline. The run already reported the
+  // timeout. Inngest still saves the step that ran it. The other engines do not: the plain loop drops
+  // the step at the deadline, and durable/evented release their claim there, so storage rejects it.
+  it.each([false, true])(
+    'a tool that finishes after the deadline is saved only on Inngest (savePerStep: %s)',
+    async savePerStep => {
+      const memory = new MockMemory();
+      const threadId = `late-tool-${engine}-${savePerStep}`;
+      const toolFinished = Promise.withResolvers<void>();
+      const result = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        prompt: 'Check the slow courier.',
+        maxSteps: 3,
+        savePerStep,
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        collectChunks: true,
+        tools: {
+          slow: createTool({
+            id: 'slow',
+            description: 'Check the slow courier.',
+            inputSchema: z.object({}),
+            execute: async () => {
+              await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 1_000));
+              toolFinished.resolve();
+              return { status: 'late courier result' };
+            },
+          }),
+        },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_slow', name: 'slow', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Must not reach the model again.' });
+        },
+      });
+
+      const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+      await toolFinished.promise;
+
+      if (engine !== 'inngest') {
+        // Absence can't be polled for; give a late write time to land.
+        await new Promise(resolve => setTimeout(resolve, 500));
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual(['user']);
+        expect(JSON.stringify(messages).includes('call_slow')).toBe(false);
+        return;
+      }
+
+      // The step that ran the tool is saved. The tool outlived the abort grace period, so its
+      // result is recorded as aborted rather than as its late return value.
+      await vi.waitFor(
+        async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+          const saved = JSON.stringify(messages);
+          expect(saved.includes('Check the slow courier.')).toBe(true);
+          expect(saved.includes('call_slow')).toBe(true);
+          expect(saved.includes('Tool execution was aborted while running.')).toBe(true);
+        },
+        { timeout: 10_000, interval: 100 },
+      );
+      expect(result.requests).toHaveLength(1);
+    },
+    TEST_TIMEOUT_MS + 5_000,
+  );
+
+  // Durable engines save the input before the run starts, so the deadline can fire before or during
+  // that save, before anything has called the model. The other engines save the input when the run finishes.
+  it.skipIf(engine !== 'durable' && engine !== 'evented' && engine !== 'inngest').each([
+    ['before', 1],
+    ['during', DEADLINE_MS],
+  ] as const)(
+    'a deadline %s a slow input save stops the run before it starts',
+    async (_when, totalMs) => {
+      const memory = new MockMemory();
+      const saveMessages = memory.saveMessages.bind(memory);
+      const heldSaves: Promise<unknown>[] = [];
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(args => {
+        if (!args.messages.some(message => message.role === 'user')) return saveMessages(args);
+        const held = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500)).then(() => saveMessages(args));
+        heldSaves.push(held.catch(() => {}));
+        return held;
+      });
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          memory,
+          threadId: `slow-input-${engine}-${totalMs}`,
+          resourceId: RESOURCE,
+          prompt: 'Save me slowly.',
+          modelSettings: { timeout: { totalMs } },
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+          },
+        });
+
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+        // Give a run started after the deadline time to reach the model.
+        await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 500));
+        expect(getMock().getRequests()).toHaveLength(0);
+        // Nothing written during startup may outlive the deadline's cleanup.
+        const workflows = await result.mastra.getStorage()!.getStore('workflows');
+        const prefix = engine === 'inngest' ? 'inngest:' : '';
+        for (const name of ['durable-agentic-loop', 'durable-agentic-execution']) {
+          const snapshot = await workflows!.loadWorkflowSnapshot({
+            workflowName: `${prefix}${name}`,
+            runId: result.output.runId,
+          });
+          expect(snapshot?.status).not.toBe('running');
+        }
+        await Promise.all(heldSaves);
+        const { messages } = await memory.recall({ threadId: `slow-input-${engine}-${totalMs}`, resourceId: RESOURCE });
+        // Inngest takes no execution claim: the request was accepted before the deadline, so the deadline
+        // alone must not drop it (see #28659). Durable and evented cover memory with their claim, and the
+        // deadline releases it, so storage rejects an input save still in flight.
+        expect(messages.map(message => message.role)).toEqual(engine === 'inngest' ? ['user'] : []);
+      } finally {
+        saveSpy.mockRestore();
+      }
+    },
+    TEST_TIMEOUT_MS + 5_000,
+  );
+
+  it.skipIf(engine !== 'inngest')(
+    'a deadline during the input save skips the running-snapshot write',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `slow-input-no-running-row-${engine}`;
+      const saveMessages = memory.saveMessages.bind(memory);
+      const heldSaves: Promise<unknown>[] = [];
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(args => {
+        if (!args.messages.some(message => message.role === 'user')) return saveMessages(args);
+        const held = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500)).then(() => saveMessages(args));
+        heldSaves.push(held);
+        return held;
+      });
+      // The Inngest host's store, which the caller writes the running row to.
+      const workflowsStore = (await getScenarioEngineHost()!.getMastra().getStorage()!.getStore('workflows'))!;
+      const runningWrites: string[] = [];
+      const persistSpy = vi.spyOn(workflowsStore, 'persistWorkflowSnapshot');
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          prompt: 'Save me slowly.',
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+          },
+        });
+
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+        expect(heldSaves).toHaveLength(1);
+        await Promise.all(heldSaves);
+        // Give the startup chain time to continue past the input save.
+        await new Promise(resolve => setTimeout(resolve, 1_000));
+        for (const [args] of persistSpy.mock.calls) {
+          if (args.runId === result.output.runId && args.snapshot.status === 'running') {
+            runningWrites.push(args.workflowName);
+          }
+        }
+        // The deadline already cleared the run's rows, so startup stops before writing a new one.
+        expect(runningWrites).toEqual([]);
+        expect(getMock().getRequests()).toHaveLength(0);
+      } finally {
+        saveSpy.mockRestore();
+        persistSpy.mockRestore();
+      }
+    },
+    TEST_TIMEOUT_MS + 10_000,
+  );
+
+  it.skipIf(engine !== 'inngest')(
+    'a deadline during the running-snapshot write stops the run before it starts',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `slow-running-row-${engine}`;
+      // The Inngest host's store, which the caller writes the running row to.
+      const workflowsStore = (await getScenarioEngineHost()!.getMastra().getStorage()!.getStore('workflows'))!;
+      const persistSnapshot = workflowsStore.persistWorkflowSnapshot.bind(workflowsStore);
+      const heldWrites: Promise<unknown>[] = [];
+      const persistSpy = vi.spyOn(workflowsStore, 'persistWorkflowSnapshot').mockImplementation(args => {
+        if (args.snapshot.status !== 'running') return persistSnapshot(args);
+        // Land the row only after the deadline has fired and cleared the run's rows.
+        const held = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500)).then(() => persistSnapshot(args));
+        heldWrites.push(held);
+        return held;
+      });
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          prompt: 'Start me slowly.',
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+          },
+        });
+
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+        // The running row write must have been held, or the post-write cleanup was never exercised.
+        expect(heldWrites).toHaveLength(1);
+        await Promise.all(heldWrites);
+        // Give a run started after the deadline time to reach the model and write its rows.
+        await new Promise(resolve => setTimeout(resolve, 3_000));
+        expect(getMock().getRequests()).toHaveLength(0);
+        // The deadline cleared the run's rows. The late running row is removed, and no run is
+        // started to write new ones.
+        const workflows = await result.mastra.getStorage()!.getStore('workflows');
+        for (const name of ['durable-agentic-loop', 'durable-agentic-execution']) {
+          const snapshot = await workflows!.loadWorkflowSnapshot({
+            workflowName: `inngest:${name}`,
+            runId: result.output.runId,
+          });
+          expect(snapshot).toBeNull();
+        }
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        expect(messages.map(message => message.role)).toEqual(['user']);
+      } finally {
+        persistSpy.mockRestore();
+      }
+    },
+    TEST_TIMEOUT_MS + 10_000,
+  );
+
+  // Only the run's own deadline may skip startup: the guard returns without reporting anything, because
+  // the deadline already did. A caller abort carrying a `MastraTimeoutError` is not reported by the
+  // deadline, so skipping startup on it would leave the stream open.
+  it.skipIf(engine !== 'inngest')(
+    'a caller abort with a timeout reason during the input save still closes the stream',
+    async () => {
+      const memory = new MockMemory();
+      const caller = new AbortController();
+      const saveMessages = memory.saveMessages.bind(memory);
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(async args => {
+        if (args.messages.some(message => message.role === 'user')) {
+          caller.abort(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 1 }));
+        }
+        return saveMessages(args);
+      });
+      try {
+        const settled = await Promise.race([
+          runLoopScenario({
+            engine,
+            llm: getMock(),
+            memory,
+            threadId: `caller-timeout-abort-${engine}`,
+            resourceId: RESOURCE,
+            prompt: 'Abort me while saving.',
+            abortSignal: caller.signal,
+            collectChunks: true,
+            fixtures: llm => {
+              llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+            },
+          }).then(
+            () => 'settled',
+            () => 'settled',
+          ),
+          new Promise(resolve => setTimeout(() => resolve('open'), 10_000)),
+        ]);
+        expect(caller.signal.aborted).toBe(true);
+        expect(settled).toBe('settled');
+      } finally {
+        saveSpy.mockRestore();
+      }
+    },
+    TEST_TIMEOUT_MS + 15_000,
   );
 
   it.each(['generate', 'resumeStream', 'resumeGenerate'] as const)(

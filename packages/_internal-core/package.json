@@ -1,6 +1,6 @@
 {
   "name": "@internal/core",
-  "version": "0.1.3",
+  "version": "0.1.4-alpha.0",
   "license": "Apache-2.0",
   "private": true,
   "type": "module",
@@ -116,6 +116,16 @@
       "require": {
         "types": "./dist/frontmatter/index.d.cts",
         "default": "./dist/frontmatter/index.cjs"
+      }
+    },
+    "./fs-routing": {
+      "import": {
+        "types": "./dist/fs-routing/index.d.ts",
+        "default": "./dist/fs-routing/index.js"
+      },
+      "require": {
+        "types": "./dist/fs-routing/index.d.cts",
+        "default": "./dist/fs-routing/index.cjs"
       }
     },
     "./package.json": "./package.json"

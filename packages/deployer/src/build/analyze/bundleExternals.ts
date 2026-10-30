@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { basename } from 'node:path/posix';
-import { ErrorCategory, ErrorDomain, MastraBaseError } from '@mastra/core/error';
+import { ErrorCategory, ErrorDomain, MastraBaseError } from '@internal/core/error';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';
 import json from '@rollup/plugin-json';
