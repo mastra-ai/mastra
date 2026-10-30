@@ -94,7 +94,7 @@ jobs:
     name: Affected UNIT Test
     if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 60
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -267,3 +267,23 @@ jobs:
       - name: Merge reports
         if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
+
+      # A test job that failed or was cancelled before uploading its blob would otherwise
+      # be missing from the merged report, and this required check would pass without it.
+      - name: Require every test job to finish
+        if: always()
+        env:
+          UNIT: ${{ needs.unit-test.result }}
+          AFFECTED_UNIT: ${{ needs.affected-unit-test.result }}
+          E2E: ${{ needs.e2e-test.result }}
+        run: |
+          status=0
+          for job in UNIT AFFECTED_UNIT E2E; do
+            result="${!job}"
+            echo "$job: $result"
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "::error::$job test job ended with '$result'; its tests did not all run."
+              status=1
+            fi
+          done
+          exit $status

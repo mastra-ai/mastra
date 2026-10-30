@@ -11,6 +11,7 @@ import {
   CloudIcon,
   CpuIcon,
   FingerprintIcon,
+  FlagIcon,
   FlaskConicalIcon,
   GaugeIcon,
   GitBranchIcon,
@@ -19,6 +20,7 @@ import {
   LayersIcon,
   MessageCircleIcon,
   MessageSquareIcon,
+  OctagonIcon,
   PercentIcon,
   PlayIcon,
   RadioIcon,
@@ -165,6 +167,8 @@ export const TRACE_PROPERTY_FILTER_PARAM_BY_FIELD = {
   serviceName: 'filterServiceName',
   environment: 'filterEnvironment',
   experimentId: 'filterExperimentId',
+  outcome: 'filterOutcome',
+  stopReason: 'filterStopReason',
   'spans.name': 'filterSpanName',
   'spans.spanType': 'filterSpanType',
   'spans.model': 'filterSpanModel',
@@ -343,6 +347,8 @@ export const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   entityName: 'Primitive name',
   entityId: 'Primitive ID',
   status: 'Status',
+  outcome: 'Outcome',
+  stopReason: 'Stop reason',
   tags: 'Tags',
   serviceName: 'Service Name',
   environment: 'Environment',
@@ -379,6 +385,8 @@ const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
   entityName: TagIcon,
   entityId: FingerprintIcon,
   status: ActivityIcon,
+  outcome: FlagIcon,
+  stopReason: OctagonIcon,
   tags: TagsIcon,
   serviceName: ServerIcon,
   environment: GlobeIcon,
@@ -417,9 +425,12 @@ export type TraceQueryFieldSupport = {
   withTimeToFirstChunk?: boolean;
   /** Root and span `timeToFirstTokenMs`, declared by `traceQueryTimeToFirstToken`. */
   withTimeToFirstToken?: boolean;
+  /** Root `outcome` and `stopReason`, declared by `traceQueryOutcomeFields`. */
+  withOutcomeFields?: boolean;
 };
 
 const ROOT_DURATION_FIELD_IDS = ['durationMs'];
+const OUTCOME_FIELD_IDS = ['outcome', 'stopReason'];
 const TIME_TO_FIRST_CHUNK_FIELD_IDS = ['timeToFirstChunkMs', 'spans.timeToFirstChunkMs'];
 const TIME_TO_FIRST_TOKEN_FIELD_IDS = ['timeToFirstTokenMs', 'spans.timeToFirstTokenMs'];
 
@@ -428,9 +439,11 @@ export const traceQueryUnqueryableFieldIds = ({
   withRootDuration = false,
   withTimeToFirstChunk = false,
   withTimeToFirstToken = false,
+  withOutcomeFields = false,
 }: TraceQueryFieldSupport): ReadonlySet<string> =>
   new Set([
     ...(withRootDuration ? [] : ROOT_DURATION_FIELD_IDS),
+    ...(withOutcomeFields ? [] : OUTCOME_FIELD_IDS),
     ...(withTimeToFirstChunk ? [] : TIME_TO_FIRST_CHUNK_FIELD_IDS),
     ...(withTimeToFirstToken ? [] : TIME_TO_FIRST_TOKEN_FIELD_IDS),
   ]);
@@ -502,6 +515,22 @@ const TRACE_FILTER_BAR_TEXT_MATCH_FIELD_IDS = new Set<string>(['spans.name', 'fe
 const TRACE_FILTER_BAR_FREE_TEXT_RELATED_FIELD_IDS = new Set<string>(['feedback.comment']);
 
 const byLabel = (a: FilterBarField, b: FilterBarField) => a.label.localeCompare(b.label);
+
+/** Outcome and stop reason: free text (custom spans set arbitrary values) with discovered suggestions. */
+export function createOutcomeFilterBarFields(
+  base: (id: string) => Pick<FilterBarField, 'id' | 'label' | 'icon' | 'color'>,
+  valueSuggestions?: (path: string) => FilterBarSuggestionsResolver | undefined,
+): FilterBarField[] {
+  return (['outcome', 'stopReason'] as const).map(id => {
+    const suggestions = valueSuggestions?.(id);
+    return {
+      ...base(id),
+      operators: TRACE_STRING_OPERATORS,
+      ...(id === 'outcome' ? { operatorLabels: { notExists: 'is not recorded' } } : {}),
+      ...(suggestions ? { suggestions } : {}),
+    };
+  });
+}
 
 /** The Tags field, or `undefined` until the backend describes `tags`: its operators
  *  can't be inferred safely from the static catalog. Only UI operators whose query
@@ -644,6 +673,7 @@ export function createTraceFilterBarFields({
       { ...number('durationMs'), operators: TRACE_ROOT_DURATION_OPERATORS },
       number('timeToFirstChunkMs'),
       number('timeToFirstTokenMs'),
+      ...createOutcomeFilterBarFields(traceFieldBase, path => valueSuggestions?.('trace', path)),
     ].sort(byLabel),
     ...relatedFields,
     ...metadataBarFields.sort(byLabel),

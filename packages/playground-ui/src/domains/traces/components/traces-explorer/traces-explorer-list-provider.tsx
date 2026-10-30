@@ -35,6 +35,7 @@ export const TracesListProvider = memo(function TracesListProvider({
     withTimeToFirstToken,
     withTimeToFirstChunkSort,
     withTimeToFirstTokenSort,
+    withOutcomeFields,
     withDeltaPolling,
     isCapabilitiesLoading,
   } = useTracesConfig();
@@ -61,6 +62,7 @@ export const TracesListProvider = memo(function TracesListProvider({
         withRootDuration,
         withTimeToFirstChunk,
         withTimeToFirstToken,
+        withOutcomeFields,
         now,
       }),
     orderBy: [sort],

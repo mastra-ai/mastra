@@ -26,6 +26,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
     withRootDuration,
     withTimeToFirstChunk,
     withTimeToFirstToken,
+    withOutcomeFields,
     discoveryTimeRange,
   } = useTracesConfig();
   const { filters } = useTracesFilters();
@@ -55,6 +56,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
         withRootDuration,
         withTimeToFirstChunk,
         withTimeToFirstToken,
+        withOutcomeFields,
       }),
     ],
     [
@@ -67,6 +69,7 @@ export function useTracesFilterBarFields(): FilterBarField[] {
       withRootDuration,
       withTimeToFirstChunk,
       withTimeToFirstToken,
+      withOutcomeFields,
       client,
       discoveryTimeRange,
     ],

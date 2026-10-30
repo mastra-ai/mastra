@@ -1,9 +1,9 @@
 ---
-title: "Reference: MCPServer | Tools and MCP"
-description: "The MCPServer class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server."
+title: 'Reference: MCPServer | Tools and MCP'
+description: 'The MCPServer class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server.'
 packages:
-  - "@mastra/core"
-  - "@mastra/mcp"
+  - '@mastra/core'
+  - '@mastra/mcp'
 ---
 
 # MCPServer
@@ -894,7 +894,7 @@ If the available prompts change, your server can notify listening clients.
 Call this method when the list of available prompts has changed (e.g., a prompt was added or removed). This will send a `notifications/prompts/list_changed` message to listening clients, prompting them to re-fetch the list of prompts.
 
 ```typescript oxfmt:false
-await serverWithPrompts.prompts.notifyListChanged()
+await serverWithPrompts.prompts.notifyListChanged();
 ```
 
 ### Best practices for Prompt Handling
@@ -1951,6 +1951,291 @@ Records an occurrence, delivers it to matching push streams and webhook subscrip
 - The buffer is in memory. A restarted server treats earlier cursors as a gap and reports `truncated: true`.
 - Webhook delivery state (pending retries, suspension, verification results) is in memory and rebuilt when clients refresh.
 - Event-list change announcements require the `eventsListChanged` filter on `subscriptions/listen`, which the MCP TypeScript SDK version used by `@mastra/mcp` doesn't carry. Until that support is available, the server neither advertises `listChanged` nor sends `notifications/events/list_changed`. Clients should re-run `events/list` to see changed event types.
+
+## Tasks (experimental)
+
+:::warning
+
+Tasks implement SEP-2663, the `io.modelcontextprotocol/tasks` MCP extension. This API may change in any release.
+
+:::
+
+The `tasks` option lets a tool, a workflow (`run_*`) or an agent (`ask_*`) answer `tools/call` with a task instead of a result. The client gets a task handle at once and polls `tasks/get` until the task finishes. The result outlives the request and isn't limited by HTTP timeouts. When at least one of them can answer with a task, the server advertises the extension and answers `tasks/get`, `tasks/update` and `tasks/cancel` over both stdio and Streamable HTTP. Without a `tasks` option, it does neither.
+
+Only clients that declare the extension on a request get a task. Every other client gets a synchronous answer, unless the tool is listed in `required`.
+
+```typescript
+import { MCPServer } from '@mastra/mcp'
+
+const server = new MCPServer({
+  id: 'reports',
+  name: 'Reports',
+  version: '1.0.0',
+  tools: { buildReport, lookupCustomer },
+  tasks: {
+    tools: {
+      buildReport: 'always',
+      lookupCustomer: { mode: 'auto', syncWindowMs: 1000 },
+    },
+  },
+})
+```
+
+### Modes
+
+| Mode | Client declared the extension | Client didn't |
+| - | - | - |
+| `'off'` | Synchronous answer. | Synchronous answer. |
+| `'always'` | Task handle at once. | Synchronous answer, or error `-32021` when the tool is in `required`. |
+| `'auto'` | Synchronous answer if the tool finishes within `syncWindowMs`. Otherwise a task handle, and the same run continues. | Synchronous answer, or error `-32021` when the tool is in `required`. |
+
+The server creates the task before it answers, so a `tasks/get` sent right after the handle arrives succeeds.
+
+### `tasks` options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'default',
+    type: "'off' | 'auto' | 'always'",
+    isOptional: true,
+    defaultValue: "'off'",
+    description:
+      "Mode for every tool, workflow and agent not listed in `tools`, `workflows` or `agents`, including tools added later with `toolActions.add()`. It covers `run_*` and `ask_*` tools too, so `default: 'always'` serves every workflow and agent as a task; list one as `'off'` to keep it synchronous.",
+  },
+  {
+    name: 'tools',
+    type: "Record<string, 'off' | 'auto' | 'always' | { mode; syncWindowMs?; ttlMs?; recover? }>",
+    isOptional: true,
+    description:
+      "Mode per tool name. `syncWindowMs` (default `2000`) is how long `'auto'` waits for a synchronous answer. `ttlMs` and `recover` override `tasks.ttlMs` and `tasks.recover` for that tool. A name that isn't one of the server's tools throws when the server is created.",
+  },
+  {
+    name: 'required',
+    type: 'string[]',
+    isOptional: true,
+    description:
+      "Tools that only run as tasks, by the name clients call: a tool's key, `run_<workflow>` or `ask_<agent>`. A client that didn't declare the extension gets error `-32021` instead of a synchronous answer. Each name must be served as a task.",
+  },
+  {
+    name: 'ttlMs',
+    type: 'number | null',
+    isOptional: true,
+    defaultValue: '86400000',
+    description:
+      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. With the in-memory store, `null` keeps tasks until the server closes, and finished results stay in memory until their TTL ends; `maxRetainedTasksPerClient` and `maxRetainedTasks` bound how many it holds. A task with a `null` TTL counts against them until the server closes. In Mastra storage, the server deletes the row of a finished task once its TTL ends, `null` keeps the row until you delete it, and a task still running after about 24.8 days (the longest timer Node.js supports) ends `failed`.',
+  },
+  {
+    name: 'recover',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Whether a tool or agent task whose server stopped mid-run runs again from the start on another instance. Only applies to tasks kept in Mastra storage. Workflow tasks ignore it, see [Workflow tasks](#workflow-tasks). See [Recovery after a crash](#recovery-after-a-crash).',
+  },
+  {
+    name: 'store',
+    type: 'MCPTaskStore',
+    isOptional: true,
+    description:
+      'Where tasks are kept. By default, a server registered on a Mastra instance with background tasks keeps them in Mastra storage (see [Tasks across instances](#tasks-across-instances)); any other server keeps them in memory, in this process.',
+  },
+  {
+    name: 'maxOpenTasksPerClient',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '100',
+    description:
+      'Most open tasks (`working` or `input_required`) one caller can hold. See [open task caps](#open-task-caps).',
+  },
+  {
+    name: 'maxOpenTasks',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Most open tasks across all callers. See [open task caps](#open-task-caps).',
+  },
+  {
+    name: 'maxRetainedTasksPerClient',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description:
+      'Most tasks one caller can have in the store, open or finished, until each is forgotten. Only the in-memory store enforces it. See [retained task caps](#retained-task-caps).',
+  },
+  {
+    name: 'maxRetainedTasks',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '10000',
+    description:
+      'Most tasks in the store across all callers, open or finished. See [retained task caps](#retained-task-caps).',
+  },
+  {
+    name: 'authorize',
+    type: '(context: { principal: string; task: MCPDetailedTask; requestContext: RequestContext }) => boolean | Promise<boolean>',
+    isOptional: true,
+    description:
+      'Runs on every `tasks/get`, `tasks/update` and `tasks/cancel`, after the caller is matched to the task. Return `false` to refuse; the caller gets the same error as for an unknown task.',
+  },
+  {
+    name: 'workflows',
+    type: "Record<string, 'off' | 'auto' | 'always' | { mode; syncWindowMs?; ttlMs? }>",
+    isOptional: true,
+    description:
+      "Mode per workflow key, for its `run_<key>` tool. A key that isn't one of the server's `workflows` throws when the server is created. See [Workflow tasks](#workflow-tasks).",
+  },
+  {
+    name: 'agents',
+    type: "Record<string, 'off' | 'auto' | 'always' | { mode; syncWindowMs?; ttlMs?; recover? }>",
+    isOptional: true,
+    description:
+      "Mode per agent key, for its `ask_<key>` tool. A key that isn't one of the server's `agents` throws when the server is created. See [Agent tasks](#agent-tasks).",
+  },
+]}
+/>
+
+### Access to tasks
+
+A task id is an unguessable bearer token, and each task is bound to the caller that created it. The caller is identified the same way as for [continuation state](#continuation-state): by the OAuth subject, the mapped `user`, or a hash of the bearer token. Another caller asking for the task, and a caller `authorize` refuses, both get error `-32602`, the same answer as for an id that doesn't exist. Tasks can't be listed.
+
+### Open task caps
+
+A task counts as open while it's `working` or `input_required`. It stops counting when it completes, fails, is cancelled or expires. When a call would go over `maxOpenTasksPerClient` or `maxOpenTasks`, the server creates no task:
+
+- An `'always'` tool doesn't run. The call answers with `isError: true` and a message such as `Too many open tasks for this client (limit 100). Wait for one to finish or cancel one.`
+- An `'auto'` tool that's still running when its sync window ends keeps running under the request and answers synchronously, the same way it would without tasks. Cancelling the request still aborts it.
+- `run_<workflow>` and `ask_<agent>` tasks count against the same caps, and against the [retained task caps](#retained-task-caps). An `'always'` workflow starts no run, and an `'always'` agent doesn't run. An `'auto'` workflow run that suspends can only be answered through a task, so at the cap the server cancels it and answers with `isError: true`.
+
+Both values must be positive integers. The server passes them to `store.create()` as `limits`, and the store enforces them by throwing `MCPTaskLimitError`. A custom store that ignores `limits` doesn't cap open tasks.
+
+### Retained task caps
+
+The in-memory store keeps a finished task's result in memory so the client can still read it, until the task's `ttlMs` ends plus one more minute. Finishing a task frees its open slot but not its memory, so a client that runs many short tasks in a row could otherwise grow memory without bound. `maxRetainedTasksPerClient` and `maxRetainedTasks` cap every task the store still holds, open or finished.
+
+- A call that would go over a retained cap gets the same answer as at an open cap. An `'always'` tool answers with `isError: true` and a message such as `Too many recent tasks for this client (limit 1000). Try again once older tasks expire.` An `'auto'` tool answers synchronously.
+- Tasks already created keep their full `ttlMs`. The store never drops a result early to make room. A slot frees when the store forgets a task.
+- Every open task is also retained. When you set only one of a pair, the other follows it: lowering `maxRetainedTasksPerClient` below 100 lowers the default `maxOpenTasksPerClient` to match, and raising `maxOpenTasks` above 10000 raises the default `maxRetainedTasks`. Setting both with the retained cap below the open cap throws when the server is created.
+
+Only the in-memory store enforces retained caps. Tasks kept in Mastra storage (see [Tasks across instances](#tasks-across-instances)) keep finished results in the database, so retained caps don't apply to them. Open task caps still do. A custom store that keeps finished results elsewhere can ignore them too.
+
+### Asking for input inside a task
+
+A tool that calls `suspend()` inside a task moves it to `input_required`. Its input request is the same form a synchronous call would get, built from the tool's `resumeSchema`. When the client answers with `tasks/update`, the server runs `execute` again with `resumeData`, as for a synchronous call. Keep the work before `suspend()` safe to repeat.
+
+A declined or cancelled input request completes the task with `isError: true`. Answers to keys the task didn't ask for are ignored.
+
+### What a task run receives
+
+Task runs are rebuilt from what the task stored when it was created. This keeps a task store free to run them again after a restart. Every run of a task gets the stored request context and no `context.mcp`. The one exception is the first run of an `'auto'` tool, which started under the request before the sync window elapsed.
+
+- The bearer token is removed from `authInfo` before the request context is stored. Everything else is stored unchanged, including `authInfo.extra` and the `user` returned by `mapAuthInfoToUser`. Don't put credentials there that the task store shouldn't keep.
+- Values are stored as JSON. A run reads back plain objects, so a `user` class instance arrives as a plain object with the same fields.
+- A key that can't be stored as JSON is left out, and the server logs a warning when it creates the task. If that key is `user`, authorization checks on later runs fail.
+- Read cancellation from `context.abortSignal`, because `context.mcp` isn't available.
+- Each run is authorized again against the stored request context, as each round of a synchronous call is.
+
+### Cancellation and errors
+
+- `tasks/cancel` aborts the tool's `abortSignal` and the task ends `cancelled`. Stopping is up to the tool. A result it returns afterwards is discarded.
+- A tool that throws completes the task with `isError: true` and the serialized error, as a synchronous call answers.
+- A task ends `failed` only when the server can't run it, for example when its TTL expires.
+
+### Workflow tasks
+
+A `run_<key>` task follows one workflow run. The run starts once, under the `tools/call` that creates the task, with a run id of its own. The task id is never the run id.
+
+```typescript
+const server = new MCPServer({
+  id: 'reports',
+  name: 'Reports',
+  version: '1.0.0',
+  workflows: { nightly },
+  tasks: {
+    workflows: { nightly: { mode: 'auto', syncWindowMs: 1000 } },
+  },
+})
+```
+
+- A run that ends `success` or `bailed` completes the task with the same text a synchronous call answers: `status`, `input`, `steps` and `result`.
+- A run that ends `failed`, `tripwire` or `canceled` completes the task with `isError: true` and the error message. In `'auto'` mode, a run that fails within `syncWindowMs` answers the same way, without a task. Only a client without the Tasks extension, or a workflow whose mode is `'off'`, gets the plain `run_` answer, where a failed run comes back without `isError`.
+- In `'auto'` mode, a run that suspends within `syncWindowMs` continues as a task, so it can ask for input.
+- Invalid arguments answer with `isError: true` before any run or task exists.
+- A step that suspends moves the task to `input_required`, with a form built from the step's `resumeSchema` and its suspend payload as the message. The server asks for one suspended step at a time. `tasks/update` resumes the run with the answer as `resumeData`. Resuming needs Mastra storage.
+- A run is resumed at most once per suspension. If it was already resumed, for example from Studio or by another instance, the answer is dropped and the task follows the run: when the run suspends again, even on the same step in a loop, the task asks again with a new input request. A resume from outside the task that reaches the run at the same moment as the task's own can still let a stale answer resume the next suspension of that same step.
+- A step whose `resumeSchema` can't be shown as a form, such as one with nested objects, leaves the task `working`. Resume the run another way, for example from Studio, and the task follows it. Until then the task reads the run's state every second and, on Mastra background tasks, holds a background task slot, as it does while it follows a run another instance executes.
+- Declining the input request, `tasks/cancel`, and TTL expiry cancel the run, including a run waiting for input, from any instance. A run executing on the instance that handles the cancel stops there. A run executing on another instance stops when that instance next renews its lease on the task, within about one lease.
+- A server that shuts down, or loses a task to another worker, stops following the run but leaves it running. Another instance picks the task up and follows the run to its end.
+- With a `store` passed in `tasks`, the server cancels the run only when the client declines. Have the store's cancel and expiry check the task's context with `isWorkflowTaskContext()` and call `mastra.getWorkflow(context.workflowKey).createRun({ runId: context.runId })`, then `run.cancel()` on it. In the process executing the run, that handle is the executing run, so `cancel()` stops it there.
+
+When the server running a workflow task stops, Mastra's [workflow recovery](/reference/core/mastra-class) continues the run on the next instance that starts, and the task follows it there. This requires `recovery.workflows` to be `'auto'`, the default. With `'off'`, the task stays `working` until its TTL expires. The step that was running when the server stopped runs again, so keep steps safe to repeat. A task whose run was never saved, or whose follower stops a second time, ends `failed`.
+
+### Agent tasks
+
+An `ask_<key>` task runs the agent's `generate()` as the task's work, like a tool task: `tasks/cancel` aborts the agent's `abortSignal`, an error completes the task with `isError: true`, and `recover` applies.
+
+An agent that pauses for tool approval or other input completes the task with `isError: true`. Tasks can't answer an agent's approval requests yet.
+
+### Tasks across instances
+
+Register the server on a Mastra instance with [background tasks](/docs/harness/background-tasks) enabled and its tasks are kept in Mastra storage. Any instance sharing that storage can answer `tasks/get`, `tasks/update` and `tasks/cancel` for a task, and run it.
+
+```typescript
+import { Mastra } from '@mastra/core/mastra'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const mastra = new Mastra({
+  // A local file is only shared by instances on the same host. Use a database every instance can reach.
+  storage: new LibSQLStore({ id: 'mastra', url: 'file:./mastra.db' }),
+  backgroundTasks: {
+    enabled: true,
+    // MCP tasks share the per-agent limit (5) unless their owner gets its own
+    perOwnerConcurrency: { 'mcp-server:reports': 50 },
+  },
+  mcpServers: { reports: server },
+})
+```
+
+- This needs a storage adapter that keeps a TTL per task. On an older adapter the server falls back to memory and logs a warning when it's registered. A `store` passed in `tasks` always wins.
+- A server that served tasks before it was registered kept those in memory. After registration it still serves them from memory on that instance, and keeps new tasks in Mastra storage.
+- Register the same server, with the same id and tools, on every instance. An instance without it can't run that server's tasks, and fails them instead. Set the id with `id`, or register the server under a key in `mcpServers`: a generated id changes on every start, and the server logs a warning.
+- Each task counts against `perOwnerConcurrency` for `mcp-server:<server id>` (or `perAgentConcurrency` when unset) and against `globalConcurrency`. Keep `backpressure` at its default, `'queue'`. With other values a full queue fails the call.
+- An answer sent with `tasks/update` is stored before it's acknowledged. The task resumes even if the instance that took the answer stops before running it.
+- The server deletes a finished task's row about a minute after its `ttlMs` ends, without `backgroundTasks.cleanup`. It only deletes its own rows. A task with `ttlMs: null` keeps its row until you delete it.
+- Expired tasks are failed, and answered tasks still waiting are resumed, by a periodic sweep on each instance. The sweep starts when the server is registered. An instance sweeps even before any client sends it a task request. Each sweep handles at most 100 expired tasks and checks 100 other open tasks, moving on to the next 100 on the following sweep. It restarts a task left waiting by a stopped instance only when a slot is free. The rest wait for a later sweep.
+- `maxOpenTasksPerClient` and `maxOpenTasks` count open tasks in storage across every instance, so they hold for the whole deployment. Each call counts before it adds its task, so calls arriving at the same moment on different instances can go over a cap by up to the number of those calls.
+- `tasks/cancel` can reach any instance. If the task's first attempt is still waiting for a slot on the instance that started it, that instance stops it on its next sweep, up to one lease (`leaseDurationMs`) later.
+
+Tasks are rows in the background tasks storage, owned by agent id `mcp-server:<server id>` with resource id `mcp-server:<server id>:<caller>`:
+
+- They don't belong to any agent, thread or memory, so they never appear in an agent's conversation.
+- The `/background-tasks` routes don't return them to a caller scoped to a resource. Callers without a resource scope can list them, as can the global `onTaskComplete` and `onTaskFailed` hooks. Check `task.agentId.startsWith('mcp-server:')` in hooks that only expect agent tasks.
+- A row is looked up by hashes of the task id and of the caller's principal, and stores neither value nor the bearer token. It does store the request context without the bearer token, and a readable `metadata.clientLabel` that keeps the client id with the subject or user id (next bullet). `authInfo.extra` and `user` are stored unchanged, so they're visible to anyone who can read the row.
+- To show which client sent a task, `metadata.clientLabel` holds the OAuth client id with the token's subject (`<client id>:sub:<subject>`), or with the id of the user `mapAuthInfoToUser` returned (`<client id>:user:<user id>`). Without either, it holds the client id and the first 8 characters of the token's hash (`<client id>:token:<hash prefix>`). The label is for debugging only: the server matches callers on the hashed principal, never on the label.
+
+### Recovery after a crash
+
+When the instance running a task stops, another instance notices it at its next sweep: after the task's lease lapses if the instance crashed, or right away if the instance shut down and handed the lease back. Every instance with the server registered on a Mastra instance with background tasks sweeps, whether or not it has served a task request. An instance that keeps tasks in memory, or without the server registered, doesn't. What happens next depends on `recover`:
+
+- `recover: false` (default): the task ends `failed` with `task lost: the server restarted while it was running`. `execute` never runs twice.
+- `recover: true`: another instance runs `execute` again from the start, once. Only turn it on for tools that are safe to repeat.
+
+With `recover: true` the same single retry also covers an attempt that fails for a reason other than the tool, such as a storage write failing while the task records that it needs input. An error from the tool itself isn't retried: it ends the task with an `isError` result.
+
+`recover` doesn't affect a task waiting for input: answering it resumes it on any instance either way.
+
+### Tracing
+
+Each task is one trace. The `tools/call` that creates the task is its root span, and it ends without an error once the task starts. Every run of the tool is a `task attempt <tool> #<n>` span under it, including resumed and recovered runs on other instances, and the tool's own spans sit inside its attempt. `tasks/update` and `tasks/cancel` requests join the same trace. `tasks/get` polls aren't traced.
+
+The same holds for `run_<workflow>` and `ask_<agent>` tasks. A workflow task's run sits under its first attempt, or under the root in `'auto'` mode, and each run resumed after `tasks/update` sits under the attempt that resumed it, on whichever instance that is. An agent task's `agent run` sits under its attempt. A run that Mastra's workflow recovery restarts after a crash starts a trace of its own, by design. Durable workflows and agents cover tracing across a crash. The task's attempt that follows the restarted run stays in the task's trace.
+
+Task details are in span metadata: `mcpTaskKey` (a SHA-256 hash of the task id), `attempt`, `resumed`, `recovered` and `mcpTaskStatus`. Spans never record the task id itself. The server writes out the root span as soon as the task starts. A trace without its root drops out of trace lists, and this keeps it listed even if that instance stops before its next export. Attempts are numbered across instances, so a run recovered after a crash shows as `#2` even when the crashed attempt's span was lost with its instance.
+
+### Limits
+
+- Without Mastra background tasks, tasks are kept in memory. They're lost when the process restarts, and a multi-instance deployment needs every `tasks/*` request for a task to reach the instance that created it. Streamable HTTP requests carry the task id in the `Mcp-Name` header, so a load balancer can route on it.
+- Progress and log notifications sent after the task handle is answered are dropped.
 
 ## Related information
 

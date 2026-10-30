@@ -49,6 +49,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
   const withTimeToFirstChunk = capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false;
   const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
+  const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
 
   // Stored columns the store can't fill stay saved but aren't drawn, so they come back on a store that can.
   const displayedColumns = useMemo(
@@ -85,8 +86,14 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
   const { field: sortField, direction: sortDirection } = sort;
 
   const where = useMemo(
-    () => buildSpanQueryWhere(tokens, groups, { withContextFields, withTimeToFirstChunk, withTimeToFirstToken }),
-    [tokens, groups, withContextFields, withTimeToFirstChunk, withTimeToFirstToken],
+    () =>
+      buildSpanQueryWhere(tokens, groups, {
+        withContextFields,
+        withOutcomeFields,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
+      }),
+    [tokens, groups, withContextFields, withOutcomeFields, withTimeToFirstChunk, withTimeToFirstToken],
   );
   const query = useMemo<SpanQueryArgs>(
     () => ({ timeRange, orderBy: [{ field: sortField, direction: sortDirection }], ...(where ? { where } : {}) }),

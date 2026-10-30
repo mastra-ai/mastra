@@ -46,6 +46,7 @@ export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOp
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
   const withTimeToFirstChunk = capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false;
   const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
+  const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
   const { data: entityNames = NO_SUGGESTIONS } = useEntityNames();
   const { data: environments = NO_SUGGESTIONS } = useEnvironments();
 
@@ -58,12 +59,22 @@ export function useSpansFilterBarFields({ timeRange }: UseSpansFilterBarFieldsOp
         withContextFields,
         withTimeToFirstChunk,
         withTimeToFirstToken,
+        withOutcomeFields,
         entityNames,
         environments,
         valueSuggestions: path => createTraceQueryValuesResolver(client, timeRange, 'spans', path),
       }),
     ],
-    [withContextFields, withTimeToFirstChunk, withTimeToFirstToken, entityNames, environments, client, timeRange],
+    [
+      withContextFields,
+      withTimeToFirstChunk,
+      withTimeToFirstToken,
+      withOutcomeFields,
+      entityNames,
+      environments,
+      client,
+      timeRange,
+    ],
   );
 }
 

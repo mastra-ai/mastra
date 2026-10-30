@@ -40,6 +40,10 @@ export type TracesListViewTrace = {
   model?: string | null;
   provider?: string | null;
   status?: string | null;
+  /** How the span or the trace's root span ended (`success`, `limit`, …); absent when not recorded. */
+  outcome?: string | null;
+  stopReason?: string | null;
+  stopReasonContext?: Record<string, unknown> | null;
   /** Server-rendered preview of `input`. Present on lightweight rows, which omit `input` itself. */
   inputPreview?: string | null;
   input?: unknown;
@@ -144,6 +148,8 @@ export type TracesListViewProps = {
   onFilterByField?: (field: TraceCustomColumn, value: string) => void;
   /** Storage id for the persisted column order. Use a distinct id per page so each keeps its own order. */
   listId?: string;
+  /** Show the Outcome column in place of Status. Defaults to `true`; thread rows carry no outcome. */
+  outcomeColumn?: boolean;
 };
 
 /**
@@ -170,10 +176,11 @@ export function TracesListView({
   onSortChange,
   onFilterByField,
   listId = 'all-traces',
+  outcomeColumn = true,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const columns = buildTraceListColumns(columnPreferences);
-  const columnKeys = buildTraceListColumnKeys(columnPreferences);
+  const columns = buildTraceListColumns(columnPreferences, { outcomeColumn });
+  const columnKeys = buildTraceListColumnKeys(columnPreferences, { outcomeColumn });
   const isSortable = (field: TracesListSortField) => !!onSortChange && sortableFields.includes(field);
   const sortFor = (field: TracesListSortField) => (sort?.field === field ? sort.direction : undefined);
   const handleSortChange = (direction: DataListSort, field: TracesListSortField) =>
@@ -225,7 +232,14 @@ export function TracesListView({
         <TracesDataList.TopCell>Primitive name</TracesDataList.TopCell>
         {hasTraceColumn(columnPreferences, 'input') && <TracesDataList.TopCell>Input</TracesDataList.TopCell>}
         {hasTraceColumn(columnPreferences, 'output') && <TracesDataList.TopCell>Output</TracesDataList.TopCell>}
-        <TracesDataList.TopCell>Status</TracesDataList.TopCell>
+        {outcomeColumn ? (
+          <>
+            <TracesDataList.TopCell>Outcome</TracesDataList.TopCell>
+            <TracesDataList.TopCell>Stop reason</TracesDataList.TopCell>
+          </>
+        ) : (
+          <TracesDataList.TopCell>Status</TracesDataList.TopCell>
+        )}
         {hasTraceColumn(columnPreferences, 'duration') && (
           <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
         )}
@@ -378,7 +392,17 @@ export function TracesListView({
                       status={trace.status}
                     />
                   ))}
-                <TracesDataList.StatusCell status={trace.status} />
+                {outcomeColumn ? (
+                  <>
+                    <TracesDataList.OutcomeCell outcome={trace.outcome} status={trace.status} />
+                    <TracesDataList.StopReasonCell
+                      stopReason={trace.stopReason}
+                      stopReasonContext={trace.stopReasonContext}
+                    />
+                  </>
+                ) : (
+                  <TracesDataList.StatusCell status={trace.status} />
+                )}
                 {hasTraceColumn(columnPreferences, 'duration') && (
                   <DataList.NumberCell font="mono">
                     {formatDuration(getSpanDurationMs(trace.startedAt, trace.endedAt))}

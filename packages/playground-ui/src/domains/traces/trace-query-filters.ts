@@ -86,6 +86,8 @@ const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
   'durationMs',
   'timeToFirstChunkMs',
   'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
 ]);
 
 /** Trace-level fields that may be unset. "is not X" on these must also keep traces
@@ -97,6 +99,8 @@ export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set([
   'durationMs',
   'timeToFirstChunkMs',
   'timeToFirstTokenMs',
+  'outcome',
+  'stopReason',
 ]);
 
 /** Negative operators are expressed as `none(<positive>)` on related collections. */

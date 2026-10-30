@@ -6,6 +6,7 @@ import {
   buildSpanQueryWhere,
   createSpanFilterBarFields,
   SPAN_CONTEXT_FILTER_FIELD_IDS,
+  SPAN_OUTCOME_FILTER_FIELD_IDS,
   SPAN_CORE_FILTER_FIELD_IDS,
 } from './span-filters';
 
@@ -40,7 +41,11 @@ describe('span filter fields', () => {
   describe('when listing every filterable field', () => {
     it('only offers paths the span query grammar accepts', () => {
       const registryPaths = Object.keys(SPAN_QUERY_FIELD_REGISTRY);
-      for (const id of [...SPAN_CORE_FILTER_FIELD_IDS, ...SPAN_CONTEXT_FILTER_FIELD_IDS]) {
+      for (const id of [
+        ...SPAN_CORE_FILTER_FIELD_IDS,
+        ...SPAN_CONTEXT_FILTER_FIELD_IDS,
+        ...SPAN_OUTCOME_FILTER_FIELD_IDS,
+      ]) {
         expect(registryPaths).toContain(id);
       }
     });
@@ -78,6 +83,20 @@ describe('span filter fields', () => {
       const tokenOnly = fieldIds(true, { withTimeToFirstChunk: false, withTimeToFirstToken: true });
       expect(tokenOnly).not.toContain('timeToFirstChunkMs');
       expect(tokenOnly).toContain('timeToFirstTokenMs');
+    });
+  });
+
+  describe('when the store accepts outcome fields', () => {
+    const fields = createSpanFilterBarFields({
+      withContextFields: false,
+      withOutcomeFields: true,
+      entityNames: [],
+      environments: [],
+    });
+
+    it('adds Outcome and Stop reason to the core fields', () => {
+      expect(fields.map(field => field.id)).toEqual(expect.arrayContaining(['outcome', 'stopReason']));
+      expect(fields.find(field => field.id === 'outcome')?.operatorLabels).toEqual({ notExists: 'is not recorded' });
     });
   });
 
@@ -142,6 +161,28 @@ describe('span filter fields', () => {
     it('leaves ids as free text', () => {
       expect(byId('runId').suggestions).toBeUndefined();
       expect(byId('traceId').operators).not.toContain('notExists');
+    });
+  });
+});
+
+describe('buildSpanQueryWhere — outcome fields', () => {
+  const outcomeTokens = [
+    { fieldId: 'outcome', value: 'limit' },
+    { fieldId: 'stopReason', operatorId: 'notExists', value: '' },
+  ];
+
+  describe('when the store accepts outcome fields', () => {
+    it('filters on the outcome and stop reason', () => {
+      expect(buildSpanQueryWhere(outcomeTokens, [], { ...coreOnly, withOutcomeFields: true })).toEqual({
+        op: 'and',
+        args: [eq('outcome', 'limit'), { op: 'notExists', path: 'stopReason' }],
+      });
+    });
+  });
+
+  describe('when the store does not accept outcome fields', () => {
+    it('drops them', () => {
+      expect(buildSpanQueryWhere(outcomeTokens, [], coreOnly)).toBeUndefined();
     });
   });
 });

@@ -236,14 +236,23 @@ export function FilterBarProvider({
 
   const getField = useCallback((fieldId: string) => fields.find(f => f.id === fieldId), [fields]);
   const getOperator = useCallback((operatorId: string) => operators.find(o => o.id === operatorId), [operators]);
-  const getFieldOperators = useCallback(
-    (field: FilterBarField) => {
-      if (!field.operators) return operators;
-      const allowed = new Set(field.operators);
-      return operators.filter(o => allowed.has(o.id));
-    },
-    [operators],
-  );
+  // Cached per field so a chip's operator and its option list stay the same objects across renders.
+  const getFieldOperators = useMemo(() => {
+    const cache = new WeakMap<FilterBarField, FilterBarOperator[]>();
+    return (field: FilterBarField) => {
+      const cached = cache.get(field);
+      if (cached) return cached;
+      const allowed = field.operators ? new Set(field.operators) : undefined;
+      const result = operators
+        .filter(o => !allowed || allowed.has(o.id))
+        .map((o): FilterBarOperator => {
+          const label = field.operatorLabels?.[o.id];
+          return label ? { ...o, label } : o;
+        });
+      cache.set(field, result);
+      return result;
+    };
+  }, [operators]);
 
   const announce = useCallback((message: string) => setAnnouncement(message), []);
 

@@ -11,6 +11,7 @@ import {
   TRACE_STRING_OPERATORS,
   TRACE_SYNTHETIC_OPERATORS,
   TRACE_TEXT_OPERATORS,
+  createOutcomeFilterBarFields,
   traceFilterFieldColor,
   traceFilterFieldIcon,
   withoutUnrecordedStreamingTimings,
@@ -61,8 +62,8 @@ export const SPAN_CONTEXT_FILTER_FIELD_IDS = [
   'rootEntityName',
 ] as const;
 
-const CORE_FIELD_IDS: ReadonlySet<string> = new Set(SPAN_CORE_FILTER_FIELD_IDS);
-const ALL_FIELD_IDS: ReadonlySet<string> = new Set([...SPAN_CORE_FILTER_FIELD_IDS, ...SPAN_CONTEXT_FILTER_FIELD_IDS]);
+/** Span query fields the server only accepts when the store declares `spanQueryOutcomeFields`. */
+export const SPAN_OUTCOME_FILTER_FIELD_IDS = ['outcome', 'stopReason'] as const;
 
 const NUMBER_FIELD_IDS: ReadonlySet<string> = new Set(['durationMs', 'timeToFirstChunkMs', 'timeToFirstTokenMs']);
 /** The query can only test `error` for presence; any other operator is rejected. */
@@ -156,12 +157,15 @@ export function createSpanFilterBarFields({
   withContextFields,
   withTimeToFirstChunk,
   withTimeToFirstToken,
+  withOutcomeFields = false,
   entityNames,
   environments,
   valueSuggestions,
 }: StreamingTimingSupport & {
   /** Offer the context fields. Only when the server declares `spanQueryContextFields`. */
   withContextFields: boolean;
+  /** Offer `outcome` and `stopReason`. Only when the server declares `spanQueryOutcomeFields`. */
+  withOutcomeFields?: boolean;
   entityNames: readonly string[];
   environments: readonly string[];
   /** Builds a lazy value resolver for a span field. Absent → free text. */
@@ -214,16 +218,23 @@ export function createSpanFilterBarFields({
     }
   };
 
-  const offered = withoutUnrecordedStreamingTimings(withContextFields ? ALL_FIELD_IDS : CORE_FIELD_IDS, {
-    withTimeToFirstChunk,
-    withTimeToFirstToken,
-  });
+  const offered = withoutUnrecordedStreamingTimings(
+    new Set([...SPAN_CORE_FILTER_FIELD_IDS, ...SPAN_CONTEXT_FILTER_FIELD_IDS]),
+    {
+      withTimeToFirstChunk,
+      withTimeToFirstToken,
+    },
+  );
   const sortFields = (ids: readonly string[]) =>
     ids
       .filter(id => offered.has(id))
       .map(field)
       .sort((a, b) => a.label.localeCompare(b.label));
-  return [...sortFields(SPAN_CORE_FILTER_FIELD_IDS), ...sortFields(SPAN_CONTEXT_FILTER_FIELD_IDS)];
+  return [
+    ...sortFields(SPAN_CORE_FILTER_FIELD_IDS),
+    ...(withContextFields ? sortFields(SPAN_CONTEXT_FILTER_FIELD_IDS) : []),
+    ...(withOutcomeFields ? createOutcomeFilterBarFields(spanFieldBase, valueSuggestions) : []),
+  ];
 }
 
 function tokenToSpanQueryPredicate(
@@ -284,10 +295,18 @@ function groupToSpanQueryPredicate(
 export function buildSpanQueryWhere(
   tokens: TraceFilterToken[],
   groups: TraceFilterGroup[],
-  { withContextFields, ...support }: StreamingTimingSupport & { withContextFields: boolean },
+  {
+    withContextFields,
+    withOutcomeFields = false,
+    ...support
+  }: StreamingTimingSupport & { withContextFields: boolean; withOutcomeFields?: boolean },
 ): TraceQueryScalarPredicate | undefined {
   const allowedFieldIds = withoutUnrecordedStreamingTimings(
-    withContextFields ? ALL_FIELD_IDS : CORE_FIELD_IDS,
+    new Set([
+      ...SPAN_CORE_FILTER_FIELD_IDS,
+      ...(withContextFields ? SPAN_CONTEXT_FILTER_FIELD_IDS : []),
+      ...(withOutcomeFields ? SPAN_OUTCOME_FILTER_FIELD_IDS : []),
+    ]),
     support,
   );
   const args = [
