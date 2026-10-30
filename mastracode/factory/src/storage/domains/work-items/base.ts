@@ -899,12 +899,13 @@ function applyUpdate({
   current,
   userId,
   input,
+  now = new Date(),
 }: {
   current: WorkItemDbRow;
   userId: string;
   input: UpdateWorkItemInput;
+  now?: Date;
 }): Partial<WorkItemDbRow> {
-  const now = new Date();
   return {
     ...(input.board !== undefined ? { board: input.board } : {}),
     ...(input.parentWorkItemId !== undefined ? { parent_work_item_id: input.parentWorkItemId } : {}),
@@ -3207,10 +3208,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           row = await ops.updateAtomic<WorkItemDbRow>('work_items', { id: row.id }, current => {
             // Stamp only the starting role — `applyUpdate` merges sessions, so
             // other roles keep their own session and `startedBy` (#22254).
+            // The binding below shares this clock, so a run started on an existing card
+            // is never older than the card's last change.
             const next = applyUpdate({
               current,
               userId: input.userId,
               input: { sessions: { [input.role]: input.session } },
+              now,
             });
             const adopt = this.#claimToAdopt(current, next, create);
             return adopt ? { ...next, claim_key: adopt } : next;

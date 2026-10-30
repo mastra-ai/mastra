@@ -104,7 +104,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('returning held 
     const bug = await triaged(await file('work', false), 'bug');
     const accepted = await triaged(await file('work', false), 'feature request', { accept: true });
     // The triage run that classified the card is still bound: bindings outlive their run.
-    const classifiedByItsRun = await triaged(await file('work', true), 'docs');
+    const classifying = await file('work', true);
+    // The run classifies the card some time after it started.
+    await new Promise(resolve => setTimeout(resolve, 5));
+    const classifiedByItsRun = await triaged(classifying, 'docs');
     const rerun = await startRun(await triaged(await file('work', false), 'feature request'));
     const review = await triaged(await file('review', false), 'feature request');
     expect(held).toMatchObject({ triageType: 'feature request', acceptedAt: null, stages: ['triage'] });

@@ -598,11 +598,12 @@ describe('FactoryPhaseStateProcessor', () => {
         },
         tools: {
           publish_draft: {
+            // Moves on whatever the call returned, so a failed call reaches the exit-tool gate.
             onResult: context =>
-              context.result.status === 'success' && context.item.stages[0] === 'drafting'
+              context.item.stages[0] === 'drafting'
                 ? {
                     type: 'transition',
-                    idempotencyKey: `${context.ingress.id}:published`,
+                    idempotencyKey: `${context.ingress.id}:published:${context.result.status}`,
                     board: 'release',
                     stage: 'shipping',
                   }
