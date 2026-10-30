@@ -71,7 +71,7 @@ describe('ConnectionActivity', () => {
     act(() => vi.advanceTimersByTime(milliseconds));
   }
 
-  it('given a reconnect that outlasts the delay, then a quiet status-line hint outranks the working state', () => {
+  it('given a reconnect that outlasts the delay, then the composer header shows it and the status line hides the working state', () => {
     const view = renderWithProviders(<ActivityFixture status="reconnecting" busy />);
     advance(RECONNECT_NOTICE_DELAY_MS);
 
@@ -81,7 +81,7 @@ describe('ConnectionActivity', () => {
 
     view.rerender(<ActivityFixture status="ready" busy />);
 
-    // Recovery clears the hint without a confirmation flash.
+    // Recovery clears the notice without a confirmation flash.
     expect(screen.queryByText('Reconnecting…')).toBeNull();
     expect(screen.queryByText('Reconnected')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('Working…');
