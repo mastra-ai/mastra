@@ -93,7 +93,7 @@ Editing a page needs editor on "policy:acme"; this run has viewer there.
 
 ## Pages
 
-A **page** is a topic with a name, a short description and a body. Each page has one home scope and can sit under a parent page. A scope holds a tree of pages. The body is the curated summary of the topic, and only editors change it.
+A **page** is a topic with a name, a short description and a body. Each page has one home scope and can sit under a parent page. A scope holds a tree of pages. The body is the curated summary of the topic, written in markdown, and only editors change it.
 
 A page can have a **key**, a short name unique among its siblings. Tools refer to a page by its ID, by its path, or by its exact name:
 
@@ -104,7 +104,7 @@ A page can have a **key**, a short name unique among its siblings. Tools refer t
 
 ## Notes
 
-A **note** is a short fact added to a page, such as a detail someone else should be able to rely on later. Notes record who wrote them, and contributors can add them without being able to edit the page body.
+A **note** is a short fact added to a page, such as a detail someone else should be able to rely on later. Notes record who wrote them, may use inline markdown such as links and code, and contributors can add them without being able to edit the page body.
 
 Every note is **stamped** with one or more scopes that decide who sees it. A note is visible when its page is visible and the run can read at least one of its stamps. An agent can add a note stamped `agent:acme:alex` to a page in `org:acme`, and only runs that can read `agent:acme:alex` see it.
 

@@ -172,6 +172,23 @@ Template pages belong to the config:
 
 A child gets no rules from its parent. List every rule it needs, with params bound from the parent's address. In a child's rules `self` is the child, which no run holds, so name the parent's pattern as the principal, as above. A run holding `org:acme` reads the team's pages but not the private child's.
 
+## Label scopes for UIs
+
+`displayLabel` gives a scope type a short name for screens such as Studio. The model never sees it. `description` is what the model reads. `$params` fill in from the address, and a concrete address's own label wins:
+
+```typescript oxfmt:false
+scopes: {
+  'org:$orgId': {
+    displayLabel: '$orgId organization',
+    access: [{ principal: 'self', role: 'editor' }],
+    children: [{ name: 'private', displayLabel: 'Private', access: [{ principal: 'self', role: 'owner' }] }],
+  },
+  'org:acme': { displayLabel: 'Acme HQ' },
+}
+```
+
+`knowledge.scopeLabel('org:globex')` returns `globex organization`, and `knowledge.scopeLabel('org:acme')` returns `Acme HQ`. See [`scopeLabel()`](/reference/knowledge/knowledge-class#scopelabel).
+
 ## Share one scope
 
 A key with no params is a concrete address. It adds rules to the one pattern it matches, for a single scope:
@@ -194,7 +211,7 @@ Declare the pattern first. A concrete address with no matching pattern fails at 
 Knowledge scope "feature:acme:a" doesn't match a declared pattern; declare its pattern first.
 ```
 
-A concrete address can add `description`, `access`, `pinnedContext` and `pinnedContextPriority`. Declare `belongsTo`, `children` and `pages` on the pattern.
+A concrete address can add `description`, `displayLabel`, `access`, `pinnedContext` and `pinnedContextPriority`. Declare `belongsTo`, `children` and `pages` on the pattern.
 
 ## Build addresses in code
 

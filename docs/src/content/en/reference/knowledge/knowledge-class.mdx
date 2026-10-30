@@ -45,7 +45,7 @@ export const knowledge = new Knowledge({
     name: 'scopes',
     type: 'KnowledgeScopeDeclarations',
     description:
-      "Scope types and concrete scopes this Knowledge knows, keyed by pattern (`team:$orgId:$teamId`) or address (`org:acme`). Each declaration sets `access` rules and optionally `description`, `belongsTo`, `children`, `pages`, `pinnedContext` and `pinnedContextPriority`. Required: every run scope of an attached agent must match a declaration. Spread `knowledgeMemoryScopes()` for Memory's scopes; `{}` declares nothing. See [Declare scope types](/docs/knowledge/scope-types).",
+      "Scope types and concrete scopes this Knowledge knows, keyed by pattern (`team:$orgId:$teamId`) or address (`org:acme`). Each declaration sets `access` rules and optionally `description`, `displayLabel`, `belongsTo`, `children`, `pages`, `pinnedContext` and `pinnedContextPriority`. `displayLabel` is a short name for UIs, such as `'$orgId organization'`; the model never sees it. Children take `displayLabel` too. Required: every run scope of an attached agent must match a declaration. Spread `knowledgeMemoryScopes()` for Memory's scopes; `{}` declares nothing. See [Declare scope types](/docs/knowledge/scope-types).",
   },
   {
     name: 'id',
@@ -248,6 +248,47 @@ const read = await knowledge.readScopeFor(['org:acme'])
 const [scope] = await store.getScopesByAddress(['team:acme:support'])
 const page = await store.getPageByPath({ scopeId: scope.id, path: ['handbook', 'refunds'], read })
 ```
+
+### `onChange()`
+
+```typescript oxfmt:false
+onChange(listener: (event: KnowledgeChangeEvent) => void): () => void
+```
+
+Calls `listener` after each committed write made through this instance's store: tool writes, host writes through `getStorage()`, and new scopes. Returns a function that removes the listener. Use it to refresh a live UI. Writes made on a store obtained another way aren't seen.
+
+Events carry IDs, not content or access, so anything that relays them to people must re-read each page under that person's read scope from `readScopeFor()`:
+
+| `kind` | `op` | Fields |
+| - | - | - |
+| `scope` | `create` | `pageId`, `scopeId` (the new scope page's ID) |
+| `page` | `create`, `update`, `move`, `merge`, `delete` | `pageId`, `scopeId`; `fromScopeId` for `move` and `merge`; `sourceId` (the page merged away) for `merge` |
+| `note` | `add`, `restamp`, `remove`, `restore` | `pageId`, `noteId` |
+| `pin` | `add`, `remove` | `pageId` |
+
+Every event also has `knowledgeId` and `at`. Creating a scope emits one `scope` event, not one per child scope or template page, so re-list the scope when it arrives. A listener that throws is logged and doesn't fail the write.
+
+```typescript
+const unsubscribe = knowledge.onChange(event => {
+  if (event.kind === 'page') refreshPage(event.pageId)
+})
+```
+
+### `scopeDeclaration()`
+
+```typescript oxfmt:false
+scopeDeclaration(key: string): KnowledgeScopeDeclarationInfo | undefined
+```
+
+Returns the declaration a scope was created from, by its declaration key, for display: `{ key, description?, displayLabel?, belongsTo?, children }`. Child keys work too, such as `org:$orgId/private`. Access rules are left out. Use `explainAccess()` for those. Returns `undefined` for an unknown key.
+
+### `scopeLabel()`
+
+```typescript oxfmt:false
+scopeLabel(address: string): string | undefined
+```
+
+Returns the `displayLabel` for a scope address with its `$params` filled in: `'$orgId organization'` on `org:$orgId` gives `acme organization` for `org:acme`. A concrete address's own `displayLabel` wins. Returns `undefined` when the address matches no declaration or has no label.
 
 ### `pinnedContextEnabled`
 

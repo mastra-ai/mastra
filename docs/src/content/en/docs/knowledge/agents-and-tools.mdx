@@ -72,7 +72,7 @@ Both need `viewer`.
 
 ## Write pages
 
-A page's body is the curated summary of its topic. `knowledge_page` with `op: "write"` creates a page when there's no `page`, and edits one when there is.
+A page's body is the curated summary of its topic, in markdown: headings, lists and links. `knowledge_page` with `op: "write"` creates a page when there's no `page`, and edits one when there is.
 
 Create a page in a scope:
 
@@ -82,7 +82,7 @@ Create a page in a scope:
   "scope": "team:acme:support",
   "name": "Chargeback Playbook",
   "description": "How support handles chargebacks.",
-  "body": "Freeze the card, then open a dispute in the billing console."
+  "body": "## Steps\n\n1. Freeze the card.\n2. Open a dispute in the billing console."
 }
 ```
 
@@ -153,7 +153,7 @@ The model decides who a fact is for when it writes it. A fact for the whole team
 
 ## Add notes
 
-A note is a short attributed fact on a page, about 250 tokens at most. Contributors can add notes to pages whose body they can't edit:
+A note is a short attributed fact on a page, about 250 tokens at most. Inline markdown such as links and code is fine. Contributors can add notes to pages whose body they can't edit:
 
 ```json
 {
