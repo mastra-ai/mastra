@@ -125,7 +125,7 @@ export function WorkItemCard({
     decision,
     transitionReason,
     sessionStatus,
-    heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
+    held: awaitsTriageDecision(item, columnStage),
   });
   const { status, owner, wick } = state;
   const lockedByYou = owner.kind === 'you';
