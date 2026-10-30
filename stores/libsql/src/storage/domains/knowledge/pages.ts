@@ -1058,6 +1058,20 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     return this.#noteOutput(rows, limit);
   }
 
+  async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.pageIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (ids.length === 0) return counts;
+    const readable = noteReadable('n', input.read);
+    const rows = await this.#query(
+      this.#read,
+      `SELECT n.pageId AS pageId, COUNT(*) AS total FROM "${T.notes}" n WHERE n.pageId IN (SELECT value FROM json_each(?)) AND n.deletedAt IS NULL AND ${readable.sql} GROUP BY n.pageId`,
+      [jsonList(ids), ...readable.args],
+    );
+    for (const row of rows) counts[String(row.pageId)] = Number(row.total);
+    return counts;
+  }
+
   async listNotesMentioning(input: {
     pageId: string;
     read: KnowledgeReadScope;
