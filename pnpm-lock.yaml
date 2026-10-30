@@ -2645,6 +2645,9 @@ importers:
       '@ai-sdk/anthropic':
         specifier: ^3.0.135
         version: 3.0.135(zod@4.6.7)
+      '@ai-sdk/google-vertex':
+        specifier: ^3.0.185
+        version: 3.0.185(supports-color@10.2.2)(zod@4.6.7)
       '@ai-sdk/openai':
         specifier: ^3.0.131
         version: 3.0.134(zod@4.6.7)
