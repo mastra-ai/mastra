@@ -11,7 +11,7 @@ const {
   createDeepInfraMock,
   createDeepSeekMock,
   createGatewayMock,
-  createGoogleGenerativeAIMock,
+  createGoogleMock,
   createGroqMock,
   createMistralMock,
   createOpenAIMock,
@@ -29,7 +29,7 @@ const {
   createDeepInfraMock: vi.fn(),
   createDeepSeekMock: vi.fn(),
   createGatewayMock: vi.fn(),
-  createGoogleGenerativeAIMock: vi.fn(),
+  createGoogleMock: vi.fn(),
   createGroqMock: vi.fn(),
   createMistralMock: vi.fn(),
   createOpenAIMock: vi.fn(),
@@ -41,19 +41,19 @@ const {
   xAIResponsesMock: vi.fn(),
 }));
 
-vi.mock('@ai-sdk/anthropic-v6', () => ({ createAnthropic: createAnthropicMock }));
+vi.mock('@ai-sdk/anthropic-v7', () => ({ createAnthropic: createAnthropicMock }));
 vi.mock('@ai-sdk/cerebras-v7', () => ({ createCerebras: createCerebrasMock }));
 vi.mock('@ai-sdk/deepinfra-v7', () => ({ createDeepInfra: createDeepInfraMock }));
 vi.mock('@ai-sdk/deepseek-v7', () => ({ createDeepSeek: createDeepSeekMock }));
-vi.mock('@ai-sdk/google-v6', () => ({ createGoogleGenerativeAI: createGoogleGenerativeAIMock }));
+vi.mock('@ai-sdk/google-v7', () => ({ createGoogle: createGoogleMock }));
 vi.mock('@ai-sdk/groq-v7', () => ({ createGroq: createGroqMock }));
 vi.mock('@ai-sdk/mistral-v6', () => ({ createMistral: createMistralMock }));
-vi.mock('@ai-sdk/openai-v6', () => ({ createOpenAI: createOpenAIMock }));
+vi.mock('@ai-sdk/openai-v7', () => ({ createOpenAI: createOpenAIMock }));
 vi.mock('@ai-sdk/perplexity-v6', () => ({ createPerplexity: createPerplexityMock }));
 vi.mock('@ai-sdk/togetherai-v7', () => ({ createTogetherAI: createTogetherAIMock }));
 vi.mock('@ai-sdk/xai-v7', () => ({ createXai: createXaiMock }));
-vi.mock('@internal/ai-v6', () => ({ createGateway: createGatewayMock }));
-vi.mock('@openrouter/ai-sdk-provider-v6', () => ({ createOpenRouter: createOpenRouterMock }));
+vi.mock('@internal/ai-v7', () => ({ createGateway: createGatewayMock }));
+vi.mock('@openrouter/ai-sdk-provider-v7', () => ({ createOpenRouter: createOpenRouterMock }));
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -72,7 +72,7 @@ describe('ModelsDevGateway', () => {
     createDeepInfraMock.mockReturnValue(callableModelMock);
     createDeepSeekMock.mockReturnValue(callableModelMock);
     createGatewayMock.mockReturnValue(callableModelMock);
-    createGoogleGenerativeAIMock.mockReturnValue({ chat: chatModelMock });
+    createGoogleMock.mockReturnValue({ chat: chatModelMock });
     createGroqMock.mockReturnValue(callableModelMock);
     createMistralMock.mockReturnValue(callableModelMock);
     createOpenAIMock.mockReturnValue({ responses: openAIResponsesMock });
@@ -611,13 +611,13 @@ describe('ModelsDevGateway', () => {
       },
       {
         providerId: 'google',
-        factory: createGoogleGenerativeAIMock,
+        factory: createGoogleMock,
         modelInvoker: chatModelMock,
         model: { provider: 'chat' },
       },
       {
         providerId: 'gemini',
-        factory: createGoogleGenerativeAIMock,
+        factory: createGoogleMock,
         modelInvoker: chatModelMock,
         model: { provider: 'chat' },
       },

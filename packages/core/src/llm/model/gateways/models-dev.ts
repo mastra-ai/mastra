@@ -1,18 +1,18 @@
 import { createAlibaba } from '@ai-sdk/alibaba-v7';
-import { createAnthropic } from '@ai-sdk/anthropic-v6';
+import { createAnthropic } from '@ai-sdk/anthropic-v7';
 import { createCerebras } from '@ai-sdk/cerebras-v7';
 import { createDeepInfra } from '@ai-sdk/deepinfra-v7';
 import { createDeepSeek } from '@ai-sdk/deepseek-v7';
-import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
+import { createGoogle } from '@ai-sdk/google-v7';
 import { createGroq } from '@ai-sdk/groq-v7';
 import { createMistral } from '@ai-sdk/mistral-v6';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
-import { createOpenAI } from '@ai-sdk/openai-v6';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v7';
+import { createOpenAI } from '@ai-sdk/openai-v7';
 import { createPerplexity } from '@ai-sdk/perplexity-v6';
 import { createTogetherAI } from '@ai-sdk/togetherai-v7';
 import { createXai } from '@ai-sdk/xai-v7';
-import { createGateway } from '@internal/ai-v6';
-import { createOpenRouter } from '@openrouter/ai-sdk-provider-v6';
+import { createGateway } from '@internal/ai-v7';
+import { createOpenRouter } from '@openrouter/ai-sdk-provider-v7';
 import { parseModelRouterId } from '../gateway-resolver.js';
 import { MastraModelGateway } from './base.js';
 import type {
@@ -412,7 +412,7 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'gemini':
       case 'google':
-        return createGoogleGenerativeAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
+        return createGoogle({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
       case 'anthropic':
         return createAnthropic({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'mistral':
@@ -472,7 +472,7 @@ export class ModelsDevGateway extends MastraModelGateway {
 
         if (npm === '@ai-sdk/google') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
-          return createGoogleGenerativeAI({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
+          return createGoogle({ apiKey, baseURL, headers: mastraHeaders }).chat(modelId);
         }
 
         if (npm === '@ai-sdk/mistral') {

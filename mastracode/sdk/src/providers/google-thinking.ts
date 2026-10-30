@@ -72,7 +72,7 @@ export function createGoogleThinkingMiddleware(
   if (!config) return undefined;
 
   return {
-    specificationVersion: 'v3',
+    specificationVersion: 'v4',
     transformParams: async ({ params }) => {
       const google = (params.providerOptions?.google ?? {}) as Record<string, unknown>;
       const thinkingConfig = (google.thinkingConfig ?? {}) as Record<string, unknown>;

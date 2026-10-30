@@ -115,6 +115,114 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
+function sortJsonObjectKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortJsonObjectKeys);
+  if (!isRecord(value)) return value;
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map(key => [key, sortJsonObjectKeys(value[key])]),
+  );
+}
+
+// Only structured tool outputs are JSON data. Do not interpret prompt text as
+// JSON, and retain original text when parsing would lose duplicate keys or
+// numeric precision. Array order and all scalar tokens must stay intact.
+function normalizeJsonToolOutput(output: unknown): unknown {
+  if (typeof output !== 'string') return output;
+  try {
+    const parsed = JSON.parse(output);
+    if (!isRecord(parsed) && !Array.isArray(parsed)) return output;
+    const normalized = JSON.stringify(sortJsonObjectKeys(parsed));
+    const scalarTokens = (text: string) =>
+      JSON.stringify(
+        text.match(/"(?:[^"\\]|\\.)*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/g)?.sort(),
+      );
+    return scalarTokens(output) === scalarTokens(normalized) ? normalized : output;
+  } catch {
+    return output;
+  }
+}
+
+function normalizeAnthropicToolOutputs(body: unknown): unknown {
+  if (!isRecord(body) || !Array.isArray(body.messages)) return body;
+  return {
+    ...body,
+    messages: body.messages.map(message =>
+      isRecord(message) && message.role === 'user' && Array.isArray(message.content)
+        ? {
+            ...message,
+            content: message.content.map(part =>
+              isRecord(part) && part.type === 'tool_result'
+                ? { ...part, content: normalizeJsonToolOutput(part.content) }
+                : part,
+            ),
+          }
+        : message,
+    ),
+  };
+}
+
+function normalizeGoogleToolSchemaKeys(body: unknown): unknown {
+  if (!isRecord(body) || !Array.isArray(body.tools)) return body;
+  return {
+    ...body,
+    tools: body.tools.map(tool =>
+      isRecord(tool) && Array.isArray(tool.functionDeclarations)
+        ? {
+            ...tool,
+            functionDeclarations: tool.functionDeclarations.map(declaration => {
+              if (
+                !isRecord(declaration) ||
+                !isRecord(declaration.parameters) ||
+                Object.hasOwn(declaration, 'parametersJsonSchema')
+              ) {
+                return declaration;
+              }
+              const { parameters, ...rest } = declaration;
+              return { ...rest, parametersJsonSchema: parameters };
+            }),
+          }
+        : tool,
+    ),
+  };
+}
+
+// Responses providers can serialize plain assistant text as output_text parts
+// or a string. Canonicalize only that equivalent form for replay matching;
+// annotated parts and other content keep their full structure.
+function normalizeOpenAIResponseAssistantText(body: unknown): unknown {
+  if (!isRecord(body) || !Array.isArray(body.input)) return body;
+
+  return {
+    ...body,
+    input: body.input.map(message => {
+      if (isRecord(message) && message.type === 'function_call_output') {
+        return { ...message, output: normalizeJsonToolOutput(message.output) };
+      }
+      if (
+        !isRecord(message) ||
+        message.role !== 'assistant' ||
+        (message.type !== undefined && message.type !== 'message') ||
+        !Array.isArray(message.content) ||
+        message.content.length === 0 ||
+        !message.content.every(
+          part =>
+            isRecord(part) &&
+            part.type === 'output_text' &&
+            typeof part.text === 'string' &&
+            Object.keys(part).length === 2,
+        )
+      ) {
+        return message;
+      }
+
+      const text = message.content.map(part => part.text).join('');
+      return text.length > 0 ? { ...message, content: text } : message;
+    }),
+  };
+}
+
 // Google provider versions disagree on whether text emitted before a tool call
 // belongs beside that call or after its response. Use the current combined form
 // so old recordings and current requests hash to the same value.
@@ -179,9 +287,15 @@ function normalizeGoogleToolCallMessages(body: unknown): unknown {
 
 export function transformRequest({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {
   let normalizedBody = normalizeOpenAIResponseFunctionCalls(normalizeNetworkFinalResultMessages(body));
-  const { hostname } = new URL(url);
+  const { hostname, pathname } = new URL(url);
+  if (hostname === 'api.openai.com' && pathname === '/v1/responses') {
+    normalizedBody = normalizeOpenAIResponseAssistantText(normalizedBody);
+  }
+  if (hostname === 'api.anthropic.com' && pathname === '/v1/messages') {
+    normalizedBody = normalizeAnthropicToolOutputs(normalizedBody);
+  }
   if (hostname === 'generativelanguage.googleapis.com') {
-    normalizedBody = normalizeGoogleToolCallMessages(normalizedBody);
+    normalizedBody = normalizeGoogleToolCallMessages(normalizeGoogleToolSchemaKeys(normalizedBody));
   }
   if (hostname === 'openrouter.ai') {
     normalizedBody = normalizeOpenRouterTextContent(normalizedBody);

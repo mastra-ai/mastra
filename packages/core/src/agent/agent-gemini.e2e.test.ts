@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
+import { google as googleV6 } from '@ai-sdk/google-v6';
 import { getLLMRecordingsDir, defaultNameGenerator, getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
@@ -150,8 +151,12 @@ afterEach(async () => {
 describe('Gemini Model Compatibility Tests', () => {
   // gemini-2.0-flash was shut down 2026-06-01 and gemini-3-pro-preview was shut
   // down 2026-03-09, so recordings can no longer be refreshed against them.
-  const MODEL = 'google/gemini-2.5-flash';
-  const GEMINI_3_PRO = 'google/gemini-3.1-pro-preview';
+  // These API-acceptance fixtures were recorded with the AI SDK v6 adapter.
+  // Select it explicitly so router upgrades do not change the historical
+  // requests being replayed. Current v7 request schemas are checked by the
+  // shared Mastra Code gateway HTTP tests.
+  const MODEL = googleV6('gemini-2.5-flash');
+  const GEMINI_3_PRO = googleV6('gemini-3.1-pro-preview');
 
   describe('Direct generate() method - Gemini basic functionality', () => {
     it('should throw error for empty user message', async () => {
