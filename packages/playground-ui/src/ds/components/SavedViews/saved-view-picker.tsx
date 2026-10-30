@@ -31,6 +31,8 @@ export type SavedViewPickerProps<TSettings> = {
   describeView?: (view: SavedView<TSettings>) => ReactNode;
   /** Whether a view can be renamed, deleted or overwritten. Others can still be applied and duplicated. */
   canEdit?: (view: SavedView<TSettings>) => boolean;
+  /** Whether new views can be saved here (save as new view, duplicate). Defaults to true. */
+  canCreate?: boolean;
   'aria-label'?: string;
   className?: string;
 };
@@ -50,6 +52,7 @@ export function SavedViewPicker<TSettings>({
   newViewSettings,
   describeView,
   canEdit = () => true,
+  canCreate = true,
   'aria-label': ariaLabel = 'Views',
   className,
 }: SavedViewPickerProps<TSettings>) {
@@ -127,7 +130,7 @@ export function SavedViewPicker<TSettings>({
             </ComboboxList>
           </ComboboxContent>
         </ComboboxRoot>
-        {activeView && !creating && (
+        {activeView && !creating && (editable || canCreate) && (
           <DropdownMenu>
             <DropdownMenu.Trigger variant="ghost" size="icon-sm" tooltip="View actions" className="shrink-0">
               <EllipsisIcon />
@@ -139,10 +142,12 @@ export function SavedViewPicker<TSettings>({
                   Rename
                 </DropdownMenu.Item>
               )}
-              <DropdownMenu.Item onClick={() => views.duplicate(activeView.id)}>
-                <CopyIcon aria-hidden />
-                Duplicate
-              </DropdownMenu.Item>
+              {canCreate && (
+                <DropdownMenu.Item onClick={() => views.duplicate(activeView.id)}>
+                  <CopyIcon aria-hidden />
+                  Duplicate
+                </DropdownMenu.Item>
+              )}
               {editable && (
                 <>
                   <DropdownMenu.Separator />
@@ -156,31 +161,33 @@ export function SavedViewPicker<TSettings>({
           </DropdownMenu>
         )}
       </div>
-      <Popover
-        open={creating}
-        onOpenChange={open => {
-          if (open) views.create(newViewSettings);
-          else views.discard();
-        }}
-      >
-        <PopoverTrigger variant="ghost" size="icon-sm" tooltip="Save as new view" className="shrink-0">
-          <LayersPlusIcon />
-        </PopoverTrigger>
-        <PopoverContent align="end" className="w-72">
-          {creating && (
-            <ViewNameForm
-              title="Save as new view"
-              initialName={draft.name}
-              submitLabel="Save view"
-              error={views.error}
-              pending={views.pending}
-              onNameChange={name => views.change({ name })}
-              onSubmit={() => views.save()}
-              onCancel={views.discard}
-            />
-          )}
-        </PopoverContent>
-      </Popover>
+      {canCreate && (
+        <Popover
+          open={creating}
+          onOpenChange={open => {
+            if (open) views.create(newViewSettings);
+            else views.discard();
+          }}
+        >
+          <PopoverTrigger variant="ghost" size="icon-sm" tooltip="Save as new view" className="shrink-0">
+            <LayersPlusIcon />
+          </PopoverTrigger>
+          <PopoverContent align="end" className="w-72">
+            {creating && (
+              <ViewNameForm
+                title="Save as new view"
+                initialName={draft.name}
+                submitLabel="Save view"
+                error={views.error}
+                pending={views.pending}
+                onNameChange={name => views.change({ name })}
+                onSubmit={() => views.save()}
+                onCancel={views.discard}
+              />
+            )}
+          </PopoverContent>
+        </Popover>
+      )}
       {activeView && (
         <RenamePopover
           open={renaming}
