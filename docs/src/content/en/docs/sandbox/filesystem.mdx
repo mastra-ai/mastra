@@ -242,7 +242,7 @@ const workspace = new Workspace({
 
 Each user gets a separate filesystem view, and file tools resolve the provider from the request context automatically.
 
-When the workspace has [skills](/docs/skills) and no `skillSource`, Mastra reads skills from the resolved filesystem when the agent runs. Agent metadata routes, such as `GET /api/agents/:agentId`, don't call the filesystem resolver, so their skill lists leave out skills read from it.
+When the workspace has [skills](/docs/skills) and no `skillSource`, Mastra reads skills from the resolved filesystem when the agent runs. Agent metadata routes, such as `GET /api/agents/:agentId`, don't call the filesystem resolver. Their skill lists leave out skills read from it.
 
 `mounts` doesn't accept a resolver and can't be combined with a sandbox resolver. When each user or thread needs separate storage inside a separate sandbox, create and mount the provider inside the sandbox resolver. See [Sandboxes per user or thread](/docs/sandbox/overview#sandboxes-per-user-or-thread).
 
