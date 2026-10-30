@@ -79,6 +79,52 @@ registerApiRoute('/my-custom-route', {
 })
 ```
 
+## Run before or after authentication
+
+By default, middleware runs before Mastra authenticates the request, so the user isn't known yet. Set `phase: 'afterAuth'` on a middleware entry to run it after route authentication succeeds instead:
+
+| Phase | Runs | Authenticated user on `requestContext` | Runs on rejected requests |
+| - | - | - | - |
+| `beforeAuth` (default) | Before route matching and auth | No | Yes |
+| `afterAuth` | After auth succeeds, before the handler | Yes, under `MASTRA_USER_KEY` | No |
+
+Use `beforeAuth` for work that doesn't depend on the caller, such as CORS, logging, or blocking route groups. Use `afterAuth` for work that does, such as per-user authorization or setting request context values from the user.
+
+Read the user from `MASTRA_USER_KEY`, not `user`. Clients can't set `MASTRA_USER_KEY`, but they can send a `user` value in the request body's `requestContext`. On paths listed in `auth.public`, or when no auth provider is configured, `afterAuth` still runs but no user is set, so handle a missing user:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context'
+import { MASTRA_USER_KEY } from '@mastra/server/auth'
+
+export const mastra = new Mastra({
+  server: {
+    auth: {
+      authenticateToken: async token => verifyToken(token),
+    },
+    middleware: [
+      {
+        path: '/api/*',
+        phase: 'afterAuth',
+        handler: async (c, next) => {
+          const requestContext = c.get('requestContext')
+          const user = requestContext.get(MASTRA_USER_KEY) as { id: string; orgId?: string } | undefined
+
+          if (!user?.orgId) {
+            return c.json({ error: 'organization_required' }, 403)
+          }
+
+          requestContext.set(MASTRA_RESOURCE_ID_KEY, `${user.orgId}:${user.id}`)
+          await next()
+        },
+      },
+    ],
+  },
+})
+```
+
+`afterAuth` middleware runs on built-in routes and on custom routes registered with `registerApiRoute`. Its `path` supports exact paths, `*` and trailing `/*` wildcards, but not `:param` segments. It doesn't run when authentication fails, and like all user middleware it doesn't run on routes declared `requiresAuth: false`. Returning a `Response` short-circuits the request before the route handler runs.
+
 ## Common examples
 
 ### Block built-in route groups
@@ -216,6 +262,7 @@ For more complex scenarios (e.g., looking up the resource ID from a database), y
 ```typescript
 import { Mastra } from '@mastra/core'
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context'
+import { MASTRA_USER_KEY } from '@mastra/server/auth'
 import { getAuthenticatedUser } from '@mastra/server/auth'
 
 export const mastra = new Mastra({
@@ -252,7 +299,7 @@ export const mastra = new Mastra({
 })
 ```
 
-`server.middleware` runs before Mastra's per-route auth checks. When middleware needs the authenticated user, call `getAuthenticatedUser()` to resolve it from the configured auth provider without changing the default route auth flow.
+`server.middleware` runs before Mastra's per-route auth checks by default. When middleware needs the authenticated user, either set [`phase: 'afterAuth'`](#run-before-or-after-authentication) and read the user from `requestContext`, or call `getAuthenticatedUser()` to resolve it from the configured auth provider.
 
 #### Using `MASTRA_THREAD_ID_KEY`
 

@@ -405,7 +405,6 @@ function projectSessionRoutes(
   return [
     registerApiRoute(path, {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -425,7 +424,6 @@ function projectSessionRoutes(
     }),
     registerApiRoute(path, {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -540,7 +538,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
   return [
     registerApiRoute('/web/factory/projects/:id/sessions', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -565,7 +562,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     ...projectSessionRoutes('/web/github/projects/:id/sessions', options, resolveOwnerProfiles),
     registerApiRoute('/web/user-sessions/:sessionId', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -596,7 +592,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     // message would, then starts its sandbox; a running sandbox returns at once.
     registerApiRoute('/web/user-sessions/:sessionId/sandbox/start', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -631,7 +626,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     }),
     registerApiRoute('/web/user-sessions/:sessionId/sandbox/recreate', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -685,7 +679,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     }),
     registerApiRoute('/web/user-sessions/:sessionId/owner', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -761,7 +754,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {
       method: 'DELETE',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -815,7 +807,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     }),
     registerApiRoute('/web/user-sessions/:sessionId/visibility', {
       method: 'PUT',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;
@@ -894,7 +885,6 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
     }),
     registerApiRoute('/web/user-sessions/:sessionId/title', {
       method: 'POST',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), options.auth);
         if ('response' in resolved) return resolved.response;

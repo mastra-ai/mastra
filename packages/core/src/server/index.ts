@@ -26,6 +26,7 @@ export type {
   ValidationErrorHook,
   StudioConfig,
   Middleware,
+  MiddlewarePhase,
   Handler,
   MiddlewareHandler,
   DescribeRouteOptions,

@@ -76,6 +76,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@mastra/hono": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace": "workspace:*",

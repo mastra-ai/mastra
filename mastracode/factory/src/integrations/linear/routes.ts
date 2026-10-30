@@ -1,7 +1,7 @@
 /**
  * Mastra `apiRoutes` for the Linear intake feature.
  *
- * Registered alongside the other `/web/*` routes, behind the WorkOS auth gate.
+ * Registered alongside the other `/web/*` routes, behind core route auth.
  * Mirrors the GitHub module: every route re-resolves the authenticated user
  * from the request cookie and scopes all rows by the caller's WorkOS org, so an
  * org can only ever see its own Linear connection and issues.
@@ -221,7 +221,6 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/linear/status', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         if (!enabled || !linear || !stateSigner) {
           return c.json({
@@ -333,7 +332,6 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/linear/projects', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -358,7 +356,6 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/linear/teams', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -385,7 +382,6 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/linear/issues', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;
@@ -477,7 +473,6 @@ export function buildLinearRoutes(options: MountLinearRoutesOptions): ApiRoute[]
   routes.push(
     registerApiRoute('/web/linear/issues/:identifier', {
       method: 'GET',
-      requiresAuth: false,
       handler: async c => {
         const resolved = await resolveOrgTenant(loose(c), auth);
         if ('response' in resolved) return resolved.response;

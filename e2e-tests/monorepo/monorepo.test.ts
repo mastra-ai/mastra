@@ -346,6 +346,23 @@ await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProje
       expect(body).toEqual({ typeName: 'google.protobuf.Timestamp' });
     });
 
+    it('runs afterAuth middleware inside the route, after beforeAuth middleware', async () => {
+      const res = await fetch(`http://localhost:${port}/phase/order`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('x-after-auth')).toBe('ran');
+      expect(await res.json()).toEqual({ phases: ['beforeAuth', 'afterAuth'] });
+    });
+
+    it('skips afterAuth middleware on public routes and unmatched paths', async () => {
+      const publicRes = await fetch(`http://localhost:${port}/phase/public`);
+      expect(publicRes.status).toBe(200);
+      expect(publicRes.headers.get('x-after-auth')).toBeNull();
+      expect(await publicRes.json()).toEqual({ phases: [] });
+
+      const missingRes = await fetch(`http://localhost:${port}/phase/missing`);
+      expect(missingRes.headers.get('x-after-auth')).toBeNull();
+    });
+
     it('reports hasBrowser for an agent with a workspace-level CLI browser', async () => {
       const res = await fetch(`http://localhost:${port}/api/agents/browser-agent`);
       const body = await res.json();

@@ -52,7 +52,6 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
   return [
     registerApiRoute(path, {
       method: 'GET',
-      requiresAuth: false,
       handler: async raw => {
         const c = raw as Context;
         const loaded = await loadRepository(c, options);
@@ -65,7 +64,6 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
     }),
     registerApiRoute(path, {
       method: 'POST',
-      requiresAuth: false,
       handler: async raw => {
         const c = raw as Context;
         const loaded = await loadRepository(c, options);
