@@ -76,6 +76,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@copilotkit/aimock": "^1.46.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace": "workspace:*",

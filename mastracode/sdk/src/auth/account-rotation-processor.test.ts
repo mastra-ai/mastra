@@ -313,6 +313,120 @@ describe('provider attribution', () => {
       }),
     ).toBe('anthropic');
   });
+
+  it('attributes a non-OAuth provider only when the store holds a pool for it', () => {
+    expect(providerFromModelId('google/gemini-3-pro')).toBeUndefined();
+    expect(providerFromModelId('google/gemini-3-pro', id => id === 'google')).toBe('google');
+    expect(providerFromModelId('deepseek/v4', id => id === 'google')).toBeUndefined();
+    expect(providerFromError(apiError(429, { url: null, modelId: 'google/gemini-3-pro' }), () => true)).toBe('google');
+  });
+});
+
+/**
+ * In-memory stand-in for a DB-backed pool store (Factory's tenant store): async
+ * activation, token-free listings, persisted status. The real tenant store
+ * lives in the factory package and is exercised end to end there.
+ */
+function makePoolStore(
+  provider: string,
+  accounts: Array<{ id: string; key: string; status?: 'ok' | 'cooldown' | 'auth-failed'; cooldownUntil?: number }>,
+) {
+  const pool = accounts.map((account, index) => ({
+    id: account.id,
+    label: account.id,
+    active: index === 0,
+    priority: index,
+    status: account.status ?? ('ok' as const),
+    cooldownUntil: account.cooldownUntil,
+  }));
+  const keys = new Map(accounts.map(account => [account.id, account.key]));
+  const marked: Array<[string, string]> = [];
+  const store = {
+    allowEnvironmentFallback: false,
+    reload: () => {},
+    get: (id: string) => {
+      const active = pool.find(account => account.active);
+      return id === provider && active ? { type: 'api_key' as const, key: keys.get(active.id)! } : undefined;
+    },
+    getStoredApiKey: () => undefined,
+    getApiKey: async (id: string, instanceId?: string) =>
+      id === provider ? keys.get(instanceId ?? pool.find(account => account.active)!.id) : undefined,
+    getAccountCredential: (id: string, instanceId: string) =>
+      id === provider && keys.has(instanceId) ? { type: 'api_key' as const, key: keys.get(instanceId)! } : undefined,
+    listAccounts: (id: string) => (id === provider ? pool.map(account => ({ ...account })) : []),
+    getActiveAccount: (id: string) => (id === provider ? pool.find(account => account.active) : undefined),
+    activateAccount: async (id: string, instanceId?: string) => {
+      const target = pool.find(account => account.id === instanceId);
+      if (id !== provider || !target) return undefined;
+      await Promise.resolve();
+      for (const account of pool) account.active = account === target;
+      return { ...target };
+    },
+    removeAccount: () => {},
+    markAccountUnavailable: async (_id: string, instanceId: string, reason: string) => {
+      marked.push([instanceId, reason]);
+      const account = pool.find(entry => entry.id === instanceId);
+      if (account) account.status = reason === 'auth-failed' ? 'auth-failed' : 'cooldown';
+    },
+  };
+  return { store, pool, marked };
+}
+
+describe('AccountRotationProcessor with an async pool store', () => {
+  const GOOGLE_ERROR = () => apiError(429, { url: null, modelId: 'google/gemini-3-pro' });
+
+  it('rotates an API-key pool on 429: marks the limited account, awaits activation, selects the next', async () => {
+    const { store, pool, marked } = makePoolStore('google', [
+      { id: 'google:a', key: 'key-a' },
+      { id: 'google:b', key: 'key-b' },
+    ]);
+    const processor = new AccountRotationProcessor({ credentialStore: store, maxProcessorRetries: 22 });
+    const requestContext = new RequestContext();
+    const args = makeArgs({ error: GOOGLE_ERROR(), requestContext });
+
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: true });
+
+    expect(marked).toEqual([['google:a', 'rate-limit']]);
+    expect(pool.find(account => account.active)?.id).toBe('google:b');
+    expect(getRequestAccountSelection(requestContext, 'google')).toBe('google:b');
+    expect(args.writer.custom.mock.calls[0][0]).toMatchObject({
+      type: ACCOUNT_SWITCH_PART_TYPE,
+      data: { provider: 'google', from: { id: 'google:a' }, to: { id: 'google:b' }, reason: 'rate-limit' },
+    });
+  });
+
+  it('skips auth-failed accounts and tries cooling-down ones last', async () => {
+    const { store, pool } = makePoolStore('google', [
+      { id: 'google:a', key: 'key-a' },
+      { id: 'google:b', key: 'key-b', status: 'cooldown', cooldownUntil: Date.now() + 60_000 },
+      { id: 'google:c', key: 'key-c', status: 'auth-failed' },
+      { id: 'google:d', key: 'key-d' },
+    ]);
+    const processor = new AccountRotationProcessor({ credentialStore: store, maxProcessorRetries: 22 });
+    const args = makeArgs({ error: GOOGLE_ERROR(), requestContext: new RequestContext() });
+
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: true });
+    expect(pool.find(account => account.active)?.id).toBe('google:d');
+
+    args.error = GOOGLE_ERROR();
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: true });
+    expect(pool.find(account => account.active)?.id).toBe('google:b');
+
+    // a, d and b tried; c is auth-failed → pool exhausted, no further activation.
+    args.error = GOOGLE_ERROR();
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: false });
+    expect(pool.find(account => account.active)?.id).toBe('google:b');
+  });
+
+  it('leaves API-key providers without a pool on the never-rotate path', async () => {
+    const { store, marked } = makePoolStore('google', []);
+    const processor = new AccountRotationProcessor({ credentialStore: store, maxProcessorRetries: 22 });
+    const args = makeArgs({ error: GOOGLE_ERROR(), requestContext: new RequestContext() });
+
+    expect(await processor.processAPIError(args as any)).toEqual({ retry: false });
+    expect(marked).toEqual([]);
+    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: ACCOUNT_SWITCH_PART_TYPE }));
+  });
 });
 
 describe('AccountRotationProcessor.processAPIError', () => {
