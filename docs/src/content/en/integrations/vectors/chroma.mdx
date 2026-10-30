@@ -113,7 +113,7 @@ Otherwise, you have several options for setting up your single-node Chroma serve
 
 Note: Forking is only supported on Chroma Cloud, or if you deploy your own OSS **distributed** Chroma.
 
-`forkIndex` instantly forks an existing Chroma index without affecting the original index. Learn more on the [Chroma docs](https://docs.trychroma.com/cloud/collection-forking).
+`forkIndex` instantly forks an existing Chroma index without affecting the original index. Learn more on the [Chroma docs](https://docs.trychroma.com/cloud/features/collection-forking).
 
 <PropertiesTable
   content={[
@@ -288,7 +288,9 @@ You can also provide the shape of your metadata to a `get` call for type inferen
 
 ### `hybridSearch()`
 
-Run a [Chroma Search API](https://docs.trychroma.com/docs/querying-collections/overview) request against an index. It exposes Chroma's native search, including hybrid ranking across dense and sparse keys, which the standard vector methods don't cover.
+Note: The Search API is only supported on Chroma Cloud, or if you deploy your own OSS **distributed** Chroma. A local single-node server doesn't support it.
+
+Run a [Chroma Search API](https://docs.trychroma.com/cloud/search-api/overview) request against an index. It exposes Chroma's native search, including hybrid ranking across dense and sparse keys, which the standard vector methods don't cover.
 
 <PropertiesTable
   content={[
