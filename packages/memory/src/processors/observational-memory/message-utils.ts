@@ -170,7 +170,7 @@ function getUnobservedPartsPreservingToolCallPairs(message: MastraDBMessage): Ma
 
   // A kept call has to travel with the signed reasoning block it was decided in.
   // Providers reject (or re-bill) a replayed tool call whose thinking signature was
-  // pruned, and the prune would otherwise drop that block as "observed" (#1926).
+  // pruned, and the prune would otherwise drop that block as "observed" (GRWTH-1926).
   const preserved: MastraDBMessage['content']['parts'] = [];
   let pendingReasoning: number[] = [];
   let keptAnything = false;

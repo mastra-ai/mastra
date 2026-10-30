@@ -390,7 +390,7 @@ export class AIV5Adapter {
               '');
           // Signed-but-empty reasoning (Anthropic thinking with no visible text) still has to
           // reach the model prompt: dropping it here loses the signature before the provider
-          // conversion ever sees it (#1919).
+          // conversion ever sees it (GRWTH-1919).
           if (text || part.details?.length || hasReplayableReasoningMetadata(part.providerMetadata)) {
             const v5UIPart: AIV5Type.ReasoningUIPart = {
               type: 'reasoning' as const,

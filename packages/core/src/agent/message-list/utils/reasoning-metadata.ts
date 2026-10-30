@@ -18,7 +18,7 @@ const REPLAYABLE_REASONING_KEYS = [
  * Whether a reasoning part carries provider metadata a provider can replay
  * (a signature, redacted payload, item id). Such a part must survive every
  * conversion even when its visible text is empty, or the next turn loses the
- * signature and the provider rejects or re-bills the whole prompt (#1919).
+ * signature and the provider rejects or re-bills the whole prompt (GRWTH-1919).
  */
 export function hasReplayableReasoningMetadata(providerOptions: AIV5Type.ProviderMetadata | undefined): boolean {
   return Object.values(providerOptions ?? {}).some(

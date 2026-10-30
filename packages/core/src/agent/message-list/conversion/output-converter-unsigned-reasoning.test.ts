@@ -151,7 +151,7 @@ describe('unsigned reasoning from a dead step (#24558)', () => {
     ]);
   });
 
-  it('keeps signed reasoning stored without text details (#1919)', () => {
+  it('keeps signed reasoning stored without text details (GRWTH-1919)', () => {
     // Rows written by the current writer carry `details: [{ text: '' }]` and already survive
     // the signed check on their own. This covers the stored shape that has no details at all
     // (rows written before details were recorded): its text is empty too, so without the
