@@ -19,13 +19,27 @@ export function withoutAuthToken<T extends Record<string, any> | undefined>(requ
 }
 
 /**
- * Returns a snapshot's request context without the keys that are only valid for the
- * request that wrote it: the bearer token and the normalized authenticated user.
- * Resume, restart and time travel take those from the request doing the resuming,
- * so a resume without a signed-in user can't act as the user who started the run.
+ * Request-context keys that describe the request that wrote a snapshot: the bearer
+ * token and the authenticated user, with their roles and permissions. The user keys
+ * are set by the server auth middleware (see `packages/server/src/server/constants.ts`)
+ * and are reserved, so clients cannot supply them.
+ */
+const LIVE_REQUEST_KEYS = [
+  MASTRA_AUTH_TOKEN_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
+  'mastra__user',
+  'mastra__userPermissions',
+  'mastra__userRoles',
+];
+
+/**
+ * Returns a snapshot's request context without {@link LIVE_REQUEST_KEYS}. Resume,
+ * restart and time travel take those from the request doing the resuming, so a
+ * resume without a signed-in user can't act as the user who started the run.
  */
 export function withoutLiveRequestKeys(requestContext: Record<string, any> | undefined): Record<string, any> {
-  const { [MASTRA_AUTH_TOKEN_KEY]: _authToken, [MASTRA_NORMALIZED_USER_KEY]: _user, ...rest } = requestContext ?? {};
+  const rest = { ...requestContext };
+  for (const key of LIVE_REQUEST_KEYS) delete rest[key];
   return rest;
 }
 

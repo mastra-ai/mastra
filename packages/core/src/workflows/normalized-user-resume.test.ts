@@ -12,11 +12,33 @@ const looseObject = z.looseObject({});
 const alice = { id: 'alice', role: 'admin' };
 const bob = { id: 'bob', role: 'member' };
 
+// Keys the server auth middleware sets for an authenticated request.
+const USER_KEYS = [MASTRA_NORMALIZED_USER_KEY, 'mastra__user', 'mastra__userRoles', 'mastra__userPermissions'];
+
 function contextFor(user: { id: string; role: string }) {
   const requestContext = new RequestContext();
   requestContext.set(MASTRA_NORMALIZED_USER_KEY, user);
+  requestContext.set('mastra__user', { sub: user.id });
+  requestContext.set('mastra__userRoles', [user.role]);
+  requestContext.set('mastra__userPermissions', [`${user.role}:*`]);
   requestContext.set('tenant', 'acme');
   return requestContext;
+}
+
+function userKeysFor(user: { id: string; role: string } | undefined) {
+  return {
+    [MASTRA_NORMALIZED_USER_KEY]: user,
+    mastra__user: user && { sub: user.id },
+    mastra__userRoles: user && [user.role],
+    mastra__userPermissions: user && [`${user.role}:*`],
+  };
+}
+
+function snapshotOf(requestContext: RequestContext) {
+  return {
+    user: Object.fromEntries(USER_KEYS.map(key => [key, requestContext.get(key)])),
+    tenant: requestContext.get('tenant'),
+  };
 }
 
 const engines = [
@@ -31,13 +53,13 @@ const engines = [
 
 describe.each(engines)('$name engine resume with a normalized user', ({ createWorkflow, createStep, evented }) => {
   function setup() {
-    const seen: Record<string, { user: unknown; tenant: unknown }> = {};
+    const seen: Record<string, ReturnType<typeof snapshotOf>> = {};
     const first = createStep({
       id: 'first',
       inputSchema: looseObject,
       outputSchema: looseObject,
       execute: async ({ requestContext }) => {
-        seen.first = { user: requestContext.get(MASTRA_NORMALIZED_USER_KEY), tenant: requestContext.get('tenant') };
+        seen.first = snapshotOf(requestContext);
         return {};
       },
     });
@@ -47,7 +69,7 @@ describe.each(engines)('$name engine resume with a normalized user', ({ createWo
       outputSchema: looseObject,
       execute: async ({ requestContext, resumeData, suspend }) => {
         if (!resumeData) return suspend({});
-        seen.approval = { user: requestContext.get(MASTRA_NORMALIZED_USER_KEY), tenant: requestContext.get('tenant') };
+        seen.approval = snapshotOf(requestContext);
         return {};
       },
     });
@@ -77,7 +99,7 @@ describe.each(engines)('$name engine resume with a normalized user', ({ createWo
     }
   }
 
-  it('does not carry the starting user into a resume without one', async () => {
+  it('does not carry the starting user, roles or permissions into a resume without one', async () => {
     const { mastra, workflow, seen } = setup();
     await withWorkers(mastra, async () => {
       const run = await workflow.createRun();
@@ -86,8 +108,8 @@ describe.each(engines)('$name engine resume with a normalized user', ({ createWo
       const resumed = await run.resume({ step: 'approval', resumeData: { approved: true } });
 
       expect(resumed.status).toBe('success');
-      expect(seen.first).toEqual({ user: alice, tenant: 'acme' });
-      expect(seen.approval).toEqual({ user: undefined, tenant: 'acme' });
+      expect(seen.first).toEqual({ user: userKeysFor(alice), tenant: 'acme' });
+      expect(seen.approval).toEqual({ user: userKeysFor(undefined), tenant: 'acme' });
     });
   });
 
@@ -104,7 +126,7 @@ describe.each(engines)('$name engine resume with a normalized user', ({ createWo
       });
 
       expect(resumed.status).toBe('success');
-      expect(seen.approval).toEqual({ user: bob, tenant: 'acme' });
+      expect(seen.approval).toEqual({ user: userKeysFor(bob), tenant: 'acme' });
     });
   });
 });
