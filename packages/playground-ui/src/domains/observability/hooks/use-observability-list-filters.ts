@@ -1,4 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { rangeBeforeZoom, rememberZoom } from '../lib/zoom-memory';
+import type { ZoomMemory } from '../lib/zoom-memory';
 import {
   OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
   OBSERVABILITY_LIST_SORT_FIELDS,
@@ -105,17 +107,38 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
   const updateDates = (change: (current: ObservabilityListDates) => ObservabilityListDates) =>
     update(next => writeObservabilityListDates(next, change(readObservabilityListDates(next))));
 
+  // Not URL state: a shared or reloaded link has no zoom to undo.
+  const zoomMemory = useRef<ZoomMemory | undefined>(undefined);
+  // A range picked by hand drops the zoom memory, even one that matches the zoomed bounds.
+  const pickDates = (change: (current: ObservabilityListDates) => ObservabilityListDates) => {
+    zoomMemory.current = undefined;
+    updateDates(change);
+  };
+
   // Switching to `custom` keeps the current dates so the picker opens on them; any other preset drops them.
   const onDatePresetChange = (preset: TraceDatePreset) =>
-    updateDates(current => (preset === 'custom' ? { ...current, datePreset: preset } : { datePreset: preset }));
+    pickDates(current => (preset === 'custom' ? { ...current, datePreset: preset } : { datePreset: preset }));
   // The picker can report a date right after switching away from `custom`; those are ignored.
   const onDateChange = (date: Date | undefined, end: 'from' | 'to') =>
-    updateDates(current => {
+    pickDates(current => {
       if (current.datePreset !== 'custom') return current;
       return end === 'from' ? { ...current, dateFrom: date } : { ...current, dateTo: date };
     });
   const onDateRangeChange = (from: Date | undefined, to: Date | undefined) =>
-    updateDates(current => (current.datePreset === 'custom' ? { ...current, dateFrom: from, dateTo: to } : current));
+    pickDates(current => (current.datePreset === 'custom' ? { ...current, dateFrom: from, dateTo: to } : current));
+  /** Narrows the range to a histogram selection, remembering the range to return to on reset. */
+  const onZoom = (from: Date, to: Date) =>
+    updateDates(current => {
+      zoomMemory.current = rememberZoom(zoomMemory.current, current, from, to);
+      return { datePreset: 'custom', dateFrom: from, dateTo: to };
+    });
+  /** Undoes the last histogram zoom, or switches to `defaultPreset` when there is none to undo. */
+  const onDateReset = (defaultPreset: TraceDatePreset) =>
+    updateDates(current => {
+      const before = rangeBeforeZoom(zoomMemory.current, current);
+      zoomMemory.current = undefined;
+      return before ?? { datePreset: defaultPreset };
+    });
   const onFiltersChange = (nextTokens: TraceFilterToken[], nextGroups: TraceFilterGroup[]) =>
     update(next => writeObservabilityListFilters(next, { tokens: nextTokens, groups: nextGroups }));
   const setSort = (next: ObservabilityListSort<F | 'startedAt'>) =>
@@ -138,6 +161,8 @@ export function useObservabilityListFilters<F extends string = 'startedAt'>(
     onDatePresetChange,
     onDateChange,
     onDateRangeChange,
+    onZoom,
+    onDateReset,
     onFiltersChange,
     contentFiltersApplied,
     filtersApplied,

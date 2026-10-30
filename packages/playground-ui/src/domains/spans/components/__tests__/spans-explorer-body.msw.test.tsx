@@ -700,6 +700,99 @@ describe('SpansExplorerBody histogram', () => {
       expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
+
+    const DAY = 24 * 60 * 60 * 1000;
+    const span = (timeRange?: { from: string; to: string }) =>
+      timeRange ? Date.parse(timeRange.to) - Date.parse(timeRange.from) : undefined;
+    const pickPreset = async (current: string, next: string) => {
+      fireEvent.click(screen.getByRole('button', { name: `Value: ${current}`, hidden: true }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: next, hidden: true }));
+    };
+    const zoomIn = async () => {
+      const before = onAggregate.mock.lastCall?.[0].timeRange;
+      const plot = (await screen.findByRole('region', { name: 'Spans over time' })).querySelector('.recharts-wrapper');
+      if (!plot) throw new Error('chart did not render');
+      await moveTo(plot, 300);
+      fireEvent.mouseDown(plot, { clientX: 300, clientY: 20 });
+      await moveTo(plot, 500);
+      fireEvent.mouseUp(window);
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBeLessThan(span(before) ?? 0));
+    };
+
+    it('resets a zoom back to the range picked before it', async () => {
+      setHistogramHandlers();
+      await renderSettled();
+      await pickPreset('Last 7 days', 'Last 24 hours');
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
+
+      await zoomIn();
+      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
+      expect(span(onSpanQuery.mock.lastCall?.[0].timeRange)).toBe(DAY);
+      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+    });
+
+    it('resets nested zooms back to the range picked before the first one', async () => {
+      setHistogramHandlers();
+      await renderSettled();
+      await pickPreset('Last 7 days', 'Last 24 hours');
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
+
+      await zoomIn();
+      await zoomIn();
+      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
+      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+    });
+
+    it('resets to the default range once the zoom is undone', async () => {
+      setHistogramHandlers();
+      await renderSettled();
+      await pickPreset('Last 7 days', 'Last 24 hours');
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
+      await zoomIn();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+      await screen.findByRole('button', { name: 'Value: Last 24 hours' });
+      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+
+      expect(await screen.findByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
+    });
+  });
+
+  describe('when the user clicks a bar', () => {
+    const TWO_HOURS = 2 * 60 * 60 * 1000;
+
+    it('narrows the list and the chart to that bar', async () => {
+      setHistogramHandlers();
+      await renderSettled();
+      const plot = (await screen.findByRole('region', { name: 'Spans over time' })).querySelector('.recharts-wrapper');
+      if (!plot) throw new Error('chart did not render');
+
+      // The rolling week is drawn as two-hour bars (UTC in tests) from the bar holding its start.
+      const week = onAggregate.mock.lastCall?.[0].timeRange;
+      if (!week) throw new Error('no aggregate request');
+      const firstBar = Math.floor(Date.parse(week.from) / TWO_HOURS) * TWO_HOURS;
+      const barWidth = 1200 / Math.ceil((Date.parse(week.to) - firstBar) / TWO_HOURS);
+      const at = { clientX: 12.5 * barWidth, clientY: 20 };
+
+      fireEvent.mouseMove(plot, at);
+      await act(() => new Promise(resolve => requestAnimationFrame(() => resolve(undefined))));
+      fireEvent.mouseDown(plot, at);
+      fireEvent.mouseUp(plot, at);
+      fireEvent.click(plot, at);
+
+      const zoomed = {
+        from: new Date(firstBar + 12 * TWO_HOURS).toISOString(),
+        to: new Date(firstBar + 13 * TWO_HOURS).toISOString(),
+      };
+      await waitFor(() => expect(onAggregate.mock.lastCall?.[0].timeRange).toEqual(zoomed));
+      expect(onSpanQuery.mock.lastCall?.[0].timeRange).toEqual(zoomed);
+      expect(screen.getByRole('button', { name: 'Reset time range' })).toBeTruthy();
+    });
   });
 
   describe('when the aggregate request fails', () => {

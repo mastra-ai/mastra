@@ -55,6 +55,8 @@ export type TraceTimeRangeChipProps = Pick<
 > & {
   /** Shows a × that switches back to this preset whenever another range is selected. */
   defaultPreset?: DateRangePreset;
+  /** Replaces what the × does, e.g. to undo a histogram zoom before falling back to `defaultPreset`. */
+  onReset?: () => void;
 };
 
 const isSegment = (target: EventTarget | null) =>
@@ -65,7 +67,7 @@ const isSegment = (target: EventTarget | null) =>
  * present and non-removable; the value segment opens the regular DateTimeRangePicker
  * menu/popover. With `defaultPreset`, a trailing × resets the range to it.
  */
-export function TraceTimeRangeChip({ defaultPreset, ...props }: TraceTimeRangeChipProps) {
+export function TraceTimeRangeChip({ defaultPreset, onReset, ...props }: TraceTimeRangeChipProps) {
   const ctx = useFilterBarContext();
   const canReset = defaultPreset !== undefined && props.preset !== defaultPreset;
   return (
@@ -108,7 +110,7 @@ export function TraceTimeRangeChip({ defaultPreset, ...props }: TraceTimeRangeCh
           aria-label="Reset time range"
           title="Reset time range"
           className={removeSegmentClass}
-          onClick={() => props.onPresetChange?.(defaultPreset)}
+          onClick={() => (onReset ? onReset() : props.onPresetChange?.(defaultPreset))}
         >
           <XIcon className="size-[1.1em]" />
         </button>

@@ -63,6 +63,10 @@ export type TracesFiltersActions = {
   setDatePreset: (preset: TraceDatePreset) => void;
   setDate: (value: Date | undefined, end: 'from' | 'to') => void;
   setDateRange: (from: Date | undefined, to: Date | undefined) => void;
+  /** Narrows the range to a histogram selection, remembering the range to return to on reset. */
+  zoomDateRange: (from: Date, to: Date) => void;
+  /** Undoes the last histogram zoom, or switches to `defaultPreset` when there is none to undo. */
+  resetDateRange: (defaultPreset: TraceDatePreset) => void;
 };
 
 export type TracesFiltersContextValue = TracesFiltersActions & {
