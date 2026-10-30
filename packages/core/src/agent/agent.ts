@@ -52,7 +52,11 @@ import { AGENTIC_EXECUTION_WORKFLOW_ID, AGENTIC_LOOP_WORKFLOW_ID } from '../loop
 import { networkLoop } from '../loop/network';
 import { recordDelegationFailure } from '../loop/shared/delegation-outcome';
 import { executionFailureTermination } from '../loop/shared/execution-outcome';
-import { getRunStreamSlot, getScopeStreamSlot } from '../loop/shared/stream-until-idle-helpers';
+import {
+  getRunStreamSlot,
+  getScopeStreamSlot,
+  untilIdleHandlesBackgroundTask,
+} from '../loop/shared/stream-until-idle-helpers';
 import type { AgentLoopResumeClaim } from '../loop/types';
 // `Mastra` is imported type-only here: a runtime import would create an ESM
 // init cycle (agent → mastra → agent/durable → agent) that breaks
@@ -9986,6 +9990,60 @@ export class Agent<
   /** @internal Allows server adapters to detect thread-wide cancellation and clear-on-abort support. */
   get __supportsThreadSignalCancellation(): boolean {
     return true;
+  }
+
+  /**
+   * @internal Whether a finished background task is already handled by an
+   * `untilIdle` stream: one is open for the thread and will report it, or the
+   * caller stopped the stream that was waiting for it.
+   */
+  __untilIdleHandlesBackgroundTask(threadId: string, resourceId: string, taskId: string): boolean {
+    return untilIdleHandlesBackgroundTask(this.#activeStreamUntilIdle, threadId, resourceId, taskId);
+  }
+
+  /**
+   * @internal Tells the agent that a deferred background task on a thread has
+   * finished and its result is now on the tool call. An open `untilIdle` stream
+   * for the thread already reports it with its own follow-up turn, and a caller
+   * that stopped the stream waiting for the task doesn't want a reply, so this
+   * does nothing then. Otherwise it sends a signal to the thread: an active run gets
+   * it on its next step, and an idle thread wakes so the agent can report the
+   * outcome. The signal names the tool call, never the result: the result is
+   * already in the thread, and tool output may hold data that must not be
+   * copied into a prompt.
+   */
+  async __notifyBackgroundTaskFinished(params: {
+    threadId: string;
+    resourceId: string;
+    taskId: string;
+    toolCallId: string;
+    toolName: string;
+    status: 'completed' | 'failed';
+  }): Promise<void> {
+    const { threadId, resourceId, taskId, toolCallId, toolName, status } = params;
+    if (this.__untilIdleHandlesBackgroundTask(threadId, resourceId, taskId)) return;
+    const outcome = status === 'completed' ? 'completed' : 'failed';
+    try {
+      const result = this.sendSignal(
+        {
+          type: 'notification',
+          tagName: 'background-task',
+          contents:
+            `Background task ${taskId} for tool call ${toolCallId} (${toolName}) has ${outcome}. ` +
+            `Its ${status === 'completed' ? 'result' : 'error'} is now on that tool call. ` +
+            `Tell the user the outcome. Do not call the tool again for it.`,
+          attributes: { taskId, toolCallId, toolName, status },
+        },
+        { threadId, resourceId, ifActive: { behavior: 'deliver' }, ifIdle: { behavior: 'wake' } },
+      );
+      await result.accepted;
+    } catch (error) {
+      this.logger.warn('Could not notify the agent that a background task finished', {
+        taskId,
+        toolCallId,
+        error,
+      });
+    }
   }
 
   abortThreadStream(options: AgentAbortThreadOptions): boolean {

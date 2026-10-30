@@ -21,3 +21,5 @@ execute: async (input, context) => {
 ```typescript
 await mastra.backgroundTaskManager.resume(taskId, { approved: true }, { suspendedAt: task.suspendedAt });
 ```
+
+**The agent reports a deferred task's result after its stream ends.** When a deferred background task finishes and no `untilIdle` stream is open for its thread, the agent now gets a `background-task` notification signal on the thread. An idle thread wakes and the agent reports the outcome; a run already active on the thread gets the signal on its next model request. Before, the result was only written to memory and waited for the next user message. This covers `stream()` calls without `untilIdle` and tasks resumed after they suspended, for example an MCP task answered from the chat. Streams using `untilIdle` are unchanged: they still run their own follow-up turn, and no signal is sent. Cancelling or aborting an `untilIdle` stream still means no reply for the tasks it was waiting for.

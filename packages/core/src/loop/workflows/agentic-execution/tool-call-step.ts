@@ -114,6 +114,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
   mcp,
+  agent,
 }: OuterLLMRun<Tools, OUTPUT>) {
   // Shared by every suspension of the run, so parallel suspends verify recalled messages once.
   const memoryMessageRefs = new MemoryMessageRefs();
@@ -1453,6 +1454,20 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
                     status: params.status === 'failed' ? 'failed' : 'completed',
                   });
+                  if (info.disposition !== 'awaited') {
+                    const threadId = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+                    const resourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
+                    if (agent && threadId && resourceId) {
+                      void agent.__notifyBackgroundTaskFinished({
+                        threadId,
+                        resourceId,
+                        taskId: params.taskId,
+                        toolCallId: params.toolCallId,
+                        toolName: params.toolName,
+                        status: params.status === 'failed' ? 'failed' : 'completed',
+                      });
+                    }
+                  }
                 } catch (error) {
                   resolveReconciliation({ error });
                   throw error;

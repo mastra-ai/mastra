@@ -10,7 +10,7 @@ packages:
 
 **Added in:** `@mastra/core@1.29.0`
 
-Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement while the LLM continues responding. The task then runs to completion in the background. When it finishes, its result is written to memory and if you use `stream()` with the [`untilIdle`](/reference/streaming/agents/stream) option the agent is re-invoked automatically so the result is processed in the same call.
+Background tasks let an agent dispatch a long-running tool call without blocking the agentic loop. The tool returns an immediate acknowledgement while the LLM continues responding. The task then runs to completion in the background. When it finishes, its result is written to memory and the agent runs a follow-up turn to report it. With the [`untilIdle`](/reference/streaming/agents/stream) option, that turn streams on the same call; otherwise the agent is notified on the thread, as described in [Report a result after the stream ends](#report-a-result-after-the-stream-ends).
 
 ## When to use background tasks
 
@@ -199,6 +199,17 @@ export const mastra = new Mastra({
 })
 ```
 
+### Report a result after the stream ends
+
+When a deferred task finishes and no `untilIdle` stream is open for its thread, Mastra sends the agent a `notification` signal with the tag `background-task`. The signal names the tool call and task, and tells the agent the result is now on the tool call. It doesn't copy the result into the prompt. This covers a `stream()` call without `untilIdle`, a client that disconnected, and a task resumed after it [suspended](#suspending-and-resuming).
+
+- If the thread is idle, the signal wakes the agent, which runs a turn on the thread to report the outcome.
+- If a run is already active on the thread, the signal is delivered to that run's next model request, and no other run starts.
+- If an `untilIdle` stream is open for the thread, no signal is sent, because that stream runs its own follow-up turn.
+- If the caller cancelled or aborted the `untilIdle` stream that was waiting for the task, no signal is sent either: stopping the stream means the caller doesn't want a reply for that work. A task that suspended and is answered later isn't covered by this, because the stream stopped waiting for it when it suspended.
+
+The signal needs memory with a thread and resource. A task dispatched without them only writes its result to the task record. Awaited tasks don't send the signal, because the run that dispatched them waits for the result.
+
 ### Aggregate properties
 
 `stream()` with `untilIdle` returns a `MastraModelOutput` that looks like the one from a regular `stream()` call, but `fullStream` alone spans the initial turn and any auto-continuations. Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()`) still resolve against the **first turn's** internal buffer. If you need an aggregate view across continuations, consume `fullStream` yourself and accumulate.
@@ -348,7 +359,7 @@ The queue lives in the memory of the process that called `resume()`. If that pro
 
 ### What happens to the agent loop
 
-When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. Once the resume payload is available, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })` to continue immediately. The resumed background task completes and adds its result to the message list before the agent runs a follow-up turn on the same SSE connection. To drive the resume out of band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly. Its result is still written into the thread for the next user turn.
+When a task suspends mid-`stream()` with `untilIdle`, the wrapper treats it as terminal for the current iteration and closes. Once the resume payload is available, call `agent.resumeStream(resumeData, { runId, toolCallId, memory, untilIdle: true })` to continue immediately. The resumed background task completes and adds its result to the message list before the agent runs a follow-up turn on the same SSE connection. To drive the resume out of band, call `mastra.backgroundTaskManager.resume(taskId, resumeData)` directly, or use the [resume route](#answer-a-suspended-task-from-a-client). When the task finishes, its result is written into the thread and the agent [wakes to report it](#report-a-result-after-the-stream-ends).
 
 ### Re-registering the executor on resume
 

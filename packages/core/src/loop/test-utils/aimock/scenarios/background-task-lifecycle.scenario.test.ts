@@ -159,6 +159,8 @@ describeForAllEngines(
         { toolCalls: [{ id: 'call-fg-1', name: 'greet', arguments: { name: 'Bob' } }] },
       );
       llm.on({ endpoint: 'chat', sequenceIndex: 3 }, { content: 'I greeted Bob.' });
+      // The research finishes after both streams ended, so the agent wakes to report it.
+      llm.on({ endpoint: 'chat', sequenceIndex: 4 }, { content: 'The neural network research is done.' });
 
       const first = await runLoopScenario({
         engine,
@@ -207,6 +209,10 @@ describeForAllEngines(
       expect(stored).toContain('Now greet Bob');
       expect(stored).toContain('Hello, Bob!');
       expect(stored).toContain('I greeted Bob.');
+      await waitFor(
+        async () => JSON.stringify((await memory.recall(thread)).messages),
+        s => s.includes('The neural network research is done.'),
+      );
     }, 30_000);
 
     it('streamUntilIdle forwards the real completion and re-invokes the model with the result', async () => {
@@ -247,6 +253,10 @@ describeForAllEngines(
       expect(await mastra.backgroundTaskManager!.getTask(started!.payload.taskId)).toMatchObject({
         status: 'completed',
       });
+      // The open stream reported the result itself, so the agent is not also signalled or woken for it.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(llm.getRequests()).toHaveLength(3);
+      expect(JSON.stringify(llm.getRequests().map(r => r.body))).not.toContain('Its result is now on that tool call');
     }, 30_000);
 
     it('streamUntilIdle closes after one turn when no background task is dispatched', async () => {
@@ -489,6 +499,8 @@ describeForAllEngines(
             { toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'solana' } }] },
           );
           llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Waiting for the analyst.' });
+          // Answering the request finishes the task, which wakes the agent to report it.
+          llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'The analyst answered.' });
         },
       });
       const manager = mastra.backgroundTaskManager!;
@@ -534,6 +546,10 @@ describeForAllEngines(
         s => s.invocation?.state === 'result' && s.suspended === undefined,
       );
       expect(answered.invocation.result).toEqual({ summary: 'Research on "solana": looks promising' });
+      await waitFor(
+        async () => JSON.stringify((await memory.recall(thread)).messages),
+        s => s.includes('The analyst answered.'),
+      );
     }, 30_000);
 
     it('clears the open request from memory when a suspended deferred task is cancelled (#28986)', async () => {
@@ -549,6 +565,185 @@ describeForAllEngines(
         () => storedToolCall(memory, thread),
         s => s.suspended === undefined,
       );
+    }, 30_000);
+
+    // A deferred task that finishes after the stream that started it has ended must still
+    // reach the agent, so it can tell the user the outcome. (#28986)
+    function storedText(memory: MockMemory, thread: { threadId: string; resourceId: string }) {
+      return async () => JSON.stringify((await memory.recall(thread)).messages);
+    }
+
+    // The evented engine can still be finishing an earlier test's run on the shared mock, so
+    // count only the requests made for this test's prompt.
+    function requestsFor(llm: { getRequests: () => Array<{ body: unknown }> }, prompt: string) {
+      return llm
+        .getRequests()
+        .filter(r => (r.body as any)?.messages?.some((m: any) => m.role === 'user' && m.content === prompt));
+    }
+
+    function toolResultSentToModel(request: { body: unknown } | undefined) {
+      const toolMessage = (request?.body as any)?.messages?.find((m: any) => m.role === 'tool');
+      return toolMessage ? JSON.parse(toolMessage.content) : undefined;
+    }
+
+    it('wakes the agent to report a deferred task that finishes after its stream ended (#28986)', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const memory = new MockMemory();
+      const thread = { threadId: 'bg-wake-thread', resourceId: 'bg-wake-user' };
+      const { chunks, mastra, llm } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Research quantum computing',
+        tools: { research: makeResearchTool(gate) },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: mock => {
+          mock.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'quantum computing' } }] },
+          );
+          mock.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Working on it.' });
+          mock.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'The quantum research is finished.' });
+        },
+      });
+      const taskId = (chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
+      expect(requestsFor(llm, 'Research quantum computing')).toHaveLength(2);
+
+      release();
+      await waitFor(
+        () => mastra.backgroundTaskManager!.getTask(taskId),
+        (t: any) => t?.status === 'completed',
+      );
+
+      await waitFor(storedText(memory, thread), s => s.includes('The quantum research is finished.'));
+      const requests = requestsFor(llm, 'Research quantum computing');
+      expect(requests).toHaveLength(3);
+      expect(toolResultSentToModel(requests[2])).toEqual({ summary: 'Research complete on "quantum computing"' });
+    }, 30_000);
+
+    it('tells a run already active on the thread about a finished deferred task instead of waking another (#28986)', async () => {
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => (release = resolve));
+      const memory = new MockMemory();
+      const llm = getMock();
+      const thread = { threadId: 'bg-deliver-thread', resourceId: 'bg-deliver-user' };
+      let manager!: NonNullable<Awaited<ReturnType<typeof createSharedAgent>>['mastra']['backgroundTaskManager']>;
+      let taskId = '';
+      // A foreground tool in the second run lets the research finish while that run is active.
+      const finishResearch = createTool({
+        id: 'finish-research',
+        description: 'Let the research finish',
+        inputSchema: z.object({}),
+        outputSchema: z.object({ ok: z.boolean() }),
+        execute: async () => {
+          release();
+          await waitFor(
+            () => manager.getTask(taskId),
+            (t: any) => t?.status === 'completed',
+          );
+          await waitFor(storedText(memory, thread), s => s.includes('Research complete on'));
+          return { ok: true };
+        },
+      });
+      const shared = await createSharedAgent(llm, {
+        tools: { research: makeResearchTool(gate), finishResearch },
+        agentBackgroundTasks: { tools: { research: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        engine,
+      });
+      manager = shared.mastra.backgroundTaskManager!;
+
+      llm.on(
+        { endpoint: 'chat', sequenceIndex: 0 },
+        { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'quantum computing' } }] },
+      );
+      llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Working on it.' });
+      llm.on(
+        { endpoint: 'chat', sequenceIndex: 2 },
+        { toolCalls: [{ id: 'call-fg-1', name: 'finishResearch', arguments: {} }] },
+      );
+      llm.on({ endpoint: 'chat', sequenceIndex: 3 }, { content: 'The research finished while we talked.' });
+
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        prompt: 'Research quantum computing now',
+        sharedAgent: shared,
+        fixtures: () => {},
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+      });
+      taskId = (first.chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
+
+      await runLoopScenario({
+        engine,
+        llm,
+        prompt: 'Let the research finish',
+        sharedAgent: shared,
+        fixtures: () => {},
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+      });
+
+      const requests = requestsFor(llm, 'Research quantum computing now');
+      expect(requests).toHaveLength(4);
+      expect(JSON.stringify((requests[3]!.body as any).messages)).toContain(
+        `Background task ${taskId} for tool call call-bg-1 (research) has completed`,
+      );
+      // Delivered to the active run, so no other run is woken for it.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(requestsFor(llm, 'Research quantum computing now')).toHaveLength(4);
+    }, 30_000);
+
+    it('wakes the agent to report a suspended deferred task once it is answered and finishes (#28986)', async () => {
+      const memory = new MockMemory();
+      const thread = { threadId: 'bg-wake-resume-thread', resourceId: 'bg-wake-resume-user' };
+      const { chunks, mastra, llm } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Research solana, then wait for the analyst',
+        tools: { researchWithApproval: makeSuspendingResearchTool([]) },
+        agentBackgroundTasks: { tools: { researchWithApproval: true } },
+        backgroundTasks: BG_CONFIG,
+        memory,
+        ...thread,
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: mock => {
+          mock.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call-bg-1', name: 'researchWithApproval', arguments: { topic: 'solana' } }] },
+          );
+          mock.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Waiting for the analyst.' });
+          mock.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'The analyst approved; solana looks promising.' });
+        },
+      });
+      const manager = mastra.backgroundTaskManager!;
+      const taskId = (chunks!.find(c => c.type === 'background-task-started') as Chunk).payload.taskId as string;
+      await waitFor(
+        () => manager.getTask(taskId),
+        (t: any) => t?.status === 'suspended',
+      );
+      await waitFor(storedText(memory, thread), s => s.includes('Waiting for the analyst.'));
+      // Suspending is not a finish: nothing wakes the agent while the request is open.
+      await new Promise(resolve => setTimeout(resolve, 300));
+      expect(requestsFor(llm, 'Research solana, then wait for the analyst')).toHaveLength(2);
+
+      await manager.resume(taskId, { notes: 'looks promising' });
+      await waitFor(storedText(memory, thread), s => s.includes('The analyst approved; solana looks promising.'));
+      const requests = requestsFor(llm, 'Research solana, then wait for the analyst');
+      expect(requests).toHaveLength(3);
+      expect(toolResultSentToModel(requests[2])).toEqual({ summary: 'Research on "solana": looks promising' });
     }, 30_000);
   },
   // The shared Inngest Mastra is built without per-scenario `backgroundTasks` config.
