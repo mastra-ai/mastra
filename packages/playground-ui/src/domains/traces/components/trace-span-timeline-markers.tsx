@@ -3,18 +3,45 @@ import { TIMELINE_TRACK_PADDING } from '../utils/span-timeline';
 import type { TimelineMarkersLayout, TimelineTimingBar } from '../utils/timeline-markers';
 import { TimelineGridlines } from './span-timeline-row';
 import { SPAN_TREE_INDENT, SPAN_TREE_LINE, SPAN_TREE_PAD_Y } from './span-tree-rail';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/duration';
 
-/** One row per streaming timing, laid out like the span rows below them, then a rule setting them apart. */
+// The panel sits in the timeline grid, so it spans both columns and hands them down to the rows.
+const SUBGRID_PANEL_STYLE = { gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'subgrid' } as const;
+
+/** A "Metrics" row, closed by default, revealing one row per streaming timing laid out like the span rows. */
 export function TimelineTimingRows({ layout }: { layout: TimelineMarkersLayout }) {
   return (
-    <>
-      <TimingRow name="Time to first chunk" bar={layout.firstChunk} />
-      {layout.firstToken && <TimingRow name="Time to first token" bar={layout.firstToken} />}
-      <div role="separator" className="col-span-2 my-1 border-b border-border" />
-    </>
+    <Collapsible className="col-span-2 grid grid-cols-subgrid">
+      <div className="col-span-2 grid grid-cols-subgrid items-stretch">
+        <div className="flex min-w-0 items-center pl-1" style={{ paddingBlock: SPAN_TREE_PAD_Y }}>
+          <CollapsibleTrigger className="flex min-w-0 items-center rounded-sm text-muted-foreground">
+            <span
+              aria-hidden
+              className="flex shrink-0 items-center justify-center"
+              style={{ width: SPAN_TREE_INDENT, height: SPAN_TREE_LINE }}
+            >
+              <DisclosureChevron direction="right" className="size-3" />
+            </span>
+            <Txt as="span" variant="body-sm" className="min-w-0 truncate px-2">
+              Metrics
+            </Txt>
+          </CollapsibleTrigger>
+        </div>
+        <div className={cn('flex min-w-0', TIMELINE_TRACK_PADDING)}>
+          <div className="relative flex-1">
+            <TimelineGridlines />
+          </div>
+        </div>
+      </div>
+      <CollapsibleContent style={SUBGRID_PANEL_STYLE} className="col-span-2 grid grid-cols-subgrid gap-y-px">
+        <TimingRow name="Time to first chunk" bar={layout.firstChunk} />
+        {layout.firstToken && <TimingRow name="Time to first token" bar={layout.firstToken} />}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 

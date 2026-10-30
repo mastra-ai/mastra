@@ -31,7 +31,7 @@ export type TraceSpanTimelineProps = {
   revealSpanId?: string;
   /** Rendered full-width above the span rows. */
   leadingSlot?: ReactNode;
-  /** Adds a row per streaming timing above the spans. */
+  /** Adds a collapsed "Metrics" row above the spans, revealing a row per streaming timing. */
   streamingTimings?: TraceStreamingTimings;
 };
 

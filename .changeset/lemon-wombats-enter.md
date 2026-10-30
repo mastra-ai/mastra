@@ -12,4 +12,4 @@ Added time to first token (TTFT) to the Traces, Spans and Threads lists in Studi
 
 **Span details**: the Timing section now shows the span's time to first chunk and time to first token when it streamed, so the root span shows the same values as the lists.
 
-**Trace timeline**: a trace opened from the Traces list shows its time to first chunk and time to first token as two dashed rows above the spans, both ending on the first chunk and set apart from the spans by a separator. You can see at a glance how much of the wait came from the model and how much from earlier steps.
+**Trace timeline**: a trace opened from the Traces list shows its time to first chunk and time to first token as two dashed rows, both ending on the first chunk, under a "Metrics" row above the spans. Metrics is closed by default; open it to see the timings. You can see at a glance how much of the wait came from the model and how much from earlier steps.

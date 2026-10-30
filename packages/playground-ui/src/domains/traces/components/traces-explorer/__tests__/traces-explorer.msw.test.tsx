@@ -429,6 +429,7 @@ describe('TracesExplorer', () => {
 
     it('shows when the first chunk arrived and how long the model took to send it, from the listed row', async () => {
       const dialog = await openTimeline(firstChunkTracesPage);
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Metrics' }));
 
       expect(within(dialog).getByRole('group', { name: 'Time to first chunk' }).textContent).toBe(
         'Time to first chunk400ms',
@@ -441,8 +442,7 @@ describe('TracesExplorer', () => {
     it('shows neither when the trace is not in the list', async () => {
       const dialog = await openTimeline({ traces: [twoTracesPage.traces[1]], page: { next: null } });
 
-      expect(within(dialog).queryByRole('group', { name: 'Time to first chunk' })).toBeNull();
-      expect(within(dialog).queryByRole('group', { name: 'Time to first token' })).toBeNull();
+      expect(within(dialog).queryByRole('button', { name: 'Metrics' })).toBeNull();
     });
   });
 
