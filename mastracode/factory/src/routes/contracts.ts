@@ -2,6 +2,7 @@ import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { z } from 'zod';
 
+import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
@@ -42,6 +43,27 @@ const nullableTrimmed = (max: number) =>
   ]);
 const projectPathSchema = z.object({ id: uuidSchema });
 const projectDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSchema });
+const boardPathSchema = z.object({ id: uuidSchema, boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH) });
+const boardRevisionSchema = z.number().int().min(1);
+/** A board's definition; send the `revision` you read so a concurrent edit is not overwritten. */
+export const replaceBoardBodySchema = storedBoardDefinitionSchema.extend({ expectedRevision: boardRevisionSchema });
+export const boardDeleteQuerySchema = z.object({ expectedRevision: z.coerce.number().int().min(1) });
+const storedBoardResponseSchema = z.object({
+  board: z.object({
+    key: z.string(),
+    name: z.string(),
+    description: z.string().nullable(),
+    /** In order; the first phase is where cards start. */
+    phases: z.array(storedPhaseInputSchema),
+    /** Send it back as `expectedRevision` when editing. Null for code boards, which are not stored. */
+    revision: z.number().int().nullable(),
+    source: z.enum(['builtin', 'app', 'stored']),
+    /** False for built-in and app boards: they are defined in code and read-only here. */
+    editable: z.boolean(),
+    /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
+    problems: z.array(z.string()),
+  }),
+});
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -592,6 +614,12 @@ export const FACTORY_ROUTE_CONTRACTS = {
           /** @deprecated Use `name`. */
           title: z.string(),
           description: z.string().optional(),
+          /** Where the board came from: Factory's built-ins, the app's code, or created through the API. */
+          source: z.enum(['builtin', 'app', 'stored']).optional(),
+          /** False for built-in and app boards, which are defined in code and read-only. */
+          editable: z.boolean().optional(),
+          /** Problems with the board, such as a runner skill that does not exist. */
+          problems: z.array(z.string()).optional(),
           initialPhase: z.string(),
           phases: z.array(
             z.object({
@@ -624,7 +652,40 @@ export const FACTORY_ROUTE_CONTRACTS = {
           ),
         }),
       ),
+      /** Stored boards that could not be loaded or are hidden by a code board with the same key, and why. */
+      problems: z.array(z.string()).optional(),
     }),
+  },
+  boardGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/boards/:boardKey',
+    description: "Get a project board's definition",
+    pathSchema: boardPathSchema,
+    responseSchema: storedBoardResponseSchema,
+  },
+  boardCreate: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/boards',
+    description: 'Create a board in a Factory project',
+    pathSchema: projectPathSchema,
+    bodySchema: storedBoardInputSchema,
+    responseSchema: storedBoardResponseSchema,
+  },
+  boardReplace: {
+    method: 'PATCH',
+    path: '/web/factory/projects/:id/boards/:boardKey',
+    description: "Replace a project board's definition",
+    pathSchema: boardPathSchema,
+    bodySchema: replaceBoardBodySchema,
+    responseSchema: storedBoardResponseSchema,
+  },
+  boardDelete: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/boards/:boardKey',
+    description: 'Delete a board from a Factory project',
+    pathSchema: boardPathSchema,
+    querySchema: boardDeleteQuerySchema,
+    responseSchema: z.null(),
   },
   workItemList: {
     method: 'GET',

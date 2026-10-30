@@ -1,9 +1,9 @@
 ---
-title: "Reference: MCPServer | Tools and MCP"
-description: "The MCPServer class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server."
+title: 'Reference: MCPServer | Tools and MCP'
+description: 'The MCPServer class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server.'
 packages:
-  - "@mastra/core"
-  - "@mastra/mcp"
+  - '@mastra/core'
+  - '@mastra/mcp'
 ---
 
 # MCPServer
@@ -894,7 +894,7 @@ If the available prompts change, your server can notify listening clients.
 Call this method when the list of available prompts has changed (e.g., a prompt was added or removed). This will send a `notifications/prompts/list_changed` message to listening clients, prompting them to re-fetch the list of prompts.
 
 ```typescript oxfmt:false
-await serverWithPrompts.prompts.notifyListChanged()
+await serverWithPrompts.prompts.notifyListChanged();
 ```
 
 ### Best practices for Prompt Handling
@@ -1960,7 +1960,7 @@ Tasks implement SEP-2663, the `io.modelcontextprotocol/tasks` MCP extension. Thi
 
 :::
 
-The `tasks` option lets a tool answer `tools/call` with a task instead of a result. The client gets a task handle at once and polls `tasks/get` until the task finishes. The result outlives the request and isn't limited by HTTP timeouts. When at least one tool can answer with a task, the server advertises the extension and answers `tasks/get`, `tasks/update` and `tasks/cancel` over both stdio and Streamable HTTP. Without a `tasks` option, it does neither.
+The `tasks` option lets a tool, a workflow (`run_*`) or an agent (`ask_*`) answer `tools/call` with a task instead of a result. The client gets a task handle at once and polls `tasks/get` until the task finishes. The result outlives the request and isn't limited by HTTP timeouts. When at least one of them can answer with a task, the server advertises the extension and answers `tasks/get`, `tasks/update` and `tasks/cancel` over both stdio and Streamable HTTP. Without a `tasks` option, it does neither.
 
 Only clients that declare the extension on a request get a task. Every other client gets a synchronous answer, unless the tool is listed in `required`.
 
@@ -2001,7 +2001,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: "'off'",
     description:
-      'Mode for tools not listed in `tools`, including tools added later with `toolActions.add()`. Agent (`ask_*`) and workflow (`run_*`) tools always answer synchronously.',
+      "Mode for every tool, workflow and agent not listed in `tools`, `workflows` or `agents`, including tools added later with `toolActions.add()`. It covers `run_*` and `ask_*` tools too, so `default: 'always'` serves every workflow and agent as a task; list one as `'off'` to keep it synchronous.",
   },
   {
     name: 'tools',
@@ -2015,7 +2015,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     type: 'string[]',
     isOptional: true,
     description:
-      "Tools that only run as tasks. A client that didn't declare the extension gets error `-32021` instead of a synchronous answer. Each name must be a tool served as a task.",
+      "Tools that only run as tasks, by the name clients call: a tool's key, `run_<workflow>` or `ask_<agent>`. A client that didn't declare the extension gets error `-32021` instead of a synchronous answer. Each name must be served as a task.",
   },
   {
     name: 'ttlMs',
@@ -2031,7 +2031,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: 'false',
     description:
-      'Whether a task whose server stopped mid-run runs `execute` again from the start on another instance. Only applies to tasks kept in Mastra storage. See [Recovery after a crash](#recovery-after-a-crash).',
+      'Whether a tool or agent task whose server stopped mid-run runs again from the start on another instance. Only applies to tasks kept in Mastra storage. Workflow tasks ignore it, see [Workflow tasks](#workflow-tasks). See [Recovery after a crash](#recovery-after-a-crash).',
   },
   {
     name: 'store',
@@ -2080,15 +2080,17 @@ The server creates the task before it answers, so a `tasks/get` sent right after
   },
   {
     name: 'workflows',
-    type: 'never',
+    type: "Record<string, 'off' | 'auto' | 'always' | { mode; syncWindowMs?; ttlMs? }>",
     isOptional: true,
-    description: 'Not supported yet. Setting it throws when the server is created.',
+    description:
+      "Mode per workflow key, for its `run_<key>` tool. A key that isn't one of the server's `workflows` throws when the server is created. See [Workflow tasks](#workflow-tasks).",
   },
   {
     name: 'agents',
-    type: 'never',
+    type: "Record<string, 'off' | 'auto' | 'always' | { mode; syncWindowMs?; ttlMs?; recover? }>",
     isOptional: true,
-    description: 'Not supported yet. Setting it throws when the server is created.',
+    description:
+      "Mode per agent key, for its `ask_<key>` tool. A key that isn't one of the server's `agents` throws when the server is created. See [Agent tasks](#agent-tasks).",
   },
 ]}
 />
@@ -2103,6 +2105,7 @@ A task counts as open while it's `working` or `input_required`. It stops countin
 
 - An `'always'` tool doesn't run. The call answers with `isError: true` and a message such as `Too many open tasks for this client (limit 100). Wait for one to finish or cancel one.`
 - An `'auto'` tool that's still running when its sync window ends keeps running under the request and answers synchronously, the same way it would without tasks. Cancelling the request still aborts it.
+- `run_<workflow>` and `ask_<agent>` tasks count against the same caps, and against the [retained task caps](#retained-task-caps). An `'always'` workflow starts no run, and an `'always'` agent doesn't run. An `'auto'` workflow run that suspends can only be answered through a task, so at the cap the server cancels it and answers with `isError: true`.
 
 Both values must be positive integers. The server passes them to `store.create()` as `limits`, and the store enforces them by throwing `MCPTaskLimitError`. A custom store that ignores `limits` doesn't cap open tasks.
 
@@ -2137,6 +2140,41 @@ Task runs are rebuilt from what the task stored when it was created. This keeps 
 - `tasks/cancel` aborts the tool's `abortSignal` and the task ends `cancelled`. Stopping is up to the tool. A result it returns afterwards is discarded.
 - A tool that throws completes the task with `isError: true` and the serialized error, as a synchronous call answers.
 - A task ends `failed` only when the server can't run it, for example when its TTL expires.
+
+### Workflow tasks
+
+A `run_<key>` task follows one workflow run. The run starts once, under the `tools/call` that creates the task, with a run id of its own. The task id is never the run id.
+
+```typescript
+const server = new MCPServer({
+  id: 'reports',
+  name: 'Reports',
+  version: '1.0.0',
+  workflows: { nightly },
+  tasks: {
+    workflows: { nightly: { mode: 'auto', syncWindowMs: 1000 } },
+  },
+})
+```
+
+- A run that ends `success` or `bailed` completes the task with the same text a synchronous call answers: `status`, `input`, `steps` and `result`.
+- A run that ends `failed`, `tripwire` or `canceled` completes the task with `isError: true` and the error message. In `'auto'` mode, a run that fails within `syncWindowMs` answers the same way, without a task. Only a client without the Tasks extension, or a workflow whose mode is `'off'`, gets the plain `run_` answer, where a failed run comes back without `isError`.
+- In `'auto'` mode, a run that suspends within `syncWindowMs` continues as a task, so it can ask for input.
+- Invalid arguments answer with `isError: true` before any run or task exists.
+- A step that suspends moves the task to `input_required`, with a form built from the step's `resumeSchema` and its suspend payload as the message. The server asks for one suspended step at a time. `tasks/update` resumes the run with the answer as `resumeData`. Resuming needs Mastra storage.
+- A run is resumed at most once per suspension. If it was already resumed, for example from Studio or by another instance, the answer is dropped and the task follows the run: when the run suspends again, even on the same step in a loop, the task asks again with a new input request. A resume from outside the task that reaches the run at the same moment as the task's own can still let a stale answer resume the next suspension of that same step.
+- A step whose `resumeSchema` can't be shown as a form, such as one with nested objects, leaves the task `working`. Resume the run another way, for example from Studio, and the task follows it. Until then the task reads the run's state every second and, on Mastra background tasks, holds a background task slot, as it does while it follows a run another instance executes.
+- Declining the input request, `tasks/cancel`, and TTL expiry cancel the run, including a run waiting for input, from any instance. A run executing on the instance that handles the cancel stops there. A run executing on another instance stops when that instance next renews its lease on the task, within about one lease.
+- A server that shuts down, or loses a task to another worker, stops following the run but leaves it running. Another instance picks the task up and follows the run to its end.
+- With a `store` passed in `tasks`, the server cancels the run only when the client declines. Have the store's cancel and expiry check the task's context with `isWorkflowTaskContext()` and call `mastra.getWorkflow(context.workflowKey).createRun({ runId: context.runId })`, then `run.cancel()` on it. In the process executing the run, that handle is the executing run, so `cancel()` stops it there.
+
+When the server running a workflow task stops, Mastra's [workflow recovery](/reference/core/mastra-class) continues the run on the next instance that starts, and the task follows it there. This requires `recovery.workflows` to be `'auto'`, the default. With `'off'`, the task stays `working` until its TTL expires. The step that was running when the server stopped runs again, so keep steps safe to repeat. A task whose run was never saved, or whose follower stops a second time, ends `failed`.
+
+### Agent tasks
+
+An `ask_<key>` task runs the agent's `generate()` as the task's work, like a tool task: `tasks/cancel` aborts the agent's `abortSignal`, an error completes the task with `isError: true`, and `recover` applies.
+
+An agent that pauses for tool approval or other input completes the task with `isError: true`. Tasks can't answer an agent's approval requests yet.
 
 ### Tasks across instances
 
@@ -2189,6 +2227,8 @@ With `recover: true` the same single retry also covers an attempt that fails for
 ### Tracing
 
 Each task is one trace. The `tools/call` that creates the task is its root span, and it ends without an error once the task starts. Every run of the tool is a `task attempt <tool> #<n>` span under it, including resumed and recovered runs on other instances, and the tool's own spans sit inside its attempt. `tasks/update` and `tasks/cancel` requests join the same trace. `tasks/get` polls aren't traced.
+
+The same holds for `run_<workflow>` and `ask_<agent>` tasks. A workflow task's run sits under its first attempt, or under the root in `'auto'` mode, and each run resumed after `tasks/update` sits under the attempt that resumed it, on whichever instance that is. An agent task's `agent run` sits under its attempt. A run that Mastra's workflow recovery restarts after a crash starts a trace of its own, by design. Durable workflows and agents cover tracing across a crash. The task's attempt that follows the restarted run stays in the task's trace.
 
 Task details are in span metadata: `mcpTaskKey` (a SHA-256 hash of the task id), `attempt`, `resumed`, `recovered` and `mcpTaskStatus`. Spans never record the task id itself. The server writes out the root span as soon as the task starts. A trace without its root drops out of trace lists, and this keeps it listed even if that instance stops before its next export. Attempts are numbered across instances, so a run recovered after a crash shows as `#2` even when the crashed attempt's span was lost with its instance.
 
