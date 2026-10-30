@@ -431,6 +431,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     }
   });
 
+  it('preserves raw provider state separately from normalized merged state', async () => {
+    const { workItems, scope } = await setup();
+    const { item } = await workItems.upsert({
+      ...scope,
+      input: {
+        title: 'Pull request',
+        stages: ['review'],
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'pr-42' },
+        metadata: { state: 'open', merged: false },
+      },
+    });
+    await workItems.syncWorkItemSource({
+      ...scope,
+      provider: 'github',
+      externalId: 'pull-request:pr-42',
+      patch: { state: 'merged', metadata: { state: 'closed', merged: true } },
+    });
+    expect((await workItems.get({ ...scope, id: item.id }))?.workItem).toMatchObject({
+      state: 'merged',
+      metadata: { state: 'closed', merged: true },
+      sources: [{ state: 'merged', metadata: { state: 'closed', merged: true } }],
+    });
+  });
+
   it('does not reintroduce stale provider metadata after direct source synchronization', async () => {
     const { workItems, scope, item } = await setup();
     await workItems.syncWorkItemSource({

@@ -1426,16 +1426,25 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId },
         current => {
           const { metadata, ...facts } = patch;
+          // Raw provider state can be 'closed' while normalized state is 'merged'.
           const nextMetadata =
             metadata === null
               ? null
               : {
                   ...current.metadata,
                   ...metadata,
-                  ...(patch.labels !== undefined ? { labels: patch.labels } : {}),
-                  ...(patch.state !== undefined ? { state: patch.state } : {}),
-                  ...(patch.author !== undefined ? { author: patch.author } : {}),
-                  ...(patch.key !== undefined ? { identifier: patch.key } : {}),
+                  ...(patch.labels !== undefined && !Object.hasOwn(metadata ?? {}, 'labels')
+                    ? { labels: patch.labels }
+                    : {}),
+                  ...(patch.state !== undefined && !Object.hasOwn(metadata ?? {}, 'state')
+                    ? { state: patch.state }
+                    : {}),
+                  ...(patch.author !== undefined && !Object.hasOwn(metadata ?? {}, 'author')
+                    ? { author: patch.author }
+                    : {}),
+                  ...(patch.key !== undefined && !Object.hasOwn(metadata ?? {}, 'identifier')
+                    ? { identifier: patch.key }
+                    : {}),
                 };
           return {
             ...facts,
