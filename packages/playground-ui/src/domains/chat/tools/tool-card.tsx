@@ -2,9 +2,12 @@ import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
+import { DeferredMcpInputRequest, ForegroundMcpInputRequest } from './badges/mcp-input-request-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
+import { useDeferredInputRequest } from './badges/use-deferred-input-request';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
+import { suspendedMcpInputRequest } from './mcp-input-request';
 import { SubmitPlanTool } from './submit-plan-tool';
 import { ToolResultMedia } from './tool-result-media';
 import type { MessageMetadata } from '@/domains/chat';
@@ -17,6 +20,7 @@ import {
   badgeStatus,
   codeModeCall,
   isAgentCall,
+  isDeferredCall,
   isSettledState,
   isWorkflowCall,
   toolCardKind,
@@ -91,13 +95,22 @@ export const ToolCardInner = ({
   );
   useWorkflowStream(output);
 
-  const kind = toolCardKind({ toolName, toolCallId, input, output, state }, { metadata, mcpAppTools });
+  const kind = toolCardKind(
+    { toolName, toolCallId, input, output, state, backgroundTaskId, backgroundTaskStatus },
+    { metadata, mcpAppTools },
+  );
   const { approval: toolApprovalMetadata, suspended: suspendedToolMetadata } = toolInteraction(
     metadata,
     toolName,
     toolCallId,
   );
   const status = badgeStatus(state, isRunning);
+  // Read here rather than in a child so the badge keeps its identity (and its MCP task progress) when
+  // the call's output turns into the deferred-call placeholder.
+  const deferredRequest = useDeferredInputRequest(
+    backgroundTaskId ?? '',
+    kind === 'background' && isDeferredCall(backgroundTaskId, backgroundTaskStatus) && !readOnly,
+  );
   const isNetwork = metadata?.mode === 'network';
   const toolCalled = isNetwork && metadata?.hasMoreMessages ? true : undefined;
   const agentToolName = stripPrefix(toolName, 'agent-');
@@ -127,26 +140,58 @@ export const ToolCardInner = ({
           metadata={metadata}
         />
       );
+    case 'mcp_input_request': {
+      const payload = suspendedMcpInputRequest(metadata, toolCallId);
+      if (!payload) break;
+      return (
+        <>
+          <ToolBadge
+            toolName={toolName}
+            args={input}
+            result={output}
+            toolOutput={[]}
+            metadata={metadata}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            isNetwork={isNetwork}
+            toolCalled={toolCalled}
+            status={status}
+            mcpInputRequest={payload}
+          />
+          <ForegroundMcpInputRequest toolCallId={toolCallId} payload={payload} readOnly={readOnly} />
+        </>
+      );
+    }
     case 'background': {
       const isAgent = isAgentCall(metadata, toolName);
       const isWorkflow = isWorkflowCall(metadata, toolName);
       return (
-        <ToolBadge
-          toolName={isAgent ? agentToolName : isWorkflow ? workflowToolName : toolName}
-          args={input}
-          result={output}
-          toolOutput={[]}
-          metadata={metadata}
-          toolCallId={toolCallId}
-          toolApprovalMetadata={toolApprovalMetadata}
-          suspendPayload={suspendedToolMetadata?.suspendPayload}
-          isNetwork={isNetwork}
-          toolCalled={toolCalled}
-          withoutArgs={isAgent || isWorkflow}
-          status={status}
-          backgroundTaskId={backgroundTaskId}
-          backgroundTaskStatus={backgroundTaskStatus}
-        />
+        <>
+          <ToolBadge
+            toolName={isAgent ? agentToolName : isWorkflow ? workflowToolName : toolName}
+            args={input}
+            result={output}
+            toolOutput={[]}
+            metadata={metadata}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            suspendPayload={suspendedToolMetadata?.suspendPayload}
+            isNetwork={isNetwork}
+            toolCalled={toolCalled}
+            withoutArgs={isAgent || isWorkflow}
+            status={status}
+            backgroundTaskId={backgroundTaskId}
+            backgroundTaskStatus={backgroundTaskStatus}
+            mcpInputRequest={deferredRequest?.payload}
+          />
+          {deferredRequest && backgroundTaskId && (
+            <DeferredMcpInputRequest
+              key={String(deferredRequest.suspendedAt)}
+              backgroundTaskId={backgroundTaskId}
+              request={deferredRequest}
+            />
+          )}
+        </>
       );
     }
     case 'agent':
