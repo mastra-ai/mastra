@@ -305,7 +305,10 @@ export interface ThreadHistoryPayload {
   messages: MastraDBMessage[];
   /** Whether older messages exist beyond this page. */
   hasMore: boolean;
-  /** Run holding the thread lease at hydration, or null when idle. */
+  /**
+   * Run holding the thread lease at hydration, or null when idle. When the lease backend doesn't answer in time,
+   * this is the run this process last saw take the thread, and it can be stale.
+   */
   activeRunId: string | null;
 }
 
