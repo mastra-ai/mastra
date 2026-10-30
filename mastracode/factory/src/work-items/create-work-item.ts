@@ -3,7 +3,10 @@
  * so a card filed from a session goes through exactly what "New card" does.
  */
 
+import { cardRuleFacts } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { resolveIntakePlacement } from '../boards/intake-routing.js';
+import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
 import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -23,7 +26,7 @@ export type CreateFactoryWorkItemResult =
       code: 'invalid_board' | 'governed_transition_required' | 'factory_transitions_unavailable';
       message: string;
     }
-  /** The first phase's entry rules refused the card; it was removed again. */
+  /** The first phase's entry rules (or the move to an intake route's phase) refused the card; it was removed again. */
   | { status: 'rejected'; code: Extract<TransitionResult, { status: 'rejected' }>['code']; reason: string };
 
 export interface CreateFactoryWorkItemArgs {
@@ -36,6 +39,8 @@ export interface CreateFactoryWorkItemArgs {
   userId: string;
   factoryProjectId: string;
   input: CreateWorkItemInput;
+  /** The project's intake routes; they place a card filed without a board or stages. */
+  intakeRoutes?: IntakeRoutesReader;
   /** Where a browser request came from; a session's tool call carries none. */
   origin?: Pick<FactoryTransitionRequest, 'actorProfile' | 'context'>;
 }
@@ -54,9 +59,25 @@ export async function createFactoryWorkItem({
   userId,
   factoryProjectId,
   input,
+  intakeRoutes,
   origin,
 }: CreateFactoryWorkItemArgs): Promise<CreateFactoryWorkItemResult> {
-  const boardId = input.board ?? (input.externalSource?.type === 'pull-request' ? 'review' : 'work');
+  // A card filed without a board or stages goes where the project's intake routes say; one
+  // that names either went where the person chose.
+  const placement =
+    intakeRoutes && input.board === undefined && input.stages === undefined
+      ? resolveIntakePlacement(
+          await intakeRoutes.listIntakeRoutes({ orgId, factoryProjectId }),
+          cardRuleFacts({
+            title: input.title,
+            metadata: input.metadata ?? null,
+            externalSource: input.externalSource ?? null,
+          }),
+          boards,
+        )
+      : undefined;
+  const boardId =
+    placement?.board ?? input.board ?? (input.externalSource?.type === 'pull-request' ? 'review' : 'work');
   const board = boards.get(boardId);
   if (!board) return { status: 'refused', code: 'invalid_board', message: `Board '${boardId}' is not installed.` };
   const initialStages = input.stages ?? [board.initialPhase];
@@ -103,6 +124,24 @@ export async function createFactoryWorkItem({
   if (entered.status === 'rejected') {
     await workItems.delete({ orgId, id: created.id });
     return { status: 'rejected', code: entered.code, reason: entered.reason };
+  }
+  if (placement && placement.phase !== board.initialPhase) {
+    const moved = await transitionService.transition({
+      orgId,
+      factoryProjectId,
+      workItemId: created.id,
+      board: boardId,
+      stage: placement.phase,
+      expectedRevision: entered.revision,
+      actor: { type: 'human', id: userId },
+      ...origin,
+      ingress: { type: 'human', identity: `work-item:${created.id}:intake-route` },
+      cause: 'work_item_created',
+    });
+    if (moved.status === 'rejected') {
+      await workItems.delete({ orgId, id: created.id });
+      return { status: 'rejected', code: moved.code, reason: moved.reason };
+    }
   }
   const item = (await workItems.getForProject(orgId, factoryProjectId, created.id)) ?? created;
   await audit({
