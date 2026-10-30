@@ -189,6 +189,30 @@ describe('signal sent while a run is finishing (#23053)', () => {
     // The signal joined the running run instead of starting another one.
     expect(count('agent_start')).toBe(1);
   });
+
+  it('Given an active run whose routing rejects, When a plain sendSignal is sent, Then the session send still resolves', async () => {
+    const { session, count, releaseFirst, getStreamCalls } = await createHarness('active-reject');
+    void session.sendMessage({ content: 'first message' }).catch(() => {});
+    await waitFor(() => getStreamCalls() === 1, 'the first model call');
+
+    // The agent rejects `accepted` only when another run reserves the thread in
+    // the race window (pending admission or claimed-owner discovery), which a
+    // single-process test can't line up. Stub just that one outcome.
+    const agent = session.machinery.getAgent();
+    const sendSignal = agent.sendSignal.bind(agent);
+    vi.spyOn(agent, 'sendSignal').mockImplementationOnce((signal, target) => {
+      const result = sendSignal(signal, target);
+      const accepted = Promise.reject(new Error('reserved run went away'));
+      accepted.catch(() => {});
+      return { ...result, accepted };
+    });
+
+    const signal = session.sendSignal({ content: 'while running' });
+    await expect(signal.accepted).resolves.toMatchObject({ accepted: true, runId: undefined });
+
+    releaseFirst();
+    await waitFor(() => count('agent_end') >= 1, 'the run to end');
+  });
 });
 
 describe('notification sent while a run is finishing (#23053)', () => {

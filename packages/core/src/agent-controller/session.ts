@@ -5148,8 +5148,14 @@ export class Session<TState = unknown> {
           ifIdle: fallBackWhenIdle ? { ...ifIdle, behavior: 'discard' } : ifIdle,
         });
         const shouldObservePersistence = ifActive?.behavior === 'persist' || ifIdle?.behavior === 'persist';
+        // Only callers that observe the outcome may see `accepted` reject; a plain
+        // send keeps the best-effort contract `settleRunId` documents.
         const settled =
-          fallBackWhenIdle || shouldObservePersistence || requireDelivery ? await result.accepted : undefined;
+          shouldObservePersistence || requireDelivery
+            ? await result.accepted
+            : fallBackWhenIdle
+              ? await result.accepted.catch(() => undefined)
+              : undefined;
         if (!(fallBackWhenIdle && settled?.action === 'discard')) {
           if (settled?.action === 'persist') {
             await result.persisted;
