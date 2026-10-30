@@ -1,3 +1,4 @@
+@layer properties, theme, base, components, utilities;
 @import './notice-material.css';
 
 @keyframes notice-enter {

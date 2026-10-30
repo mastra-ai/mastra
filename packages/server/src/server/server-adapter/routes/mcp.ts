@@ -10,6 +10,10 @@ import {
   POLL_MCP_SERVER_EVENT_ROUTE,
   STREAM_MCP_SERVER_EVENT_ROUTE,
   EMIT_MCP_SERVER_EVENT_ROUTE,
+  LIST_MCP_SERVER_TASKS_ROUTE,
+  FIND_MCP_SERVER_TASK_ROUTE,
+  CANCEL_MCP_SERVER_TASK_ROUTE,
+  ANSWER_MCP_SERVER_TASK_ROUTE,
   MCP_HTTP_TRANSPORT_ROUTE,
   MCP_SSE_TRANSPORT_ROUTE,
   MCP_SSE_MESSAGES_ROUTE,
@@ -48,6 +52,14 @@ export const MCP_ROUTES = [
   POLL_MCP_SERVER_EVENT_ROUTE,
   STREAM_MCP_SERVER_EVENT_ROUTE,
   EMIT_MCP_SERVER_EVENT_ROUTE,
+
+  // ============================================================================
+  // MCP Server Task Routes (experimental; Studio admin view, unscoped callers only)
+  // ============================================================================
+  LIST_MCP_SERVER_TASKS_ROUTE,
+  FIND_MCP_SERVER_TASK_ROUTE,
+  CANCEL_MCP_SERVER_TASK_ROUTE,
+  ANSWER_MCP_SERVER_TASK_ROUTE,
 
   // ============================================================================
   // MCP Transport Routes (handled by adapters)

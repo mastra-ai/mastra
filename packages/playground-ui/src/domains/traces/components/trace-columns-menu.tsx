@@ -39,6 +39,7 @@ const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
   duration: 'Duration',
   traceCount: 'Messages',
   timeToFirstChunk: 'Time to first chunk',
+  timeToFirstToken: 'Time to first token',
   endTime: 'End',
   environment: 'Environment',
   model: 'Model',

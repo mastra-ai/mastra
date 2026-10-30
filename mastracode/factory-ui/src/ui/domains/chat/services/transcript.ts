@@ -101,6 +101,8 @@ export type TimelineEntry =
 
 export interface TranscriptState {
   entries: TimelineEntry[];
+  /** What the current run said comes after this entry; whatever is older belongs to an earlier run. */
+  lastEntryBeforeRun?: string;
   pending: boolean;
   threadId?: string;
   tasks: AgentControllerTaskSnapshot[];
@@ -208,6 +210,9 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
 function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerId?: string): TranscriptState {
   if (!isKnownAgentControllerEvent(event)) return state;
   switch (event.type) {
+    case 'agent_start':
+      return { ...state, lastEntryBeforeRun: state.entries.at(-1)?.id };
+
     case 'agent_end':
       return { ...state, pending: false };
 
