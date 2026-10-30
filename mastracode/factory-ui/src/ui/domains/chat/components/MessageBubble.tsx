@@ -113,7 +113,6 @@ export function MessageBubble({
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
   const prose = messageText(entry.message.role === 'user' ? content : written);
-  // The reveal hands back `written` itself once every word is on screen.
   const settled = !entry.streaming && paced === written;
   const meta = metaText(entry, prose, settled, reply);
   const showsReplyFooter = Boolean(meta);
@@ -282,7 +281,7 @@ export function MessageBubble({
           <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} appearance="inline" />
         );
       }
-      if (row.kind === 'divider') return <TranscriptDivider label={row.label} title={row.title} />;
+      if (row.kind === 'divider') return <TranscriptDivider label={row.label} />;
       if (row.kind === 'reminder') {
         return <SignalActivity kind="reminder" label="System reminder" message={row.text} appearance="inline" />;
       }

@@ -77,7 +77,8 @@ export function revealedParts(parts: MessagePart[], shown: string): MessagePart[
  * A message's parts as far as the reveal has laid them down. Hand the result to
  * `MessageFactory` in place of the message's own parts and the whole reply — prose,
  * reasoning, tool rows, cards — arrives at the pace it was written, from one clock,
- * without a renderer having to know a reveal is running.
+ * without a renderer having to know a reveal is running. Once fully revealed it returns
+ * the caller's own `parts` array, so `result === parts` means the reveal has settled.
  */
 export function useRevealedParts(parts: MessagePart[], streaming: boolean): MessagePart[] {
   const shown = useRevealedText(messageScript(parts), streaming);

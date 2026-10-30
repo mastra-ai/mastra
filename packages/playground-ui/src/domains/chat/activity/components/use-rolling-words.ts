@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef } from 'react';
+import type { RefObject } from 'react';
 
 const EASE = 'cubic-bezier(0.22, 1, 0.36, 1)';
 const ROLL_MS = 460;
@@ -91,24 +92,29 @@ function roll(box: HTMLElement, words: HTMLElement, before: Said, motion: Motion
  * away, and the box glides to the new width. Only a line the reader `watched` being written moves: it writes its
  * first words in from the left, and rolls each time `words`, the key of what is said, changes.
  */
-export function useRollingWords(words: string, watched: boolean) {
-  const box = useRef<HTMLSpanElement>(null);
-  const said = useRef<HTMLSpanElement>(null);
+export function useRollingWords(
+  box: RefObject<HTMLElement | null>,
+  said: RefObject<HTMLElement | null>,
+  words: string,
+  watched: boolean,
+) {
   const before = useRef<Said | undefined>(undefined);
   const motion = useRef<Motion>({});
 
   useLayoutEffect(() => {
+    if (!watched) return;
     const boxElement = box.current;
     const saidElement = said.current;
     const previous = before.current;
     if (!boxElement || !saidElement || previous?.key === words) return;
 
     const clone = saidElement.cloneNode(true);
-    const moving = watched && moves(saidElement);
-    if (moving && !previous) writeIn(saidElement);
-    const width = moving && previous ? roll(boxElement, saidElement, previous, motion.current) : boxElement.offsetWidth;
-    before.current = { key: words, words: clone, width };
-  }, [words, watched]);
-
-  return { box, said };
+    const moving = moves(saidElement);
+    if (moving && previous) {
+      before.current = { key: words, words: clone, width: roll(boxElement, saidElement, previous, motion.current) };
+      return;
+    }
+    if (moving) writeIn(saidElement);
+    before.current = { key: words, words: clone, width: boxElement.offsetWidth };
+  }, [box, said, words, watched]);
 }

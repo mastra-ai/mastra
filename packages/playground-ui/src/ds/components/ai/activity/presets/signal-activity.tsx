@@ -82,26 +82,14 @@ function SignalLine({ kind, label, message, detail, mode, defaultOpen }: Omit<Si
   );
 }
 
-export function SignalActivity({
-  kind,
-  label,
-  message,
-  detail,
-  mode,
-  defaultOpen,
-  appearance = 'row',
-}: SignalActivityProps) {
-  if (appearance === 'inline') {
-    return (
-      <SignalLine kind={kind} label={label} message={message} detail={detail} mode={mode} defaultOpen={defaultOpen} />
-    );
-  }
+export function SignalActivity({ appearance = 'row', ...signal }: SignalActivityProps) {
+  if (appearance === 'inline') return <SignalLine {...signal} />;
+  const { kind, label, message, detail, mode, defaultOpen } = signal;
   const { Icon, accent, body } = signalKinds[kind];
   const lineHoldsMessage = detail === undefined && messagePreviewShowsAll(message);
 
   return (
     <ActivityItem
-      appearance={appearance}
       icon={<Icon className={accent} aria-hidden />}
       label={label}
       detail={detail ?? messagePreview(message)}

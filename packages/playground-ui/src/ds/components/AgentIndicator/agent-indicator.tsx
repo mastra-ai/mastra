@@ -13,12 +13,14 @@ export interface AgentIndicatorProps {
   className?: string;
 }
 
-const strokes = (part: string, count: number) => range(count).map(i => <path key={i} data-part={part} />);
+function Strokes({ part, count }: { part: string; count: number }) {
+  return range(count).map(i => <path key={i} data-part={part} />);
+}
 
 const CUTS = (
   <g fill="none" stroke="black" strokeLinecap="round">
-    {strokes('cut', LINES)}
-    {strokes('trail-cut', TRAIL - 1)}
+    <Strokes part="cut" count={LINES} />
+    <Strokes part="trail-cut" count={TRAIL - 1} />
   </g>
 );
 
@@ -29,14 +31,14 @@ const SHAPE = (
       <circle key={i} data-part="ball" />
     ))}
     <g fill="none" stroke="currentColor" strokeLinecap="round">
-      {strokes('ink', LINES)}
+      <Strokes part="ink" count={LINES} />
     </g>
   </>
 );
 
 const TRAIL_INKS = (
   <g fill="none" stroke="currentColor" strokeLinecap="round">
-    {strokes('trail-ink', TRAIL - 1)}
+    <Strokes part="trail-ink" count={TRAIL - 1} />
   </g>
 );
 

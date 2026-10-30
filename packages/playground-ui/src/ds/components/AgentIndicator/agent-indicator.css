@@ -18,16 +18,12 @@
   }
 }
 
-.agent-indicator[data-state='idle']:not([data-still]) {
-  animation: agent-indicator-breathe 5.236s ease-in-out 0.52s infinite;
-}
+@media (prefers-reduced-motion: no-preference) {
+  .agent-indicator[data-state='idle']:not([data-still]) {
+    animation: agent-indicator-breathe 5.236s ease-in-out 0.52s infinite;
+  }
 
-.agent-indicator[data-state='waiting']:not([data-still]) {
-  animation: agent-indicator-pulse 2.4s ease-in-out 0.52s infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .agent-indicator {
-    animation: none;
+  .agent-indicator[data-state='waiting']:not([data-still]) {
+    animation: agent-indicator-pulse 2.4s ease-in-out 0.52s infinite;
   }
 }

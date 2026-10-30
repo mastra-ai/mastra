@@ -2,6 +2,7 @@
 import { cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AgentIndicator } from './agent-indicator';
+import { frameParts } from './paint';
 import { agentIndicatorStates, poses } from './poses';
 import { FRAME } from './shapes';
 
@@ -85,7 +86,9 @@ describe('AgentIndicator', () => {
 
   it('draws its state on the first paint', () => {
     const { container } = render(<AgentIndicator state="done" />);
-    expect(drawnStrokes(container)).toHaveLength(62);
+    const doneStrokes = frameParts(poses.done(0, 0)).trailInks.filter(s => Number(s.width) > 0);
+    expect(doneStrokes.length).toBeGreaterThan(0);
+    expect(drawnStrokes(container)).toHaveLength(doneStrokes.length);
   });
 
   it('eases from one state into the next', () => {
