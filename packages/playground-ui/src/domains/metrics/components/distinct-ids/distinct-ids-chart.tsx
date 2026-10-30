@@ -70,6 +70,10 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
   const step = intervalHours(scope.interval === '1d' ? '1d' : '1h');
   const error = series.error ?? totals.error;
   const isLoading = series.isLoading || totals.isLoading;
+  // One request failing says nothing about the other, which may still be loading: report the
+  // failure only once both have settled. A card that failed while a request it waits on is still
+  // in flight cannot be recovered by Retry, which only re-sends the requests that failed.
+  const hasFailed = Boolean(error) && !isLoading;
 
   const layout = {
     title: DISTINCT_IDS_TITLE,
@@ -81,7 +85,7 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
     ),
   };
 
-  if (error) {
+  if (hasFailed) {
     return (
       <ChartCard {...layout}>
         <ChartCardError

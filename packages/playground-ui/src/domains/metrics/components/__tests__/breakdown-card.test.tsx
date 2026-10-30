@@ -466,5 +466,34 @@ describe('BreakdownCard', () => {
       expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
       expect(screen.getByRole('tab', { name: 'Tools' })).toBeDefined();
     });
+
+    it('waits for the other requests rather than failing while one is still loading', async () => {
+      serveCapabilities(aggregateCapabilities);
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      // The spans answer last; the usage totals fail first. Retry re-sends only the failed
+      // request, so reporting the failure now would leave the card broken once the spans answer.
+      serveSpanAggregate(async () => {
+        await held;
+        return agentRunsByName;
+      });
+      server.use(http.post(BREAKDOWN_API, () => HttpResponse.json({ error: 'boom' }, { status: 400 })));
+      const { queryClient } = renderInMetrics(<BreakdownCard />);
+
+      await waitFor(() =>
+        expect(
+          queryClient
+            .getQueryCache()
+            .findAll({ queryKey: ['metrics', 'cost-breakdown'] })
+            .some(q => q.state.status === 'error'),
+        ).toBe(true),
+      );
+      expect(screen.queryByText(/Couldn't load this data/)).toBeNull();
+
+      release();
+      expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
+    });
   });
 });

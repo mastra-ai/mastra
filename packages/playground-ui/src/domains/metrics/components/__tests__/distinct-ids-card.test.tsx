@@ -46,7 +46,7 @@ function serveCard(served?: Served) {
   });
 }
 
-/** Fails every request until the returned `recover()` is called, then serves the card. */
+/** Fails every request until the returned `recover()` is called, so only Retry can make it load. */
 function failUntilRetried() {
   let failing = true;
   serveTraceAggregate(request => {
@@ -57,6 +57,33 @@ function failUntilRetried() {
   });
   return () => {
     failing = false;
+  };
+}
+
+/**
+ * Fails the range-totals request once — a 4xx fails at once — then serves them, and keeps the
+ * bucket request in flight until `release()`: one request has failed while the other still runs.
+ */
+function failTotalsWhileBucketsLoad() {
+  let totalsCalls = 0;
+  let release = () => {};
+  const held = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  serveTraceAggregate(async request => {
+    requests.push(request);
+    if (request.interval) {
+      await held;
+      return HttpResponse.json(respond(request));
+    }
+    totalsCalls++;
+    return totalsCalls === 1
+      ? HttpResponse.json(traceAggregateErrorFixture, { status: 400 })
+      : HttpResponse.json(respond(request));
+  });
+  return {
+    release: () => release(),
+    totalsCalls: () => totalsCalls,
   };
 }
 
@@ -133,9 +160,7 @@ describe('when the server answers aggregateTraces()', () => {
     ).toBeDefined();
   });
 
-  it('loads after Retry once the requests stop failing', async () => {
-    // Every request fails until the click: how many times the client retries a 500 on its own is an
-    // implementation detail, so the test must not spend a fixed failure budget on it.
+  it('loads after Retry when both requests failed', async () => {
     const recover = failUntilRetried();
     render(<DistinctIdsCard />);
 
@@ -146,6 +171,33 @@ describe('when the server answers aggregateTraces()', () => {
     expect(await screen.findByText('Resources', undefined, { timeout: 5000 })).toBeDefined();
     expect(legendEntry('Resources')).toBe('Resources5');
     // Two waits of up to 5 s each: the default 5 s test timeout cuts it short under a loaded run.
+  }, 15_000);
+
+  it('keeps loading until both requests settle, then loads again after Retry', async () => {
+    // One request failed while the other is still loading: the card must not report a failure
+    // Retry cannot fix, and Retry must re-request both once it does.
+    const card = failTotalsWhileBucketsLoad();
+    const { queryClient } = render(<DistinctIdsCard />);
+
+    await waitFor(() => {
+      const totals = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['trace-aggregate'] })
+        .find(query => !(query.queryKey[1] as { interval?: string }).interval);
+      expect(totals?.state.status).toBe('error');
+    });
+    expect(screen.queryByText(ERROR)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+
+    // The buckets answer: now both requests have settled, so the totals failure is the card's.
+    card.release();
+    await waitFor(() => expect(screen.getByText(ERROR)).toBeDefined(), { timeout: 5000 });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+    expect(await screen.findByText('Resources', undefined, { timeout: 5000 })).toBeDefined();
+    expect(card.totalsCalls()).toBe(2);
+    expect(legendEntry('Resources')).toBe('Resources5');
   }, 15_000);
 
   it('says a service filter has no trace equivalent, and sends nothing', async () => {
