@@ -36,6 +36,23 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "DELETE /web/factory/projects/:id/skills/:name": {
+    "contractKey": "skillOverrideRevert",
+    "method": "DELETE",
+    "path": "/web/factory/projects/:id/skills/:name",
+    "description": "Revert a project's edited Factory skill to its original SKILL.md",
+    "pathParams": [
+      "id",
+      "name"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "DELETE /web/factory/work-items/:id": {
     "contractKey": "workItemDelete",
     "method": "DELETE",
@@ -260,6 +277,23 @@ export const FACTORY_API_ROUTE_METADATA = {
     "hasBody": false,
     "responseShape": {
       "kind": "single"
+    }
+  },
+  "GET /web/factory/skills": {
+    "contractKey": "skillList",
+    "method": "GET",
+    "path": "/web/factory/skills",
+    "description": "List Factory skills, with a project's edits when a project is given",
+    "pathParams": [],
+    "queryParams": [
+      "projectId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "skills"
     }
   },
   "PATCH /web/factory/projects/:id": {
@@ -644,6 +678,25 @@ export const FACTORY_API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "record"
     }
+  },
+  "PUT /web/factory/projects/:id/skills/:name": {
+    "contractKey": "skillOverrideSave",
+    "method": "PUT",
+    "path": "/web/factory/projects/:id/skills/:name",
+    "description": "Save a project's edited SKILL.md for a Factory skill",
+    "pathParams": [
+      "id",
+      "name"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "content"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
   }
 } as const;
 
@@ -704,6 +757,43 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
     "response": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "null"
+    }
+  },
+  "DELETE /web/factory/projects/:id/skills/:name": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "skill": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "skill"
+      ]
     }
   },
   "DELETE /web/factory/work-items/:id": {
@@ -2215,6 +2305,37 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "workItems",
         "runningSessionIds",
         "parkedSessionIds"
+      ]
+    }
+  },
+  "GET /web/factory/skills": {
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": {
+              "type": "string"
+            },
+            "additionalProperties": {}
+          }
+        }
+      },
+      "required": [
+        "skills"
       ]
     }
   },
@@ -5283,12 +5404,70 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "additionalProperties": {}
     }
+  },
+  "PUT /web/factory/projects/:id/skills/:name": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 64,
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "body": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "content": {
+          "$ref": "#/$defs/__schema0"
+        }
+      },
+      "required": [
+        "content"
+      ],
+      "additionalProperties": false,
+      "$defs": {
+        "__schema0": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200000
+        }
+      }
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "skill": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
+        }
+      },
+      "required": [
+        "skill"
+      ]
+    }
   }
 } as const;
 
 export const FACTORY_API_ROUTE_CATALOG = {
   "projectDelete": "DELETE /web/factory/projects/:id",
   "boardDelete": "DELETE /web/factory/projects/:id/boards/:boardKey",
+  "skillOverrideRevert": "DELETE /web/factory/projects/:id/skills/:name",
   "workItemDelete": "DELETE /web/factory/work-items/:id",
   "projectList": "GET /web/factory/projects",
   "projectGet": "GET /web/factory/projects/:id",
@@ -5302,6 +5481,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "healthThresholdsGet": "GET /web/factory/projects/:id/health/thresholds",
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "workItemList": "GET /web/factory/projects/:id/work-items",
+  "skillList": "GET /web/factory/skills",
   "projectUpdate": "PATCH /web/factory/projects/:id",
   "boardReplace": "PATCH /web/factory/projects/:id/boards/:boardKey",
   "projectEnvironmentUpdate": "PATCH /web/factory/projects/:id/environment",
@@ -5320,5 +5500,6 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "workItemStart": "POST /web/factory/projects/:id/runs/start",
   "workItemCreate": "POST /web/factory/projects/:id/work-items",
   "workItemAutomationRun": "POST /web/factory/projects/:id/work-items/:workItemId/automation-runs",
-  "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition"
+  "workItemTransition": "POST /web/factory/projects/:id/work-items/:workItemId/transition",
+  "skillOverrideSave": "PUT /web/factory/projects/:id/skills/:name"
 } as const;
