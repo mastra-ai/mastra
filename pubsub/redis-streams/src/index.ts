@@ -76,6 +76,47 @@ function compareStreamIds(a: string, b: string): number {
 }
 
 /**
+ * Connect a client, standalone or cluster, within its `socket.connectTimeout`
+ * (node-redis default: 5000 ms; 0 disables the bound).
+ *
+ * node-redis applies `connectTimeout` only to opening the TCP socket. The
+ * handshake that follows (CLIENT SETINFO, HELLO/AUTH, SELECT) has no deadline,
+ * and the default reconnectStrategy retries a failed attempt forever. So a
+ * server that accepts the socket but never replies (a SIGSTOPped process, or a
+ * proxy that stopped forwarding) makes `connect()` hang forever. The same
+ * budget therefore bounds the whole connect here. On expiry the client is
+ * destroyed, which stops its retry loop and lets a later call connect again.
+ */
+async function connectWithin(client: RedisClientType, role: 'write' | 'read'): Promise<void> {
+  const cluster = client as unknown as Partial<Pick<RedisClusterType, '_options'>>;
+  const socket = cluster._options ? cluster._options.defaults?.socket : client.options?.socket;
+  const timeoutMs = socket?.connectTimeout ?? 5000;
+  const connecting = client.connect();
+  if (!timeoutMs) {
+    await connecting;
+    return;
+  }
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      // destroy() makes the abandoned connect() reject; nothing awaits it now.
+      connecting.catch(() => {});
+      client.destroy();
+      reject(
+        new Error(
+          `redis-streams: ${role} client did not connect to Redis within ${timeoutMs}ms (socket.connectTimeout); the server is unreachable or not responding`,
+        ),
+      );
+    }, timeoutMs);
+  });
+  try {
+    await Promise.race([connecting, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Disconnect a client, standalone or cluster.
  *
  * node-redis 5 `quit()` never settles on a client that is open but waiting to
@@ -391,13 +432,10 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // second connect().
     if (!this.#writerConnecting && this.#writeClient.isOpen) return;
     if (!this.#writerConnecting) {
-      this.#writerConnecting = this.#writeClient
-        .connect()
-        .then(() => undefined)
-        .finally(() => {
-          // Clear so a failed initial connect can be retried on the next call.
-          this.#writerConnecting = undefined;
-        });
+      this.#writerConnecting = connectWithin(this.#writeClient, 'write').finally(() => {
+        // Clear so a failed initial connect can be retried on the next call.
+        this.#writerConnecting = undefined;
+      });
     }
     return this.#writerConnecting;
   }
@@ -669,7 +707,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // connection until a message arrives.
     const readClient = this.#createReadClient();
     this.#attachErrorLogger(readClient, 'read', { topic });
-    await readClient.connect();
+    await connectWithin(readClient, 'read');
 
     return {
       members: new Map([[cb, {}]]),
