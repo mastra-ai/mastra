@@ -13,6 +13,7 @@ import { shutdownDrainWorkflow } from '@/workflows/shutdown-drain';
 import { transitiveWorkspaceRoute } from '@/api/route/transitive-workspace';
 import { protobufSubpathRoute } from '@/api/route/protobuf-subpath';
 import { modelUsageRoute } from '@/api/route/model-usage';
+import { stackRoute } from '@/api/route/stack';
 import { myAgent } from '@inner/hello-world/agent';
 import { calculatorMcpServer } from '@/mcp';
 import 'nodemailer';
@@ -37,6 +38,7 @@ export const mastra = new Mastra({
       transitiveWorkspaceRoute,
       protobufSubpathRoute,
       modelUsageRoute,
+      stackRoute,
     ],
   },
   bundler: {

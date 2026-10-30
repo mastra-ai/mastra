@@ -95,6 +95,16 @@ export function shouldSkipDotenvLoading(): boolean {
 }
 
 /**
+ * Node flags that make stack traces resolve through the bundle's source maps.
+ * Skipped when NODE_OPTIONS already sets either form of the flag, since a CLI
+ * flag would override a `--no-enable-source-maps` there. Callers place these
+ * before user-supplied args so `--no-enable-source-maps` in those still wins.
+ */
+export function getSourceMapNodeArgs(sourcemapEnabled: boolean, nodeOptions: string | undefined): string[] {
+  return sourcemapEnabled && !nodeOptions?.includes('enable-source-maps') ? ['--enable-source-maps'] : [];
+}
+
+/**
  * Get the version tag (e.g., 'beta', 'latest') for the currently running mastra CLI.
  * Create passes its known version to avoid resolving package metadata from an installed layout.
  * Init omits it and preserves the existing best-effort undefined fallback.

@@ -435,7 +435,8 @@ await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProje
           .replace(
             /apiRoutes: \[\s*testRoute,/,
             'apiRoutes: [testRoute, environmentRoute, versionlessRoute, rawTsRoute,',
-          );
+          )
+          .replace('bundler: {', 'bundler: {\n    sourcemap: true,');
         await Promise.all([
           writeFile(mastraIndexPath, mastraIndex),
           writeFile(
@@ -554,6 +555,12 @@ export const environmentRoute = registerApiRoute('/environment', {
       const res = await fetch(`http://localhost:${port}/raw-ts`);
       expect(res.status).toBe(200);
       await expect(res.json()).resolves.toEqual({ value: 'hello workspace c' });
+    });
+
+    it('points server stack traces at the source file (#29048)', async () => {
+      const res = await fetch(`http://localhost:${port}/stack`);
+      const { stack } = await res.json();
+      expect(stack).toContain(join('src', 'mastra', 'api', 'route', 'stack.ts'));
     });
 
     it('layers development dotenv files without overriding the shell environment', async () => {
@@ -1190,7 +1197,14 @@ export const mastra = new Mastra({
     const cancelSignal = controller.signal;
 
     beforeAll(async () => {
-      await runBuild(fixturePath);
+      const mastraConfigPath = join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'index.ts');
+      const originalMastraConfig = await readFile(mastraConfigPath, 'utf-8');
+      try {
+        await writeFile(mastraConfigPath, originalMastraConfig.replace('bundler: {', 'bundler: {\n    sourcemap: true,'));
+        await runBuild(fixturePath);
+      } finally {
+        await writeFile(mastraConfigPath, originalMastraConfig);
+      }
 
       const inputFile = join(fixturePath, 'apps', 'custom');
 
@@ -1244,6 +1258,13 @@ export const mastra = new Mastra({
     }, timeout);
 
     runApiTests(port);
+
+    // The build above enables `bundler.sourcemap`; `mastra start` must turn on Node's source map support.
+    it('points server stack traces at the source file (#29048)', async () => {
+      const res = await fetch(`http://localhost:${port}/stack`);
+      const { stack } = await res.json();
+      expect(stack).toContain(join('src', 'mastra', 'api', 'route', 'stack.ts'));
+    });
 
     it(
       'drains an in-flight response before the generated server exits on SIGTERM',
@@ -1641,6 +1662,45 @@ class AliasDeployer extends Deployer {
 
           const outputPackageJson = JSON.parse(await readFile(join(outputDir, 'package.json'), 'utf-8'));
           expect(outputPackageJson.dependencies ?? {}).not.toHaveProperty('ajv');
+        } finally {
+          await rm(isolatedFixturePath, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
+  describe.sequential('bundler options with file-based agents', () => {
+    // `mastra build` reads options from a generated wrapper when file-based agents exist; the
+    // wrapper has no `new Mastra({...})`, so the `bundler` block was dropped for defaults (#29048).
+    it(
+      'applies bundler options from index.ts when the project has file-based agents (#29048)',
+      async () => {
+        const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-fs-agents-bundler-${pkgManager}-`));
+        try {
+          await setupMonorepo(isolatedFixturePath, pkgManager);
+
+          const appDir = join(isolatedFixturePath, 'apps', 'custom');
+          const agentDir = join(appDir, 'src', 'mastra', 'agents', 'fs-helper');
+          await mkdir(agentDir, { recursive: true });
+          await Promise.all([
+            writeFile(join(agentDir, 'config.ts'), `export default { model: 'openai/gpt-5-mini' };\n`),
+            writeFile(join(agentDir, 'instructions.md'), 'You are a helper.\n'),
+          ]);
+
+          const mastraConfigPath = join(appDir, 'src', 'mastra', 'index.ts');
+          const mastraConfig = await readFile(mastraConfigPath, 'utf-8');
+          await writeFile(mastraConfigPath, mastraConfig.replace('bundler: {', 'bundler: {\n    sourcemap: true,'));
+
+          const buildResult = await execa(pkgManager, ['build'], {
+            cwd: appDir,
+            reject: false,
+            env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
+          });
+          expect(buildResult.exitCode, `${buildResult.stdout}\n${buildResult.stderr}`).toBe(0);
+
+          const outputFiles = await readdir(join(appDir, '.mastra', 'output'));
+          expect(outputFiles).toContain('index.mjs.map');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }
