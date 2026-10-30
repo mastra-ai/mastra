@@ -4819,9 +4819,15 @@ export class AgentThreadStreamRuntime {
             }
             this.#releaseUnusedThreadControlSubscription(state, key);
           }
-        } else if (record.leaseNotAcquired) {
-          // A drain transfers the lease to the follow-up run, so a registration that never got the lease must not
-          // drain either; whichever execution holds the lease takes the queued work when it finishes.
+        } else if (
+          record.leaseNotAcquired &&
+          (!this.#hasPendingThreadWork(state, key) ||
+            [...state.threadRunsByStreamId.values()].some(other => other.runId === record.runId))
+        ) {
+          // A registration that never got the lease has no lease to release, and a drain transfers the lease to the
+          // follow-up run, so it must not drain while the execution holding the lease is still live here; that
+          // execution takes the queued work when it finishes. Once it has finished, this is the last execution that
+          // can take the queue, and the drain moves the lease from the run's held owner or acquires it fresh.
           this.#releaseUnusedThreadControlSubscription(state, key);
         } else if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);

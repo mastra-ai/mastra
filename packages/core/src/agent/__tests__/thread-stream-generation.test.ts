@@ -190,6 +190,35 @@ describe('thread stream: runs taken over by a later claim generation', () => {
     }
   });
 
+  it.each(['after', 'before'] as const)(
+    'drains a follow-up queued %s the recovery finished through an older execution that registered after it',
+    async when => {
+      const { pubsub, original, subscription } = await setup();
+      const stream = vi.fn(async () => controlledOutput('drained').output);
+      const streamingAgent = { ...agent, stream } as unknown as Agent<any, any, any, any>;
+      const followUp = () =>
+        original.sendSignal(
+          streamingAgent,
+          { type: 'user-message', contents: 'follow-up' },
+          { runId: 'run-1', resourceId: 'generation-user', threadId: 'generation-thread' },
+          pubsub,
+        ).accepted;
+
+      const b = controlledOutput('run-1');
+      await original.registerRun(streamingAgent, b.output, options, pubsub, { strict: true, generation: 2 });
+      const a = controlledOutput('run-1');
+      await original.registerRun(streamingAgent, a.output, options, pubsub, { generation: 1 });
+      if (when === 'before') await followUp();
+      b.end();
+      await nextTicks(30);
+      if (when === 'after') await followUp();
+
+      a.end('failed');
+      await vi.waitFor(() => expect(stream).toHaveBeenCalledTimes(1));
+      subscription.unsubscribe();
+    },
+  );
+
   it("keeps a recovery's thread lease when the superseded execution in the same process finishes", async () => {
     const { pubsub, original, subscription } = await setup();
     const key = 'generation-user\u0000generation-thread';
