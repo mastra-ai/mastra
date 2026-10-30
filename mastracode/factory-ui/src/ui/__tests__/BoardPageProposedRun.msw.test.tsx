@@ -349,7 +349,7 @@ describe('Board card with a proposed run', () => {
     // With no status badge, the highlighted action is what keeps the parked run
     // from reading as a plain link to the card's session.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    const release = await within(card).findByRole('button', { name: 'Start suggested run: Build' });
+    const release = await within(card).findByRole('button', { name: 'Start suggested run: Plan' });
     expect(within(card).queryByText(/^Suggested:/)).toBeNull();
     expect(release).toHaveAttribute('data-variant', 'primary');
     expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'ghost');
@@ -374,9 +374,9 @@ describe('Board card with a proposed run', () => {
     expect(accept).toHaveAttribute('data-variant', 'primary');
 
     await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
-    await screen.findByRole('menuitem', { name: 'Accept and build' });
+    await screen.findByRole('menuitem', { name: 'Accept and plan' });
     expect(screen.queryByRole('menuitem', { name: 'Start suggested run' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Build' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Plan' })).not.toBeInTheDocument();
     expect(screen.getByRole('menuitem', { name: 'Dismiss suggested run' })).toBeVisible();
     await user.keyboard('{Escape}');
 

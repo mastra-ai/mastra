@@ -5,6 +5,7 @@ import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 
 const investigate: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
+const plan: CardMove = { label: 'Plan', role: 'work', stage: 'planning' };
 const build: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
 const review: CardMove = { label: 'Review', role: 'review', stage: 'review' };
 
@@ -57,22 +58,26 @@ describe('cardMoves', () => {
     },
   );
 
-  it('offers an issue its two lanes, and a needs-approval issue only the decision', () => {
+  it('offers an issue its lanes for its column, and a needs-approval issue only the decision', () => {
     const issue = { source: 'github-issue' as const, metadata: {} };
-    expect(cardMoves(issue, 'intake')).toEqual([investigate, build]);
+    expect(cardMoves(issue, 'intake')).toEqual([investigate, plan]);
+    expect(cardMoves(issue, 'triage')).toEqual([investigate, plan]);
+    // Building comes only after Planning: from there Build approves the plan, and in Building it re-runs the lane.
+    expect(cardMoves(issue, 'planning')).toEqual([plan, build]);
+    expect(cardMoves(issue, 'execute')).toEqual([build, plan]);
     expect(cardMoves({ ...issue, metadata: { labels: ['Status: Needs Approval'] } }, 'intake')).toEqual([
       { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
     ]);
     // A person moved it on, so the label is stale until the source catches up.
     expect(
       cardMoves({ ...issue, metadata: { labels: ['Status: Needs Approval'] }, stages: ['planning'] }, 'planning'),
-    ).toEqual([investigate, build]);
+    ).toEqual([plan, build]);
   });
 
   it.each(['linear-issue', 'jira-issue', 'incidentio-follow-up'] as const)(
     'offers a %s the same issue lanes',
     source => {
-      expect(cardMoves({ source, metadata: {} }, 'intake')).toEqual([investigate, build]);
+      expect(cardMoves({ source, metadata: {} }, 'intake')).toEqual([investigate, plan]);
     },
   );
 
@@ -127,7 +132,14 @@ describe('resumeStage', () => {
         sessions: { work: sessionRef('work') },
         stageHistory: history('triage', 'planning', 'execute', 'intake'),
       }),
-    ).toBe('execute');
+    ).toBe('planning');
+    // Intake does not lead to Building: a card self-review parked resumes in Review.
+    expect(
+      resumeStage('intake', {
+        sessions: { work: sessionRef('work'), review: sessionRef('review') },
+        stageHistory: history('triage', 'planning', 'execute', 'review', 'intake'),
+      }),
+    ).toBe('review');
   });
 
   it('offers nothing for a fresh arrival or outside Intake', () => {
@@ -150,7 +162,7 @@ describe('cardPrimaryAction', () => {
     const action = cardPrimaryAction({
       ...handlers,
       item: item({ plan: sessionRef('plan') }),
-      move: build,
+      move: plan,
       resumeStage: 'planning',
       hasSession: true,
       onMove,
@@ -183,7 +195,7 @@ describe('cardPrimaryAction', () => {
       ...handlers,
       item: held,
       columnStage: 'intake',
-      move: build,
+      move: plan,
       hasSession: true,
       onMove,
     });
@@ -202,7 +214,7 @@ describe('cardPrimaryAction', () => {
       ...handlers,
       item: held,
       columnStage: 'intake',
-      move: build,
+      move: plan,
       waiting: { label: 'Review', decisionId: 'decision-1' },
       hasSession: true,
       onApproveProposal,
@@ -216,20 +228,20 @@ describe('cardPrimaryAction', () => {
   });
 
   it('holds only a Work card triage left in Intake, not one still triaging, past Triage since, or never triaged', () => {
-    const args = { ...handlers, move: build, hasSession: true };
+    const args = { ...handlers, move: plan, hasSession: true };
     expect(cardPrimaryAction({ ...args, item: triaged(), columnStage: 'intake' })?.label).toBe('Accept');
     // Still in Triage: the run decides where it goes.
-    expect(cardPrimaryAction({ ...args, item: triaged(), columnStage: 'triage' })?.label).toBe('Build');
+    expect(cardPrimaryAction({ ...args, item: triaged(), columnStage: 'triage' })?.label).toBe('Plan');
     // Parked back in Intake after building: resume, don't re-decide.
     const parked = {
       ...triaged(),
       sessions: { triage: sessionRef('triage'), work: sessionRef('work') },
       stageHistory: [...triaged().stageHistory, stageEntry('planning'), stageEntry('execute'), stageEntry('intake')],
     };
-    expect(cardPrimaryAction({ ...args, item: parked, columnStage: 'intake' })?.label).toBe('Build');
-    expect(cardPrimaryAction({ ...args, item: item({}), columnStage: 'intake' })?.label).toBe('Build');
+    expect(cardPrimaryAction({ ...args, item: parked, columnStage: 'intake' })?.label).toBe('Plan');
+    expect(cardPrimaryAction({ ...args, item: item({}), columnStage: 'intake' })?.label).toBe('Plan');
     expect(cardPrimaryAction({ ...args, item: { ...triaged(), board: 'review' }, columnStage: 'intake' })?.label).toBe(
-      'Build',
+      'Plan',
     );
   });
 

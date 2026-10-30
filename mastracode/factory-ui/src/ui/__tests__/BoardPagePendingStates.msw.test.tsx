@@ -899,7 +899,7 @@ describe('Board card pending states', () => {
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix Jira intake sync' }));
 
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.queryByRole('menuitem', { name: 'Add to board' })).not.toBeInTheDocument();
     const jiraLink = screen.getByRole('menuitem', { name: 'Open in Jira' });
     expect(jiraLink).toHaveAttribute('href', jiraIssue.url);
@@ -908,7 +908,7 @@ describe('Board card pending states', () => {
 
   it.each([
     ['Investigate', 'triage'],
-    ['Build', 'execute'],
+    ['Plan', 'planning'],
   ] as const)('%s files the Jira intake candidate and starts its run', async (action, stage) => {
     const createRequests: unknown[] = [];
     const transitionRequests: unknown[] = [];
@@ -1037,7 +1037,7 @@ describe('Board card pending states', () => {
 
     // The filed Jira card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Jira' })).toHaveAttribute('href', jiraIssue.url);
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
@@ -1052,7 +1052,7 @@ describe('Board card pending states', () => {
     await user.click(await screen.findByRole('button', { name: 'Actions for Add retry to incident pager' }));
 
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.queryByRole('menuitem', { name: 'Add to board' })).not.toBeInTheDocument();
     const incidentioLink = screen.getByRole('menuitem', { name: 'Open in incident.io' });
     expect(incidentioLink).toHaveAttribute('href', incidentioIssue.url);
@@ -1061,7 +1061,7 @@ describe('Board card pending states', () => {
 
   it.each([
     ['Investigate', 'triage'],
-    ['Build', 'execute'],
+    ['Plan', 'planning'],
   ] as const)('%s files the incident.io intake candidate and starts its run', async (action, stage) => {
     const createRequests: unknown[] = [];
     const transitionRequests: unknown[] = [];
@@ -1189,7 +1189,7 @@ describe('Board card pending states', () => {
 
     // The filed incident.io card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in incident.io' })).toHaveAttribute('href', incidentioIssue.url);
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
