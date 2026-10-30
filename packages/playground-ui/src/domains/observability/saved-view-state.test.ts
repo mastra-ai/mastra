@@ -97,6 +97,7 @@ const tracesView: SavedViewState = {
     { id: 'output', visible: false },
     { id: 'duration', visible: true },
     { id: 'timeToFirstChunk', visible: false },
+    { id: 'timeToFirstToken', visible: false },
     { id: 'endTime', visible: false },
     { id: 'environment', visible: false },
     { id: 'inputTokens', visible: true },
@@ -127,7 +128,7 @@ function listUrlByHand(tokens: TraceFilterToken[], groups: TraceFilterGroup[]) {
   const params = new URLSearchParams('spanId=span-1');
   writeObservabilityListFilters(params, { tokens, groups });
   writeObservabilityListDates(params, { datePreset: 'last-24h' });
-  writeObservabilityListSort(params, 'asc');
+  writeObservabilityListSort(params, { field: 'startedAt', direction: 'asc' });
   return params;
 }
 
@@ -236,8 +237,18 @@ describe('saved view columns', () => {
     expect(applySavedView(saved, new URLSearchParams()).columns).toEqual(DEFAULT_TRACE_COLUMN_PREFERENCES);
   });
 
+  it('apply on the threads page as the thread columns they were saved from', () => {
+    const threadColumns: TraceColumnPreferences = {
+      visibleColumns: ['input', 'traceCount', 'timeToFirstChunk', 'timeToFirstToken'],
+      customColumns: [],
+      metadataKeys: [],
+    };
+    const saved = savedViewFromSearchParams('threads', new URLSearchParams(), { columns: threadColumns });
+    expect(applySavedView(saved, new URLSearchParams()).columns).toEqual(threadColumns);
+  });
+
   it('are not saved or applied on pages with fixed columns', () => {
-    const saved = savedViewFromSearchParams('threads', new URLSearchParams(), { columns: traceColumns });
+    const saved = savedViewFromSearchParams('logs', new URLSearchParams(), { columns: traceColumns });
     expect(saved.columns).toBeUndefined();
     expect(applySavedView({ ...saved, columns: tracesView.columns }, new URLSearchParams()).columns).toBeUndefined();
   });

@@ -20,6 +20,7 @@ import {
   DRAIN_PENDING_SIGNALS_KEY,
   RESOURCE_ID_KEY,
   STEP_ACTIVE_TOOLS_KEY,
+  STEP_PROVIDER_METADATA_KEY,
   STEP_TOOLS_KEY,
   STEP_USAGE_KEY,
   STEP_WORKSPACE_KEY,
@@ -385,6 +386,12 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           emittedConcurrencyResolved = true;
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
+          writeScoped(
+            scopeCtx,
+            STEP_PROVIDER_METADATA_KEY,
+            'stepProviderMetadata',
+            typedInputData.metadata?.providerMetadata,
+          );
           return toolCalls;
         },
         { id: 'map-tool-calls' },

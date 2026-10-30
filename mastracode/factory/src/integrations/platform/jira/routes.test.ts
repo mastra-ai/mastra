@@ -73,6 +73,18 @@ function buildApp(
 
 const org1 = (): TestAuthUser => ({ workosId: 'u1', organizationId: 'org1' });
 
+const createProject = async (id: string) => {
+  const now = new Date();
+  await seed.storage.ops.insertOne('factory_projects', {
+    id,
+    org_id: 'org1',
+    created_by: 'u1',
+    name: id,
+    created_at: now,
+    updated_at: now,
+  });
+};
+
 beforeEach(async () => {
   seed = await createFactoryStorageForTests();
   jira = new PlatformJiraIntegration({
@@ -299,8 +311,8 @@ describe('issues route — Factory source bindings', () => {
   const projectB = '22222222-2222-4222-8222-222222222222';
 
   const seedProjects = async (count: number) => {
-    for (let i = 0; i < count; i += 1) {
-      await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: `project-${i}` } });
+    for (const id of [projectA, projectB].slice(0, count)) {
+      await createProject(id);
     }
   };
 

@@ -11,6 +11,8 @@ const eq = (path: string, literal: string | number): TraceQueryScalarPredicate =
   right: { literal },
 });
 
+const streamingTimings = { withTimeToFirstChunk: true, withTimeToFirstToken: true };
+
 const collectPaths = (predicate: TraceQueryScalarPredicate | undefined): string[] => {
   if (!predicate) return [];
   const paths: string[] = [];
@@ -24,7 +26,11 @@ const collectPaths = (predicate: TraceQueryScalarPredicate | undefined): string[
 };
 
 describe('thread filter fields', () => {
-  const fields = createThreadFilterBarFields({ entityNames: ['weather-agent'], environments: ['production'] });
+  const fields = createThreadFilterBarFields({
+    ...streamingTimings,
+    entityNames: ['weather-agent'],
+    environments: ['production'],
+  });
   const byId = (id: string) => {
     const field = fields.find(candidate => candidate.id === id);
     if (!field) throw new Error(`No ${id} field`);
@@ -44,6 +50,25 @@ describe('thread filter fields', () => {
     it('leaves the start and end timestamps to the time-range chip', () => {
       expect(fields.map(field => field.id)).not.toContain('startedAt');
       expect(fields.map(field => field.id)).not.toContain('endedAt');
+    });
+  });
+
+  describe('when the store does not record streaming timings', () => {
+    const fieldIds = (support: typeof streamingTimings) =>
+      createThreadFilterBarFields({ ...support, entityNames: [], environments: [] }).map(field => field.id);
+
+    it('offers time to first chunk and time to first token only when the store records each', () => {
+      const none = fieldIds({ withTimeToFirstChunk: false, withTimeToFirstToken: false });
+      expect(none).not.toContain('timeToFirstChunkMs');
+      expect(none).not.toContain('timeToFirstTokenMs');
+
+      const chunkOnly = fieldIds({ withTimeToFirstChunk: true, withTimeToFirstToken: false });
+      expect(chunkOnly).toContain('timeToFirstChunkMs');
+      expect(chunkOnly).not.toContain('timeToFirstTokenMs');
+
+      const tokenOnly = fieldIds({ withTimeToFirstChunk: false, withTimeToFirstToken: true });
+      expect(tokenOnly).not.toContain('timeToFirstChunkMs');
+      expect(tokenOnly).toContain('timeToFirstTokenMs');
     });
   });
 
@@ -76,8 +101,9 @@ describe('thread filter fields', () => {
       expect(byId('traceCount')).toMatchObject({ label: 'Messages', icon: MessagesSquareIcon });
     });
 
-    it('treats time to first chunk as a number', () => {
-      expect(byId('timeToFirstChunkMs')).toMatchObject({ type: 'number' });
+    it('treats time to first chunk and time to first token as numbers', () => {
+      expect(byId('timeToFirstChunkMs')).toMatchObject({ type: 'number', label: 'Time to first chunk (ms)' });
+      expect(byId('timeToFirstTokenMs')).toMatchObject({ type: 'number', label: 'Time to first token (ms)' });
     });
 
     it('leaves ids as free text', () => {
@@ -88,22 +114,47 @@ describe('thread filter fields', () => {
 });
 
 describe('buildThreadQueryWhere', () => {
+  describe.each([
+    ['time to first chunk', 'timeToFirstChunkMs', 'withTimeToFirstChunk'],
+    ['time to first token', 'timeToFirstTokenMs', 'withTimeToFirstToken'],
+  ] as const)('when a token filters %s', (_label, fieldId, flag) => {
+    it('compares it as a number', () => {
+      expect(buildThreadQueryWhere([{ fieldId, operatorId: 'gt', value: '800' }], [], streamingTimings)).toEqual({
+        op: 'and',
+        args: [{ op: 'gt', left: { path: fieldId }, right: { literal: 800 } }],
+      });
+    });
+
+    it('drops it, also inside groups, when the store does not record it', () => {
+      const unsupported = { ...streamingTimings, [flag]: false };
+      const token: TraceFilterToken = { fieldId, operatorId: 'gt', value: '800' };
+      expect(buildThreadQueryWhere([token], [], unsupported)).toBeUndefined();
+      expect(
+        buildThreadQueryWhere(
+          [],
+          [{ logic: 'or', nodes: [token, { fieldId: 'status', value: 'error' }] }],
+          unsupported,
+        ),
+      ).toEqual({ op: 'and', args: [eq('status', 'error')] });
+    });
+  });
+
   describe('when there are no filters', () => {
     it('returns no predicate', () => {
-      expect(buildThreadQueryWhere([], [])).toBeUndefined();
+      expect(buildThreadQueryWhere([], [], streamingTimings)).toBeUndefined();
     });
   });
 
   describe('when a token filters a thread field', () => {
     it('wraps a single value in a top-level and', () => {
-      expect(buildThreadQueryWhere([{ fieldId: 'status', value: 'error' }], [])).toEqual({
+      expect(buildThreadQueryWhere([{ fieldId: 'status', value: 'error' }], [], streamingTimings)).toEqual({
         op: 'and',
         args: [eq('status', 'error')],
       });
     });
 
     it('uses set membership for several values', () => {
-      expect(buildThreadQueryWhere([{ fieldId: 'entityName', value: ['a', 'b'] }], [])).toEqual({
+      expect(buildThreadQueryWhere([{ fieldId: 'entityName', value: ['a', 'b'] }], [], streamingTimings)).toEqual({
         op: 'and',
         args: [{ op: 'in', value: { path: 'entityName' }, set: ['a', 'b'] }],
       });
@@ -118,25 +169,31 @@ describe('buildThreadQueryWhere', () => {
         { fieldId: 'spans.model', value: 'gpt' },
         { fieldId: 'traceId', value: 'trace-1' },
       ];
-      expect(buildThreadQueryWhere(tokens, [])).toBeUndefined();
+      expect(buildThreadQueryWhere(tokens, [], streamingTimings)).toBeUndefined();
     });
   });
 
   describe('when a token has no usable value', () => {
     it('drops empty values', () => {
-      expect(buildThreadQueryWhere([{ fieldId: 'runId', value: '  ' }], [])).toBeUndefined();
+      expect(buildThreadQueryWhere([{ fieldId: 'runId', value: '  ' }], [], streamingTimings)).toBeUndefined();
     });
 
     it('drops non-numeric trace counts', () => {
-      expect(buildThreadQueryWhere([{ fieldId: 'traceCount', operatorId: 'gt', value: 'many' }], [])).toBeUndefined();
+      expect(
+        buildThreadQueryWhere([{ fieldId: 'traceCount', operatorId: 'gt', value: 'many' }], [], streamingTimings),
+      ).toBeUndefined();
     });
 
     it('drops trace counts matched against several values', () => {
-      expect(buildThreadQueryWhere([{ fieldId: 'traceCount', value: ['2', '3'] }], [])).toBeUndefined();
+      expect(
+        buildThreadQueryWhere([{ fieldId: 'traceCount', value: ['2', '3'] }], [], streamingTimings),
+      ).toBeUndefined();
     });
 
     it('keeps numeric trace counts as numbers', () => {
-      expect(buildThreadQueryWhere([{ fieldId: 'traceCount', operatorId: 'gt', value: '3' }], [])).toEqual({
+      expect(
+        buildThreadQueryWhere([{ fieldId: 'traceCount', operatorId: 'gt', value: '3' }], [], streamingTimings),
+      ).toEqual({
         op: 'and',
         args: [{ op: 'gt', left: { path: 'traceCount' }, right: { literal: 3 } }],
       });
@@ -145,26 +202,32 @@ describe('buildThreadQueryWhere', () => {
 
   describe('when a negation targets an optional field', () => {
     it('keeps threads without the field', () => {
-      expect(buildThreadQueryWhere([{ fieldId: 'environment', operatorId: 'isNot', value: 'production' }], [])).toEqual(
-        {
-          op: 'and',
-          args: [
-            {
-              op: 'or',
-              args: [
-                { op: 'ne', left: { path: 'environment' }, right: { literal: 'production' } },
-                { op: 'notExists', path: 'environment' },
-              ],
-            },
-          ],
-        },
-      );
+      expect(
+        buildThreadQueryWhere(
+          [{ fieldId: 'environment', operatorId: 'isNot', value: 'production' }],
+          [],
+          streamingTimings,
+        ),
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'ne', left: { path: 'environment' }, right: { literal: 'production' } },
+              { op: 'notExists', path: 'environment' },
+            ],
+          },
+        ],
+      });
     });
   });
 
   describe('when a negation targets a field every thread has', () => {
     it('stays a plain negation', () => {
-      expect(buildThreadQueryWhere([{ fieldId: 'status', operatorId: 'notIn', value: ['error'] }], [])).toEqual({
+      expect(
+        buildThreadQueryWhere([{ fieldId: 'status', operatorId: 'notIn', value: ['error'] }], [], streamingTimings),
+      ).toEqual({
         op: 'and',
         args: [{ op: 'notIn', value: { path: 'status' }, set: ['error'] }],
       });
@@ -188,7 +251,9 @@ describe('buildThreadQueryWhere', () => {
           ],
         },
       ];
-      expect(buildThreadQueryWhere([{ fieldId: 'entityName', value: 'weather-agent' }], groups)).toEqual({
+      expect(
+        buildThreadQueryWhere([{ fieldId: 'entityName', value: 'weather-agent' }], groups, streamingTimings),
+      ).toEqual({
         op: 'and',
         args: [
           eq('entityName', 'weather-agent'),
@@ -208,7 +273,7 @@ describe('buildThreadQueryWhere', () => {
 
     it('drops groups left empty', () => {
       const groups: TraceFilterGroup[] = [{ logic: 'or', nodes: [{ fieldId: 'traceId', value: 'trace-1' }] }];
-      expect(buildThreadQueryWhere([], groups)).toBeUndefined();
+      expect(buildThreadQueryWhere([], groups, streamingTimings)).toBeUndefined();
     });
   });
 
@@ -219,7 +284,7 @@ describe('buildThreadQueryWhere', () => {
         operatorId: 'isNot',
         value: '1',
       }));
-      const paths = collectPaths(buildThreadQueryWhere(tokens, []));
+      const paths = collectPaths(buildThreadQueryWhere(tokens, [], streamingTimings));
       expect(paths.length).toBeGreaterThan(0);
       for (const path of paths) expect(Object.keys(THREAD_QUERY_FIELD_REGISTRY)).toContain(path);
     });

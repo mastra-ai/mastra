@@ -2,6 +2,7 @@ import { MastraError } from '@mastra/core/error';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { FactoryStorageOps } from '@mastra/core/storage';
 import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra/core/workspace';
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
@@ -286,11 +287,14 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return this.deps.sourceControl;
   }
 
-  async #releaseIntakeSources(orgId: string, factoryProjectId: string): Promise<void> {
+  async #intakeRelease(
+    orgId: string,
+    factoryProjectId: string,
+  ): Promise<((ops: FactoryStorageOps) => Promise<void>) | undefined> {
     const { intake } = this.deps;
-    if (!intake) return;
+    if (!intake) return undefined;
     await intake.ensureReady();
-    await intake.clearProjectBindings({ orgId, factoryProjectId });
+    return ops => intake.clearProjectBindings({ orgId, factoryProjectId }, ops);
   }
 
   async #handles(): Promise<SourceControlStorageHandle[]> {
@@ -722,9 +726,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
               await handle.connections.delete({ orgId: tenant.orgId, id: connection.id });
             }
           }
-          await (await this.#projects()).delete({ orgId: tenant.orgId, id });
+          await (
+            await this.#projects()
+          ).delete({ orgId: tenant.orgId, id }, await this.#intakeRelease(tenant.orgId, id));
           await this.#dropSchedule(id);
-          await this.#releaseIntakeSources(tenant.orgId, id);
           return context.body(null, 204);
         },
       }),

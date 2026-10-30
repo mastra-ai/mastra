@@ -11,12 +11,14 @@ import { useObservabilityCapabilities } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
 import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
+import { SPAN_LIST_SORT_FIELDS } from '@/domains/observability/observability-list-url-state';
 import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { TracesListView } from '@/domains/traces/components/traces-list-view';
-import type { TracesListViewTrace } from '@/domains/traces/components/traces-list-view';
+import type { TracesListSortField, TracesListViewTrace } from '@/domains/traces/components/traces-list-view';
 import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
+import { hasTraceColumn, withoutUnrecordedStreamingColumns } from '@/domains/traces/trace-list-columns';
 import { ActionRow } from '@/ds/components/ActionRow';
 
 export type SpansExplorerPanelArgs = {
@@ -39,21 +41,63 @@ export type SpansExplorerBodyProps = {
 
 /** The spans page body: filter bar, span list and the host's span panel. Router-agnostic. */
 export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, urlState }: SpansExplorerBodyProps) {
-  const filters = useObservabilityListFilters(urlState);
-  const { timeRange, tokens, groups, sort } = filters;
+  const filters = useObservabilityListFilters(urlState, { sortFields: SPAN_LIST_SORT_FIELDS });
+  const { timeRange, tokens, groups } = filters;
   const columns = useTraceColumnPreferences({ scope: 'spans' });
 
-  const { data: capabilities } = useObservabilityCapabilities();
+  const { data: capabilities, isLoading: isCapabilitiesLoading } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
+  const withTimeToFirstChunk = capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false;
+  const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
   const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
 
+  // Stored columns the store can't fill stay saved but aren't drawn, so they come back on a store that can.
+  const displayedColumns = useMemo(
+    () =>
+      isCapabilitiesLoading
+        ? columns.preferences
+        : withoutUnrecordedStreamingColumns(columns.preferences, { withTimeToFirstChunk, withTimeToFirstToken }),
+    [columns.preferences, isCapabilitiesLoading, withTimeToFirstChunk, withTimeToFirstToken],
+  );
+
+  const sortableFields = useMemo(() => {
+    const fields: TracesListSortField[] = ['startedAt'];
+    if (
+      withTimeToFirstChunk &&
+      capabilities?.capabilities.traceQueryTimeToFirstChunkSort &&
+      hasTraceColumn(displayedColumns, 'timeToFirstChunk')
+    ) {
+      fields.push('timeToFirstChunkMs');
+    }
+    if (
+      withTimeToFirstToken &&
+      capabilities?.capabilities.traceQueryTimeToFirstTokenSort &&
+      hasTraceColumn(displayedColumns, 'timeToFirstToken')
+    ) {
+      fields.push('timeToFirstTokenMs');
+    }
+    return fields;
+  }, [capabilities, withTimeToFirstChunk, withTimeToFirstToken, displayedColumns]);
+
+  // A URL sort the store can't run, or on a hidden column, lists newest first without rewriting the URL.
+  const sort = sortableFields.includes(filters.sort.field)
+    ? filters.sort
+    : ({ field: 'startedAt', direction: 'desc' } as const);
+  const { field: sortField, direction: sortDirection } = sort;
+
   const where = useMemo(
-    () => buildSpanQueryWhere(tokens, groups, { withContextFields, withOutcomeFields }),
-    [tokens, groups, withContextFields, withOutcomeFields],
+    () =>
+      buildSpanQueryWhere(tokens, groups, {
+        withContextFields,
+        withOutcomeFields,
+        withTimeToFirstChunk,
+        withTimeToFirstToken,
+      }),
+    [tokens, groups, withContextFields, withOutcomeFields, withTimeToFirstChunk, withTimeToFirstToken],
   );
   const query = useMemo<SpanQueryArgs>(
-    () => ({ timeRange, orderBy: [{ field: 'startedAt', direction: sort }], ...(where ? { where } : {}) }),
-    [timeRange, sort, where],
+    () => ({ timeRange, orderBy: [{ field: sortField, direction: sortDirection }], ...(where ? { where } : {}) }),
+    [timeRange, sortField, sortDirection, where],
   );
 
   const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useSpansListSource(
@@ -97,6 +141,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
                 onDatePresetChange={filters.onDatePresetChange}
                 onDateChange={filters.onDateChange}
                 onDateRangeChange={filters.onDateRangeChange}
+                onDateReset={filters.onDateReset}
                 onFiltersChange={filters.onFiltersChange}
                 disabled={isLoading}
               />
@@ -107,10 +152,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
           <SpansExplorerHistogram
             timeRange={timeRange}
             where={where}
-            onZoom={({ from, to }) => {
-              filters.onDatePresetChange('custom');
-              filters.onDateRangeChange(from, to);
-            }}
+            onZoom={({ from, to }) => filters.onZoom(from, to)}
           />
         }
         error={
@@ -130,7 +172,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
         <TracesListView
           listId="all-spans"
           traces={rows}
-          columnPreferences={columns.preferences}
+          columnPreferences={displayedColumns}
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}
@@ -138,7 +180,8 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
           filtersApplied={filters.filtersApplied}
           resource="spans"
           isBranchesMode
-          createdSort={sort}
+          sort={sort}
+          sortableFields={sortableFields}
           onSortChange={filters.setSort}
           featuredTraceId={selection?.traceId}
           featuredSpanId={selection?.spanId}
