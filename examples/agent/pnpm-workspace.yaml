@@ -45,6 +45,6 @@ overrides:
   'yargs@<18.1.0': 18.2.0
   'raw-body@<4.0.0': 4.0.0
   'nanoid@<5.1.16': 5.1.16
-  # Vanta 2026-10-30: CVE-2026-118663 / GHSA-rmxm-3fg6-px4f (@hono/node-server >=1.19.10 <2.1.3); MCP SDK/node declare ^2.x too
+  # Vanta 2026-11-02: CVE-2026-118663 / GHSA-rmxm-3fg6-px4f (@hono/node-server >=1.19.10 <2.1.3); MCP SDK/node declare ^2.x too
   '@modelcontextprotocol/sdk>@hono/node-server': 2.1.5
   '@modelcontextprotocol/node>@hono/node-server': 2.1.5
