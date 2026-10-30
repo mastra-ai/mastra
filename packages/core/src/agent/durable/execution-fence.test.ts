@@ -464,6 +464,19 @@ describe('storage-backed ExecutionFence', () => {
     expect(await admitted).toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
   });
 
+  it('refuses worker admission for a claim a takeover has superseded', async () => {
+    const { storage, workflowsStore } = await stores();
+    const coordinator = await storageClaim(workflowsStore, 'run-1');
+    coordinator.stopHeartbeat();
+    const successor = await storageClaim(workflowsStore, 'run-1', 'takeover');
+    const mastra = new Mastra({ storage });
+
+    await expect(ExecutionFence.follow(mastra, 'run-1', coordinator.claim)).rejects.toMatchObject({
+      id: EXECUTION_SUPERSEDED_ERROR_ID,
+    });
+    await successor.settle(async () => {});
+  });
+
   it('records ownership in the workflows store instead of the pubsub lease', async () => {
     const { workflowsStore } = await stores();
     const pubsub = new EventEmitterPubSub();

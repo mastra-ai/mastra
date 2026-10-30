@@ -708,7 +708,8 @@ export class ExecutionFence implements RunFenceScope {
     const backend: OwnershipBackend = {
       ...executionBackend,
       renew: async current => {
-        if (!(await executionBackend.renew(current))) {
+        const result = await executionBackend.renew(current);
+        if (!result.renewed) {
           if (claim.generation === undefined && !(await executionBackend.isSuperseded(current))) {
             throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
               agentId: claim.agentId!,
@@ -716,7 +717,7 @@ export class ExecutionFence implements RunFenceScope {
               executionId: claim.executionId,
             });
           }
-          return false;
+          return result;
         }
         if (
           claim.threadId &&
@@ -735,7 +736,7 @@ export class ExecutionFence implements RunFenceScope {
             executionId: claim.executionId,
           });
         }
-        return true;
+        return result;
       },
     };
     const startedAt = Date.now();
@@ -744,7 +745,7 @@ export class ExecutionFence implements RunFenceScope {
     try {
       await Promise.race([
         (async () => {
-          if (await backend.renew(claim)) return true;
+          if ((await backend.renew(claim)).renewed) return true;
           if (claim.generation !== undefined) {
             const store = await mastra.getStorage()?.getStore('workflows');
             const record = await store?.getRunOwnership({ runId });
