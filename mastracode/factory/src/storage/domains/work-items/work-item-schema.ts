@@ -1,5 +1,7 @@
 import type { CollectionSchema } from '@mastra/core/storage';
 
+import type { FactoryTriageType } from '../../../rules/types.js';
+
 export type WorkItemProvider =
   | 'github'
   | 'gitlab'
@@ -72,6 +74,10 @@ export const FACTORY_BOARD_ITEMS_SCHEMA: CollectionSchema = {
     factory_project_id: { type: 'text' },
     work_item_id: { type: 'text' },
     claim_key: { type: 'text', nullable: true },
+    triage_type: { type: 'text', nullable: true },
+    accepted_at: { type: 'timestamp', nullable: true },
+    autonomy_armed_at: { type: 'timestamp', nullable: true },
+    plans_preapproved_at: { type: 'timestamp', nullable: true },
     board: { type: 'text', nullable: true },
     parent_board_item_id: { type: 'text', nullable: true },
     stages: { type: 'json' },
@@ -141,6 +147,10 @@ export interface BoardItemDbRecord extends Record<string, unknown> {
   factory_project_id: string;
   work_item_id: string;
   claim_key: string | null;
+  triage_type: FactoryTriageType | null;
+  accepted_at: Date | null;
+  autonomy_armed_at: Date | null;
+  plans_preapproved_at: Date | null;
   board: string | null;
   parent_board_item_id: string | null;
   stages: string[];
