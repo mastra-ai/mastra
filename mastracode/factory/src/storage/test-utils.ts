@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
+import type { PgFactoryStorage } from '@mastra/pg';
 import { onTestFinished } from 'vitest';
 
 import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
@@ -25,6 +25,7 @@ import { WorkItemsStorage } from './domains/work-items/base.js';
 
 /** Keep migration tests from clearing tables another Postgres test is using. */
 export async function createIsolatedFactoryPostgresForTests(connectionString: string): Promise<PgFactoryStorage> {
+  const { PgFactoryStorage, PostgresStore } = await import('@mastra/pg');
   const admin = new PostgresStore({ id: 'factory-test-admin', connectionString, disableInit: true });
   const schema = `factory_test_${randomUUID().replaceAll('-', '')}`;
   await admin.pool.query(`CREATE SCHEMA "${schema}"`);
