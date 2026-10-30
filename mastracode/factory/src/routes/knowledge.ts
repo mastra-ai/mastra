@@ -97,12 +97,15 @@ async function visibleChange(store: KnowledgeStorage, read: KnowledgeReadScope, 
   };
 }
 
-type LabelablePage = { isScope: boolean; declaration?: string };
+type LabelablePage = { isScope: boolean; address?: string };
 
-/** Adds a scope page's declared `displayLabel` (e.g. "Team"); declarations live in config, not storage. */
+/**
+ * Adds a scope page's declared `displayLabel` with the address's `$params` filled in (`'$orgId policy'`
+ * → `'acme policy'`); declarations live in config, not storage.
+ */
 function withDisplayLabel<T extends LabelablePage>(knowledge: Knowledge, page: T): T & { displayLabel?: string } {
-  if (!page.isScope || !page.declaration) return page;
-  const displayLabel = knowledge.scopeDeclaration(page.declaration)?.displayLabel;
+  if (!page.isScope || !page.address) return page;
+  const displayLabel = knowledge.scopeLabel(page.address);
   return displayLabel ? { ...page, displayLabel } : page;
 }
 
