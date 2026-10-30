@@ -296,6 +296,22 @@ describe('PgKnowledgePages (schema 4)', () => {
     ).resolves.toMatchObject({ scopeId: y.id });
   });
 
+  it('drops the per-scope key index an earlier alpha database kept, so sibling keys work', async () => {
+    await pool.query(`DROP SCHEMA IF EXISTS stale_key_test CASCADE`);
+    await pool.query(`CREATE SCHEMA stale_key_test`);
+    await initPgKnowledgePagesSchema(client, 'stale_key_test');
+    await pool.query(
+      `CREATE UNIQUE INDEX "mastra_knowledge_pages_key_uq" ON stale_key_test.mastra_knowledge_pages ("scopeId", key) WHERE key IS NOT NULL AND "deletedAt" IS NULL`,
+    );
+    await initPgKnowledgePagesSchema(client, 'stale_key_test');
+    const indexes = (await pool.query(`SELECT indexname FROM pg_indexes WHERE schemaname = 'stale_key_test'`)).rows.map(
+      r => r.indexname,
+    );
+    expect(indexes).not.toContain('mastra_knowledge_pages_key_uq');
+    expect(indexes).toContain('mastra_knowledge_pages_parent_key_uq');
+    await pool.query(`DROP SCHEMA stale_key_test CASCADE`);
+  });
+
   it('requires a reset over legacy tables and resets only Knowledge tables', async () => {
     await pool.query(`CREATE SCHEMA IF NOT EXISTS legacy_test`);
     await pool.query(`CREATE TABLE legacy_test.mastra_knowledge_nodes (id text)`);

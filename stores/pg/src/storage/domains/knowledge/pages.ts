@@ -133,6 +133,8 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
       "schemaVersion" integer NOT NULL
     )`,
     index('mastra_knowledge_pages_address_uq', t.pages, '"address"', '"isScope"', true),
+    // Earlier alpha schema-4 databases kept page keys unique per scope; keys are now unique among siblings.
+    `DROP INDEX IF EXISTS ${q('mastra_knowledge_pages_key_uq')}`,
     index(
       'mastra_knowledge_pages_parent_key_uq',
       t.pages,
@@ -1429,15 +1431,17 @@ export class PgKnowledgePages implements KnowledgePageStore {
        WHERE ${where.join(' AND ')} ORDER BY a."createdAt" DESC, a."id" DESC LIMIT ${limit + 1}`,
       params.values,
     );
-    const events = rows.slice(0, limit).map((row): KnowledgePageActivityEvent => ({
-      id: String(row.id),
-      action: String(row.action) as KnowledgePageActivityAction,
-      scopeId: String(row.scopeId),
-      pageId: String(row.pageId),
-      ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
-      provenance: parseJson<KnowledgeProvenance>(row.provenance),
-      createdAt: new Date(row.createdAt as string | Date),
-    }));
+    const events = rows.slice(0, limit).map(
+      (row): KnowledgePageActivityEvent => ({
+        id: String(row.id),
+        action: String(row.action) as KnowledgePageActivityAction,
+        scopeId: String(row.scopeId),
+        pageId: String(row.pageId),
+        ...(row.noteId == null ? {} : { noteId: String(row.noteId) }),
+        provenance: parseJson<KnowledgeProvenance>(row.provenance),
+        createdAt: new Date(row.createdAt as string | Date),
+      }),
+    );
     const last = events[events.length - 1];
     return {
       events,
