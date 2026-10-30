@@ -58,7 +58,8 @@ export function AddApiKeyDialog({
   const scope: KeyScope = fixedScope ?? writableScope;
 
   const fixedScopeCredential = fixedScope === 'org' ? provider.orgCredential : provider.userCredential;
-  const replacesSignIn = fixedScope !== undefined && fixedScopeCredential === 'oauth';
+  // A connected provider pools its credentials, so a new key joins them instead of replacing them.
+  const addsToPool = fixedScope !== undefined && fixedScopeCredential !== undefined;
   const error = saveKeyMutation.error instanceof Error ? saveKeyMutation.error.message : undefined;
   const personalOnlyWarning = authEnabled && preferredScope === 'org' && !canWriteOrgKey;
 
@@ -88,7 +89,7 @@ export function AddApiKeyDialog({
           <DialogDescription>
             The key is stored securely and never displayed again.
             {fixedScope && ` ${SCOPED_KEY_ACCESS[fixedScope]}`}
-            {replacesSignIn && ' Saving replaces the provider sign-in at this scope.'}
+            {addsToPool && " Adds this key to the provider's accounts."}
           </DialogDescription>
         </DialogHeader>
         <DialogBody>

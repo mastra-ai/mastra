@@ -4,6 +4,7 @@ import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages
 
 import { isTerminalInvocationState } from '../services/transcript';
 import type { MessageEntry, SuspensionPrompt, ToolCall } from '../services/transcript';
+import { routingNoticeText } from '../services/routing-notice';
 import { isRecord } from './transcript-shared';
 
 export type MessagePart = MessageEntry['message']['content']['parts'][number];
@@ -61,7 +62,7 @@ function keepsSlot(part: MessagePart): boolean {
     case 'tool-invocation':
       return !isTaskTool(part.toolInvocation.toolName);
     default:
-      return false;
+      return routingNoticeText(part) !== undefined;
   }
 }
 
@@ -89,7 +90,7 @@ export function draws(
     case 'error':
       return true;
     default:
-      return false;
+      return routingNoticeText(part) !== undefined;
   }
 }
 
