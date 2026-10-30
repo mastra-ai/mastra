@@ -462,9 +462,9 @@ export class MastraFactory {
   /** The normalized sandbox, set by `prepare()`. Undefined until then and when sandboxes are disabled. */
   #sandbox: FactorySandbox | undefined;
   #sandboxDescription: FactorySandboxDescription | undefined;
-  /** The compiled code boards: seed input for every project's stored boards. */
+  /** The code boards (built-in and app boards), served to every project and never stored. */
   readonly #boards: BoardRegistry;
-  /** Each project's boards, read from the database. Undefined until `prepare()` or when the boards domain is down. */
+  /** Each project's boards: the code boards plus the boards it stored. Undefined until `prepare()` or when the boards domain is down. */
   #projectBoards: ProjectBoardCache | undefined;
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
@@ -725,11 +725,11 @@ export class MastraFactory {
     // registered app domains initialize fail-soft inside FactoryStorage.
     await timedPhase('prepare.storage.init', () => storage.init());
 
-    // Boards live in the database. Seed every project with the code boards and load them before
-    // anything reads a project's boards; without the boards domain the code boards serve directly.
+    // Each project's boards are the code boards plus the boards it stored. Load every project
+    // before anything reads its boards; without the boards domain the code boards serve directly.
     if (storage.isDomainReady('boards') && storage.isDomainReady('projects')) {
       const projectBoards = new ProjectBoardCache({
-        seedRegistry: this.#boards,
+        codeRegistry: this.#boards,
         storage: storedBoardsStorage,
         projects: factoryProjectsStorage,
         codeSkills: this.#skills,
@@ -1090,12 +1090,6 @@ export class MastraFactory {
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
       sandbox: this.#sandbox,
-      ...(this.#projectBoards
-        ? {
-            onProjectCreated: (project: { orgId: string; id: string }) =>
-              this.#projectBoards!.load({ orgId: project.orgId, factoryProjectId: project.id }),
-          }
-        : {}),
       ...(environmentBuilds ? { environmentBuilds } : {}),
       projects: factoryProjectsStorage,
       sourceControl: sourceControlStorage,

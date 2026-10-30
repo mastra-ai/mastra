@@ -16,8 +16,7 @@ import { MastraFactory } from '../factory.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
 import { mountApiRoutes } from '../routes/test-utils.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
-import type { StoredBoardsStorage, StoredPhaseInput } from '../storage/domains/boards/base.js';
-import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { StoredBoardInput, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -77,31 +76,20 @@ function stubModel() {
   return requests;
 }
 
-/**
- * The admin's edit of the stored Work board, made straight in storage: Building is renamed,
- * Review is removed, and a resting "Parked" and a terminal "Abandoned" phase are added.
- */
-function editWork(phases: StoredPhaseInput[]): StoredPhaseInput[] {
-  const kept = phases
-    .filter(phase => phase.key !== 'review')
-    .map(phase => ({
-      ...phase,
-      ...(phase.key === 'execute' ? { name: 'Shipping' } : {}),
-      nextPhases: [
-        ...(phase.nextPhases ?? []).filter(next => next !== 'review'),
-        ...(phase.key === 'intake' ? ['parked', 'abandoned'] : []),
-      ],
-    }));
-  return [
-    kept[0]!,
-    { key: 'parked', name: 'Parked', kind: 'resting', nextPhases: ['intake', 'planning'] },
-    ...kept.slice(1),
-    { key: 'abandoned', name: 'Abandoned', kind: 'terminal', nextPhases: [] },
-  ];
-}
+/** A board an admin added to a project; it lives only in that project's database. */
+const bugsBoard: StoredBoardInput = {
+  key: 'bugs',
+  name: 'Bugs',
+  phases: [
+    { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing', 'wontfix'] },
+    { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' }, nextPhases: ['fixed'] },
+    { key: 'fixed', name: 'Fixed', kind: 'terminal' },
+    { key: 'wontfix', name: "Won't fix", kind: 'terminal' },
+  ],
+};
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
-  'an admin edited the stored Work board (%s)',
+  'an admin added a stored board to a project (%s)',
   backend => {
     function database() {
       if (backend === 'postgres')
@@ -167,30 +155,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       return created.json.project.id as string;
     }
 
-    async function edit(replica: Awaited<ReturnType<typeof boot>>, orgId: string, projectId: string) {
-      const scope = { orgId, factoryProjectId: projectId };
-      const work = (await replica.boards.get(scope, 'work'))!;
-      await replica.boards.replace(
-        scope,
-        'work',
-        { key: 'work', name: work.name, phases: editWork(work.phases) },
-        { expectedRevision: work.revision, actor: 'admin-user', customized: true },
-      );
+    /** The admin's create, written straight to storage the way the boards API writes it. */
+    async function addBugs(replica: Awaited<ReturnType<typeof boot>>, orgId: string, projectId: string) {
+      await replica.boards.create({ orgId, factoryProjectId: projectId }, bugsBoard, 'admin-user');
     }
 
-    async function catalogWork(replica: Awaited<ReturnType<typeof boot>>, projectId: string) {
-      const catalog = await replica.send('GET', `/web/factory/projects/${projectId}/boards`);
-      expect(catalog.status).toBe(200);
-      return catalog.json.boards.find((board: { id: string }) => board.id === 'work');
-    }
-
-    async function createCard(replica: Awaited<ReturnType<typeof boot>>, projectId: string, title: string) {
-      const created = await replica.send('POST', `/web/factory/projects/${projectId}/work-items`, {
-        board: 'work',
-        title,
-      });
-      expect(created.status).toBe(200);
-      return created.json.workItem as { id: string; revision: number; stages: string[] };
+    async function catalog(replica: Awaited<ReturnType<typeof boot>>, projectId: string) {
+      const response = await replica.send('GET', `/web/factory/projects/${projectId}/boards`);
+      expect(response.status).toBe(200);
+      return response.json.boards as {
+        id: string;
+        source?: string;
+        editable?: boolean;
+        phases: { id: string; name: string }[];
+      }[];
     }
 
     function transition(
@@ -200,7 +178,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       stage: string,
     ) {
       return replica.send('POST', `/web/factory/projects/${projectId}/work-items/${card.id}/transition`, {
-        board: 'work',
+        board: 'bugs',
         stage,
         expectedRevision: card.revision,
         requestId: randomUUID(),
@@ -208,87 +186,30 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       });
     }
 
-    it('serves the edit in the catalog, and moves cards by the edited phases', async () => {
-      const requests = stubModel();
+    it('lists the stored board next to the read-only code boards and moves cards through its phases', async () => {
+      stubModel();
       const orgId = `org-${randomUUID()}`;
       const replica = await boot(database(), orgId);
-      await replica.storage
-        .getDomain<ModelCredentialsStorage>('model-credentials')
-        .setCredential({ orgId }, 'openai', { type: 'api_key', key: 'sk-stored-boards-test' });
-      const projectId = await createProject(replica, 'Edited project');
-      const untouchedProjectId = await createProject(replica, 'Untouched project');
-      const settings = await replica.send('PATCH', `/web/factory/projects/${projectId}`, {
-        autoRunEnabled: true,
-        defaultModelId: 'openai/gpt-5.6-sol',
-      });
-      expect(settings.status).toBe(200);
-      const sourceControl = replica.github.sourceControlStorage;
-      const installation = await sourceControl.installations.upsert({
-        orgId,
-        connectedByUserId: 'admin-user',
-        externalId: '123',
-      });
-      const repository = await sourceControl.repositories.upsert({
-        orgId,
-        input: { installationId: installation.id, externalId: '456', slug: 'stored/project', defaultBranch: 'main' },
-      });
-      const connection = await sourceControl.connections.create({
-        orgId,
-        factoryProjectId: projectId,
-        installationId: installation.id,
-        createdByUserId: 'admin-user',
-      });
-      await sourceControl.projectRepositories.link({
-        orgId,
-        connectionId: connection.id,
-        repositoryId: repository.id,
-        createdByUserId: 'admin-user',
-        sandboxProvider: 'local',
-        sandboxWorkdir: '/tmp/stored-boards-runtime',
-      });
+      const projectId = await createProject(replica, 'Bugs project');
+      const otherProjectId = await createProject(replica, 'Other project');
 
-      await edit(replica, orgId, projectId);
+      await addBugs(replica, orgId, projectId);
 
-      // The edit was written behind the cache's back, so it arrives within the recheck window.
-      await vi.waitFor(async () => expect((await catalogWork(replica, projectId)).phases.length).toBe(8), {
-        timeout: 5_000,
-      });
-      const work = await catalogWork(replica, projectId);
-      expect(work.phases.map((phase: { id: string; name: string }) => `${phase.id}:${phase.name}`)).toEqual([
-        'intake:Intake',
-        'parked:Parked',
-        'triage:Triage',
-        'planning:Planning',
-        'execute:Shipping',
-        'done:Done',
-        'canceled:Canceled',
-        'abandoned:Abandoned',
-      ]);
-      expect(work).toMatchObject({ source: 'builtin', customized: true });
-
-      const card = await createCard(replica, projectId, 'Plan the stored boards');
-      // Review was removed from the stored board, though the code board still declares it.
-      const removed = await transition(replica, projectId, card, 'review');
-      expect(removed.json.result).toMatchObject({ status: 'rejected' });
-      expect(await replica.workItems.get({ orgId, id: card.id })).toMatchObject({ stages: ['intake'] });
-
-      const parked = await transition(replica, projectId, card, 'parked');
-      expect(parked.json.result).toMatchObject({ status: 'accepted', stage: 'parked' });
-
-      const planning = await transition(replica, projectId, { id: card.id, revision: card.revision + 1 }, 'planning');
-      expect(planning.json.result).toMatchObject({ status: 'accepted', stage: 'planning' });
-      // Planning's code behavior reattached to the stored phase: the planning run reached the model.
+      // Written behind the cache's back, so the board arrives within the recheck window.
       await vi.waitFor(
-        () =>
-          expect(requests.some(body => body.includes('Plan the stored boards') && body.includes('factory-plan'))).toBe(
-            true,
-          ),
-        { timeout: 15_000 },
+        async () => expect((await catalog(replica, projectId)).map(board => board.id)).toContain('bugs'),
+        {
+          timeout: 5_000,
+        },
       );
-
-      const untouched = await catalogWork(replica, untouchedProjectId);
-      expect(untouched).toMatchObject({ source: 'builtin', customized: false });
-      expect(untouched.phases.map((phase: { id: string; name: string }) => `${phase.id}:${phase.name}`)).toEqual([
+      const boards = await catalog(replica, projectId);
+      expect(boards.map(board => [board.id, board.source, board.editable])).toEqual([
+        ['work', 'builtin', false],
+        ['review', 'builtin', false],
+        ['bugs', 'stored', true],
+      ]);
+      const work = boards.find(board => board.id === 'work')!;
+      expect(work.phases.map(phase => `${phase.id}:${phase.name}`)).toEqual([
         'intake:Intake',
         'triage:Triage',
         'planning:Planning',
@@ -297,22 +218,48 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         'done:Done',
         'canceled:Canceled',
       ]);
+
+      const created = await replica.send('POST', `/web/factory/projects/${projectId}/work-items`, {
+        board: 'bugs',
+        title: 'Login button does nothing',
+      });
+      expect(created.status).toBe(200);
+      const card = created.json.workItem as { id: string; revision: number; stages: string[] };
+      expect(card.stages).toEqual(['reported']);
+
+      const skipped = await transition(replica, projectId, card, 'fixed');
+      expect(skipped.json.result).toMatchObject({ status: 'rejected' });
+      const undeclared = await transition(replica, projectId, card, 'review');
+      expect(undeclared.json.result).toMatchObject({ status: 'rejected' });
+      expect(await replica.workItems.get({ orgId, id: card.id })).toMatchObject({ stages: ['reported'] });
+
+      const fixing = await transition(replica, projectId, card, 'fixing');
+      expect(fixing.json.result).toMatchObject({ status: 'accepted', stage: 'fixing' });
+      const fixed = await transition(replica, projectId, { id: card.id, revision: card.revision + 1 }, 'fixed');
+      expect(fixed.json.result).toMatchObject({ status: 'accepted', stage: 'fixed' });
+
+      expect((await catalog(replica, otherProjectId)).map(board => board.id)).toEqual(['work', 'review']);
+      const elsewhere = await replica.send('POST', `/web/factory/projects/${otherProjectId}/work-items`, {
+        board: 'bugs',
+        title: 'Not here',
+      });
+      expect(elsewhere.status).not.toBe(200);
     }, 30_000);
 
-    it('treats a card in an added terminal phase as finished as soon as a restarted replica is up', async () => {
+    it("treats a card in a stored board's terminal phase as finished as soon as a restarted replica is up", async () => {
       stubModel();
       const orgId = `org-${randomUUID()}`;
       const newStorage = database();
       const first = await boot(newStorage, orgId);
       const projectId = await createProject(first, 'Restarted project');
-      await edit(first, orgId, projectId);
+      await addBugs(first, orgId, projectId);
       const { item: card } = await first.workItems.upsert({
         orgId,
         userId: 'admin-user',
         factoryProjectId: projectId,
         input: {
-          board: 'work',
-          title: 'Abandon me',
+          board: 'bugs',
+          title: 'Close me',
           claimKey: `claim-${randomUUID()}`,
           externalSource: { integrationId: 'github', type: 'issue', externalId: `issue-${randomUUID()}` },
         },
@@ -326,10 +273,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         orgId,
         id: card.id,
         userId: 'admin-user',
-        patch: { stages: ['abandoned'] },
+        patch: { stages: ['wontfix'] },
       });
 
-      expect(moved?.item).toMatchObject({ stages: ['abandoned'], claimKey: null });
+      expect(moved?.item).toMatchObject({ stages: ['wontfix'], claimKey: null });
     }, 30_000);
   },
 );

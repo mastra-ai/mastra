@@ -4,15 +4,10 @@ import { findBoardSkillProblems } from '../skills/app-skills.js';
 import type { StoredBoardRecord, StoredBoardScope, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import { createBoardRegistry, defaultBoards } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
-import { compileStoredBoard, seedFromDefinition } from './stored-board.js';
-import type { BoardSeed } from './stored-board.js';
+import { compileStoredBoard } from './stored-board.js';
 
 const DEFAULT_RECHECK_MS = 1000;
 const PRELOAD_CONCURRENCY = 8;
-
-export const DRIFT_PROBLEM = 'Code definition changed since this board was edited. Reset to adopt it.';
-export const ORPHANED_BEHAVIORS_PROBLEM =
-  'This board is no longer defined in code; any code behaviors it had no longer run.';
 const SNAPSHOT_ATTEMPTS = 3;
 
 /** Where a board in a project's catalog came from. */
@@ -20,25 +15,29 @@ export type BoardSourceKind = 'builtin' | 'app' | 'stored';
 
 export interface StoredBoardDetails {
   source: BoardSourceKind;
-  customized: boolean;
+  /** Only boards the project stored can be edited; code boards are read-only. */
+  editable: boolean;
   problems: string[];
 }
 
-/** A project's boards: the registry compiled from its stored rows, and what to report about each board. */
+/** A project's boards: the code boards plus its stored boards, and what to report about each board. */
 export interface ProjectBoards {
   readonly registry: BoardRegistry;
   readonly details: ReadonlyMap<string, StoredBoardDetails>;
-  /** Problems with boards that could not be compiled and are left out of the registry. */
+  /** Problems with stored boards that are left out of the registry. */
   readonly problems: readonly string[];
 }
+
+const PROJECT_BOARD_SOURCE = Symbol('ProjectBoardSource');
 
 /**
  * Serves each project its boards. `load` is the async entry point that brings a project's
  * boards up to date; `forProject` is the sync read for code that already loaded the project.
  */
 export interface ProjectBoardSource {
-  /** The compiled code boards: what a project holds before anyone edits its boards. */
-  readonly seedRegistry: BoardRegistry;
+  readonly [PROJECT_BOARD_SOURCE]: true;
+  /** The code boards: built-in and app boards, served to every project as code built them. */
+  readonly codeRegistry: BoardRegistry;
   load(scope: StoredBoardScope): Promise<BoardRegistry>;
   forProject(scope: StoredBoardScope): BoardRegistry;
   describe?(scope: StoredBoardScope): Promise<ProjectBoards>;
@@ -49,21 +48,15 @@ export function toBoardSource(boards: BoardRegistry | ProjectBoardSource | undef
   const source = boards ?? createBoardRegistry();
   if (isBoardSource(source)) return source;
   return {
-    seedRegistry: source,
+    [PROJECT_BOARD_SOURCE]: true,
+    codeRegistry: source,
     load: async () => source,
     forProject: () => source,
   };
 }
 
 function isBoardSource(boards: BoardRegistry | ProjectBoardSource): boards is ProjectBoardSource {
-  return typeof (boards as Partial<ProjectBoardSource>).forProject === 'function';
-}
-
-/** The code boards as seed input; Factory's own boards are `builtin`, the app's are `app`. */
-export function boardSeeds(registry: BoardRegistry): BoardSeed[] {
-  return [...registry.values()].map(board =>
-    seedFromDefinition(board, defaultBoards.includes(board) ? 'builtin' : 'app'),
-  );
+  return PROJECT_BOARD_SOURCE in boards;
 }
 
 interface CacheEntry {
@@ -73,10 +66,10 @@ interface CacheEntry {
 }
 
 export interface ProjectBoardCacheOptions {
-  /** The compiled code boards, built-ins included when enabled. */
-  seedRegistry: BoardRegistry;
+  /** The code boards, built-ins included when enabled. */
+  codeRegistry: BoardRegistry;
   storage: StoredBoardsStorage;
-  /** Lists every project, to seed and warm them at boot. */
+  /** Lists every project, to warm them at boot. */
   projects?: { listAll(): Promise<readonly { orgId: string; id: string }[]> };
   codeSkills?: readonly InlineSkill[];
   recheckMs?: number;
@@ -89,43 +82,51 @@ function scopeKey(scope: StoredBoardScope): string {
 }
 
 /**
- * The per-project board cache. A project's first load in this process writes the code boards
- * into its database; after that, loads recheck the project's board version at most every
- * `recheckMs` and recompile when it changed, so edits on other replicas arrive within that delay.
+ * The per-project board cache. A project's boards are the code boards, served as code built them
+ * and winning on their key, followed by the boards the project stored. Loads recheck the
+ * project's board version at most every `recheckMs` and recompile when it changed, so stored
+ * edits on other replicas arrive within that delay. The cache never writes.
  */
 export class ProjectBoardCache implements ProjectBoardSource {
-  readonly seedRegistry: BoardRegistry;
-  readonly #seeds: readonly BoardSeed[];
-  readonly #seedsByKey: ReadonlyMap<string, BoardSeed>;
+  readonly [PROJECT_BOARD_SOURCE] = true;
+  readonly codeRegistry: BoardRegistry;
+  readonly #codeDetails: ReadonlyMap<string, StoredBoardDetails>;
   readonly #storage: StoredBoardsStorage;
   readonly #projects: ProjectBoardCacheOptions['projects'];
-  readonly #codeSkills: readonly InlineSkill[];
   readonly #recheckMs: number;
   readonly #now: () => number;
   readonly #warn: (message: string) => void;
   readonly #entries = new Map<string, CacheEntry>();
   readonly #loading = new Map<string, Promise<ProjectBoards>>();
   readonly #generations = new Map<string, number>();
-  readonly #seeded = new Set<string>();
   readonly #warned = new Set<string>();
+  readonly #codeSkills: readonly InlineSkill[];
 
   constructor(options: ProjectBoardCacheOptions) {
-    this.seedRegistry = options.seedRegistry;
-    this.#seeds = boardSeeds(options.seedRegistry);
-    this.#seedsByKey = new Map(this.#seeds.map(seed => [seed.key, seed]));
+    this.codeRegistry = options.codeRegistry;
     this.#storage = options.storage;
     this.#projects = options.projects;
     this.#codeSkills = options.codeSkills ?? [];
     this.#recheckMs = options.recheckMs ?? DEFAULT_RECHECK_MS;
     this.#now = options.now ?? Date.now;
     this.#warn = options.warn ?? (message => console.warn(`[factory] ${message}`));
+    this.#codeDetails = new Map(
+      [...this.codeRegistry.values()].map(board => [
+        board.id,
+        {
+          source: defaultBoards.includes(board) ? 'builtin' : 'app',
+          editable: false,
+          problems: this.#skillProblems(board),
+        },
+      ]),
+    );
   }
 
   async load(scope: StoredBoardScope): Promise<BoardRegistry> {
     return (await this.describe(scope)).registry;
   }
 
-  /** The project's boards with their source, edit state and problems, brought up to date. */
+  /** The project's boards with their source, whether they can be edited, and problems, brought up to date. */
   async describe(scope: StoredBoardScope): Promise<ProjectBoards> {
     const key = scopeKey(scope);
     const entry = this.#entries.get(key);
@@ -142,13 +143,13 @@ export class ProjectBoardCache implements ProjectBoardSource {
 
   /**
    * The project's loaded boards. Before the project's first load (boot preload not finished, or a
-   * project created on another replica) this is the code boards, which match the stored ones until
-   * someone edits them.
+   * project created on another replica) this is the code boards alone, without the project's
+   * stored boards.
    */
   forProject(scope: StoredBoardScope): BoardRegistry {
     // Storage asks about a row it is about to insert by its board and stages alone, with no
     // project to look up; the code boards answer for it.
-    if (!scope.orgId || !scope.factoryProjectId) return this.seedRegistry;
+    if (!scope.orgId || !scope.factoryProjectId) return this.codeRegistry;
     const entry = this.#entries.get(scopeKey(scope));
     if (entry) return entry.boards.registry;
     // Warm the project so the next sync read sees its stored boards.
@@ -158,7 +159,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
       `Boards for project ${scope.factoryProjectId} were read before they were loaded; using the code boards.`,
       true,
     );
-    return this.seedRegistry;
+    return this.codeRegistry;
   }
 
   /** Makes the next load reread the project. The loaded boards keep serving sync reads until then. */
@@ -170,7 +171,7 @@ export class ProjectBoardCache implements ProjectBoardSource {
     if (entry) entry.checkedAt = Number.NEGATIVE_INFINITY;
   }
 
-  /** Seeds and loads every project, a few at a time. */
+  /** Loads every project, a few at a time, so sync reads find them warm. */
   async preload(): Promise<void> {
     const projects = (await this.#projects?.listAll()) ?? [];
     let next = 0;
@@ -189,58 +190,18 @@ export class ProjectBoardCache implements ProjectBoardSource {
   }
 
   async #refresh(scope: StoredBoardScope, key: string, generation: number): Promise<ProjectBoards> {
-    let seedFailure = this.#seeded.has(key) ? undefined : await this.#seed(scope, key);
     const current = this.#entries.get(key);
     const version = await this.#storage.readVersion(scope);
-    if (current && current.version === version && !seedFailure) {
+    if (current && current.version === version) {
       if ((this.#generations.get(key) ?? 0) === generation) current.checkedAt = this.#now();
       return current.boards;
     }
-    let snapshot = await this.#consistentSnapshot(scope);
-    // A replica running other code rewrote a board nobody edited. Write this replica's code back,
-    // so a rollout settles on the code the remaining replicas run.
-    if (!seedFailure && this.#codeChangedUnder(snapshot.boards)) {
-      seedFailure = await this.#seed(scope, key);
-      snapshot = await this.#consistentSnapshot(scope);
-    }
-    const boards =
-      seedFailure && snapshot.boards.length === 0
-        ? { registry: this.seedRegistry, details: new Map(), problems: [seedFailure] }
-        : this.#compile(scope, snapshot.boards);
+    const snapshot = await this.#consistentSnapshot(scope);
+    const boards = this.#compile(scope, snapshot.boards);
     if ((this.#generations.get(key) ?? 0) === generation) {
       this.#entries.set(key, { boards, version: snapshot.version, checkedAt: this.#now() });
     }
     return boards;
-  }
-
-  /** Writes the code boards into the project. Returns the problem to report when that fails. */
-  async #seed(scope: StoredBoardScope, key: string): Promise<string | undefined> {
-    try {
-      const { drifted } = await this.#storage.applySeed(scope, this.#seeds);
-      this.#seeded.add(key);
-      for (const board of drifted) {
-        this.#warnOnce(
-          `drift:${key}:${board}`,
-          `Board '${board}' in project ${scope.factoryProjectId} was edited, so its changed code definition was not applied. Reset the board to adopt it.`,
-        );
-      }
-      return undefined;
-    } catch (error) {
-      // The stored boards still serve; seeding is retried on the next recheck.
-      this.#seeded.delete(key);
-      const failure = `Writing the code boards failed: ${error instanceof Error ? error.message : String(error)}`;
-      this.#warnOnce(`seed:${key}:${failure}`, `${failure} (project ${scope.factoryProjectId})`);
-      return failure;
-    }
-  }
-
-  /** Whether an unedited board was last written from code other than this replica's. */
-  #codeChangedUnder(rows: readonly StoredBoardRecord[]): boolean {
-    return rows.some(row => {
-      if (row.customized || !row.seedHash) return false;
-      const seed = this.#seedsByKey.get(row.key);
-      return seed !== undefined && (seed.hash !== row.seedHash || seed.source !== row.seedSource);
-    });
   }
 
   /** Boards and phases are read in two statements; reread when a write landed between them. */
@@ -253,17 +214,18 @@ export class ProjectBoardCache implements ProjectBoardSource {
     return snapshot;
   }
 
-  #compile(scope: StoredBoardScope, rows: Awaited<ReturnType<StoredBoardsStorage['list']>>): ProjectBoards {
-    const compiled: InstalledBoard[] = [];
-    const details = new Map<string, StoredBoardDetails>();
+  #compile(scope: StoredBoardScope, rows: readonly StoredBoardRecord[]): ProjectBoards {
+    const boards: InstalledBoard[] = [...this.codeRegistry.values()];
+    const details = new Map(this.#codeDetails);
     const problems: string[] = [];
     for (const row of rows) {
-      // Behaviors follow the code under the board's key, for boards that were written from code.
-      // A board created through the API keeps none, even when code later uses its key.
-      const seed = row.seedHash ? this.#seedsByKey.get(row.key) : undefined;
+      if (this.codeRegistry.has(row.key)) {
+        problems.push(`Stored board "${row.key}" is hidden by the code board with the same key.`);
+        continue;
+      }
       let board: InstalledBoard;
       try {
-        board = compileStoredBoard(row, seed?.behaviors);
+        board = compileStoredBoard(row);
       } catch (error) {
         const message = `Board '${row.key}' could not be loaded: ${error instanceof Error ? error.message : String(error)}`;
         problems.push(message);
@@ -273,27 +235,21 @@ export class ProjectBoardCache implements ProjectBoardSource {
         );
         continue;
       }
-      compiled.push(board);
-      const boardProblems: string[] = [];
-      if (row.driftHash) boardProblems.push(DRIFT_PROBLEM);
-      if (row.seedHash && !seed) boardProblems.push(ORPHANED_BEHAVIORS_PROBLEM);
-      boardProblems.push(
-        ...findBoardSkillProblems(
-          createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
-          this.#codeSkills,
-        ),
-      );
-      details.set(row.key, {
-        source: row.seedSource ?? 'stored',
-        customized: row.customized,
-        problems: boardProblems,
-      });
+      boards.push(board);
+      details.set(row.key, { source: 'stored', editable: true, problems: this.#skillProblems(board) });
     }
     return {
-      registry: createBoardRegistry({ boards: compiled, includeDefaultBoards: false }),
+      registry: createBoardRegistry({ boards, includeDefaultBoards: false }),
       details,
       problems,
     };
+  }
+
+  #skillProblems(board: InstalledBoard): string[] {
+    return findBoardSkillProblems(
+      createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      this.#codeSkills,
+    );
   }
 
   #warnOnce(key: string, message: string, debug = false): void {

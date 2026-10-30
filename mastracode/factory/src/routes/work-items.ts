@@ -204,12 +204,12 @@ function decisionSummary(boards: BoardRegistry, decision: FactoryDeferredDecisio
   };
 }
 
-/** Where a catalog board came from, whether a person edited it, and what is wrong with it. */
+/** Where a catalog board came from, whether it can be edited, and what is wrong with it. */
 function catalogDetails(details: StoredBoardDetails | undefined) {
   if (!details) return {};
   return {
     source: details.source,
-    customized: details.customized,
+    editable: details.editable,
     ...(details.problems.length > 0 ? { problems: details.problems } : {}),
   };
 }

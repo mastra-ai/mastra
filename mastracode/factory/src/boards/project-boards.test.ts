@@ -8,15 +8,15 @@ import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
-import type { StoredBoardScope } from '../storage/domains/boards/base.js';
+import type { StoredBoardInput, StoredBoardScope } from '../storage/domains/boards/base.js';
 import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
-import { DRIFT_PROBLEM, ProjectBoardCache } from './project-boards.js';
+import { ProjectBoardCache, toBoardSource } from './project-boards.js';
 import type { ProjectBoardCacheOptions } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
 import { reviewBoard } from './review.js';
-import { seedFromDefinition } from './stored-board.js';
+import { boardDefinitionOf } from './stored-board.js';
 import { workBoard } from './work.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -44,13 +44,17 @@ function appBoard(id: string, names: { queued?: string; shipping?: string } = {}
   });
 }
 
-function phaseShape(board: InstalledBoard) {
-  return Object.fromEntries(
-    Object.entries(board.phases).map(([key, phase]) => [
-      key,
-      { name: phase.name, kind: phase.kind, nextPhases: [...phase.nextPhases].sort() },
-    ]),
-  );
+/** A board a project created through the boards API. */
+function bugsBoard(name = 'Bugs'): StoredBoardInput {
+  return {
+    key: 'bugs',
+    name,
+    phases: [
+      { key: 'reported', name: 'Reported', kind: 'resting' },
+      { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' } },
+      { key: 'fixed', name: 'Fixed', kind: 'terminal' },
+    ],
+  };
 }
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCache on %s', backend => {
@@ -82,48 +86,50 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
 
   function cache(
     storage: StoredBoardsStorage,
-    seedRegistry: BoardRegistry = createBoardRegistry({ boards: [appBoard('release')] }),
+    codeRegistry: BoardRegistry = createBoardRegistry({ boards: [appBoard('release')] }),
     options: Pick<ProjectBoardCacheOptions, 'now' | 'warn' | 'projects'> = {},
   ) {
-    return new ProjectBoardCache({ seedRegistry, storage, recheckMs: RECHECK_MS, ...options });
+    return new ProjectBoardCache({ codeRegistry, storage, recheckMs: RECHECK_MS, ...options });
   }
 
-  it('writes the code boards into a project on its first load, and serves them as the code defined them', async () => {
+  it('serves the code boards as code built them, read-only, without writing anything', async () => {
     const { a, scope } = await setup();
     const release = appBoard('release');
     const boards = cache(a.boards, createBoardRegistry({ boards: [release] }));
 
-    const registry = await boards.load(scope);
-
-    expect((await a.boards.list(scope)).map(row => [row.key, row.seedSource])).toEqual([
-      ['work', 'builtin'],
-      ['review', 'builtin'],
-      ['release', 'app'],
-    ]);
-    for (const code of [workBoard, reviewBoard, release] as InstalledBoard[]) {
-      const stored = registry.get(code.id)!;
-      expect(stored.initialPhase).toBe(code.initialPhase);
-      expect(phaseShape(stored)).toEqual(phaseShape(code));
-      expect(stored.transitionPolicy).toBe(code.transitionPolicy);
-      expect(stored.sourceClosed).toEqual(code.sourceClosed);
-    }
-    expect(registry.get('release')!.rules.shipping?.manual?.onEnter).toBe(shipped);
-    const work = registry.get('work')!;
-    for (const [phase, sources] of Object.entries(workBoard.rules)) {
-      for (const [source, rules] of Object.entries(sources ?? {})) {
-        expect(work.rules[phase]?.[source as keyof typeof rules]?.onEnter, `${phase}/${source}`).toBe(rules?.onEnter);
-      }
-    }
-    expect(Object.keys(work.tools ?? {})).toEqual(Object.keys(workBoard.tools ?? {}));
-    for (const [tool, rule] of Object.entries(workBoard.tools ?? {})) {
-      expect(work.tools?.[tool]?.onResult).toBe(rule.onResult);
-    }
     const described = await boards.describe(scope);
-    expect(described.details.get('work')).toEqual({ source: 'builtin', customized: false, problems: [] });
-    expect(described.details.get('release')).toEqual({ source: 'app', customized: false, problems: [] });
+
+    expect(await a.boards.list(scope)).toEqual([]);
+    expect(await a.boards.readVersion(scope)).toBeNull();
+    expect([...described.registry.keys()]).toEqual(['work', 'review', 'release']);
+    expect(described.registry.get('work')).toBe(workBoard);
+    expect(described.registry.get('review')).toBe(reviewBoard);
+    expect(described.registry.get('release')).toBe(release);
+    expect(described.details.get('work')).toEqual({ source: 'builtin', editable: false, problems: [] });
+    expect(described.details.get('review')).toEqual({ source: 'builtin', editable: false, problems: [] });
+    expect(described.details.get('release')).toEqual({ source: 'app', editable: false, problems: [] });
+    expect(described.problems).toEqual([]);
   });
 
-  it('shows an edit made on another replica only after the recheck window, and at once on the replica that invalidated', async () => {
+  it('serves a changed code board after a restart, with no database write', async () => {
+    const { a, scope } = await setup();
+    await a.boards.create(scope, bugsBoard(), 'user-1');
+    await cache(a.boards).load(scope);
+    const version = await a.boards.readVersion(scope);
+
+    const restarted = cache(
+      a.boards,
+      createBoardRegistry({ boards: [appBoard('release', { shipping: 'Publishing' })] }),
+    );
+    const registry = await restarted.load(scope);
+
+    expect(registry.get('release')!.phases.shipping!.name).toBe('Publishing');
+    expect(registry.get('release')!.rules.shipping?.manual?.onEnter).toBe(shipped);
+    expect((await a.boards.list(scope)).map(row => [row.key, row.revision])).toEqual([['bugs', 1]]);
+    expect(await a.boards.readVersion(scope)).toBe(version);
+  });
+
+  it('adds a board the project stored after the code boards: at once where it was written, after the recheck window elsewhere', async () => {
     const { a, b, scope } = await setup();
     let now = 0;
     const replicaA = cache(a.boards, undefined, { now: () => now });
@@ -131,122 +137,66 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     await replicaA.load(scope);
     await replicaB.load(scope);
 
-    const work = (await a.boards.get(scope, 'work'))!;
-    await a.boards.replace(
-      scope,
-      'work',
-      { ...work, phases: work.phases.map(phase => (phase.key === 'execute' ? { ...phase, name: 'Shipping' } : phase)) },
-      { expectedRevision: work.revision, actor: 'user-1', customized: true },
-    );
+    await a.boards.create(scope, bugsBoard(), 'user-1');
     replicaA.invalidate(scope);
 
-    expect((await replicaA.load(scope)).get('work')!.phases.execute!.name).toBe('Shipping');
+    const described = await replicaA.describe(scope);
+    expect([...described.registry.keys()]).toEqual(['work', 'review', 'release', 'bugs']);
+    expect(described.registry.get('bugs')!.initialPhase).toBe('reported');
+    expect(described.details.get('bugs')).toEqual({ source: 'stored', editable: true, problems: [] });
     now = RECHECK_MS - 1;
-    expect((await replicaB.load(scope)).get('work')!.phases.execute!.name).toBe('Building');
-    expect(replicaB.forProject(scope).get('work')!.phases.execute!.name).toBe('Building');
+    expect((await replicaB.load(scope)).has('bugs')).toBe(false);
+    expect(replicaB.forProject(scope).has('bugs')).toBe(false);
     now = RECHECK_MS;
-    expect((await replicaB.load(scope)).get('work')!.phases.execute!.name).toBe('Shipping');
-    expect(replicaB.forProject(scope).get('work')!.phases.execute!.name).toBe('Shipping');
+    expect((await replicaB.load(scope)).has('bugs')).toBe(true);
+    expect(replicaB.forProject(scope).get('bugs')!.name).toBe('Bugs');
   });
 
-  it('keeps an edited board when its code changes and reports the drift, but upgrades an unedited one', async () => {
+  it('hides a stored board under a code board key and reports it', async () => {
     const { a, scope } = await setup();
-    await cache(a.boards, createBoardRegistry({ boards: [appBoard('release'), appBoard('deploy')] })).load(scope);
-    const release = (await a.boards.get(scope, 'release'))!;
-    await a.boards.replace(
-      scope,
-      'release',
-      { ...release, name: 'Our releases' },
-      { expectedRevision: release.revision, actor: 'user-1', customized: true },
-    );
+    const release = appBoard('release');
+    await a.boards.create(scope, { ...boardDefinitionOf(release), name: 'Stored release' }, 'user-1');
+    await a.boards.create(scope, bugsBoard(), 'user-1');
 
-    const warnings: string[] = [];
-    const redeployed = cache(
-      a.boards,
-      createBoardRegistry({
-        boards: [appBoard('release', { shipping: 'Publishing' }), appBoard('deploy', { shipping: 'Rolling out' })],
-      }),
-      { warn: message => warnings.push(message) },
-    );
-    const described = await redeployed.describe(scope);
+    const described = await cache(a.boards, createBoardRegistry({ boards: [release] })).describe(scope);
 
-    expect(described.registry.get('release')!.name).toBe('Our releases');
-    expect(described.registry.get('release')!.phases.shipping!.name).toBe('Shipping');
-    expect(described.details.get('release')).toEqual({ source: 'app', customized: true, problems: [DRIFT_PROBLEM] });
-    expect(described.registry.get('deploy')!.phases.shipping!.name).toBe('Rolling out');
-    expect(described.details.get('deploy')).toEqual({ source: 'app', customized: false, problems: [] });
-    expect(warnings).toEqual([expect.stringContaining("Board 'release' in project project-1 was edited")]);
+    expect(described.registry.get('release')).toBe(release);
+    expect(described.details.get('release')).toEqual({ source: 'app', editable: false, problems: [] });
+    expect(described.registry.has('bugs')).toBe(true);
+    expect(described.problems).toEqual(['Stored board "release" is hidden by the code board with the same key.']);
   });
 
-  it('settles on the newer code when a replica still running older code rewrites an unedited board mid-rollout', async () => {
-    const { a, b, scope } = await setup();
-    let now = 0;
-    const v2 = cache(a.boards, createBoardRegistry({ boards: [appBoard('release', { shipping: 'Publishing' })] }), {
-      now: () => now,
-    });
-    const v1 = cache(b.boards, createBoardRegistry({ boards: [appBoard('release')] }), { now: () => now });
-
-    expect((await v2.load(scope)).get('release')!.phases.shipping!.name).toBe('Publishing');
-    // An old pod restarts during the rollout and writes its own definition.
-    expect((await v1.load(scope)).get('release')!.phases.shipping!.name).toBe('Shipping');
-    expect((await a.boards.get(scope, 'release'))!.phases.find(phase => phase.key === 'shipping')!.name).toBe(
-      'Shipping',
-    );
-
-    now = RECHECK_MS;
-    const registry = await v2.load(scope);
-
-    expect(registry.get('release')!.phases.shipping!.name).toBe('Publishing');
-    expect(registry.get('release')!.rules.shipping?.manual?.onEnter).toBe(shipped);
-    const stored = (await a.boards.get(scope, 'release'))!;
-    expect(stored.phases.find(phase => phase.key === 'shipping')!.name).toBe('Publishing');
-    expect(stored.customized).toBe(false);
-    expect((await v2.describe(scope)).details.get('release')).toEqual({
-      source: 'app',
-      customized: false,
-      problems: [],
-    });
-  });
-
-  it('skips a stored board that no longer compiles and still loads the rest of the project', async () => {
+  it('skips a stored board that no longer compiles and still loads the code boards and the other stored boards', async () => {
     const { a, scope } = await setup();
-    await cache(a.boards).load(scope);
+    await a.boards.create(scope, bugsBoard(), 'user-1');
+    await a.boards.create(scope, { ...bugsBoard('Chores'), key: 'chores' }, 'user-1');
     // A row written outside the boards API: a terminal phase cannot be where cards start.
     await a.storage.ops.updateMany(
       'factory_board_phases',
-      { org_id: scope.orgId, factory_project_id: scope.factoryProjectId, board_key: 'release', phase_key: 'queued' },
+      { org_id: scope.orgId, factory_project_id: scope.factoryProjectId, board_key: 'bugs', phase_key: 'reported' },
       { kind: 'terminal' },
     );
 
     const warnings: string[] = [];
     const described = await cache(a.boards, undefined, { warn: message => warnings.push(message) }).describe(scope);
 
-    expect([...described.registry.keys()]).toEqual(['work', 'review']);
-    expect(described.problems).toEqual([expect.stringMatching(/^Board 'release' could not be loaded: .*resting/)]);
-    expect(warnings).toEqual([expect.stringContaining("Board 'release' could not be loaded")]);
+    expect([...described.registry.keys()]).toEqual(['work', 'review', 'release', 'chores']);
+    expect(described.problems).toEqual([expect.stringMatching(/^Board 'bugs' could not be loaded: .*resting/)]);
+    expect(warnings).toEqual([expect.stringContaining("Board 'bugs' could not be loaded")]);
   });
 
-  it("keeps one project's edits out of another project's boards", async () => {
+  it("keeps one project's stored boards out of another project", async () => {
     const { a, orgId } = await setup();
     const first = { orgId, factoryProjectId: 'project-1' };
     const second = { orgId, factoryProjectId: 'project-2' };
     const boards = cache(a.boards);
-    await boards.load(first);
-    await boards.load(second);
-    const work = (await a.boards.get(first, 'work'))!;
-    await a.boards.replace(
-      first,
-      'work',
-      { ...work, name: 'Project one work' },
-      { expectedRevision: work.revision, actor: 'user-1', customized: true },
-    );
-    boards.invalidate(first);
+    await a.boards.create(first, bugsBoard(), 'user-1');
 
-    expect((await boards.load(first)).get('work')!.name).toBe('Project one work');
-    expect((await boards.load(second)).get('work')!.name).toBe('Work');
+    expect((await boards.load(first)).has('bugs')).toBe(true);
+    expect([...(await boards.load(second)).keys()]).toEqual(['work', 'review', 'release']);
   });
 
-  it('seeds no built-in boards when the app turns them off', async () => {
+  it('serves no built-in boards when the app turns them off', async () => {
     const { a, scope } = await setup();
     const registry = await cache(
       a.boards,
@@ -254,18 +204,41 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     ).load(scope);
 
     expect([...registry.keys()]).toEqual(['release']);
-    expect((await a.boards.list(scope, { includeDeleted: true })).map(row => row.key)).toEqual(['release']);
+    expect(await a.boards.list(scope)).toEqual([]);
   });
 
   it('serves the code boards to a sync read of a project that has not been loaded yet', async () => {
     const { a, scope } = await setup();
-    const seedRegistry = createBoardRegistry({ boards: [appBoard('release')] });
-    const boards = cache(a.boards, seedRegistry);
+    await a.boards.create(scope, bugsBoard(), 'user-1');
+    const codeRegistry = createBoardRegistry({ boards: [appBoard('release')] });
+    const boards = cache(a.boards, codeRegistry);
 
-    expect(boards.forProject(scope)).toBe(seedRegistry);
+    expect(boards.forProject(scope)).toBe(codeRegistry);
     const loaded = await boards.load(scope);
     expect(boards.forProject(scope)).toBe(loaded);
-    expect(loaded).not.toBe(seedRegistry);
+    expect(loaded.has('bugs')).toBe(true);
+  });
+
+  it('warms every project at startup by reading only', async () => {
+    const { a, orgId } = await setup();
+    const first = { orgId, factoryProjectId: 'project-1' };
+    const second = { orgId, factoryProjectId: 'project-2' };
+    await a.boards.create(first, bugsBoard(), 'user-1');
+    const boards = cache(a.boards, undefined, {
+      projects: {
+        listAll: async () => [
+          { orgId, id: first.factoryProjectId },
+          { orgId, id: second.factoryProjectId },
+        ],
+      },
+    });
+
+    await boards.preload();
+
+    expect(boards.forProject(first).has('bugs')).toBe(true);
+    expect([...boards.forProject(second).keys()]).toEqual(['work', 'review', 'release']);
+    expect(await a.boards.list(second)).toEqual([]);
+    expect(await a.boards.readVersion(second)).toBeNull();
   });
 
   it('loads a project once when several callers ask for it at the same time', async () => {
@@ -277,72 +250,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(second).toBe(first);
     expect(third).toBe(first);
   });
+});
 
-  it('keeps the code behaviors of a board another replica, running other code, took out of code', async () => {
-    const { a, b, scope } = await setup();
-    const replicaA = cache(a.boards);
-    await replicaA.load(scope);
-    // A replica still on code without the release board clears its seed source.
-    await cache(b.boards, createBoardRegistry()).load(scope);
-    expect((await a.boards.get(scope, 'release'))!.seedSource).toBeNull();
+describe('toBoardSource', () => {
+  it('treats only a project board cache as a per-project source, not any object with a forProject function', () => {
+    const registry = createBoardRegistry();
+    const lookalike = Object.assign(new Map<string, InstalledBoard>(), { forProject: () => registry });
+    const storage = new StoredBoardsStorage();
+    const projectCache = new ProjectBoardCache({ codeRegistry: registry, storage });
 
-    // Replica A seeded this project already and does not seed it again.
-    replicaA.invalidate(scope);
-    const described = await replicaA.describe(scope);
-
-    expect(described.registry.get('release')!.rules.shipping?.manual?.onEnter).toBe(shipped);
-    expect(described.details.get('release')!.problems).toEqual([]);
-  });
-
-  it('attaches no code behaviors to a board created through the API that code later names', async () => {
-    const { a, scope } = await setup();
-    await a.boards.create(scope, seedFromDefinition(appBoard('release'), 'app').input, 'user-1');
-
-    const described = await cache(a.boards).describe(scope);
-
-    expect(described.registry.get('release')!.rules.shipping?.manual?.onEnter).not.toBe(shipped);
-    expect(described.details.get('release')).toEqual({ source: 'app', customized: true, problems: [DRIFT_PROBLEM] });
-  });
-
-  it('serves the stored boards when writing the code boards keeps failing, and still loads other projects', async () => {
-    const { a, orgId } = await setup();
-    const broken = { orgId, factoryProjectId: 'project-broken' };
-    const healthy = { orgId, factoryProjectId: 'project-healthy' };
-    // A stray phase row under the release key makes every attempt to write that board collide.
-    await a.storage.ops.insertOne('factory_board_phases', {
-      id: randomUUID(),
-      org_id: orgId,
-      factory_project_id: broken.factoryProjectId,
-      board_key: 'release',
-      phase_key: 'queued',
-      position: 0,
-      name: 'Queued',
-      description: null,
-      kind: 'resting',
-      runner: null,
-      next_phases: null,
-      auto_start: false,
-      auto_start_when: null,
-      exit_tool: null,
-    });
-    const warnings: string[] = [];
-    const seedRegistry = createBoardRegistry({ boards: [appBoard('release')] });
-    const boards = cache(a.boards, seedRegistry, {
-      warn: message => warnings.push(message),
-      projects: {
-        listAll: async () => [
-          { orgId, id: broken.factoryProjectId },
-          { orgId, id: healthy.factoryProjectId },
-        ],
-      },
-    });
-
-    await boards.preload();
-
-    expect([...boards.forProject(healthy).keys()]).toEqual(['work', 'review', 'release']);
-    const described = await boards.describe(broken);
-    expect(described.registry).toBe(seedRegistry);
-    expect(described.problems).toEqual([expect.stringMatching(/^Writing the code boards failed/)]);
-    expect(warnings).toEqual([expect.stringMatching(/^Writing the code boards failed.*project-broken/)]);
+    expect(toBoardSource(lookalike)).not.toBe(lookalike);
+    expect(toBoardSource(lookalike).codeRegistry).toBe(lookalike);
+    expect(toBoardSource(lookalike).forProject({ orgId: 'org', factoryProjectId: 'p' })).toBe(lookalike);
+    expect(toBoardSource(projectCache)).toBe(projectCache);
+    const wrapped = toBoardSource(registry);
+    expect(toBoardSource(wrapped)).toBe(wrapped);
   });
 });

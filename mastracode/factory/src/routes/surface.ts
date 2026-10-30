@@ -137,7 +137,7 @@ export interface FactoryApiRoutesDeps {
   knowledgeKey?: string;
   /** Resolved Factory rule set, threaded from the host (no service locator). */
   configVersion: string;
-  /** Each project's boards; integrations use the code boards (`seedRegistry`). */
+  /** Each project's boards; integrations use the code boards (`codeRegistry`). */
   boardRegistry: BoardRegistry | ProjectBoardSource;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
@@ -645,7 +645,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       {
         ...deps,
         // Integrations evaluate code behaviors and place new cards with the code boards.
-        boardRegistry: toBoardSource(deps.boardRegistry).seedRegistry,
+        boardRegistry: toBoardSource(deps.boardRegistry).codeRegistry,
         stateSigner: deps.stateSigner,
         emitAudit,
         ...(githubRegistration ? { sourceControlOwnerId: 'github' } : {}),

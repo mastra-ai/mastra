@@ -455,7 +455,7 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
       boardSource && factoryProjectId ? boardSource.load({ orgId, factoryProjectId }) : undefined;
     const installed = async (board: string, orgId: string, factoryProjectId: string | null) =>
       boardSource !== undefined &&
-      boardSource.seedRegistry.has(board) &&
+      boardSource.codeRegistry.has(board) &&
       (factoryProjectId === null || (await projectBoards(orgId, factoryProjectId))!.has(board));
 
     return [

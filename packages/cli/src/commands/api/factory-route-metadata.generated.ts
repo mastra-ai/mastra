@@ -852,7 +852,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "stored"
                 ]
               },
-              "customized": {
+              "editable": {
                 "type": "boolean"
               },
               "problems": {

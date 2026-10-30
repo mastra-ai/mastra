@@ -594,9 +594,9 @@ export const FACTORY_ROUTE_CONTRACTS = {
           description: z.string().optional(),
           /** Where the board came from: Factory's built-ins, the app's code, or created through the API. */
           source: z.enum(['builtin', 'app', 'stored']).optional(),
-          /** True once a person edited the board; a seeded board then keeps its edits over code changes. */
-          customized: z.boolean().optional(),
-          /** Problems with the board, such as a newer code definition that was not applied. */
+          /** False for built-in and app boards, which are defined in code and read-only. */
+          editable: z.boolean().optional(),
+          /** Problems with the board, such as a runner skill that does not exist. */
           problems: z.array(z.string()).optional(),
           initialPhase: z.string(),
           phases: z.array(
