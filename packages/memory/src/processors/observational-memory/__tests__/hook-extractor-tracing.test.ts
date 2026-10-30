@@ -180,7 +180,7 @@ async function runObservedTurn(scope: 'thread' | 'resource', { reflect = false }
 
   await subconscious.settled();
   await memory.settled();
-  return { hookContexts };
+  return { hookContexts, mastra };
 }
 
 const requestsTo = (model: string) => mock.getRequests().filter(request => request.body?.model === model);
@@ -189,7 +189,7 @@ const agentRunSpan = (agentIdPrefix: string) =>
 
 describe.each(['thread', 'resource'] as const)('%s-scoped observation hooks', { timeout: 30_000 }, scope => {
   it('trace the curate and remind agents as children of the memory observe span', async () => {
-    const { hookContexts } = await runObservedTurn(scope);
+    const { hookContexts, mastra } = await runObservedTurn(scope);
 
     expect(requestsTo(CURATOR).length).toBeGreaterThan(0);
     expect(requestsTo(REMINDER).length).toBeGreaterThan(0);
@@ -223,6 +223,11 @@ describe.each(['thread', 'resource'] as const)('%s-scoped observation hooks', { 
     expect(hookContexts).toHaveLength(1);
     const hookSpan = hookContexts[0]?.observabilityContext?.tracingContext?.currentSpan;
     expect(hookSpan?.id).toBe(observeSpan!.id);
+
+    // The curator's scope-bound write tools must not leak into the user's tool registry.
+    const registeredTools = Object.keys(mastra.listTools() ?? {});
+    expect(registeredTools).not.toContain('knowledge_create');
+    expect(registeredTools).not.toContain('knowledge_remove');
   });
 });
 

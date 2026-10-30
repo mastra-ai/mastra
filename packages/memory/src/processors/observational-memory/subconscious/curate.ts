@@ -246,7 +246,6 @@ export async function createCuratorAgent(
       .join('\n\n'),
     model,
     memory: curatorMemory,
-    mastra: context.mainAgent?.getMastraInstance?.(),
     tools: {
       ...createKnowledgeTools(memory, scope),
       ...createKnowledgeWriteTools(memory, {

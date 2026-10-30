@@ -1,9 +1,11 @@
 import type { EmbeddingModelV1 } from '@internal/ai-sdk-v4';
 import type { EmbeddingModelV2 } from '@internal/ai-sdk-v5';
 import { fastembed } from '@mastra/fastembed';
+/* oxlint-disable import/no-duplicates -- ai, ai-v5 and ai-v6 are aliases for different versions of the `ai` package */
 import { embed as embedV1 } from 'ai';
 import { embed as embedV2 } from 'ai-v5';
 import { embed as embedV3 } from 'ai-v6';
+/* oxlint-enable import/no-duplicates */
 
 import { describe, it, expect } from 'vitest';
 
