@@ -127,4 +127,58 @@ describe('Koa client error logging', () => {
     expect(appListener).toHaveBeenCalledTimes(1);
     expect(app.rawListeners('error')[0]).toBe(Koa.prototype.onerror);
   });
+
+  // Errors thrown by middleware behind the boundary, to cover shapes the workflow route can't produce.
+  async function startThrowingServer(throwError: (ctx: Koa.Context) => never, configure?: (app: Koa) => void) {
+    const mastra = new Mastra({});
+    const app = new Koa();
+    configure?.(app);
+    const adapter = new MastraServer({ app, mastra });
+    (adapter as any).registerErrorMiddleware();
+    app.use(ctx => throwError(ctx));
+
+    server = await new Promise(resolve => {
+      const s = app.listen(0, () => resolve(s));
+    });
+    const address = server.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    return { send: () => fetch(`http://localhost:${port}/`, { signal: AbortSignal.timeout(2000) }) };
+  }
+
+  function throwLoggedNotImplemented(ctx: Koa.Context, error: unknown): never {
+    (ctx as any)._mastraLoggedNotImplementedError = error;
+    throw error;
+  }
+
+  it('keeps the 400 for a frozen client error', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { send } = await startThrowingServer(() => {
+      throw Object.freeze(Object.assign(new Error('frozen bad request'), { status: 400 }));
+    });
+
+    expect((await send()).status).toBe(400);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
+
+  it('does not emit a logged 501 once the only app listener was a once listener', async () => {
+    const onceListener = vi.fn();
+    const { send } = await startThrowingServer(
+      ctx => throwLoggedNotImplemented(ctx, Object.assign(new Error('not implemented'), { status: 501 })),
+      app => app.once('error', onceListener),
+    );
+
+    expect((await send()).status).toBe(501);
+    expect((await send()).status).toBe(501);
+    expect(onceListener).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the 501 for a logged non-Error object', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { send } = await startThrowingServer(ctx =>
+      throwLoggedNotImplemented(ctx, { status: 501, message: 'not implemented' }),
+    );
+
+    expect((await send()).status).toBe(501);
+    expect(consoleError).not.toHaveBeenCalled();
+  });
 });
