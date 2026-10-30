@@ -30,7 +30,10 @@ export type SavedViewsController<TSettings> = {
   activeView: SavedView<TSettings> | undefined;
   draft: SavedViewDraft<TSettings> | undefined;
   unsaved: boolean;
-  storageError: string | undefined;
+  /** A failed save, rename, duplicate or delete, shown under the tabs. */
+  error: string | undefined;
+  /** A change is being saved; the save actions are disabled until it settles. */
+  pending?: boolean;
   applied: SavedViewContent<TSettings> | undefined;
   select: (viewId: string | undefined) => void;
   create: (settings: TSettings, filters?: FilterBarItem[]) => void;
@@ -97,7 +100,7 @@ export function useSavedViews<TSettings>({
     activeView,
     draft,
     unsaved,
-    storageError:
+    error:
       failedStorageKey === storageKey
         ? 'Could not save changes. Check your browser storage settings and try again.'
         : undefined,

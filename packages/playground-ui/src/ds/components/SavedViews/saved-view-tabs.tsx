@@ -1,5 +1,5 @@
 import { CopyIcon, LayersIcon, LayersPlusIcon, PencilIcon, TextCursorInputIcon, Trash2Icon } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SavedViewNameInput } from './saved-view-name-input';
 import type { SavedView } from './saved-view-schema';
@@ -90,9 +90,9 @@ export function SavedViewTabs<TSettings>({
           />
         );
       })}
-      {views.storageError && (
+      {views.error && (
         <Txt role="alert" variant="caption" className="w-full text-destructive-foreground">
-          {views.storageError}
+          {views.error}
         </Txt>
       )}
       {creating ? (
@@ -208,8 +208,11 @@ function SavedViewTab<TSettings>({
   ];
   const [menuOpen, setMenuOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // The trigger asks to open a frame after the click, when the click that selected the tab has
+  // already re-rendered it as selected. Only a click on the selected tab opens the menu.
+  const clickOpensMenuRef = useRef(true);
   const changeMenuOpen = (open: boolean) => {
-    setMenuOpen(selected && open);
+    setMenuOpen(selected && open && clickOpensMenuRef.current);
     if (open) setPreviewOpen(false);
   };
 
@@ -229,6 +232,7 @@ function SavedViewTab<TSettings>({
                         aria-pressed={selected}
                         aria-haspopup={selected ? 'menu' : undefined}
                         onClick={() => {
+                          clickOpensMenuRef.current = selected;
                           if (selected) return;
                           setPreviewOpen(false);
                           onSelect();

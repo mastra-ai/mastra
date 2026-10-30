@@ -36,7 +36,7 @@ function Page({ storageKey = STORAGE_KEY }: { storageKey?: string }) {
         defaultLabel="All"
         newViewSettings={{ layout: 'board' }}
       />
-      <SavedViewEditor views={views}>
+      <SavedViewEditor views={views} saveCaption="Saved in this browser">
         <button type="button" onClick={() => views.change({ filters: [ERRORS] })}>
           Filter errors
         </button>
@@ -175,6 +175,30 @@ describe('SavedViews', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(stored()).toMatchObject([{ name: 'Errors', filters: [], settings: { layout: 'list' } }]);
+  });
+
+  it('selects a tab on the first click without opening its menu', async () => {
+    render(<Page />);
+    await createView('Errors');
+    fireEvent.click(tab('All'));
+
+    const errors = tab('Errors');
+    const press = () => {
+      fireEvent.pointerDown(errors, { pointerType: 'mouse', button: 0 });
+      fireEvent.mouseDown(errors, { button: 0 });
+      fireEvent.pointerUp(errors, { pointerType: 'mouse', button: 0 });
+      fireEvent.mouseUp(errors, { button: 0 });
+      fireEvent.click(errors);
+    };
+    press();
+
+    expect(errors.getAttribute('aria-pressed')).toBe('true');
+    // The trigger asks to open on the next animation frame.
+    await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 20)));
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    press();
+    expect(await screen.findByRole('menuitem', { name: 'Edit view' })).toBeTruthy();
   });
 
   it('keeps the selected tab mounted while marking changes that can be saved or reset', async () => {
