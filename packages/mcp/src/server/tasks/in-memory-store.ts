@@ -257,6 +257,11 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
     return this.#lookup(taskKeyOf(taskId), access)?.trace;
   }
 
+  /** Whether this store holds the task, for any caller. */
+  has(taskId: string): boolean {
+    return this.#tasks.has(taskId);
+  }
+
   /** The context recorded at creation. */
   context(taskId: string): Record<string, unknown> | undefined {
     return this.#tasks.get(taskId)?.context;

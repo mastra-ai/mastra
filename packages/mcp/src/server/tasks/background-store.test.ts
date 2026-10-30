@@ -535,6 +535,74 @@ describe('BackgroundTaskMCPTaskStore', () => {
     release.forEach(resolve => resolve());
     store.close();
   });
+
+  /** A task waiting for input whose TTL has passed, so the next sweep would fail it. */
+  async function expiredWaiting(
+    store: BackgroundTaskMCPTaskStore,
+    storage: Awaited<ReturnType<typeof setup>>['storage'],
+  ) {
+    const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+    store.run(task.taskId, async () => ({
+      status: 'input_required',
+      inputRequests: { k: { method: 'elicitation/create', params: {} } },
+    }));
+    const key = taskKeyOf(task.taskId);
+    const waiting = await until(
+      async () => (await storage.listTasks({ agentId: store.owner, toolCallId: key })).tasks[0],
+      row => row?.status === 'suspended',
+    );
+    expect(await storage.updateTask(waiting!.id, { expiresAt: new Date(Date.now() - 1_000) })).toBe(true);
+    return waiting!;
+  }
+
+  it('stops a sweep already running when it closes, and waits for it before closing', async () => {
+    const { store, storage } = await setup(async () => ({ status: 'completed', result: { content: [] } }));
+    const waiting = await expiredWaiting(store, storage);
+    let release!: () => void;
+    const held = new Promise<void>(resolve => (release = resolve));
+    const deleteTasks = storage.deleteTasks.bind(storage);
+    const reached = vi.spyOn(storage, 'deleteTasks').mockImplementation(async filter => {
+      await held;
+      return deleteTasks(filter);
+    });
+
+    const sweeping = store.sweep();
+    await until(
+      async () => reached.mock.calls.length,
+      n => n === 1,
+    );
+    let closed = false;
+    const closing = Promise.resolve(store.close()).then(() => (closed = true));
+    await sleep(20);
+    expect(closed).toBe(false);
+
+    release();
+    await sweeping;
+    await closing;
+    // The sweep stopped at close: the task past its TTL was not failed by this instance.
+    expect(await storage.getTask(waiting.id)).toMatchObject({ status: 'suspended' });
+  });
+
+  it('sweeps no more once closed, even when asked about a task', async () => {
+    const { store, storage } = await setup(async () => ({ status: 'completed', result: { content: [] } }), false, {
+      leaseDurationMs: 3_000,
+    });
+    const waiting = await expiredWaiting(store, storage);
+    const sweeps = vi.spyOn(storage, 'deleteTasks');
+    await store.close();
+
+    // Requests start the sweep timer; a closed store must not start it again.
+    const timers = vi.spyOn(globalThis, 'setInterval');
+    await store.get(waiting.toolCallId, { principal: 'alice' }).catch(() => undefined);
+    expect(timers).not.toHaveBeenCalled();
+    timers.mockRestore();
+    await store.sweep();
+    expect(sweeps).not.toHaveBeenCalled();
+    // Past one sweep interval: no timer runs either.
+    await sleep(3_300);
+    expect(sweeps).not.toHaveBeenCalled();
+    expect(await storage.getTask(waiting.id)).toMatchObject({ status: 'suspended' });
+  });
 });
 
 // Without `backgroundTasks.cleanup`, the manager never deletes finished rows; the sweep deletes this

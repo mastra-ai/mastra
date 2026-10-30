@@ -1787,9 +1787,8 @@ export class MCPServer extends MCPServerBase {
     }
     // Aborts in-memory tasks still running; a store passed in by the application is left to it.
     // Background-task rows stay in storage for other instances to serve.
-    const selected = this.taskStore instanceof SelectingMCPTaskStore ? this.taskStore.selected : undefined;
-    if (selected instanceof InMemoryMCPTaskStore) selected.close();
-    this.backgroundTaskStore?.close();
+    if (this.taskStore instanceof SelectingMCPTaskStore) this.taskStore.close();
+    await this.backgroundTaskStore?.close();
   }
 
   /** Whether the id was given (in the config, or as a Mastra registration key) rather than generated per process. */
@@ -1805,7 +1804,11 @@ export class MCPServer extends MCPServerBase {
     super.__registerMastra(mastra);
     // Usually the manager exists by now and has not recovered rows yet: register the executors
     // synchronously so recovered attempts find them.
+    const prepared = this.backgroundTaskStore;
     if (!this.prepareBackgroundTaskStore() || !(this.taskStore instanceof SelectingMCPTaskStore)) return;
+    // Tasks served before registration were kept in memory: keep serving those from there, and
+    // choose again so new tasks go to Mastra storage.
+    if (!prepared) this.taskStore.reselect();
     // Choose the store now rather than on the first task request, so its sweep runs from the start
     // and settles rows of instances that died even if this one never serves a task. A failure here
     // is not remembered: the next task request chooses again.
@@ -1865,7 +1868,7 @@ export class MCPServer extends MCPServerBase {
       this.logger.warn(
         `MCP server '${this.name}' keeps tasks in memory: the background tasks storage (${storage.constructor.name}) does not support task expiry. Upgrade the storage adapter to serve tasks across instances.`,
       );
-      this.backgroundTaskStore?.close();
+      await this.backgroundTaskStore?.close();
       this.backgroundTaskStore = undefined;
     }
     return new InMemoryMCPTaskStore();

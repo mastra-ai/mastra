@@ -3,7 +3,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { MCPToolType } from '@mastra/core/tools';
 import { DEFAULT_TASK_TTL_MS, taskKeyOf } from '../../shared/tasks';
 import type { MCPDetailedTask } from '../../shared/tasks';
-import type { InMemoryMCPTaskStore } from './in-memory-store';
+import { InMemoryMCPTaskStore } from './in-memory-store';
 import { isMCPTaskStoreAdmin } from './store';
 import type {
   MCPTaskAccess,
@@ -276,19 +276,53 @@ export class SelectingMCPTaskStore implements MCPTaskStore {
   readonly #select: () => Promise<MCPTaskStore>;
   #selecting?: Promise<MCPTaskStore>;
   #selected?: MCPTaskStore;
+  /** In-memory stores chosen before a later registration on Mastra, still serving the tasks created on them. */
+  readonly #earlier: InMemoryMCPTaskStore[] = [];
 
   constructor(select: () => Promise<MCPTaskStore>) {
     this.#select = select;
   }
 
-  /** The chosen store, once a task request has made the choice. */
-  get selected(): MCPTaskStore | undefined {
-    return this.#selected;
-  }
-
   /** The chosen store, choosing it if no task request has yet. */
   resolve(): Promise<MCPTaskStore> {
     return this.#store();
+  }
+
+  /**
+   * Chooses again on next use, for a server registered on Mastra after it served tasks. An
+   * in-memory store chosen before keeps the tasks created on it and goes on serving them.
+   */
+  reselect(): void {
+    const chosen = this.#selected;
+    if (chosen) {
+      if (!(chosen instanceof InMemoryMCPTaskStore)) return;
+      this.#earlier.push(chosen);
+      this.#selected = undefined;
+      this.#selecting = undefined;
+      return;
+    }
+    const choosing = this.#selecting;
+    if (!choosing) return;
+    // A choice still in flight was made without Mastra: set it aside once made, and choose again.
+    const next = choosing.then(() => {
+      this.reselect();
+      return this.#store();
+    });
+    next.catch(() => {});
+    this.#selecting = next;
+  }
+
+  /** Cancels the work of the in-memory stores it chose; a background-task store is closed by the server. */
+  close(): void {
+    for (const store of [...this.#earlier.splice(0), this.#selected]) {
+      if (store instanceof InMemoryMCPTaskStore) store.close();
+    }
+  }
+
+  /** The store that holds this task: an earlier in-memory store that created it, else the chosen one. */
+  #storeOf(taskId: string): Promise<MCPTaskStore> {
+    const earlier = this.#earlier.find(store => store.has(taskId));
+    return earlier ? Promise.resolve(earlier) : this.#store();
   }
 
   #store(): Promise<MCPTaskStore> {
@@ -308,25 +342,27 @@ export class SelectingMCPTaskStore implements MCPTaskStore {
   }
 
   async get(taskId: string, access: MCPTaskAccess) {
-    return (await this.#store()).get(taskId, access);
+    return (await this.#storeOf(taskId)).get(taskId, access);
   }
 
   async update(taskId: string, inputResponses: Parameters<MCPTaskStore['update']>[1], access: MCPTaskAccess) {
-    return (await this.#store()).update(taskId, inputResponses, access);
+    return (await this.#storeOf(taskId)).update(taskId, inputResponses, access);
   }
 
   async cancel(taskId: string, access: MCPTaskAccess) {
-    return (await this.#store()).cancel(taskId, access);
+    return (await this.#storeOf(taskId)).cancel(taskId, access);
   }
 
   async traceOf(taskId: string, access: MCPTaskAccess) {
-    return (await this.#store()).traceOf?.(taskId, access);
+    return (await this.#storeOf(taskId)).traceOf?.(taskId, access);
   }
 
   run(taskId: string, work: MCPTaskWork, options?: MCPTaskRunOptions): void {
-    if (!this.#selected) throw new Error(`MCP task ${taskKeyOf(taskId)} not found`);
-    this.#selected.run(taskId, work, options);
+    const store = this.#earlier.find(earlier => earlier.has(taskId)) ?? this.#selected;
+    if (!store) throw new Error(`MCP task ${taskKeyOf(taskId)} not found`);
+    store.run(taskId, work, options);
   }
+
   /** The chosen store's admin view, or `undefined` when it has none. */
   async admin(): Promise<MCPTaskStoreAdmin | undefined> {
     const store = await this.#store();
