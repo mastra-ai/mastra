@@ -68,9 +68,11 @@ function Explorer({
   useEffect(() => {
     pending.current = null;
   }, [searchParams]);
-  const update = (name: string, value: string) => {
+  // A null value drops the param: an empty-canvas click clears `page`.
+  const update = (name: string, value: string | null) => {
     const next = new URLSearchParams(pending.current ?? searchParams);
-    next.set(name, value);
+    if (value === null) next.delete(name);
+    else next.set(name, value);
     pending.current = next;
     setSearchParams(next);
   };

@@ -2,7 +2,7 @@ import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { Route, Routes } from 'react-router';
+import { Route, Routes, useLocation } from 'react-router';
 import { describe, expect, it } from 'vitest';
 import KnowledgePage from '..';
 import {
@@ -26,6 +26,10 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const api = `${TEST_BASE_URL}/api/knowledge`;
 
+function LocationProbe() {
+  return <output data-testid="location-search">{useLocation().search}</output>;
+}
+
 const renderPage = (entry = '/knowledge') =>
   renderWithProviders(
     <TooltipProvider>
@@ -33,6 +37,7 @@ const renderPage = (entry = '/knowledge') =>
         <Routes>
           <Route path="/knowledge" element={<KnowledgePage />} />
         </Routes>
+        <LocationProbe />
       </LinkComponentProvider>
     </TooltipProvider>,
     { router: { initialEntries: [entry] } },
@@ -176,6 +181,18 @@ describe('Knowledge page', () => {
       fireEvent.click(await paymentsNode());
       const detail = await screen.findByRole('region', { name: 'Selected page' });
       expect(await within(detail).findByText('Retries card charges three times before failing.')).toBeTruthy();
+    });
+
+    it('drops it from the URL on a click on empty canvas', async () => {
+      withInstance();
+      server.use(http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageView)));
+      const { container } = renderPage('/knowledge?view=graph&page=page-payments');
+      await paymentsNode();
+      const pane = container.querySelector('.react-flow__pane');
+      if (!pane) throw new Error('no graph pane');
+      fireEvent.pointerDown(pane, { clientX: 30, clientY: 30 });
+      fireEvent.click(pane, { clientX: 30, clientY: 30 });
+      await waitFor(() => expect(screen.getByTestId('location-search').textContent).toBe('?view=graph'));
     });
   });
 

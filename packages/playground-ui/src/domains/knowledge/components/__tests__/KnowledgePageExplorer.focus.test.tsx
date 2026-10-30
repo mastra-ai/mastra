@@ -146,6 +146,21 @@ describe('KnowledgePageExplorer mention popup', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
+  it('closes when empty canvas is clicked', async () => {
+    const { container } = renderWithProviders(<Host />);
+    await screen.findAllByTestId('knowledge-page-node');
+    const line = container.querySelector('[data-id="mention:refunds->roadmap"]');
+    if (!line) throw new Error('mention line not drawn');
+    fireEvent.click(line);
+    await screen.findByRole('dialog', { name: /Refunds mentions Roadmap/ });
+
+    const pane = container.querySelector('.react-flow__pane');
+    if (!pane) throw new Error('no graph pane');
+    fireEvent.pointerDown(pane, { clientX: 20, clientY: 20 });
+    fireEvent.click(pane, { clientX: 20, clientY: 20 });
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
   it('opens the mentioning page from the popup', async () => {
     const { container } = renderWithProviders(<Host />);
     await screen.findAllByTestId('knowledge-page-node');
