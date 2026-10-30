@@ -427,18 +427,22 @@ describe('TracesExplorer', () => {
       return dialog;
     };
 
-    it('marks when the first chunk arrived and how long the model took to send it, from the listed row', async () => {
+    it('shows when the first chunk arrived and how long the model took to send it, from the listed row', async () => {
       const dialog = await openTimeline(firstChunkTracesPage);
 
-      expect(within(dialog).getByTitle('Time to first chunk').textContent).toBe('TTFC 400 ms');
-      expect(within(dialog).getByTitle('Time to first token').textContent).toBe('TTFT 150 ms');
+      expect(within(dialog).getByRole('group', { name: 'Time to first chunk' }).textContent).toBe(
+        'Time to first chunk400ms',
+      );
+      expect(within(dialog).getByRole('group', { name: 'Time to first token' }).textContent).toBe(
+        'Time to first token150ms',
+      );
     });
 
-    it('marks nothing when the trace is not in the list', async () => {
+    it('shows neither when the trace is not in the list', async () => {
       const dialog = await openTimeline({ traces: [twoTracesPage.traces[1]], page: { next: null } });
 
-      expect(within(dialog).queryByTitle('Time to first chunk')).toBeNull();
-      expect(within(dialog).queryByTitle('Time to first token')).toBeNull();
+      expect(within(dialog).queryByRole('group', { name: 'Time to first chunk' })).toBeNull();
+      expect(within(dialog).queryByRole('group', { name: 'Time to first token' })).toBeNull();
     });
   });
 

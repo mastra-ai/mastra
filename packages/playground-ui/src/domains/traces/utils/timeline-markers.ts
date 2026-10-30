@@ -8,19 +8,23 @@ export type TraceStreamingTimings = {
   timeToFirstTokenMs?: number | null;
 };
 
-/** Where the markers sit on the track, as percentages of the trace duration. */
+/** A timing drawn as a bar on the track, as percentages of the trace duration. */
+export type TimelineTimingBar = { durationMs: number; leftPercent: number; widthPercent: number };
+
 export type TimelineMarkersLayout = {
-  timeToFirstChunkMs: number;
+  /** Where the first chunk sits on the track; both bars end there. */
   firstChunkPercent: number;
+  /** From the root start up to the first chunk. */
+  firstChunk: TimelineTimingBar;
   /** The model's own wait: from the inference start up to the first chunk. */
-  firstToken?: { timeToFirstTokenMs: number; leftPercent: number; widthPercent: number };
+  firstToken?: TimelineTimingBar;
 };
 
 const clampPercent = (percent: number) => Math.min(100, Math.max(0, percent));
 
 /**
  * TTFC counts from the root start and TTFT from the inference start, but both end on the first
- * chunk. So TTFC is a point on the axis, and TTFT the stretch of track leading up to it.
+ * chunk. So both are bars ending on the same point of the axis, starting at different places.
  */
 export function getTimelineMarkersLayout(
   spans: Pick<UISpan, 'startTime'>[],
@@ -36,14 +40,16 @@ export function getTimelineMarkersLayout(
 
   const toPercent = (ms: number) => clampPercent(((rootShiftMs + ms) * 100) / overallLatency);
   const firstChunkPercent = toPercent(timeToFirstChunkMs);
+  const barFrom = (startMs: number, durationMs: number): TimelineTimingBar => {
+    const leftPercent = toPercent(startMs);
+    return { durationMs, leftPercent, widthPercent: firstChunkPercent - leftPercent };
+  };
+
+  const firstChunk = barFrom(0, timeToFirstChunkMs);
   const timeToFirstTokenMs = timings.timeToFirstTokenMs;
-  if (timeToFirstTokenMs == null) return { timeToFirstChunkMs, firstChunkPercent };
+  if (timeToFirstTokenMs == null) return { firstChunkPercent, firstChunk };
 
   // The inference cannot start before the root, even if the recorded timings disagree.
-  const leftPercent = toPercent(Math.max(0, timeToFirstChunkMs - timeToFirstTokenMs));
-  return {
-    timeToFirstChunkMs,
-    firstChunkPercent,
-    firstToken: { timeToFirstTokenMs, leftPercent, widthPercent: firstChunkPercent - leftPercent },
-  };
+  const firstToken = barFrom(Math.max(0, timeToFirstChunkMs - timeToFirstTokenMs), timeToFirstTokenMs);
+  return { firstChunkPercent, firstChunk, firstToken };
 }

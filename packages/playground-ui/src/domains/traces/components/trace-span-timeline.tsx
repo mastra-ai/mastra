@@ -6,7 +6,7 @@ import { getTimelineMarkersLayout } from '../utils/timeline-markers';
 import type { TraceStreamingTimings } from '../utils/timeline-markers';
 import { SpanRows } from './span-rows';
 import { SpanTimelineRow, TimelineGridlines } from './span-timeline-row';
-import { TimelineMarkersLanes } from './trace-span-timeline-markers';
+import { TimelineTimingRows } from './trace-span-timeline-markers';
 import { TraceSpanTreeLoading } from './trace-span-tree';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
@@ -31,7 +31,7 @@ export type TraceSpanTimelineProps = {
   revealSpanId?: string;
   /** Rendered full-width above the span rows. */
   leadingSlot?: ReactNode;
-  /** Marks the first chunk, and the model's wait for it, on the axis and every row. */
+  /** Adds a row per streaming timing above the spans, and marks the first chunk on every row. */
   streamingTimings?: TraceStreamingTimings;
 };
 
@@ -64,7 +64,7 @@ export function TraceSpanTimeline({
       <div className="grid grid-cols-[minmax(12rem,2fr)_minmax(12rem,3fr)] content-start gap-y-px overflow-hidden py-1">
         {/* Header row: empty name cell, then the axis on the same track as the bars. */}
         <div />
-        <div className={cn('flex flex-col', TIMELINE_TRACK_PADDING)}>
+        <div className={TIMELINE_TRACK_PADDING}>
           <div aria-label="Trace time axis" className="relative h-6 tabular-nums">
             <TimelineGridlines />
             {TIMELINE_TICKS.map((tick, index) => (
@@ -84,8 +84,8 @@ export function TraceSpanTimeline({
               </Txt>
             ))}
           </div>
-          {markers && <TimelineMarkersLanes layout={markers} />}
         </div>
+        {markers && <TimelineTimingRows layout={markers} />}
         <SpanRows
           spans={hierarchicalSpans}
           onSpanClick={onSpanClick}
