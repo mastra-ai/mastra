@@ -569,7 +569,9 @@ describe('workspace_apply_patch', () => {
           },
           { workspace },
         ),
-      ).rejects.toThrow(FileReadRequiredError);
+      ).rejects.toThrow(
+        expect.objectContaining({ name: 'FileReadRequiredError', message: expect.stringContaining('b.ts') }),
+      );
 
       expect(await read('a.ts')).toBe('a\n');
       expect(await read('b.ts')).toBe('b changed\n');
