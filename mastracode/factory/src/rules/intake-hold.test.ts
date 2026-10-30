@@ -150,7 +150,11 @@ async function setup(options: { routes?: StoredIntakeRouteInput[]; withReader?: 
   return { storage, scope, seed, card, startRun, agentMove };
 }
 
-const held = (status: string) => status === 'proposed';
+/** Held runs wait as `proposed`; a run that isn't held is attempted (and retried: no sessions here). */
+const held = (status: string) => {
+  expect(['proposed', 'retry']).toContain(status);
+  return status === 'proposed';
+};
 
 describe('the intake hold with no routes configured', () => {
   for (const [author, { held: expected, metadata }] of Object.entries(AUTHORS)) {
@@ -217,7 +221,7 @@ describe('the intake hold with no routes configured', () => {
       userId: 'user-1',
       patch: { metadata: { authorTrusted: true } },
     });
-    expect(await startRun(item, { autoRun: true })).not.toBe('proposed');
+    expect(await startRun(item, { autoRun: true })).toBe('retry');
   });
 });
 
@@ -227,7 +231,7 @@ describe('the intake hold a route sets', () => {
       routes: [{ name: 'Docs need no person', when: DOCS, hold: 'never' }],
     });
     const docs = await card({ metadata: { authorTrusted: false, labels: ['docs'] } });
-    expect(await startRun(docs, { autoRun: true })).not.toBe('proposed');
+    expect(await startRun(docs, { autoRun: true })).toBe('retry');
     const resting = await card({
       metadata: { authorTrusted: false, labels: ['docs'] },
       source: SOURCES['gitlab issue'],
@@ -278,8 +282,8 @@ describe('the intake hold a route sets', () => {
     expect(
       await startRun(await card({ metadata: { authorTrusted: false, labels: ['docs'] } }), { autoRun: true }),
     ).toBe('proposed');
-    expect(
-      await startRun(await card({ metadata: { authorTrusted: false, labels: ['bug'] } }), { autoRun: true }),
-    ).not.toBe('proposed');
+    expect(await startRun(await card({ metadata: { authorTrusted: false, labels: ['bug'] } }), { autoRun: true })).toBe(
+      'retry',
+    );
   });
 });

@@ -134,7 +134,11 @@ export type StoredBoardErrorCode =
   | 'board_not_found'
   | 'revision_mismatch'
   | 'intake_route_not_found'
-  | 'intake_route_set_mismatch';
+  | 'intake_route_set_mismatch'
+  | 'intake_route_limit';
+
+/** A project's most intake routes; a reorder names every one of them. */
+export const MAX_INTAKE_ROUTES = 100;
 
 export class StoredBoardError extends Error {
   override name = 'StoredBoardError';
@@ -367,6 +371,12 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     await ensureIntakeRouteLockRow(this.ops, scope);
     await this.#transact(async ops => {
       const rows = await lockIntakeRoutes(ops, scope);
+      if (rows.length >= MAX_INTAKE_ROUTES) {
+        throw new StoredBoardError(
+          'intake_route_limit',
+          `A project can have at most ${MAX_INTAKE_ROUTES} intake routes; delete one first.`,
+        );
+      }
       const now = new Date();
       await ops.insertOne<IntakeRouteRow>(INTAKE_ROUTES, {
         id,
@@ -674,10 +684,6 @@ async function updateIntakeRouteRow(
   return revision;
 }
 
-/**
- * Gives `rows` the positions 0..n-1 in the order given. Rows that move park at a negative
- * position first, so no two rows share a position mid-way and the unique index stays satisfied.
- */
 /**
  * Creates the project's route lock row (see `FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA`). Runs outside the
  * write's transaction: a racing insert would abort a Postgres transaction, and the lock taken

@@ -7,7 +7,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
-import { StoredBoardsStorage } from './base.js';
+import { MAX_INTAKE_ROUTES, StoredBoardsStorage } from './base.js';
 import type { StoredBoardScope, StoredIntakeRouteInput } from './base.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -85,6 +85,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     expect(bare).toMatchObject({ enabled: true, position: 1, when: null, target: null, hold: 'untrusted' });
     expect(await boards.getIntakeRoute(scope, full.id)).toEqual(full);
     expect(await boards.listIntakeRoutes(scope)).toEqual([full, bare]);
+  });
+
+  it('refuses a route past the most a project may have', async () => {
+    const { boards, scope } = await setup();
+    for (let i = 0; i < MAX_INTAKE_ROUTES; i += 1) await boards.createIntakeRoute(scope, { name: `r${i}` }, 'admin');
+    await expect(boards.createIntakeRoute(scope, { name: 'one more' }, 'admin')).rejects.toMatchObject({
+      code: 'intake_route_limit',
+    });
+    expect(await boards.listIntakeRoutes(scope)).toHaveLength(MAX_INTAKE_ROUTES);
   });
 
   it('keeps a board-only target without a phase', async () => {

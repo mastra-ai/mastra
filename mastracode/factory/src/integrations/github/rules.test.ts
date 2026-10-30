@@ -3829,8 +3829,8 @@ describe('GithubRules holding outside work for a person', () => {
     // The held proposal gives way to the newer re-triage, which the dispatcher now tries to run.
     const status = Object.fromEntries(decisions.map(entry => [entry.idempotencyKey, entry.status]));
     expect(status['7:before-route:factory-triage']).toBe('superseded');
-    expect(status['7:after-route:factory-triage']).toBeDefined();
-    expect(status['7:after-route:factory-triage']).not.toBe('proposed');
+    // Not held: the dispatcher tries to start it (and retries, as this harness has no sessions).
+    expect(status['7:after-route:factory-triage']).toBe('retry');
   });
 });
 

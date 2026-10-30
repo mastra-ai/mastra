@@ -243,11 +243,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
   });
 
   it('refuses a target that is not an installed board or a phase new cards can land in', async () => {
-    const { base, replicaA } = await setup();
+    const { base, projectPath, replicaA } = await setup();
+    const stepwise = {
+      key: 'stepwise',
+      name: 'Stepwise',
+      phases: [
+        { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['triaged'] },
+        { key: 'triaged', name: 'Triaged', kind: 'resting', nextPhases: ['fixing'] },
+        { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' }, nextPhases: [] },
+      ],
+    };
+    expect((await replicaA.send('POST', `${projectPath}/boards`, stepwise)).status).toBe(201);
     const cases = [
       [{ boardKey: 'nope' }, 'unknown_board'],
       [{ boardKey: 'work', phaseKey: 'nope' }, 'unknown_phase'],
       [{ boardKey: 'work', phaseKey: 'done' }, 'terminal_phase'],
+      [{ boardKey: 'stepwise', phaseKey: 'fixing' }, 'unreachable_phase'],
     ] as const;
     for (const [target, error] of cases) {
       expect(await replicaA.send('POST', base, { name: 'Bad', target })).toMatchObject({

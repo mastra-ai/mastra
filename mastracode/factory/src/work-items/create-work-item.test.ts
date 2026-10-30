@@ -35,7 +35,7 @@ async function setup(routes: StoredIntakeRouteInput[] = []) {
       input,
       ...(withRoutes ? { intakeRoutes: seed.boards } : {}),
     });
-  return { create };
+  return { create, seed, project };
 }
 
 describe('createFactoryWorkItem with intake routes', () => {
@@ -52,6 +52,17 @@ describe('createFactoryWorkItem with intake routes', () => {
     if (created.status !== 'created') return;
     expect(created.item).toMatchObject({ board: 'work', stages: ['planning'] });
     expect(created.item.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'planning']);
+  });
+
+  it("doesn't count the route's move as the person's consent to start work", async () => {
+    const { create, seed, project } = await setup([toPlanning]);
+    const created = await create({ title: 'Write the guide', metadata: { labels: ['docs'] } });
+    expect(created).toMatchObject({ status: 'created', item: { stages: ['planning'] } });
+    if (created.status !== 'created') return;
+    expect(created.item.autonomyArmedAt).toBeNull();
+    const decisions = await seed.workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.filter(decision => decision.workItemId === created.item.id).length).toBeGreaterThan(0);
+    for (const decision of decisions) expect(decision).toMatchObject({ approvedAt: null, approvedBy: null });
   });
 
   it('leaves a card no route matches in the default first phase', async () => {

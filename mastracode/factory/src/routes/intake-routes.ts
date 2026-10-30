@@ -121,9 +121,9 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
     if (problem) throw new Refusal(422, { error: problem.code, message: problem.message });
   }
 
-  async #list(c: Context, scope: Resolved) {
+  async #list(c: Context, scope: Resolved, routes?: StoredIntakeRouteRecord[]) {
     const registry = await this.#registry(scope);
-    const routes = await this.deps.storage.listIntakeRoutes(scope);
+    routes ??= await this.deps.storage.listIntakeRoutes(scope);
     return c.json({ intakeRoutes: routes.map(route => present(route, registry)), fallback: FALLBACK });
   }
 
@@ -182,10 +182,9 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
         const { ids } = await this.#body(c, contracts.intakeRouteReorder.bodySchema);
-        await storage.reorderIntakeRoutes(scope, ids, scope.userId);
-        const routes = await storage.listIntakeRoutes(scope);
+        const routes = await storage.reorderIntakeRoutes(scope, ids, scope.userId);
         await this.#audit(c, scope, 'reordered', routes);
-        return this.#list(c, scope);
+        return this.#list(c, scope, routes);
       }),
 
       this.#route(contracts.intakeRouteGet, async c => {
@@ -207,8 +206,8 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
 
       this.#route(contracts.intakeRouteUpdate, async c => {
         const scope = await this.#resolve(c);
-        const id = this.#routeId(c);
         await this.#requireAdmin(c, scope);
+        const id = this.#routeId(c);
         const { expectedRevision, ...patch } = await this.#body(c, contracts.intakeRouteUpdate.bodySchema);
         await this.#checkTarget(scope, patch.target);
         const route = await storage.updateIntakeRoute(scope, id, patch, { expectedRevision, actor: scope.userId });
@@ -218,8 +217,8 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
 
       this.#route(contracts.intakeRouteDelete, async c => {
         const scope = await this.#resolve(c);
-        const id = this.#routeId(c);
         await this.#requireAdmin(c, scope);
+        const id = this.#routeId(c);
         const parsed = contracts.intakeRouteDelete.querySchema.safeParse({
           expectedRevision: c.req.query('expectedRevision'),
         });
