@@ -8,14 +8,14 @@
  * @see https://www.daytona.io/docs
  */
 
-import { Daytona, DaytonaGoneError, DaytonaNotFoundError, SandboxState } from '@daytonaio/sdk';
+import { Daytona, DaytonaGoneError, DaytonaNotFoundError, SandboxState } from '@daytona/sdk';
 import type {
   ComputerUse,
   CreateSandboxFromImageParams,
   CreateSandboxFromSnapshotParams,
   Sandbox,
   VolumeMount,
-} from '@daytonaio/sdk';
+} from '@daytona/sdk';
 import type {
   SandboxInfo,
   ProviderStatus,
