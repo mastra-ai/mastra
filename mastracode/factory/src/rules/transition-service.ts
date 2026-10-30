@@ -400,7 +400,8 @@ export class FactoryTransitionService {
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
       );
     }
-    if ((itemBoard === 'review' && !isPullRequest) || (itemBoard === 'work' && isPullRequest)) {
+    // Review holds only pull requests; Work holds both, and its policy keeps a pull request's card to review.
+    if (itemBoard === 'review' && !isPullRequest) {
       return this.#commitRejection(
         request,
         transitionId,
