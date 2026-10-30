@@ -35,7 +35,7 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
   if (!denied.has(MC_TOOLS.VIEW)) {
     readTools.push(`
 **${MC_TOOLS.VIEW}** — Read file contents
-- Use this to read files before editing them. NEVER propose changes to code you haven't read.
+- Use this to read file contents. Don't propose changes to code you haven't seen; reading with shell commands (cat, sed, rg) also works.
 - Use \`offset\` (1-indexed start line) and \`limit\` (number of lines) for large files.
 - Example: Read lines 50-100: \`{ path: "src/big-file.ts", offset: 50, limit: 51 }\`
 - To list directories, use \`${MC_TOOLS.FIND_FILES}\` instead.`);
@@ -106,7 +106,6 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
     if (!denied.has(MC_TOOLS.STRING_REPLACE_LSP)) {
       writeTools.push(`
 **${MC_TOOLS.STRING_REPLACE_LSP}** — Edit files by replacing exact text
-- You MUST read a file with \`${MC_TOOLS.VIEW}\` before editing it.
 - \`old_string\` must be an exact match of existing text in the file.
 - Provide enough surrounding context in \`old_string\` to make it unique.
 - Use \`replace_all: true\` to replace all occurrences (default: false, requires unique match).
@@ -119,7 +118,7 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
       writeTools.push(`
 **${MC_TOOLS.WRITE_FILE}** — Create new files or overwrite existing ones
 - Use this to create new files.
-- If overwriting an existing file, you MUST have read it first with \`${MC_TOOLS.VIEW}\`.
+- Overwriting replaces the whole file, so make sure you know its current contents first.
 - Prefer editing existing files over creating new ones.`);
     }
 

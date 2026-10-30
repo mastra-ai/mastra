@@ -1584,6 +1584,53 @@ describe('Agent Routes Authorization', () => {
     });
   });
 
+  // https://github.com/mastra-ai/mastra/issues/28760
+  describe('requestContextSchema validation failure', () => {
+    function createSchemaAgents() {
+      const schemaAgent = new Agent({
+        id: 'schema-agent',
+        name: 'schema-agent',
+        instructions: 'test-instructions',
+        model: { specificationVersion: 'v2' } as any,
+        requestContextSchema: z.object({ userId: z.string() }),
+      });
+      const durableSchemaAgent = createDurableAgent({
+        agent: schemaAgent,
+        id: 'durable-schema-agent',
+        name: 'durable-schema-agent',
+      });
+      const schemaMastra = new Mastra({
+        agents: { 'schema-agent': schemaAgent, 'durable-schema-agent': durableSchemaAgent },
+        storage,
+        logger: false,
+      });
+      return schemaMastra;
+    }
+
+    for (const agentId of ['schema-agent', 'durable-schema-agent']) {
+      for (const [name, route] of [
+        ['generate', GENERATE_AGENT_ROUTE],
+        ['stream', STREAM_GENERATE_ROUTE],
+      ] as const) {
+        it(`${name} on ${agentId} responds 400 with the validation message`, async () => {
+          const schemaMastra = createSchemaAgents();
+          const error = await (route.handler as any)({
+            mastra: schemaMastra,
+            agentId,
+            requestContext: new RequestContext(),
+            abortSignal: new AbortController().signal,
+            messages: [{ role: 'user', content: 'hi' }],
+          }).catch((e: unknown) => e);
+
+          expect(error).toBeInstanceOf(HTTPException);
+          expect((error as HTTPException).status).toBe(400);
+          expect((error as HTTPException).message).toContain('Request context validation failed');
+          expect((error as HTTPException).message).toContain('userId');
+        });
+      }
+    }
+  });
+
   describe('RESUME_STREAM_ROUTE', () => {
     async function persistAgenticLoopRun({ runId, resourceId }: { runId: string; resourceId?: string }) {
       const workflowsStore = await storage.getStore('workflows');
@@ -2387,7 +2434,7 @@ describe('Agent Routes Authorization', () => {
       });
       const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
       requestContext.set('tenantId', 'tenant-a');
-      const abort = vi.spyOn(scopedAgent, 'abortRunStream').mockResolvedValue(true);
+      const abort = vi.spyOn(scopedAgent, '__abortRunAcknowledged').mockResolvedValue(true);
 
       await expect(
         ABORT_AGENT_RUN_ROUTE.handler({ mastra, agentId: 'test-durable-agent', runId: 'scoped-abort', requestContext }),
@@ -2397,7 +2444,7 @@ describe('Agent Routes Authorization', () => {
 
     it.each(['user-a', 'user-b'])('checks thread ownership for an ownerless run called by %s', async caller => {
       await mockMemory.createThread({ threadId: 'abort-thread', resourceId: 'user-a', title: 'Protected thread' });
-      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
+      const abort = vi.spyOn(mockDurableAgent, '__abortRunAcknowledged').mockResolvedValue(true);
       await persistDurableAgenticLoopRun({ runId: 'ownerless-thread-run', threadId: 'abort-thread' });
       const cancellation = ABORT_AGENT_RUN_ROUTE.handler({
         mastra,
@@ -2415,7 +2462,7 @@ describe('Agent Routes Authorization', () => {
 
     it.each(['', 'inngest:'])('aborts an active run using its %s execution checkpoint', async prefix => {
       Object.defineProperty(mockDurableAgent, 'durableLoopWorkflowName', { value: `${prefix}durable-agentic-loop` });
-      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
+      const abort = vi.spyOn(mockDurableAgent, '__abortRunAcknowledged').mockResolvedValue(true);
       await persistDurableAgenticLoopRun({
         runId: 'abort-active',
         workflowName: `${prefix}durable-agentic-loop`,
@@ -2437,7 +2484,7 @@ describe('Agent Routes Authorization', () => {
     });
 
     it('does not acknowledge run abort before ownership has been checkpointed', async () => {
-      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      const abort = vi.spyOn(mockDurableAgent, '__abortRunAcknowledged');
       await persistDurableAgenticLoopRun({ runId: 'abort-registering', status: 'pending', inputCheckpointed: false });
       await expect(
         ABORT_AGENT_RUN_ROUTE.handler({
@@ -2458,7 +2505,7 @@ describe('Agent Routes Authorization', () => {
       vi.spyOn(mastra, 'getServer').mockReturnValue({
         auth: { mapUserToResourceId: (user: { id: string }) => user.id },
       } as any);
-      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      const abort = vi.spyOn(mockDurableAgent, '__abortRunAcknowledged');
       await persistDurableAgenticLoopRun({ runId: 'abort-ownership', resourceId: owner });
       await expect(
         ABORT_AGENT_RUN_ROUTE.handler({

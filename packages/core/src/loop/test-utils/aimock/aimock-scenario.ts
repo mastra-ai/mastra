@@ -84,6 +84,11 @@ export function setScenarioEngineHost(host: ScenarioEngineHost | undefined): voi
   engineHost = host;
 }
 
+/** The external engine host registered by {@link setScenarioEngineHost}, if any. */
+export function getScenarioEngineHost(): ScenarioEngineHost | undefined {
+  return engineHost;
+}
+
 function wrapForEngine(agent: any, engine: EngineVariant, pubsub?: any): any {
   if (engine === 'durable') return createDurableAgent({ agent });
   if (engine === 'evented') return createEventedAgent({ agent, pubsub });

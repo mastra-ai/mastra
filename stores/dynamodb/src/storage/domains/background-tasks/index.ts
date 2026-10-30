@@ -232,12 +232,21 @@ export class BackgroundTasksStorageDynamoDB extends BackgroundTasksStorage {
             : eq(leaseExpiresAtIso, expectedLeaseExpiresAt.toISOString()),
         );
       }
+      if (options?.expectedSuspendedAt !== undefined) {
+        const expectedSuspendedAt = options.expectedSuspendedAt;
+        op = op.where(({ suspendedAtIso }: any, { eq, notExists }: any) =>
+          expectedSuspendedAt === null
+            ? notExists(suspendedAtIso)
+            : eq(suspendedAtIso, expectedSuspendedAt.toISOString()),
+        );
+      }
       await op.go();
     } catch (error: any) {
       const hadExpectedCondition =
         options?.expectedStatus !== undefined ||
         options?.expectedOwnerId !== undefined ||
-        options?.expectedLeaseExpiresAt !== undefined;
+        options?.expectedLeaseExpiresAt !== undefined ||
+        options?.expectedSuspendedAt !== undefined;
       if (hadExpectedCondition && error?.cause?.name === 'ConditionalCheckFailedException') return false;
       throw new MastraError(
         {

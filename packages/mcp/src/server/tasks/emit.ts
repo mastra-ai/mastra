@@ -13,9 +13,15 @@ const TASK_RESULT_META_KEY = 'mastra.ai/mcp-task-result';
 export function taskHandleResult(task: MCPTask): CallToolResult {
   return {
     isError: true,
-    content: [{ type: 'text', text: `MCP task ${task.taskId}` }],
+    content: [{ type: 'text', text: 'MCP task created' }],
     _meta: { [TASK_RESULT_META_KEY]: task },
   };
+}
+
+/** The task a result built by {@link taskHandleResult} stands for; `undefined` for any other result. */
+export function taskOfHandleResult(result: unknown): MCPTask | undefined {
+  const meta = (result as { _meta?: Record<string, unknown> } | undefined)?._meta;
+  return meta?.[TASK_RESULT_META_KEY] as MCPTask | undefined;
 }
 
 /**
@@ -26,10 +32,9 @@ export function emitTaskResults(transport: Transport): void {
   const send = transport.send.bind(transport);
   transport.send = (message, options) => {
     const result = 'result' in message ? (message.result as Record<string, unknown> | undefined) : undefined;
-    const meta = result?._meta as Record<string, unknown> | undefined;
-    const task = meta?.[TASK_RESULT_META_KEY] as MCPTask | undefined;
+    const task = taskOfHandleResult(result);
     if (task) {
-      const { [TASK_RESULT_META_KEY]: _task, ...rest } = meta!;
+      const { [TASK_RESULT_META_KEY]: _task, ...rest } = result!._meta as Record<string, unknown>;
       message = {
         ...message,
         result: { ...task, resultType: TASK_RESULT_TYPE, ...(Object.keys(rest).length > 0 ? { _meta: rest } : {}) },

@@ -212,6 +212,12 @@ export class BackgroundTasksStorageDO extends BackgroundTasksStorage {
             ? query.whereAnd('leaseExpiresAt IS NULL')
             : query.whereAnd('leaseExpiresAt = ?', options.expectedLeaseExpiresAt.toISOString());
       }
+      if (options?.expectedSuspendedAt !== undefined) {
+        query =
+          options.expectedSuspendedAt === null
+            ? query.whereAnd('suspendedAt IS NULL')
+            : query.whereAnd('suspendedAt = ?', options.expectedSuspendedAt.toISOString());
+      }
       const { sql, params } = query.build();
       const result = await this.#db.executeQuery({ sql: `${sql} RETURNING id`, params });
       return Array.isArray(result) && result.length > 0;

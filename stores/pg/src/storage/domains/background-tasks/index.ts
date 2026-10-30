@@ -379,6 +379,15 @@ export class BackgroundTasksPG extends BackgroundTasksStorage {
         params.push(options.expectedLeaseExpiresAt.toISOString());
       }
     }
+    if (options?.expectedSuspendedAt !== undefined) {
+      // Timezone-aware column, for the same reason as the lease fence above.
+      if (options.expectedSuspendedAt === null) {
+        where += ` AND "suspendedAtZ" IS NULL`;
+      } else {
+        where += ` AND "suspendedAtZ" = $${paramIdx++}`;
+        params.push(options.expectedSuspendedAt.toISOString());
+      }
+    }
     const result = await this.#db.client.query(`UPDATE ${table} SET ${setClauses.join(', ')} WHERE ${where}`, params);
     return (result.rowCount ?? 0) > 0;
   }

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Chat, Adapter, Attachment, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
@@ -23,6 +24,10 @@ import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
+import { WORKSPACE_TOOLS } from '../workspace/constants';
+import { CompositeFilesystem } from '../workspace/filesystem/composite-filesystem';
+import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
+import { resolveToolConfig } from '../workspace/tools/tools';
 
 import { getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
@@ -81,7 +86,7 @@ export interface ChannelLogContext {
 
 type ChannelAgent = Pick<
   Agent<any, any, any, any>,
-  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory'
+  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory' | 'getWorkspace'
 >;
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
@@ -90,8 +95,12 @@ const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat',
 /** Size cap for text attachments decoded into the agent's prompt. */
 const MAX_TEXT_ATTACHMENT_BYTES = 128 * 1024;
 
-/** Text attachments whose reported size exceeds this are not downloaded. */
-const MAX_TEXT_ATTACHMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
+/** Text and binary attachments larger than this are not downloaded or saved. */
+const MAX_ATTACHMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
+
+/** Default total for attachments stored under `channel-attachments/` in a workspace. */
+const DEFAULT_MAX_ATTACHMENT_STORAGE_BYTES = 100 * 1024 * 1024;
+const ATTACHMENT_DIR = 'channel-attachments';
 
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
@@ -124,6 +133,8 @@ export class AgentChannels {
   private shouldInline: (mimeType: string) => boolean;
   /** Inline-link rules for promoting URLs in message text to file parts. */
   private inlineLinkRules: InlineLinkRule[] | undefined;
+  /** Total bytes of attachments that may be stored under `channel-attachments/`. */
+  private maxAttachmentStorageBytes: number;
   /** Whether channel tools (reactions, etc.) are enabled. */
   private toolsEnabled: boolean;
   /** Optional hook to resolve the memory resourceId (owner) for newly-created channel threads. */
@@ -194,6 +205,7 @@ export class AgentChannels {
     this.threadContext = config.threadContext ?? {};
     this.shouldInline = buildInlineMediaCheck(config.inlineMedia);
     this.inlineLinkRules = normalizeInlineLinks(config.inlineLinks);
+    this.maxAttachmentStorageBytes = config.maxAttachmentStorageBytes ?? DEFAULT_MAX_ATTACHMENT_STORAGE_BYTES;
     this.toolsEnabled = config.tools !== false;
     this.resolveResourceId = config.resolveResourceId;
     this.resolveThreadId = config.resolveThreadId;
@@ -1475,6 +1487,23 @@ export class AgentChannels {
       return;
     }
 
+    const { channelContext, attributes, providerOptions } = await this.buildEventContext({
+      chatThread,
+      platform,
+      eventType,
+      messageId: message.id,
+      actor: message.author,
+    });
+
+    // NOTE: `requestContext` is constructed per message at the handler boundary
+    // (see `beginMessage` in initialize) so a custom handler can contribute to
+    // it — e.g. stamping the tenant — before the run dispatches. Core only
+    // enriches it here. Set it before thread mapping and attachments: the
+    // workspace caches the filesystem it resolves per request context, so a
+    // channel-aware resolver must see the channel on its first call, even
+    // from a resolveResourceId/resolveThreadId hook.
+    requestContext.set('channel', channelContext);
+
     // Map to a Mastra thread for memory/history.
     // chatThread.id encodes channel + threadTs, so it's stable per conversation:
     // each Slack thread (including top-level DM, DM thread reply, channel mention, and
@@ -1542,7 +1571,8 @@ export class AgentChannels {
         const hasHistory = history.root !== undefined || history.recent.length > 0;
         if (hasHistory) {
           const persisted = await this.persistThreadHistorySignals({
-            buildSignals: () => this.buildThreadHistorySignals({ history, chatThread, platform, mastraThread }),
+            buildSignals: () =>
+              this.buildThreadHistorySignals({ history, chatThread, platform, mastraThread, requestContext }),
             requestContext,
             thread: mastraThread,
             memory: { thread: mastraThread.id, resource: threadResourceId },
@@ -1576,7 +1606,7 @@ export class AgentChannels {
     });
     const parts: Exclude<AgentSignalContents, string> = [
       { type: 'text', text },
-      ...(await this.attachmentsToParts(attachments)),
+      ...(await this.attachmentsToParts(attachments, requestContext)),
     ];
 
     // Promote URLs in message text to file parts based on `inlineLinks` config.
@@ -1634,20 +1664,6 @@ export class AgentChannels {
       autoResumeSuspendedTools: canRenderApprovalButtons ? undefined : true,
     });
 
-    const { channelContext, attributes, providerOptions } = await this.buildEventContext({
-      chatThread,
-      platform,
-      eventType,
-      messageId: message.id,
-      actor: message.author,
-    });
-
-    // NOTE: `requestContext` is constructed per message at the handler boundary
-    // (see `beginMessage` in initialize) so a custom handler can contribute to
-    // it — e.g. stamping the tenant — before the run dispatches. Core only
-    // enriches it here.
-    requestContext.set('channel', channelContext);
-
     // Stash the per-event render deps so `ChatChannelOutputProcessor` can
     // route the agent's stream to the chat platform. The processor opens an
     // async queue on the first chunk and hands the iterable to the existing
@@ -1695,10 +1711,16 @@ export class AgentChannels {
    * YAML, XML, …) that come with an authenticated `fetchData` are decoded and
    * sent as text. Other non-inline types are described as text
    * metadata so the agent is aware of them without crashing models that
-   * reject unsupported media (e.g. OpenAI rejects video/mp4).
+   * reject unsupported media (e.g. OpenAI rejects video/mp4). When the agent
+   * has a writable workspace, those with `fetchData` are saved there and the
+   * description carries the workspace path instead of the URL.
    */
-  private async attachmentsToParts(attachments: Attachment[]): Promise<Exclude<AgentSignalContents, string>> {
+  private async attachmentsToParts(
+    attachments: Attachment[],
+    requestContext: RequestContext,
+  ): Promise<Exclude<AgentSignalContents, string>> {
     const parts: Exclude<AgentSignalContents, string> = [];
+    let filesystem: Promise<WorkspaceFilesystem | undefined> | undefined;
     for (const att of attachments) {
       if (!att.url && !att.fetchData) continue;
       const mimeType = att.mimeType || (att.type === 'image' ? 'image/png' : undefined);
@@ -1744,7 +1766,7 @@ export class AgentChannels {
       } else if (
         att.fetchData &&
         isTextMimeType(mimeType) &&
-        !(att.size !== undefined && att.size > MAX_TEXT_ATTACHMENT_DOWNLOAD_BYTES)
+        !(att.size !== undefined && att.size > MAX_ATTACHMENT_DOWNLOAD_BYTES)
       ) {
         // Text-like files behind an authenticated fetch (e.g. Slack's
         // url_private) are decoded and handed to the agent as text, since the
@@ -1770,13 +1792,95 @@ export class AgentChannels {
           });
         }
       } else {
+        // Binary files behind an authenticated fetch (e.g. Slack's url_private)
+        // go to the workspace so tools can open them. The URL stays as the
+        // fallback: some adapters with fetchData (Discord) have public URLs.
+        let savedPath: string | undefined;
+        if (att.fetchData && !(att.size !== undefined && att.size > MAX_ATTACHMENT_DOWNLOAD_BYTES)) {
+          filesystem ??= this.resolveAttachmentFilesystem(requestContext);
+          const fs = await filesystem;
+          if (fs) savedPath = await this.saveAttachmentToWorkspace(fs, att, att.fetchData, filename, mimeType);
+        }
         parts.push({
           type: 'text',
-          text: `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
+          text: savedPath
+            ? `[Attached file: ${filename} (${mimeType}) — saved in the workspace at ${savedPath}]`
+            : `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
         });
       }
     }
     return parts;
+  }
+
+  /**
+   * The agent's workspace filesystem when one is configured and writable, and
+   * the workspace lets the agent write files without approval. Saving follows
+   * the same policy as the write tool so a deployer who disables or gates
+   * writes doesn't get channel participants' files written anyway.
+   */
+  private async resolveAttachmentFilesystem(requestContext: RequestContext): Promise<WorkspaceFilesystem | undefined> {
+    try {
+      const workspace = await this.getDispatchAgent()?.getWorkspace?.({ requestContext });
+      if (!workspace) return undefined;
+      const writeConfig = await resolveToolConfig(workspace.getToolsConfig(), WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE, {
+        requestContext: Object.fromEntries(requestContext.entries()),
+        workspace,
+      });
+      if (!writeConfig.enabled || writeConfig.requireApproval !== false) return undefined;
+      const fs = await workspace.resolveFilesystem({ requestContext });
+      return fs && !fs.readOnly ? fs : undefined;
+    } catch (err) {
+      this.log('warn', 'Could not resolve the agent workspace for attachments', { error: err });
+      return undefined;
+    }
+  }
+
+  /**
+   * Save an attachment under `channel-attachments/<hash>/<name>` (inside the
+   * first writable mount of a composite filesystem) and return
+   * the path, or undefined when it cannot be downloaded or written, or when
+   * it would push the folder over `maxAttachmentStorageBytes`. The folder
+   * hashes the URL so history walks reuse a saved file without refetching;
+   * attachments without a URL hash their downloaded bytes, so different
+   * files never share a path.
+   */
+  private async saveAttachmentToWorkspace(
+    fs: WorkspaceFilesystem,
+    att: Attachment,
+    fetchData: () => Promise<Buffer | ArrayBuffer>,
+    filename: string,
+    mimeType: string,
+  ): Promise<string | undefined> {
+    const dir = attachmentDirFor(fs);
+    if (!dir) return undefined;
+    const safeName = filename.replace(/[^\w.-]+/g, '_').replace(/^\.+/, '') || 'file';
+    const pathFor = (source: string | Uint8Array) =>
+      `${dir}/${createHash('sha256').update(source).digest('hex').slice(0, 16)}/${safeName}`;
+    const limit = this.maxAttachmentStorageBytes;
+    const overLimit = (used: number, size: number) => {
+      if (used + size <= limit) return false;
+      this.log('warn', 'Attachment storage limit reached, not saved', { mimeType, bytes: size, used, limit });
+      return true;
+    };
+    try {
+      if (att.url && (await fs.exists(pathFor(att.url)))) return pathFor(att.url);
+      const used = await storedAttachmentBytes(fs, dir);
+      if (att.size !== undefined && overLimit(used, att.size)) return undefined;
+      const buf = await fetchData();
+      const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+      if (bytes.byteLength > MAX_ATTACHMENT_DOWNLOAD_BYTES) {
+        this.log('warn', 'Attachment exceeds the download ceiling, not saved', { mimeType, bytes: bytes.byteLength });
+        return undefined;
+      }
+      const path = pathFor(att.url ?? bytes);
+      if (!att.url && (await fs.exists(path))) return path;
+      if (overLimit(used, bytes.byteLength)) return undefined;
+      await fs.writeFile(path, bytes, { recursive: true, mimeType });
+      return path;
+    } catch (err) {
+      this.log('warn', 'Attachment could not be saved to the workspace', { mimeType, error: err });
+      return undefined;
+    }
   }
 
   /**
@@ -1790,8 +1894,9 @@ export class AgentChannels {
     chatThread: Thread;
     platform: string;
     mastraThread: Pick<StorageThreadType, 'id'>;
+    requestContext: RequestContext;
   }): Promise<AgentSignalInput[]> {
-    const { history, chatThread, platform, mastraThread } = args;
+    const { history, chatThread, platform, mastraThread, requestContext } = args;
     const ordered: Array<{ message: Message; gapAfter: boolean }> = [];
     if (history.root) ordered.push({ message: history.root, gapAfter: history.omitted > 0 });
     for (const message of history.recent) ordered.push({ message, gapAfter: false });
@@ -1820,7 +1925,7 @@ export class AgentChannels {
       const text = messageText(message);
       const parts: Exclude<AgentSignalContents, string> = [
         ...(text ? [{ type: 'text' as const, text }] : []),
-        ...(await this.attachmentsToParts(message.attachments ?? [])),
+        ...(await this.attachmentsToParts(message.attachments ?? [], requestContext)),
       ];
       if (parts.length > 0) {
         const { attributes, providerOptions } = await this.buildEventContext({
@@ -2616,4 +2721,27 @@ function parseLastSender(value: unknown): LastSender | undefined {
   const { author, raw } = value as Partial<LastSender>;
   if (!author || typeof author.userId !== 'string') return undefined;
   return { author, raw: raw && typeof raw === 'object' ? raw : {} };
+}
+
+/**
+ * Folder for saved attachments. A composite filesystem only accepts paths
+ * under one of its mounts, so the folder goes in the first writable mount.
+ */
+function attachmentDirFor(fs: WorkspaceFilesystem): string | undefined {
+  if (!(fs instanceof CompositeFilesystem)) return ATTACHMENT_DIR;
+  // A "/" mount is skipped: CompositeFilesystem only routes the exact path "/" to it.
+  const mount = fs.mountPaths.find(path => path !== '/' && !fs.mounts.get(path)?.readOnly);
+  return mount === undefined ? undefined : `${mount}/${ATTACHMENT_DIR}`;
+}
+
+/** Total size of the files under `dir` (0 when the folder doesn't exist yet). */
+async function storedAttachmentBytes(fs: WorkspaceFilesystem, dir: string, root = true): Promise<number> {
+  if (root && !(await fs.exists(dir))) return 0;
+  let total = 0;
+  for (const entry of await fs.readdir(dir)) {
+    const path = `${dir}/${entry.name}`;
+    if (entry.type === 'directory') total += await storedAttachmentBytes(fs, path, false);
+    else total += entry.size ?? (await fs.stat(path)).size;
+  }
+  return total;
 }

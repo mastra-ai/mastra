@@ -7,7 +7,8 @@ import { McpServer, createMcpHandler } from '@modelcontextprotocol/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { CreateTaskResultSchema, tasksCapabilityEntry } from '../../shared/tasks';
-import { emitTaskResults, taskHandleResult } from './emit';
+import type { MCPTask } from '../../shared/tasks';
+import { emitTaskResults, taskHandleResult, taskOfHandleResult } from './emit';
 import { InMemoryMCPTaskStore } from './in-memory-store';
 
 let close: (() => Promise<void>) | undefined;
@@ -79,6 +80,17 @@ function parseBody(text: string): unknown {
 }
 
 const resultOf = (body: unknown) => (body as { result: Record<string, unknown> }).result;
+
+describe('taskOfHandleResult', () => {
+  it('finds the task in a handle and in nothing else', () => {
+    const task = { taskId: 'secret-id', status: 'working', createdAt: '', lastUpdatedAt: '', ttlMs: 1 } as MCPTask;
+    const handle = taskHandleResult(task);
+    expect(taskOfHandleResult(handle)).toBe(task);
+    expect(JSON.stringify(handle.content)).not.toContain('secret-id');
+    expect(taskOfHandleResult({ content: [], _meta: { other: 1 } })).toBeUndefined();
+    expect(taskOfHandleResult(undefined)).toBeUndefined();
+  });
+});
 
 describe('emitTaskResults', () => {
   it('sends a CreateTaskResult that the task store can serve', async () => {
