@@ -1,6 +1,14 @@
+import { randomUUID } from 'node:crypto';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { AGENT_STREAM_TOPIC } from '../../agent/durable/constants';
+import {
+  DurableExecutionFenceError,
+  EXECUTION_UNVERIFIED_ERROR_ID,
+  setExecutionClaim,
+} from '../../agent/durable/execution-fence';
 import type { ActorSignal } from '../../auth/ee';
 import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError } from '../../error';
@@ -8,6 +16,7 @@ import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
+import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { PUBSUB_SYMBOL } from '../constants';
@@ -204,6 +213,56 @@ describe('StepExecutor', () => {
     const result = await stepExecutor.resolveSleep(params);
     expect(result).toBe(0);
   });
+
+  it.each(['unfenced', 'fenced', 'nested', 'unfenced-with-stale-ancestor'] as const)(
+    'only retries storage-fenced worker interruptions (%s)',
+    async mode => {
+      setExecutionClaim(requestContext, mode === 'nested' ? 'parent-run' : 'test-run', {
+        executionId: 'worker',
+        agentId: 'agent',
+        ...(mode === 'fenced' || mode === 'nested' ? { generation: 42 } : {}),
+      });
+      if (mode === 'unfenced-with-stale-ancestor') {
+        setExecutionClaim(requestContext, 'previous-run', { executionId: 'previous', generation: 41 });
+      }
+      const interruption = new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
+        agentId: 'agent',
+        runId: 'test-run',
+        executionId: 'worker',
+      });
+      const step = createStep({
+        id: 'interrupted-step',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async () => {
+          throw interruption;
+        },
+      });
+      const pubsub = new UnixSocketPubSub(join(tmpdir(), `worker-interruption-${randomUUID()}.sock`));
+      const worker = new Mastra({ pubsub, logger: false });
+      try {
+        const execution = new StepExecutor({ mastra: worker }).execute({
+          workflowId: 'test-workflow',
+          entry: { type: 'step', step },
+          runId: 'test-run',
+          input: {},
+          stepResults: {},
+          state: {},
+          requestContext,
+          ...(mode === 'nested'
+            ? { parentWorkflow: { workflowId: 'parent', runId: 'parent-run', executionPath: [0] } }
+            : {}),
+        });
+        if (mode === 'fenced' || mode === 'nested') {
+          await expect(execution).rejects.toBe(interruption);
+        } else {
+          await expect(execution).resolves.toMatchObject({ status: 'failed', nonRetryable: true, error: interruption });
+        }
+      } finally {
+        await pubsub.close();
+      }
+    },
+  );
 
   it('should save only error message without stack trace when step fails', async () => {
     const errorMessage = 'Test error: step execution failed.';
