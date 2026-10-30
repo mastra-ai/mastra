@@ -8,8 +8,59 @@ const SHOWN_LEVELS: Record<RunLogFilter, ReadonlySet<KnowledgeImporterRunEvent['
   errors: new Set(['error']),
 };
 
-export const filterRunEvents = (events: KnowledgeImporterRunEvent[], filter: RunLogFilter) =>
-  filter === 'all' ? events : events.filter(event => SHOWN_LEVELS[filter].has(event.level));
+/** A log line, or the one line that stands in for every provider request of a source. */
+export type RunLogRow =
+  | { kind: 'event'; key: string; event: KnowledgeImporterRunEvent }
+  | { kind: 'requests'; key: string; at: string; message: string };
+
+const providerOf = (event: KnowledgeImporterRunEvent) => {
+  const provider = event.data?.provider;
+  return typeof provider === 'string' ? provider : 'the source';
+};
+
+/**
+ * The rows to show. Request lines (`debug`) are plumbing: unless the reader asks for them they
+ * collapse into one line per source, at the first request, whose count grows as the run goes.
+ */
+export function buildRunLogRows(
+  events: KnowledgeImporterRunEvent[],
+  filter: RunLogFilter,
+  { showRequests, done }: { showRequests: boolean; done: boolean },
+): RunLogRow[] {
+  const rows: RunLogRow[] = [];
+  const requests = new Map<string, { at: string; count: number; index: number }>();
+  for (const event of events) {
+    if (event.level !== 'debug') {
+      if (SHOWN_LEVELS[filter].has(event.level)) rows.push({ kind: 'event', key: String(event.seq), event });
+      continue;
+    }
+    if (filter !== 'all') continue;
+    if (showRequests) {
+      rows.push({ kind: 'event', key: String(event.seq), event });
+      continue;
+    }
+    const provider = providerOf(event);
+    const seen = requests.get(provider);
+    if (seen) {
+      seen.count += 1;
+      continue;
+    }
+    requests.set(provider, { at: event.at, count: 1, index: rows.length });
+    rows.push({ kind: 'requests', key: `requests:${provider}`, at: event.at, message: '' });
+  }
+  for (const [provider, { at, count, index }] of requests) {
+    const noun = count === 1 ? 'request' : 'requests';
+    rows[index] = {
+      kind: 'requests',
+      key: `requests:${provider}`,
+      at,
+      message: `${done ? 'Fetched' : 'Fetching'} from ${provider}: ${count} ${noun}`,
+    };
+  }
+  return rows;
+}
+
+export const hasRequestLines = (events: KnowledgeImporterRunEvent[]) => events.some(event => event.level === 'debug');
 
 export const EMPTY_FILTER_COPY: Record<RunLogFilter, string> = {
   all: 'Waiting for the first event…',

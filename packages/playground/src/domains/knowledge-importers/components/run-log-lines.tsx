@@ -5,27 +5,29 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { describeElapsed } from '../run-log';
+import type { RunLogRow } from '../run-log';
 
 /** How close to the bottom still counts as following the tail. */
 const FOLLOW_SLACK_PX = 24;
 
 export interface RunLogLinesProps {
-  events: KnowledgeImporterRunEvent[];
+  rows: RunLogRow[];
   /** When the run started; timestamps are relative to it. */
   origin: string | undefined;
   emptyCopy: string;
 }
 
 /** The scrolling log. Follows new lines until the reader scrolls up, then offers a way back. */
-export function RunLogLines({ events, origin, emptyCopy }: RunLogLinesProps) {
+export function RunLogLines({ rows, origin, emptyCopy }: RunLogLinesProps) {
   const scroller = useRef<HTMLDivElement>(null);
   const [following, setFollowing] = useState(true);
-  const lastSeq = events.at(-1)?.seq;
+  // The requests line grows in place, so its text counts as new content too.
+  const tail = rows.map(row => (row.kind === 'requests' ? row.message : row.key)).join('|').length;
 
   useEffect(() => {
     const element = scroller.current;
     if (following && element) element.scrollTop = element.scrollHeight;
-  }, [lastSeq, following]);
+  }, [tail, following]);
 
   const onScroll = () => {
     const element = scroller.current;
@@ -41,15 +43,19 @@ export function RunLogLines({ events, origin, emptyCopy }: RunLogLinesProps) {
         data-testid="run-log-scroller"
         className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border bg-fill-subtle px-3 py-2"
       >
-        {events.length === 0 ? (
+        {rows.length === 0 ? (
           <Txt variant="body-sm" tone="muted">
             {emptyCopy}
           </Txt>
         ) : (
           <ol aria-label="Run log" className="flex flex-col gap-1">
-            {events.map(event => (
-              <RunLogLine key={event.seq} event={event} origin={origin} />
-            ))}
+            {rows.map(row =>
+              row.kind === 'event' ? (
+                <RunLogLine key={row.key} event={row.event} origin={origin} />
+              ) : (
+                <RunLogRequestsLine key={row.key} at={row.at} message={row.message} origin={origin} />
+              ),
+            )}
           </ol>
         )}
       </div>
@@ -76,15 +82,34 @@ function RunLogLine({ event, origin }: { event: KnowledgeImporterRunEvent; origi
         {describeElapsed(origin, event.at)}
       </Txt>
       <span className="flex min-w-0 items-baseline gap-2">
-        {event.level === 'info' ? null : (
+        {event.level === 'warn' || event.level === 'error' ? (
           <Badge variant={LEVEL_BADGE[event.level].variant} emphasis="subtle" size="sm">
             {LEVEL_BADGE[event.level].label}
           </Badge>
-        )}
-        <Txt as="span" variant="body-sm" font="mono" className="min-w-0 break-words">
+        ) : null}
+        <Txt
+          as="span"
+          variant="body-sm"
+          font="mono"
+          tone={event.level === 'debug' ? 'muted' : undefined}
+          className="min-w-0 break-words"
+        >
           {event.message}
         </Txt>
       </span>
+    </li>
+  );
+}
+
+function RunLogRequestsLine({ at, message, origin }: { at: string; message: string; origin: string | undefined }) {
+  return (
+    <li className="grid grid-cols-[4.5rem_1fr] items-baseline gap-3" data-level="debug" data-testid="run-log-requests">
+      <Txt as="span" variant="caption" font="mono" tone="muted" className="tabular-nums" title={at}>
+        {describeElapsed(origin, at)}
+      </Txt>
+      <Txt as="span" variant="body-sm" font="mono" tone="muted" className="min-w-0 break-words">
+        {message}
+      </Txt>
     </li>
   );
 }

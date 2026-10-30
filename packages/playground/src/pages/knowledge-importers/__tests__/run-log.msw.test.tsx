@@ -23,19 +23,30 @@ const API = `${TEST_BASE_URL}/knowledge-importers`;
 const POLL_TIMEOUT = { timeout: 5000 };
 
 const STARTED = buildRunEvent(1, 'Started an import from Notion.', { type: 'started' });
-const FETCHED = buildRunEvent(2, 'Fetched 3 items from Notion (request 1).', { type: 'fetch', afterMs: 1200 });
-const CREATED = buildRunEvent(3, 'Created "Release checklist" in Engineering.', { afterMs: 2400 });
-const RATE_LIMITED = buildRunEvent(4, 'Notion asked us to slow down (request 2).', {
+const FETCHED = buildRunEvent(2, 'Fetched 3 items from Notion (request 1).', {
+  level: 'debug',
+  type: 'fetch',
+  afterMs: 1200,
+  data: { provider: 'Notion', request: 1, count: 3 },
+});
+const FETCHED_AGAIN = buildRunEvent(3, 'Fetched 2 items from Notion (request 2).', {
+  level: 'debug',
+  type: 'fetch',
+  afterMs: 1800,
+  data: { provider: 'Notion', request: 2, count: 2 },
+});
+const CREATED = buildRunEvent(4, 'Created "Release checklist" in Engineering.', { afterMs: 2400 });
+const RATE_LIMITED = buildRunEvent(5, 'Notion asked us to slow down (request 3).', {
   level: 'warn',
   type: 'rate_limited',
   afterMs: 3000,
 });
-const FAILED_REQUEST = buildRunEvent(5, 'Request 3 to Notion failed (HTTP 500).', {
+const FAILED_REQUEST = buildRunEvent(6, 'Request 4 to Notion failed (HTTP 500).', {
   level: 'error',
   type: 'error',
   afterMs: 3600,
 });
-const FINISHED = buildRunEvent(6, 'Finished: 1 created, 0 updated, 2 records written, 0 skipped, 0 removed.', {
+const FINISHED = buildRunEvent(7, 'Finished: 1 created, 0 updated, 2 records written, 0 skipped, 0 removed.', {
   type: 'finished',
   afterMs: 65_000,
 });
@@ -94,30 +105,60 @@ describe('Importer run log', () => {
       showRuns([buildRun({ id: 'run_live', kind: 'run' })]);
       const cursors = serveLog([
         { events: [STARTED, FETCHED], done: false },
-        { events: [CREATED], done: false },
+        { events: [FETCHED_AGAIN, CREATED], done: false },
         { events: [FINISHED], done: true },
       ]);
       renderPage();
 
       const drawer = await openLog('run_live');
-      expect(await within(drawer).findByText('Fetched 3 items from Notion (request 1).')).toBeTruthy();
+      expect(await within(drawer).findByText('Fetching from Notion: 1 request')).toBeTruthy();
       expect(within(drawer).getByText('+1.2s')).toBeTruthy();
       expect(within(drawer).getByTestId('run-log-live')).toBeTruthy();
 
       expect(
         await within(drawer).findByText('Created "Release checklist" in Engineering.', {}, POLL_TIMEOUT),
       ).toBeTruthy();
+      expect(within(drawer).getByText('Fetching from Notion: 2 requests')).toBeTruthy();
       const outcome = await within(drawer).findByTestId('run-log-outcome', {}, POLL_TIMEOUT);
       expect(outcome.textContent).toContain('1 created, 0 updated, 2 records written');
       expect(within(drawer).queryByTestId('run-log-live')).toBeNull();
       expect(within(drawer).getByText('+1m 05s')).toBeTruthy();
+      expect(within(drawer).getByText('Fetched from Notion: 2 requests')).toBeTruthy();
 
       expect(cursors.mock.calls).toEqual([
         [null, 'run_live'],
         ['2', 'run_live'],
-        ['3', 'run_live'],
+        ['4', 'run_live'],
       ]);
       expect(lines(within(drawer).getByRole('list', { name: 'Run log' }))).toHaveLength(4);
+    });
+  });
+
+  describe('when opened from a preview that is still running', () => {
+    it('stays open with the final counts after the preview settles', async () => {
+      showRuns([]);
+      let polls = 0;
+      server.use(
+        http.post(`${API}/:key/dry-run`, () => HttpResponse.json({ runId: 'run_dry' }, { status: 202 })),
+        http.get(`${API}/runs/run_dry`, () => {
+          polls += 1;
+          return HttpResponse.json(polls < 3 ? buildRun() : buildNotionPreview());
+        }),
+      );
+      serveLog([
+        { events: [STARTED, FETCHED], done: false },
+        { events: [CREATED, FINISHED], done: true },
+      ]);
+      renderPage();
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Preview import' }));
+      const progress = await screen.findByTestId('run-in-progress');
+      fireEvent.click(await within(progress).findByRole('button', { name: 'View log' }));
+      const drawer = await screen.findByRole('dialog');
+
+      await waitFor(() => expect(screen.queryByTestId('run-in-progress')).toBeNull(), POLL_TIMEOUT);
+      expect(await within(drawer).findByTestId('run-log-outcome', {}, POLL_TIMEOUT)).toBeTruthy();
+      expect(screen.getByRole('dialog')).toBe(drawer);
     });
   });
 
@@ -145,6 +186,34 @@ describe('Importer run log', () => {
 
       fireEvent.click(within(drawer).getByRole('radio', { name: 'All' }));
       expect(lines(within(drawer).getByRole('list', { name: 'Run log' }))).toHaveLength(5);
+    });
+
+    it('folds provider requests into one line until asked to show them', async () => {
+      showRuns([buildNotionPreview({ id: 'run_done', kind: 'run' })]);
+      serveLog([{ events: [STARTED, FETCHED, FETCHED_AGAIN, CREATED, FINISHED], done: true }]);
+      renderPage();
+
+      const drawer = await openLog('run_done');
+      const log = await within(drawer).findByRole('list', { name: 'Run log' });
+      expect(lines(log)).toEqual([
+        expect.stringContaining(STARTED.message),
+        expect.stringContaining('Fetched from Notion: 2 requests'),
+        expect.stringContaining(CREATED.message),
+        expect.stringContaining(FINISHED.message),
+      ]);
+
+      fireEvent.click(within(drawer).getByRole('switch', { name: 'Show requests' }));
+      expect(lines(within(drawer).getByRole('list', { name: 'Run log' }))).toEqual([
+        expect.stringContaining(STARTED.message),
+        expect.stringContaining(FETCHED.message),
+        expect.stringContaining(FETCHED_AGAIN.message),
+        expect.stringContaining(CREATED.message),
+        expect.stringContaining(FINISHED.message),
+      ]);
+
+      fireEvent.click(within(drawer).getByRole('radio', { name: 'Warnings' }));
+      expect(within(drawer).queryByRole('switch', { name: 'Show requests' })).toBeNull();
+      expect(within(drawer).getByText('Nothing logged at this level.')).toBeTruthy();
     });
 
     // The drawer's swipe-to-dismiss captures any mouse press outside its interactive region, which

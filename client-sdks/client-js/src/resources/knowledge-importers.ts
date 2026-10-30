@@ -128,7 +128,8 @@ export interface ListKnowledgeImporterRunsResponse {
   runs: KnowledgeImporterRunSummary[];
 }
 
-export type KnowledgeImporterRunEventLevel = 'info' | 'warn' | 'error';
+/** `debug` lines are plumbing (one per provider request); UIs hide them by default. */
+export type KnowledgeImporterRunEventLevel = 'debug' | 'info' | 'warn' | 'error';
 
 /** One plain-English line of a run's log. Messages never carry tokens, emails or private names. */
 export interface KnowledgeImporterRunEvent {

@@ -12,9 +12,10 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
-import { EMPTY_FILTER_COPY, filterRunEvents } from '../run-log';
+import { buildRunLogRows, EMPTY_FILTER_COPY, hasRequestLines } from '../run-log';
 import type { RunLogFilter } from '../run-log';
 import { RUN_KIND_LABEL } from '../runs';
 import { readApiError } from '../settings';
@@ -62,6 +63,7 @@ function RunLog({
 }) {
   const log = useImporterRunEvents(importerKey, runId);
   const [filter, setFilter] = useState<RunLogFilter>('all');
+  const [showRequests, setShowRequests] = useState(false);
 
   if (log.isPending) {
     return (
@@ -82,15 +84,25 @@ function RunLog({
   const { events, done } = log.data;
   return (
     <>
-      <SegmentedControl<RunLogFilter> value={filter} onValueChange={setFilter} aria-label="Show levels" size="sm">
-        {FILTERS.map(option => (
-          <SegmentedControlItem key={option.value} value={option.value}>
-            {option.label}
-          </SegmentedControlItem>
-        ))}
-      </SegmentedControl>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SegmentedControl<RunLogFilter> value={filter} onValueChange={setFilter} aria-label="Show levels" size="sm">
+          {FILTERS.map(option => (
+            <SegmentedControlItem key={option.value} value={option.value}>
+              {option.label}
+            </SegmentedControlItem>
+          ))}
+        </SegmentedControl>
+        {filter === 'all' && hasRequestLines(events) ? (
+          <label className="flex items-center gap-2">
+            <Switch checked={showRequests} onCheckedChange={setShowRequests} aria-label="Show requests" />
+            <Txt as="span" variant="caption" tone="muted">
+              Show requests
+            </Txt>
+          </label>
+        ) : null}
+      </div>
       <RunLogLines
-        events={filterRunEvents(events, filter)}
+        rows={buildRunLogRows(events, filter, { showRequests, done })}
         origin={events[0]?.at ?? startedAt}
         emptyCopy={done ? 'Nothing logged at this level.' : EMPTY_FILTER_COPY[filter]}
       />
