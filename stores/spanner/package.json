@@ -32,7 +32,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@google-cloud/spanner": "^8.13.0"
+    "@google-cloud/spanner": "^9.1.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
