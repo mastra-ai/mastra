@@ -591,10 +591,11 @@ describe('intake configuration', () => {
       ).toBeNull();
     });
 
-    it('rejects an empty label list, and unbinding a Jira project through PUT', async () => {
+    it('rejects an empty label list, a label with a space, and unbinding a Jira project through PUT', async () => {
       const { payments } = await factories();
       expect((await put({ ...ops, factoryProjectId: payments.id, labels: [] })).status).toBe(400);
       expect((await put({ ...ops, factoryProjectId: payments.id, labels: ['  '] })).status).toBe(400);
+      expect((await put({ ...ops, factoryProjectId: payments.id, labels: ['needs triage'] })).status).toBe(400);
       const unbind = await put({ ...ops, factoryProjectId: null });
       expect(unbind.status).toBe(400);
       expect(await unbind.json()).toMatchObject({ error: 'use_delete' });
@@ -615,6 +616,21 @@ describe('intake configuration', () => {
         metadata: { factoryProjectId: null, board: null, labels: null },
       });
       expect((await remove({ ...ops, factoryProjectId: payments.id })).status).toBe(404);
+    });
+
+    it('unroutes a binding whose factory was deleted, so another factory can take all issues', async () => {
+      const { platform, payments } = await factories();
+      await put({ ...ops, factoryProjectId: platform.id, board: 'release' });
+      await seed.projects.delete({ orgId: 'org1', id: platform.id });
+      expect((await put({ ...ops, factoryProjectId: payments.id, board: 'release' })).status).toBe(409);
+
+      const unrouted = await remove({ ...ops, factoryProjectId: platform.id });
+
+      expect(unrouted.status).toBe(200);
+      expect((await put({ ...ops, factoryProjectId: payments.id, board: 'release' })).status).toBe(200);
+      expect(summary(await seed.intake.listBindings({ orgId: 'org1' }))).toEqual([
+        { factoryProjectId: payments.id, labels: null },
+      ]);
     });
 
     it('rejects DELETE without every identifier, or for another org', async () => {

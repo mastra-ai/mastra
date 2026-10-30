@@ -9,7 +9,10 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../../boards/index.js';
+import { ProjectRoutes } from '../../routes/projects.js';
 import { fakeRouteAuth, mountApiRoutes } from '../../routes/test-utils.js';
+import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
+import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../../storage/test-utils.js';
 import { encodeIssueReference, encodeSourceId, PlatformJiraIntegration } from '../platform/jira/integration.js';
@@ -49,7 +52,7 @@ function fakeJira(target: string, init?: RequestInit): Response | null {
   if ((init?.method ?? 'GET') === 'POST' && target.includes('/rest/api/3/search/jql')) {
     const { jql } = JSON.parse(String(init?.body)) as { jql: string };
     const page = issues.filter(issue => matchesJql(jql, issue));
-    return json({ issues: page.map((issue, index) => jiraIssuePayload(issue, String(20_000 + index))) });
+    return json({ issues: page.map(issue => jiraIssuePayload(issue, String(20_000 + issues.indexOf(issue)))) });
   }
   const comments = target.match(/\/rest\/api\/3\/issue\/([^/?]+)\/comment/);
   if (comments) return json({ comments: [], total: 0, startAt: 0, maxResults: 50 });
@@ -88,7 +91,13 @@ const paths: JiraPath[] = [
         email: 'ops@acme.test',
         apiToken: 't',
       });
-      return buildJiraRoutes({ jira, auth: fakeRouteAuth(), intake: seed.intake, ingestFactoryIssues: ingest });
+      return buildJiraRoutes({
+        jira,
+        auth: fakeRouteAuth(),
+        intake: seed.intake,
+        workItems: seed.workItems,
+        ingestFactoryIssues: ingest,
+      });
     },
   },
   {
@@ -125,6 +134,7 @@ const paths: JiraPath[] = [
         jira,
         auth: fakeRouteAuth(),
         intake: seed.intake,
+        workItems: seed.workItems,
         appDbConfigured: true,
         ingestFactoryIssues: ingest,
       });
@@ -160,10 +170,16 @@ describe.each(paths)('Jira project shared by label — $name', path => {
       c.set('factoryAuthUser' as never, { workosId: 'u1', organizationId: 'org1' } as never);
       await next();
     });
-    mountApiRoutes(
-      app,
-      path.routes(seed, input => rules.ingest(input)),
-    );
+    mountApiRoutes(app, [
+      ...path.routes(seed, input => rules.ingest(input)),
+      ...new ProjectRoutes({
+        auth: fakeRouteAuth(),
+        projects: seed.projects,
+        sourceControl: seed.sourceControl,
+        intake: seed.intake,
+        workItems: seed.workItems,
+      }).routes(),
+    ]);
 
     const create = async (name: string) =>
       (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name } })).id;
@@ -199,6 +215,21 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     (await seed.workItems.listDeferredDecisions('org1', factoryProjectId))
       .map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier)
       .sort();
+  const fileProposedCards = async () => {
+    const boards = createBoardRegistry();
+    await new FactoryDecisionDispatcher({
+      controller: {} as never,
+      storage: seed.workItems,
+      boards,
+      transitionService: new FactoryTransitionService({
+        storage: seed.workItems,
+        boards,
+        configVersion: 'factory-config-v1',
+      }),
+      isAutoRunEnabled: async () => false,
+      ownerId: 'label-routing-test',
+    }).runOnce(new Date(Date.now() + 1_000));
+  };
 
   it.each([
     { order: ['platform', 'payments', 'mobile'] as const },
@@ -216,7 +247,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     }
   });
 
-  it('leaves labels with the all-issues factory until the label factory has a board', async () => {
+  it('leaves labels with the all-issues factory until the label factory has a board, and keeps its cards there', async () => {
     const triage = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'triage' } })).id;
     const bindTriage = (board: string | null) =>
       seed.intake.setSharedBinding({
@@ -235,12 +266,39 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     nextMinute();
     await bindTriage(null);
     expect(await poll(factories.platform)).toContain('OPS-2');
+    await fileProposedCards();
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
 
     await bindTriage('work');
     expect(await poll(factories.platform)).not.toContain('OPS-2');
-    expect((await open(factories.platform, 'OPS-2')).status).toBe(404);
+    expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
     expect(await poll(triage)).toEqual(['OPS-2']);
+    expect(await filed(triage)).toEqual([]);
+  });
+
+  it("hands a deleted factory's filed issues to the factory that takes over its Jira project", async () => {
+    expect(await poll(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
+    await fileProposedCards();
+    expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(204);
+    const growth = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'growth' } })).id;
+    await seed.intake.setSharedBinding({
+      orgId: 'org1',
+      integrationId: 'jira',
+      sourceId: path.sourceId,
+      factoryProjectId: growth,
+      board: 'work',
+      labels: null,
+    });
+
+    expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
+    expect(await filed(growth)).toEqual(['OPS-1', 'OPS-2']);
+    await fileProposedCards();
+
+    const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId: growth });
+    expect(cards.map(card => card.title).sort()).toEqual([
+      expect.stringMatching(/^OPS-1\b/),
+      expect.stringMatching(/^OPS-2\b/),
+    ]);
   });
 
   it("does not open an issue from another factory's slice by its identifier", async () => {

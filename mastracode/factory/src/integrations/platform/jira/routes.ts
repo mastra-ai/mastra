@@ -18,8 +18,10 @@ import type { Context } from 'hono';
 
 import type { RouteAuth } from '../../../routes/route.js';
 import type { IntakeStorage } from '../../../storage/domains/intake/base.js';
+import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import { JiraApiError } from '../../jira/api.js';
 import { scopeJiraSourcesToProject } from '../../jira/binding-scope.js';
+import { jiraIssueFiledIn } from '../../jira/claim.js';
 import { unfilteredJiraScopes } from '../../jira/intake-jql.js';
 import type { JiraRulesIngress } from '../../jira/rules.js';
 import type { PlatformJiraIntegration } from './integration.js';
@@ -65,6 +67,8 @@ export interface MountJiraRoutesOptions {
    * the same automatic intake Linear has.
    */
   ingestFactoryIssues?: (input: JiraRulesIngress) => Promise<unknown>;
+  /** Filed cards, so a Factory keeps reading issues it filed after a label filter moves them to another slice. */
+  workItems?: Pick<WorkItemsStorage, 'getByClaimKey' | 'listBySource'>;
 }
 
 /**
@@ -124,7 +128,7 @@ function jiraFetchError(c: RouteContext, err: unknown) {
  */
 export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRoute[] {
   const routes: ApiRoute[] = [];
-  const { jira, auth, intake } = options;
+  const { jira, auth, intake, workItems } = options;
   const enabled = Boolean(jira) && auth.enabled();
   const diagnostics = (): JiraFeatureDiagnostics => ({
     jiraConfigured: Boolean(jira),
@@ -341,11 +345,14 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
 
         try {
           const issue = await jira.intake.getIssue(dispatch);
-          // An issue another Factory's label filter takes reads like one that doesn't exist.
+          // An issue in another Factory's slice that this Factory never filed reads like one that doesn't exist.
           if (
             !issue ||
             issue.identifier.toUpperCase() !== identifier.toUpperCase() ||
-            !projectScope.takes(sourceId, issue.labels)
+            !(
+              projectScope.takes(sourceId, issue.labels) ||
+              (await jiraIssueFiledIn(workItems, { orgId: resolved.tenant.orgId, factoryProjectId, issueRef }))
+            )
           ) {
             return c.json({ error: 'issue_not_found' }, 404);
           }

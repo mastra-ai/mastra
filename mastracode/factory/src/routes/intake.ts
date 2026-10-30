@@ -302,9 +302,14 @@ const MAX_INTAKE_SOURCE_ID_LENGTH = 1024;
 const identifier = z.string().min(1).max(256);
 const sourceIdentifier = z.string().min(1).max(MAX_INTAKE_SOURCE_ID_LENGTH);
 
-/** Labels a shared binding takes; `[]` is rejected because "all issues" is spelled `null`. */
+/** Labels a shared binding takes; `[]` is rejected because "all issues" is spelled `null`. Jira labels never hold spaces. */
 const bindingLabelsSchema = z
-  .array(z.string().max(255))
+  .array(
+    z
+      .string()
+      .max(255)
+      .refine(label => !/\s/.test(label.trim()), 'labels cannot contain spaces'),
+  )
   .max(50)
   .transform(normalizeBindingLabels)
   .refine(labels => labels.length > 0, 'labels must name at least one label; use null for all issues');
@@ -697,10 +702,6 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
             return c.json({ error: 'invalid_binding' }, 400);
           }
           const binding = parsed.data;
-          if (projects) {
-            const project = await projects.get({ orgId: tenant.orgId, id: binding.factoryProjectId });
-            if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
-          }
 
           await intake.ensureReady();
           const removed = await intake.clearBinding({ orgId: tenant.orgId, ...binding });

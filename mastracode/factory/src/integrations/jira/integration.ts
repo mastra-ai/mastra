@@ -447,6 +447,7 @@ export class JiraIntegration implements FactoryIntegration {
       jira: this,
       auth: ctx.auth,
       intake: ctx.storage.intake,
+      workItems: ctx.runtime?.workItems,
       ingestFactoryIssues: attachJiraRules(this, ctx),
     });
   }

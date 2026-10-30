@@ -193,6 +193,9 @@ export function useJiraHandlers({
       );
       return HttpResponse.json({ bindings });
     }),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
+      HttpResponse.json({ boards: [{ id: 'work', title: 'Work', initialPhase: 'intake', phases: [] }] }),
+    ),
   );
   return { saved, savedBindings, deletedBindings };
 }
