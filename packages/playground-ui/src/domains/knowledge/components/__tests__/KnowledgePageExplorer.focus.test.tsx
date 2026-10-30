@@ -115,7 +115,8 @@ describe('KnowledgePageExplorer scope focus', () => {
 
     const focus = screen.getByTestId('knowledge-scope-focus');
     expect(focus.textContent).toContain('Team');
-    expect(focus.textContent).toContain('team:support');
+    expect(focus.textContent).toContain('Support team');
+    expect(focus.textContent).not.toContain('team:support');
     await waitFor(() => expect(within(tree()).queryByText('Refunds')).toBeNull());
     expect(within(tree()).getByText('Macros')).toBeTruthy();
     const graphIds = () => screen.getAllByTestId('knowledge-page-node').map(node => node.getAttribute('data-page-id'));

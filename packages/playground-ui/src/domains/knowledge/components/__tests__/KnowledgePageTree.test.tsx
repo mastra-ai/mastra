@@ -55,7 +55,7 @@ const names = () => screen.getAllByRole('treeitem').map(item => item.textContent
 describe('KnowledgePageTree', () => {
   it('opens roots by default and shows siblings in stored order', () => {
     renderWithProviders(<ControlledTree />);
-    expect(names()).toEqual(['Acmeorg:acme', 'Refunds', 'Billing']);
+    expect(names()).toEqual(['Acme', 'Refunds', 'Billing']);
     expect(screen.getByRole('treeitem', { name: /Acme/ }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByRole('treeitem', { name: /Refunds/ }).getAttribute('aria-expanded')).toBe('false');
   });
@@ -107,22 +107,11 @@ describe('KnowledgePageTree scope rows and pins', () => {
     expect(screen.getAllByText('org:acme')).toHaveLength(1);
   });
 
-  it('shows the address beside a scope with its own name', () => {
+  it('names a scope and keeps its address in the tooltip', () => {
     renderWithProviders(<KnowledgePageTree pages={pages} onSelect={() => {}} />);
-    const row = screen.getByRole('treeitem', { name: /Acme/ });
-    expect(within(row).getByText('org:acme')).toBeTruthy();
-  });
-
-  it('lets a long address shrink so the scope name keeps its room', () => {
-    const project = page('project', null, 'a0', {
-      name: 'Support desk',
-      address: 'project:9efdb859-2ce6-4e4b-83ce-971a7e41bec5',
-    });
-    renderWithProviders(<KnowledgePageTree pages={[project]} onSelect={() => {}} />);
-    const address = screen.getByTestId('knowledge-tree-address');
-    expect(address.className).not.toMatch(/\bshrink-0\b/);
-    expect(address.className).toMatch(/\bmin-w-0\b/);
-    expect(address.className).toMatch(/\bmax-w-1\/2\b/);
+    const row = screen.getByRole('treeitem', { name: 'Acme' });
+    expect(within(row).queryByText('org:acme')).toBeNull();
+    expect(within(row).getByText('Acme').getAttribute('title')).toBe('org:acme');
   });
 
   it('marks pinned pages', () => {
@@ -157,12 +146,14 @@ describe('KnowledgePageDetail', () => {
       />,
     );
     const detail = screen.getByRole('article', { name: 'Refunds' });
-    expect(within(detail).getByText('in org:acme')).toBeTruthy();
+    expect(detail.textContent).toContain('in Acme');
+    expect(detail.querySelectorAll('[title="org:acme"]').length).toBeGreaterThan(0);
     expect(within(detail).getByText('How refunds work')).toBeTruthy();
-    expect(within(detail).getByText('Pinned for org:acme')).toBeTruthy();
+    expect(within(detail).getByText('Pinned for Acme')).toBeTruthy();
     expect(within(detail).getByText('Refunds take 5 days')).toBeTruthy();
     expect(within(detail).getByText('agent:alex')).toBeTruthy();
-    expect(within(within(detail).getByLabelText('Stamped to')).getByText('org:acme')).toBeTruthy();
+    expect(within(within(detail).getByLabelText('Stamped to')).getByText('Acme')).toBeTruthy();
+    expect(detail.textContent).not.toContain('org:acme');
   });
 
   it('links resolved mentions and leaves unresolved ones as text', async () => {
@@ -201,7 +192,8 @@ describe('KnowledgePageDetail', () => {
   it('says so when a page has no notes', () => {
     renderWithProviders(<KnowledgePageDetail page={orgPage} notes={[]} pagesById={pagesById} onPageClick={() => {}} />);
     expect(screen.getByText('Scope')).toBeTruthy();
-    expect(screen.getByText('org:acme')).toBeTruthy();
+    expect(screen.queryByText('org:acme')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'Acme' }).querySelector('[title="org:acme"]')).toBeTruthy();
     expect(screen.getByText('No notes on this page.')).toBeTruthy();
   });
 });

@@ -173,19 +173,14 @@ export function KnowledgePageTree({
               ) : (
                 <span className="size-5 shrink-0" aria-hidden />
               )}
-              <span className={cn('min-w-0 flex-1 truncate text-body', row.page.isScope && 'font-medium')}>
+              <span
+                className={cn('min-w-0 flex-1 truncate text-body', row.page.isScope && 'font-medium')}
+                title={row.page.isScope && row.page.address ? row.page.address : undefined}
+              >
                 {row.page.name}
               </span>
               {pinned.has(row.page.id) ? (
                 <Pin size={12} className="shrink-0 text-badge-amber-indicator" aria-label="Pinned" />
-              ) : null}
-              {row.page.isScope && row.page.address && row.page.address !== row.page.name ? (
-                <span
-                  data-testid="knowledge-tree-address"
-                  className="max-w-1/2 min-w-0 truncate text-caption text-muted-foreground"
-                >
-                  {row.page.address}
-                </span>
               ) : null}
             </div>
             {closing.map(({ parentId, depth }) => {

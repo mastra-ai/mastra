@@ -97,17 +97,26 @@ function AuthorMark({ author }: { author: string }) {
 }
 
 /**
- * The page's address: its home scope, then the keys from that scope down to it
- * (`org:acme#policies/refund`). Null when a page on the way has no key.
+ * The page's path: its home scope by name, then the keys from that scope down
+ * to it (`Acme / policies / refund`), with the full address
+ * (`org:acme#policies/refund`) kept for the tooltip. Null when a page on the
+ * way has no key.
  */
-function knowledgePagePath(page: KnowledgePagePayload, ancestors: KnowledgePagePayload[]): string | null {
-  if (page.isScope) return page.address ?? null;
+function knowledgePagePath(
+  page: KnowledgePagePayload,
+  ancestors: KnowledgePagePayload[],
+): { label: string; address: string } | null {
   const scope = ancestors.find(candidate => candidate.id === page.scopeId);
   if (!scope?.address) return null;
   const below = ancestors.slice(ancestors.indexOf(scope) + 1).filter(candidate => !candidate.isScope);
   const keys = [...below, page].map(candidate => candidate.key);
   if (keys.some(key => !key)) return null;
-  return `${scope.address}#${keys.join('/')}`;
+  return { label: [scope.name, ...keys].join(' / '), address: `${scope.address}#${keys.join('/')}` };
+}
+
+/** A scope by name, with its raw address only in the tooltip. */
+function ScopeName({ scope, fallback }: { scope: KnowledgePagePayload | undefined; fallback: string }) {
+  return <span title={scope?.address ?? undefined}>{scope?.name ?? scope?.address ?? fallback}</span>;
 }
 
 function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
@@ -167,10 +176,6 @@ export function KnowledgeNoteItem({
   compact?: boolean;
 }) {
   const mentioned = note.mentions.map(id => pagesById.get(id)).filter(candidate => candidate !== undefined);
-  const scopeLabel = (id: string) => {
-    const scopePage = pagesById.get(id);
-    return scopePage?.address ?? scopePage?.name ?? id;
-  };
   const onPage = showPage ? pagesById.get(note.pageId) : undefined;
   return (
     <li
@@ -219,7 +224,7 @@ export function KnowledgeNoteItem({
           <div className="flex flex-wrap gap-1" aria-label="Stamped to">
             {note.stampScopeIds.map(id => (
               <Badge key={id} variant="neutral" size="xs">
-                {scopeLabel(id)}
+                <ScopeName scope={pagesById.get(id)} fallback={id} />
               </Badge>
             ))}
           </div>
@@ -278,6 +283,8 @@ export function KnowledgePageDetail({
     ? page
     : (ancestors.find(candidate => candidate.id === page.scopeId) ?? pagesById.get(page.scopeId));
   const path = knowledgePagePath(page, ancestors);
+  const scopeNameAt = (address: string) =>
+    [...pagesById.values()].find(candidate => candidate.isScope && candidate.address === address)?.name ?? address;
 
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
 
@@ -309,17 +316,19 @@ export function KnowledgePageDetail({
             </Badge>
             {page.isScope ? null : (
               <Txt as="span" variant="caption" tone="muted">
-                in {scope?.address ?? scope?.name ?? page.scopeId}
+                in <ScopeName scope={scope} fallback={page.scopeId} />
               </Txt>
             )}
             {pin ? (
               <Badge variant="warning" size="sm" icon={<Pin size={10} aria-hidden />}>
-                {pin.audience.length > 0 ? `Pinned for ${pin.audience.join(', ')}` : 'Pinned'}
+                <span title={pin.audience.join(', ') || undefined}>
+                  {pin.audience.length > 0 ? `Pinned for ${pin.audience.map(scopeNameAt).join(', ')}` : 'Pinned'}
+                </span>
               </Badge>
             ) : null}
           </div>
           <Txt as="h2" variant="title" className="break-words">
-            {page.name}
+            <span title={page.isScope && page.address ? page.address : undefined}>{page.name}</span>
           </Txt>
           {page.description ? (
             <Txt variant="body" tone="muted">
@@ -328,22 +337,12 @@ export function KnowledgePageDetail({
           ) : null}
         </div>
         <dl className="flex flex-wrap items-center gap-x-4 gap-y-1">
-          {page.isScope && page.address ? (
-            <div className="flex items-center gap-1.5">
-              <dt className="sr-only">Address</dt>
-              <dd>
-                <Txt as="span" variant="caption" tone="muted" font="mono">
-                  {page.address}
-                </Txt>
-              </dd>
-            </div>
-          ) : null}
           {path && !page.isScope ? (
             <div className="flex items-center gap-1.5">
               <dt className="sr-only">Path</dt>
               <dd>
                 <Txt as="span" variant="caption" tone="muted" font="mono" data-testid="knowledge-page-path">
-                  {path}
+                  <span title={path.address}>{path.label}</span>
                 </Txt>
               </dd>
             </div>

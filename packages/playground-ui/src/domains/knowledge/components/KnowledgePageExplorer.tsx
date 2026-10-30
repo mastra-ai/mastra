@@ -598,7 +598,7 @@ export function KnowledgePageExplorer({
                   {focusScope.displayLabel ?? 'Scope'}
                 </Txt>
                 <Txt as="span" variant="label" tone="ink" className="truncate">
-                  {focusScope.address ?? focusScope.name}
+                  <span title={focusScope.address ?? undefined}>{focusScope.name}</span>
                 </Txt>
               </div>
               <button

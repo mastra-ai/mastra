@@ -188,10 +188,18 @@ describe('KnowledgePageExplorer page view', () => {
       expect((window as { __pwned?: number }).__pwned).toBeUndefined();
     });
 
+    it('names scopes on screen and keeps their raw addresses in tooltips only', () => {
+      const { container } = renderWithProviders(<Host initial="refund" initialView="page" />);
+      expect(container.textContent).not.toMatch(/\borg:acme\b/);
+      expect(container.querySelector('[title^="org:acme"]')).toBeTruthy();
+    });
+
     it('shows where the page lives, its version and who last changed it', () => {
       renderWithProviders(<Host initial="refund" initialView="page" />);
       const view = within(pageView());
-      expect(view.getByTestId('knowledge-page-path').textContent).toBe('org:acme#policies/refund');
+      const path = view.getByTestId('knowledge-page-path');
+      expect(path.textContent).toBe('Acme / policies / refund');
+      expect(path.querySelector('[title]')?.getAttribute('title')).toBe('org:acme#policies/refund');
       expect(view.getByTestId('knowledge-page-version').textContent).toMatch(/^Version 3 · updated .* by admin$/);
       const crumbs = within(view.getByRole('navigation', { name: 'Breadcrumb' }));
       expect(crumbs.getAllByRole('button').map(button => button.textContent)).toEqual(['Acme', 'Policies']);
@@ -289,7 +297,7 @@ describe('KnowledgePageExplorer page view', () => {
     it('opens levels on demand and pages through long ones', () => {
       renderWithProviders(<Host />);
       const tree = within(screen.getByRole('tree'));
-      expect(tree.getAllByRole('treeitem').map(row => row.textContent)).toEqual(['Acmeorg:acme', 'Policies']);
+      expect(tree.getAllByRole('treeitem').map(row => row.textContent)).toEqual(['Acme', 'Policies']);
       fireEvent.click(tree.getByRole('button', { name: 'Expand Policies' }));
       expect(tree.getByRole('treeitem', { name: /Refund Policy/ })).toBeTruthy();
       expect(tree.queryByText('Escalation Process')).toBeNull();
