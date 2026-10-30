@@ -101,10 +101,11 @@ export function BreakdownTable({
 
   const current = [aggregate, totals, spans].filter(q => q !== undefined);
   const isLoading = current.some(q => q.isLoading);
-  // One request failing says nothing about the others, which may still be loading: report the
+  // One request failing says nothing about the others, which may still be running: report the
   // failure only once they have all settled, or Retry — which re-sends only the failed ones —
-  // cannot recover a card whose remaining request is still in flight.
-  if (!isLoading && current.some(q => q.isError)) {
+  // cannot recover a card whose remaining request is still in flight. A new scope keeps the
+  // previous answer on screen, so `isLoading` is false there while `isFetching` is not.
+  if (!current.some(q => q.isFetching) && current.some(q => q.isError)) {
     return (
       <BreakdownFrame {...frame} tab={tab}>
         <ChartCardError onRetry={() => current.forEach(q => q.isError && void q.refetch())} />

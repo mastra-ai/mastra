@@ -95,6 +95,38 @@ function render(ui: ReactElement, filterTokens: PropertyFilterToken[] = []) {
   );
 }
 
+/** The card inside a dashboard pinned to `preset`, for re-rendering it onto another scope. */
+function atPreset(preset: '24h' | '7d') {
+  return (
+    <MetricsProvider preset={preset} filterTokens={[]} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
+      <DistinctIdsCard />
+    </MetricsProvider>
+  );
+}
+
+/**
+ * Serves the first scope, then — once `nextScope()` is called — fails that scope's range totals
+ * while holding its bucket request open. A new scope keeps the previous answer on screen, so the
+ * totals failure lands with the buckets still fetching rather than still loading.
+ */
+function failTotalsOfNextScope() {
+  let next = false;
+  let release = () => {};
+  const held = new Promise<void>(resolve => {
+    release = resolve;
+  });
+  serveTraceAggregate(async request => {
+    requests.push(request);
+    if (!next) return HttpResponse.json(respond(request));
+    if (request.interval) {
+      await held;
+      return HttpResponse.json(respond(request));
+    }
+    return HttpResponse.json(traceAggregateErrorFixture, { status: 400 });
+  });
+  return { nextScope: () => (next = true), release: () => release() };
+}
+
 beforeEach(() => {
   requests = [];
   seedMetrics();
@@ -198,6 +230,31 @@ describe('when the server answers aggregateTraces()', () => {
     expect(await screen.findByText('Resources', undefined, { timeout: 5000 })).toBeDefined();
     expect(card.totalsCalls()).toBe(2);
     expect(legendEntry('Resources')).toBe('Resources5');
+  }, 15_000);
+
+  it('keeps the loaded card on a new scope until that scope’s requests settle', async () => {
+    // A new scope keeps the previous answer on screen while it fetches, so the card is not
+    // loading when the totals of the new scope fail: the buckets are still running, and reporting
+    // the failure now would leave Retry unable to recover the card.
+    const card = failTotalsOfNextScope();
+    const { rerender, queryClient } = renderWithProviders(atPreset('24h'));
+    await screen.findByText('Resources');
+
+    card.nextScope();
+    rerender(atPreset('7d'));
+
+    await waitFor(() => {
+      const totals = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['trace-aggregate'] })
+        .filter(query => !(query.queryKey[1] as { interval?: string }).interval);
+      expect(totals.some(query => query.state.status === 'error')).toBe(true);
+    });
+    expect(screen.queryByText(ERROR)).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull();
+
+    card.release();
+    expect(await screen.findByText(ERROR, undefined, { timeout: 5000 })).toBeDefined();
   }, 15_000);
 
   it('says a service filter has no trace equivalent, and sends nothing', async () => {

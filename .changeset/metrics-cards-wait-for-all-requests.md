@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Metrics cards no longer report a loading failure while another of their requests is still in flight. Previously the "Resources and threads" and breakdown cards could show "Couldn't load this data" as soon as one request failed, even though a second request was still running; Retry then re-sent only the failed request, so the card could not recover until that second request failed too. The cards now report the failure once all their requests have settled, and Retry recovers them on the first click.
+Metrics cards now wait for all their requests before reporting a failure. The "Resources and threads" and breakdown cards used to show "Couldn't load this data" as soon as one of their requests failed, even while another was still running. Retry re-sends only the requests that failed, so a request that failed later left the card stuck until a second click. Cards now report the failure once every request behind them has settled, and one Retry recovers them. A request that fails after that click is the next click's job.

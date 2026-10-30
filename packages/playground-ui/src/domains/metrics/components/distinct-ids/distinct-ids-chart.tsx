@@ -70,10 +70,13 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
   const step = intervalHours(scope.interval === '1d' ? '1d' : '1h');
   const error = series.error ?? totals.error;
   const isLoading = series.isLoading || totals.isLoading;
-  // One request failing says nothing about the other, which may still be loading: report the
+  // One request failing says nothing about the other, which may still be running: report the
   // failure only once both have settled. A card that failed while a request it waits on is still
-  // in flight cannot be recovered by Retry, which only re-sends the requests that failed.
-  const hasFailed = Boolean(error) && !isLoading;
+  // in flight cannot be recovered by Retry, which only re-sends the requests that failed. A new
+  // scope keeps the previous answer on screen, so `isLoading` is false there while `isFetching`
+  // is not.
+  const isFetching = series.isFetching || totals.isFetching;
+  const hasFailed = Boolean(error) && !isFetching;
 
   const layout = {
     title: DISTINCT_IDS_TITLE,
