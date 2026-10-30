@@ -101,7 +101,9 @@ describe('Knowledge read routes', () => {
       ['Acme', 'acme organization'],
       ['Support', undefined],
     ]);
-    expect((await call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: acme.id })).page.displayLabel).toBe('acme organization');
+    expect((await call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: acme.id })).page.displayLabel).toBe(
+      'acme organization',
+    );
     const graph = await call(GET_KNOWLEDGE_GRAPH_ROUTE, args);
     expect(graph.pages.find((p: { id: string }) => p.id === acme.id).displayLabel).toBe('acme organization');
   });
