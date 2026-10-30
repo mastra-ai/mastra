@@ -249,6 +249,8 @@ Attempts to delete an item by its ID from the specified index. Logs an error mes
 
 Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` must be provided, but not both, and neither can be empty.
 
+Filter deletion runs a single query capped at Upstash's maximum of 1,000 results, then deletes those IDs. If more than 1,000 vectors match, the call still succeeds but leaves the rest in place, so re-run it until a pass deletes nothing. Deleting by `ids` isn't subject to that cap.
+
 <PropertiesTable
   content={[
   {
@@ -266,7 +268,8 @@ Delete multiple vectors by IDs or by metadata filter. Either `ids` or `filter` m
     name: 'filter',
     type: 'Record<string, any>',
     isOptional: true,
-    description: 'Metadata filter to identify vectors to delete (mutually exclusive with ids)',
+    description:
+      'Metadata filter to identify vectors to delete (mutually exclusive with ids). Only the first 1,000 matches are deleted',
   },
 ]}
 />
