@@ -52,12 +52,11 @@ export { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 export type { FactoryProject } from './storage/domains/projects/base.js';
 export { WorkItemsStorage } from './storage/domains/work-items/base.js';
 export type { CreateWorkItemInput, Card, BoardItemRow } from './storage/domains/work-items/base.js';
-export { primarySource, WORK_ITEM_KINDS } from './storage/domains/work-items/work-item-schema.js';
+export { primarySource } from './storage/domains/work-items/work-item-schema.js';
 export type {
   WorkItemRow,
   WorkItemSourceRow,
   WorkItemProvider,
-  WorkItemKind,
 } from './storage/domains/work-items/work-item-schema.js';
 export { createStateSigner } from './state-signing.js';
 export type { StateSigner, StateTenant } from './state-signing.js';

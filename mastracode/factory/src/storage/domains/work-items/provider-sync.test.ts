@@ -270,9 +270,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     expect(second).toMatchObject({ created: true, item: { claimKey: null } });
     expect(second.item.id).not.toBe(item.id);
     expect(await workItems.getByClaimKey({ orgId: scope.orgId, claimKey: input.claimKey })).toBeNull();
+    for (const card of [item, reused.item, second.item]) {
+      expect(card.workItem).not.toHaveProperty('kind');
+      for (const source of card.workItem.sources) expect(source).not.toHaveProperty('kind');
+    }
     for (const table of ['factory_work_items', 'factory_work_item_sources', 'factory_board_items']) {
       for (const row of await storage.ops.findMany(table, { org_id: scope.orgId })) {
         for (const column of [
+          'kind',
           'claim_key',
           'triage_type',
           'accepted_at',
