@@ -49,6 +49,13 @@ export function SavedViewTabs<TSettings>({
   const { draft } = views;
   const creating = draft !== undefined && draft.viewId === undefined;
   const defaultSelected = views.activeView === undefined && !creating;
+  // A blank name cancels; a failed rename stays open with what was typed so it can be retried.
+  const commitRename = async (viewId: string, name: string) => {
+    if (!name.trim()) return setRenamingViewId(undefined);
+    const renamed = views.rename(viewId, name);
+    // A synchronous controller closes in the same render; only an async one waits.
+    if (typeof renamed === 'boolean' ? renamed : await renamed) setRenamingViewId(undefined);
+  };
 
   return (
     <div role="group" aria-label={ariaLabel} className={cn('flex flex-wrap items-center gap-1.5', className)}>
@@ -62,16 +69,7 @@ export function SavedViewTabs<TSettings>({
       </button>
       {views.views.map(view => {
         if (renamingViewId === view.id) {
-          return (
-            <RenamingViewTab
-              key={view.id}
-              name={view.name}
-              onCommit={name => {
-                setRenamingViewId(undefined);
-                void views.rename(view.id, name);
-              }}
-            />
-          );
+          return <RenamingViewTab key={view.id} name={view.name} onCommit={name => void commitRename(view.id, name)} />;
         }
         return (
           <SavedViewTab
