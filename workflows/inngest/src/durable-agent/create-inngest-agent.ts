@@ -59,6 +59,7 @@ import {
   requestAcknowledgedAbort,
   RUN_DEADLINE_KEY,
   saveDurableRunAtDeadline,
+  claimDurableDeadlineSave,
   normalizeResumeGenerateArgs,
   validateModelTimeoutSettings,
   DurableStepIds,
@@ -932,7 +933,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * stops too. The worker saves the turn and reports the error itself; this
    * process reports it only when the worker stays silent. Mirrors core
    * `DurableAgent.#installAbortWithTotalTimeout` + `settleExecution`.
-   * Returns the timer teardown; a no-op when no budget is configured.
+   * Returns the timer teardown (a no-op when no budget is configured) and the
+   * segment's absolute deadline, which the segment's event carries to workers.
    */
   function armTotalTimeout(
     entry: { abortSignal?: AbortSignal },
@@ -940,7 +942,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     runId: string,
     timeoutMs: number | undefined,
     runInput: () => Promise<any> | any,
-  ): () => void {
+  ): { clear: () => void; deadline: RunDeadline | undefined } {
     const totalTimeout = createTimeoutAbortSignal({
       parentSignal: abortController.signal,
       timeoutMs,
@@ -949,11 +951,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       detachParentOnCleanup: false,
     });
     entry.abortSignal = totalTimeout.signal;
-    if (timeoutMs !== undefined && timeoutMs > 0) {
-      runDeadlines.set(runId, { at: Date.now() + timeoutMs, timeoutMs });
-    } else {
-      runDeadlines.delete(runId);
-    }
+    const deadline = timeoutMs !== undefined && timeoutMs > 0 ? { at: Date.now() + timeoutMs, timeoutMs } : undefined;
     void totalTimeout.timeoutPromise?.catch(async error => {
       if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
       // The worker owns span finalization and accumulated usage/output (OBS-754).
@@ -965,7 +963,17 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         const input = await Promise.resolve()
           .then(runInput)
           .catch(() => undefined);
-        if (input) {
+        // A worker the run reaches later sees the expired deadline too; the claim keeps the save to one.
+        const ownsSave =
+          !!input &&
+          !!deadline &&
+          (await claimDurableDeadlineSave({
+            runId,
+            deadlineAt: deadline.at,
+            ownerId: `caller:${crypto.randomUUID()}`,
+            mastra,
+          }));
+        if (ownsSave) {
           await saveDurableRunAtDeadline({
             runId,
             runInput: input,
@@ -978,22 +986,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       }
       await deleteRunSnapshots(runId);
     });
-    return () => {
-      runDeadlines.delete(runId);
-      totalTimeout.cleanup();
-    };
+    return { clear: () => totalTimeout.cleanup(), deadline };
   }
 
   /**
-   * Absolute deadline of each run's current execution segment. Sent with the segment's event so
-   * a worker that subscribes after the deadline's abort request went out still stops at it.
+   * The request context a segment's event carries: the caller's, plus this segment's absolute
+   * deadline (or none), so a worker that subscribes after the deadline's abort request went out
+   * still stops at it.
    */
-  const runDeadlines = new Map<string, RunDeadline>();
-
-  /** The request context a segment's event carries: the caller's, plus this segment's deadline (or none). */
-  function withSegmentDeadline(runId: string, requestContext: Record<string, any>): Record<string, any> {
+  function withSegmentDeadline(
+    requestContext: Record<string, any>,
+    deadline: RunDeadline | undefined,
+  ): Record<string, any> {
     const { [RUN_DEADLINE_KEY]: _stale, ...rest } = requestContext;
-    const deadline = runDeadlines.get(runId);
     return deadline ? { ...rest, [RUN_DEADLINE_KEY]: deadline } : rest;
   }
 
@@ -1191,6 +1196,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     workflowInput: any,
     tracingOptions?: { traceId: string; parentSpanId: string },
     actor?: ActorSignal,
+    deadline?: RunDeadline,
   ): Promise<void> {
     const eventName = `workflow.${InngestDurableStepIds.AGENTIC_LOOP}`;
 
@@ -1200,7 +1206,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         inputData: workflowInput,
         runId,
         resourceId: workflowInput.state?.resourceId,
-        requestContext: withSegmentDeadline(runId, workflowInput.requestContextEntries ?? {}),
+        requestContext: withSegmentDeadline(workflowInput.requestContextEntries ?? {}, deadline),
         tracingOptions,
         actor,
       }),
@@ -1408,7 +1414,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ? forwardExternalAbort(streamOptions.abortSignal, abortController, runId)
         : undefined;
       registryEntry.abortController = abortController;
-      const clearTotalTimeout = armTotalTimeout(
+      const { clear: clearTotalTimeout, deadline: segmentDeadline } = armTotalTimeout(
         registryEntry,
         abortController,
         runId,
@@ -1546,7 +1552,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             return;
           }
           try {
-            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor, segmentDeadline);
           } catch (error) {
             if (persistedRunning) await deleteRunSnapshots(runId);
             throw error;
@@ -1789,7 +1795,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
       // its registry entry (warm) or persisted workflow input (cold).
-      const clearTotalTimeout = armTotalTimeout(
+      const { clear: clearTotalTimeout, deadline: segmentDeadline } = armTotalTimeout(
         existingEntry,
         abortController,
         runId,
@@ -1985,7 +1991,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             inputData: resumeData,
             runId,
             resourceId: resumeOptions?.resourceId,
-            requestContext: withSegmentDeadline(runId, requestContext),
+            requestContext: withSegmentDeadline(requestContext, segmentDeadline),
             tracingOptions,
             actor: resumeOptions?.actor,
             resume: {

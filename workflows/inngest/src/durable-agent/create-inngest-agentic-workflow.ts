@@ -24,6 +24,8 @@ import {
   loadRunStoredMessages,
   takeRunScorerInstances,
   pruneAgentLoopSnapshot,
+  readRunDeadline,
+  claimDurableDeadlineSave,
 } from '@mastra/core/agent/durable';
 import type {
   DurableAgenticExecutionOutput,
@@ -480,14 +482,18 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
           // A run its total deadline aborted ends as the deadline error, not an abort. The abort
           // reaches this worker either through the caller's composed signal (same process) or as a
-          // timeout abort request over pubsub (another worker).
+          // timeout abort request over pubsub (another worker). A worker that saw neither still has the
+          // deadline carried on request context: past it, the caller has already reported the timeout.
           const abortReason = tracingRegistry?.abortSignal?.aborted ? tracingRegistry.abortSignal.reason : undefined;
+          const carriedDeadline = readRunDeadline(requestContext);
           const deadlineError =
             isMastraTimeoutError(abortReason) && abortReason.timeoutType === 'total'
               ? abortReason
               : state.deadlineTimeout
                 ? new MastraTimeoutError(state.deadlineTimeout)
-                : undefined;
+                : carriedDeadline && Date.now() >= carriedDeadline.at
+                  ? new MastraTimeoutError({ timeoutType: 'total', timeoutMs: carriedDeadline.timeoutMs })
+                  : undefined;
 
           // Extract final text from last step
           const lastStep = state.accumulatedSteps[state.accumulatedSteps.length - 1];
@@ -499,26 +505,39 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // Inngest step, which the Inngest protocol does not support: the nested step's
           // callback never executes and its promise never settles, hanging the run and
           // silently skipping output processors, memory persistence, and title generation.
-          const finishResult = await runDurableFinishSideEffects({
-            runId: state.runId,
-            initData,
-            messageListState: state.messageListState,
-            mastra,
-            requestContext,
-            tracingContext,
-            logger: mastra?.getLogger?.(),
-            outputResult: {
-              text: finalText ?? '',
-              usage: state.accumulatedUsage,
-              finishReason: deadlineError
-                ? 'error'
-                : state.runAborted
-                  ? 'abort'
-                  : (state.lastStepResult?.reason ?? 'unknown'),
-              steps: state.accumulatedSteps,
-              ...(deadlineError ? { error: deadlineError } : {}),
-            },
-          });
+          // Past the deadline, the caller may already have saved the turn (no worker reported in its
+          // wait); only one of them runs the output pass.
+          const ownsSave =
+            !deadlineError ||
+            !carriedDeadline ||
+            (await claimDurableDeadlineSave({
+              runId: state.runId,
+              deadlineAt: carriedDeadline.at,
+              ownerId: `worker:${crypto.randomUUID()}`,
+              mastra,
+            }));
+          const finishResult: Awaited<ReturnType<typeof runDurableFinishSideEffects>> = ownsSave
+            ? await runDurableFinishSideEffects({
+                runId: state.runId,
+                initData,
+                messageListState: state.messageListState,
+                mastra,
+                requestContext,
+                tracingContext,
+                logger: mastra?.getLogger?.(),
+                outputResult: {
+                  text: finalText ?? '',
+                  usage: state.accumulatedUsage,
+                  finishReason: deadlineError
+                    ? 'error'
+                    : state.runAborted
+                      ? 'abort'
+                      : (state.lastStepResult?.reason ?? 'unknown'),
+                  steps: state.accumulatedSteps,
+                  ...(deadlineError ? { error: deadlineError } : {}),
+                },
+              })
+            : { messageListState: state.messageListState, outputText: finalText ?? '' };
           if (lastStep && finishResult.outputText && finishResult.outputText !== (finalText ?? '')) {
             lastStep.text = finishResult.outputText;
             finalText = finishResult.outputText;

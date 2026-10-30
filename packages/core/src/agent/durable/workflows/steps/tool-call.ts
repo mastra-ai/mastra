@@ -1421,9 +1421,16 @@ export function createDurableToolCallStep() {
 
       // A tool step can run on a worker whose LLM step ran elsewhere, so it subscribes to abort
       // requests too. Otherwise a deadline or abort() published while the tool runs never reaches it.
-      // Only a real entry that has no signal of its own: a cold worker without one keeps
-      // no registry state, and a signal already set on the entry stays the one tools see.
-      if (pubsub && registryEntry && !registryEntry.isPlaceholder && !registryEntry.abortSignal) {
+      // Only a real entry: a cold worker without one keeps no registry state. Keyed on the subscription,
+      // not the signal, so a step whose subscribe failed earlier retries it. The listener reuses the
+      // entry's controller; a signal with no controller behind it would be replaced, so leave it alone.
+      if (
+        pubsub &&
+        registryEntry &&
+        !registryEntry.isPlaceholder &&
+        !registryEntry.remoteAbortListenerInstalled &&
+        (!registryEntry.abortSignal || registryEntry.abortController)
+      ) {
         try {
           await ensureRemoteAbortListener(pubsub, runId, mastra as Mastra | undefined, readRunDeadline(requestContext));
           registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined) ?? registryEntry;
@@ -2044,8 +2051,10 @@ export function createDurableToolCallStep() {
             if (registryEntry?.executionFence?.deadlineError) {
               // processToolResult hooks can redact or block a result, and they do not run past the deadline.
               // When one could apply, save only the abort notice so the raw value never reaches memory.
-              const resultProcessed = registryEntry.outputProcessors?.some(
-                processor => isProcessorWorkflow(processor) || typeof processor.processToolResult === 'function',
+              const resultProcessed = registryEntry.outputProcessors?.some(processor =>
+                isProcessorWorkflow(processor)
+                  ? processor.__processToolResult !== false
+                  : typeof processor.processToolResult === 'function',
               );
               (registryEntry.lateToolResults ??= []).push({
                 toolCallId,

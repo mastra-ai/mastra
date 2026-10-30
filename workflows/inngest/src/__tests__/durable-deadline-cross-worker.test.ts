@@ -315,6 +315,46 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
     expect(modelCalls()).toBe(0);
   });
 
+  it('ends the run as the timeout when its last step reaches a fresh worker after the deadline', async () => {
+    const threadId = `thread-${crypto.randomUUID()}`;
+    const resourceId = 'user-a';
+    // The model answers at once. As it does, hold the run's remaining steps past the deadline and send
+    // them to worker c, which has no state for the run: only the deadline carried on the request
+    // context tells it the run timed out.
+    mock.clearFixtures();
+    let routed = false;
+    mock.on(
+      {
+        endpoint: 'chat',
+        predicate: () => {
+          if (!routed) {
+            routed = true;
+            routing.targets = [ports.c];
+            routing.hold = new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 1_000));
+          }
+          return true;
+        },
+      },
+      { content: 'Answered just before the deadline.' },
+    );
+    const res = await driver.durableAgent.stream([{ role: 'user', content: 'Answer quickly.' }], {
+      memory: { thread: threadId, resource: resourceId },
+      maxSteps: 3,
+      modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+    });
+    const chunks = await drain(res);
+
+    const errors = chunks.filter(chunk => chunk.type === 'error');
+    expect(errors).toHaveLength(1);
+    expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+
+    // Worker c reported the timeout and saved the turn, so the caller's fallback did not run.
+    const events = toolEvents();
+    expect(events).toContainEqual({ worker: 'c', event: 'output-pass' });
+    expect(events).not.toContainEqual({ worker: 'driver', event: 'output-pass' });
+    expect(modelCalls()).toBe(1);
+  });
+
   it('saves the turn itself when no worker picks the run up before the deadline', async () => {
     const threadId = `thread-${crypto.randomUUID()}`;
     const resourceId = 'user-a';
@@ -340,8 +380,12 @@ describe('Inngest durable agent total deadline across workers (real Inngest dev 
       release();
     }
 
-    // Steps that reach a worker after the deadline stop there instead of calling the model.
-    await new Promise(r => setTimeout(r, 3_000));
+    // Steps that reach a worker after the deadline stop there instead of calling the model, and
+    // leave the turn to the caller that already saved it.
+    await new Promise(r => setTimeout(r, 5_000));
     expect(modelCalls()).toBe(0);
+    expect(toolEvents().filter(event => event.event === 'output-pass')).toEqual([
+      { worker: 'driver', event: 'output-pass' },
+    ]);
   });
 });

@@ -482,8 +482,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         const errors = result.chunks!.filter(chunk => chunk.type === 'error');
         expect(errors).toHaveLength(1);
         expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
-        // The up-front input save, and the caller's deadline save since no worker ran the run.
-        expect(heldSaves.length).toBeGreaterThanOrEqual(1);
+        // The up-front input save, then the caller's deadline save, since no worker ran the run.
+        expect(heldSaves).toHaveLength(2);
         await Promise.all(heldSaves);
         // Give the startup chain time to continue past the input save.
         await new Promise(resolve => setTimeout(resolve, 1_000));

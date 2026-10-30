@@ -2,6 +2,7 @@ import { MastraFGAPermissions } from '../../../auth/ee';
 import type { IMastraLogger } from '../../../logger';
 import { noopLogger } from '../../../logger/noop-logger';
 import { commitToolResult } from '../../../loop/shared/steps/tool-result-commit-core';
+import { TOOL_ABORT_NOTICE } from '../../../loop/shared/tool-abort-grace';
 import { DEADLINE_SAVE_WAIT_MS, settledOrElapsed } from '../../../loop/timeout';
 import type { Mastra } from '../../../mastra';
 import type { MastraMemory } from '../../../memory/memory';
@@ -427,7 +428,8 @@ export async function runDurableFinishSideEffects({
 
 /**
  * The message list a total deadline saves: the steps that completed in time, plus the step in flight
- * when every tool call in it returned (or was aborted) during the deadline's grace window.
+ * with the tool results that came back during the deadline's grace window and any call still running
+ * saved as aborted.
  */
 export function deadlineMessageListState(entry: RunRegistryEntry): SerializedMessageListState | undefined {
   const late = entry.lateToolResults;
@@ -443,11 +445,23 @@ export function deadlineMessageListState(entry: RunRegistryEntry): SerializedMes
         toolArgs: result.args,
       });
     }
-    const settled = inFlight.get.response
+    // A sibling call still running past the grace window is saved as aborted, so the late results
+    // that did come back are not dropped with it.
+    const unsettled = inFlight.get.response
       .db()
       .flatMap(message => message.content.parts ?? [])
-      .every(part => part.type !== 'tool-invocation' || isTerminalToolInvocationState(part.toolInvocation.state));
-    if (settled) return inFlight.serialize();
+      .filter(part => part.type === 'tool-invocation' && !isTerminalToolInvocationState(part.toolInvocation.state));
+    for (const part of unsettled) {
+      if (part.type !== 'tool-invocation') continue;
+      commitToolResult({
+        messageList: inFlight,
+        outcome: { kind: 'result', result: TOOL_ABORT_NOTICE },
+        toolCallId: part.toolInvocation.toolCallId,
+        toolName: part.toolInvocation.toolName,
+        toolArgs: part.toolInvocation.args,
+      });
+    }
+    return inFlight.serialize();
   }
   return entry.completedStepsState;
 }
@@ -544,6 +558,41 @@ export async function runDurableDeadlineOutputPass({
   await entry.saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig, {
     throwOnError: true,
   });
+}
+
+/** Long enough that a step reaching a worker hours after the caller saved still loses the claim. */
+const DEADLINE_SAVE_OWNER_LEASE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Claim the one deadline save of a run's segment across processes. On Inngest the caller saves
+ * when no worker reported within its wait, and a worker the run reaches later still sees the
+ * expired deadline; only the first of them may run the output pass. The claim is keyed by the
+ * segment's deadline, so a resumed segment with its own deadline gets its own save. Stores without
+ * run ownership cannot arbitrate, so every claimant saves there (message saves upsert by id).
+ */
+export async function claimDurableDeadlineSave({
+  runId,
+  deadlineAt,
+  ownerId,
+  mastra,
+}: {
+  runId: string;
+  deadlineAt: number;
+  ownerId: string;
+  mastra?: Mastra;
+}): Promise<boolean> {
+  try {
+    const store = await mastra?.getStorage()?.getStore('workflows');
+    if (!store) return true;
+    const { acquired } = await store.claimRunOwnership({
+      runId: `${runId}:deadline-save:${deadlineAt}`,
+      ownerId,
+      leaseMs: DEADLINE_SAVE_OWNER_LEASE_MS,
+    });
+    return acquired;
+  } catch {
+    return true;
+  }
 }
 
 /**

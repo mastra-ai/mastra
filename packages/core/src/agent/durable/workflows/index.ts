@@ -2,6 +2,7 @@ export { createDurableAgenticWorkflow, type DurableAgenticWorkflowOptions } from
 export {
   runDurableFinishSideEffects,
   saveDurableRunAtDeadline,
+  claimDurableDeadlineSave,
   type DurableFinishSideEffectsOptions,
   type DurableFinishSideEffectsResult,
 } from './finalize-run';

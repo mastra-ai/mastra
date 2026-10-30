@@ -216,6 +216,7 @@ export {
   createDurableAgenticWorkflow,
   runDurableFinishSideEffects,
   saveDurableRunAtDeadline,
+  claimDurableDeadlineSave,
   type DurableAgenticWorkflowOptions,
   type DurableFinishSideEffectsOptions,
   type DurableFinishSideEffectsResult,

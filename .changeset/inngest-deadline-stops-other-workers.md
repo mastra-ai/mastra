@@ -4,7 +4,7 @@
 
 On Inngest, the deadline now stops a step running on another worker. Before, only the caller's local controller was aborted, so the other worker kept going and the run could call the model again and finish normally. `abort()` now also stops the run when its next step lands on a different worker.
 
-The deadline also reaches a worker that first sees the run after it passed, so that worker stops instead of calling the model. If no worker reports within a few seconds of the deadline, the caller saves the turn itself (output processors and memory) before reporting the timeout.
+The deadline also reaches a worker that first sees the run after it passed, so that worker stops instead of calling the model. If no worker reports within a few seconds of the deadline, the caller tries to save the turn itself (output processors and memory) before reporting the timeout. It waits at most about a second for that save, so a stuck memory store can still leave the turn unsaved. A worker that picks the run up later does not save it a second time.
 
 Errors with the id `DURABLE_AGENT_EXECUTION_TIMED_OUT` are no longer thrown, because Inngest durable agents no longer refuse memory writes after the deadline. Remove any checks for that id. The deadline is still reported as a `MastraTimeoutError`.
 
