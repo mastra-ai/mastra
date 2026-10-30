@@ -118,7 +118,7 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
       writeTools.push(`
 **${MC_TOOLS.WRITE_FILE}** — Create new files or overwrite existing ones
 - Use this to create new files.
-- If overwriting an existing file, you MUST have read it first with \`${MC_TOOLS.VIEW}\`.
+- Overwriting replaces the whole file, so make sure you know its current contents first.
 - Prefer editing existing files over creating new ones.`);
     }
 

@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 import { WORKSPACE_TOOLS } from '../../constants';
-import { PermissionError } from '../../errors';
+import { FileReadRequiredError, PermissionError } from '../../errors';
 import { LocalFilesystem } from '../../filesystem';
 import { Workspace } from '../../workspace';
 import { createWorkspaceTools } from '../tools';
@@ -569,7 +569,7 @@ describe('workspace_apply_patch', () => {
           },
           { workspace },
         ),
-      ).rejects.toThrow(/b\.ts/);
+      ).rejects.toThrow(FileReadRequiredError);
 
       expect(await read('a.ts')).toBe('a\n');
       expect(await read('b.ts')).toBe('b changed\n');
