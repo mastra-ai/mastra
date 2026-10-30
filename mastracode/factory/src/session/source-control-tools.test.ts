@@ -1331,6 +1331,18 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
     expect(rerunWorkflowRun).not.toHaveBeenCalled();
   });
 
+  it('refuses a re-run whose arguments are too long to show for approval', async () => {
+    const { built, getWorkflowRun, rerunWorkflowRun } = await githubTools();
+    const tool = built.source_control_rerun_workflow_run as any;
+    const input = { ...rerunInput, workflowName: 'x'.repeat(25_000) };
+    await expect(beforeApproval(tool, input)).resolves.toEqual({
+      proceed: false,
+      output: { error: expect.stringContaining('too long to show for approval') },
+    });
+    expect(getWorkflowRun).not.toHaveBeenCalled();
+    expect(rerunWorkflowRun).not.toHaveBeenCalled();
+  });
+
   it.each(['workflow_dispatch', 'schedule', 'release'])('refuses to re-run %s runs', async event => {
     const { built, rerunWorkflowRun } = await githubTools({ run: { event } });
     await expect((built.source_control_rerun_workflow_run!.execute as any)(rerunInput, {})).rejects.toThrow(
@@ -1590,6 +1602,11 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
       ['.github/workflows/test.yml', '.github/workflows/deploy.yml', '.github/workflows/publish.yml'],
       'List exactly those',
     ],
+    [
+      'a duplicated workflow file',
+      ['.github/workflows/test.yml', '.github/workflows/deploy.yml', '.github/workflows/test.yml'],
+      'each once',
+    ],
   ])('refuses before approval when the list has %s', async (_label, workflowFiles, message) => {
     const { tool, workspace, commit, pushCommits } = await workflowPushFixture();
     const head = commit({ '.github/workflows/test.yml': 'a\n', '.github/workflows/deploy.yml': 'b\n' }, 'two');
@@ -1599,6 +1616,22 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
       output: { error: expect.stringContaining(message) },
     });
     await expect(tool.execute(input, { workspace })).rejects.toThrow(message);
+    expect(pushCommits).not.toHaveBeenCalled();
+  });
+
+  it('refuses a workflow list padded so the approver would not see the workflow content', async () => {
+    const { tool, workspace, commit, pushCommits } = await workflowPushFixture();
+    const head = commit({ '.github/workflows/test.yml': 'on: push\n' }, 'one');
+    const input = {
+      headSha: head,
+      workflowFiles: Array.from({ length: 1_000 }, () => '.github/workflows/test.yml'),
+      workflowChanges: shown({ '.github/workflows/test.yml': 'on: push\n' }),
+    };
+    await expect(beforeApproval(tool, input, workspace)).resolves.toEqual({
+      proceed: false,
+      output: { error: expect.stringContaining('too long to show for approval') },
+    });
+    await expect(tool.execute(input, { workspace })).rejects.toThrow('each once');
     expect(pushCommits).not.toHaveBeenCalled();
   });
 
@@ -1678,11 +1711,8 @@ describe('approval-gated GitHub Actions and workflow tools', { timeout: 15_000 }
     const { tool, workspace, commit, pushCommits } = await workflowPushFixture();
     const big = '# filler\n'.repeat(2_500);
     const head = commit({ '.github/workflows/test.yml': big }, 'huge workflow');
-    const input = {
-      headSha: head,
-      workflowFiles: ['.github/workflows/test.yml'],
-      workflowChanges: shown({ '.github/workflows/test.yml': big }),
-    };
+    // The agent cannot know the content is too big; a short guess still learns it is refused.
+    const input = { headSha: head, workflowFiles: ['.github/workflows/test.yml'], workflowChanges: 'guess' };
     await expect(beforeApproval(tool, input, workspace)).resolves.toEqual({
       proceed: false,
       output: { error: expect.stringContaining('too large to show for approval') },

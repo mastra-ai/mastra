@@ -1674,7 +1674,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       input.expectedHeadSha ?? state.defaultBranchSha,
       last.sha,
     );
-    const approved = [...new Set(input.approvedWorkflowFiles)].sort();
+    const approved = [...input.approvedWorkflowFiles].sort();
     if (changed.length !== approved.length || changed.some((path, index) => path !== approved[index])) {
       throw new Error(
         `The push would change workflow files ${changed.join(', ') || '(none)'}, but ${approved.join(', ') || '(none)'} were approved. Nothing was pushed.`,

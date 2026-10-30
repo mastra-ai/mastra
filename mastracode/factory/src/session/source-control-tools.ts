@@ -26,6 +26,7 @@ import type {
   SourceControlSession,
   SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
+import { APPROVAL_ARGS_LENGTH } from '../tools/reports.js';
 import { mergeRequestNumberFromBranch } from '../work-item-branch.js';
 import { environmentSlugs, findEnvironmentRepository, resolveSessionRepositories } from './environment-repositories.js';
 import { updateSessionEnvironmentRepository } from './environment-state-processor.js';
@@ -239,20 +240,27 @@ const RERUNNABLE_EVENTS = new Set(['pull_request', 'push', 'merge_group']);
 /** GitHub refuses to let an App token without `workflows` touch `.github/workflows/`. */
 const WORKFLOW_PUSH_REFUSAL = /without `?workflows`? permission/i;
 
-function sameFiles(a: readonly string[], b: readonly string[]): boolean {
-  const left = [...new Set(a)].sort();
-  const right = [...new Set(b)].sort();
+/** True when `listed` names each of `changed` exactly once and nothing else. */
+function sameFiles(changed: readonly string[], listed: readonly string[]): boolean {
+  const left = [...changed].sort();
+  const right = [...listed].sort();
   return left.length === right.length && left.every((path, index) => path === right[index]);
 }
 
 /**
  * Validate a call before a person is asked to approve it, so the approval
  * notice (which shows the tool arguments) never describes something other than
- * what would run. `execute` re-runs the same check after approval.
+ * what would run. `execute` re-runs the same check after approval. Calls whose
+ * arguments would not fit in the notice are refused, so nothing approved is cut off.
  */
 function refuseBeforeApproval(check: (input: any, workspace: unknown) => Promise<unknown>) {
   return async (input: any, context: { workspace?: unknown }) => {
     try {
+      if ((JSON.stringify(input ?? {}) ?? '').length > APPROVAL_ARGS_LENGTH) {
+        throw new Error(
+          `The arguments are too long to show for approval (over ${APPROVAL_ARGS_LENGTH} characters). Nothing was run.`,
+        );
+      }
       await check(input, context.workspace);
       return undefined;
     } catch (error) {
@@ -415,7 +423,7 @@ export async function createSourceControlTools({
     }
     if (!sameFiles(workflowFiles, input.workflowFiles)) {
       throw new Error(
-        `The commits change these workflow files: ${workflowFiles.join(', ')}. List exactly those in workflowFiles.`,
+        `The commits change these workflow files: ${workflowFiles.join(', ')}. List exactly those in workflowFiles, each once.`,
       );
     }
     const workflowChanges = renderWorkflowChanges(exported);

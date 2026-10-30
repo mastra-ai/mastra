@@ -1958,4 +1958,15 @@ describe('privileged GitHub operations', () => {
     );
     expect(githubCalls.some(call => call.includes('/git/'))).toBe(false);
   });
+
+  it('moves no ref when the approved workflow list repeats a file', async () => {
+    const { integration, githubCalls } = remote();
+    await expect(
+      integration.versionControl.pushCommits!({
+        ...pushInput,
+        approvedWorkflowFiles: ['.github/workflows/test.yml', '.github/workflows/test.yml'],
+      }),
+    ).rejects.toThrow('were approved');
+    expect(githubCalls.some(call => call.includes('/git/refs'))).toBe(false);
+  });
 });
