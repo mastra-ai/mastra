@@ -2015,6 +2015,21 @@ export interface ApprovalResponse {
   declineContext?: { reason?: string; message?: string };
 }
 
+/** Tool-call answers that armed an idle run and have not settled yet. */
+interface AnswerArms {
+  /** {@link SessionRun.armCount} right after the latest of these answers armed the run. */
+  armCount: number;
+  /** Answers still in flight. */
+  pending: number;
+  /** Set once any of these answers dispatched without failing. */
+  dispatched: boolean;
+}
+
+/** Set only when a tool-call answer armed an idle run, or joined answers that did. */
+interface ArmedRun {
+  arms?: AnswerArms;
+}
+
 /** A single parked interactive approval gate, scoped to the call that opened it. */
 interface ApprovalGate {
   toolCallId: string;
@@ -2229,6 +2244,8 @@ export class SessionRun {
   #bindingGeneration = 0;
   /** Controller whose signal cancels the active run; null when no run is armed. */
   #abortController: AbortController | null = null;
+  /** Bumped every time the run is armed; see {@link armCount}. */
+  #armCount = 0;
   /** Whether an abort has been requested for the current run. */
   #abortRequested = false;
   /** Incremented on every abort request, so waiters can ignore earlier ones. */
@@ -2348,8 +2365,17 @@ export class SessionRun {
    * run. Callers pass its `.signal` into the underlying stream.
    */
   ensureAbortController(): AbortController {
+    this.#armCount += 1;
     this.#abortController ??= new AbortController();
     return this.#abortController;
+  }
+
+  /**
+   * How many times the run has been armed via {@link ensureAbortController}.
+   * Lets a caller tell whether anyone else joined the run it armed.
+   */
+  armCount(): number {
+    return this.#armCount;
   }
 
   /** Signal for the current run's AbortController, or undefined when none is armed. */
@@ -4187,6 +4213,8 @@ export class Session<TState = unknown> {
   readonly subagents = new SessionSubagents(this.#bus);
   /** Transient run identity (run id, trace id, operation counter) for the active run. */
   readonly run = new SessionRun();
+  /** Tool-call answers currently holding {@link run} armed; see `#armRun`. */
+  #answerArms: AnswerArms | undefined;
   /** Live subscription to the active thread's agent event stream. */
   readonly stream = new SessionStream(() => ({
     sessionId: this.identity.getId(),
@@ -6097,7 +6125,68 @@ export class Session<TState = unknown> {
     },
     onDispatch?: () => void,
   ): Promise<void> {
-    await this.#approveToolCall(input, onDispatch);
+    await this.#disarmRunOnFailedStart(armed => this.#approveToolCall(input, onDispatch, armed));
+  }
+
+  /**
+   * Arm the session run for an answer to a parked tool call. Records the arm in
+   * `armed` only when this call armed an idle run, or joined other answers that
+   * did, so a failed start can disarm it without touching a run another caller
+   * armed.
+   */
+  #armRun(armed?: ArmedRun): AbortSignal {
+    const wasRunning = this.run.isRunning();
+    const armCountBefore = this.run.armCount();
+    const signal = this.run.ensureAbortController().signal;
+    if (!armed) return signal;
+    // Answers in flight together share one record, as long as nothing else
+    // armed the run between them.
+    const arms = !wasRunning
+      ? { armCount: 0, pending: 0, dispatched: false }
+      : this.#answerArms?.armCount === armCountBefore
+        ? this.#answerArms
+        : undefined;
+    if (arms) {
+      arms.armCount = this.run.armCount();
+      arms.pending += 1;
+      this.#answerArms = arms;
+      armed.arms = arms;
+    }
+    return signal;
+  }
+
+  /**
+   * Run an answer to a parked tool call, resetting the run it armed when the
+   * answer fails before any run started (mirrors the `sendSignal` startup
+   * failure reset). Otherwise the session reports running with no run id.
+   */
+  async #disarmRunOnFailedStart(answer: (armed: ArmedRun) => Promise<void>): Promise<void> {
+    const armed: ArmedRun = {};
+    try {
+      await answer(armed);
+      if (armed.arms) {
+        armed.arms.pending -= 1;
+        armed.arms.dispatched = true;
+      }
+    } catch (error) {
+      const arms = armed.arms;
+      if (arms) {
+        arms.pending -= 1;
+        // Anyone else holding the run armed it again: the subscription arms the
+        // run as it starts, and so does a message or signal joining it. Only the
+        // last failed answer of a run nobody else armed resets it.
+        if (
+          arms.pending === 0 &&
+          !arms.dispatched &&
+          this.#answerArms === arms &&
+          this.run.armCount() === arms.armCount
+        ) {
+          this.#answerArms = undefined;
+          this.run.reset();
+        }
+      }
+      throw error;
+    }
   }
 
   /**
@@ -6121,6 +6210,7 @@ export class Session<TState = unknown> {
       abortSignal: inputAbortSignal,
     }: Parameters<Session<TState>['approveToolCall']>[0],
     onDispatch?: () => void,
+    armed?: ArmedRun,
   ): Promise<void> {
     const runId = inputRunId ?? this.run.getRunId();
     const threadId = inputThreadId ?? this.thread.getId();
@@ -6137,7 +6227,7 @@ export class Session<TState = unknown> {
     const abortSignal =
       inputAbortSignal ??
       (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
-        ? this.run.ensureAbortController().signal
+        ? this.#armRun(armed)
         : new AbortController().signal);
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
       threadId,
@@ -6196,7 +6286,7 @@ export class Session<TState = unknown> {
     },
     onDispatch?: () => void,
   ): Promise<void> {
-    await this.#declineToolCall(input, onDispatch);
+    await this.#disarmRunOnFailedStart(armed => this.#declineToolCall(input, onDispatch, armed));
   }
 
   async #declineToolCall(
@@ -6211,6 +6301,7 @@ export class Session<TState = unknown> {
       abortSignal: inputAbortSignal,
     }: Parameters<Session<TState>['declineToolCall']>[0],
     onDispatch?: () => void,
+    armed?: ArmedRun,
   ): Promise<void> {
     const runId = inputRunId ?? this.run.getRunId();
     const threadId = inputThreadId ?? this.thread.getId();
@@ -6227,7 +6318,7 @@ export class Session<TState = unknown> {
     const abortSignal =
       inputAbortSignal ??
       (this.thread.getId() === threadId && this.identity.getResourceId() === resourceId
-        ? this.run.ensureAbortController().signal
+        ? this.#armRun(armed)
         : new AbortController().signal);
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
       threadId,
@@ -6506,13 +6597,7 @@ export class Session<TState = unknown> {
    * reject the answer. The caller already handled approval (setForTool policy,
    * yolo mode, or a prior explicit approval gate).
    */
-  async resumeToolCall({
-    resumeData,
-    address,
-    requestContext: requestContextInput,
-    resolveOnToolEnd = false,
-    modeId: inputModeId,
-  }: {
+  async resumeToolCall(input: {
     resumeData: any;
     address: SuspensionAddress;
     requestContext?: RequestContext;
@@ -6520,6 +6605,19 @@ export class Session<TState = unknown> {
     /** The mode the continuation runs in; defaults to the suspended run's mode. */
     modeId?: string;
   }): Promise<void> {
+    await this.#disarmRunOnFailedStart(armed => this.#resumeToolCall(input, armed));
+  }
+
+  async #resumeToolCall(
+    {
+      resumeData,
+      address,
+      requestContext: requestContextInput,
+      resolveOnToolEnd = false,
+      modeId: inputModeId,
+    }: Parameters<Session<TState>['resumeToolCall']>[0],
+    armed: ArmedRun,
+  ): Promise<void> {
     const suspension = this.suspensions.get(address);
     if (!suspension) {
       throw new Error('No active suspension to resume');
@@ -6529,7 +6627,7 @@ export class Session<TState = unknown> {
     const agent = await this.resolveSuspensionAgent(address);
     const threadOwnerId = await this.resolveSuspendedThreadOwnerId(agent, address);
     const sourceIsActive = () => threadId === this.thread.getId() && resourceId === this.identity.getResourceId();
-    const abortSignal = sourceIsActive() ? this.run.ensureAbortController().signal : new AbortController().signal;
+    const abortSignal = sourceIsActive() ? this.#armRun(armed) : new AbortController().signal;
     const requestContext = await this.machinery.buildRequestContext(requestContextInput, {
       threadId,
       resourceId,
