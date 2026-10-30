@@ -48,6 +48,15 @@
     "claude-sonnet-5-5"
   ],
   "reasoning": {
+    "claude-sonnet-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "claude-sonnet-4-6": [
       {
         "type": "effort",
@@ -58,16 +67,34 @@
         "min": 1024
       }
     ],
-    "claude-opus-4-8": [
+    "claude-opus-4-7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-fable-5": [
+    "claude-sonnet-5-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-haiku-4-5": [
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-haiku-4-5-20251001": [
+      {
+        "type": "budget_tokens",
+        "min": 1024
       }
     ],
     "claude-sonnet-4-5": [
@@ -76,7 +103,7 @@
         "min": 1024
       }
     ],
-    "claude-sonnet-5-5": [
+    "claude-opus-4-8": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -92,16 +119,14 @@
         "min": 1024
       }
     ],
-    "claude-opus-5": [
+    "claude-opus-4-5-20251101": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-opus-4-7": [
+        "values": ["low", "medium", "high"]
+      },
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "type": "budget_tokens",
+        "min": 1024
       }
     ],
     "claude-fable-5-1": [
@@ -110,13 +135,19 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-haiku-4-5": [
+    "claude-sonnet-4-5-20250929": [
       {
         "type": "budget_tokens",
         "min": 1024
       }
     ],
-    "claude-opus-4-5-20251101": [
+    "claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-opus-4-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -133,37 +164,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-haiku-4-5-20251001": [
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "claude-sonnet-5": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-opus-4-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "claude-sonnet-4-5-20250929": [
-      {
-        "type": "budget_tokens",
-        "min": 1024
       }
     ],
     "claude-opus-5-5": [
