@@ -7,39 +7,18 @@ import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 import { formatDuration } from '@/utils/duration';
 
-/** Dashed vertical line at the first chunk, drawn down the timing rows and every span row. */
-export function FirstChunkLine({ percent }: { percent: number }) {
-  return (
-    <span
-      aria-hidden
-      data-testid="time-to-first-chunk-line"
-      className="pointer-events-none absolute top-0 -bottom-px border-l border-dashed border-muted-foreground"
-      style={{ left: `${percent}%` }}
-    />
-  );
-}
-
-/** One row per streaming timing, laid out like the span rows below them so they read the same way. */
+/** One row per streaming timing, laid out like the span rows below them, then a rule setting them apart. */
 export function TimelineTimingRows({ layout }: { layout: TimelineMarkersLayout }) {
   return (
     <>
-      <TimingRow name="Time to first chunk" bar={layout.firstChunk} firstChunkPercent={layout.firstChunkPercent} />
-      {layout.firstToken && (
-        <TimingRow name="Time to first token" bar={layout.firstToken} firstChunkPercent={layout.firstChunkPercent} />
-      )}
+      <TimingRow name="Time to first chunk" bar={layout.firstChunk} />
+      {layout.firstToken && <TimingRow name="Time to first token" bar={layout.firstToken} />}
+      <div role="separator" className="col-span-2 my-1 border-b border-border" />
     </>
   );
 }
 
-function TimingRow({
-  name,
-  bar,
-  firstChunkPercent,
-}: {
-  name: string;
-  bar: TimelineTimingBar;
-  firstChunkPercent: number;
-}) {
+function TimingRow({ name, bar }: { name: string; bar: TimelineTimingBar }) {
   const { durationMs, leftPercent, widthPercent } = bar;
 
   return (
@@ -60,7 +39,6 @@ function TimingRow({
       <div className={cn('flex min-w-0', TIMELINE_TRACK_PADDING)}>
         <div className="relative flex-1">
           <TimelineGridlines />
-          <FirstChunkLine percent={firstChunkPercent} />
           <div
             data-testid="streaming-timing-bar"
             className="absolute top-1/2 h-3 -translate-y-1/2 rounded-sm border border-dashed border-muted-foreground bg-fill-subtle"

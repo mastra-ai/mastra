@@ -31,7 +31,7 @@ export type TraceSpanTimelineProps = {
   revealSpanId?: string;
   /** Rendered full-width above the span rows. */
   leadingSlot?: ReactNode;
-  /** Adds a row per streaming timing above the spans, and marks the first chunk on every row. */
+  /** Adds a row per streaming timing above the spans. */
   streamingTimings?: TraceStreamingTimings;
 };
 
@@ -95,7 +95,7 @@ export function TraceSpanTimeline({
           featuredSpanIds={featuredSpanIds}
           expandedSpanIds={expandedSpanIds}
           setExpandedSpanIds={setExpandedSpanIds}
-          renderRow={ctx => <SpanTimelineRow ctx={ctx} firstChunkPercent={markers?.firstChunkPercent} />}
+          renderRow={ctx => <SpanTimelineRow ctx={ctx} />}
         />
       </div>
     </>

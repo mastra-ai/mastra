@@ -6,7 +6,6 @@ import type { SpanRowContext } from './span-rows';
 import { SpanTimingHoverCard } from './span-timing-hover-card';
 import { SPAN_TREE_INDENT, SPAN_TREE_LINE, SPAN_TREE_PAD_Y, SpanTreeRail } from './span-tree-rail';
 import { SpanTypeBadge } from './span-type-badge';
-import { FirstChunkLine } from './trace-span-timeline-markers';
 import { Badge } from '@/ds/components/Badge';
 import { HoverCard, HoverCardTrigger } from '@/ds/components/HoverCard';
 import { SegmentedName } from '@/ds/components/SegmentedName';
@@ -29,8 +28,6 @@ export function TimelineGridlines() {
 
 export type SpanTimelineRowProps = {
   ctx: SpanRowContext;
-  /** Where the trace's first chunk sits on the track, when it streamed. */
-  firstChunkPercent?: number;
 };
 
 /**
@@ -38,7 +35,7 @@ export type SpanTimelineRowProps = {
  * shared trace time axis with the duration printed right after it. The row spans both grid columns
  * (subgrid) so hover and selection cover the name and the bar together.
  */
-export function SpanTimelineRow({ ctx, firstChunkPercent }: SpanTimelineRowProps) {
+export function SpanTimelineRow({ ctx }: SpanTimelineRowProps) {
   const {
     span,
     spanUI,
@@ -156,7 +153,6 @@ export function SpanTimelineRow({ ctx, firstChunkPercent }: SpanTimelineRowProps
         <HoverCardTrigger render={<div />} className={cn('flex min-w-0 cursor-help', TIMELINE_TRACK_PADDING)}>
           <div className="relative flex-1">
             <TimelineGridlines />
-            {firstChunkPercent !== undefined && <FirstChunkLine percent={firstChunkPercent} />}
             <div
               data-testid="span-timeline-bar"
               className="absolute top-1/2 h-3 -translate-y-1/2 rounded-sm"

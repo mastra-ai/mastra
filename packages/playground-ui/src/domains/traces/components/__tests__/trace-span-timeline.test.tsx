@@ -156,14 +156,13 @@ describe('TraceSpanTimeline', () => {
   describe('when the trace streamed', () => {
     // The root runs for 1s, so each millisecond is a tenth of a percent of the axis.
     const startedAt = '2026-06-01T10:00:00.000Z';
-    const firstChunkLines = () => screen.queryAllByTestId('time-to-first-chunk-line');
     const timingRow = (name: string) => screen.queryByRole('group', { name });
     const barOf = (row: HTMLElement | null) => {
       const bar = row?.querySelector<HTMLElement>('[data-testid="streaming-timing-bar"]');
       return [bar?.style.left, bar?.style.width];
     };
 
-    it('shows each timing as its own dashed row above the spans, both ending on the first chunk', () => {
+    it('shows each timing as its own dashed row above the spans, set apart from them', () => {
       render(
         <Harness
           initialExpanded={['root']}
@@ -178,10 +177,11 @@ describe('TraceSpanTimeline', () => {
       expect(barOf(firstChunk)).toEqual(['0%', '40%']);
       expect(barOf(firstToken)).toEqual(['25%', '15%']);
 
+      // Timing rows, then a separator, then the spans.
+      const separator = screen.getByRole('separator');
       const [firstSpanRow] = screen.getAllByLabelText(/^View details for span/);
-      expect(firstToken.compareDocumentPosition(firstSpanRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      // The first chunk's line runs down both timing rows and both span rows.
-      expect(firstChunkLines().map(line => line.style.left)).toEqual(['40%', '40%', '40%', '40%']);
+      expect(firstToken.compareDocumentPosition(separator) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(separator.compareDocumentPosition(firstSpanRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
     it('shows only the time to first chunk when no time to first token was recorded', () => {
@@ -196,7 +196,7 @@ describe('TraceSpanTimeline', () => {
 
       expect(timingRow('Time to first chunk')).toBeNull();
       expect(timingRow('Time to first token')).toBeNull();
-      expect(firstChunkLines()).toHaveLength(0);
+      expect(screen.queryByRole('separator')).toBeNull();
     });
   });
 
@@ -204,6 +204,6 @@ describe('TraceSpanTimeline', () => {
     render(<Harness initialExpanded={['root']} />);
 
     expect(screen.queryByRole('group', { name: 'Time to first chunk' })).toBeNull();
-    expect(screen.queryAllByTestId('time-to-first-chunk-line')).toHaveLength(0);
+    expect(screen.queryByRole('separator')).toBeNull();
   });
 });

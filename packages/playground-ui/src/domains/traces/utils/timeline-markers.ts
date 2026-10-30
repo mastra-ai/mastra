@@ -12,8 +12,6 @@ export type TraceStreamingTimings = {
 export type TimelineTimingBar = { durationMs: number; leftPercent: number; widthPercent: number };
 
 export type TimelineMarkersLayout = {
-  /** Where the first chunk sits on the track; both bars end there. */
-  firstChunkPercent: number;
   /** From the root start up to the first chunk. */
   firstChunk: TimelineTimingBar;
   /** The model's own wait: from the inference start up to the first chunk. */
@@ -47,9 +45,9 @@ export function getTimelineMarkersLayout(
 
   const firstChunk = barFrom(0, timeToFirstChunkMs);
   const timeToFirstTokenMs = timings.timeToFirstTokenMs;
-  if (timeToFirstTokenMs == null) return { firstChunkPercent, firstChunk };
+  if (timeToFirstTokenMs == null) return { firstChunk };
 
   // The inference cannot start before the root, even if the recorded timings disagree.
   const firstToken = barFrom(Math.max(0, timeToFirstChunkMs - timeToFirstTokenMs), timeToFirstTokenMs);
-  return { firstChunkPercent, firstChunk, firstToken };
+  return { firstChunk, firstToken };
 }
