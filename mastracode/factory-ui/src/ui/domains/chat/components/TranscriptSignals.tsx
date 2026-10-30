@@ -37,7 +37,7 @@ export const SUPPRESSED_STATE_SIGNAL_IDS = new Set(['tasks', 'goal']);
 export type SignalRowView =
   | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
   | { kind: 'divider'; label: string; title?: string }
-  | { kind: 'reminder'; text: string }
+  | { kind: 'reminder'; text: string; loadedFile?: string }
   | { kind: 'reactive'; tagName?: string; text: string };
 
 export function signalRowView(entry: MessageEntry): SignalRowView | undefined {
@@ -49,7 +49,9 @@ export function signalRowView(entry: MessageEntry): SignalRowView | undefined {
   const text = signalPartsText(entry);
   const attributes = isRecord(signal.attributes) ? signal.attributes : {};
   const reminder: SignalRowView =
-    attributes.type === 'temporal-gap' ? timeGapDivider(text) : { kind: 'reminder', text };
+    attributes.type === 'temporal-gap'
+      ? timeGapDivider(text)
+      : { kind: 'reminder', text, loadedFile: loadedFile(attributes) };
 
   if (signal.type === 'state') {
     const metadata = isRecord(signal.metadata) ? signal.metadata : {};
@@ -68,6 +70,12 @@ export function signalRowView(entry: MessageEntry): SignalRowView | undefined {
   if (signal.type === 'reactive' && tagName === SESSION_OWNER_SIGNAL_TAG) return { kind: 'divider', label: text };
   if (signal.type === 'reactive') return { kind: 'reactive', tagName, text };
   return undefined;
+}
+
+/** The instructions file a reminder loaded, by its folder: the absolute path sits in a sandbox the reader never sees. */
+function loadedFile(attributes: Record<string, unknown>): string | undefined {
+  if (attributes.type !== 'dynamic-agents-md' || typeof attributes.path !== 'string') return undefined;
+  return attributes.path.split('/').slice(-2).join('/');
 }
 
 export function isTurnDivider(entry: TimelineEntry | undefined): boolean {
