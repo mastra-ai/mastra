@@ -3304,7 +3304,9 @@ export class AgentThreadStreamRuntime {
     };
     const { threadId: savedThreadId, resourceId: savedResourceId } = runtime.#parseThreadKey(key);
     startSaveListener = () => {
-      if (stopSaveListener) return;
+      // Once the broadcast has finished (including the error path, where the pump
+      // keeps reading), nothing would stop a listener attached here.
+      if (stopSaveListener || done || failed || cancelled) return;
       stopSaveListener = onThreadMessagesSaved({ threadId: savedThreadId, resourceId: savedResourceId }, at => {
         savedAt = Math.max(savedAt ?? at, at);
         trimSaved();
