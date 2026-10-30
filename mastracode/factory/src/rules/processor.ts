@@ -445,7 +445,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const phaseLabel = phase?.name ?? stage;
     const exitText =
       phase?.kind === 'working' && phase.exitTool
-        ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
+        ? boards.get(board)?.tools[phase.exitTool.id]
+          ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds; Factory then moves the card on.\n`
+          : `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
         : '';
     const runtime =
       value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
