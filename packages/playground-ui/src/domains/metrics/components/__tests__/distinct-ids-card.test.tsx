@@ -240,6 +240,17 @@ describe('when the server answers aggregateTraces()', () => {
     const { rerender, queryClient } = renderWithProviders(atPreset('24h'));
     await screen.findByText('Resources');
 
+    // The buckets must finish before the scope changes: the retained answer is what makes the
+    // next totals failure land while the buckets are fetching instead of loading.
+    await waitFor(() => {
+      const buckets = queryClient
+        .getQueryCache()
+        .findAll({ queryKey: ['trace-aggregate'] })
+        .find(query => (query.queryKey[1] as { interval?: string }).interval);
+      expect(buckets?.state.status).toBe('success');
+      expect(buckets?.state.fetchStatus).toBe('idle');
+    });
+
     card.nextScope();
     rerender(atPreset('7d'));
 

@@ -527,8 +527,12 @@ describe('BreakdownCard', () => {
       );
       const { rerender, queryClient } = renderWithProviders(atPreset('24h'));
       const breakdownQueries = () => queryClient.getQueryCache().findAll({ queryKey: ['metrics', 'cost-breakdown'] });
+      // `every` is true on an empty list, so wait for the queries to exist before trusting it.
+      await waitFor(() => expect(breakdownQueries().length).toBeGreaterThan(0));
       await waitFor(() => expect(breakdownQueries().every(q => q.state.status === 'success')).toBe(true));
       await waitFor(() => expect(breakdownQueries().every(q => q.state.fetchStatus !== 'fetching')).toBe(true));
+      // The retained answer has to be on screen for the scope change to keep it there.
+      expect(await screen.findByText('Code Agent')).toBeDefined();
 
       next = true;
       rerender(atPreset('7d'));
