@@ -77,11 +77,26 @@ export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
     updated_by: { type: 'text' },
     updated_at: { type: 'timestamp' },
   },
-  // Two writers appending at once meet this index; the loser retries from fresh reads.
   uniqueIndexes: [
     { name: 'factory_intake_routes_project_position', columns: ['org_id', 'factory_project_id', 'position'] },
   ],
   indexes: [{ name: 'factory_intake_routes_project', columns: ['org_id', 'factory_project_id'] }],
+};
+
+/**
+ * One row per project that every write adding, deleting or moving intake routes upserts first,
+ * inside its transaction. The upsert holds the row until commit, so those writes on one project
+ * run one after another and positions stay 0..n-1 with no gaps.
+ */
+export const FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA: CollectionSchema = {
+  name: 'factory_intake_route_locks',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
+    locked_at: { type: 'timestamp' },
+  },
+  uniqueIndexes: [{ name: 'factory_intake_route_locks_project', columns: ['org_id', 'factory_project_id'] }],
 };
 
 /**
