@@ -148,6 +148,16 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     return this.#pages.materializeScope(input);
   }
 
+  override listScopeDeclarations(): ReturnType<KnowledgePageStore['listScopeDeclarations']> {
+    return this.#pages.listScopeDeclarations();
+  }
+
+  override renameScopeDeclaration(
+    input: Parameters<KnowledgePageStore['renameScopeDeclaration']>[0],
+  ): ReturnType<KnowledgePageStore['renameScopeDeclaration']> {
+    return this.#pages.renameScopeDeclaration(input);
+  }
+
   override getScopesByAddress(
     input: Parameters<KnowledgePageStore['getScopesByAddress']>[0],
   ): ReturnType<KnowledgePageStore['getScopesByAddress']> {

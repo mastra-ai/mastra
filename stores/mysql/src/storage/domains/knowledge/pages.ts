@@ -17,6 +17,8 @@ import type {
   KnowledgePageSearchHit,
   KnowledgePageStore,
   KnowledgeListedPin,
+  KnowledgeScopeDeclarationCount,
+  KnowledgeScopeDeclarationRename,
   KnowledgePin,
   KnowledgeProvenance,
   KnowledgeReadScope,
@@ -591,6 +593,39 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
         created,
         ...(parentConflict ? { parentConflict } : {}),
       };
+    });
+  }
+
+  async listScopeDeclarations(): Promise<KnowledgeScopeDeclarationCount[]> {
+    const rows = await this.#query(
+      this.#read,
+      `SELECT declaration, COUNT(*) AS scopes FROM ${T.pages} WHERE isScope = 1 AND declaration IS NOT NULL GROUP BY declaration ORDER BY declaration`,
+    );
+    return rows.map(row => ({ declaration: String(row.declaration), scopes: Number(row.scopes) }));
+  }
+
+  async renameScopeDeclaration(input: {
+    from: string;
+    to: string;
+    check: (scopes: KnowledgeScopeDeclarationRename[]) => void;
+  }): Promise<number> {
+    return this.#transaction(async tx => {
+      const within = prefixRange('declaration', `${input.from}/`);
+      const rows = await this.#query(
+        tx,
+        `SELECT id, address, declaration FROM ${T.pages} WHERE isScope = 1 AND (declaration = ? OR ${within.sql}) FOR UPDATE`,
+        [input.from, ...within.args],
+      );
+      // Collations may pad or fold; keep only exact, case-sensitive matches.
+      const affected = rows
+        .map(row => ({ id: String(row.id), address: String(row.address), from: String(row.declaration) }))
+        .filter(row => row.from === input.from || row.from.startsWith(`${input.from}/`))
+        .map(row => ({ ...row, to: input.to + row.from.slice(input.from.length) }));
+      input.check(affected.map(({ address, from, to }) => ({ address, from, to })));
+      for (const row of affected) {
+        await tx.execute({ sql: `UPDATE ${T.pages} SET declaration = ? WHERE id = ?`, args: [row.to, row.id] });
+      }
+      return affected.length;
     });
   }
 
