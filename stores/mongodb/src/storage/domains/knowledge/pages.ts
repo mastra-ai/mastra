@@ -22,6 +22,7 @@ import type {
   KnowledgePageSearchHit,
   KnowledgePageTemplateInput,
   KnowledgePageStore,
+  KnowledgeListedPin,
   KnowledgePin,
   KnowledgeProvenance,
   KnowledgeReadScope,
@@ -160,6 +161,10 @@ function toNote(row: Row): KnowledgeNote {
     ...(row.deletedAt == null ? {} : { deletedAt: new Date(row.deletedAt) }),
     ...(row.deletedBy == null ? {} : { deletedBy: String(row.deletedBy) }),
   };
+}
+
+function toListedPin(row: Row): KnowledgeListedPin {
+  return { ...toPin(row), pageName: String(row.pageName) };
 }
 
 function toPin(row: Row): KnowledgePin {
@@ -1653,53 +1658,95 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     });
   }
 
+  async getPages(input: { ids: string[]; read: KnowledgeReadScope }): Promise<KnowledgePage[]> {
+    if (!input.ids.length) return [];
+    const rows = await (
+      await this.#c('pages')
+    )
+      .find({ id: { $in: [...new Set(input.ids)] }, ...live }, noProjection)
+      .toArray();
+    if (input.read === 'all') return rows.map(toPage);
+    const read = input.read;
+    const scopeIds = [...new Set(rows.map(row => String(row.scopeId)))];
+    const readable = new Set<string>();
+    const any = this.#readableClauses(read);
+    if (scopeIds.length && any.length) {
+      const scopes = await (
+        await this.#c('pages')
+      )
+        .find({ id: { $in: scopeIds }, isScope: true, $or: any }, { projection: { _id: 0, id: 1 } })
+        .toArray();
+      for (const scope of scopes) readable.add(String(scope.id));
+    }
+    return rows.filter(row => readable.has(String(row.scopeId))).map(toPage);
+  }
+
   async listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
     pageIds?: string[];
+    excludePageIds?: string[];
+    withBody?: boolean;
+    count?: boolean;
     cursor?: string;
     limit?: number;
-  }): Promise<{ pins: KnowledgePin[]; nextCursor?: string }> {
+  }): Promise<{ pins: KnowledgeListedPin[]; nextCursor?: string; total?: number }> {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const ids = await this.#readable(input.read);
     const match: Filter<Document> = {};
     if (input.audience !== 'all') match.audience = { $in: input.audience };
-    if (input.pageIds) match.pageId = { $in: input.pageIds };
+    const pageId: Document = {};
+    if (input.pageIds) pageId.$in = input.pageIds;
+    if (input.excludePageIds?.length) pageId.$nin = input.excludePageIds;
+    if (Object.keys(pageId).length) match.pageId = pageId;
+    const pins = await this.#c('pins');
+    // Every condition except the cursor and the limit, so `total` counts the same pins.
+    const base: Document[] = [
+      { $match: match },
+      {
+        $lookup: {
+          from: MONGO_KNOWLEDGE_PAGES_COLLECTIONS.pages,
+          localField: 'pageId',
+          foreignField: 'id',
+          as: 'page',
+        },
+      },
+      {
+        $match: {
+          'page.deletedAt': { $exists: false },
+          ...(ids === null ? {} : { 'page.scopeId': { $in: ids } }),
+          ...(input.withBody ? { 'page.body': { $regex: '\\S' } } : {}),
+        },
+      },
+    ];
+    const pageMatch: Document[] = [];
     if (input.cursor) {
       const [createdAt, id] = decodeCursor(input.cursor);
       const at = new Date(createdAt);
-      match.$or = [{ createdAt: { $lt: at } }, { createdAt: at, id: { $lt: id } }];
+      pageMatch.push({ $match: { $or: [{ createdAt: { $lt: at } }, { createdAt: at, id: { $lt: id } }] } });
     }
-    const rows = await (
-      await this.#c('pins')
-    )
+    const rows = await pins
       .aggregate([
-        { $match: match },
-        {
-          $lookup: {
-            from: MONGO_KNOWLEDGE_PAGES_COLLECTIONS.pages,
-            localField: 'pageId',
-            foreignField: 'id',
-            as: 'page',
-          },
-        },
-        {
-          $match: {
-            'page.deletedAt': { $exists: false },
-            ...(ids === null ? {} : { 'page.scopeId': { $in: ids } }),
-          },
-        },
+        ...base,
+        ...pageMatch,
+        { $addFields: { pageName: { $arrayElemAt: ['$page.name', 0] } } },
         { $project: { _id: 0, page: 0 } },
         { $sort: { createdAt: -1, id: -1 } },
         { $limit: limit + 1 },
       ])
       .toArray();
-    const pins = rows.slice(0, limit).map(toPin);
-    const last = pins[pins.length - 1];
+    let total: number | undefined;
+    if (input.count) {
+      const counted = await pins.aggregate([...base, { $count: 'total' }]).toArray();
+      total = Number(counted[0]?.total ?? 0);
+    }
+    const listed = rows.slice(0, limit).map(toListedPin);
+    const last = listed[listed.length - 1];
     return {
-      pins,
+      pins: listed,
       ...(rows.length > limit && last ? { nextCursor: encodeCursor([last.createdAt.toISOString(), last.id]) } : {}),
+      ...(total === undefined ? {} : { total }),
     };
   }
 }

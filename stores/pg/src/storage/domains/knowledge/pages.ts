@@ -17,6 +17,7 @@ import type {
   KnowledgePageSearchHit,
   KnowledgePageTemplateInput,
   KnowledgePageStore,
+  KnowledgeListedPin,
   KnowledgePin,
   KnowledgeProvenance,
   KnowledgeReadScope,
@@ -147,6 +148,7 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
     index('mastra_knowledge_notes_page_idx', t.notes, '"pageId","createdAt","id"'),
     index('mastra_knowledge_stamps_scope_idx', t.stamps, '"scopeId"'),
     index('mastra_knowledge_mentions_page_idx', t.mentions, '"pageId"'),
+    `CREATE INDEX IF NOT EXISTS "mastra_knowledge_pins_audience_gin" ON ${q(t.pins)} USING gin ("audience")`,
     index('mastra_knowledge_pins_created_idx', t.pins, '"createdAt","id"'),
     index('mastra_knowledge_activity_page_idx', t.activity, '"pageId","createdAt","id"'),
     index('mastra_knowledge_activity_created_idx', t.activity, '"createdAt","id"'),
@@ -344,6 +346,10 @@ function toPin(row: Row): KnowledgePin {
     createdAt: new Date(row.createdAt as string | Date),
     updatedAt: new Date(row.updatedAt as string | Date),
   };
+}
+
+function toListedPin(row: Row): KnowledgeListedPin {
+  return { ...toPin(row), pageName: String(row.pageName) };
 }
 
 function escapeLike(term: string): string {
@@ -1529,13 +1535,30 @@ export class PgKnowledgePages implements KnowledgePageStore {
     await this.#client.query(`TRUNCATE ${tables}`);
   }
 
+  async getPages(input: { ids: string[]; read: KnowledgeReadScope }): Promise<KnowledgePage[]> {
+    if (!input.ids.length) return [];
+    const params = new Params();
+    const ids = params.add([...new Set(input.ids)]);
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId"
+       WHERE p."id" = ANY(${ids}::text[]) AND p."deletedAt" IS NULL AND ${filter.readable('s')}`,
+      params.values,
+    );
+    return rows.map(toPage);
+  }
+
   async listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
     pageIds?: string[];
+    excludePageIds?: string[];
+    withBody?: boolean;
+    count?: boolean;
     cursor?: string;
     limit?: number;
-  }): Promise<{ pins: KnowledgePin[]; nextCursor?: string }> {
+  }): Promise<{ pins: KnowledgeListedPin[]; nextCursor?: string; total?: number }> {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
@@ -1543,21 +1566,36 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const where = [`p."deletedAt" IS NULL`, filter.readable('s')];
     if (input.audience !== 'all') where.push(`pn."audience" && ${params.add(input.audience)}::text[]`);
     if (input.pageIds) where.push(`pn."pageId" = ANY(${params.add(input.pageIds)}::text[])`);
+    if (input.excludePageIds?.length) where.push(`pn."pageId" <> ALL(${params.add(input.excludePageIds)}::text[])`);
+    if (input.withBody) where.push(`p."body" ~ '\\S'`);
+    const from = `FROM ${this.#pins} pn JOIN ${this.#pages} p ON p."id" = pn."pageId" JOIN ${this.#pages} s ON s."id" = p."scopeId"`;
+    // The total ignores the cursor and the limit; it shares every other condition and parameter.
+    const totalWhere = where.join(' AND ');
     if (input.cursor) {
       const [createdAt, id] = decodeCursor(input.cursor, 2);
       where.push(`(pn."createdAt", pn."id") < (${params.add(createdAt)}::timestamptz, ${params.add(id)})`);
     }
     const rows = await this.#rows(
       this.#client,
-      `SELECT pn.* FROM ${this.#pins} pn JOIN ${this.#pages} p ON p."id" = pn."pageId" JOIN ${this.#pages} s ON s."id" = p."scopeId"
+      `SELECT pn.*, p."name" AS "pageName" ${from}
        WHERE ${where.join(' AND ')} ORDER BY pn."createdAt" DESC, pn."id" DESC LIMIT ${limit + 1}`,
       params.values,
     );
-    const pins = rows.slice(0, limit).map(toPin);
+    let total: number | undefined;
+    if (input.count) {
+      const counted = await this.#rows(
+        this.#client,
+        `SELECT count(*)::int AS "total" ${from} WHERE ${totalWhere}`,
+        params.values.slice(0, params.values.length - (input.cursor ? 2 : 0)),
+      );
+      total = Number(counted[0]?.total ?? 0);
+    }
+    const pins = rows.slice(0, limit).map(toListedPin);
     const last = pins[pins.length - 1];
     return {
       pins,
       ...(rows.length > limit && last ? { nextCursor: encodeCursor([iso(last.createdAt), last.id]) } : {}),
+      ...(total === undefined ? {} : { total }),
     };
   }
 }

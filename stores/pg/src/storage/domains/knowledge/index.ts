@@ -152,6 +152,10 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#pages.listChildScopes(input);
   }
 
+  override getPages(input: Parameters<KnowledgePageStore['getPages']>[0]): ReturnType<KnowledgePageStore['getPages']> {
+    return this.#pages.getPages(input);
+  }
+
   override getPage(input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
     return this.#pages.getPage(input);
   }
