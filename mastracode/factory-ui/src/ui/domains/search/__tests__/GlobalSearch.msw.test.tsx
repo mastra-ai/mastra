@@ -11,13 +11,14 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../
 import { queryKeys } from '../../../../api/keys';
 import {
   boardQueryOptions,
-  workItemHistoryQueryOptions,
+  workItemLookupQueryOptions,
   workItemSourcesQueryOptions,
 } from '../../../../hooks/useWorkItems';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { missingSessionLookup } from '../../workspaces/services/sessionWorkItems';
 import { createAppRoutes } from '../../../router';
 import {
   ACTIVE_FACTORY_ID,
@@ -309,9 +310,12 @@ async function warmSessionsAndWorkItems(client: ReturnType<typeof createQueryCli
   await Promise.all([
     client.prefetchQuery(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
     client.prefetchQuery(boardQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
-    client.prefetchQuery(workItemHistoryQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
     client.prefetchQuery(workItemSourcesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
   ]);
+  const board = client.getQueryData(boardQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID).queryKey);
+  const sessions = client.getQueryData(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID).queryKey);
+  const lookup = missingSessionLookup(board?.workItems ?? [], sessions?.workspaces ?? []);
+  await client.prefetchQuery(workItemLookupQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID, lookup));
 }
 
 async function openWithShortcut() {

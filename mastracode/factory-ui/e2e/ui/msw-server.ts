@@ -5,6 +5,9 @@ import { builtinBoardCatalog } from './board-catalog';
 
 interface StubbedCard {
   id: string;
+  createdAt?: string;
+  stages?: string[];
+  stageHistory?: { stage: string; enteredAt: string }[];
   board?: string | null;
   externalSource?: unknown;
   metadata?: Record<string, unknown> | null;
@@ -91,11 +94,30 @@ export const server = setupServer(
     const list = await readStubbedList(request.url);
     return HttpResponse.json({
       sources: list.workItems.flatMap(item =>
-        item.externalSource ? [{ board: item.board ?? 'work', externalSource: item.externalSource, metadata: item.metadata ?? {} }] : [],
+        item.externalSource
+          ? [{ board: item.board ?? 'work', externalSource: item.externalSource, metadata: item.metadata ?? {} }]
+          : [],
       ),
     });
   }),
   http.get('*/web/factory/projects/:id/work-items/counts', () => HttpResponse.json({ total: 0, boards: {} })),
+  // The activity chart reads when cards came in and shipped; answered from the test's cards like the server does.
+  http.get('*/web/factory/projects/:id/work-items/activity', async ({ request }) => {
+    const since = Date.parse(new URL(request.url).searchParams.get('since') ?? '');
+    const list = await readStubbedList(request.url);
+    const inWindow = (time: string | undefined): time is string => time !== undefined && Date.parse(time) >= since;
+    return HttpResponse.json({
+      total: list.workItems.length,
+      createdAt: list.workItems.map(item => item.createdAt).filter(inWindow),
+      doneAt: list.workItems
+        .map(item =>
+          item.stages?.includes('done')
+            ? item.stageHistory?.findLast(entry => entry.stage === 'done')?.enteredAt
+            : undefined,
+        )
+        .filter(inWindow),
+    });
+  }),
   http.get('*/web/factory/projects/:id/work-items/:workItemId', async ({ request, params }) => {
     const list = await readStubbedList(request.url);
     const workItem = list.workItems.find(item => item.id === params.workItemId);

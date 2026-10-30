@@ -396,13 +396,14 @@ export const workItemFilterQuerySchema = z.object({
   session: commaListSchema,
   /** Cards holding a session on any of these threads. */
   thread: commaListSchema,
-  /** Cards whose parent is any of these card ids. */
-  parent: commaListSchema,
-  /** Pull request cards opened from any of these branches. */
-  headBranch: commaListSchema,
 });
 
 export const workItemListQuerySchema = workItemFilterQuerySchema.extend({
+  /** `1` adds the matched cards' parents, children and pull requests after the page. */
+  related: z
+    .enum(['0', '1'])
+    .optional()
+    .transform(value => value === '1'),
   sort: z.enum(WORK_ITEM_SORTS).optional().default('recent'),
   limit: z
     .string()

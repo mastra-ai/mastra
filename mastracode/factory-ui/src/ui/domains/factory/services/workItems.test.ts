@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { createWorkItem, listWorkItems, startFactoryRun, updateWorkItem } from './workItems';
+import { createWorkItem, listWorkItemPage, startFactoryRun, updateWorkItem } from './workItems';
 
 const wireItem = {
   id: 'item-1',
@@ -36,7 +36,7 @@ describe('Factory work item service boundary', () => {
   it('maps provider-neutral server work items to the board source model', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [wireItem] })));
 
-    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    const [item] = (await listWorkItemPage('', 'project-1', { limit: 1 })).workItems;
 
     expect(item).toMatchObject({
       githubProjectId: 'project-1',
@@ -66,7 +66,7 @@ describe('Factory work item service boundary', () => {
     const externalSource = { integrationId: 'slack', type: 'slack-thread', ...slackSource };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));
 
-    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    const [item] = (await listWorkItemPage('', 'project-1', { limit: 1 })).workItems;
 
     expect(item).toMatchObject({ source: 'slack-thread', sourceKey: slackSource.externalId, url });
   });
@@ -80,7 +80,7 @@ describe('Factory work item service boundary', () => {
     };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));
 
-    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    const [item] = (await listWorkItemPage('', 'project-1', { limit: 1 })).workItems;
     expect(item).toMatchObject({ source: 'gitlab-pr', sourceKey: externalSource.externalId, url: externalSource.url });
   });
 

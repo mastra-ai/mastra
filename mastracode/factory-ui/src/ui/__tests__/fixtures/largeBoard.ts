@@ -25,6 +25,7 @@ export function largeBoard(count: number, factoryProjectId = 'fp-1'): WorkItemRo
     revision: 1,
     createdAt: new Date(Date.UTC(2026, 6, 18, 0, index)),
     updatedAt: new Date(Date.UTC(2026, 6, 18, 0, index)),
+    changedAt: new Date(Date.UTC(2026, 6, 18, 0, index)),
   }));
 }
 

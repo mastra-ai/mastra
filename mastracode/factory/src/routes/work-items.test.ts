@@ -682,7 +682,7 @@ describe('work item read wire', () => {
     expect(shipped.metadata.selfReviewFindings).toBeUndefined();
   });
 
-  it("finds a card's pull requests by parent or by the branch they were opened from", async () => {
+  it("adds a looked-up card's parent, children and branch pull requests when asked", async () => {
     const seedCard = async (title: string, input: Record<string, unknown> = {}) =>
       (
         await seed.workItems.upsert({
@@ -692,16 +692,23 @@ describe('work item read wire', () => {
           input: { externalSource: null, title, stages: ['done'], sessions: {}, metadata: {}, ...input },
         })
       ).item;
-    const parent = await seedCard('Parent');
-    await seedCard('Linked PR', { parentWorkItemId: parent.id });
-    await seedCard('Unlinked PR', { metadata: { headBranch: 'feat/x' } });
-    await seedCard('Other PR', { metadata: { headBranch: 'feat/y' } });
+    const pullRequest = (number: number) => ({
+      integrationId: 'github',
+      type: 'pull-request',
+      externalId: `acme/app#${number}`,
+    });
+    const parent = await seedCard('Parent', {
+      sessions: { work: { sessionId: 's1', threadId: 't1', branch: 'feat/x' } },
+    });
+    await seedCard('Linked PR', { parentWorkItemId: parent.id, externalSource: pullRequest(1) });
+    await seedCard('Branch PR', { externalSource: pullRequest(2), metadata: { headBranch: 'feat/x' } });
+    await seedCard('Other PR', { externalSource: pullRequest(3), metadata: { headBranch: 'feat/y' } });
     const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
     const titles = async (query: string) =>
       (await (await json('GET', `${base}?${query}`)).json()).workItems.map((item: { title: string }) => item.title);
 
-    expect(await titles(`parent=${parent.id}`)).toEqual(['Linked PR']);
-    expect(await titles('headBranch=feat/x')).toEqual(['Unlinked PR']);
+    expect(await titles('session=s1')).toEqual(['Parent']);
+    expect((await titles('session=s1&related=1')).toSorted()).toEqual(['Branch PR', 'Linked PR', 'Parent']);
   });
 
   it('reports when cards came in and shipped without sending the cards', async () => {

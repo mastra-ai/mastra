@@ -3,6 +3,7 @@ import type { QueryClient, QueryKey } from '@tanstack/react-query';
 
 import { useMemo } from 'react';
 import {
+  keepPreviousData,
   queryOptions,
   skipToken,
   useMutation,
@@ -16,8 +17,8 @@ import { queryKeys } from '../api/keys';
 import {
   createWorkItem,
   deleteWorkItem,
+  listWorkItemPage,
   listWorkItemSources,
-  listWorkItems,
   syncWorkItems,
   transitionWorkItem,
   updateWorkItem,
@@ -108,7 +109,11 @@ export function boardQueryOptions(baseUrl: string, factoryProjectId: string | un
             void client.invalidateQueries({ queryKey: queryKeys.workItemArchiveRoot(factoryProjectId) });
           }
           // Read again: an optimistic edit may have landed while the sync was in flight.
-          return applyBoardSync(sync.reset ? undefined : client.getQueryData<BoardSnapshot>(queryKey), sync, Date.now());
+          return applyBoardSync(
+            sync.reset ? undefined : client.getQueryData<BoardSnapshot>(queryKey),
+            sync,
+            Date.now(),
+          );
         }
       : skipToken,
     // The feed stream refetches on every board write; this only backs it up for a dropped stream
@@ -148,45 +153,65 @@ export function useWorkItemSources(factoryProjectId: string | undefined): WorkIt
   return useQuery(workItemSourcesQueryOptions(baseUrl, factoryProjectId)).data ?? NO_SOURCES;
 }
 
+/** What a lookup asks the server for: the cards holding any of these sessions, or a session on any of these threads. */
+export interface WorkItemLookup {
+  kind: 'session' | 'thread';
+  ids: readonly string[];
+}
+
 /**
- * Every card on the project, Done and Canceled included. Read once and kept for a few minutes rather
- * than polled: only lookups that miss the board need it.
+ * The cards holding the given sessions or threads, Done and Canceled included, with their parents, children
+ * and pull requests so relationship lookups resolve too. Kept for a few minutes rather than polled: cards on
+ * the board come from the board, so these are mostly closed ones that no longer change.
  */
-export function workItemHistoryQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+export function workItemLookupQueryOptions(
+  baseUrl: string,
+  factoryProjectId: string | undefined,
+  lookup: WorkItemLookup | undefined,
+) {
+  const ids = lookup ? [...new Set(lookup.ids)].sort().join(',') : '';
   return queryOptions({
-    queryKey: queryKeys.workItemHistory(factoryProjectId),
-    queryFn: factoryProjectId ? ({ signal }) => listWorkItems(baseUrl, factoryProjectId, signal) : skipToken,
+    queryKey: queryKeys.workItemLookup(factoryProjectId, lookup?.kind ?? 'session', ids),
+    queryFn:
+      factoryProjectId && lookup && ids
+        ? async ({ signal }) =>
+            (await listWorkItemPage(baseUrl, factoryProjectId, { [lookup.kind]: ids, related: '1' }, signal)).workItems
+        : skipToken,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
-    select: selectCards,
   });
 }
 
 /**
- * The board's cards, plus every older one once `needsHistory` says the board alone falls short.
- * Board cards win over their history copies, since the board is synced and patched by every edit.
+ * The board's cards, plus the ones `lookup` names that the board lacks — Done and Canceled cards it never
+ * loaded. `lookup` sees the board's cards and returns only the ids they miss, or nothing when none are
+ * missing. Board cards win over looked-up copies, since the board is synced and patched by every edit.
  */
-export function useWorkItemsWithHistory(
+export function useWorkItemsWithLookup(
   factoryProjectId: string | undefined,
-  needsHistory: boolean | ((cards: WorkItem[]) => boolean),
+  lookup: (cards: WorkItem[]) => WorkItemLookup | undefined,
 ) {
   const { baseUrl } = useApiConfig();
   const board = useWorkItemsQuery(factoryProjectId);
-  const cards = board.data ?? NO_CARDS;
-  const enabled = board.isSuccess && (typeof needsHistory === 'function' ? needsHistory(cards) : needsHistory);
-  const history = useQuery({ ...workItemHistoryQueryOptions(baseUrl, factoryProjectId), enabled });
+  const missing = board.isSuccess ? lookup(board.data) : undefined;
+  const enabled = missing !== undefined && missing.ids.length > 0;
+  const found = useQuery({
+    ...workItemLookupQueryOptions(baseUrl, factoryProjectId, enabled ? missing : undefined),
+    // A new session joining the list changes the key; keep naming the ones already found meanwhile.
+    placeholderData: keepPreviousData,
+  });
   const data = useMemo(() => {
-    if (!board.data || !history.data) return board.data;
+    if (!board.data || !found.data) return board.data;
     const onBoard = new Set(board.data.map(item => item.id));
-    return [...board.data, ...history.data.filter(item => !onBoard.has(item.id))];
-  }, [board.data, history.data]);
-  const settled = !enabled || history.isFetched;
+    return [...board.data, ...found.data.filter(item => !onBoard.has(item.id))];
+  }, [board.data, found.data]);
+  const settled = !enabled || found.isFetched;
   return {
     data,
     isSuccess: board.isSuccess && settled,
     isPending: board.isPending || !settled,
     isFetched: board.isFetched,
-    isLoading: board.isLoading || (enabled && history.isLoading),
+    isLoading: board.isLoading || (enabled && found.isLoading),
     isError: board.isError,
     dataUpdatedAt: board.dataUpdatedAt,
     refetch: board.refetch,
@@ -398,6 +423,7 @@ export function useDeleteWorkItemMutation(factoryProjectId: string | undefined) 
       // patchCards keeps the snapshot's session markers, so refetch to drop the deleted card's with it.
       void queryClient.invalidateQueries({ queryKey: listKey });
       void queryClient.invalidateQueries({ queryKey: queryKeys.workItemArchiveRoot(factoryProjectId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.workItemLookupRoot(factoryProjectId) });
     },
   });
 }

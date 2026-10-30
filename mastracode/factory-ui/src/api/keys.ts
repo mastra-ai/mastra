@@ -97,9 +97,11 @@ export const queryKeys = {
     ['intake', 'label-routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  /** Kept apart from `workItems` so invalidating the board never refetches the full history. */
-  workItemHistory: (factoryProjectId: string | undefined) =>
-    ['factory', 'work-item-history', factoryProjectId ?? null] as const,
+  /** Kept apart from `workItems` so invalidating the board never refetches the cards looked up beside it. */
+  workItemLookupRoot: (factoryProjectId: string | undefined) =>
+    ['factory', 'work-item-lookup', factoryProjectId ?? null] as const,
+  workItemLookup: (factoryProjectId: string | undefined, kind: 'session' | 'thread', ids: string) =>
+    [...queryKeys.workItemLookupRoot(factoryProjectId), kind, ids] as const,
   /** Every Done/Canceled page a board has read; deletes invalidate it so a removed card leaves. */
   workItemArchiveRoot: (factoryProjectId: string | undefined) =>
     ['factory', 'work-item-archive', factoryProjectId ?? null] as const,
@@ -111,6 +113,8 @@ export const queryKeys = {
     search: string,
     cursor: string | null,
   ) => [...queryKeys.workItemArchiveRoot(factoryProjectId), board, stage, sort, search, cursor] as const,
+  workItemActivity: (factoryProjectId: string | undefined, depth: string) =>
+    ['factory', 'work-item-activity', factoryProjectId ?? null, depth] as const,
   workItemSources: (factoryProjectId: string | undefined) =>
     ['factory', 'work-item-sources', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */

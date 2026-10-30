@@ -62,6 +62,7 @@ import {
   toSyncedWorkItem,
   workItemActivity,
   workItemSources,
+  withRelatedWorkItems,
 } from './work-item-page.js';
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
@@ -122,8 +123,6 @@ const FILTER_QUERY_PARAMS = [
   'worked',
   'session',
   'thread',
-  'parent',
-  'headBranch',
 ] as const;
 
 function filterQuery(context: Context): Record<(typeof FILTER_QUERY_PARAMS)[number], string | undefined> {
@@ -147,8 +146,6 @@ function workItemFilters(query: {
   worked?: string[];
   session?: string[];
   thread?: string[];
-  parent?: string[];
-  headBranch?: string[];
 }): WorkItemFilters {
   return {
     boards: query.board,
@@ -166,8 +163,6 @@ function workItemFilters(query: {
     },
     sessions: query.session,
     threads: query.thread,
-    parents: query.parent,
-    headBranches: query.headBranch,
   };
 }
 
@@ -181,8 +176,6 @@ function hasFilters(filters: WorkItemFilters): boolean {
     filters.labels?.length ||
     filters.sessions?.length ||
     filters.threads?.length ||
-    filters.parents?.length ||
-    filters.headBranches?.length ||
     Object.values(filters.people ?? {}).some(ids => ids?.length),
   );
 }
@@ -472,6 +465,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             sort: context.req.query('sort'),
             limit: context.req.query('limit'),
             cursor: context.req.query('cursor'),
+            related: context.req.query('related'),
           });
           if (!query.success) {
             const field = query.error.issues[0]?.path[0];
@@ -490,7 +484,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const page = sorted
             ? pageWorkItems(all, { ...filters, sort, userId: resolved.userId, limit, cursor })
             : { items: all };
-          const items = page.items;
+          const items = query.data.related ? withRelatedWorkItems(all, page.items) : page.items;
           return c.json({
             // A paged read is a board read, so it gets the board's card shape; the full list keeps the old one.
             workItems: paged ? items.map(item => toWireWorkItem(toSyncedWorkItem(item))) : items.map(toWireWorkItem),

@@ -40,10 +40,6 @@ export interface WorkItemFilters {
   sessions?: readonly string[];
   /** Cards holding a session on any of these thread ids. */
   threads?: readonly string[];
-  /** Cards whose parent is any of these card ids: a card's pull requests. */
-  parents?: readonly string[];
-  /** Pull request cards opened from any of these branches, the ones never linked to a parent. */
-  headBranches?: readonly string[];
 }
 
 export interface WorkItemPageQuery extends WorkItemFilters {
@@ -160,13 +156,6 @@ export function matchesWorkItemFilters(item: WorkItemRow, filters: WorkItemFilte
     if (filters.sessions?.length && !refs.some(ref => filters.sessions!.includes(ref.sessionId))) return false;
     if (filters.threads?.length && !refs.some(ref => filters.threads!.includes(ref.threadId))) return false;
   }
-  if (filters.parents?.length && (!item.parentWorkItemId || !filters.parents.includes(item.parentWorkItemId))) {
-    return false;
-  }
-  if (filters.headBranches?.length) {
-    const branch = item.metadata?.headBranch;
-    if (typeof branch !== 'string' || !filters.headBranches.includes(branch)) return false;
-  }
   const needle = filters.q?.trim().toLowerCase();
   if (!needle) return true;
   return (
@@ -193,8 +182,48 @@ export function pageWorkItems(items: readonly WorkItemRow[], query: WorkItemPage
   return { items: page.map(({ item }) => item), nextCursor: encodeWorkItemCursor(page.at(-1)!.at) };
 }
 
-/** Cards per board and column, for stage chips and column headers that no longer load every card. */
 /** Cards per board and column. Filters other than the stage apply, so a filtered board still counts every column. */
+function isPullRequestRow(item: WorkItemRow): boolean {
+  return item.externalSource?.type === 'pull-request';
+}
+
+function headBranchOf(item: WorkItemRow): string | undefined {
+  const branch = item.metadata?.headBranch;
+  return typeof branch === 'string' ? branch : undefined;
+}
+
+/**
+ * `matched` plus the cards related to them the way the board relates cards: their parents and children,
+ * pull requests opened from a matched card's session branch, and the cards whose branch a matched
+ * pull request was opened from. A session list names a card's pull request without reading every card.
+ */
+export function withRelatedWorkItems(all: readonly WorkItemRow[], matched: readonly WorkItemRow[]): WorkItemRow[] {
+  const ids = new Set(matched.map(item => item.id));
+  const parentIds = new Set(matched.flatMap(item => (item.parentWorkItemId ? [item.parentWorkItemId] : [])));
+  const sessionBranches = new Set(
+    matched
+      .filter(item => !isPullRequestRow(item))
+      .flatMap(item => Object.values(item.sessions).map(ref => ref.branch)),
+  );
+  const pullRequestBranches = new Set(
+    matched.flatMap(item => {
+      const branch = isPullRequestRow(item) && !item.parentWorkItemId ? headBranchOf(item) : undefined;
+      return branch === undefined ? [] : [branch];
+    }),
+  );
+  const related = all.filter(item => {
+    if (ids.has(item.id)) return false;
+    if (parentIds.has(item.id)) return true;
+    if (item.parentWorkItemId && ids.has(item.parentWorkItemId)) return true;
+    if (isPullRequestRow(item)) {
+      const branch = item.parentWorkItemId ? undefined : headBranchOf(item);
+      return branch !== undefined && sessionBranches.has(branch);
+    }
+    return Object.values(item.sessions).some(ref => pullRequestBranches.has(ref.branch));
+  });
+  return [...matched, ...related];
+}
+
 export function countWorkItems(
   items: readonly WorkItemRow[],
   filters: WorkItemFilters = {},

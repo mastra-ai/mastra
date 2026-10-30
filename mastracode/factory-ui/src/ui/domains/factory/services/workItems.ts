@@ -244,24 +244,6 @@ export interface BoardSnapshot {
   counts?: WorkItemCounts;
 }
 
-/** List the org's work items for a Factory project. */
-export async function listWorkItems(
-  baseUrl: string,
-  factoryProjectId: string,
-  signal?: AbortSignal,
-): Promise<BoardSnapshot> {
-  const data = await requestJson<{
-    workItems: WireWorkItem[];
-    runningSessionIds?: string[];
-    parkedSessionIds?: string[];
-  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`, { signal });
-  return {
-    workItems: data.workItems.map(fromWireWorkItem),
-    runningSessionIds: data.runningSessionIds ?? [],
-    parkedSessionIds: data.parkedSessionIds ?? [],
-  };
-}
-
 /** Cards per board and phase, counted by the server over every card including the ones never loaded. */
 export interface WorkItemCounts {
   total: number;
@@ -316,6 +298,12 @@ export interface WorkItemPageQuery {
   sort?: WorkItemPageSort;
   limit?: number;
   cursor?: string;
+  /** Comma-separated session ids: the cards holding any of them. */
+  session?: string;
+  /** Comma-separated thread ids: the cards holding a session on any of them. */
+  thread?: string;
+  /** Also return the matched cards' parents, children and pull requests. */
+  related?: '1';
 }
 
 export interface WorkItemPage {
@@ -339,6 +327,17 @@ export async function listWorkItemPage(
     { signal },
   );
   return { workItems: data.workItems.map(fromWireWorkItem), ...(data.nextCursor ? { nextCursor: data.nextCursor } : {}) };
+}
+
+/** When the project's cards came in and shipped since a time, and how many cards it has: the activity chart's input. */
+export async function getWorkItemActivity(
+  baseUrl: string,
+  factoryProjectId: string,
+  since: Date,
+  signal?: AbortSignal,
+): Promise<{ total: number; createdAt: string[]; doneAt: string[] }> {
+  const params = new URLSearchParams({ since: since.toISOString() });
+  return requestJson(projectWorkItemsUrl(baseUrl, factoryProjectId, `/activity?${params.toString()}`), { signal });
 }
 
 /** One card by id, Done and Canceled included: what a deep link to a card the board never loaded reads. */

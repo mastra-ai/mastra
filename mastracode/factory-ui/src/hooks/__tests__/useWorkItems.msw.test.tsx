@@ -11,6 +11,7 @@ import {
   useParkedSessions,
   useTransitionWorkItemMutation,
   useWorkItemsQuery,
+  useWorkItemsWithLookup,
 } from '../useWorkItems';
 
 const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [], parkedSessionIds: [] });
@@ -252,5 +253,44 @@ describe('board sync', () => {
 
     expect(seen).toEqual([null, 'c1']);
     expect(client.getQueryData<BoardSnapshot>(queryKeys.workItems(PROJECT_ID))?.cursor).toBe('c2');
+  });
+});
+
+describe('useWorkItemsWithLookup', () => {
+  it("asks the server only for the sessions the board lacks and adds those cards to the board's", async () => {
+    const ref = (sessionId: string) => ({ sessionId, threadId: `thread-${sessionId}` });
+    const open = { ...item(1, 'execute'), id: 'open', sessions: { work: ref('s-open') } };
+    const shipped = { ...item(1, 'done'), id: 'shipped', sessions: { work: ref('s-shipped') } };
+    const lookups: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items/sync`, () =>
+        HttpResponse.json({
+          cursor: 'c1',
+          reset: true,
+          workItems: [open],
+          deletedIds: [],
+          counts: { total: 2, boards: {} },
+          runningSessionIds: [],
+          parkedSessionIds: [],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, ({ request }) => {
+        lookups.push(new URL(request.url).search);
+        return HttpResponse.json({ workItems: [shipped], runningSessionIds: [], parkedSessionIds: [] });
+      }),
+    );
+    const sessions = ['s-open', 's-shipped'];
+
+    const { result } = renderHookWithProviders(() =>
+      useWorkItemsWithLookup(PROJECT_ID, cards => {
+        const onBoard = new Set(cards.flatMap(card => Object.values(card.sessions).map(r => r.sessionId)));
+        const ids = sessions.filter(id => !onBoard.has(id));
+        return ids.length > 0 ? { kind: 'session', ids } : undefined;
+      }),
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.map(card => card.id)).toEqual(['open', 'shipped']);
+    expect(lookups).toEqual(['?session=s-shipped&related=1']);
   });
 });

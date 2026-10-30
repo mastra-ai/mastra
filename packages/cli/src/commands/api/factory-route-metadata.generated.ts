@@ -223,15 +223,19 @@ export const FACTORY_API_ROUTE_METADATA = {
       "author",
       "board",
       "cursor",
+      "headBranch",
       "label",
       "limit",
       "linearProject",
+      "parent",
       "q",
       "reviewer",
+      "session",
       "sort",
       "source",
       "stage",
       "teammate",
+      "thread",
       "worked"
     ],
     "bodyParams": [],
@@ -258,6 +262,24 @@ export const FACTORY_API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /web/factory/projects/:id/work-items/activity": {
+    "contractKey": "workItemActivity",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/activity",
+    "description": "When cards came in and shipped since a time, without the cards: what the activity chart counts over periods longer than the board holds",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [
+      "since"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /web/factory/projects/:id/work-items/counts": {
     "contractKey": "workItemCounts",
     "method": "GET",
@@ -270,13 +292,17 @@ export const FACTORY_API_ROUTE_METADATA = {
       "assignee",
       "author",
       "board",
+      "headBranch",
       "label",
       "linearProject",
+      "parent",
       "q",
       "reviewer",
+      "session",
       "source",
       "stage",
       "teammate",
+      "thread",
       "worked"
     ],
     "bodyParams": [],
@@ -1818,6 +1844,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "worked": {
           "$ref": "#/$defs/__schema0"
         },
+        "session": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "thread": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "parent": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "headBranch": {
+          "$ref": "#/$defs/__schema0"
+        },
         "sort": {
           "default": "recent",
           "type": "string",
@@ -1919,6 +1957,63 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       ]
     }
   },
+  "GET /web/factory/projects/:id/work-items/activity": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "query": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "since": {
+          "type": "string",
+          "format": "date-time",
+          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+        }
+      },
+      "required": [
+        "since"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "createdAt": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "doneAt": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "total",
+        "createdAt",
+        "doneAt"
+      ]
+    }
+  },
   "GET /web/factory/projects/:id/work-items/counts": {
     "path": {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -1969,6 +2064,18 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "$ref": "#/$defs/__schema0"
         },
         "worked": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "session": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "thread": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "parent": {
+          "$ref": "#/$defs/__schema0"
+        },
+        "headBranch": {
           "$ref": "#/$defs/__schema0"
         }
       },
@@ -3943,6 +4050,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "metricsGet": "GET /web/factory/projects/:id/metrics",
   "workItemList": "GET /web/factory/projects/:id/work-items",
   "workItemGet": "GET /web/factory/projects/:id/work-items/:workItemId",
+  "workItemActivity": "GET /web/factory/projects/:id/work-items/activity",
   "workItemCounts": "GET /web/factory/projects/:id/work-items/counts",
   "workItemSources": "GET /web/factory/projects/:id/work-items/sources",
   "workItemSync": "GET /web/factory/projects/:id/work-items/sync",

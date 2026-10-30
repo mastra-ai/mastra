@@ -28,3 +28,13 @@ export function sessionWorkItemIndex(workItems: readonly WorkItem[]): ReadonlyMa
     }),
   );
 }
+
+/** The listed sessions whose cards the board lacks — finished before its window — as one card lookup. */
+export function missingSessionLookup(
+  cards: readonly WorkItem[],
+  sessions: readonly { sessionId: string }[],
+): { kind: 'session'; ids: string[] } | undefined {
+  const index = sessionWorkItemIndex(cards);
+  const ids = sessions.flatMap(session => (index.has(session.sessionId) ? [] : [session.sessionId]));
+  return ids.length > 0 ? { kind: 'session', ids } : undefined;
+}

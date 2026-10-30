@@ -1,9 +1,16 @@
-import { useWorkItemsWithHistory } from '../../../../hooks/useWorkItems';
+import { useWorkItemsWithLookup } from '../../../../hooks/useWorkItems';
+import { useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
+import { missingSessionLookup } from '../../workspaces/services/sessionWorkItems';
 
-/** Board cards: they title the session results and are searchable on their own before a session exists. */
+/**
+ * Board cards, which title the session results and are searchable on their own before a session exists,
+ * plus the Done and Canceled cards of listed sessions the board lacks — the same lookup the sidebar makes.
+ */
 export function useGlobalSearchWorkItems(factoryId: string | undefined) {
-  // Search reaches every card, not just the board's recent ones.
-  const query = useWorkItemsWithHistory(factoryId, true);
+  const workspaces = useWorkspacesQuery(factoryId);
+  const query = useWorkItemsWithLookup(factoryId, cards =>
+    missingSessionLookup(cards, workspaces.data?.workspaces ?? []),
+  );
 
   return {
     items: query.data ?? [],
