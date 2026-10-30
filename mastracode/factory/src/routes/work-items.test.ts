@@ -786,7 +786,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
   const transition = (item: { id: string; revision: number }, overrides: Record<string, unknown> = {}) =>
     json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${item.id}/transition`, {
       board: 'work',
-      stage: 'execute',
+      stage: 'planning',
       expectedRevision: item.revision,
       requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
       cause: 'board_drag',
@@ -799,12 +799,12 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
     const res = await transition(item);
     expect(res.status).toBe(200);
     const { result } = await res.json();
-    expect(result).toMatchObject({ status: 'accepted', itemId: item.id, revision: 2, stage: 'execute' });
+    expect(result).toMatchObject({ status: 'accepted', itemId: item.id, revision: 2, stage: 'planning' });
     const [canonical] = await listItems();
-    expect(canonical?.stages).toEqual(['execute']);
+    expect(canonical?.stages).toEqual(['planning']);
     expect(canonical?.stageHistory.map(entry => [entry.stage, entry.exitedAt !== undefined])).toEqual([
       ['intake', true],
-      ['execute', false],
+      ['planning', false],
     ]);
     expect(auditRecorded).toContainEqual(
       expect.objectContaining({
@@ -829,7 +829,7 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
         },
         body: JSON.stringify({
           board: 'work',
-          stage: 'execute',
+          stage: 'planning',
           expectedRevision: item.revision,
           requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1',
           cause: 'board_drag',
@@ -857,18 +857,18 @@ describe('POST /web/factory/projects/:id/work-items/:workItemId/transition', () 
   it('returns typed stale without overwriting the winner', async () => {
     const item = await createItem();
     expect((await transition(item)).status).toBe(200);
-    const stale = await transition(item, { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', stage: 'planning' });
+    const stale = await transition(item, { requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa2', stage: 'triage' });
     expect(stale.status).toBe(409);
     expect(await stale.json()).toMatchObject({ result: { status: 'rejected', code: 'stale' } });
-    expect((await listItems())[0]?.stages).toEqual(['execute']);
+    expect((await listItems())[0]?.stages).toEqual(['planning']);
   });
 
   it('replays immutable ingress without evaluating a second destination', async () => {
     const item = await createItem();
     const first = await transition(item);
-    const replay = await transition(item, { stage: 'planning' });
+    const replay = await transition(item, { stage: 'triage' });
     expect(await replay.json()).toEqual(await first.json());
-    expect((await listItems())[0]?.stages).toEqual(['execute']);
+    expect((await listItems())[0]?.stages).toEqual(['planning']);
   });
 
   it('rejects non-UUID human request identities before they can collide across work items', async () => {

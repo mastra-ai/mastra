@@ -1103,17 +1103,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "string"
                       }
                     },
-                    "agentEnterWhen": {
-                      "anyOf": [
-                        {
-                          "$ref": "#/$defs/__schema0"
-                        },
-                        {
-                          "type": "boolean",
-                          "const": false
-                        }
-                      ]
-                    },
                     "context": {
                       "type": "string"
                     },
@@ -1279,11 +1268,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
-            "item.phase",
-            "item.openPullRequest",
-            "item.reviewVerdict",
-            "item.selfReviewVerdict",
-            "item.selfReviewNeedsHuman",
             "source.kind",
             "source.integration"
           ]
@@ -1504,24 +1488,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
-                  },
-                  "agentEnterWhen": {
-                    "anyOf": [
-                      {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/__schema0"
-                          },
-                          {
-                            "type": "boolean",
-                            "const": false
-                          }
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 },
                 "required": [
@@ -1660,11 +1626,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
-            "item.phase",
-            "item.openPullRequest",
-            "item.reviewVerdict",
-            "item.selfReviewVerdict",
-            "item.selfReviewNeedsHuman",
             "source.kind",
             "source.integration"
           ]
@@ -2653,24 +2614,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
-            },
-            "agentEnterWhen": {
-              "anyOf": [
-                {
-                  "anyOf": [
-                    {
-                      "$ref": "#/$defs/__schema1"
-                    },
-                    {
-                      "type": "boolean",
-                      "const": false
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
             }
           },
           "required": [
@@ -2762,11 +2705,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
-            "item.phase",
-            "item.openPullRequest",
-            "item.reviewVerdict",
-            "item.selfReviewVerdict",
-            "item.selfReviewNeedsHuman",
             "source.kind",
             "source.integration"
           ]
@@ -2966,24 +2904,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
-                  },
-                  "agentEnterWhen": {
-                    "anyOf": [
-                      {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/__schema0"
-                          },
-                          {
-                            "type": "boolean",
-                            "const": false
-                          }
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 },
                 "required": [
@@ -3122,11 +3042,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
-            "item.phase",
-            "item.openPullRequest",
-            "item.reviewVerdict",
-            "item.selfReviewVerdict",
-            "item.selfReviewNeedsHuman",
             "source.kind",
             "source.integration"
           ]
@@ -4312,24 +4227,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "type": "null"
                 }
               ]
-            },
-            "agentEnterWhen": {
-              "anyOf": [
-                {
-                  "anyOf": [
-                    {
-                      "$ref": "#/$defs/__schema5"
-                    },
-                    {
-                      "type": "boolean",
-                      "const": false
-                    }
-                  ]
-                },
-                {
-                  "type": "null"
-                }
-              ]
             }
           },
           "required": [
@@ -4421,11 +4318,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
-            "item.phase",
-            "item.openPullRequest",
-            "item.reviewVerdict",
-            "item.selfReviewVerdict",
-            "item.selfReviewNeedsHuman",
             "source.kind",
             "source.integration"
           ]
@@ -4625,24 +4517,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                         "type": "null"
                       }
                     ]
-                  },
-                  "agentEnterWhen": {
-                    "anyOf": [
-                      {
-                        "anyOf": [
-                          {
-                            "$ref": "#/$defs/__schema0"
-                          },
-                          {
-                            "type": "boolean",
-                            "const": false
-                          }
-                        ]
-                      },
-                      {
-                        "type": "null"
-                      }
-                    ]
                   }
                 },
                 "required": [
@@ -4781,11 +4655,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.labels",
             "item.title",
             "item.author",
-            "item.phase",
-            "item.openPullRequest",
-            "item.reviewVerdict",
-            "item.selfReviewVerdict",
-            "item.selfReviewNeedsHuman",
             "source.kind",
             "source.integration"
           ]

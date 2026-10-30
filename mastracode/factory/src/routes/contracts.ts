@@ -662,8 +662,6 @@ export const FACTORY_ROUTE_CONTRACTS = {
               description: z.string().optional(),
               kind: z.enum(['resting', 'working', 'terminal']),
               nextPhases: z.array(z.string()).optional(),
-              /** Cards an agent may move into the phase; `false` for none, absent for any. */
-              agentEnterWhen: z.union([cardRuleGroupSchema, z.literal(false)]).optional(),
               /** The session context a working phase runs in. */
               context: z.string().optional(),
               /** @deprecated Use `context`. */

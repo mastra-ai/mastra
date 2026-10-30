@@ -135,26 +135,6 @@ describe('defineBoard phase fields', () => {
     }
   });
 
-  it('keeps agentEnterWhen on any phase kind, as a condition or false, and rejects anything else', () => {
-    const board = release({
-      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['building'], agentEnterWhen: LOW_EFFORT },
-      building: { name: 'Building', kind: 'working', nextPhases: ['shipped'], agentEnterWhen: LOW_EFFORT },
-      shipped: { name: 'Shipped', kind: 'terminal', agentEnterWhen: false },
-    });
-
-    expect(board.phases.backlog.agentEnterWhen).toEqual(LOW_EFFORT);
-    expect(board.phases.building.agentEnterWhen).toEqual(LOW_EFFORT);
-    expect(board.phases.shipped.agentEnterWhen).toBe(false);
-    for (const agentEnterWhen of [
-      true,
-      { operator: 'AND', conditions: [{ field: 'item.nope', operator: 'exists' }] },
-    ]) {
-      expect(() => release({ backlog: { name: 'Backlog', kind: 'resting', agentEnterWhen } })).toThrow(
-        'Phase "backlog" agentEnterWhen is not a valid condition',
-      );
-    }
-  });
-
   it('starts a phase on its own only when autoStart is set and its condition matches the card', () => {
     const board = release({
       backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['always', 'lowEffort', 'manual'] },
@@ -360,9 +340,9 @@ describe('defineBoard phase fields', () => {
 
     expect(board.transitionPolicy).toBe(transitionPolicy);
     expect(warn.mock.calls.map(([message]) => message)).toEqual([
-      '[Mastra Factory] Board "policy-release" uses deprecated fields: transitionPolicy → phases.*.agentEnterWhen. ' +
+      '[Mastra Factory] Board "policy-release" uses deprecated fields: transitionPolicy → phases.*.nextPhases and exitTool. ' +
         'They still work but will be removed in a future release.',
-      '[Mastra Factory] Board "policy-release-2" uses deprecated fields: transitionPolicy → phases.*.agentEnterWhen. ' +
+      '[Mastra Factory] Board "policy-release-2" uses deprecated fields: transitionPolicy → phases.*.nextPhases and exitTool. ' +
         'They still work but will be removed in a future release.',
     ]);
   });
