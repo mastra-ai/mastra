@@ -252,7 +252,10 @@ export interface KnowledgePageGraphProps {
   edges: KnowledgePageEdge[];
   pinnedIds?: readonly string[];
   selectedPageId?: string | null;
+  /** A page that wasn't selected was clicked, tapped, or activated with Enter or Space: select it. */
   onSelect: (page: KnowledgePagePayload) => void;
+  /** The already-selected page was clicked, tapped, or activated again: open it. Without it, that only reselects. */
+  onOpen?: (page: KnowledgePagePayload) => void;
   /** A mention line was clicked: notes on `source` mention `target`. `point` is where, in the graph's own box. */
   onMentionSelect?: (mention: {
     source: KnowledgePagePayload;
@@ -281,6 +284,7 @@ function KnowledgePageGraphInner({
   pinnedIds = [],
   selectedPageId,
   onSelect,
+  onOpen,
   onMentionSelect,
 }: KnowledgePageGraphProps) {
   const allEdges = useMemo(() => pageGraphEdges(pages, edges), [pages, edges]);
@@ -433,6 +437,22 @@ function KnowledgePageGraphInner({
     fit(true, 300);
   }, [selectedPageId, selectedIsLoaded, fit]);
 
+  // First click selects; a click on the page that is already selected opens it. A double-click is the two.
+  const activate = (page: KnowledgePagePayload) => {
+    if (page.id === selectedPageId && onOpen) return onOpen(page);
+    selectedHere.current = page.id;
+    onSelect(page);
+  };
+  // React Flow focuses nodes but only toggles its own selection on Enter or Space; route them like a click.
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key !== 'Enter' && event.key !== ' ') return;
+    const id = (event.target as HTMLElement).closest<HTMLElement>('.react-flow__node')?.dataset.id;
+    const page = id ? pagesById.get(id) : undefined;
+    if (!page) return;
+    event.preventDefault();
+    activate(page);
+  };
+
   if (!hasNodes) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -444,7 +464,7 @@ function KnowledgePageGraphInner({
   }
 
   return (
-    <div ref={containerRef} className="relative size-full" data-testid="knowledge-page-graph">
+    <div ref={containerRef} className="relative size-full" data-testid="knowledge-page-graph" onKeyDown={onKeyDown}>
       <GraphLegend />
       <ReactFlow
         nodes={nodes}
@@ -459,10 +479,7 @@ function KnowledgePageGraphInner({
         proOptions={{ hideAttribution: true }}
         nodesConnectable={false}
         nodesDraggable={false}
-        onNodeClick={(_: unknown, node: PageFlowNode) => {
-          selectedHere.current = node.id;
-          onSelect(node.data.page);
-        }}
+        onNodeClick={(_: unknown, node: PageFlowNode) => activate(node.data.page)}
         onEdgeClick={(event: React.MouseEvent, edge: Edge<RimEdgeData>) => {
           if (edge.data?.kind !== 'mention' || !onMentionSelect) return;
           const source = pagesById.get(edge.source);
