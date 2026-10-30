@@ -46,14 +46,18 @@ function serveCard(served?: Served) {
   });
 }
 
-/** Fails `failures` times (the client retries a 500 three times on its own), then serves the card. */
-function failThenServe(failures: number) {
-  let calls = 0;
+/** Fails every request until the returned `recover()` is called, then serves the card. */
+function failUntilRetried() {
+  let failing = true;
   serveTraceAggregate(request => {
-    calls++;
-    if (calls <= failures) return HttpResponse.json(traceAggregateErrorFixture, { status: 500 });
-    return respond(request);
+    requests.push(request);
+    return failing
+      ? HttpResponse.json(traceAggregateErrorFixture, { status: 500 })
+      : HttpResponse.json(respond(request));
   });
+  return () => {
+    failing = false;
+  };
 }
 
 function render(ui: ReactElement, filterTokens: PropertyFilterToken[] = []) {
@@ -129,11 +133,14 @@ describe('when the server answers aggregateTraces()', () => {
     ).toBeDefined();
   });
 
-  it('loads after Retry when both requests failed', async () => {
-    failThenServe(8);
+  it('loads after Retry once the requests stop failing', async () => {
+    // Every request fails until the click: how many times the client retries a 500 on its own is an
+    // implementation detail, so the test must not spend a fixed failure budget on it.
+    const recover = failUntilRetried();
     render(<DistinctIdsCard />);
 
     await waitFor(() => expect(screen.getByText(ERROR)).toBeDefined(), { timeout: 5000 });
+    recover();
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(await screen.findByText('Resources', undefined, { timeout: 5000 })).toBeDefined();
