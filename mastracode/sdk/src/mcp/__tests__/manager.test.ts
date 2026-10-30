@@ -346,6 +346,28 @@ describe('createMcpManager', () => {
       expect(call.servers).toHaveProperty('fs');
       expect(call.servers).toHaveProperty('remote');
     });
+
+    it('returns tools in config order even when a later server settles first', async () => {
+      setupConfig({
+        mcpServers: {
+          fs: { command: 'npx' },
+          remote: { url: 'https://example.com/mcp' },
+        },
+      });
+
+      MockedMCPClient.mockImplementation(function (this: any) {
+        this.listToolsetsWithErrors = vi.fn().mockResolvedValue({
+          toolsets: { remote: { context: {} }, fs: { read: {}, write: {} } },
+          errors: {},
+        });
+        this.disconnect = vi.fn();
+      } as any);
+
+      const manager = createMcpManager('/tmp/test');
+      await manager.init();
+
+      expect(Object.keys(manager.getTools())).toEqual(['fs_read', 'fs_write', 'remote_context']);
+    });
   });
 
   describe('extraServers parameter', () => {

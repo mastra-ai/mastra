@@ -996,7 +996,14 @@ export function createMcpManager(
     disconnect,
 
     getTools() {
-      return { ...tools };
+      // Servers settle in any order; return tools in config order so the model sees a stable tool list.
+      const ordered: Record<string, any> = {};
+      for (const name of Object.keys(config.mcpServers ?? {})) {
+        for (const key of serverStatuses.get(name)?.toolNames ?? []) {
+          if (key in tools) ordered[key] = tools[key];
+        }
+      }
+      return ordered;
     },
 
     hasServers() {
