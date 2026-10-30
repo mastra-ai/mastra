@@ -256,6 +256,82 @@ describe('BackgroundTaskMCPTaskStore', () => {
     return { manager, store, storage: await manager.getStorage() };
   }
 
+  it('lists a full page of tasks when newer rows are not readable as tasks', async () => {
+    const work: MCPTaskWork = async () => ({
+      status: 'input_required',
+      inputRequests: { who: { method: 'elicitation/create', params: {} } },
+    });
+    const { store, storage, manager } = await setup(work);
+    const keys: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+      keys.push(taskKeyOf(task.taskId));
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    // The two newest rows lose their envelope, like rows written before the principal was hashed.
+    const { tasks: rows } = await manager.listTasks({ agentId: 'mcp-server:s' });
+    for (const row of rows.filter(row => row.toolCallId === keys[2] || row.toolCallId === keys[3])) {
+      const { principalKey: _dropped, ...metadata } = row.metadata as Record<string, unknown>;
+      await storage.updateTask(row.id, { metadata });
+    }
+
+    const { listings: listed } = await store.list({ limit: 2 });
+
+    expect(listed.map(listing => listing.taskKey)).toEqual([keys[1], keys[0]]);
+    store.close();
+  });
+
+  describe('listing by status', () => {
+    const hang: MCPTaskWork = ({ signal }) =>
+      new Promise((_, reject) => signal.addEventListener('abort', () => reject(signal.reason)));
+
+    async function rowsOf(manager: Awaited<ReturnType<typeof setup>>['manager']) {
+      return (await manager.listTasks({ agentId: 'mcp-server:s' })).tasks;
+    }
+
+    it('reads only rows that can have the status, not every row on the server', async () => {
+      const { store, storage, manager } = await setup(hang);
+      for (let i = 0; i < 12; i++) {
+        await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+      }
+      for (const row of await rowsOf(manager)) await storage.updateTask(row.id, { status: 'completed' });
+      const listTasks = vi.spyOn(manager, 'listTasks');
+
+      const { listings } = await store.list({ status: 'cancelled', limit: 2 });
+
+      expect(listings).toEqual([]);
+      // Pages of the listing itself (limit + 1 rows each), not the sweep's.
+      const pages = listTasks.mock.calls.filter(([query]) => query?.perPage === 3);
+      expect(pages).toHaveLength(1);
+      expect(pages[0]![0]).toMatchObject({ status: ['cancelled'] });
+      store.close();
+    });
+
+    it('still lists an expired running row as failed, and an answered suspended row as working', async () => {
+      const { store, storage, manager } = await setup(hang);
+      const expired = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+      const answered = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+      for (const row of await rowsOf(manager)) {
+        if (row.toolCallId === taskKeyOf(expired.taskId)) {
+          await storage.updateTask(row.id, { status: 'running', expiresAt: new Date(Date.now() - 1_000) });
+        } else {
+          const metadata = {
+            ...(row.metadata as Record<string, unknown>),
+            inputRequests: { who: { method: 'elicitation/create' } },
+            inputResponses: { who: { action: 'accept' } },
+          };
+          await storage.updateTask(row.id, { status: 'suspended', metadata });
+        }
+      }
+
+      const failed = await store.list({ status: 'failed' });
+      expect(failed.listings.map(listing => listing.taskKey)).toEqual([taskKeyOf(expired.taskId)]);
+      const working = await store.list({ status: 'working' });
+      expect(working.listings.map(listing => listing.taskKey)).toEqual([taskKeyOf(answered.taskId)]);
+      store.close();
+    });
+  });
+
   it("gives a task's trace only to its caller, and each attempt its number", async () => {
     const attempts: MCPTaskAttempt[] = [];
     const work: MCPTaskWork = async attempt => {
@@ -306,9 +382,14 @@ describe('BackgroundTaskMCPTaskStore', () => {
       'metadata' in change ? Promise.resolve(false) : update(id, change, options),
     );
 
-    await expect(store.update(task.taskId, { who: { action: 'accept', content: {} } }, access)).rejects.toThrow(
-      'Could not store the input responses',
+    const refused = await store.update(task.taskId, { who: { action: 'accept', content: {} } }, access).then(
+      () => undefined,
+      (error: Error) => error,
     );
+    expect(refused?.message).toContain('Could not store the input responses');
+    // The task id is a bearer token: the error names the task by its key only.
+    expect(refused?.message).toContain(taskKeyOf(task.taskId));
+    expect(refused?.message).not.toContain(task.taskId);
     expect(await store.get(task.taskId, access)).toMatchObject({
       status: 'input_required',
       inputRequests: { who: {} },

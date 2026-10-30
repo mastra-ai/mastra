@@ -1,22 +1,36 @@
-import { createHash } from 'node:crypto';
 import type { BackgroundTask, BackgroundTaskManager, TaskContext, ToolExecutor } from '@mastra/core/background-tasks';
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { BackgroundTasksStorage } from '@mastra/core/storage';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { createTaskId, suggestedPollIntervalMs, taskKeyOf, TASKS_ERROR_CODES } from '../../shared/tasks';
 import type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputResponses } from '../../shared/tasks';
-import { MCPTaskLimitError } from './store';
+import {
+  MCPTaskLimitError,
+  decodeTaskListCursor,
+  isPastTaskListCursor,
+  matchesTaskListOptions,
+  nextTaskListCursor,
+  principalKeyOf,
+  toListing,
+} from './store';
 import type {
   MCPTaskAccess,
+  MCPTaskAdminOutcome,
   MCPTaskAttempt,
   MCPTaskAttemptTrace,
   MCPTaskCreateParams,
+  MCPTaskListing,
+  MCPTaskListOptions,
+  MCPTaskListPage,
   MCPTaskLimits,
   MCPTaskRunOptions,
   MCPTaskStore,
+  MCPTaskStoreAdmin,
   MCPTaskTrace,
   MCPTaskWork,
 } from './store';
+
+export { principalKeyOf, taskKeyOf } from './store';
 
 /** What the store needs from a task's `context`: which tool it runs. */
 export interface BackgroundToolTaskContext extends Record<string, unknown> {
@@ -92,16 +106,22 @@ export const TASK_EXPIRED_MESSAGE = 'Task expired before it finished';
 const TERMINAL_ROW_STATUSES = new Set<BackgroundTask['status']>(['completed', 'failed', 'cancelled', 'timed_out']);
 const OPEN_ROW_STATUSES: BackgroundTask['status'][] = ['pending', 'running', 'suspended'];
 const UPDATE_ATTEMPTS = 3;
-/** How long an aborted attempt's row is watched for core to record why: 20 reads, 50ms apart. */
+/**
+ * The row statuses {@link projectTask} can turn into each task status: a suspended row whose
+ * requests are all answered is working, and an open row past its TTL is failed.
+ */
+const ROW_STATUSES_FOR: Record<MCPTask['status'], BackgroundTask['status'][]> = {
+  working: ['pending', 'running', 'suspended'],
+  input_required: ['suspended'],
+  completed: ['completed'],
+  cancelled: ['cancelled'],
+  failed: ['failed', 'timed_out', ...OPEN_ROW_STATUSES],
+};
+/** How long an aborted attempt's row is watched for core to record why: from 50ms apart, backing off to 1s. */
 const ABORT_SETTLE_FIRST_READ_MS = 50;
 const ABORT_SETTLE_MAX_READ_MS = 1_000;
 /** The most rows one sweep reads, in each of its two listings. */
 const SWEEP_BATCH = 100;
-
-/** How a principal is stored. Principals can carry user and subject ids, so only their hash is kept. */
-export function principalKeyOf(principal: string): string {
-  return createHash('sha256').update(principal).digest('base64url');
-}
 
 /** Running, or pending but pinned (`pinToWorker`) to the worker that holds its attempt. */
 function isOwned(row: BackgroundTask): boolean {
@@ -142,6 +162,11 @@ function wasStopped(row: BackgroundTask, now: number): boolean {
 
 function isExpired(row: BackgroundTask, now: number): boolean {
   return row.expiresAt !== undefined && row.expiresAt.getTime() <= now;
+}
+
+/** Terminal past its deadline: gone, whether or not cleanup has deleted the row yet. */
+function isForgotten(row: BackgroundTask, now: number): boolean {
+  return isTerminalRow(row) && row.expiresAt !== undefined && row.expiresAt.getTime() + EXPIRED_RETENTION_MS <= now;
 }
 
 function latest(...dates: Array<Date | undefined>): Date {
@@ -211,7 +236,7 @@ interface Gate {
  * the tool's work rebuilt from the row (`workFor`), through a static executor registered for
  * every task tool, so a worker other than the creating one can run it.
  */
-export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
+export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
   readonly #manager: BackgroundTaskManager;
   readonly #owner: string;
   readonly #workFor: BackgroundTaskMCPTaskStoreOptions['workFor'];
@@ -394,7 +419,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
 
   async get(taskId: string, access: MCPTaskAccess): Promise<MCPDetailedTask | undefined> {
     this.#startSweeping();
-    const found = await this.#find(taskId, access);
+    const found = await this.#find(taskKeyOf(taskId), access);
     if (!found) return undefined;
     const { row, envelope } = found;
     // A task finished on another instance leaves its context registered here.
@@ -405,9 +430,82 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   }
 
   async update(taskId: string, inputResponses: MCPTaskInputResponses, access: MCPTaskAccess): Promise<boolean> {
+    const taskKey = taskKeyOf(taskId);
+    return (await this.#update(taskKey, inputResponses, `with key "${taskKey}"`, access)) !== 'not_found';
+  }
+
+  async cancel(taskId: string, access: MCPTaskAccess): Promise<boolean> {
+    return (await this.#cancel(taskKeyOf(taskId), access)) !== 'not_found';
+  }
+
+  /** Lists this server's tasks across principals, most recently created first. */
+  async list(options: MCPTaskListOptions = {}): Promise<MCPTaskListPage> {
     this.#startSweeping();
-    const found = await this.#find(taskId, access);
-    if (!found) return false;
+    const limit = options.limit ?? 50;
+    const cursor = decodeTaskListCursor(options.cursor);
+    const now = Date.now();
+    const matching: MCPTaskListing[] = [];
+    // Surface, client and key are row columns, so storage filters them. A row's status isn't the
+    // task's (an expired running row is a failed task), so storage only narrows to the row statuses
+    // that can become it, and the status is checked here. A status filter then reads its own rows,
+    // plus open rows for `failed`, which `maxOpenTasks` bounds. Skipped rows can leave a page short,
+    // so keep reading until one task more than `limit` is found or rows run out.
+    for (let page = 0; matching.length <= limit; page++) {
+      const { tasks } = await this.#manager.listTasks({
+        agentId: this.#owner,
+        ...(options.surface && { toolName: this.#rowToolName(options.surface) }),
+        ...(options.principalKey && { resourceId: `${this.#owner}:${options.principalKey}` }),
+        ...(options.taskKey && { toolCallId: options.taskKey }),
+        ...(options.status && { status: ROW_STATUSES_FOR[options.status] }),
+        // `toDate` is exclusive; tasks created in the cursor's millisecond are sorted out below.
+        ...(cursor && { toDate: new Date(Date.parse(cursor.before) + 1) }),
+        orderBy: 'createdAt',
+        orderDirection: 'desc',
+        page,
+        perPage: limit + 1,
+      });
+      for (const row of tasks) {
+        const envelope = envelopeOf(row);
+        if (!envelope || isForgotten(row, now)) continue;
+        const { context } = row.args as unknown as RowArgs;
+        const listing = toListing(
+          row.toolCallId,
+          envelope.principalKey,
+          context,
+          projectTask(row, envelope, '', now),
+          envelope.clientLabel,
+        );
+        if (!isPastTaskListCursor(listing, cursor) || !matchesTaskListOptions(listing, options)) continue;
+        matching.push(listing);
+        if (matching.length > limit) break;
+      }
+      if (tasks.length <= limit) break;
+    }
+    const listings = matching.slice(0, limit);
+    return {
+      listings,
+      ...(matching.length > limit && { nextCursor: nextTaskListCursor(listings, cursor) }),
+    };
+  }
+
+  updateByKey(taskKey: string, inputResponses: MCPTaskInputResponses): Promise<MCPTaskAdminOutcome> {
+    return this.#update(taskKey, inputResponses, `with key "${taskKey}"`);
+  }
+
+  cancelByKey(taskKey: string): Promise<MCPTaskAdminOutcome> {
+    return this.#cancel(taskKey);
+  }
+
+  /** Without `access`, any principal's task (admin). `label` names the task in errors. */
+  async #update(
+    taskKey: string,
+    inputResponses: MCPTaskInputResponses,
+    label: string,
+    access?: MCPTaskAccess,
+  ): Promise<MCPTaskAdminOutcome> {
+    this.#startSweeping();
+    const found = await this.#find(taskKey, access);
+    if (!found) return 'not_found';
     let { row, envelope } = found;
     let stored = false;
     const storage = await this.#manager.getStorage();
@@ -430,7 +528,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       );
       const reread = await storage.getTask(row.id);
       const rereadEnvelope = reread && envelopeOf(reread);
-      if (!reread || !rereadEnvelope) return false;
+      if (!reread || !rereadEnvelope) return 'not_found';
       row = reread;
       envelope = rereadEnvelope;
       // A concurrent update can overwrite these answers; check they landed, and write again if not.
@@ -444,31 +542,30 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     if (!stored && row.status === 'suspended') {
       const open = openInputRequests(envelope);
       if (Object.keys(inputResponses).some(key => key in open && !(key in (envelope.inputResponses ?? {})))) {
-        throw new Error(`Could not store the input responses for MCP task ${taskKeyOf(taskId)}`);
+        throw new Error(`Could not store the input responses for MCP task ${label}`);
       }
     }
     if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
-    return true;
+    return stored ? 'done' : 'ignored';
   }
 
   async traceOf(taskId: string, access: MCPTaskAccess): Promise<MCPTaskTrace | undefined> {
-    return (await this.#find(taskId, access))?.envelope.trace;
+    return (await this.#find(taskKeyOf(taskId), access))?.envelope.trace;
   }
 
-  async cancel(taskId: string, access: MCPTaskAccess): Promise<boolean> {
+  async #cancel(taskKey: string, access?: MCPTaskAccess): Promise<MCPTaskAdminOutcome> {
     this.#startSweeping();
-    const found = await this.#find(taskId, access);
-    if (!found) return false;
-    if (!isTerminalRow(found.row)) {
-      try {
-        await this.#manager.cancel(found.row.id);
-      } catch (error) {
-        this.#getLogger?.().warn('Could not cancel MCP task', { error });
-      }
-      this.#abortFirstAttempt(found.row.id, new Error('Task cancelled'));
-      this.#notifyCancel(found.row);
+    const found = await this.#find(taskKey, access);
+    if (!found) return 'not_found';
+    if (isTerminalRow(found.row)) return 'ignored';
+    try {
+      await this.#manager.cancel(found.row.id);
+    } catch (error) {
+      this.#getLogger?.().warn('Could not cancel MCP task', { error });
     }
-    return true;
+    this.#abortFirstAttempt(found.row.id, new Error('Task cancelled'));
+    this.#notifyCancel(found.row);
+    return 'done';
   }
 
   /** Fire and forget: a slow hook must hold up neither the `tasks/cancel` ack nor the sweep. */
@@ -722,24 +819,22 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     }
   }
 
+  /** Without `access`, any principal's task (admin). */
   async #find(
-    taskId: string,
-    access: MCPTaskAccess,
+    taskKey: string,
+    access?: MCPTaskAccess,
   ): Promise<{ row: BackgroundTask; envelope: BackgroundTaskEnvelope } | undefined> {
-    const principalKey = principalKeyOf(access.principal);
+    const principalKey = access && principalKeyOf(access.principal);
     const { tasks } = await this.#manager.listTasks({
       agentId: this.#owner,
-      resourceId: `${this.#owner}:${principalKey}`,
-      toolCallId: taskKeyOf(taskId),
+      ...(principalKey !== undefined && { resourceId: `${this.#owner}:${principalKey}` }),
+      toolCallId: taskKey,
       perPage: 1,
     });
     const row = tasks[0];
     const envelope = row && envelopeOf(row);
-    if (!row || !envelope || envelope.principalKey !== principalKey) return undefined;
-    // Terminal past its deadline: gone, whether or not cleanup has deleted the row yet.
-    if (isTerminalRow(row) && row.expiresAt && row.expiresAt.getTime() + EXPIRED_RETENTION_MS <= Date.now()) {
-      return undefined;
-    }
+    if (!row || !envelope || (principalKey !== undefined && envelope.principalKey !== principalKey)) return undefined;
+    if (isForgotten(row, Date.now())) return undefined;
     return { row, envelope };
   }
 

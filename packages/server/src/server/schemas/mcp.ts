@@ -55,6 +55,7 @@ export const serverInfoSchema = z.object({
   transports: z.array(mcpServerTransportSchema).optional(),
   /** Whether the server declares event types (experimental); see `GET /mcp/:serverId/events`. */
   events_capability: z.boolean().optional(),
+  tasks_capability: z.boolean().optional(),
 });
 
 export const listMcpServersResponseSchema = z.object({
@@ -75,6 +76,7 @@ export const serverDetailSchema = z.object({
   transports: z.array(mcpServerTransportSchema).optional(),
   /** Whether the server declares event types (experimental); see `GET /mcp/:serverId/events`. */
   events_capability: z.boolean().optional(),
+  tasks_capability: z.boolean().optional(),
 });
 
 // Tool schemas
@@ -216,3 +218,81 @@ export const emitMcpServerEventBodySchema = z.object({
 export const emitMcpServerEventResponseSchema = z.object({
   occurrence: mcpServerEventOccurrenceSchema,
 });
+
+// Task schemas (experimental; Studio admin view)
+export const mcpServerTaskPathParams = z.object({
+  serverId: z.string().describe('MCP server ID'),
+  taskKey: z.string().describe('Task key (a hash of the task id, as listed)'),
+});
+
+/** Tasks listed when the caller doesn't ask for a number. */
+export const DEFAULT_MCP_SERVER_TASKS_LIMIT = 50;
+
+const mcpServerTaskStatusSchema = z.enum(['working', 'input_required', 'completed', 'failed', 'cancelled']);
+
+export const listMcpServerTasksQuerySchema = z.object({
+  /** How many of the most recent tasks to list; defaults to 50, at most 200. */
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+  /** `nextCursor` of the previous page. */
+  cursor: z.string().min(1).optional(),
+  status: mcpServerTaskStatusSchema.optional(),
+  /** The tool, workflow or agent name. */
+  surface: z.string().min(1).optional(),
+  /** A client key (`principalKey`) as listed. */
+  client: z.string().min(1).optional(),
+  /** A task key as listed, to read one task. */
+  key: z.string().min(1).optional(),
+});
+
+/** The raw MCP task id goes in the body so it never lands in URLs or access logs. */
+export const findMcpServerTaskBodySchema = z.object({
+  taskId: z.string().min(1).max(512),
+});
+
+export const mcpServerTaskSurfaceSchema = z.object({
+  name: z.string(),
+  type: z.enum(['tool', 'workflow', 'agent']),
+  mode: z.enum(['auto', 'always']),
+  recover: z.boolean(),
+  /** Clients that don't declare the tasks extension are refused for this surface. */
+  required: z.boolean(),
+  ttlMs: z.number().nullable(),
+});
+
+export const mcpServerTaskSummarySchema = z.object({
+  taskKey: z.string(),
+  surface: z.string(),
+  status: mcpServerTaskStatusSchema,
+  statusMessage: z.string().optional(),
+  createdAt: z.string(),
+  lastUpdatedAt: z.string(),
+  expiresAt: z.string().optional(),
+  principalKey: z.string(),
+  clientLabel: z.string().optional(),
+  inputRequests: z
+    .record(z.string(), z.object({ method: z.string(), params: jsonObjectSchema.optional() }).passthrough())
+    .optional(),
+  result: jsonObjectSchema.optional(),
+  error: jsonObjectSchema.optional(),
+});
+
+export const listMcpServerTasksResponseSchema = z.object({
+  surfaces: z.array(mcpServerTaskSurfaceSchema),
+  /**
+   * Why `tasks` is empty regardless of what exists: the task store can't be listed, or the
+   * caller is scoped to a resource, which has no mapping to MCP principals.
+   */
+  unavailable: z.enum(['not_listable', 'resource_scoped']).optional(),
+  /** The most recent matching tasks first, at most `limit`. */
+  tasks: z.array(mcpServerTaskSummarySchema),
+  /** Pass as `cursor` for the next page; absent when no older task matches. */
+  nextCursor: z.string().optional(),
+});
+
+export const findMcpServerTaskResponseSchema = z.object({ task: mcpServerTaskSummarySchema });
+
+export const answerMcpServerTaskBodySchema = z.object({
+  inputResponses: z.record(z.string(), jsonObjectSchema),
+});
+
+export const mcpServerTaskActionResponseSchema = z.object({ success: z.literal(true) });
