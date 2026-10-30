@@ -10041,7 +10041,8 @@ export class Agent<
           tagName: 'background-task',
           contents:
             `Background task ${taskId} for tool call ${toolCallId} (${toolName}) has ${outcome}. ` +
-            `Its ${status === 'completed' ? 'result' : 'error'} is now on that tool call. ` +
+            `Its ${status === 'completed' ? 'result' : 'error'} now replaces the "started in the background" ` +
+            `placeholder that tool call returned, so earlier messages about it running were correct. ` +
             `Tell the user the outcome. Do not call the tool again for it.`,
           attributes: { taskId, toolCallId, toolName, status },
         },
