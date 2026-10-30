@@ -477,6 +477,9 @@ const invalidMerge = (text: string) =>
     text,
   });
 
+// A WeakSet rather than an instance field: the base constructor resolves the config before subclass fields are initialized.
+const warnedUnmergeableManagedWorkingMemory = new WeakSet<object>();
+
 export class Memory extends MastraMemory {
   protected override createMemoryTokenCounter() {
     return new TokenCounter();
@@ -612,6 +615,17 @@ export class Memory extends MastraMemory {
     }
 
     const currentWorkingMemory = config.workingMemory;
+    if (
+      !warnedUnmergeableManagedWorkingMemory.has(this) &&
+      !currentWorkingMemory.schema &&
+      (currentWorkingMemory.scope ?? 'resource') === 'resource' &&
+      (omConfig.scope ?? 'thread') === 'thread'
+    ) {
+      warnedUnmergeableManagedWorkingMemory.add(this);
+      this.logger.warn(
+        'observation.manageWorkingMemory rewrites the whole Markdown working memory, and with resource-scoped working memory the Observers of sibling threads can overwrite each other. Use a working memory schema so updates are merged field by field, or set workingMemory.scope to "thread".',
+      );
+    }
     const workingMemory = {
       ...currentWorkingMemory,
       agentManaged: currentWorkingMemory.agentManaged ?? false,

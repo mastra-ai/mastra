@@ -275,9 +275,9 @@ describe('Extractor', () => {
     expect(buildThreadMetadataFromExtractedValues([resolved!], result.values)).toEqual({});
   });
 
-  it('replaces JSON working memory from the working memory extractor', async () => {
+  it('replaces thread-scoped JSON working memory from the working memory extractor', async () => {
     const memory = {
-      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, scope: 'thread', schema: {} } })),
       getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
       getWorkingMemory: vi.fn(async () => '{"name":"Tyler","likes":["dogs"]}'),
       updateWorkingMemory: vi.fn(async () => undefined),
@@ -313,6 +313,33 @@ describe('Extractor', () => {
     });
     expect(result.values).toEqual({ 'working-memory': { location: 'Toronto' } });
     expect(buildThreadMetadataFromExtractedValues([resolved!], result.values)).toEqual({});
+  });
+
+  it('asks for a patch instead of the full document when schema working memory is resource-scoped', async () => {
+    const createMemory = (scope?: 'thread' | 'resource') =>
+      ({
+        getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, scope, schema: {} } })),
+        getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+        getWorkingMemory: vi.fn(async () => '{"name":"Tyler"}'),
+      }) as any;
+    const resolveInstructions = async (scope?: 'thread' | 'resource') => {
+      const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+        source: 'observer',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        memory: createMemory(scope),
+      });
+      return resolved!.instructions;
+    };
+
+    for (const scope of [undefined, 'resource'] as const) {
+      const instructions = await resolveInstructions(scope);
+      expect(instructions).toContain('Return a JSON object with ONLY the fields to add or change.');
+      expect(instructions).toContain('Set a field to null to delete it.');
+      expect(instructions).toContain('Current working memory JSON:\n{"name":"Tyler"}');
+      expect(instructions).not.toContain('full updated JSON object');
+    }
+    expect(await resolveInstructions('thread')).toContain('Return the full updated JSON object');
   });
 
   it('skips JSON working memory updates when the extractor returns null', async () => {
@@ -615,11 +642,11 @@ describe('Extractor', () => {
     expect(stream).toHaveBeenCalledTimes(1);
   });
 
-  describe('WorkingMemoryExtractor onExtracted with a configured schema', () => {
+  describe('WorkingMemoryExtractor onExtracted with a thread-scoped configured schema', () => {
     const schema = z.object({ name: z.string().optional() });
     const createMemory = () =>
       ({
-        getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema } })),
+        getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, scope: 'thread', schema } })),
         updateWorkingMemory: vi.fn(async () => undefined),
       }) as any;
     const runHook = (memory: any, current: unknown) =>
@@ -800,7 +827,7 @@ describe('Extractor', () => {
   });
 });
 
-describe('WorkingMemoryExtractor schema enforcement', () => {
+describe('WorkingMemoryExtractor schema enforcement for thread-scoped working memory', () => {
   const colorSchema = z.strictObject({
     preferredColor: z.enum(['blue', 'green']),
     budget: z.number().nullable(),
@@ -808,7 +835,7 @@ describe('WorkingMemoryExtractor schema enforcement', () => {
 
   function createSchemaMemory(schema: unknown) {
     return {
-      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema } })),
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, scope: 'thread', schema } })),
       getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
       getWorkingMemory: vi.fn(async () => '{"preferredColor":"blue","budget":100}'),
       updateWorkingMemory: vi.fn(async () => undefined),

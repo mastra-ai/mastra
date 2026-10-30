@@ -6,6 +6,7 @@ import {
   MessageList,
 } from '@mastra/core/agent';
 import type { AgentSignalType, MastraDBMessage } from '@mastra/core/agent';
+import { ConsoleLogger } from '@mastra/core/logger';
 import { filterSystemReminderMessages } from '@mastra/core/memory';
 import type { MemoryConfig } from '@mastra/core/memory';
 import { RequestContext } from '@mastra/core/request-context';
@@ -163,6 +164,30 @@ describe('Memory', () => {
       expect(config.workingMemory.useStateSignals).toBe(true);
       expect(memory.listTools()).not.toHaveProperty('updateWorkingMemory');
       expect(omConfig.observation?.extract?.some(extractor => extractor.slug === 'working-memory')).toBe(true);
+    });
+
+    it('warns once that managed Markdown working memory shared by a resource is not merged', () => {
+      const createManagedMemory = (workingMemory: MemoryConfig['workingMemory']) => {
+        const warn = vi.spyOn(ConsoleLogger.prototype, 'warn').mockImplementation(() => {});
+        const memory = new Memory({
+          storage: new InMemoryStore(),
+          options: {
+            workingMemory,
+            observationalMemory: { enabled: true, observation: { manageWorkingMemory: true } },
+          },
+        });
+        memory.getMergedThreadConfig();
+        memory.getMergedThreadConfig();
+        const calls = warn.mock.calls.filter(([message]) => String(message).includes('manageWorkingMemory'));
+        warn.mockRestore();
+        return calls;
+      };
+
+      const markdownWarnings = createManagedMemory({ enabled: true });
+      expect(markdownWarnings).toHaveLength(1);
+      expect(markdownWarnings[0]![0]).toContain('Use a working memory schema');
+      expect(createManagedMemory({ enabled: true, scope: 'thread' })).toHaveLength(0);
+      expect(createManagedMemory({ enabled: true, schema: z.object({ name: z.string().optional() }) })).toHaveLength(0);
     });
 
     it('keeps explicit useStateSignals false when manageWorkingMemory supplies defaults', () => {
