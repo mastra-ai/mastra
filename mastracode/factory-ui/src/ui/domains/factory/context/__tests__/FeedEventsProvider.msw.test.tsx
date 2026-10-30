@@ -160,6 +160,7 @@ describe('FeedEventsProvider', () => {
       await waitFor(() => expect(result.current.connected).toBe(true));
       // A tab left hidden holds no stream, so nothing announced what landed meanwhile.
       await waitFor(() => expect(commentRequests).toBe(before + 1));
+      await waitForMutationsIdle(rendered.client);
     } finally {
       vi.useRealTimers();
     }
