@@ -39,6 +39,7 @@ import {
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
   STEP_RESPONSE_MESSAGE_ID_KEY,
+  STEP_PROVIDER_METADATA_KEY,
   STEP_TOOLS_KEY,
   STEP_USAGE_KEY,
   STEP_WORKSPACE_KEY,
@@ -590,13 +591,15 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const isFreshCall = suspendData === undefined;
         const approvalGated = !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && isFreshCall));
 
-        // A suspended step never reaches `step-finish`, so its model usage rides on the first
-        // suspension chunk of the step. Consume it so parallel suspended calls and later
-        // re-suspensions of the same step do not report it again.
-        const takeSuspendedStepUsage = () => {
+        // A suspended step never reaches `step-finish`, so its model usage and provider metadata
+        // ride on the first suspension chunk of the step. Consume them so parallel suspended calls
+        // and later re-suspensions of the same step do not report them again.
+        const takeSuspendedStep = () => {
           const usage = readScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage');
           if (usage) writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', undefined);
-          return usage;
+          const providerMetadata = readScoped(scopeCtx, STEP_PROVIDER_METADATA_KEY, 'stepProviderMetadata');
+          if (providerMetadata) writeScoped(scopeCtx, STEP_PROVIDER_METADATA_KEY, 'stepProviderMetadata', undefined);
+          return { usage, providerMetadata };
         };
 
         // The real suspension sequence, extracted so it has exactly one implementation with
@@ -621,7 +624,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               runId,
               now: readScoped(scopeCtx, NOW_KEY, 'now'),
             });
-            const suspendedStepUsage = takeSuspendedStepUsage();
+            const { usage: suspendedStepUsage, providerMetadata: suspendedStepProviderMetadata } = takeSuspendedStep();
             const approvalChunk = await transformChunk({
               type: 'tool-call-approval',
               runId,
@@ -633,6 +636,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
                 usage: suspendedStepUsage,
+                ...(suspendedStepProviderMetadata && { providerMetadata: suspendedStepProviderMetadata }),
               },
             });
             // Add approval metadata to message before persisting
@@ -704,7 +708,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               },
             );
           }
-          const suspendedStepUsage = takeSuspendedStepUsage();
+          const { usage: suspendedStepUsage, providerMetadata: suspendedStepProviderMetadata } = takeSuspendedStep();
           const suspensionChunk = await transformChunk({
             type: 'tool-call-suspended',
             runId,
@@ -716,6 +720,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               args: inputData.args,
               resumeSchema: options?.resumeSchema,
               usage: suspendedStepUsage,
+              ...(suspendedStepProviderMetadata && { providerMetadata: suspendedStepProviderMetadata }),
             },
           });
           // Add suspension metadata to message before persisting
@@ -798,7 +803,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               runId,
               now: readScoped(scopeCtx, NOW_KEY, 'now'),
             });
-            const suspendedStepUsage = takeSuspendedStepUsage();
+            const { usage: suspendedStepUsage, providerMetadata: suspendedStepProviderMetadata } = takeSuspendedStep();
             const approvalChunk = await transformChunk({
               type: 'tool-call-approval',
               runId,
@@ -810,6 +815,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
                 usage: suspendedStepUsage,
+                ...(suspendedStepProviderMetadata && { providerMetadata: suspendedStepProviderMetadata }),
               },
             });
             // Add approval metadata to message before persisting
