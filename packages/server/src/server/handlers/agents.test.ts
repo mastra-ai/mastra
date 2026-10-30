@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { Agent } from '@mastra/core/agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, createDurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgent } from '@mastra/core/agent/durable';
@@ -15,6 +18,7 @@ import {
 } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { HTTPException } from '../http-exception';
@@ -414,6 +418,47 @@ describe('getProvidersHandler', () => {
     const customProvider = result.providers.find(p => p.id === 'test-gateway/custom-llm');
     expect(customProvider).toBeDefined();
     expect(customProvider?.name).toBe('Custom LLM');
+  });
+
+  describe('Mastra gateway listing', () => {
+    beforeEach(() => {
+      // The default Netlify gateway fetches its catalog over the network; keep these tests offline.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => Response.json({ providers: {} })),
+      );
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('lists the Mastra gateway as disconnected when MASTRA_GATEWAY_API_KEY is not set', async () => {
+      delete process.env.MASTRA_GATEWAY_API_KEY;
+
+      const mastra = new Mastra({});
+      const requestContext = new RequestContext();
+      const abortSignal = new AbortController().signal;
+
+      const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+      const gateway = result.providers.find(p => p.id === 'mastra');
+      expect(gateway).toBeDefined();
+      expect(gateway?.envVar).toBe('MASTRA_GATEWAY_API_KEY');
+      expect(gateway?.connected).toBe(false);
+    });
+
+    it('lists the Mastra gateway as connected when MASTRA_GATEWAY_API_KEY is set', async () => {
+      process.env.MASTRA_GATEWAY_API_KEY = 'test-key';
+
+      const mastra = new Mastra({});
+      const requestContext = new RequestContext();
+      const abortSignal = new AbortController().signal;
+
+      const result = await GET_PROVIDERS_ROUTE.handler({ mastra, requestContext, abortSignal });
+
+      expect(result.providers.find(p => p.id === 'mastra')?.connected).toBe(true);
+    });
   });
 
   it('should return no providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set and no custom gateway is registered', async () => {
@@ -872,6 +917,59 @@ describe('Agent Routes Authorization', () => {
       } as any);
 
       expect(result.metadata).toEqual({ type: 'support' });
+    });
+  });
+
+  describe('workspace skills from a filesystem resolver', () => {
+    let skillsDir: string;
+
+    beforeEach(async () => {
+      skillsDir = await mkdtemp(join(tmpdir(), 'agent-skills-'));
+      await mkdir(join(skillsDir, 'skills', 'greet'), { recursive: true });
+      await writeFile(
+        join(skillsDir, 'skills', 'greet', 'SKILL.md'),
+        '---\nname: greet\ndescription: Say hello\n---\n\nSay hello.\n',
+      );
+    });
+
+    afterEach(async () => {
+      await rm(skillsDir, { recursive: true, force: true });
+    });
+
+    it('does not call the filesystem resolver on agent metadata routes', async () => {
+      const filesystemResolver = vi.fn(() => new LocalFilesystem({ basePath: skillsDir }));
+      const agent = new Agent({
+        id: 'resolver-skills-agent',
+        name: 'resolver-skills-agent',
+        instructions: 'test-instructions',
+        model: {} as any,
+        workspace: new Workspace({ id: 'resolver-ws', filesystem: filesystemResolver, skills: ['skills'] }),
+      });
+      vi.spyOn(agent, 'listTools').mockResolvedValue({});
+      vi.spyOn(agent, 'getLLM').mockResolvedValue({
+        getModel: () => undefined,
+        getProvider: () => 'test-provider',
+        getModelId: () => 'test-model',
+      } as any);
+      vi.spyOn(agent, 'getDefaultGenerateOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(agent, 'getDefaultStreamOptionsLegacy').mockResolvedValue({});
+      vi.spyOn(agent, 'getDefaultOptions').mockResolvedValue({});
+      vi.spyOn(agent, 'getModelList').mockResolvedValue(null);
+      mastra = new Mastra({ agents: { 'resolver-skills-agent': agent }, logger: false });
+
+      await LIST_AGENTS_ROUTE.handler({ mastra, requestContext: new RequestContext() } as any);
+      await GET_AGENT_BY_ID_ROUTE.handler({
+        mastra,
+        agentId: 'resolver-skills-agent',
+        requestContext: new RequestContext(),
+      } as any);
+
+      expect(filesystemResolver).not.toHaveBeenCalled();
+
+      // Execution paths still resolve the filesystem and see its skills.
+      const skills = await agent.listSkills({ requestContext: new RequestContext() });
+      expect(filesystemResolver).toHaveBeenCalled();
+      expect(skills.map(skill => skill.name)).toEqual(['greet']);
     });
   });
 
@@ -1582,6 +1680,53 @@ describe('Agent Routes Authorization', () => {
       expect(capturedOptions.requestContext).toBeDefined();
       expect(capturedOptions.requestContext.get('custom-key')).toBe('stream-value');
     });
+  });
+
+  // https://github.com/mastra-ai/mastra/issues/28760
+  describe('requestContextSchema validation failure', () => {
+    function createSchemaAgents() {
+      const schemaAgent = new Agent({
+        id: 'schema-agent',
+        name: 'schema-agent',
+        instructions: 'test-instructions',
+        model: { specificationVersion: 'v2' } as any,
+        requestContextSchema: z.object({ userId: z.string() }),
+      });
+      const durableSchemaAgent = createDurableAgent({
+        agent: schemaAgent,
+        id: 'durable-schema-agent',
+        name: 'durable-schema-agent',
+      });
+      const schemaMastra = new Mastra({
+        agents: { 'schema-agent': schemaAgent, 'durable-schema-agent': durableSchemaAgent },
+        storage,
+        logger: false,
+      });
+      return schemaMastra;
+    }
+
+    for (const agentId of ['schema-agent', 'durable-schema-agent']) {
+      for (const [name, route] of [
+        ['generate', GENERATE_AGENT_ROUTE],
+        ['stream', STREAM_GENERATE_ROUTE],
+      ] as const) {
+        it(`${name} on ${agentId} responds 400 with the validation message`, async () => {
+          const schemaMastra = createSchemaAgents();
+          const error = await (route.handler as any)({
+            mastra: schemaMastra,
+            agentId,
+            requestContext: new RequestContext(),
+            abortSignal: new AbortController().signal,
+            messages: [{ role: 'user', content: 'hi' }],
+          }).catch((e: unknown) => e);
+
+          expect(error).toBeInstanceOf(HTTPException);
+          expect((error as HTTPException).status).toBe(400);
+          expect((error as HTTPException).message).toContain('Request context validation failed');
+          expect((error as HTTPException).message).toContain('userId');
+        });
+      }
+    }
   });
 
   describe('RESUME_STREAM_ROUTE', () => {
@@ -2387,7 +2532,7 @@ describe('Agent Routes Authorization', () => {
       });
       const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
       requestContext.set('tenantId', 'tenant-a');
-      const abort = vi.spyOn(scopedAgent, 'abortRunStream').mockResolvedValue(true);
+      const abort = vi.spyOn(scopedAgent, '__abortRunAcknowledged').mockResolvedValue(true);
 
       await expect(
         ABORT_AGENT_RUN_ROUTE.handler({ mastra, agentId: 'test-durable-agent', runId: 'scoped-abort', requestContext }),
@@ -2397,7 +2542,7 @@ describe('Agent Routes Authorization', () => {
 
     it.each(['user-a', 'user-b'])('checks thread ownership for an ownerless run called by %s', async caller => {
       await mockMemory.createThread({ threadId: 'abort-thread', resourceId: 'user-a', title: 'Protected thread' });
-      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
+      const abort = vi.spyOn(mockDurableAgent, '__abortRunAcknowledged').mockResolvedValue(true);
       await persistDurableAgenticLoopRun({ runId: 'ownerless-thread-run', threadId: 'abort-thread' });
       const cancellation = ABORT_AGENT_RUN_ROUTE.handler({
         mastra,
@@ -2415,7 +2560,7 @@ describe('Agent Routes Authorization', () => {
 
     it.each(['', 'inngest:'])('aborts an active run using its %s execution checkpoint', async prefix => {
       Object.defineProperty(mockDurableAgent, 'durableLoopWorkflowName', { value: `${prefix}durable-agentic-loop` });
-      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
+      const abort = vi.spyOn(mockDurableAgent, '__abortRunAcknowledged').mockResolvedValue(true);
       await persistDurableAgenticLoopRun({
         runId: 'abort-active',
         workflowName: `${prefix}durable-agentic-loop`,
@@ -2437,7 +2582,7 @@ describe('Agent Routes Authorization', () => {
     });
 
     it('does not acknowledge run abort before ownership has been checkpointed', async () => {
-      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      const abort = vi.spyOn(mockDurableAgent, '__abortRunAcknowledged');
       await persistDurableAgenticLoopRun({ runId: 'abort-registering', status: 'pending', inputCheckpointed: false });
       await expect(
         ABORT_AGENT_RUN_ROUTE.handler({
@@ -2458,7 +2603,7 @@ describe('Agent Routes Authorization', () => {
       vi.spyOn(mastra, 'getServer').mockReturnValue({
         auth: { mapUserToResourceId: (user: { id: string }) => user.id },
       } as any);
-      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      const abort = vi.spyOn(mockDurableAgent, '__abortRunAcknowledged');
       await persistDurableAgenticLoopRun({ runId: 'abort-ownership', resourceId: owner });
       await expect(
         ABORT_AGENT_RUN_ROUTE.handler({

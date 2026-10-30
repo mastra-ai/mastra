@@ -24,7 +24,7 @@ export type KpiCardProps = {
 /** One headline number, with its change and the previous value. Group them in `MetricsCardGroup`. */
 export function KpiCard({ label, icon: Icon, isError = false, ...reading }: KpiCardProps) {
   return (
-    <MetricsKpiCard>
+    <MetricsKpiCard busy={!isError && (reading.isLoading || reading.isUpdating)}>
       <MetricsKpiCard.Label icon={<Icon />}>{label}</MetricsKpiCard.Label>
       {isError ? <KpiError /> : <KpiReading {...reading} />}
     </MetricsKpiCard>

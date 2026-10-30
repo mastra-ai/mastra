@@ -1,7 +1,7 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { normalizeToolOutput } from '../agent/message-list/utils/unwrap-legacy-tool-output';
 import type { MastraDBMessage } from '../memory';
-import { InternalSpans, resolveExportedSpanId, SpanType } from '../observability';
+import { getResumeTracingContext, InternalSpans, SpanType } from '../observability';
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
@@ -20,6 +20,7 @@ import {
   DRAIN_PENDING_SIGNALS_KEY,
   RESOURCE_ID_KEY,
   STEP_ACTIVE_TOOLS_KEY,
+  STEP_PROVIDER_METADATA_KEY,
   STEP_TOOLS_KEY,
   STEP_USAGE_KEY,
   STEP_WORKSPACE_KEY,
@@ -385,6 +386,12 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           emittedConcurrencyResolved = true;
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
+          writeScoped(
+            scopeCtx,
+            STEP_PROVIDER_METADATA_KEY,
+            'stepProviderMetadata',
+            typedInputData.metadata?.providerMetadata,
+          );
           return toolCalls;
         },
         { id: 'map-tool-calls' },
@@ -715,15 +722,10 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         agentSpan.traceId === previousContext.traceId &&
         agentSpan.getParentSpanId() === previousContext.spanId;
 
-      if (continuesSavedLineage) {
-        resumeTracingContext = { ...previousContext };
-      } else {
-        resumeTracingContext = {
-          traceId: agentSpan.traceId,
-          spanId: resolveExportedSpanId(agentSpan),
-          parentSpanId: agentSpan.getParentSpanId(),
-        };
-      }
+      const own = getResumeTracingContext(agentSpan);
+      resumeTracingContext = continuesSavedLineage
+        ? { ...own, spanId: previousContext.spanId, parentSpanId: previousContext.parentSpanId }
+        : own;
     }
 
     const workflow = this.workflowFactory()({

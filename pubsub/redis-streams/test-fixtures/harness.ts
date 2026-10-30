@@ -1,7 +1,8 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import { mkdtemp, rm } from 'node:fs/promises';
-import { createServer } from 'node:net';
+import { connect, createServer } from 'node:net';
+import type { AddressInfo, Socket } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -160,4 +161,67 @@ export async function waitForServerHttp(serverUrl: string, timeoutMs = 15_000): 
       return false;
     }
   }, timeoutMs);
+}
+
+/**
+ * TCP proxy in front of a Redis node. While stalled it still accepts new
+ * connections (so node-redis's TCP-level connectTimeout is satisfied) but never
+ * forwards them, exactly like a frozen server. Connections made before the
+ * stall keep forwarding. On resume, held connections start forwarding with the
+ * client's queued writes intact, like a SIGCONTed server answering late.
+ */
+export function makeStallingProxy(target: { host: string; port: number }) {
+  const sockets = new Set<Socket>();
+  const held = new Set<Socket>();
+  let stalled = false;
+  const forward = (client: Socket) => {
+    const upstream = connect(target.port, target.host);
+    sockets.add(upstream);
+    upstream.on('close', () => {
+      sockets.delete(upstream);
+      client.destroy();
+    });
+    upstream.on('error', () => {});
+    client.on('close', () => upstream.destroy());
+    client.pipe(upstream);
+    upstream.pipe(client);
+  };
+  const server = createServer(client => {
+    sockets.add(client);
+    client.on('close', () => {
+      sockets.delete(client);
+      held.delete(client);
+    });
+    client.on('error', () => {});
+    if (stalled) {
+      held.add(client);
+      return;
+    }
+    forward(client);
+  });
+  const listening = new Promise<number>(resolve => {
+    server.listen(0, '127.0.0.1', () => resolve((server.address() as AddressInfo).port));
+  });
+  return {
+    listening,
+    stall: () => void (stalled = true),
+    /**
+     * Forward every held connection. `newestFirst` with `gapMs` answers them
+     * in reverse arrival order, so an earlier connect settles after a later one.
+     */
+    async resume({ newestFirst = false, gapMs = 0 } = {}) {
+      stalled = false;
+      const pending = [...held];
+      held.clear();
+      if (newestFirst) pending.reverse();
+      for (const [i, client] of pending.entries()) {
+        if (i > 0 && gapMs) await new Promise(r => setTimeout(r, gapMs));
+        forward(client);
+      }
+    },
+    close() {
+      for (const s of sockets) s.destroy();
+      return new Promise<void>(r => server.close(() => r()));
+    },
+  };
 }

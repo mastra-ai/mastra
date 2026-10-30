@@ -15,6 +15,10 @@ import { SCENARIO_MODEL_ID } from '../types';
  * supervisor. A decline (and its reason) must reach the subagent, which then
  * answers on its own; the tool must never run. Declining the supervisor's own
  * gate on the delegation call stays with the supervisor.
+ *
+ * The approval is raised on the supervisor's delegation call, which is what
+ * approves it, and names the subagent's own tool call (`delegatedToolCallId` /
+ * `delegatedToolName`) so a UI can tell which subagent tool is waiting (#28583).
  */
 const toolNames = (req: ChatCompletionRequest) => (req.tools ?? []).map(t => t.function?.name);
 const isSupervisor = (req: ChatCompletionRequest) => toolNames(req).includes('agent-subAgent');
@@ -26,22 +30,30 @@ const SUB_AGENT_ANSWER = 'Sub-agent handled it.';
 const SUPERVISOR_ANSWER = 'Supervisor finished.';
 
 type RunHandle = { fullStream: AsyncIterable<ChunkType>; runId: string };
+type ApprovalPayload = {
+  toolCallId: string;
+  toolName: string;
+  delegatedToolCallId?: string;
+  delegatedToolName?: string;
+};
+type SubCall = { id: string; query: string };
 
 describeForAllEngines(
   'AIMock loop scenario: subagent tool approval',
   engine => {
     const getMock = useLoopScenarioAimock();
 
-    async function setup(mock: LLMock) {
+    async function setup(mock: LLMock, subCalls: SubCall[] = [{ id: 'call-sub-1', query: 'classified' }]) {
       const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
-      const executions = { count: 0 };
+      const executions = { count: 0, queries: [] as string[] };
       const secretTool = createTool({
         id: 'secret-tool',
         description: 'Fetch a secret',
         inputSchema: z.object({ query: z.string() }),
         requireApproval: true,
-        execute: async () => {
+        execute: async ({ query }) => {
           executions.count++;
+          executions.queries.push(query);
           return { secret: 'classified-42' };
         },
       });
@@ -67,7 +79,7 @@ describeForAllEngines(
       );
       mock.on(
         { endpoint: 'chat', predicate: req => isSubagent(req) && !lastIsToolResult(req) },
-        { toolCalls: [{ id: 'call-sub-1', name: 'secretTool', arguments: { query: 'classified' } }] },
+        { toolCalls: subCalls.map(call => ({ id: call.id, name: 'secretTool', arguments: { query: call.query } })) },
       );
       mock.on(
         { endpoint: 'chat', predicate: req => isSubagent(req) && lastIsToolResult(req) },
@@ -91,10 +103,10 @@ describeForAllEngines(
         ...(gateDelegation ? { requireToolApproval: true } : {}),
       })) as unknown as RunHandle;
 
-      let approval: { toolName: string } | undefined;
+      let approval: ApprovalPayload | undefined;
       for await (const chunk of run.fullStream) {
         if (chunk.type === 'tool-call-approval') {
-          approval = chunk.payload as { toolName: string };
+          approval = chunk.payload as ApprovalPayload;
           // Durable streams stay open while suspended; stop at the approval.
           break;
         }
@@ -110,6 +122,8 @@ describeForAllEngines(
           runId: string;
           toolCallId: string;
           delegatedRunId?: string;
+          delegatedToolCallId?: string;
+          delegatedToolName?: string;
         };
       });
 
@@ -162,7 +176,12 @@ describeForAllEngines(
 
     it('runs the subagent tool once when the approval is granted', async () => {
       const mock = getMock();
-      const { agent, executions, entry, thread, resource } = await runToApproval(mock);
+      const { agent, executions, approval, entry, thread, resource } = await runToApproval(mock);
+
+      // Approved through the delegation call, but names the subagent's tool call that is waiting.
+      const identity = { toolCallId: 'call-sup-1', delegatedToolCallId: 'call-sub-1', delegatedToolName: 'secretTool' };
+      expect(approval).toMatchObject({ ...identity, toolName: 'secretTool' });
+      expect(entry).toMatchObject(identity);
 
       const resumed = (await agent.approveToolCall({
         runId: entry.runId,
@@ -195,11 +214,46 @@ describeForAllEngines(
 
       const label = `resumed chunks: ${types.join(', ')}`;
       expect(entry.delegatedRunId).toBeUndefined();
+      expect(approval.delegatedToolCallId).toBeUndefined();
+      expect(entry.delegatedToolCallId).toBeUndefined();
       const denied = chunks.find(c => c.type === 'tool-output-denied');
       expect((denied?.payload as any)?.toolName, label).toBe('agent-subAgent');
       expect((denied?.payload as any)?.approval, label).toMatchObject({ approved: false, reason: DECLINE_REASON });
       expect(subagentRequests(mock)).toHaveLength(0);
       expect(executions.count).toBe(0);
+    });
+
+    it('surfaces parallel subagent approvals one at a time, each naming its own call', async () => {
+      const mock = getMock();
+      const { agent, executions } = await setup(mock, [
+        { id: 'call-sub-a', query: 'alpha' },
+        { id: 'call-sub-b', query: 'beta' },
+      ]);
+      const memory = { thread: 'subagent-approval-parallel', resource: 'subagent-approval-user' };
+
+      let run = (await agent.stream('Get both secrets', { memory, maxSteps: 5 })) as unknown as RunHandle;
+      const waiting: (string | undefined)[] = [];
+      for (let turn = 0; turn < 2; turn++) {
+        let approval: ApprovalPayload | undefined;
+        for await (const chunk of run.fullStream) {
+          if (chunk.type === 'tool-call-approval') {
+            approval = chunk.payload as ApprovalPayload;
+            break;
+          }
+        }
+        expect(approval, 'run paused for approval').toMatchObject({ toolCallId: 'call-sup-1' });
+        waiting.push(approval!.delegatedToolCallId);
+        run = (await agent.approveToolCall({
+          runId: run.runId,
+          toolCallId: 'call-sup-1',
+          memory,
+        } as any)) as unknown as RunHandle;
+      }
+      const { types } = await drain(run.fullStream);
+
+      expect(types, `final chunks: ${types.join(', ')}`).not.toContain('error');
+      expect(waiting).toEqual(['call-sub-a', 'call-sub-b']);
+      expect(executions.queries).toEqual(['alpha', 'beta']);
     });
   },
   { skip: ['fs'] },

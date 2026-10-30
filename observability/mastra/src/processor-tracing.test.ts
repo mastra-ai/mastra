@@ -974,13 +974,13 @@ describe('Processor Tracing Tests', () => {
       expect(inputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
       // 4. MODEL_INFERENCE is child of MODEL_STEP
       expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 5. Model chunk spans are children of MODEL_INFERENCE (the provider call)
-      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
-      expect(chunkSpansInInference.length).toBe(1);
+      // 5. Model chunk spans are children of MODEL_STEP (processed content, siblings of MODEL_INFERENCE)
+      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
+      expect(chunkSpansInStep.length).toBe(1);
 
       // EXECUTION ORDER within MODEL_STEP: input_step_processor → model_chunks
-      const firstChunkInInference = chunkSpansInInference[0];
-      testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
+      const firstChunkInStep = chunkSpansInStep[0];
+      testExporter.expectStartedBefore(inputStepSpan, firstChunkInStep);
 
       await testExporter.finalExpectations();
     });
@@ -1049,13 +1049,13 @@ describe('Processor Tracing Tests', () => {
       expect(outputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
       // 4. MODEL_INFERENCE is child of MODEL_STEP
       expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 5. Model chunk spans are children of MODEL_INFERENCE (the provider call)
-      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
-      expect(chunkSpansInInference.length).toBe(1);
+      // 5. Model chunk spans are children of MODEL_STEP (processed content, siblings of MODEL_INFERENCE)
+      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
+      expect(chunkSpansInStep.length).toBe(1);
 
       // EXECUTION ORDER within MODEL_STEP: model_chunks → output_step_processor
-      const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
-      testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
+      const lastChunkInStep = chunkSpansInStep[chunkSpansInStep.length - 1];
+      testExporter.expectStartedBefore(lastChunkInStep, outputStepSpan);
 
       await testExporter.finalExpectations();
     });
@@ -1211,19 +1211,19 @@ describe('Processor Tracing Tests', () => {
       expect(outputStepSpan?.parentSpanId).toBe(modelStepSpan?.id);
       // 5. MODEL_INFERENCE is child of MODEL_STEP
       expect(modelInferenceSpan?.parentSpanId).toBe(modelStepSpan?.id);
-      // 6. Model chunk spans are children of MODEL_INFERENCE (the provider call)
-      const chunkSpansInInference = modelChunkSpans.filter(s => s.parentSpanId === modelInferenceSpan?.id);
-      expect(chunkSpansInInference.length).toBe(1);
+      // 6. Model chunk spans are children of MODEL_STEP (processed content, siblings of MODEL_INFERENCE)
+      const chunkSpansInStep = modelChunkSpans.filter(s => s.parentSpanId === modelStepSpan?.id);
+      expect(chunkSpansInStep.length).toBe(1);
 
       // EXECUTION ORDER: input -> MODEL_GENERATION -> output
       testExporter.expectStartedBefore(inputSpan, modelSpan);
       testExporter.expectStartedBefore(modelSpan, outputSpan);
 
       // EXECUTION ORDER within MODEL_STEP: input_step → model_chunks → output_step
-      const firstChunkInInference = chunkSpansInInference[0];
-      const lastChunkInInference = chunkSpansInInference[chunkSpansInInference.length - 1];
-      testExporter.expectStartedBefore(inputStepSpan, firstChunkInInference);
-      testExporter.expectStartedBefore(lastChunkInInference, outputStepSpan);
+      const firstChunkInStep = chunkSpansInStep[0];
+      const lastChunkInStep = chunkSpansInStep[chunkSpansInStep.length - 1];
+      testExporter.expectStartedBefore(inputStepSpan, firstChunkInStep);
+      testExporter.expectStartedBefore(lastChunkInStep, outputStepSpan);
 
       await testExporter.finalExpectations();
     });

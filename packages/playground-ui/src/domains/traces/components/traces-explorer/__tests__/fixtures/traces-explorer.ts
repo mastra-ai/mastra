@@ -34,6 +34,8 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryRootDuration: true,
     traceQueryTimeToFirstChunk: true,
     traceQueryTimeToFirstChunkSort: true,
+    traceQueryTimeToFirstToken: true,
+    traceQueryTimeToFirstTokenSort: true,
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     threadQuery: true,
@@ -53,6 +55,12 @@ export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = 
   capabilities: { ...traceQueryCapabilities.capabilities, traceQueryRootDuration: false },
 };
 
+/** A store that records each root's outcome and stop reason and filters trace queries on them. */
+export const outcomeCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, traceQueryOutcomeFields: true },
+};
+
 export const noTimeToFirstChunkCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceQueryCapabilities,
   capabilities: {
@@ -66,6 +74,21 @@ export const noTimeToFirstChunkCapabilities: GetObservabilityCapabilitiesRespons
 export const noTimeToFirstChunkSortCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceQueryCapabilities,
   capabilities: { ...traceQueryCapabilities.capabilities, traceQueryTimeToFirstChunkSort: false },
+};
+
+export const noTimeToFirstTokenCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQueryTimeToFirstToken: false,
+    traceQueryTimeToFirstTokenSort: false,
+  },
+};
+
+/** A store that records when each root's model produced its first token but can't order trace queries by it. */
+export const noTimeToFirstTokenSortCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, traceQueryTimeToFirstTokenSort: false },
 };
 
 export const noSpanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
@@ -142,16 +165,31 @@ export const twoTracesPage: TraceQueryKeysetTraceResponse = {
   page: { next: null },
 };
 
-/** One root that streamed its first chunk after 412ms, one that never streamed. */
+/** One root stopped by a step limit, one from a store or SDK that recorded no outcome. */
+export const outcomeTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [
+    { ...weatherTrace, outcome: 'limit', stopReason: 'max_steps', stopReasonContext: { maxSteps: 5 } },
+    { ...twoTracesPage.traces[1], status: 'error', outcome: null, stopReason: null, stopReasonContext: null },
+  ],
+  page: { next: null },
+};
+
+/** One root that streamed its first chunk after 412ms and its first token after 538ms, one that never streamed. */
 export const streamedTracesPage: TraceQueryKeysetTraceResponse = {
   traces: [
-    { ...weatherTrace, timeToFirstChunkMs: 412 },
-    { ...twoTracesPage.traces[1], timeToFirstChunkMs: null },
+    { ...weatherTrace, timeToFirstChunkMs: 412, timeToFirstTokenMs: 538 },
+    { ...twoTracesPage.traces[1], timeToFirstChunkMs: null, timeToFirstTokenMs: null },
   ],
   page: { next: null },
 };
 
 export const emptyTracesPage: TraceQueryKeysetTraceResponse = { traces: [], page: { next: null } };
+
+/** The weather root's first chunk came 400ms in, from an inference that had started 150ms before it. */
+export const firstChunkTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [{ ...weatherTrace, timeToFirstChunkMs: 400, timeToFirstTokenMs: 150 }],
+  page: { next: null },
+};
 
 export const workflowTracesPage: TraceQueryKeysetTraceResponse = {
   traces: [{ ...weatherTrace, name: 'weather-workflow', entityId: 'weather-workflow', entityType: 'workflow_run' }],

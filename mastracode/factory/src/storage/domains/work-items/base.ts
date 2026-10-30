@@ -185,6 +185,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'skill_delivery_ambiguous',
   'run_overdue',
   'repository_git_missing',
+  'repository_sandbox_unresponsive',
   'repository_egress_blocked',
   'repository_clone_failed',
   'repository_pull_failed',
@@ -1569,23 +1570,43 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * as a cursor and non-deterministic for the callers that iterate this list.
    */
   async list({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<WorkItemRow[]> {
+    const { items, cached } = await this.#listCached(orgId, factoryProjectId);
+    return cached ? structuredClone(items) : items;
+  }
+
+  /**
+   * Same rows as {@link list}, but shared with the list cache instead of cloned: the board poll
+   * reads every card of the project every few seconds, and cloning thousands of rows per poll
+   * costs more than the query the cache saves. Callers must not mutate the result.
+   */
+  async listShared({
+    orgId,
+    factoryProjectId,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+  }): Promise<readonly WorkItemRow[]> {
+    return (await this.#listCached(orgId, factoryProjectId)).items;
+  }
+
+  /** `cached` is true when `items` is the cache's own array, which callers that mutate must clone. */
+  async #listCached(orgId: string, factoryProjectId: string): Promise<{ items: WorkItemRow[]; cached: boolean }> {
     const key = `${orgId}\u0000${factoryProjectId}`;
     // Read the version before the rows: a write that lands in between bumps it again afterwards,
     // so the next call refetches instead of trusting a snapshot taken before that write.
     const version = await readBoardVersion(super.ops, orgId, factoryProjectId);
-    const cached = this.#listCache.get(key);
-    if (version && cached?.version === version && Date.now() - cached.takenAt < LIST_CACHE_TTL_MS) {
-      return structuredClone(cached.items);
+    const hit = this.#listCache.get(key);
+    if (version && hit?.version === version && Date.now() - hit.takenAt < LIST_CACHE_TTL_MS) {
+      return { items: hit.items, cached: true };
     }
     const items = await this.#listWithOps(super.ops, orgId, factoryProjectId);
     this.#listCache.delete(key);
-    if (version) {
-      this.#listCache.set(key, { version, takenAt: Date.now(), items: structuredClone(items) });
-      if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
-        this.#listCache.delete(this.#listCache.keys().next().value!);
-      }
+    if (!version) return { items, cached: false };
+    this.#listCache.set(key, { version, takenAt: Date.now(), items });
+    if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
+      this.#listCache.delete(this.#listCache.keys().next().value!);
     }
-    return items;
+    return { items, cached: true };
   }
 
   async listByIds({
@@ -1679,6 +1700,15 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async getByClaimKey({ orgId, claimKey }: { orgId: string; claimKey: string }): Promise<WorkItemRow | null> {
     const row = await this.#db.findOne<WorkItemDbRow>('work_items', { org_id: orgId, claim_key: claimKey });
     return row ? toWorkItem(row) : null;
+  }
+
+  /** Drop the org-wide claims a project's cards hold, so a deleted project stops reserving their records. */
+  async releaseProjectClaims({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<void> {
+    await this.#db.updateMany(
+      'work_items',
+      { org_id: orgId, factory_project_id: factoryProjectId },
+      { claim_key: null },
+    );
   }
 
   /**

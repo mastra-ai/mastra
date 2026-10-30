@@ -758,6 +758,35 @@ describe('BraintrustExporter', () => {
       });
     });
 
+    it.each([
+      ['a provider-reported charge', 'provider_reported', 0.000967, 0.000967],
+      ['a zero bring-your-own-key charge', 'provider_reported', 0, undefined],
+      ['a Mastra price estimate', 'estimated', 0.000967, undefined],
+    ])('should price the span in Braintrust with %s', async (_, source, estimatedCost, expected) => {
+      const llmSpan = createMockSpan({
+        id: 'priced-llm',
+        name: 'llm',
+        type: SpanType.MODEL_GENERATION,
+        isRoot: true,
+        attributes: {
+          model: 'zai/glm-4.7-flash',
+          usage: { inputTokens: 13780, outputTokens: 6 },
+        },
+      });
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: llmSpan });
+
+      llmSpan.endTime = new Date();
+      llmSpan.attributes = {
+        ...llmSpan.attributes,
+        costContext: { estimatedCost, costUnit: 'USD', costMetadata: { source } },
+      };
+      await exporter.exportTracingEvent({ type: TracingEventType.SPAN_ENDED, exportedSpan: llmSpan });
+
+      const logged = mockSpan.log.mock.calls.at(-1)[0];
+      expect(logged.metrics.estimated_cost).toBe(expected);
+      expect(logged.metadata.costContext.estimatedCost).toBe(estimatedCost);
+    });
+
     it('should handle minimal LLM generation attributes', async () => {
       const traceId = 'trace-id';
 

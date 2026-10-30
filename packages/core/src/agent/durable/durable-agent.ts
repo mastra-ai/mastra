@@ -15,7 +15,13 @@ import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
 import type { MemoryConfig } from '../../memory';
-import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
+import {
+  createObservabilityContext,
+  getOrCreateSpan,
+  getResumeTracingContext,
+  SpanType,
+  EntityType,
+} from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
@@ -50,7 +56,7 @@ import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } fro
 import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
-import { publishAbortRequest } from './abort-transport';
+import { publishAbortRequest, requestAcknowledgedAbort } from './abort-transport';
 import {
   AGENT_STREAM_TOPIC,
   AgentStreamEventTypes,
@@ -110,6 +116,7 @@ import type {
   RunRegistryEntry,
   SerializableModelListEntry,
 } from './types';
+import { restoreCompletionPolicy } from './utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
@@ -127,6 +134,7 @@ function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra
 }
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
+const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
 /** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
 const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 /** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
@@ -1681,8 +1689,7 @@ export class DurableAgent<
             ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
           },
           tracingPolicy: agentTracingPolicy,
-          tracingOptions: origAgentSpanData?.traceId ? { traceId: origAgentSpanData.traceId } : undefined,
-          ...(origAgentSpanData?.id ? { resumedFromSpanId: origAgentSpanData.id } : {}),
+          resumeFrom: getResumeTracingContext(origAgentSpanData),
           requestContext,
           mastra: this.#mastra,
         });
@@ -1700,7 +1707,16 @@ export class DurableAgent<
     }
     executionFence.throwIfLost();
 
+    const restoredCompletion = await restoreCompletionPolicy({
+      agent: wrapped,
+      persisted: workflowInput.options?.isTaskComplete,
+      requestContext,
+      runId,
+      logger: this.#mastra?.getLogger?.(),
+    });
+
     const registryEntry = {
+      isTaskComplete: restoredCompletion,
       // Call-time toolset tools died with the original process. Mark the entry
       // as a placeholder so the first step rebuilds tools and fails loudly
       // (DURABLE_AGENT_TOOLSETS_UNAVAILABLE) instead of running without them.
@@ -1993,6 +2009,7 @@ export class DurableAgent<
     });
     // Preserve the marker when the until-idle wrapper spreads these options.
     Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    Object.defineProperty(scopedOptions, RESOLVED_DEFAULT_OPTIONS, { value: defaultOptions, enumerable: true });
     return scopedOptions;
   }
 
@@ -2844,6 +2861,35 @@ export class DurableAgent<
     return aborted || this.#isRunExecuting(runId);
   }
 
+  /**
+   * Abort `runId` and resolve whether the abort was confirmed.
+   *
+   * Only a close this process performs itself counts as local confirmation. A
+   * run-registry entry does not: an evented run keeps one here while another
+   * process executes its steps, possibly a dead one. Every other run gets a
+   * single correlated request, and only the executor's answer confirms it.
+   * The local controller is flipped after that answer, so an executor in this
+   * process cannot unwind and drop its listener before the request reaches it.
+   *
+   * @internal Used by the server's run abort route.
+   */
+  async __abortRunAcknowledged(runId: string): Promise<boolean> {
+    const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
+    if (super.abortRunStream(runId)) {
+      this.#abortDurableRun(runId);
+      return true;
+    }
+    try {
+      return await requestAcknowledgedAbort(this.pubsub, runId);
+    } finally {
+      this.#abortLocalController(runId);
+    }
+  }
+
   /** Whether this process can see `runId` executing, in its registries or on the thread runtime. */
   #isRunExecuting(runId: string): boolean {
     return (
@@ -2889,13 +2935,18 @@ export class DurableAgent<
    * happens to know about the run.
    */
   #abortDurableRun(runId: string): void {
+    this.#abortLocalController(runId);
+    // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
+    // abort synchronously and a failed publish is logged, not thrown.
+    void this.requestRemoteAbort(runId);
+  }
+
+  /** Flip the controller this process holds for `runId`, if it holds one. */
+  #abortLocalController(runId: string): void {
     const controller = (this.#runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
     }
-    // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
-    // abort synchronously and a failed publish is logged, not thrown.
-    void this.requestRemoteAbort(runId);
   }
 
   /**
@@ -3089,6 +3140,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
         durableAgentId: this.id,
@@ -3918,9 +3970,7 @@ export class DurableAgent<
     if (origTraceId && this.#mastra?.observability) {
       try {
         const ag = this.#wrappedAgent as Agent<string, any, any>;
-        // Match non-durable Agent.stream() resume-span shape: same name suffix
-        // `(resumed)`, forward agent-level tracingPolicy, parent under the original
-        // span via `resumedFromSpanId` (also kept in metadata), and carry the resolvedVersionId.
+        // Match non-durable Agent.stream() resume-span shape.
         const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
         const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
         const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
@@ -3938,7 +3988,7 @@ export class DurableAgent<
             ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
             ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
           },
-          ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
+          resumeFrom: getResumeTracingContext(entry.agentSpan),
           tracingPolicy: agentTracingPolicy,
           tracingOptions: { traceId: origTraceId, ...entry.agentSpan?.traceState },
           traceState: entry.agentSpan?.traceState,
@@ -4723,6 +4773,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
         methodType: 'generate',

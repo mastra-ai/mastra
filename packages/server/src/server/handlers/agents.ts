@@ -563,13 +563,14 @@ export function getSerializedProcessors(
 /**
  * Extract skills from an agent (both inline and workspace skills).
  * Uses agent.listSkills() which merges agent-level and workspace-level skills.
+ * Skips skills read through a filesystem resolver so metadata reads don't run it.
  */
 export async function getSerializedSkillsFromAgent(
   agent: Agent,
   requestContext?: RequestContext,
 ): Promise<SerializedSkill[]> {
   try {
-    const skillsList = await agent.listSkills({ requestContext });
+    const skillsList = await agent.listSkills({ requestContext, resolveDynamicProviders: false });
     return skillsList.map(skill => ({
       name: skill.name,
       description: skill.description,
@@ -2362,6 +2363,10 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
           effectiveResourceId: getContextResourceId(requestContext),
           permission: MastraFGAPermissions.MEMORY_WRITE,
         });
+      }
+      // Another server may be executing the run: only report it aborted once that server confirms.
+      if (typeof agent.__abortRunAcknowledged === 'function') {
+        return { aborted: await agent.__abortRunAcknowledged(runId) };
       }
       return { aborted: await agent.abortRunStream(runId) };
     } catch (error) {

@@ -86,6 +86,7 @@ import type {
   DefinitionSource,
   TracingProperties,
   ObservabilityContext,
+  ResumeTracingContext,
   TracingContext,
   TracingPolicy,
 } from '../observability';
@@ -139,6 +140,7 @@ import { ChunkFrom } from '../stream';
 import type { ChunkType, MastraAgentNetworkStream, MastraOnFinishCallback } from '../stream';
 import { usesOpenAIStrictJsonSchema } from '../stream/aisdk/v5/execute';
 import type { FullOutput, MastraModelOutput } from '../stream/base/output';
+import type { DelegatedPauseIdentity } from '../stream/types';
 import { createTool } from '../tools';
 import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
@@ -171,7 +173,7 @@ import { createStep, createStepFromProcessor, isProcessor } from '../workflows/w
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state-read-tracker';
-import { createSkillTools } from '../workspace/skills';
+import { createSkillTools, ResolvedSourceWorkspaceSkills } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
 import { AgentLegacyHandler } from './agent-legacy';
@@ -464,6 +466,23 @@ function formatPendingSubAgentToolCalls(pendingToolCalls: SubAgentPendingToolCal
   if (!pendingToolCalls?.length) return '';
   const calls = pendingToolCalls.map(toolCall => `${toolCall.toolName}(${JSON.stringify(toolCall.args ?? {})})`);
   return `\n\n[The sub-agent stopped before finishing: it called tools that have no server-side execute and were never run: ${calls.join(', ')}.]`;
+}
+
+/**
+ * The sub-agent's own tool call that paused, read from its `tool-call-suspended` /
+ * `tool-call-approval` payload. When that sub-agent is itself re-raising a deeper
+ * delegate's pause, the deeper call already rides on `delegatedToolCallId`, so the
+ * call that actually paused wins over the intermediate delegation call.
+ */
+function getDelegatedPauseIdentity(payload: unknown): DelegatedPauseIdentity {
+  if (!payload || typeof payload !== 'object') return {};
+  const { toolCallId, toolName, delegatedToolCallId, delegatedToolName } = payload as Record<string, unknown>;
+  const callId = delegatedToolCallId ?? toolCallId;
+  const name = delegatedToolName ?? toolName;
+  return {
+    ...(typeof callId === 'string' ? { delegatedToolCallId: callId } : {}),
+    ...(typeof name === 'string' ? { delegatedToolName: name } : {}),
+  };
 }
 
 function logPendingSubAgentToolCalls(
@@ -1767,6 +1786,7 @@ export class Agent<
     requestContext?: RequestContext,
     workspaceOverride?: AnyWorkspace,
     tracingContext?: TracingContext,
+    resolveDynamicProviders = true,
   ): Promise<WorkspaceSkills | undefined> {
     const rc = requestContext || new RequestContext();
 
@@ -1791,9 +1811,13 @@ export class Agent<
     // Resolve workspace-level skills (if configured)
     const workspace = workspaceOverride ?? (await this.getWorkspace({ requestContext: rc }));
     const configuredWorkspaceSkills = workspace?.skills;
-    const workspaceSkills = configuredWorkspaceSkills?.getScoped
-      ? await configuredWorkspaceSkills.getScoped({ requestContext: rc })
-      : configuredWorkspaceSkills;
+    // Resolved-source skills read from a filesystem resolver; skip them when the caller must not resolve providers.
+    const workspaceSkills =
+      !resolveDynamicProviders && configuredWorkspaceSkills instanceof ResolvedSourceWorkspaceSkills
+        ? undefined
+        : configuredWorkspaceSkills?.getScoped
+          ? await configuredWorkspaceSkills.getScoped({ requestContext: rc })
+          : configuredWorkspaceSkills;
 
     // Merge if both exist (agent skills win on name conflicts)
     if (agentSkills && workspaceSkills) {
@@ -2994,7 +3018,9 @@ export class Agent<
   /**
    * List all skills available to this agent (from both agent-level and workspace).
    *
-   * @param options - Optional request context for dynamic skill resolution
+   * @param options - Optional request context for dynamic skill resolution.
+   *   Set `resolveDynamicProviders: false` to skip workspace skills that come from a
+   *   filesystem resolver, so listing doesn't call the resolver.
    * @returns Array of skill metadata (name, description, path)
    *
    * @example
@@ -3005,8 +3031,16 @@ export class Agent<
    * }
    * ```
    */
-  public async listSkills(options?: { requestContext?: RequestContext }): Promise<SkillMetadata[]> {
-    const skills = await this.resolveSkills(options?.requestContext);
+  public async listSkills(options?: {
+    requestContext?: RequestContext;
+    resolveDynamicProviders?: boolean;
+  }): Promise<SkillMetadata[]> {
+    const skills = await this.resolveSkills(
+      options?.requestContext,
+      undefined,
+      undefined,
+      options?.resolveDynamicProviders ?? true,
+    );
     if (!skills) return [];
     return skills.list();
   }
@@ -6355,6 +6389,8 @@ export class Agent<
                     resumeSchema: generateResult.resumeSchema,
                     runId: generateResult.runId,
                     isAgentSuspend: true,
+                    // generate() resolves suspendPayload to the sub-agent's pause chunk payload.
+                    ...getDelegatedPauseIdentity(generateResult.suspendPayload),
                   });
                 }
 
@@ -6432,6 +6468,7 @@ export class Agent<
                 let requireToolApproval;
                 let suspendedPayload;
                 let resumeSchema;
+                let delegatedPause: DelegatedPauseIdentity = {};
                 for await (const chunk of streamResult.fullStream) {
                   if (context?.writer) {
                     // Data chunks from writer.custom() should bubble up directly without wrapping
@@ -6448,17 +6485,21 @@ export class Agent<
                     suspendedPayload = {
                       requireToolApproval: (chunk as any).data ?? {},
                     };
+                    delegatedPause = getDelegatedPauseIdentity((chunk as any).data);
                   } else if (chunk.type === 'data-tool-call-suspended') {
                     suspendedPayload = chunk.data.suspendPayload;
                     resumeSchema = chunk.data.resumeSchema;
+                    delegatedPause = getDelegatedPauseIdentity(chunk.data);
                   } else if (chunk.type === 'tool-call-approval') {
                     requireToolApproval = chunk.payload ?? true;
                     suspendedPayload = {
                       requireToolApproval: chunk.payload ?? {},
                     };
+                    delegatedPause = getDelegatedPauseIdentity(chunk.payload);
                   } else if (chunk.type === 'tool-call-suspended') {
                     suspendedPayload = chunk.payload.suspendPayload;
                     resumeSchema = chunk.payload.resumeSchema;
+                    delegatedPause = getDelegatedPauseIdentity(chunk.payload);
                   }
                 }
 
@@ -6559,6 +6600,7 @@ export class Agent<
                     requireToolApproval,
                     runId: streamResult.runId,
                     isAgentSuspend: true,
+                    ...delegatedPause,
                   });
                 }
               } else {
@@ -8870,35 +8912,8 @@ export class Agent<
       ? this.#getSuspendedToolInfo(resumeContext?.snapshot, options.toolCallId)
       : undefined;
     const persistedTracingContext = isResume
-      ? (resumeContext?.snapshot?.tracingContext as
-          | { traceId?: string; spanId?: string; parentSpanId?: string }
-          | undefined)
+      ? (resumeContext?.snapshot?.tracingContext as ResumeTracingContext | undefined)
       : undefined;
-
-    // Only fall back to persisted traceId/parentSpanId when the caller didn't provide
-    // their own. This prevents cross-trace parentage if the caller is explicit.
-    const userProvidedTraceId = options.tracingOptions?.traceId;
-    const userProvidedParentSpanId = options.tracingOptions?.parentSpanId;
-    const effectiveTraceId =
-      userProvidedTraceId ?? (!userProvidedParentSpanId ? persistedTracingContext?.traceId : undefined);
-    const shouldUsePersistedParentSpan =
-      !userProvidedParentSpanId && (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
-
-    const resumeTracingOptions =
-      isResume && persistedTracingContext?.traceId
-        ? {
-            ...options.tracingOptions,
-            traceId: effectiveTraceId,
-          }
-        : options.tracingOptions;
-
-    // The persisted resume link travels separately from tracingOptions:
-    // tracingOptions.parentSpanId is reserved for external correlation ids,
-    // while the suspended span's id is a Mastra span present in storage.
-    const resumedFromSpanId =
-      isResume && persistedTracingContext?.traceId && shouldUsePersistedParentSpan
-        ? persistedTracingContext.spanId
-        : undefined;
 
     const spanInput = isResume ? buildResumeSpanInput(resumeContext.resumeData, suspendedToolInfo) : options.messages;
     const startingSignal = isResume ? undefined : signalSpanAttributes(options.messages);
@@ -8932,11 +8947,11 @@ export class Agent<
           : {}),
       },
       tracingPolicy: this.#options?.tracingPolicy,
-      tracingOptions: resumeTracingOptions,
+      tracingOptions: options.tracingOptions,
       tracingContext: options.tracingContext,
       requestContext,
       mastra: this.#mastra,
-      resumedFromSpanId,
+      resumeFrom: persistedTracingContext,
     });
 
     const memory = await this.getMemory({ requestContext });

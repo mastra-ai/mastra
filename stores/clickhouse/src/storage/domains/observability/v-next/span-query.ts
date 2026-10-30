@@ -10,11 +10,13 @@ import type {
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
 import { BRANCH_SPAN_TYPE_VALUES, TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS, TABLE_TRACE_BRANCHES } from './ddl';
+import { parseJson } from './helpers';
 import { buildSpanQueryResponse } from './preview-compat';
 import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
 import {
   compileSpanQueryPredicate,
   runWithClickHouseTraceQueryTimeout,
+  spanQueryOutcomeFieldsSupported,
   timeToFirstChunkSupported,
   timeToFirstTokenSupported,
 } from './trace-query';
@@ -58,6 +60,9 @@ const displayFields = [
   'timeToFirstChunkMs',
   'timeToFirstTokenMs',
   'status',
+  'outcome',
+  'stopReason',
+  'stopReasonContext',
 ];
 
 class Parameters {
@@ -120,13 +125,19 @@ function predicateFields(
   return fields;
 }
 
+/** Selection and filter expressions read only columns; `model`/`provider` read their dedicated columns. */
 function fieldExpression(field: string): string {
-  if (field === 'model' || field === 'provider')
-    return `if(JSONType(e.attributes, '${field}') = 'String', JSONExtractString(e.attributes, '${field}'), NULL)`;
   if (field === 'durationMs') return "dateDiff('millisecond', e.startedAt, e.endedAt)";
   if (field === 'status') return "if(isNull(e.error), 'success', 'error')";
   if (field === 'error') return "if(isNull(e.error), NULL, 'error')";
   return `e.${field}`;
+}
+
+/** Returned values fall back to span attributes for rows written before the dedicated columns existed. */
+function displayExpression(field: string): string {
+  if (field === 'model' || field === 'provider')
+    return `coalesce(e.${field}, if(JSONType(e.attributes, '${field}') = 'String', JSONExtractString(e.attributes, '${field}'), NULL))`;
+  return fieldExpression(field);
 }
 
 export function compileClickHouseSpanQuery(plan: TrustedSpanQueryPlan) {
@@ -206,6 +217,10 @@ export const TRACE_BRANCHES_SPAN_FIELD_COLUMNS: Readonly<Record<string, readonly
       'rootEntityId',
       'rootEntityName',
       'rootEntityVersionId',
+      'model',
+      'provider',
+      'outcome',
+      'stopReason',
     ].map(field => [field, sameColumn(field)]),
   ),
   status: ['error'],
@@ -365,7 +380,7 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
     rows.map(row => new TupleParam([...identityValues(row), row.endedAt.replace('T', ' ').replace(/Z$/, '')]));
   const rowsWithPreviews = await run<SpanQuerySelectedRow & StoredPreviewRow>({
     query: `SELECT ${identities}, ${[...displayFields, ...PREVIEW_COLUMNS].map((field, index) => `data.${index + 1} AS ${field}`).join(', ')}
-    FROM (SELECT ${identities}, any(tuple(${[...displayFields.map(fieldExpression), ...PREVIEW_COLUMNS].join(', ')})) AS data
+    FROM (SELECT ${identities}, any(tuple(${[...displayFields.map(displayExpression), ...PREVIEW_COLUMNS].join(', ')})) AS data
       FROM ${TABLE_SPAN_EVENTS} e WHERE ${payloadWhere} GROUP BY ${identities})`,
     query_params: { page: pageParameter(page) },
   });
@@ -399,6 +414,9 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
       errorPreview: _error,
       timeToFirstChunkMs,
       timeToFirstTokenMs,
+      outcome,
+      stopReason,
+      stopReasonContext,
       ...metadata
     } = row;
     return [
@@ -411,6 +429,11 @@ export async function querySpans(client: ClickHouseClient, plan: TrustedSpanQuer
         }),
         ...(timeToFirstTokenSupported && {
           timeToFirstTokenMs: timeToFirstTokenMs == null ? null : Number(timeToFirstTokenMs),
+        }),
+        ...(spanQueryOutcomeFieldsSupported && {
+          outcome: outcome ?? null,
+          stopReason: stopReason ?? null,
+          stopReasonContext: (parseJson(stopReasonContext) ?? null) as Record<string, unknown> | null,
         }),
       },
     ];

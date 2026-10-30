@@ -1,5 +1,16 @@
-import { buildTraceListFilters, ROOT_ENTITY_TYPE_OPTIONS, TRACE_STATUS_VALUES } from '../../trace-filters';
-import type { EntityOptions, TraceFilterGroup, TraceFilterToken, TraceStatusFilter } from '../../trace-filters';
+import {
+  buildTraceListFilters,
+  ROOT_ENTITY_TYPE_OPTIONS,
+  TRACE_STATUS_VALUES,
+  traceQueryUnqueryableFieldIds,
+} from '../../trace-filters';
+import type {
+  EntityOptions,
+  TraceFilterGroup,
+  TraceFilterToken,
+  TraceQueryFieldSupport,
+  TraceStatusFilter,
+} from '../../trace-filters';
 import { buildTraceQueryRequest, TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from '../../trace-query-filters';
 import type { SpanTab, TraceDatePreset } from '../../types';
 import type { TraceSpanView } from '../trace-data-panel-view';
@@ -27,7 +38,8 @@ export type TracesFilters = {
 export type TracesSortDirection = 'asc' | 'desc';
 
 /** Fields the traces list can be sorted by, named like the trace query's `orderBy` fields. */
-export type TracesSortField = 'startedAt' | 'timeToFirstChunkMs';
+export const TRACES_SORT_FIELDS = ['startedAt', 'timeToFirstChunkMs', 'timeToFirstTokenMs'] as const;
+export type TracesSortField = (typeof TRACES_SORT_FIELDS)[number];
 
 export type TracesSort = { field: TracesSortField; direction: TracesSortDirection };
 
@@ -114,17 +126,10 @@ export const applyDateRange = (
   dateTo: Date | undefined,
 ): TracesFilters => (filters.datePreset === 'custom' ? { ...filters, dateFrom, dateTo } : filters);
 
-const ROOT_DURATION_FIELD_IDS: ReadonlySet<string> = new Set(['durationMs']);
-const NO_FIELD_IDS: ReadonlySet<string> = new Set();
-
-/** Fields this server can't query on top of the always-unsupported ones: root duration needs its capability. */
-const serverUnqueryableFieldIds = (withRootDuration: boolean) =>
-  withRootDuration ? NO_FIELD_IDS : ROOT_DURATION_FIELD_IDS;
-
-const isQueryableToken = (token: TraceFilterToken, withRootDuration: boolean) => {
+const isQueryableToken = (token: TraceFilterToken, unqueryableFieldIds: ReadonlySet<string>) => {
   if (token.fieldId === 'status' && token.value === 'running') return false;
   if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId)) return false;
-  return !serverUnqueryableFieldIds(withRootDuration).has(token.fieldId);
+  return !unqueryableFieldIds.has(token.fieldId);
 };
 
 /**
@@ -132,8 +137,9 @@ const isQueryableToken = (token: TraceFilterToken, withRootDuration: boolean) =>
  * Groups pass through and stay visible in the bar: `buildTracesQueryRequest` leaves their unqueryable
  * conditions out of the query. Returns the same object when nothing is dropped.
  */
-export const sanitizeTracesFilters = (filters: TracesFilters, withRootDuration: boolean): TracesFilters => {
-  const tokens = filters.tokens.filter(token => isQueryableToken(token, withRootDuration));
+export const sanitizeTracesFilters = (filters: TracesFilters, support: TraceQueryFieldSupport): TracesFilters => {
+  const unqueryableFieldIds = traceQueryUnqueryableFieldIds(support);
+  const tokens = filters.tokens.filter(token => isQueryableToken(token, unqueryableFieldIds));
   return tokens.length === filters.tokens.length ? filters : { ...filters, tokens };
 };
 
@@ -169,9 +175,9 @@ export const buildTracesQueryRequest = ({
   filters,
   dateFrom,
   dateTo,
-  withRootDuration,
   now,
-}: TracesQueryWindow & { withRootDuration: boolean; now: Date }) =>
+  ...support
+}: TracesQueryWindow & TraceQueryFieldSupport & { now: Date }) =>
   buildTraceQueryRequest({
     rootEntityType: getSelectedEntityOption(filters.tokens)?.entityType,
     status: getSelectedStatus(filters.tokens),
@@ -179,7 +185,7 @@ export const buildTracesQueryRequest = ({
     dateTo,
     tokens: filters.tokens,
     groups: filters.groups,
-    excludedFieldIds: serverUnqueryableFieldIds(withRootDuration),
+    excludedFieldIds: traceQueryUnqueryableFieldIds(support),
     now,
   });
 

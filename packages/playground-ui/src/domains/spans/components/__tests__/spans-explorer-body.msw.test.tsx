@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
-import type { AggregateSpansResponse, GetObservabilityCapabilitiesResponse, QuerySpansResult } from '@mastra/client-js';
+import type {
+  AggregateSpansResponse,
+  GetObservabilityCapabilitiesResponse,
+  QuerySpansInput,
+  QuerySpansResult,
+} from '@mastra/client-js';
 import { planSpanAggregate, spanAggregateRequestSchema } from '@mastra/core/storage';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -10,10 +15,15 @@ import {
   emptySpanRows,
   endedSpan,
   firstListedSpan,
+  limitedSpanPage,
+  noStreamingTimingsSortSpanCapabilities,
+  noStreamingTimingsSpanCapabilities,
   spanAggregateCapabilities,
   spanAggregateError,
   spanCountsAggregate,
   spanHeadPage,
+  spanModelCapabilities,
+  spanOutcomeCapabilities,
   spanQueryCapabilities,
   spanRowsPage,
 } from '../../__tests__/fixtures/spans';
@@ -21,18 +31,26 @@ import type { SpanSelection } from '../span-detail-panel';
 import { SpansExplorerBody } from '../spans-explorer-body';
 import type { SpansExplorerPanelArgs } from '../spans-explorer-body';
 import { OBSERVABILITY_LIST_POLL_INTERVAL_MS } from '@/domains/observability/list-polling';
+import { savedViewFromSearchParams } from '@/domains/observability/saved-view-state';
+import { SavedViewsProvider } from '@/domains/observability/saved-views';
+import type { SavedViewsSource } from '@/domains/observability/saved-views';
+import { createInMemorySavedViewsSource } from '@/domains/observability/saved-views/__tests__/fixtures/in-memory-source';
 import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
-import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '@/domains/traces/trace-list-columns';
+import { DEFAULT_TRACE_COLUMN_PREFERENCES, TRACE_COLUMN_CATALOGS } from '@/domains/traces/trace-list-columns';
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { SearchParamsHost } from '@/test/search-params-host';
 
 const SPANS_QUERY_URL = `${TEST_BASE_URL}/api/observability/spans/query`;
 const SPANS_AGGREGATE_URL = `${TEST_BASE_URL}/api/observability/spans/aggregate`;
 
-const setHandlers = (spans: QuerySpansResult) =>
+const setHandlers = (
+  spans: QuerySpansResult,
+  capabilities: GetObservabilityCapabilitiesResponse = spanQueryCapabilities,
+) =>
   server.use(
-    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(spanQueryCapabilities)),
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/entity-names`, () => HttpResponse.json(emptyEntityNames)),
     http.get(`${TEST_BASE_URL}/api/observability/discovery/environments`, () => HttpResponse.json(emptyEnvironments)),
     http.post(SPANS_QUERY_URL, () => HttpResponse.json(spans)),
@@ -46,6 +64,44 @@ const renderBody = (selection?: SpanSelection) => {
     <SpansExplorerBody selection={selection} onSelectionChange={onSelectionChange} renderPanel={renderPanel} />,
   );
   return { onSelectionChange, renderPanel };
+};
+
+/**
+ * The body inside a stand-in router whose URL starts as `initial`, under a saved views store when
+ * one is given; returns each list query sent.
+ */
+const renderBodyAtUrl = (initial: string, savedViews?: SavedViewsSource) => {
+  const queries: QuerySpansInput[] = [];
+  server.use(
+    http.post(SPANS_QUERY_URL, async ({ request }) => {
+      const body = (await request.json()) as QuerySpansInput;
+      // The poll for newly ended spans orders by endedAt; only the list query is kept.
+      if (body.orderBy?.[0]?.field !== 'endedAt') queries.push(body);
+      return HttpResponse.json(spanRowsPage);
+    }),
+  );
+  const body = (
+    <SearchParamsHost initial={initial}>
+      {urlState => (
+        <SpansExplorerBody
+          selection={undefined}
+          onSelectionChange={() => {}}
+          renderPanel={() => null}
+          urlState={urlState}
+        />
+      )}
+    </SearchParamsHost>
+  );
+  renderWithProviders(
+    savedViews ? (
+      <SavedViewsProvider source={savedViews} queryKeyScope={['test']}>
+        {body}
+      </SavedViewsProvider>
+    ) : (
+      body
+    ),
+  );
+  return { queries };
 };
 
 /** The spans body next to a readout of the traces page's saved columns, which live under their own key. */
@@ -65,6 +121,15 @@ const openColumnsMenu = async () => {
   fireEvent.click(button);
 };
 
+const turnOnStreamingColumns = async () => {
+  await openColumnsMenu();
+  fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' }));
+  fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Time to first token' }));
+  fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+};
+
+const currentSearchParams = () => new URLSearchParams(screen.getByTestId('search-params').textContent ?? '');
+
 describe('SpansExplorerBody', () => {
   useFixedChartSize(1200, 800);
   // Base UI ScrollArea calls getAnimations once a ResizeObserver exists; jsdom has no Web Animations API.
@@ -73,6 +138,115 @@ describe('SpansExplorerBody', () => {
   });
   beforeEach(() => {
     window.localStorage.clear();
+  });
+
+  describe('when the store records span outcomes', () => {
+    const spanQueryBodies = vi.fn<(body: unknown) => void>();
+    const setOutcomeHandlers = (capabilities: GetObservabilityCapabilitiesResponse) => {
+      setHandlers(limitedSpanPage);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
+        http.post(SPANS_QUERY_URL, async ({ request }) => {
+          spanQueryBodies(await request.json());
+          return HttpResponse.json(limitedSpanPage);
+        }),
+      );
+    };
+    const filterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
+
+    afterEach(() => spanQueryBodies.mockClear());
+
+    it('shows each span outcome with its stop reason', async () => {
+      setOutcomeHandlers(spanOutcomeCapabilities);
+
+      renderBody();
+
+      const row = await screen.findByRole('button', { name: /agent run: weather/ });
+      expect(within(row).getByText('Limit')).toBeTruthy();
+      expect(within(row).getByText('max_steps')).toBeTruthy();
+    });
+
+    it('queries spans with no recorded outcome', async () => {
+      setOutcomeHandlers(spanOutcomeCapabilities);
+      renderBody();
+      await screen.findByText('agent run: weather');
+
+      filterInput().focus();
+      fireEvent.change(filterInput(), { target: { value: 'Outcome' } });
+      await screen.findByRole('option', { name: 'Outcome' });
+      fireEvent.keyDown(filterInput(), { key: 'Enter' });
+      fireEvent.change(filterInput(), { target: { value: 'is not recorded' } });
+      await screen.findByRole('option', { name: 'is not recorded' });
+      fireEvent.keyDown(filterInput(), { key: 'Enter' });
+
+      await waitFor(() =>
+        expect(spanQueryBodies).toHaveBeenLastCalledWith(
+          expect.objectContaining({ where: { op: 'and', args: [{ op: 'notExists', path: 'outcome' }] } }),
+        ),
+      );
+    });
+
+    it('does not offer outcome filters when the store cannot filter on them', async () => {
+      setOutcomeHandlers(spanQueryCapabilities);
+      renderBody();
+      await screen.findByText('agent run: weather');
+
+      filterInput().focus();
+      fireEvent.change(filterInput(), { target: { value: 'Status' } });
+      await screen.findByRole('option', { name: 'Status' });
+      fireEvent.change(filterInput(), { target: { value: 'Outcome' } });
+
+      expect(screen.queryByRole('option', { name: 'Outcome' })).toBeNull();
+    });
+  });
+
+  describe('when the store filters spans by model and provider', () => {
+    const spanQueryBodies = vi.fn<(body: unknown) => void>();
+    const setModelHandlers = (capabilities: GetObservabilityCapabilitiesResponse) => {
+      setHandlers(spanRowsPage, capabilities);
+      server.use(
+        http.post(SPANS_QUERY_URL, async ({ request }) => {
+          spanQueryBodies(await request.json());
+          return HttpResponse.json(spanRowsPage);
+        }),
+      );
+    };
+    const filterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
+
+    afterEach(() => spanQueryBodies.mockClear());
+
+    it('queries spans with no recorded provider', async () => {
+      setModelHandlers(spanModelCapabilities);
+      renderBody();
+      await screen.findByText('agent run: weather');
+
+      filterInput().focus();
+      fireEvent.change(filterInput(), { target: { value: 'Provider' } });
+      await screen.findByRole('option', { name: 'Provider' });
+      fireEvent.keyDown(filterInput(), { key: 'Enter' });
+      fireEvent.change(filterInput(), { target: { value: 'does not exist' } });
+      await screen.findByRole('option', { name: 'does not exist' });
+      fireEvent.keyDown(filterInput(), { key: 'Enter' });
+
+      await waitFor(() =>
+        expect(spanQueryBodies).toHaveBeenLastCalledWith(
+          expect.objectContaining({ where: { op: 'and', args: [{ op: 'notExists', path: 'provider' }] } }),
+        ),
+      );
+    });
+
+    it('does not offer model filters when the store cannot filter on them', async () => {
+      setModelHandlers(spanQueryCapabilities);
+      renderBody();
+      await screen.findByText('agent run: weather');
+
+      filterInput().focus();
+      fireEvent.change(filterInput(), { target: { value: 'Status' } });
+      await screen.findByRole('option', { name: 'Status' });
+      fireEvent.change(filterInput(), { target: { value: 'Provider' } });
+
+      expect(screen.queryByRole('option', { name: 'Provider' })).toBeNull();
+    });
   });
 
   describe('when the store returns span rows', () => {
@@ -234,6 +408,243 @@ describe('SpansExplorerBody', () => {
       expect(await screen.findByText('gpt-5.6')).toBeTruthy();
       expect(screen.getByTestId('traces-columns').textContent).toBe(
         DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns.join(','),
+      );
+    });
+  });
+
+  describe('when the user turns on the time to first chunk and time to first token columns', () => {
+    it('labels them TTFC and TTFT', async () => {
+      setHandlers(spanRowsPage);
+
+      renderBody();
+      await turnOnStreamingColumns();
+
+      expect(await screen.findByText('TTFC')).toBeTruthy();
+      expect(screen.getByText('TTFT')).toBeTruthy();
+    });
+
+    it('shows how long each span took to stream its first chunk and token', async () => {
+      setHandlers(spanRowsPage);
+
+      renderBody();
+      await turnOnStreamingColumns();
+
+      const row = (await screen.findByText('agent run: weather')).closest('[role="button"], button');
+      expect(row).toBeTruthy();
+      expect(within(row as HTMLElement).getByText('412ms')).toBeTruthy();
+      expect(within(row as HTMLElement).getByText('538ms')).toBeTruthy();
+    });
+  });
+
+  describe('when the stored columns include time to first chunk and token but the store records neither', () => {
+    it('leaves both columns out of the list', async () => {
+      window.localStorage.clear();
+      setHandlers(spanRowsPage);
+      const { unmount } = renderWithProviders(<BodyWithTracesColumns />);
+      await openColumnsMenu();
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' }));
+      fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Time to first token' }));
+      await screen.findByText('412ms');
+      unmount();
+
+      setHandlers(spanRowsPage, noStreamingTimingsSpanCapabilities);
+      renderBody();
+
+      expect(await screen.findByText('agent run: weather')).toBeTruthy();
+      expect(screen.queryByText('TTFC')).toBeNull();
+      expect(screen.queryByText('TTFT')).toBeNull();
+      expect(screen.queryByText('412ms')).toBeNull();
+    });
+  });
+
+  describe('when the URL filters on time to first chunk and time to first token', () => {
+    const STREAMING_FILTERS =
+      'filter.timeToFirstChunkMs=500&filter.timeToFirstChunkMs.op=lte&filter.timeToFirstTokenMs=800&filter.timeToFirstTokenMs.op=gt';
+    const paths = (where: unknown) => JSON.stringify(where ?? null);
+
+    it('sends both conditions when the store records both', async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl(STREAMING_FILTERS);
+      await screen.findByText('agent run: weather');
+
+      await waitFor(() =>
+        expect(queries.map(query => paths(query.where))).toContainEqual(
+          expect.stringMatching(/"timeToFirstChunkMs".*"timeToFirstTokenMs"/),
+        ),
+      );
+    });
+
+    it('leaves both conditions out when the store does not record them', async () => {
+      const onCapabilities = vi.fn();
+      setHandlers(spanRowsPage, noStreamingTimingsSpanCapabilities);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => {
+          onCapabilities();
+          return HttpResponse.json(noStreamingTimingsSpanCapabilities);
+        }),
+      );
+
+      const { queries } = renderBodyAtUrl(STREAMING_FILTERS);
+      await screen.findByText('agent run: weather');
+      await waitFor(() => expect(onCapabilities).toHaveBeenCalled());
+
+      for (const query of queries) {
+        expect(paths(query.where)).not.toContain('timeToFirstChunkMs');
+        expect(paths(query.where)).not.toContain('timeToFirstTokenMs');
+      }
+    });
+  });
+
+  describe('when the URL holds a filter, a sort and a time range', () => {
+    it('queries spans with them', async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl('filter.name=tool%3A+get-weather&sort=startedAt&dir=asc&datePreset=last-24h');
+      await screen.findByText('agent run: weather');
+
+      const [query] = queries;
+      expect(JSON.stringify(query?.where)).toContain('"tool: get-weather"');
+      expect(query?.orderBy).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+      const from = new Date(query?.timeRange?.from ?? NaN).getTime();
+      expect(Date.now() - from).toBeGreaterThan(23 * 60 * 60 * 1000);
+      expect(Date.now() - from).toBeLessThan(25 * 60 * 60 * 1000);
+    });
+  });
+
+  describe('when the user sorts the list by start time', () => {
+    it('writes the sort to the URL and keeps the other params', async () => {
+      setHandlers(spanRowsPage);
+
+      renderBodyAtUrl('traceId=trace-1&spanId=span-2&filter.name=tool%3A+get-weather');
+      fireEvent.click(await screen.findByRole('button', { name: /^Start, sorted descending/ }));
+
+      await waitFor(() =>
+        expect(currentSearchParams()).toEqual(
+          new URLSearchParams('traceId=trace-1&spanId=span-2&filter.name=tool%3A+get-weather&sort=startedAt&dir=asc'),
+        ),
+      );
+    });
+  });
+
+  describe('when the user sorts the list by time to first token', () => {
+    it('queries spans fastest first and writes the sort to the URL', async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl('');
+      await turnOnStreamingColumns();
+      fireEvent.click(await screen.findByRole('button', { name: 'Time to first token, not sorted, sort ascending' }));
+
+      await waitFor(() => expect(queries.at(-1)?.orderBy).toEqual([{ field: 'timeToFirstTokenMs', direction: 'asc' }]));
+      expect(currentSearchParams().get('sort')).toBe('timeToFirstTokenMs');
+      expect(currentSearchParams().get('dir')).toBe('asc');
+      expect(
+        screen.getByRole('button', { name: 'Time to first token, sorted ascending, sort descending' }),
+      ).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Start, not sorted, sort ascending' })).toBeTruthy();
+    });
+  });
+
+  describe('when the user sorts by time to first chunk, then by time to first token', () => {
+    it('moves the order from one column to the other', async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl('');
+      await turnOnStreamingColumns();
+      fireEvent.click(await screen.findByRole('button', { name: 'Time to first chunk, not sorted, sort ascending' }));
+      await waitFor(() => expect(queries.at(-1)?.orderBy).toEqual([{ field: 'timeToFirstChunkMs', direction: 'asc' }]));
+
+      fireEvent.click(screen.getByRole('button', { name: 'Time to first token, not sorted, sort ascending' }));
+
+      await waitFor(() => expect(queries.at(-1)?.orderBy).toEqual([{ field: 'timeToFirstTokenMs', direction: 'asc' }]));
+      expect(screen.getByRole('button', { name: 'Time to first chunk, not sorted, sort ascending' })).toBeTruthy();
+    });
+  });
+
+  describe('when the URL sorts by time to first chunk but the column is hidden', () => {
+    it("lists newest first instead of sorting by a column that isn't shown, without rewriting the URL", async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl('sort=timeToFirstChunkMs&dir=asc');
+      await screen.findByText('agent run: weather');
+
+      expect(queries.map(query => query.orderBy)).toEqual(
+        queries.map(() => [{ field: 'startedAt', direction: 'desc' }]),
+      );
+      expect(queries.length).toBeGreaterThan(0);
+      expect(currentSearchParams().get('sort')).toBe('timeToFirstChunkMs');
+    });
+  });
+
+  describe('when the store records the timings but cannot sort spans by them', () => {
+    it('shows both columns without a sort control', async () => {
+      setHandlers(spanRowsPage, noStreamingTimingsSortSpanCapabilities);
+
+      renderBody();
+      await turnOnStreamingColumns();
+
+      expect(await screen.findByText('TTFT')).toBeTruthy();
+      expect(screen.getByText('TTFC')).toBeTruthy();
+      expect(screen.queryByRole('button', { name: /^Time to first (chunk|token),/ })).toBeNull();
+    });
+
+    it('lists newest first instead of the sort in the URL', async () => {
+      setHandlers(spanRowsPage, noStreamingTimingsSortSpanCapabilities);
+
+      const { queries } = renderBodyAtUrl('sort=timeToFirstTokenMs&dir=asc');
+      await turnOnStreamingColumns();
+      await screen.findByText('538ms');
+
+      expect(queries.at(-1)?.orderBy).toEqual([{ field: 'startedAt', direction: 'desc' }]);
+      expect(screen.getByRole('button', { name: 'Start, sorted descending, sort ascending' })).toBeTruthy();
+    });
+  });
+
+  describe('saved views', () => {
+    const URL_BY_HAND = 'filter.name=tool%3A+get-weather&datePreset=last-24h&sort=startedAt&dir=asc';
+
+    it('shows no saved views when the host does not store them', async () => {
+      setHandlers(spanRowsPage);
+      renderBodyAtUrl(URL_BY_HAND);
+      await screen.findByText('agent run: weather');
+
+      expect(screen.queryByLabelText(/^View: /)).toBeNull();
+    });
+
+    it('applying a view queries and shows what the user gets by setting it by hand', async () => {
+      setHandlers(spanRowsPage);
+      const state = savedViewFromSearchParams('spans', new URLSearchParams(URL_BY_HAND), {
+        columns: { visibleColumns: ['type', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+      });
+      const source = createInMemorySavedViewsSource([{ name: 'Weather tools', state }]);
+      const { queries } = renderBodyAtUrl('', source);
+      await screen.findByText('agent run: weather');
+
+      fireEvent.click(await screen.findByLabelText(/^View: /));
+      fireEvent.click(await screen.findByRole('option', { name: 'Weather tools' }));
+
+      await waitFor(() => expect(screen.getByTestId('search-params').textContent).toBe(URL_BY_HAND));
+      await waitFor(() => expect(JSON.stringify(queries.at(-1)?.where)).toContain('"tool: get-weather"'));
+      expect(queries.at(-1)?.orderBy).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+      await openColumnsMenu();
+      const input = await screen.findByRole('menuitemcheckbox', { name: 'Input' });
+      expect(input.getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('saves the filters, sort, range and columns on screen', async () => {
+      setHandlers(spanRowsPage);
+      const source = createInMemorySavedViewsSource();
+      renderBodyAtUrl(URL_BY_HAND, source);
+      await screen.findByText('agent run: weather');
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Save as new view' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+
+      await waitFor(() => expect(source.records()).toHaveLength(1));
+      expect(source.records()[0]?.state).toEqual(
+        savedViewFromSearchParams('spans', new URLSearchParams(URL_BY_HAND), {
+          columns: TRACE_COLUMN_CATALOGS.spans.defaults,
+        }),
       );
     });
   });
@@ -403,6 +814,99 @@ describe('SpansExplorerBody histogram', () => {
       expect(onSpanQuery.mock.lastCall?.[0].timeRange).toEqual(reset);
       expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
+    });
+
+    const DAY = 24 * 60 * 60 * 1000;
+    const span = (timeRange?: { from: string; to: string }) =>
+      timeRange ? Date.parse(timeRange.to) - Date.parse(timeRange.from) : undefined;
+    const pickPreset = async (current: string, next: string) => {
+      fireEvent.click(screen.getByRole('button', { name: `Value: ${current}`, hidden: true }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: next, hidden: true }));
+    };
+    const zoomIn = async () => {
+      const before = onAggregate.mock.lastCall?.[0].timeRange;
+      const plot = (await screen.findByRole('region', { name: 'Spans over time' })).querySelector('.recharts-wrapper');
+      if (!plot) throw new Error('chart did not render');
+      await moveTo(plot, 300);
+      fireEvent.mouseDown(plot, { clientX: 300, clientY: 20 });
+      await moveTo(plot, 500);
+      fireEvent.mouseUp(window);
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBeLessThan(span(before) ?? 0));
+    };
+
+    it('resets a zoom back to the range picked before it', async () => {
+      setHistogramHandlers();
+      await renderSettled();
+      await pickPreset('Last 7 days', 'Last 24 hours');
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
+
+      await zoomIn();
+      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
+      expect(span(onSpanQuery.mock.lastCall?.[0].timeRange)).toBe(DAY);
+      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+    });
+
+    it('resets nested zooms back to the range picked before the first one', async () => {
+      setHistogramHandlers();
+      await renderSettled();
+      await pickPreset('Last 7 days', 'Last 24 hours');
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
+
+      await zoomIn();
+      await zoomIn();
+      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
+      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+    });
+
+    it('resets to the default range once the zoom is undone', async () => {
+      setHistogramHandlers();
+      await renderSettled();
+      await pickPreset('Last 7 days', 'Last 24 hours');
+      await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
+      await zoomIn();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+      await screen.findByRole('button', { name: 'Value: Last 24 hours' });
+      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
+
+      expect(await screen.findByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
+    });
+  });
+
+  describe('when the user clicks a bar', () => {
+    const TWO_HOURS = 2 * 60 * 60 * 1000;
+
+    it('narrows the list and the chart to that bar', async () => {
+      setHistogramHandlers();
+      await renderSettled();
+      const plot = (await screen.findByRole('region', { name: 'Spans over time' })).querySelector('.recharts-wrapper');
+      if (!plot) throw new Error('chart did not render');
+
+      // The rolling week is drawn as two-hour bars (UTC in tests) from the bar holding its start.
+      const week = onAggregate.mock.lastCall?.[0].timeRange;
+      if (!week) throw new Error('no aggregate request');
+      const firstBar = Math.floor(Date.parse(week.from) / TWO_HOURS) * TWO_HOURS;
+      const barWidth = 1200 / Math.ceil((Date.parse(week.to) - firstBar) / TWO_HOURS);
+      const at = { clientX: 12.5 * barWidth, clientY: 20 };
+
+      fireEvent.mouseMove(plot, at);
+      await act(() => new Promise(resolve => requestAnimationFrame(() => resolve(undefined))));
+      fireEvent.mouseDown(plot, at);
+      fireEvent.mouseUp(plot, at);
+      fireEvent.click(plot, at);
+
+      const zoomed = {
+        from: new Date(firstBar + 12 * TWO_HOURS).toISOString(),
+        to: new Date(firstBar + 13 * TWO_HOURS).toISOString(),
+      };
+      await waitFor(() => expect(onAggregate.mock.lastCall?.[0].timeRange).toEqual(zoomed));
+      expect(onSpanQuery.mock.lastCall?.[0].timeRange).toEqual(zoomed);
+      expect(screen.getByRole('button', { name: 'Reset time range' })).toBeTruthy();
     });
   });
 

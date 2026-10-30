@@ -1,13 +1,13 @@
 import {
   DEFAULT_TRACES_FILTERS,
   DEFAULT_TRACES_SORT,
+  TRACES_SORT_FIELDS,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import type {
   TracesExplorerState,
   TracesFilters,
   TracesSelection,
   TracesSort,
-  TracesSortField,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import {
   TRACE_ANCHOR_SPAN_ID_PARAM,
@@ -33,8 +33,6 @@ const SPAN_VIEW_PARAM = 'spanView';
 const SCORE_ID_PARAM = 'scoreId';
 const HIGHLIGHT_SPAN_IDS_PARAM = 'highlightSpanIds';
 const PAGE_PARAM = 'page';
-
-const TRACES_SORT_FIELDS: readonly TracesSortField[] = ['startedAt', 'timeToFirstChunkMs'];
 
 const SELECTION_PARAMS = [
   TRACE_ID_PARAM,
