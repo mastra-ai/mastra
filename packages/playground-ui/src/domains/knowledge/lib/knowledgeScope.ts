@@ -1,4 +1,4 @@
-import type { KnowledgeRung } from '../../services/knowledge';
+import type { KnowledgeRung } from '../types';
 
 /** Shared scope colors for the canvas, minimap, legend, and detail badges. */
 export const knowledgeScopes = {
