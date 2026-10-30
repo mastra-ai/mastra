@@ -213,4 +213,50 @@ describe('KnowledgeMySQL schema 4 wiring', () => {
     );
     await store.dangerouslyReset();
   });
+
+  it('stores pin audiences up to 512 characters and finds them by lookup', async () => {
+    const store = await makeStore();
+    const { scope } = await store.materializeScope({
+      address: 'org:acme',
+      declaration: 'org:$orgId',
+      name: 'Acme',
+      provenance: who,
+    });
+    const page = await store.createPage({ parentId: scope.id, name: 'Long', body: 'x', provenance: who });
+    const long = `role:acme:${'r'.repeat(300)}`;
+    const max = `role:${'m'.repeat(507)}`;
+    await store.addPinAudience({ pageId: page.id, audience: [long, max], createdBy: 'host' });
+    for (const audience of [long, max]) {
+      expect(
+        (await store.listPins({ audience: [audience], read: 'all', limit: 10 })).pins.map(pin => pin.pageName),
+      ).toEqual(['Long']);
+    }
+    const near = `${long.slice(0, -1)}x`;
+    expect((await store.listPins({ audience: [near], read: 'all', limit: 10 })).pins).toEqual([]);
+    await store.dangerouslyReset();
+  });
+
+  it('upgrades concurrently from two processes without failing init', async () => {
+    const store = await makeStore();
+    await store.materializeScope({ address: 'org:acme', declaration: 'org:$orgId', name: 'Acme', provenance: who });
+    await pool.query('ALTER TABLE `mastra_knowledge_pages` DROP INDEX idx_kpages_live_key, DROP COLUMN liveKey');
+    await pool.query(
+      "ALTER TABLE `mastra_knowledge_pages` ADD COLUMN liveKey VARCHAR(768) COLLATE utf8mb4_bin AS (IF(deletedAt IS NULL AND `key` IS NOT NULL, CONCAT(scopeId, '#', `key`), NULL)) STORED, ADD UNIQUE KEY idx_kpages_live_key (liveKey)",
+    );
+    await pool.query('ALTER TABLE `mastra_knowledge_pages` DROP INDEX idx_kpages_path');
+    await pool.query(
+      'ALTER TABLE `mastra_knowledge_pin_audiences` MODIFY audience VARCHAR(255) COLLATE utf8mb4_bin NOT NULL',
+    );
+    const stores = Array.from({ length: 6 }, () => createStore());
+    await Promise.all(stores.map(s => s.init()));
+    const [live] = (await pool.query(
+      "SELECT generation_expression AS e FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'mastra_knowledge_pages' AND column_name = 'liveKey'",
+    )) as any;
+    expect(String(live[0].e)).not.toContain('scopeId');
+    const [width] = (await pool.query(
+      "SELECT character_maximum_length AS n FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'mastra_knowledge_pin_audiences' AND column_name = 'audience'",
+    )) as any;
+    expect(Number(width[0].n)).toBe(512);
+    await store.dangerouslyReset();
+  });
 });

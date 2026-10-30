@@ -69,14 +69,26 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     return this.#inspectPages();
   }
 
+  /** Runs the earlier-alpha upgrades under a named lock so processes starting together don't race their ALTERs. */
+  async #upgrade(): Promise<void> {
+    const connection = await this.#pool.getConnection();
+    try {
+      await connection.query("SELECT GET_LOCK('mastra_knowledge_upgrade', 60)");
+      for (const upgrade of KNOWLEDGE_PAGE_UPGRADES) {
+        const [rows] = await connection.query<RowDataPacket[]>(upgrade.needed, upgrade.args);
+        if (rows.length > 0) for (const statement of upgrade.apply) await connection.query(statement);
+      }
+    } finally {
+      await connection.query("SELECT RELEASE_LOCK('mastra_knowledge_upgrade')").catch(() => {});
+      connection.release();
+    }
+  }
+
   override async init(): Promise<void> {
     const inspection = await this.#inspectPages();
     if (inspection.status === 'incompatible-reset-required') throw new KnowledgeSchemaResetRequiredError(inspection);
     for (const statement of KNOWLEDGE_PAGE_DDL) await this.#pool.query(statement);
-    for (const upgrade of KNOWLEDGE_PAGE_UPGRADES) {
-      const [rows] = await this.#pool.query<RowDataPacket[]>(upgrade.needed, upgrade.args);
-      if (rows.length > 0) for (const statement of upgrade.apply) await this.#pool.query(statement);
-    }
+    await this.#upgrade();
     await this.#pool.query(
       `INSERT IGNORE INTO \`${TABLE_KNOWLEDGE_PAGES_STATE}\` (id, schemaVersion) VALUES ('knowledge', ?)`,
       [KNOWLEDGE_PAGES_SCHEMA_VERSION],

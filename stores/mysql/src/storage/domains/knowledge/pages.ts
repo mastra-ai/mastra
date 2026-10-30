@@ -73,9 +73,14 @@ export const KNOWLEDGE_PAGE_UPGRADES: ReadonlyArray<{ needed: string; args: stri
     needed: `SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'mastra_knowledge_pages' AND column_name = 'liveKey' AND generation_expression LIKE '%scopeId%'`,
     args: [],
     apply: [
-      'ALTER TABLE `mastra_knowledge_pages` DROP INDEX idx_kpages_live_key, DROP COLUMN liveKey',
-      `ALTER TABLE \`mastra_knowledge_pages\` ADD COLUMN liveKey ${LIVE_KEY_COLUMN}, ADD UNIQUE KEY idx_kpages_live_key (liveKey)`,
+      `ALTER TABLE \`mastra_knowledge_pages\` DROP INDEX idx_kpages_live_key, DROP COLUMN liveKey, ADD COLUMN liveKey ${LIVE_KEY_COLUMN}, ADD UNIQUE KEY idx_kpages_live_key (liveKey)`,
     ],
+  },
+  {
+    // The first alpha pin index sized audience for 255 characters; scope addresses go to 512.
+    needed: `SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'mastra_knowledge_pin_audiences' AND column_name = 'audience' AND character_maximum_length < 512`,
+    args: [],
+    apply: [`ALTER TABLE \`mastra_knowledge_pin_audiences\` MODIFY audience VARCHAR(512) ${BIN} NOT NULL`],
   },
   {
     needed: MISSING_PAGE_INDEX,
@@ -89,10 +94,10 @@ export const KNOWLEDGE_PAGE_UPGRADES: ReadonlyArray<{ needed: string; args: stri
   },
   {
     // Pins created before the audience index existed.
-    needed: `SELECT 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM mastra_knowledge_pins pin, JSON_TABLE(pin.audience, '$[*]' COLUMNS (v VARCHAR(255) ${BIN} PATH '$')) jv WHERE NOT EXISTS (SELECT 1 FROM mastra_knowledge_pin_audiences pa WHERE pa.pinId = pin.id AND pa.audience = jv.v))`,
+    needed: `SELECT 1 FROM DUAL WHERE EXISTS (SELECT 1 FROM mastra_knowledge_pins pin, JSON_TABLE(pin.audience, '$[*]' COLUMNS (v VARCHAR(512) ${BIN} PATH '$')) jv WHERE NOT EXISTS (SELECT 1 FROM mastra_knowledge_pin_audiences pa WHERE pa.pinId = pin.id AND pa.audience = jv.v))`,
     args: [],
     apply: [
-      `INSERT IGNORE INTO mastra_knowledge_pin_audiences (audience, pinId) SELECT jv.v, pin.id FROM mastra_knowledge_pins pin, JSON_TABLE(pin.audience, '$[*]' COLUMNS (v VARCHAR(255) ${BIN} PATH '$')) jv`,
+      `INSERT IGNORE INTO mastra_knowledge_pin_audiences (audience, pinId) SELECT jv.v, pin.id FROM mastra_knowledge_pins pin, JSON_TABLE(pin.audience, '$[*]' COLUMNS (v VARCHAR(512) ${BIN} PATH '$')) jv`,
     ],
   },
 ];
@@ -170,7 +175,7 @@ export const KNOWLEDGE_PAGE_DDL: string[] = [
     UNIQUE KEY idx_kpins_page (pageId)
   )`,
   `CREATE TABLE IF NOT EXISTS ${T.pinAudiences} (
-    audience VARCHAR(255) ${BIN} NOT NULL,
+    audience VARCHAR(512) ${BIN} NOT NULL,
     pinId VARCHAR(255) ${BIN} NOT NULL,
     PRIMARY KEY (audience, pinId),
     KEY idx_kpin_audiences_pin (pinId)
@@ -1454,7 +1459,7 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const args: InValue[] = [...readable.args];
     let filters = '';
     if (input.audience !== 'all') {
-      filters += ` AND pin.id IN (SELECT pa.pinId FROM (SELECT jv.v FROM JSON_TABLE(?, '$[*]' COLUMNS (v VARCHAR(255) ${BIN} PATH '$')) jv) aud STRAIGHT_JOIN ${T.pinAudiences} pa ON pa.audience = aud.v)`;
+      filters += ` AND pin.id IN (SELECT pa.pinId FROM (SELECT jv.v FROM JSON_TABLE(?, '$[*]' COLUMNS (v VARCHAR(512) ${BIN} PATH '$')) jv) aud STRAIGHT_JOIN ${T.pinAudiences} pa ON pa.audience = aud.v)`;
       args.push(jsonList(input.audience));
     }
     if (input.pageIds) {
