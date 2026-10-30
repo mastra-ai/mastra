@@ -1,15 +1,17 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { ChevronRight, Pin } from 'lucide-react';
 
-import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../../services/knowledge';
-import { parseRecordSegments } from './recordText';
+import { parseRecordSegments } from '../lib/recordText';
+import type { KnowledgeGraphNode, KnowledgeGraphPayload } from '../types';
+
+import { Txt } from '@/ds/components/Txt';
+import { cn } from '@/utils/cn';
 
 /**
  * Tap-friendly reading of the same bounded lens payload the canvas renders:
  * child scopes first, then content nodes; the selected node expands to the
  * records it owns inside the window.
  */
+
 export function KnowledgeList({
   payload,
   rootScopeId,
@@ -42,9 +44,9 @@ export function KnowledgeList({
         )}
         onClick={() => onNodeClick(node)}
       >
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{node.name}</span>
-        {node.pinned ? <Pin size={12} className="text-badge-amber-indicator shrink-0" aria-label="Pinned" /> : null}
-        <span className="text-muted-foreground shrink-0 text-xs">{meta}</span>
+        <span className="min-w-0 flex-1 truncate text-body font-medium">{node.name}</span>
+        {node.pinned ? <Pin size={12} className="shrink-0 text-badge-amber-indicator" aria-label="Pinned" /> : null}
+        <span className="shrink-0 text-caption text-muted-foreground">{meta}</span>
       </button>
     );
   };
@@ -53,7 +55,7 @@ export function KnowledgeList({
     <div data-testid="knowledge-list" className="min-h-0 flex-1 overflow-y-auto pb-16">
       {childScopes.length > 0 ? (
         <section aria-label="Child scopes" className="mb-4">
-          <Txt as="h3" variant="caption" className="text-muted-foreground mb-1 px-3 font-semibold">
+          <Txt as="h3" variant="caption" tone="muted" className="mb-1 px-3 font-semibold">
             Scopes
           </Txt>
           <ul className="flex flex-col gap-0.5">
@@ -73,7 +75,7 @@ export function KnowledgeList({
       ) : null}
       {contentNodes.length > 0 ? (
         <section aria-label="Knowledge nodes">
-          <Txt as="h3" variant="caption" className="text-muted-foreground mb-1 px-3 font-semibold">
+          <Txt as="h3" variant="caption" tone="muted" className="mb-1 px-3 font-semibold">
             Nodes
           </Txt>
           <ul className="flex flex-col gap-0.5">
@@ -84,14 +86,14 @@ export function KnowledgeList({
                 <li key={node.id}>
                   {row(node, node.recordCount === 1 ? '1 record' : `${node.recordCount} records`)}
                   {records.length > 0 ? (
-                    <ul aria-label={`${node.name} records`} className="border-border my-1 ml-4 flex flex-col border-l">
+                    <ul aria-label={`${node.name} records`} className="my-1 ml-4 flex flex-col border-l border-border">
                       {records.map(record => (
                         <li key={record.id}>
                           <button
                             type="button"
                             aria-pressed={record.id === selectedRecordId}
                             className={cn(
-                              'text-muted-foreground hover:text-foreground min-h-11 w-full px-3 py-2 text-left text-sm',
+                              'min-h-11 w-full px-3 py-2 text-left text-body text-muted-foreground hover:text-foreground',
                               record.id === selectedRecordId && 'bg-fill text-foreground',
                             )}
                             onClick={() => onRecordClick(node, record.id)}
