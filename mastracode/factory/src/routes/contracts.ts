@@ -7,6 +7,7 @@ import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSc
 import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
@@ -117,7 +118,7 @@ export const intakeRouteReorderBodySchema = z
     ids: z
       .array(uuidSchema)
       .min(1)
-      .max(100)
+      .max(MAX_INTAKE_ROUTES)
       .refine(ids => new Set(ids).size === ids.length, { message: 'Each route may appear only once.' }),
   })
   .strict();

@@ -100,7 +100,11 @@ async function setup(options: { withRoutesReader?: boolean; autoRun?: boolean } 
       .filter(decision => decision.workItemId === cardId && decision.decision.type === 'invokeSkill')
       .map(decision => decision.status);
   };
-  return { ...seeded, scope, project, route, deliver, runs };
+  const runErrors = async (cardId: string) =>
+    (await workItems.listDeferredDecisions('org-1', project.id))
+      .filter(decision => decision.workItemId === cardId && decision.decision.type === 'invokeSkill')
+      .map(decision => decision.lastError);
+  return { ...seeded, scope, project, route, deliver, runs, runErrors };
 }
 
 function placed(card: { board?: string | null; stages: string[] } | undefined) {
@@ -147,7 +151,7 @@ describe('intake routes placing linked cards', () => {
   });
 
   it("starts an outsider's routed card only under a route that says hold: 'never'", async () => {
-    const { route, deliver, runs } = await setup({ autoRun: true });
+    const { route, deliver, runs, runErrors } = await setup({ autoRun: true });
     await route({
       name: 'Docs need no person',
       when: DOCS,
@@ -162,6 +166,8 @@ describe('intake routes placing linked cards', () => {
     expect(placed(released)).toEqual({ board: 'work', stages: ['triage'] });
     // Not held: the dispatcher tries to start it (and retries, as this harness has no sessions).
     expect(await runs(released!.id)).toEqual(['retry']);
+    // It got past the hold and failed only for want of a session to run in.
+    expect(await runErrors(released!.id)).toEqual(['No active Factory binding for role triage.']);
   });
 
   it('files a labelled issue on a stored board at its initial phase', async () => {
