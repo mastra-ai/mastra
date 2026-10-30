@@ -36,10 +36,13 @@ export type CredentialStoreProvider = (tenant: CredentialTenant) => CredentialSt
 
 export type CredentialTenantResolver = (requestContext: RequestContext) => Promise<CredentialTenant | undefined>;
 
-export type CredentialTenantFailureReason =
-  | 'missing-user-context'
-  | 'invalid-organization-id'
-  | 'no-policy-for-principal';
+const CREDENTIAL_TENANT_FAILURE_REASONS = [
+  'missing-user-context',
+  'invalid-organization-id',
+  'no-policy-for-principal',
+] as const;
+
+export type CredentialTenantFailureReason = (typeof CREDENTIAL_TENANT_FAILURE_REASONS)[number];
 
 const CREDENTIAL_TENANT_FAILURES: Record<CredentialTenantFailureReason, string> = {
   'missing-user-context':
@@ -59,7 +62,7 @@ class CredentialTenantError extends Error {
 }
 
 function isCredentialTenantFailureReason(value: unknown): value is CredentialTenantFailureReason {
-  return typeof value === 'string' && Object.hasOwn(CREDENTIAL_TENANT_FAILURES, value);
+  return CREDENTIAL_TENANT_FAILURE_REASONS.some(reason => reason === value);
 }
 
 export function credentialTenantFailureReason(error: unknown): CredentialTenantFailureReason | undefined {
@@ -68,9 +71,7 @@ export function credentialTenantFailureReason(error: unknown): CredentialTenantF
     return error.reason;
   }
   // A run's error reaches its session through core's run-failed event as the message alone, sometimes wrapped.
-  return Object.keys(CREDENTIAL_TENANT_FAILURES)
-    .filter(isCredentialTenantFailureReason)
-    .find(reason => error.message.includes(CREDENTIAL_TENANT_FAILURES[reason]));
+  return CREDENTIAL_TENANT_FAILURE_REASONS.find(reason => error.message.includes(CREDENTIAL_TENANT_FAILURES[reason]));
 }
 
 const CREDENTIAL_POLICY_KEY = 'mastracode__credentialPolicy';
@@ -245,9 +246,9 @@ export function resolveCredentialStore(requestContext?: RequestContext): Credent
   if (!credentialStoreProvider) return undefined;
   const tenant = resolveTenantFromRequestContext(requestContext);
   if (!tenant) {
-    const rawUser = requestContext?.get('user');
+    const principal = readPrincipal(requestContext);
     logger.error('[MastraCode] Tenant credential resolution failed closed', {
-      reason: rawUser === undefined ? 'missing-user-context' : 'credential-policy-unavailable',
+      reason: 'tenant' in principal ? 'credential-policy-unavailable' : principal.failure,
       hasRequestContext: requestContext !== undefined,
     });
     return unavailableTenantCredentialStore;
