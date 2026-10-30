@@ -215,6 +215,32 @@ describe('DurableAgent cross-process abort', () => {
     }
   });
 
+  it("does not stop a warm resume that carries no deadline at the previous segment's deadline", async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const runId = 'deadline-resumed-without-deadline-run';
+    const pubsub = new EventEmitterPubSub();
+    const entry = { isPlaceholder: true } as RunRegistryEntry;
+    globalRunRegistry.set(runId, entry);
+
+    try {
+      await ensureRemoteAbortListener(pubsub, runId, undefined, { at: Date.now() + 200, timeoutMs: 200 });
+      // The resume swaps in a fresh controller on the same entry, as create-inngest-agent does.
+      await vi.advanceTimersByTimeAsync(100);
+      const resumed = new AbortController();
+      entry.abortController = resumed;
+      entry.abortSignal = resumed.signal;
+      await ensureRemoteAbortListener(pubsub, runId, undefined, undefined);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(resumed.signal.aborted).toBe(false);
+    } finally {
+      entry.cleanup?.();
+      globalRunRegistry.delete(runId);
+      vi.useRealTimers();
+      await pubsub.close();
+    }
+  });
+
   it('stops an in-flight run from an abort request it did not raise locally, and still terminates the stream', async () => {
     const pubsub = new EventEmitterPubSub();
     const storage = new InMemoryStore();
