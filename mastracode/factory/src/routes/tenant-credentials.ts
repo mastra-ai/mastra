@@ -26,7 +26,7 @@ import {
   setCredentialStoreProvider,
 } from '@mastra/code-sdk/agents/credential-resolver';
 import { getOAuthProvider, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
-import type { AuthCredential, CredentialStore, OAuthCredential } from '@mastra/code-sdk/auth/types';
+import type { AuthCredential, CredentialStore } from '@mastra/code-sdk/auth/types';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 

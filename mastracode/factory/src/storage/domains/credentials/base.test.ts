@@ -483,6 +483,12 @@ describe('ModelCredentialsStorage account pools', () => {
       expect.objectContaining({ access: 'at-new-2' }),
       expect.objectContaining({ access: 'at-new-2' }),
     ]);
+    // A stale rejected token never keeps an expired one: it is still refreshed.
+    const expiredSpare = await store.addAccount(alice, 'anthropic', { credential: oauth('lapsed', Date.now() - 1000) });
+    expect(
+      await store.refreshAccountOAuth(alice, expiredSpare.id, refreshFn, { force: true, staleAccess: 'at-other' }),
+    ).toMatchObject({ access: 'at-new-3' });
+    expect(refreshFn).toHaveBeenCalledTimes(3);
 
     // A failed refresh is recorded and rethrown; a successful one clears auth-failed.
     await store.markAccountStatus(alice, spare.id, 'auth-failed');

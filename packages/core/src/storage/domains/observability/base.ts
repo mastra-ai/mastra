@@ -121,6 +121,7 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
  * - `span-query-model-fields`: `model` and `provider` predicates in `querySpans` and `aggregateSpans`
  * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
+ * - `span-aggregate-model-dimensions`: `model` and `provider` in `aggregateSpans` `groupBy` and `countDistinct`
  * - `trace-query`: `queryTraces`
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
@@ -155,6 +156,7 @@ export type ObservabilityStorageFeature =
   | 'span-query-context-fields'
   | 'span-query-model-fields'
   | 'span-aggregate'
+  | 'span-aggregate-model-dimensions'
   | 'trace-query'
   | 'trace-aggregate'
   | 'trace-query-root-duration'

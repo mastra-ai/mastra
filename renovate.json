@@ -115,7 +115,7 @@
     {
       "groupName": "Observability providers",
       "commitMessageTopic": "Observability providers",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": [
         "@arizeai/*",
         "@langfuse/*",
@@ -126,13 +126,13 @@
         "posthog-node"
       ],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"],
       "dependencyDashboardApproval": false
     },
     {
       "groupName": "Database clients",
       "commitMessageTopic": "Database clients",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": [
         "@clickhouse/client",
         "@datastax/astra-db-ts",
@@ -158,7 +158,7 @@
         "redis"
       ],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"],
       "dependencyDashboardApproval": false
     },
     {
@@ -280,19 +280,19 @@
     {
       "groupName": "formatting & linting",
       "commitMessageTopic": "Formatting & linting",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["oxfmt", "oxlint", "oxlint-tsgolint", "oxlint-tailwindcss", "eslint-plugin-storybook"],
       "matchUpdateTypes": ["major", "minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"],
       "dependencyDashboardApproval": false,
       "automerge": true
     },
     {
       "groupName": "Build tools",
       "commitMessageTopic": "Build tools",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchUpdateTypes": ["major", "minor", "patch"],
-      "matchDepTypes": ["devDependencies"],
+      "matchDepTypes": ["devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"],
       "matchPackageNames": [
         "@microsoft/api-extractor",
         "tsdown",
@@ -309,7 +309,7 @@
     {
       "groupName": "Schema",
       "commitMessageTopic": "Schema",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": [
         "zod",
         "json-schema",
@@ -320,108 +320,108 @@
         "json-schema-to-zod"
       ],
       "matchUpdateTypes": ["major", "minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"],
       "dependencyDashboardApproval": false
     },
     {
       "groupName": "Cloudflare",
       "commitMessageTopic": "Cloudflare",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["cloudflare", "miniflare", "@cloudflare/workers-types"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"],
       "dependencyDashboardApproval": false,
       "automerge": true
     },
     {
       "groupName": "AWS SDK",
       "commitMessageTopic": "AWS SDK",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchSourceUrls": ["https://github.com/aws/aws-sdk-js-v3"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"],
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"],
       "dependencyDashboardApproval": false,
       "automerge": true
     },
     {
       "groupName": "Upstash",
       "commitMessageTopic": "Upstash",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@upstash/*"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "CodeMirror",
       "commitMessageTopic": "CodeMirror",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@uiw/*", "codemirror", "@codemirror/*"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "Serve",
       "commitMessageTopic": "Serve",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["serve", "serve-handler"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "Google Cloud",
       "commitMessageTopic": "Google Cloud",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@google-cloud/*", "google-auth-library"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "Inngest",
       "commitMessageTopic": "Inngest",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["inngest", "inngest-cli", "@inngest/*"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "PostHog",
       "commitMessageTopic": "PostHog",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["posthog-js", "@posthog/*"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "Browser automation",
       "commitMessageTopic": "Browser automation",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@browserbasehq/stagehand", "agent-browser", "firecrawl"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "Chat adapter",
       "commitMessageTopic": "Chat adapter",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@chat-adapter/slack", "chat"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "Composio",
       "commitMessageTopic": "Composio",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@composio/*"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "MCP",
       "commitMessageTopic": "MCP",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@modelcontextprotocol/*"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "description": "Disable @opencode-ai/plugin updates. Newer plugin versions pull effect@4.0.0-beta.83, which pnpm rejects as a trust downgrade under trustPolicy: no-downgrade. The plugin is exact-pinned to 1.14.48 (effect@4.0.0-beta.59) until upstream publishes a version that does not trigger ERR_PNPM_TRUST_DOWNGRADE.",
@@ -436,47 +436,47 @@
     {
       "groupName": "OpenCode",
       "commitMessageTopic": "OpenCode",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@opencode-ai/*"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "React Hook Form",
       "commitMessageTopic": "React Hook Form",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["react-hook-form", "@hookform/resolvers"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "Smithy",
       "commitMessageTopic": "Smithy",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@smithy/*"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "Tailwind ecosystem",
       "commitMessageTopic": "Tailwind ecosystem",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@tailwindcss/typography", "tailwind-merge"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "WorkOS",
       "commitMessageTopic": "WorkOS",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": ["@workos-inc/node", "@workos/authkit-session"],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },
     {
       "groupName": "Workspace providers",
       "commitMessageTopic": "Workspace providers",
-      "matchFileNames": ["+(package.json)", "**/package.json"],
+      "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
       "matchPackageNames": [
         "@blaxel/core",
         "@daytonaio/sdk",
@@ -487,7 +487,31 @@
         "@vercel/sandbox"
       ],
       "matchUpdateTypes": ["minor", "patch"],
-      "matchDepTypes": ["dependencies", "devDependencies"]
+      "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
+    },
+    {
+      "groupName": "Changesets",
+      "description": "Group every @changesets package, majors included, since they ship from one monorepo",
+      "matchSourceUrls": ["https://github.com/changesets/changesets"]
+    },
+    {
+      "groupName": "AutoForm",
+      "description": "Group @autoform packages, majors included, since they ship from one monorepo",
+      "matchSourceUrls": ["https://github.com/vantezzen/autoform"]
+    },
+    {
+      "groupName": "Langfuse",
+      "description": "Group @langfuse majors in one PR; minor and patch updates stay in Observability providers",
+      "matchSourceUrls": ["https://github.com/langfuse/langfuse-js"],
+      "matchUpdateTypes": ["major"]
+    },
+    {
+      "groupName": "Socket registry overrides",
+      "commitMessageTopic": "Socket registry overrides",
+      "description": "pnpm-workspace.yaml overrides that swap polyfills such as is-array-buffer for @socketregistry/* replacements",
+      "matchPackageNames": ["@socketregistry/*"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": true
     }
   ]
 }
