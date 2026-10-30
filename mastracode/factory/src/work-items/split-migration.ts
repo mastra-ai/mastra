@@ -194,25 +194,6 @@ async function migratedBoardItems(
 class MigrationConflict extends Error {}
 
 async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy: boolean): Promise<boolean> {
-  const claimKey = card.boardItem.claim_key;
-  if (claimKey) {
-    const holder = await ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, {
-      org_id: card.boardItem.org_id,
-      claim_key: claimKey,
-    });
-    if (holder && holder.id !== card.boardItem.id) {
-      // An old replica may have transferred the claim since our first copy.
-      // Only release an untouched migrated holder whose legacy row released it.
-      const legacy = await ops.updateAtomic<WorkItemDbRow>(LEGACY, { id: holder.id }, () => null);
-      await ops.updateAtomic<BoardItemDbRecord>(BOARD_ITEMS, { id: holder.id }, current => {
-        if (current.claim_key !== claimKey) return null;
-        if (legacy?.claim_key === claimKey || time(current.updated_at) > time(current.migrated_from_updated_at)) {
-          throw new MigrationConflict('Split claim is held by another card');
-        }
-        return { claim_key: null };
-      });
-    }
-  }
   if (!recopy) {
     await ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, card.workItem);
     if (card.source) await ops.insertOne<WorkItemSourceDbRecord>(SOURCES, card.source);
@@ -286,66 +267,71 @@ export async function migrateWorkItemSplit(
   };
   const projects = new Set<string>();
   const written = new Map<string, BoardScope>();
-  let cursor: WorkItemDbRow | undefined;
-  while (true) {
-    const page = await ops.findMany<WorkItemDbRow>(
-      LEGACY,
-      {},
-      {
-        orderBy: [
-          ['org_id', 'asc'],
-          ['factory_project_id', 'asc'],
-          ['created_at', 'asc'],
-          ['id', 'asc'],
-        ],
-        limit: PAGE_SIZE,
-        ...(cursor
-          ? { cursor: { values: [cursor.org_id, cursor.factory_project_id, cursor.created_at, cursor.id] } }
-          : {}),
-      },
-    );
-    if (!page.length) break;
-    cursor = page[page.length - 1];
-    report.cards += page.length;
-    for (const row of page) projects.add(`${row.org_id}\u0000${row.factory_project_id}`);
-    const plan = planWorkItemSplit(
-      page,
-      await migratedBoardItems(
-        ops,
-        page.map(row => row.id),
-      ),
-    );
-    report.unchanged += plan.unchanged;
-    report.skipped.push(...plan.skipped);
-    for (const { card, recopy } of [
-      ...plan.inserts.map(card => ({ card, recopy: false })),
-      ...plan.recopies.map(card => ({ card, recopy: true })),
-    ]) {
-      if (!dryRun) {
-        try {
-          const changed = await storage.withTransaction(tx => writeCard(tx, card, recopy));
-          if (!changed) {
-            report.unchanged += 1;
+  // Recopy released claims before their new owners, even across pages/projects.
+  // Each transaction touches only its own card; no cross-card claim locks.
+  for (const claimed of [false, true]) {
+    let cursor: WorkItemDbRow | undefined;
+    while (true) {
+      const page = await ops.findMany<WorkItemDbRow>(
+        LEGACY,
+        {},
+        {
+          orderBy: [
+            ['org_id', 'asc'],
+            ['factory_project_id', 'asc'],
+            ['created_at', 'asc'],
+            ['id', 'asc'],
+          ],
+          limit: PAGE_SIZE,
+          ...(cursor
+            ? { cursor: { values: [cursor.org_id, cursor.factory_project_id, cursor.created_at, cursor.id] } }
+            : {}),
+        },
+      );
+      if (!page.length) break;
+      cursor = page[page.length - 1];
+      const rows = page.filter(row => Boolean(row.claim_key) === claimed);
+      report.cards += rows.length;
+      for (const row of rows) projects.add(`${row.org_id}\u0000${row.factory_project_id}`);
+      const plan = planWorkItemSplit(
+        rows,
+        await migratedBoardItems(
+          ops,
+          rows.map(row => row.id),
+        ),
+      );
+      report.unchanged += plan.unchanged;
+      report.skipped.push(...plan.skipped);
+      for (const { card, recopy } of [
+        ...plan.inserts.map(card => ({ card, recopy: false })),
+        ...plan.recopies.map(card => ({ card, recopy: true })),
+      ]) {
+        if (!dryRun) {
+          try {
+            const changed = await storage.withTransaction(tx => writeCard(tx, card, recopy));
+            if (!changed) {
+              report.unchanged += 1;
+              continue;
+            }
+          } catch (error) {
+            if (!(error instanceof UniqueViolationError) && !(error instanceof MigrationConflict)) throw error;
+            const raced = (await migratedBoardItems(ops, [card.boardItem.id])).get(card.boardItem.id);
+            if (raced?.migratedFromHash === card.boardItem.migrated_from_hash) report.unchanged += 1;
+            else report.skipped.push({ id: card.boardItem.id, reason: error.message });
             continue;
           }
-        } catch (error) {
-          if (!(error instanceof UniqueViolationError) && !(error instanceof MigrationConflict)) throw error;
-          const raced = (await migratedBoardItems(ops, [card.boardItem.id])).get(card.boardItem.id);
-          if (raced?.migratedFromHash === card.boardItem.migrated_from_hash) report.unchanged += 1;
-          else report.skipped.push({ id: card.boardItem.id, reason: error.message });
-          continue;
         }
+        report.workItems += 1;
+        report.sources += card.source ? 1 : 0;
+        report.boardItems += 1;
+        if (recopy) report.recopied += 1;
+        written.set(`${card.boardItem.org_id}\u0000${card.boardItem.factory_project_id}`, {
+          orgId: card.boardItem.org_id,
+          factoryProjectId: card.boardItem.factory_project_id,
+        });
       }
-      report.workItems += 1;
-      report.sources += card.source ? 1 : 0;
-      report.boardItems += 1;
-      if (recopy) report.recopied += 1;
-      written.set(`${card.boardItem.org_id}\u0000${card.boardItem.factory_project_id}`, {
-        orgId: card.boardItem.org_id,
-        factoryProjectId: card.boardItem.factory_project_id,
-      });
+      if (page.length < PAGE_SIZE) break;
     }
-    if (page.length < PAGE_SIZE) break;
   }
   report.projects = projects.size;
   if (!dryRun && written.size) await bumpBoardVersions(ops, [...written.values()]);
