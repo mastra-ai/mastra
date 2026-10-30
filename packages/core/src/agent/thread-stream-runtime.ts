@@ -2427,6 +2427,10 @@ export class AgentThreadStreamRuntime {
     joinSignal?: CreatedAgentSignal,
     messageScopes?: string[],
   ): Promise<{ runId: string; error?: string; blocked?: boolean; output?: MastraModelOutput<OUTPUT> } | undefined> {
+    // A message naming scopes joins only a run started with exactly those scopes; otherwise
+    // it falls through to the queued idle start below, which runs after the run in flight.
+    const joins = (activeRunId: string) =>
+      !waitForIdle && (messageScopes === undefined || this.#runHoldsScopes(state, activeRunId, messageScopes));
     const messageIdentity = this.#idleMessageIdentity(owner.agent.id, key, signal);
     let admissionSettled = false;
     // Records this attempt's real admission outcome for the logical message and
@@ -2544,7 +2548,7 @@ export class AgentThreadStreamRuntime {
         activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
         // Queued input waits for the thread to go idle; only a send joins a run in flight.
         const pendingAdmission =
-          activeRunId && !activeRecord && !waitForIdle ? state.pendingThreadAdmissions.get(key) : undefined;
+          activeRunId && !activeRecord && joins(activeRunId) ? state.pendingThreadAdmissions.get(key) : undefined;
         if (pendingAdmission && pendingAdmission.runId === activeRunId && pendingAdmission.agentId === owner.agent.id) {
           // The owner has reserved the thread for a run that has not started yet. Hand
           // it the input for its first model request, as a local send does.
@@ -2579,8 +2583,8 @@ export class AgentThreadStreamRuntime {
           activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
         }
         if (
-          !waitForIdle &&
           activeRecord &&
+          joins(activeRecord.runId) &&
           activeRecord.agent.id === owner.agent.id &&
           this.#isThreadBlockingRun(state, activeRecord)
         ) {
@@ -7197,21 +7201,7 @@ export class AgentThreadStreamRuntime {
         key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
         if (activeRecord.agent.id === agent.id) {
           if (scopeMismatch(runId)) return refuseScopes(runId);
-          // Same-agent active run: queue the signal for in-loop draining so it becomes
-          // the next model input instead of waiting for the run to finish.
-          const queue = state.pendingSignalsByThread.get(key) ?? [];
-          queue.push(signal);
-          state.pendingSignalsByThread.set(key, queue);
-          this.#recordLocallyQueuedSignal(state, key, signal.id);
-          this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
-          this.#notifyPendingSignals(state, key);
-          this.#publish(pubsub, key, {
-            type: 'signal-enqueued',
-            runId,
-            signal: this.#serializeSignal(signal),
-            sourceId: this.#getSourceId(),
-          });
-          this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+          this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
           return {
             signal,
             accepted: Promise.resolve({ action: 'deliver' as const, runId }),
@@ -7282,6 +7272,16 @@ export class AgentThreadStreamRuntime {
         }
         const claimedOwnerDiscovery = isLocalReservedRun ? state.claimedThreadOwnerDiscoveries.get(key) : undefined;
         if (claimedOwnerDiscovery) {
+          if (messageScopes !== undefined) {
+            // Discovered owners are in another process; the request carries no scopes.
+            const refused = Promise.reject(
+              new Error(
+                `A message with scopes can't be sent to the owner of ${describeThreadKey(key)} in another process: scopes don't cross processes.`,
+              ),
+            );
+            void refused.catch(() => {});
+            return { signal, accepted: refused };
+          }
           const accepted = this.#deliverAfterClaimedOwnerDiscovery<OUTPUT>(
             this.#getPubSub(pubsub),
             key,
@@ -7415,6 +7415,7 @@ export class AgentThreadStreamRuntime {
           target.ifIdle?.streamOptions,
           waitForIdle,
           joinSignal,
+          messageScopes,
         );
         if (!localAcceptance) {
           throw new Error(
@@ -7436,6 +7437,17 @@ export class AgentThreadStreamRuntime {
       }
 
       if (target.ifIdle?.requireClaimedOwner) {
+        if (messageScopes !== undefined) {
+          if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
+            state.activeThreadRunIds.delete(reservedKey);
+          }
+          state.threadKeysByRunId.delete(reservedRunId);
+          // The request to a claimed owner in another process carries no scopes, so the
+          // owner would join or start a run without them. Refuse rather than drop them.
+          throw new Error(
+            `A message with scopes can't be sent to the owner of ${describeThreadKey(reservedKey)} in another process: scopes don't cross processes.`,
+          );
+        }
         const discovery = this.#findClaimedThreadOwnerWithRetry(resolvedPubSub, reservedKey);
         state.claimedThreadOwnerDiscoveries.set(reservedKey, discovery);
         try {
