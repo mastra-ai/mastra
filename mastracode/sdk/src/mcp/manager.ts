@@ -466,29 +466,46 @@ export function createMcpManager(
     // A reconnect, authenticate, or reload started meanwhile owns the status now.
     const isCurrent = () => connectAttempts.get(name) === attempt && clients.get(name) === client;
 
-    let status: McpServerStatus;
-    try {
-      const { toolsets, errors } = await withDiscoveryTimeout(client.listToolsetsWithErrors());
+    // Capture stderr whether the server connected or failed, so its logs are viewable.
+    let stderrCaptured = false;
+    const captureStderrOnce = () => {
+      if (stderrCaptured) return;
+      stderrCaptured = true;
+      captureStderr(name);
+    };
+
+    const record = (result: { toolsets: Record<string, any>; errors: Record<string, string> }) => {
       if (!isCurrent()) return;
-      const serverTools = (toolsets as Record<string, Record<string, any>>)[name];
+      const serverTools = (result.toolsets as Record<string, Record<string, any>>)[name];
       if (serverTools && Object.keys(serverTools).length > 0) {
         for (const [toolName, toolConfig] of Object.entries(serverTools)) {
           tools[`${name}_${toolName}`] = toolConfig;
         }
         const toolNames = Object.keys(serverTools).map(t => `${name}_${t}`);
-        status = { name, connected: true, toolCount: toolNames.length, toolNames, transport: getTransport(cfg) };
+        serverStatuses.set(name, {
+          name,
+          connected: true,
+          toolCount: toolNames.length,
+          toolNames,
+          transport: getTransport(cfg),
+        });
       } else {
         // Server failed — use the real error from listToolsetsWithErrors()
-        status = failedStatus(name, cfg, errors[name] ?? 'Failed to connect');
+        serverStatuses.set(name, failedStatus(name, cfg, result.errors[name] ?? 'Failed to connect'));
       }
+      captureStderrOnce();
+    };
+
+    const discovery = client.listToolsetsWithErrors();
+    try {
+      record(await withDiscoveryTimeout(discovery));
     } catch (error) {
       if (!isCurrent()) return;
-      status = failedStatus(name, cfg, error instanceof Error ? error.message : String(error));
+      serverStatuses.set(name, failedStatus(name, cfg, error instanceof Error ? error.message : String(error)));
+      captureStderrOnce();
+      // A slow server (e.g. a cold `npx` install) can still finish after the timeout; record it if nothing replaced this attempt.
+      discovery.then(record, () => {});
     }
-
-    serverStatuses.set(name, status);
-    // Capture stderr whether the server connected or failed, so its logs are viewable.
-    captureStderr(name);
   }
 
   function failedStatus(name: string, cfg: McpServerConfig, error: string): McpServerStatus {
