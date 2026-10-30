@@ -103,7 +103,11 @@ export function useBoardItems({
     void update
       .mutateAsync({
         id,
-        patch: { metadata: { ...item.metadata, repository: options.repositorySlug } },
+        patch: {
+          metadata: item.workItem
+            ? { repository: options.repositorySlug }
+            : { ...item.metadata, repository: options.repositorySlug },
+        },
       })
       .then(patched => requestTransition(patched, toStage, options, release))
       .catch(error => {

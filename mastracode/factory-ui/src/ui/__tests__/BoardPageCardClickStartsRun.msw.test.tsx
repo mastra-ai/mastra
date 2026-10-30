@@ -359,6 +359,41 @@ describe('Board card buttons move the card', () => {
     });
   });
 
+  it('patches only the chosen repository when moving a normalized card with stale provider metadata', async () => {
+    const item = {
+      ...linearWorkItem,
+      stages: ['intake'],
+      metadata: {
+        ...linearWorkItem.metadata,
+        labels: ['stale-label'],
+        state: 'closed',
+        githubRepositoryId: 202,
+      },
+      workItem: {
+        ...providerFactsCard.workItem,
+        provider: 'linear',
+        title: linearWorkItem.title,
+        key: 'ENG-42',
+        state: 'open',
+        labels: ['bug'],
+        metadata: linearWorkItem.metadata,
+      },
+    };
+    const { patches, transitions } = stubBoardEndpoints({ multiRepository: true, workItems: [item] });
+    renderWorkBoard();
+
+    await moveFromCardDetails(item.title, 'Investigate');
+    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: /acme\/other/ }));
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(patches).toEqual([{ itemId: item.id, body: { metadata: { repository: 'acme/other' } } }]);
+    expect(transitions[0]).toMatchObject({
+      itemId: item.id,
+      body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
+    });
+  });
+
   it('cancels repository selection without changing a Linear item and resets search on reopening', async () => {
     const { patches, transitions } = stubBoardEndpoints({
       multiRepository: true,
