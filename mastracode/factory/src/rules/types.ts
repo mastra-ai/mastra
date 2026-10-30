@@ -67,12 +67,16 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
 
+/** The card's author is inside the write-access circle, or the card is Factory's own PR. */
+export function authorTrusted(metadata: Record<string, unknown> | null | undefined): boolean {
+  return metadata?.authorTrusted === true || metadata?.factoryAuthored === true;
+}
+
 // Authored outside the write-access circle: a missing trust stamp fails closed until
 // the reconcile sweep backfills it, and Factory's own PRs pass through `factoryAuthored`.
 export function externallyAuthored(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
   if (!['github-pr', 'github-issue', 'gitlab-pr', 'gitlab-issue'].includes(item.source)) return false;
-  if (item.metadata?.factoryAuthored === true) return false;
-  return item.metadata?.authorTrusted !== true;
+  return !authorTrusted(item.metadata);
 }
 
 export function externallyAuthoredWorkItem(item: {
