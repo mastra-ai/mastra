@@ -4564,7 +4564,12 @@ describe('FactoryDecisionDispatcher', () => {
     vi.spyOn(storage, 'commitRuleEvaluation').mockImplementation(async input => {
       if (input.ingress.triggerType === 'transition.message' && !raced) {
         raced = true;
-        await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { plansPreapproved: true } });
+        await storage.update({
+          orgId: 'org-1',
+          id: item.id,
+          userId: 'user-1',
+          patch: { metadata: { reviewVerdict: 'approved' } },
+        });
       }
       return commit(input);
     });

@@ -141,7 +141,34 @@ export interface WorkItemSourceDbRecord extends Record<string, unknown> {
   updated_at: Date;
 }
 
+export interface WorkItemSourceRow {
+  id: string;
+  workItemId: string;
+  provider: WorkItemProvider;
+  kind: WorkItemKind;
+  integrationId: string;
+  sourceType: string;
+  workspaceId: string | null;
+  externalId: string;
+  sourceKey: string | null;
+  key: string | null;
+  url: string | null;
+  state: string | null;
+  labels: string[];
+  author: string | null;
+  metadata: Record<string, unknown> | null;
+  revision: number;
+  syncedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export function primarySource(card: { workItem: { sources: readonly WorkItemSourceRow[] } }): WorkItemSourceRow | null {
+  return card.workItem.sources[0] ?? null;
+}
+
 export interface WorkItemRow {
+  sources: WorkItemSourceRow[];
   id: string;
   orgId: string;
   factoryProjectId: string;
@@ -185,6 +212,16 @@ export interface BoardItemDbRecord extends Record<string, unknown> {
   migrated_from_updated_at: Date | null;
   migrated_from_hash: string | null;
 }
+
+/** Serializes first-copy migration with deletion without locking an entire project's cards. */
+export const FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA: CollectionSchema = {
+  name: 'factory_work_item_split_locks',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
+  },
+};
 
 /** Deleted card ids prevent the boot migration resurrecting frozen legacy rows. */
 export const FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA: CollectionSchema = {

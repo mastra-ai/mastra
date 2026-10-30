@@ -1732,7 +1732,12 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
-    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-2', patch: { title: 'Changed concurrently' } });
+    await storage.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-2',
+      patch: { metadata: { reviewVerdict: 'approved' } },
+    });
 
     const result = await service.transition(request(item));
 

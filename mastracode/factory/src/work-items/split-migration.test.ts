@@ -311,10 +311,12 @@ async function seedLegacy(storage: FactoryStorage) {
   const cards = await new Cards(storage.ops).findMany({});
   for (const card of cards) {
     delete card.work_item;
+    delete card.work_item_sources;
     await storage.ops.upsertOne('work_items', ['id'], card);
   }
   await storage.ops.deleteMany(FACTORY_BOARD_ITEMS_SCHEMA.name, {});
   await storage.ops.deleteMany(FACTORY_WORK_ITEMS_SCHEMA.name, {});
+  await storage.ops.deleteMany(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {});
 }
 
 async function readSplit(storage: FactoryStorage) {
@@ -464,6 +466,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
 
     const createdRow = await new Cards(storage.ops).findOne({ id: created.item.id });
     delete createdRow!.work_item;
+    delete createdRow!.work_item_sources;
     await storage.ops.insertOne('work_items', createdRow!);
     const createdBoard = (await readSplit(storage)).boardItems.get(created.item.id)!;
     await storage.ops.deleteMany(FACTORY_BOARD_ITEMS_SCHEMA.name, { id: created.item.id });
@@ -527,6 +530,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('detects copied changes that an old replica writes without touching updated_at', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     await migrateWorkItemSplit(storage);
     const id = cards.get('github issue')!;
     const armed = new Date('2031-01-01T00:00:00Z');
@@ -545,6 +549,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('reports conflicting legacy recopies without reverting newer board state', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     await migrateWorkItemSplit(storage);
     const id = cards.get('github issue')!;
     const copied = (await readSplit(storage)).boardItems.get(id)!;
@@ -588,6 +593,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
         userId: USER,
         input: FIXTURES[0]!.input,
       });
+      await seedLegacy(storage);
       await migrateWorkItemSplit(storage);
       await storage.ops.updateMany(
         'work_items',

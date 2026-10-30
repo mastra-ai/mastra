@@ -13,6 +13,7 @@ import {
   FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
+  FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA,
 } from '../storage/domains/work-items/work-item-schema.js';
 import type {
   BoardItemDbRecord,
@@ -198,6 +199,25 @@ class MigrationConflict extends Error {}
 
 async function writeCard(ops: FactoryStorageOps, card: WorkItemSplitCard, recopy: boolean): Promise<boolean> {
   if (!recopy) {
+    // Both paths take this card-specific lock before any card rows. A project-wide
+    // lock here would invert the row-lock order of parent/child and bulk deletions.
+    const guard = await ops.updateAtomic(
+      FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name,
+      { id: card.boardItem.id },
+      () => null,
+    );
+    if (!guard)
+      await ops.insertOne(FACTORY_WORK_ITEM_SPLIT_LOCKS_SCHEMA.name, {
+        id: card.boardItem.id,
+        org_id: card.boardItem.org_id,
+        factory_project_id: card.boardItem.factory_project_id,
+      });
+    if (await ops.findOne(FACTORY_BOARD_ITEM_TOMBSTONES_SCHEMA.name, { id: card.boardItem.id })) return false;
+    const existing = await ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, { id: card.boardItem.id });
+    if (existing) {
+      if (existing.migrated_from_hash === card.boardItem.migrated_from_hash) return false;
+      throw new MigrationConflict('Migration baseline changed since planning');
+    }
     await ops.insertOne<WorkItemDbRecord>(WORK_ITEMS, card.workItem);
     if (card.source) await ops.insertOne<WorkItemSourceDbRecord>(SOURCES, card.source);
     await ops.insertOne<BoardItemDbRecord>(BOARD_ITEMS, card.boardItem);
