@@ -23,16 +23,16 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "mistral4-119b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "glm5.3-754b": [
@@ -47,16 +47,16 @@
         "values": ["none", "high"]
       }
     ],
-    "gemma4-26b": [
+    "mistral4-119b": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "qwen3.8-27b": [
+    "gemma4-26b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "high"]
       }
     ]
   }

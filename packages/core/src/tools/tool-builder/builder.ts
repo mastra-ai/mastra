@@ -759,7 +759,11 @@ export class CoreToolBuilder extends MastraBase {
                 name: options.name,
                 runId: options.runId!,
               },
-              options.outputWriter || execOptions.outputWriter,
+              // The execution-time writer is the step's own writer, which knows the
+              // current response message id. A tool built by a processor carries the
+              // run-level writer captured when the stream started, and that id goes
+              // stale once a signal or retry rotates the response id.
+              execOptions.outputWriter || options.outputWriter,
             ),
             ...createObservabilityContext({ currentSpan: contextSpan }),
             abortSignal: execOptions.abortSignal,
@@ -815,7 +819,7 @@ export class CoreToolBuilder extends MastraBase {
                 suspendPayload,
                 threadId,
                 resourceId,
-                outputWriter: options.outputWriter || execOptions.outputWriter,
+                outputWriter: execOptions.outputWriter || options.outputWriter,
                 flushMessages: execOptions.flushMessages,
                 ...(execOptions.isBackgroundTask ? { isBackgroundTask: true } : {}),
               },

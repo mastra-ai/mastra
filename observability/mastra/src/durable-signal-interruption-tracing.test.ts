@@ -87,7 +87,7 @@ describe.each(['durable', 'evented'] as const)('%s signal interruption tracing',
 
     const steps = exporter.getSpansByType(SpanType.MODEL_STEP);
     const inferences = exporter.getSpansByType(SpanType.MODEL_INFERENCE);
-    const interruptedStep = steps.find(span => span.attributes?.finishReason === 'interrupted');
+    const interruptedStep = steps.find(span => span.outcome === 'interrupted' && span.stopReason === 'signal_received');
     const answeredStep = steps.find(span => span.attributes?.finishReason === 'stop');
     expect(steps).toHaveLength(2);
     expect(interruptedStep).toBeDefined();
@@ -163,7 +163,7 @@ describe.each(['durable', 'evented'] as const)('%s signal interruption tracing',
       provider: span?.attributes?.provider,
     });
     const steps = exporter.getSpansByType(SpanType.MODEL_STEP);
-    const interruptedStep = steps.find(span => span.attributes?.finishReason === 'interrupted');
+    const interruptedStep = steps.find(span => span.outcome === 'interrupted' && span.stopReason === 'signal_received');
     const answeredStep = steps.find(span => span.attributes?.finishReason === 'stop');
     expect(steps).toHaveLength(2);
     expect(interruptedStep).toBeDefined();

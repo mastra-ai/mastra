@@ -30,10 +30,15 @@
     "kimi-latest"
   ],
   "reasoning": {
-    "glm-5.3-flash": [
+    "glm-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-latest": [
+      {
+        "type": "toggle"
       }
     ],
     "gpt-oss-120b": [
@@ -53,12 +58,7 @@
         "type": "toggle"
       }
     ],
-    "kimi-latest": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-latest": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

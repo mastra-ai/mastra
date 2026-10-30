@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
-import type { AggregateSpansResponse, GetObservabilityCapabilitiesResponse, QuerySpansResult } from '@mastra/client-js';
+import type {
+  AggregateSpansResponse,
+  GetObservabilityCapabilitiesResponse,
+  QuerySpansInput,
+  QuerySpansResult,
+} from '@mastra/client-js';
 import { planSpanAggregate, spanAggregateRequestSchema } from '@mastra/core/storage';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -10,10 +15,12 @@ import {
   emptySpanRows,
   endedSpan,
   firstListedSpan,
+  limitedSpanPage,
   spanAggregateCapabilities,
   spanAggregateError,
   spanCountsAggregate,
   spanHeadPage,
+  spanOutcomeCapabilities,
   spanQueryCapabilities,
   spanRowsPage,
 } from '../../__tests__/fixtures/spans';
@@ -26,6 +33,7 @@ import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '@/domains/traces/trace-list-co
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { SearchParamsHost } from '@/test/search-params-host';
 
 const SPANS_QUERY_URL = `${TEST_BASE_URL}/api/observability/spans/query`;
 const SPANS_AGGREGATE_URL = `${TEST_BASE_URL}/api/observability/spans/aggregate`;
@@ -46,6 +54,32 @@ const renderBody = (selection?: SpanSelection) => {
     <SpansExplorerBody selection={selection} onSelectionChange={onSelectionChange} renderPanel={renderPanel} />,
   );
   return { onSelectionChange, renderPanel };
+};
+
+/** The body inside a stand-in router whose URL starts as `initial`; returns each list query sent. */
+const renderBodyAtUrl = (initial: string) => {
+  const queries: QuerySpansInput[] = [];
+  server.use(
+    http.post(SPANS_QUERY_URL, async ({ request }) => {
+      const body = (await request.json()) as QuerySpansInput;
+      // The poll for newly ended spans orders by endedAt; only the list query is kept.
+      if (body.orderBy?.[0]?.field !== 'endedAt') queries.push(body);
+      return HttpResponse.json(spanRowsPage);
+    }),
+  );
+  renderWithProviders(
+    <SearchParamsHost initial={initial}>
+      {urlState => (
+        <SpansExplorerBody
+          selection={undefined}
+          onSelectionChange={() => {}}
+          renderPanel={() => null}
+          urlState={urlState}
+        />
+      )}
+    </SearchParamsHost>,
+  );
+  return { queries };
 };
 
 /** The spans body next to a readout of the traces page's saved columns, which live under their own key. */
@@ -73,6 +107,66 @@ describe('SpansExplorerBody', () => {
   });
   beforeEach(() => {
     window.localStorage.clear();
+  });
+
+  describe('when the store records span outcomes', () => {
+    const spanQueryBodies = vi.fn<(body: unknown) => void>();
+    const setOutcomeHandlers = (capabilities: GetObservabilityCapabilitiesResponse) => {
+      setHandlers(limitedSpanPage);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
+        http.post(SPANS_QUERY_URL, async ({ request }) => {
+          spanQueryBodies(await request.json());
+          return HttpResponse.json(limitedSpanPage);
+        }),
+      );
+    };
+    const filterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
+
+    afterEach(() => spanQueryBodies.mockClear());
+
+    it('shows each span outcome with its stop reason', async () => {
+      setOutcomeHandlers(spanOutcomeCapabilities);
+
+      renderBody();
+
+      const row = await screen.findByRole('button', { name: /agent run: weather/ });
+      expect(within(row).getByText('Limit')).toBeTruthy();
+      expect(within(row).getByText('max_steps')).toBeTruthy();
+    });
+
+    it('queries spans with no recorded outcome', async () => {
+      setOutcomeHandlers(spanOutcomeCapabilities);
+      renderBody();
+      await screen.findByText('agent run: weather');
+
+      filterInput().focus();
+      fireEvent.change(filterInput(), { target: { value: 'Outcome' } });
+      await screen.findByRole('option', { name: 'Outcome' });
+      fireEvent.keyDown(filterInput(), { key: 'Enter' });
+      fireEvent.change(filterInput(), { target: { value: 'is not recorded' } });
+      await screen.findByRole('option', { name: 'is not recorded' });
+      fireEvent.keyDown(filterInput(), { key: 'Enter' });
+
+      await waitFor(() =>
+        expect(spanQueryBodies).toHaveBeenLastCalledWith(
+          expect.objectContaining({ where: { op: 'and', args: [{ op: 'notExists', path: 'outcome' }] } }),
+        ),
+      );
+    });
+
+    it('does not offer outcome filters when the store cannot filter on them', async () => {
+      setOutcomeHandlers(spanQueryCapabilities);
+      renderBody();
+      await screen.findByText('agent run: weather');
+
+      filterInput().focus();
+      fireEvent.change(filterInput(), { target: { value: 'Status' } });
+      await screen.findByRole('option', { name: 'Status' });
+      fireEvent.change(filterInput(), { target: { value: 'Outcome' } });
+
+      expect(screen.queryByRole('option', { name: 'Outcome' })).toBeNull();
+    });
   });
 
   describe('when the store returns span rows', () => {
@@ -234,6 +328,37 @@ describe('SpansExplorerBody', () => {
       expect(await screen.findByText('gpt-5.6')).toBeTruthy();
       expect(screen.getByTestId('traces-columns').textContent).toBe(
         DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns.join(','),
+      );
+    });
+  });
+
+  describe('when the URL holds a filter, a sort and a time range', () => {
+    it('queries spans with them', async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl('filter.name=tool%3A+get-weather&sort=startedAt&dir=asc&datePreset=last-24h');
+      await screen.findByText('agent run: weather');
+
+      const [query] = queries;
+      expect(JSON.stringify(query?.where)).toContain('"tool: get-weather"');
+      expect(query?.orderBy).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+      const from = new Date(query?.timeRange?.from ?? NaN).getTime();
+      expect(Date.now() - from).toBeGreaterThan(23 * 60 * 60 * 1000);
+      expect(Date.now() - from).toBeLessThan(25 * 60 * 60 * 1000);
+    });
+  });
+
+  describe('when the user sorts the list by start time', () => {
+    it('writes the sort to the URL and keeps the other params', async () => {
+      setHandlers(spanRowsPage);
+
+      renderBodyAtUrl('traceId=trace-1&spanId=span-2&filter.name=tool%3A+get-weather');
+      fireEvent.click(await screen.findByRole('button', { name: /^Start, sorted descending/ }));
+
+      await waitFor(() =>
+        expect(new URLSearchParams(screen.getByTestId('search-params').textContent ?? '')).toEqual(
+          new URLSearchParams('traceId=trace-1&spanId=span-2&filter.name=tool%3A+get-weather&sort=startedAt&dir=asc'),
+        ),
       );
     });
   });

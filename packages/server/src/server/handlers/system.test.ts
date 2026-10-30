@@ -28,11 +28,14 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryTimeToFirstTokenSort: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
+  traceQueryOutcomeFields: false,
   traceAggregate: false,
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
   spanQueryContextFields: false,
+  spanQueryModelFields: false,
+  spanQueryOutcomeFields: false,
   spanAggregate: false,
   feedback: false,
 };
@@ -671,6 +674,52 @@ describe('System Handlers', () => {
         expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
           spanQueryContextFields: supported,
         });
+      });
+
+      it.each([
+        { features: ['span-query', 'span-query-model-fields'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-model-fields'], supported: false },
+      ] as const)(
+        'reports model and provider span filters for $features as $supported',
+        async ({ features, supported }) => {
+          class SpanQueryStore extends BaseObservabilityStore {
+            getFeatures() {
+              return features;
+            }
+          }
+
+          expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
+            spanQueryModelFields: supported,
+          });
+        },
+      );
+
+      it.each([
+        {
+          features: ['span-query', 'span-query-outcome-fields'],
+          expected: { spanQueryOutcomeFields: true, traceQueryOutcomeFields: false },
+        },
+        {
+          features: ['trace-query', 'trace-query-outcome-fields'],
+          expected: { spanQueryOutcomeFields: false, traceQueryOutcomeFields: true },
+        },
+        {
+          features: ['span-query-outcome-fields', 'trace-query-outcome-fields'],
+          expected: { spanQueryOutcomeFields: false, traceQueryOutcomeFields: false },
+        },
+        {
+          features: ['span-query', 'trace-query'],
+          expected: { spanQueryOutcomeFields: false, traceQueryOutcomeFields: false },
+        },
+      ] as const)('reports outcome fields for $features as $expected', async ({ features, expected }) => {
+        class OutcomeStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+
+        expect(await capabilitiesFor(new OutcomeStore())).toMatchObject(expected);
       });
 
       it('reports time to first chunk only when the store also serves a trace, thread or span query', async () => {

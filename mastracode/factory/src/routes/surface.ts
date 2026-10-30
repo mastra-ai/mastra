@@ -72,6 +72,7 @@ import { WorkItemRoutes } from './work-items.js';
 
 const MATERIALIZE_FAILURE_CODE = {
   'git-missing': 'repository_git_missing',
+  'sandbox-unresponsive': 'repository_sandbox_unresponsive',
   'egress-blocked': 'repository_egress_blocked',
   'clone-failed': 'repository_clone_failed',
   'pull-failed': 'repository_pull_failed',

@@ -1,5 +1,16 @@
 # @mastra/code-sdk
 
+## 1.16.1-alpha.1
+
+### Patch Changes
+
+- Fixed OpenAI Codex (ChatGPT sign-in) threads failing with `Item with id 'rs_…' not found` after sitting idle. Earlier reasoning and message items are now replayed without their server ids, so a resumed thread no longer depends on Codex still caching them. ([#28786](https://github.com/mastra-ai/mastra/pull/28786))
+
+- Updated dependencies [[`3d8cc6a`](https://github.com/mastra-ai/mastra/commit/3d8cc6a05bb2eec5f445a17758e829cc46758109), [`7691115`](https://github.com/mastra-ai/mastra/commit/7691115f9dbe3dae8909af435db8799c1efcae3d), [`5ea837f`](https://github.com/mastra-ai/mastra/commit/5ea837f6abfe095e9d9ec57059bd331ec91325aa), [`5b7f85e`](https://github.com/mastra-ai/mastra/commit/5b7f85e1ab2cfe72dd5aa820e8a61d7c9ab64041), [`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990), [`ec3ba11`](https://github.com/mastra-ai/mastra/commit/ec3ba11dad428caeb3b4afae77d1669462e8c129)]:
+  - @mastra/core@1.81.0-alpha.1
+  - @mastra/stagehand@0.4.0-alpha.1
+  - @mastra/client-js@1.57.1-alpha.1
+
 ## 1.16.1-alpha.0
 
 ### Patch Changes

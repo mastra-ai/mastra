@@ -15,7 +15,13 @@ import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
 import type { MemoryConfig } from '../../memory';
-import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
+import {
+  createObservabilityContext,
+  getOrCreateSpan,
+  getResumeTracingContext,
+  SpanType,
+  EntityType,
+} from '../../observability';
 import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
@@ -50,7 +56,7 @@ import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } fro
 import { isDurableAgentLike } from '../types';
 import { resolveThreadIdFromArgs } from '../utils';
 
-import { publishAbortRequest } from './abort-transport';
+import { publishAbortRequest, requestAcknowledgedAbort } from './abort-transport';
 import {
   AGENT_STREAM_TOPIC,
   AgentStreamEventTypes,
@@ -75,7 +81,7 @@ import {
 import type { UntrackedRunLiveness } from './execution-fence';
 import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
-import type { PreparationResult } from './preparation';
+import type { PreparationOptions, PreparationResult } from './preparation';
 import { recordRunSavedMessages } from './run-message-refs';
 import {
   deleteRunRegistryEntry,
@@ -129,6 +135,8 @@ function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 /** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
 const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
+/** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
+const RESUMED_SPAN_DATA = Symbol('mastra.durable.resumedSpanData');
 /** Recoveries in progress in this process, keyed by agent and run. */
 const localRecoveryClaims = new Map<string, string>();
 const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
@@ -1679,8 +1687,7 @@ export class DurableAgent<
             ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
           },
           tracingPolicy: agentTracingPolicy,
-          tracingOptions: origAgentSpanData?.traceId ? { traceId: origAgentSpanData.traceId } : undefined,
-          ...(origAgentSpanData?.id ? { resumedFromSpanId: origAgentSpanData.id } : {}),
+          resumeFrom: getResumeTracingContext(origAgentSpanData),
           requestContext,
           mastra: this.#mastra,
         });
@@ -2842,6 +2849,35 @@ export class DurableAgent<
     return aborted || this.#isRunExecuting(runId);
   }
 
+  /**
+   * Abort `runId` and resolve whether the abort was confirmed.
+   *
+   * Only a close this process performs itself counts as local confirmation. A
+   * run-registry entry does not: an evented run keeps one here while another
+   * process executes its steps, possibly a dead one. Every other run gets a
+   * single correlated request, and only the executor's answer confirms it.
+   * The local controller is flipped after that answer, so an executor in this
+   * process cannot unwind and drop its listener before the request reaches it.
+   *
+   * @internal Used by the server's run abort route.
+   */
+  async __abortRunAcknowledged(runId: string): Promise<boolean> {
+    const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
+    if (wrapperClose) {
+      wrapperClose();
+      return true;
+    }
+    if (super.abortRunStream(runId)) {
+      this.#abortDurableRun(runId);
+      return true;
+    }
+    try {
+      return await requestAcknowledgedAbort(this.pubsub, runId);
+    } finally {
+      this.#abortLocalController(runId);
+    }
+  }
+
   /** Whether this process can see `runId` executing, in its registries or on the thread runtime. */
   #isRunExecuting(runId: string): boolean {
     return (
@@ -2887,13 +2923,18 @@ export class DurableAgent<
    * happens to know about the run.
    */
   #abortDurableRun(runId: string): void {
+    this.#abortLocalController(runId);
+    // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
+    // abort synchronously and a failed publish is logged, not thrown.
+    void this.requestRemoteAbort(runId);
+  }
+
+  /** Flip the controller this process holds for `runId`, if it holds one. */
+  #abortLocalController(runId: string): void {
     const controller = (this.#runRegistry.get(runId) ?? getRunRegistryEntry(runId, this.#mastra))?.abortController;
     if (controller && !controller.signal.aborted) {
       controller.abort(new Error('Aborted'));
     }
-    // Best-effort, like `requestRemoteAbort` itself: the caller gets the local
-    // abort synchronously and a failed publish is logged, not thrown.
-    void this.requestRemoteAbort(runId);
   }
 
   /**
@@ -3582,6 +3623,7 @@ export class DurableAgent<
       // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
       await this.prepare([], {
         [SCOPES_ALREADY_APPLIED]: true,
+        [RESUMED_SPAN_DATA]: { agentSpanData: workflowInput.agentSpanData, modelSpanData: workflowInput.modelSpanData },
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
         requestContext: options?.requestContext ?? snapshotRequestContext,
@@ -3915,9 +3957,7 @@ export class DurableAgent<
     if (origTraceId && this.#mastra?.observability) {
       try {
         const ag = this.#wrappedAgent as Agent<string, any, any>;
-        // Match non-durable Agent.stream() resume-span shape: same name suffix
-        // `(resumed)`, forward agent-level tracingPolicy, parent under the original
-        // span via `resumedFromSpanId` (also kept in metadata), and carry the resolvedVersionId.
+        // Match non-durable Agent.stream() resume-span shape.
         const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
         const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
         const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
@@ -3935,7 +3975,7 @@ export class DurableAgent<
             ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
             ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
           },
-          ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
+          resumeFrom: getResumeTracingContext(entry.agentSpan),
           tracingPolicy: agentTracingPolicy,
           tracingOptions: { traceId: origTraceId, ...entry.agentSpan?.traceState },
           traceState: entry.agentSpan?.traceState,
@@ -6110,6 +6150,9 @@ export class DurableAgent<
       runId: options?.runId,
       requestContext: options?.requestContext,
       scopesResolved: !!(options as { [SCOPES_ALREADY_APPLIED]?: boolean } | undefined)?.[SCOPES_ALREADY_APPLIED],
+      resumedSpanData: (options as { [RESUMED_SPAN_DATA]?: PreparationOptions['resumedSpanData'] } | undefined)?.[
+        RESUMED_SPAN_DATA
+      ],
       mastra: this.#mastra,
       durableAgentId: this.id,
       durableAgentName: this.name,

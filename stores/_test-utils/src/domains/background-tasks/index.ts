@@ -355,6 +355,113 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
       });
     });
 
+    describe('expiry and metadata', () => {
+      const HOUR = 60 * 60 * 1000;
+      const asTime = (value: Date | undefined) => {
+        const reader = value as unknown;
+        return (reader instanceof Date ? reader : new Date(reader as string)).getTime();
+      };
+      const ids = async (filter: Parameters<BackgroundTasksStorage['listTasks']>[0]) =>
+        (await bgStorage.listTasks(filter)).tasks.map(t => t.id).sort();
+
+      it('round-trips expiresAt and nested metadata', async () => {
+        if (!bgStorage) return;
+        const expiresAt = new Date(Date.now() + 24 * HOUR);
+        const metadata = { ttlMs: 86_400_000, resumeSchema: { type: 'object', required: ['a'] }, tags: ['x', 1] };
+        const task = createSampleTask({ expiresAt, metadata });
+        await bgStorage.createTask(task);
+
+        const result = await bgStorage.getTask(task.id);
+        expect(Math.abs(asTime(result!.expiresAt) - expiresAt.getTime())).toBeLessThan(5_000);
+        expect(result!.metadata).toEqual(metadata);
+      });
+
+      it('stores neither field when absent', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask();
+        await bgStorage.createTask(task);
+
+        const result = await bgStorage.getTask(task.id);
+        expect(result!.expiresAt ?? null).toBeNull();
+        expect(result!.metadata ?? null).toBeNull();
+      });
+
+      it('sets and clears both fields with updateTask', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask();
+        await bgStorage.createTask(task);
+
+        const expiresAt = new Date(Date.now() + HOUR);
+        await bgStorage.updateTask(task.id, { expiresAt, metadata: { step: 2 } });
+        let result = await bgStorage.getTask(task.id);
+        expect(Math.abs(asTime(result!.expiresAt) - expiresAt.getTime())).toBeLessThan(5_000);
+        expect(result!.metadata).toEqual({ step: 2 });
+
+        await bgStorage.updateTask(task.id, { expiresAt: undefined, metadata: undefined });
+        result = await bgStorage.getTask(task.id);
+        expect(result!.expiresAt ?? null).toBeNull();
+        expect(result!.metadata ?? null).toBeNull();
+      });
+
+      it('filters listTasks by hasExpiresAt and an expiresAt range', async () => {
+        if (!bgStorage) return;
+        const now = Date.now();
+        const soon = createSampleTask({ expiresAt: new Date(now + HOUR) });
+        const later = createSampleTask({ expiresAt: new Date(now + 48 * HOUR) });
+        const none = createSampleTask();
+        for (const t of [soon, later, none]) await bgStorage.createTask(t);
+
+        expect(await ids({ hasExpiresAt: true })).toEqual([soon.id, later.id].sort());
+        expect(await ids({ hasExpiresAt: false })).toEqual([none.id]);
+        expect(await ids({ dateFilterBy: 'expiresAt', toDate: new Date(now + 24 * HOUR) })).toEqual([soon.id]);
+        expect(await ids({ dateFilterBy: 'expiresAt', fromDate: new Date(now + 24 * HOUR) })).toEqual([later.id]);
+      });
+
+      it('deleteTasks removes only terminal rows whose expiresAt has passed', async () => {
+        if (!bgStorage) return;
+        const now = Date.now();
+        const expired = createSampleTask({
+          status: 'completed',
+          completedAt: new Date(now - HOUR),
+          expiresAt: new Date(now - HOUR),
+        });
+        const live = createSampleTask({
+          status: 'completed',
+          completedAt: new Date(now - HOUR),
+          expiresAt: new Date(now + HOUR),
+        });
+        const suspended = createSampleTask({ status: 'suspended', expiresAt: new Date(now - HOUR) });
+        const noExpiry = createSampleTask({ status: 'completed', completedAt: new Date(now - HOUR) });
+        for (const t of [expired, live, suspended, noExpiry]) await bgStorage.createTask(t);
+
+        await bgStorage.deleteTasks({
+          status: ['completed', 'failed', 'cancelled', 'timed_out'],
+          dateFilterBy: 'expiresAt',
+          toDate: new Date(now),
+        });
+
+        expect(await ids({})).toEqual([live.id, suspended.id, noExpiry.id].sort());
+      });
+
+      it('deleteTasks with hasExpiresAt: false spares rows that set their own expiry', async () => {
+        if (!bgStorage) return;
+        const now = Date.now();
+        const old = new Date(now - 2 * HOUR);
+        const ttlOnly = createSampleTask({ status: 'completed', completedAt: old });
+        const ownExpiry = createSampleTask({ status: 'completed', completedAt: old, expiresAt: new Date(now + HOUR) });
+        for (const t of [ttlOnly, ownExpiry]) await bgStorage.createTask(t);
+
+        await bgStorage.deleteTasks({
+          status: 'completed',
+          hasExpiresAt: false,
+          dateFilterBy: 'completedAt',
+          toDate: new Date(now - HOUR),
+        });
+
+        expect(await ids({})).toEqual([ownExpiry.id]);
+      });
+    });
+
     describe('execution ownership', () => {
       // Adapters store timestamps with differing precision (seconds for some
       // SQL dialects, ISO strings for schemaless stores), so compare with a
@@ -414,6 +521,78 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expect(stored!.status).toBe('running');
         expect(stored!.ownerId).toBe('worker-a');
         expectCloseTo(stored!.leaseExpiresAt, new Date(Date.now() + 60_000));
+      });
+
+      it('fences a pinned pending task on its owner and lease', async () => {
+        if (!bgStorage) return;
+        // `enqueue(..., { pinToWorker: true })` writes a pending row that
+        // already carries its owner and lease.
+        const task = createSampleTask({
+          status: 'pending',
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() - 1_000),
+        });
+        await bgStorage.createTask(task);
+        const pinned = (await bgStorage.getTask(task.id))!;
+        expect(pinned.status).toBe('pending');
+        expect(pinned.ownerId).toBe('worker-a');
+
+        // A peer that observed no owner cannot claim it.
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { status: 'running', startedAt: new Date(), ownerId: 'worker-b' },
+            { expectedStatus: 'pending', expectedOwnerId: null, expectedLeaseExpiresAt: null },
+          ),
+        ).toBe(false);
+
+        // Recovery fenced on the observed owner and lapsed lease unpins it once.
+        const fence = {
+          expectedStatus: 'pending' as const,
+          expectedOwnerId: 'worker-a',
+          expectedLeaseExpiresAt: pinned.leaseExpiresAt ?? null,
+        };
+        expect(
+          await bgStorage.updateTask(task.id, { retryCount: 1, ownerId: undefined, leaseExpiresAt: undefined }, fence),
+        ).toBe(true);
+        expect(
+          await bgStorage.updateTask(task.id, { retryCount: 2, ownerId: undefined, leaseExpiresAt: undefined }, fence),
+        ).toBe(false);
+        const recovered = (await bgStorage.getTask(task.id))!;
+        expect(recovered.status).toBe('pending');
+        expect(recovered.retryCount).toBe(1);
+        expect(recovered.ownerId ?? null).toBeNull();
+        expect(recovered.leaseExpiresAt ?? null).toBeNull();
+      });
+
+      it('renews a pinned pending lease only for its owner', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({
+          status: 'pending',
+          ownerId: 'worker-a',
+          leaseExpiresAt: new Date(Date.now() + 10_000),
+        });
+        await bgStorage.createTask(task);
+
+        const renewedAt = new Date(Date.now() + 60_000);
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { leaseExpiresAt: new Date(Date.now() + 60_000) },
+            { expectedStatus: 'pending', expectedOwnerId: 'worker-b' },
+          ),
+        ).toBe(false);
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { leaseExpiresAt: renewedAt },
+            { expectedStatus: 'pending', expectedOwnerId: 'worker-a' },
+          ),
+        ).toBe(true);
+        const stored = (await bgStorage.getTask(task.id))!;
+        expect(stored.status).toBe('pending');
+        expect(stored.ownerId).toBe('worker-a');
+        expectCloseTo(stored.leaseExpiresAt, renewedAt);
       });
 
       it('refuses a claim fenced on an owner that does not match', async () => {
@@ -683,6 +862,111 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expect(cleared!.status).toBe('pending');
         expect(cleared!.ownerId ?? null).toBeNull();
         expect(cleared!.leaseExpiresAt ?? null).toBeNull();
+      });
+    });
+
+    describe('suspension fence', () => {
+      // A suspended task's open questions live in its metadata. A reply to the
+      // first suspension that arrives after the task resumed and suspended
+      // again must not overwrite the second suspension's questions: status is
+      // `suspended` both times and owner/lease are cleared on suspend, so only
+      // `suspendedAt` tells the two suspensions apart.
+      const firstSuspendedAt = new Date(Date.now() - 60_000);
+      const secondSuspendedAt = new Date(Date.now() - 10_000);
+
+      const suspendTwice = async () => {
+        const task = createSampleTask({
+          status: 'suspended',
+          startedAt: new Date(Date.now() - 120_000),
+          suspendedAt: firstSuspendedAt,
+          metadata: { question: 'K1' },
+        });
+        await bgStorage.createTask(task);
+        // Fence on values read back through the store; adapters round-trip
+        // timestamps with differing precision.
+        const first = (await bgStorage.getTask(task.id))!;
+
+        // Resumed, ran, and suspended again on a new question.
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { status: 'running', suspendedAt: undefined, ownerId: 'worker-a' },
+            { expectedStatus: 'suspended', expectedSuspendedAt: first.suspendedAt ?? null },
+          ),
+        ).toBe(true);
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { status: 'suspended', suspendedAt: secondSuspendedAt, ownerId: undefined, metadata: { question: 'K2' } },
+            { expectedStatus: 'running' },
+          ),
+        ).toBe(true);
+        const second = (await bgStorage.getTask(task.id))!;
+        return { task, first, second };
+      };
+
+      it('rejects an answer meant for an earlier suspension of the task', async () => {
+        if (!bgStorage) return;
+        const { task, first } = await suspendTwice();
+
+        const stale = await bgStorage.updateTask(
+          task.id,
+          { metadata: { question: 'K1', answer: 'for K1' } },
+          { expectedStatus: 'suspended', expectedSuspendedAt: first.suspendedAt ?? null },
+        );
+
+        expect(stale).toBe(false);
+        expect((await bgStorage.getTask(task.id))!.metadata).toEqual({ question: 'K2' });
+      });
+
+      it('applies an answer for the current suspension', async () => {
+        if (!bgStorage) return;
+        const { task, second } = await suspendTwice();
+        expect(second.suspendedAt).toBeDefined();
+
+        const applied = await bgStorage.updateTask(
+          task.id,
+          { metadata: { question: 'K2', answer: 'for K2' } },
+          { expectedStatus: 'suspended', expectedSuspendedAt: second.suspendedAt ?? null },
+        );
+
+        expect(applied).toBe(true);
+        expect((await bgStorage.getTask(task.id))!.metadata).toEqual({ question: 'K2', answer: 'for K2' });
+      });
+
+      it('matches a null fence against a task that was never suspended', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'pending' });
+        await bgStorage.createTask(task);
+
+        expect(await bgStorage.updateTask(task.id, { retryCount: 1 }, { expectedSuspendedAt: null })).toBe(true);
+        expect((await bgStorage.getTask(task.id))!.retryCount).toBe(1);
+      });
+
+      it('rejects a null fence against a suspended task', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'suspended', suspendedAt: firstSuspendedAt, retryCount: 0 });
+        await bgStorage.createTask(task);
+
+        expect(await bgStorage.updateTask(task.id, { retryCount: 1 }, { expectedSuspendedAt: null })).toBe(false);
+        expect((await bgStorage.getTask(task.id))!.retryCount).toBe(0);
+      });
+
+      it('matches a null fence once the suspension time has been cleared on resume', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'suspended', suspendedAt: firstSuspendedAt });
+        await bgStorage.createTask(task);
+        expect(await bgStorage.updateTask(task.id, { status: 'running', suspendedAt: undefined })).toBe(true);
+        expect((await bgStorage.getTask(task.id))!.suspendedAt ?? null).toBeNull();
+
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { retryCount: 1 },
+            { expectedStatus: 'running', expectedSuspendedAt: null },
+          ),
+        ).toBe(true);
+        expect((await bgStorage.getTask(task.id))!.retryCount).toBe(1);
       });
     });
   });

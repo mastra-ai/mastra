@@ -10,7 +10,7 @@ import {
   InfoIcon,
   MessageSquareReplyIcon,
 } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { SpanRecord, SpanTab } from '../types';
 import { getSpanSignal } from '../utils/span-signal';
@@ -54,9 +54,6 @@ import { formatDuration, formatDurationPrecise } from '@/utils/duration';
 // Mirrors `DataPanel.Content` without requiring the Drawer root (this view also renders standalone).
 // Sections bleed their hairlines through this padding, so the two must match.
 const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-3';
-
-/** Below this width the tab labels collapse to icons: the four labelled tabs need ~370px. */
-const COMPACT_WIDTH = 380;
 
 type PayloadView = 'rich' | 'raw';
 
@@ -112,8 +109,6 @@ export function SpanDataPanelView({
 }: SpanDataPanelViewProps) {
   const [ownTab, setOwnTab] = useState<SpanTab>('details');
   const [view, setView] = useState<PayloadView>('rich');
-  const [panel, setPanel] = useState<HTMLElement | null>(null);
-  const compact = useIsNarrow(panel, COMPACT_WIDTH);
 
   const requested = activeTab ?? ownTab;
   // A feedback tab asked for by the URL means nothing where the consumer offers no feedback.
@@ -138,10 +133,9 @@ export function SpanDataPanelView({
   // which already provides the panel chrome.
   return (
     <section
-      ref={setPanel}
       aria-labelledby={headingId}
       data-slot="span-data-panel"
-      className={cn('@container flex min-h-0 flex-1 flex-col overflow-hidden', className)}
+      className={cn('flex min-h-0 flex-1 flex-col overflow-hidden', className)}
     >
       <DataPanel.Header className="flex-nowrap">
         {span ? (
@@ -189,14 +183,9 @@ export function SpanDataPanelView({
               <div className="min-w-0 flex-1">
                 <TabList variant="pill-ghost" size="sm">
                   {tabs.map(item => (
-                    <Tab
-                      key={item.value}
-                      value={item.value}
-                      attention={item.attention}
-                      tooltip={compact ? item.name : undefined}
-                    >
+                    <Tab key={item.value} value={item.value} attention={item.attention}>
                       <Icon size="xs">{item.icon}</Icon>
-                      <span className="@max-[380px]:sr-only">{item.name}</span>
+                      <span>{item.name}</span>
                       {item.badge != null && <> ({item.badge})</>}
                     </Tab>
                   ))}
@@ -215,18 +204,6 @@ export function SpanDataPanelView({
       )}
     </section>
   );
-}
-
-/** Mirrors the `@max-[380px]` container query in JS: tooltips render in a portal, outside the container. */
-function useIsNarrow(element: HTMLElement | null, width: number) {
-  const [narrow, setNarrow] = useState(false);
-  useEffect(() => {
-    if (!element || !('ResizeObserver' in globalThis)) return;
-    const observer = new ResizeObserver(() => setNarrow(element.clientWidth <= width));
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, [element, width]);
-  return narrow;
 }
 
 /* ------------------------------------------------------------------------------------------------

@@ -37,6 +37,8 @@ export type TracesConfigContextValue = {
   /** The thread rows API is on, so the host can offer a threads view next to the traces list. */
   withThreadQuery: boolean;
   withRootDuration: boolean;
+  /** The server filters trace queries on the root span's `outcome` and `stopReason`. */
+  withOutcomeFields: boolean;
   /** Trace rows carry the root span's time to first chunk, so the TTFC column can be shown. */
   withTimeToFirstChunk: boolean;
   /** Trace queries can be ordered by the root span's time to first chunk. */
