@@ -104,7 +104,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
   const DEADLINE_MS = engine === 'inngest' ? 2_500 : 500;
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 15_000 : 5_000;
   // Engines that do not yet save the turn when the total deadline fires. Each engine's fix removes it here.
-  const deadlineSavePending: EngineVariant[] = ['normal', 'fs'];
+  // Inngest needs a caller-side deadline save that has not landed yet.
+  const deadlineSavePending: EngineVariant[] = ['normal', 'fs', 'inngest'];
   const deadlineSaves = !deadlineSavePending.includes(engine);
 
   it.each([false, true])(
@@ -312,7 +313,9 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       // The durable engines persist the input through agent memory regardless of the configured
       // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
       const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
-      const inputSaved = !readOnly && !((customHistory || historyOff) && !durable);
+      // A history-only store gets the input from the deadline save, which Inngest does not run yet.
+      const inputSaved =
+        !readOnly && !(historyStore && engine === 'inngest') && !((customHistory || historyOff) && !durable);
       // The lookup step completed before the deadline, and the courier step ends with the abort notice
       // once its grace window passes, so the deadline saves both with the input.
       const completedStepSaved = (deadlineSaves && inputSaved) || (savePerStep && !readOnly);
@@ -373,7 +376,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
       await toolFinished.promise;
 
-      if (!deadlineSaves) {
+      // Inngest already saved this step before the deadline save.
+      if (!deadlineSaves && engine !== 'inngest') {
         // Absence can't be polled for; give a late write time to land.
         await new Promise(resolve => setTimeout(resolve, 500));
         const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });

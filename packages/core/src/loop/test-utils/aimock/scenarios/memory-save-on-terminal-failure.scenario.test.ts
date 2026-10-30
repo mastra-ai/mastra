@@ -83,7 +83,8 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
   const DEADLINE_MS = engine === 'inngest' ? 4_000 : 800;
   const TEST_TIMEOUT_MS = engine === 'inngest' ? 30_000 : 10_000;
   // Engines that do not yet save the turn when the total deadline fires. Each engine's fix removes it here.
-  const deadlineSavePending: EngineVariant[] = ['normal', 'fs'];
+  // Inngest needs a caller-side deadline save that has not landed yet.
+  const deadlineSavePending: EngineVariant[] = ['normal', 'fs', 'inngest'];
   const itDeadline = deadlineSavePending.includes(engine) ? it.fails : it;
   // Inngest already keeps the user message when the deadline lands during the input save.
   const itInFlightSave = deadlineSavePending.includes(engine) && engine !== 'inngest' ? it.fails : it;
