@@ -614,6 +614,21 @@ export function registerApiCommand(program: CommanderCommand): void {
     description: 'List the external sources Factory work items were created from',
     routePlacement: 'origin',
   });
+  addAction(factoryWorkItem, 'session-cards', FACTORY_API_ROUTE_CATALOG.workItemSessionCards, {
+    description: 'List a brief of the Factory work items that ran a session',
+    routePlacement: 'origin',
+  });
+  addAction(factoryWorkItem, 'activity', FACTORY_API_ROUTE_CATALOG.workItemActivity, {
+    description: 'List when Factory work items came in and shipped since a time',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Show what came in and shipped since a date',
+        command: `mastra api factory work-item activity <project-id> '{"since":"2026-10-01T00:00:00.000Z"}'`,
+      },
+    ],
+  });
   addAction(factoryWorkItem, 'sync', FACTORY_API_ROUTE_CATALOG.workItemSync, {
     description: 'Sync a board: open cards first, then only cards changed since the cursor',
     input: 'optional',

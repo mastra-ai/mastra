@@ -129,6 +129,8 @@ describe('api command descriptors', () => {
       'factoryWork-itemGet': ['workItemGet', ['id', 'workItemId'], false, false, false],
       'factoryWork-itemCounts': ['workItemCounts', ['id'], true, false, false],
       'factoryWork-itemSources': ['workItemSources', ['id'], false, false, false],
+      'factoryWork-itemSession-cards': ['workItemSessionCards', ['id'], false, false, false],
+      'factoryWork-itemActivity': ['workItemActivity', ['id'], true, true, false],
       'factoryWork-itemSync': ['workItemSync', ['id'], true, false, false],
       'factoryWork-itemCreate': ['workItemCreate', ['id'], true, true, false],
       'factoryWork-itemUpdate': ['workItemUpdate', ['id'], true, true, false],
