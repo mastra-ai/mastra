@@ -265,6 +265,62 @@ describe('subscribeToThread withInitialHistory', () => {
     }
   });
 
+  // A read that never settles never clears its own stalled mark, so noting a new stall drops marks that are a
+  // lease TTL old and keeps younger ones. The marks are private, so the test finds their map through Map#set.
+  it('drops stalled lease-read marks a lease TTL old when a new stall is noted, and keeps younger ones', async () => {
+    const { pubsub, runtime, subscribe } = setup(() => []);
+    const leaseKeys: string[] = [];
+    vi.spyOn(pubsub, 'getLeaseOwner').mockImplementation(key => {
+      leaseKeys.push(key);
+      return new Promise(() => {});
+    });
+    const marks = new Set<Map<unknown, unknown>>();
+    const set = Map.prototype.set;
+    const setSpy = vi.spyOn(Map.prototype, 'set').mockImplementation(function (this: Map<unknown, unknown>, k, v) {
+      if (typeof v === 'number' && leaseKeys.includes(k as string)) marks.add(this);
+      return set.call(this, k, v);
+    });
+    const start = Date.now();
+    const now = vi.spyOn(Date, 'now');
+    const stallOn = async (thread: string, at: number) => {
+      now.mockReturnValue(at);
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        const opening =
+          thread === threadId
+            ? subscribe().then(r => r.subscription)
+            : runtime.subscribeToThread(
+                {
+                  id: harness.agent.id,
+                  getMemory: async () => ({
+                    getThreadById: async ({ threadId }: { threadId: string }) => ({ id: threadId }),
+                    recall: async () => ({ messages: [], hasMore: false }),
+                  }),
+                } as unknown as Agent<any, any, any, any>,
+                { threadId: thread, resourceId, withInitialHistory: true },
+                pubsub,
+              );
+        await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS * 1.5);
+        (await opening).unsubscribe();
+      } finally {
+        vi.useRealTimers();
+      }
+      return leaseKeys.at(-1)!;
+    };
+    try {
+      const oldest = await stallOn(threadId, start);
+      const younger = await stallOn(`${threadId}-b`, start + 1);
+      const newest = await stallOn(`${threadId}-c`, start + AGENT_LEASE_TTL_MS);
+      expect(new Set([oldest, younger, newest]).size).toBe(3);
+      expect(marks.size).toBe(1);
+      const [stalled] = [...marks];
+      expect([...stalled.keys()].sort()).toEqual([younger, newest].sort());
+    } finally {
+      now.mockRestore();
+      setSpy.mockRestore();
+    }
+  });
+
   it('delivers deferred output before its outcome and keeps serving later runs', async () => {
     const { emit, subscribe } = setup(() => []);
     const { subscription, collected, consumed } = await subscribe(false);
