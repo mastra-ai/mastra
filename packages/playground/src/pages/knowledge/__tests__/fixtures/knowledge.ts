@@ -165,3 +165,9 @@ export const paymentsUpdatedNotice: KnowledgeChangeNotice = {
   scopeId: 'scope-acme',
   at: '2026-10-29T12:00:00.000Z',
 };
+
+/** The graph with grants: a written role scope and a declared one nothing was written to yet. */
+export const knowledgeGraphWithGrants: KnowledgeGraphResponse = {
+  ...knowledgeGraph,
+  grants: [{ principal: 'role:acme:admin', principalLabel: 'acme admin', target: 'scope-acme', role: 'owner' }],
+};

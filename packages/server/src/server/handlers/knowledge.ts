@@ -135,6 +135,26 @@ function requirePageReaders(): KnowledgePageReaders {
   };
 }
 
+/**
+ * The declared grants between the graph's scopes, each with its principal's display label. Grants are
+ * newer than the page readers, so a core without them sends none and the graph still loads.
+ */
+async function graphGrants(
+  instance: Knowledge,
+  store: KnowledgeStorage,
+  pages: readonly coreKnowledge.KnowledgePage[],
+  read: KnowledgeReadScope,
+): Promise<Array<coreKnowledge.KnowledgeGraphScopeGrant & { principalLabel?: string }> | undefined> {
+  const readGrants = (coreKnowledge as Partial<typeof coreKnowledge>).readKnowledgeScopeGrants;
+  const scopeGrants = (instance as Partial<Knowledge>).scopeGrants?.bind(instance);
+  if (!readGrants || !scopeGrants) return undefined;
+  const grants = await readGrants(store, { pages, read, grantsFor: scopeGrants });
+  return grants.map(grant => {
+    const principalLabel = instance.scopeLabel?.(grant.principal);
+    return principalLabel ? { ...grant, principalLabel } : grant;
+  });
+}
+
 async function resolveStore(
   mastra: Mastra,
   requestContext: RequestContext | undefined,
@@ -256,7 +276,7 @@ export const GET_KNOWLEDGE_GRAPH_ROUTE = createRoute({
   responseSchema: knowledgeGraphResponseSchema,
   summary: 'Get a bounded Knowledge page graph',
   description:
-    'Returns pages under rootId (or every root scope) breadth-first with parent and mention edges, bounded; truncated is true when a limit stopped it. 404 when rootId does not exist.',
+    'Returns pages under rootId (or every root scope) breadth-first with parent and mention edges, bounded; truncated is true when a limit stopped it. grants lists the declared access grants onto the scopes shown, from principal scopes the caller can read. 404 when rootId does not exist.',
   tags: ['Knowledge'],
   requiresAuth: true,
   handler: async ({ mastra, requestContext, knowledgeKey, rootId, maxPages }) => {
@@ -268,7 +288,12 @@ export const GET_KNOWLEDGE_GRAPH_ROUTE = createRoute({
         ...(maxPages ? { limits: { maxPages } } : {}),
       });
       if (!graph) throw new HTTPException(404, { message: 'Knowledge page not found' });
-      return { ...graph, pages: graph.pages.map(page => withDisplayLabel(instance, page)) };
+      const grants = await graphGrants(instance, store, graph.pages, read);
+      return {
+        ...graph,
+        pages: graph.pages.map(page => withDisplayLabel(instance, page)),
+        ...(grants ? { grants } : {}),
+      };
     } catch (error) {
       return handleError(error, 'Error reading Knowledge graph');
     }

@@ -9,6 +9,7 @@ import type {
   KnowledgePageEdge,
   KnowledgePagePayload,
   KnowledgePinPayload,
+  KnowledgeScopeGrantPayload,
 } from '../pageTypes';
 import { KnowledgeNoteItem, KnowledgePageDetail } from './KnowledgePageDetail';
 import { KnowledgePageGraph } from './KnowledgePageGraph';
@@ -26,6 +27,8 @@ export interface KnowledgeExplorerGraph {
   pages: KnowledgePagePayload[];
   edges: KnowledgePageEdge[];
   pinnedIds: string[];
+  /** Access grants between scopes; hosts whose server doesn't send them leave this out. */
+  grants?: KnowledgeScopeGrantPayload[];
   truncated: boolean;
 }
 
@@ -656,6 +659,7 @@ export function KnowledgePageExplorer({
                 pages={graphPages}
                 edges={mentionEdges}
                 pinnedIds={graph.pinnedIds}
+                grants={graph.grants}
                 selectedPageId={selectedPageId}
                 onSelect={page => {
                   onSelect(page.id);
