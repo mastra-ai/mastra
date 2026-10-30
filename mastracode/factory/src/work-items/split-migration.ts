@@ -317,7 +317,14 @@ export async function migrateWorkItemSplit(
             if (!(error instanceof UniqueViolationError) && !(error instanceof MigrationConflict)) throw error;
             const raced = (await migratedBoardItems(ops, [card.boardItem.id])).get(card.boardItem.id);
             if (raced?.migratedFromHash === card.boardItem.migrated_from_hash) report.unchanged += 1;
-            else report.skipped.push({ id: card.boardItem.id, reason: error.message });
+            else {
+              const reason =
+                error instanceof UniqueViolationError &&
+                (error.collection === SOURCES || error.collection === BOARD_ITEMS)
+                  ? `Conflicting source or claim: ${error.message}`
+                  : error.message;
+              report.skipped.push({ id: card.boardItem.id, reason });
+            }
             continue;
           }
         }
