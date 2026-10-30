@@ -408,6 +408,8 @@ export interface FactoryDecisionDispatcherOptions {
     factoryProjectId: string;
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
   }) => Promise<string | null>;
+  /** `false` spends a linked-card decision unfiled: its Factory project was deleted after the decision committed. */
+  factoryProjectExists?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   maxInFlight?: number;
   /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
   staleBindingSweepIntervalMs?: number;
@@ -595,6 +597,7 @@ export class FactoryDecisionDispatcher {
   readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
+  readonly #factoryProjectExists?: FactoryDecisionDispatcherOptions['factoryProjectExists'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
   readonly #staleBindingTtlMs: number;
@@ -629,6 +632,7 @@ export class FactoryDecisionDispatcher {
     this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
+    this.#factoryProjectExists = options.factoryProjectExists;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
     this.#staleBindingSweepIntervalMs = positiveMs(
@@ -1297,6 +1301,12 @@ export class FactoryDecisionDispatcher {
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
+    if (
+      this.#factoryProjectExists &&
+      !(await this.#factoryProjectExists({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }))
+    ) {
+      return;
+    }
     // A lost completion acknowledgement must not reinterpret a committed
     // materialization against a replacement installation.
     const existing = await this.#storage.getByProjectSource({
@@ -1337,9 +1347,8 @@ export class FactoryDecisionDispatcher {
         decision,
       })) ??
       null;
-    let result: UpsertWorkItemResult;
-    try {
-      result = await this.#storage.upsert({
+    const upsert = () =>
+      this.#storage.upsert({
         orgId: record.orgId,
         userId: 'factory-rule-dispatcher',
         factoryProjectId: record.factoryProjectId,
@@ -1355,20 +1364,33 @@ export class FactoryDecisionDispatcher {
         },
         reuseMode: 'preserve',
       });
+    let result: UpsertWorkItemResult;
+    try {
+      result = await upsert().catch(async error => {
+        if (
+          error instanceof WorkItemClaimConflictError &&
+          (await this.#releaseDeletedProjectClaim(record.orgId, decision.claimKey))
+        ) {
+          return upsert();
+        }
+        throw error;
+      });
     } catch (error) {
-      // Another Factory project in the org holds the live card for this record.
+      // Another live Factory project in the org holds the card for this record.
       // The decision is spent, not failed: retrying would only be refused again.
       if (error instanceof WorkItemClaimConflictError) return;
       throw error;
     }
-    if (!result.created && decision.claimKey && !result.item.claimKey) {
+    const { claimKey } = decision;
+    if (!result.created && claimKey && !result.item.claimKey) {
       // A card filed before claims existed adopts the claim now; a refusal means
-      // another project already owns the record, and this card stays as it is.
-      const claimed = await this.#storage.claimWorkItem({
-        orgId: record.orgId,
-        id: result.item.id,
-        claimKey: decision.claimKey,
-      });
+      // another live project already owns the record, and this card stays as it is.
+      const claim = { orgId: record.orgId, id: result.item.id, claimKey };
+      const claimed =
+        (await this.#storage.claimWorkItem(claim)) ??
+        ((await this.#releaseDeletedProjectClaim(record.orgId, claimKey))
+          ? await this.#storage.claimWorkItem(claim)
+          : null);
       if (claimed) result = { ...result, item: claimed };
     }
     const itemBoard = boardForWorkItem(result.item);
@@ -1468,6 +1490,16 @@ export class FactoryDecisionDispatcher {
       causalChain,
     });
     if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
+  }
+
+  /** Drops `claimKey` when the card holding it belongs to a deleted Factory project; true when it is free again. */
+  async #releaseDeletedProjectClaim(orgId: string, claimKey: string | undefined): Promise<boolean> {
+    if (!claimKey || !this.#factoryProjectExists) return false;
+    const holder = await this.#storage.getByClaimKey({ orgId, claimKey });
+    if (!holder) return true;
+    if (await this.#factoryProjectExists({ orgId, factoryProjectId: holder.factoryProjectId })) return false;
+    await this.#storage.releaseProjectClaims({ orgId, factoryProjectId: holder.factoryProjectId });
+    return true;
   }
 
   async #requireItem(record: FactoryDeferredDecisionRecord) {

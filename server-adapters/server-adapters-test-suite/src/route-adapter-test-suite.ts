@@ -460,6 +460,12 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       '/agents/:agentId/observe',
       // Covered by packages/server/src/server/handlers/mcp-events.test.ts.
       '/mcp/:serverId/events/:eventName/stream',
+      // Finding, cancelling, and answering an MCP task need a live task on the server; the generic
+      // test context has none, so each fails closed with 404. Covered by
+      // packages/server/src/server/handlers/mcp-tasks.test.ts.
+      '/mcp/:serverId/tasks/find',
+      '/mcp/:serverId/tasks/:taskKey/cancel',
+      '/mcp/:serverId/tasks/:taskKey/input',
       // Recover requires both a durable agent and a persisted workflow run.
       // Its stateful behavior is covered by packages/server/src/server/handlers/agents.test.ts.
       '/agents/:agentId/recover',

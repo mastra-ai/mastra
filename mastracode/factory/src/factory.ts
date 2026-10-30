@@ -200,6 +200,8 @@ export interface MastraFactoryConfig {
    * one connection, every feature on.
    */
   storage: FactoryStorage;
+  /** Disable persistence of rich scorer results. Default: true. */
+  disableScoreStorage?: boolean;
   /**
    * Vector store instance for recall search — `PgVector` (`@mastra/pg`) on
    * the same database as `storage`. Omitted → the SDK mount's default vector
@@ -1496,6 +1498,7 @@ export class MastraFactory {
           gitBranch: '',
         },
         storage: storage.getMastraStorage(),
+        disableScoreStorage: this.#config.disableScoreStorage ?? true,
         ...(mastraStorageBackend ? { storageBackend: mastraStorageBackend } : {}),
         ...(this.#config.knowledge ? { knowledge: this.#config.knowledge } : {}),
         // The environment signal tells the agent which repositories its
@@ -1811,6 +1814,10 @@ export class MastraFactory {
                   await factoryProjectsStorage.ensureReady();
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                   return project?.autoApprovePlans ?? false;
+                },
+                factoryProjectExists: async ({ orgId, factoryProjectId }) => {
+                  await factoryProjectsStorage.ensureReady();
+                  return (await factoryProjectsStorage.get({ orgId, id: factoryProjectId })) !== null;
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,

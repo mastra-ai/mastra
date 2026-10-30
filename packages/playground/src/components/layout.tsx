@@ -106,7 +106,10 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
               collapsible
               collapsedSize={0}
               hideExpandButton
-              minSize={480}
+              // Must fit under `maxSize` at the smallest desktop width (1024px gives ~384px):
+              // CollapsiblePanel keeps its content at least `minSize` wide, so a panel capped
+              // below it clips its content's left side.
+              minSize={370}
               maxSize="50%"
               defaultSize={560}
               className="min-w-0"

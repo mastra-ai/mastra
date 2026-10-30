@@ -5,7 +5,15 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import { LatencyCard } from '../latency-card';
 import { agentLatencyFixture, emptyPercentilesFixture } from './fixtures/metrics';
-import { PERCENTILES_API, failingMetrics, pendingMetrics, renderInMetrics, seedMetrics } from './metrics-msw';
+import {
+  PERCENTILES_API,
+  failingMetrics,
+  openViewMenu,
+  pendingMetrics,
+  pickView,
+  renderInMetrics,
+  seedMetrics,
+} from './metrics-msw';
 import { server } from '@/test/msw-server';
 
 /** Serves agent latency and records each percentiles request's metric and levels. */
@@ -25,11 +33,10 @@ function recordPercentiles() {
 
 describe('LatencyCard', () => {
   describe('when the data is loading', () => {
-    it('shows its title and tabs', () => {
+    it('shows its title and view menu', async () => {
       pendingMetrics();
       renderInMetrics(<LatencyCard />);
-      expect(screen.getByText('Latency')).toBeDefined();
-      expect(screen.getByRole('tab', { name: 'Agents' })).toBeDefined();
+      expect(await openViewMenu('Agent latency')).toEqual(['Agent latency', 'Workflow latency', 'Tool latency']);
       expect(screen.queryByText('4.50s')).toBeNull();
     });
   });
@@ -48,7 +55,7 @@ describe('LatencyCard', () => {
       for (const label of ['P50', 'P95', 'P99']) expect(screen.getByText(label)).toBeDefined();
     });
 
-    it('asks only for the open tab, with P50, P95 and P99', async () => {
+    it('asks only for the open view, with P50, P95 and P99', async () => {
       seedMetrics();
       const requests = recordPercentiles();
       renderInMetrics(<LatencyCard />);
@@ -56,12 +63,12 @@ describe('LatencyCard', () => {
       expect(requests).toEqual([{ name: 'mastra_agent_duration_ms', percentiles: [0.5, 0.95, 0.99] }]);
     });
 
-    it('asks for workflows when that tab opens', async () => {
+    it('asks for workflows when that view opens', async () => {
       seedMetrics();
       const requests = recordPercentiles();
       renderInMetrics(<LatencyCard />);
       await screen.findByText('4.50s');
-      fireEvent.click(screen.getByRole('tab', { name: 'Workflows' }));
+      await pickView('Agent latency', 'Workflow latency');
       await waitFor(() => expect(requests.map(r => r.name)).toContain('mastra_workflow_duration_ms'));
       expect(requests).toHaveLength(2);
     });
@@ -73,23 +80,23 @@ describe('LatencyCard', () => {
       expect(screen.queryByRole('button', { name: 'View in traces' })).toBeNull();
     });
 
-    it('reports the open tab from "View in traces"', async () => {
+    it('reports the open view from "View in traces"', async () => {
       seedMetrics();
       const onViewTraces = vi.fn();
       renderInMetrics(<LatencyCard onViewTraces={onViewTraces} />);
       await screen.findByText('4.50s');
-      fireEvent.click(screen.getByRole('tab', { name: 'Workflows' }));
+      await pickView('Agent latency', 'Workflow latency');
       fireEvent.click(screen.getByRole('button', { name: 'View in traces' }));
       expect(onViewTraces).toHaveBeenCalledWith(EntityType.WORKFLOW_RUN);
     });
   });
 
   describe('when the data fails to load', () => {
-    it('keeps the tabs and says so', async () => {
+    it('keeps the view menu and says so', async () => {
       failingMetrics();
       renderInMetrics(<LatencyCard />);
       expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
-      expect(screen.getByRole('tab', { name: 'Workflows' })).toBeDefined();
+      expect(await openViewMenu('Agent latency')).toContain('Workflow latency');
     });
   });
 });

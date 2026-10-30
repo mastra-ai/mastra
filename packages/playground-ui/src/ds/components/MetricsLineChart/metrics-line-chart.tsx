@@ -16,7 +16,6 @@ export type MetricsLineChartSeries = {
   dataKey: string;
   label: string;
   color: string;
-  aggregate?: (data: Record<string, unknown>[]) => { value: string; suffix?: string };
   /** A secondary reading (e.g. an average next to counts): dashed, no fill under it. */
   dashed?: boolean;
   /** The series to read first (e.g. P95 among percentiles): a slightly heavier line. */
@@ -46,8 +45,8 @@ const LINE_STYLES: Record<MetricsLineChartLineStyle, { width: number; emphasis: 
  * edge where the line starts and stops. A mask sized to each fill's own box.
  */
 const THIN_FILL_FADE = '[&_.recharts-area-area]:mask-x-from-[calc(100%-24px)]';
-/** A series with this few points gets a dot on each: a lone point draws no line at all. */
-const SPARSE_POINTS = 12;
+/** A lone point draws no line at all, so it gets a dot; lines already bridge gaps (`connectNulls`). */
+const SPARSE_POINTS = 1;
 
 // Jumps straight to the hovered point, with the dots and the tooltip.
 function HoverLine({ points }: { points?: { x: number; y: number }[] }) {
@@ -78,10 +77,10 @@ export type MetricsLineChartProps = {
   xLabels?: ChartXLabels;
   /** Row field for the tooltip heading (e.g. a longer date); defaults to the x-axis label. */
   tooltipLabelKey?: string;
-  /** Render a visible dot on every point. Series with few points get them anyway. */
+  /** Render a visible dot on every point. A series with a single point gets one anyway. */
   showDots?: boolean;
   /**
-   * Point markers. `auto`: on every point of a sparse series (or all with `showDots`). `hover`:
+   * Point markers. `auto`: on a series' lone point (or every point with `showDots`). `hover`:
    * none at rest, only the hovered point's.
    */
   dots?: 'auto' | 'hover';
@@ -109,7 +108,7 @@ export function MetricsLineChart(props: MetricsLineChartProps) {
   // The legend stays while loading: it comes from the series, not the data.
   return (
     <div className={root}>
-      {showLegend && <MetricsLineChartLegend data={isLoading ? undefined : data} series={series} className="mb-4" />}
+      {showLegend && <MetricsLineChartLegend series={series} className="mb-4" />}
       {isLoading ? <ChartSkeleton kind="line" height={height} /> : <LinePlot {...props} />}
     </div>
   );
