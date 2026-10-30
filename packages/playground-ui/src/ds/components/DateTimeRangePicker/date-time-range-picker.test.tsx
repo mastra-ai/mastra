@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DateTimeRangePicker } from './date-time-range-picker';
 import type { DateRangePreset } from './date-time-range-picker';
@@ -185,6 +185,51 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     });
 
     expect(new Set(selects.map(select => select.id)).size).toBe(6);
+  });
+});
+
+describe('DateTimeRangePicker (custom range label)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-29T12:00:00.000Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const label = (dateFrom?: Date, dateTo?: Date) => {
+    render(<DateTimeRangePicker preset="custom" dateFrom={dateFrom} dateTo={dateTo} />);
+    return screen.getByRole('button').textContent;
+  };
+
+  describe('when the range sits within one day', () => {
+    it('shows the day once, then both times', () => {
+      expect(label(new Date('2026-10-21T14:05:00.000Z'), new Date('2026-10-21T16:00:00.000Z'))).toBe(
+        'Oct 21, 2:05 PM \u2013 4 PM',
+      );
+    });
+  });
+
+  describe('when the range spans several days', () => {
+    it('shows the day and time of each end', () => {
+      expect(label(new Date('2026-10-20T00:00:00.000Z'), new Date('2026-10-27T09:30:00.000Z'))).toBe(
+        'Oct 20, 12 AM \u2013 Oct 27, 9:30 AM',
+      );
+    });
+  });
+
+  describe('when the range reaches outside the current year', () => {
+    it('adds the year to both ends', () => {
+      expect(label(new Date('2025-12-30T22:00:00.000Z'), new Date('2026-01-02T06:00:00.000Z'))).toBe(
+        'Dec 30, 2025, 10 PM \u2013 Jan 2, 2026, 6 AM',
+      );
+    });
+  });
+
+  describe('when an end is open', () => {
+    it('names the open end', () => {
+      expect(label(new Date('2026-10-21T14:00:00.000Z'), undefined)).toBe('Oct 21, 2 PM \u2013 End');
+    });
   });
 });
 

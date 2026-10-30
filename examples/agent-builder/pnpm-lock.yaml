@@ -51,11 +51,11 @@ importers:
         specifier: ^3.0.0
         version: 3.0.19
       '@hono/node-server':
-        specifier: ^1.19.15
-        version: 1.19.17(hono@4.13.11)
+        specifier: ^2.1.5
+        version: 2.1.5(hono@4.13.11)
       '@hono/node-ws':
         specifier: ^1.1.1
-        version: 1.3.1(@hono/node-server@1.19.17(hono@4.13.11))(hono@4.13.11)
+        version: 1.3.1(@hono/node-server@2.1.5(hono@4.13.11))(hono@4.13.11)
       '@mastra/ai-sdk':
         specifier: link:../../client-sdks/ai-sdk
         version: link:../../client-sdks/ai-sdk
@@ -148,9 +148,9 @@ packages:
     resolution: {integrity: sha512-5lWq7zSfRaU5ylDESn3sDQjgGl2AI1vjZKO/6JY3aFW70ct4zcP1kN+ZUYOuTXr28fVsYbyu2YFhddLdIgQFZQ==}
     engines: {node: '>=18'}
 
-  '@hono/node-server@1.19.17':
-    resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
-    engines: {node: '>=18.14.1'}
+  '@hono/node-server@2.1.5':
+    resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
+    engines: {node: '>=20'}
     peerDependencies:
       hono: 4.13.11
 
@@ -447,13 +447,13 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@hono/node-server@1.19.17(hono@4.13.11)':
+  '@hono/node-server@2.1.5(hono@4.13.11)':
     dependencies:
       hono: 4.13.11
 
-  '@hono/node-ws@1.3.1(@hono/node-server@1.19.17(hono@4.13.11))(hono@4.13.11)':
+  '@hono/node-ws@1.3.1(@hono/node-server@2.1.5(hono@4.13.11))(hono@4.13.11)':
     dependencies:
-      '@hono/node-server': 1.19.17(hono@4.13.11)
+      '@hono/node-server': 2.1.5(hono@4.13.11)
       hono: 4.13.11
       ws: 8.22.0
     transitivePeerDependencies:

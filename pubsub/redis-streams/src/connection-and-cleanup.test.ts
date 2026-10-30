@@ -381,14 +381,59 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       expect(pttl).toBeLessThanOrEqual(60_000);
     }, 15_000);
 
-    it('leaves streams persistent by default', async () => {
+    it('expires idle streams by default (7 days) on both publish- and subscribe-created keys', async () => {
+      // A deployment constructed with defaults must not accumulate immortal
+      // streams: under a volatile-* policy they can't be evicted, and under
+      // noeviction they grow until Redis rejects writes.
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
       const ps = createPubSub();
-      const topic = `nottl-${randomUUID()}`;
-      await ps.publish(topic, makeEvent());
+      const publishTopic = `default-ttl-pub-${randomUUID()}`;
+      const subscribeTopic = `default-ttl-sub-${randomUUID()}`;
+      await ps.publish(publishTopic, makeEvent());
+      await ps.subscribe(subscribeTopic, (_event, ack) => void ack?.());
+
+      const inspector = await createInspector();
+      for (const topic of [publishTopic, subscribeTopic]) {
+        const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+        expect(pttl).toBeGreaterThan(sevenDays - 60_000);
+        expect(pttl).toBeLessThanOrEqual(sevenDays);
+      }
+    }, 15_000);
+
+    it('keeps delivering to a live subscriber after its idle stream expires', async () => {
+      // Expiry, unlike clearTopic(), happens while the reader is blocked in
+      // XREADGROUP with no local cursor reset; the read loop must recreate the
+      // group and keep delivering.
+      const ps = createPubSub({ streamIdleTtlMs: 300 });
+      const topic = `ttl-expire-live-${randomUUID()}`;
+      const received: number[] = [];
+      await ps.subscribe(topic, (event, ack) => {
+        received.push((event.data as { n: number }).n);
+        void ack?.();
+      });
+      await ps.publish(topic, makeEvent({ data: { n: 1 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1]);
+
+      const inspector = await createInspector();
+      // The read loop recreates the stream right after it expires, so check that
+      // entry 1 is gone (XLEN 0) rather than racing to see the key missing.
+      await expect.poll(() => inspector.xLen(`mastra:topic:${topic}`), { timeout: 5000 }).toBe(0);
+
+      await ps.publish(topic, makeEvent({ data: { n: 2 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1, 2]);
+    }, 20_000);
+
+    it('keeps streams persistent with streamIdleTtlMs: 0', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 0 });
+      const publishTopic = `nottl-pub-${randomUUID()}`;
+      const subscribeTopic = `nottl-sub-${randomUUID()}`;
+      await ps.publish(publishTopic, makeEvent());
+      await ps.subscribe(subscribeTopic, (_event, ack) => void ack?.());
 
       const inspector = await createInspector();
       // -1 = key exists with no TTL.
-      expect(await inspector.pTTL(`mastra:topic:${topic}`)).toBe(-1);
+      expect(await inspector.pTTL(`mastra:topic:${publishTopic}`)).toBe(-1);
+      expect(await inspector.pTTL(`mastra:topic:${subscribeTopic}`)).toBe(-1);
     }, 15_000);
 
     it('rejects an invalid streamIdleTtlMs (negative, NaN, Infinity, or non-integer)', () => {

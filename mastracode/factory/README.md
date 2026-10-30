@@ -55,9 +55,76 @@ MASTRA_TELEMETRY_DISABLED=true
 
 `1`, `true`, and `yes` are accepted, ignoring case and surrounding whitespace. Older servers without the explicit capability do not receive browser telemetry requests. Custom auth providers are outside this initial measurement scope until they have a stable identity namespace. No names, emails, tokens, prompts, input values, raw URLs, session replay, or anonymous browser identity are collected by this event. Account IDs are identifiable account data, not anonymous data.
 
+### Stored boards
+
+Each project has two kinds of boards:
+
+- **Code boards**: the built-in Work and Review boards and the boards you pass to `new MastraFactory({ boards })`. Factory serves them to every project exactly as your code defines them. They are never written to the database and are read-only in the boards API.
+- **Stored boards**: boards an admin created for one project through the boards API. They live in that project's database.
+
+A project's boards are its code boards followed by its stored boards. The catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs and the attention views all read that list. When a stored board has the same key as a code board, the code board wins: the stored board is hidden and the catalog reports `Stored board "<key>" is hidden by the code board with the same key.` Existing apps need no change, and Factory writes nothing to the database at startup.
+
+**Data model.** A stored board has a `key` (the ID cards reference as `board`), `name`, optional `description`, and ordered phases. A phase has a `key` (the stage ID), `name`, optional `description`, `kind`, and for working phases `runner` (`{ skill?, context?, instructions? }`), `autoStart`, `autoStartWhen` and `exitTool`, plus `nextPhases`. The first phase is the initial phase and must be `resting`. Saved boards pass the same checks `defineBoard()` applies, with the same messages. A stored board has no code behaviors: no handlers, transition policy, `sourceClosed`, or tool and event rules. Its working phases start their `runner` on entry.
+
+`nextPhases` on a stored board: leaving it out (or `null`) on a resting or working phase allows moves to every other phase, `[]` allows none, and a terminal phase allows none unless it lists some.
+
+**Code boards are read-only.** The catalog and `GET …/boards/:boardKey` report each board's `source` (`builtin`, `app` or `stored`) and `editable` (`false` for code boards). Creating a board with a code board's key, or editing or deleting a code board, is refused with `409 code_board`. Change a code board in code; every project picks up the change when Factory restarts.
+
+**Editing rules for stored boards.**
+
+- Board and phase keys never change. Renaming changes `name`. Any phase may become the first phase, as long as it is `resting`.
+- Removing a phase, or changing its `kind`, while cards sit in it is refused with `409 phase_in_use` and the count per phase. Deleting a board that has cards is refused with `409 board_in_use`. Factory never moves cards for you. A card created between the check and the write can still land on a removed phase; it then shows as an unsupported item until it is moved.
+- A runner skill that does not exist is refused (`422 unknown_skill`). A review skill outside the `review` context is saved with a warning in `problems`. A skill that disappears later never stops a board from loading; it shows in the catalog's `problems`.
+
+**Replicas.** Each board write replaces the project's board version. The replica that wrote it sees the change at once; other replicas notice within a second, the next time they touch that project.
+
+**Integrations.** Integration event rules, reconcilers and the code that files new cards from integrations read only the code boards. Intake bindings and label routes can target only code boards. Every card move goes through the transition service, which checks it against the project's boards.
+
+**Routes.** All need project membership; changes need an organization admin when auth is enabled, and are recorded in the audit log as `factory.board.created`, `updated` and `deleted`.
+
+| Method   | Path                                                            | Body                                                    | Result                                                                                                 |
+| -------- | --------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `GET`    | `/web/factory/projects/:id/boards`                              | —                                                       | The catalog, with each board's `source`, `editable` and `problems`.                                    |
+| `GET`    | `/web/factory/projects/:id/boards/:boardKey`                    | —                                                       | The definition, `revision` (`null` for code boards), `source`, `editable` and `problems`.              |
+| `POST`   | `/web/factory/projects/:id/boards`                              | The board, with `key`.                                  | `201` and the board. `409 code_board` for a code board's key, `409 board_exists` for a stored board's. |
+| `PATCH`  | `/web/factory/projects/:id/boards/:boardKey`                    | The whole board without `key`, plus `expectedRevision`. | The board. Replaces every field. `409 code_board` for a code board.                                    |
+| `DELETE` | `/web/factory/projects/:id/boards/:boardKey?expectedRevision=n` | —                                                       | `204`. `409 code_board` for a code board.                                                              |
+
+A stale `expectedRevision` is refused with `409 revision_mismatch`; reload the board and try again.
+
+```bash
+# Create a board.
+curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/boards" -H 'content-type: application/json' -d '{
+  "key": "bugs",
+  "name": "Bugs",
+  "phases": [
+    { "key": "reported", "name": "Reported", "kind": "resting" },
+    { "key": "fixing", "name": "Fixing", "kind": "working", "runner": { "context": "work" } },
+    { "key": "fixed", "name": "Fixed", "kind": "terminal" }
+  ]
+}'
+
+# Rename its Fixing phase: read the board, change it, send it back with its revision.
+curl "$FACTORY_URL/web/factory/projects/$PROJECT/boards/bugs" > bugs.json
+jq '.board | { name, description, phases: (.phases | map(if .key == "fixing" then .name = "Patching" else . end)), expectedRevision: .revision }' bugs.json \
+  | curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/boards/bugs" -H 'content-type: application/json' -d @-
+```
+
+### Migrating from `defineBoard()`
+
+`defineBoard()`, and the `boards` and `includeDefaultBoards` options of `MastraFactory`, are deprecated. Nothing breaks: the boards you pass keep working as read-only code boards, they are not stored, and Factory logs once per process:
+
+```text
+[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and these definitions are served read-only next to the boards each project stores. Manage boards through the boards API; see the README "Stored boards" section.
+```
+
+Using only the built-in boards logs nothing. A board that cards reach only through the API, the Factory UI or Factory tools, and that needs no handlers, policies or rules, can move off code: create it in each project with `POST /web/factory/projects/:id/boards` under a new key, move its cards, then stop passing the code board. Keep passing a board while integrations file cards onto it, intake bindings or label routes target it, or it needs code behaviors.
+
+Removing `defineBoard()` needs, among other things, a one-time copy of the code boards into each project's database, so built-in and app boards become editable stored boards. That work is tracked in [mastra-ai/mastra#28920](https://github.com/mastra-ai/mastra/issues/28920).
+
 ### Board lifecycle rules
 
-Installed board definitions exclusively own phase entry and exit handlers. Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`:
+Code boards own phase entry and exit handlers; stored boards have none (see [Stored boards](#stored-boards)). Work and Review are installed automatically with Mastra's preferred defaults; no rule configuration is needed. Custom boards declare source-specific `onEnter` and `onExit` handlers through `defineBoard()`, which is deprecated but still works:
 
 ```typescript
 import { MastraFactory } from '@mastra/factory';
@@ -277,7 +344,7 @@ A policy cannot bypass topology, ingress authorization, board ownership, externa
 
 ### Board phase semantics
 
-Every phase declares what it _is_ with a required `kind`; `defineBoard()` rejects a phase without one.
+Every phase declares what it _is_ with a required `kind`; `defineBoard()` and the boards API reject a phase without one.
 
 - `resting` — the card is parked. A human move out of a resting phase arms autonomy; a move back into one disarms it. `initialPhase` must be resting: a card cannot arrive already seated or already finished.
 - `working` — an agent carries the card. `runner.context` (same identifier rules as decision roles, default `work`) names the session context a human kickoff opens and the lane a rule-started run leaves rest for. Two working phases may share a context, and then a session; `phaseForRole` returns the first in declaration order.
@@ -300,7 +367,7 @@ Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` wo
 
 Planning and Building on Work share the `work` session, so the builder keeps the planner's reasoning, branch and sandbox. Self-review still runs in its own `review` session. When the planner moves the card to Building, the build prompt is queued onto its own run, and the planner's run binding ends at that point: Factory tools it calls later in the same turn are rejected. When the builder moves a card back from Building to Planning, no new planning run starts; the builder keeps working in its run. When a person moves it back, Planning starts again, in the same `work` session. The old `plan` role still names Planning: a run requested or queued for `plan` starts Planning in a `plan` session, and the build then continues in that session. Cards planned before this change do the same.
 
-Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
+Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the project's board; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
 
 Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, and a rule-started run from rest with no lane for its role is rejected.
 
@@ -419,7 +486,7 @@ Settings › Skills shows the skill each custom phase runs, marks a phase whose 
 
 ### Execute a custom board
 
-Installed custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.
+Custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.
 
 This configuration runs a release rehearsal through `backlog → preparing → build → done`. Add it to an existing Factory host with configured storage, a GitHub integration, a connected project repository, a sandbox, and organization-scoped model credentials. Enable automatic runs for the project. The repository must contain a `release:check` package script; it should validate the release without publishing it.
 
@@ -515,7 +582,7 @@ Custom phase signals and persisted tool-result ingestion use the item's installe
 
 ### Custom boards in the Factory UI
 
-`GET /web/factory/projects/:id/boards` returns the installed board catalog for an authorized project: each board's `id`, `title`, `initialPhase`, declaration-ordered `phases` (with `kind`, and for working phases `role` and the `skill` the runner starts), and transition topology. Handlers, policies, and prompts are never serialized. The Factory UI reads this catalog instead of assuming Work and Review:
+`GET /web/factory/projects/:id/boards` returns the project's boards (its code boards, then its stored boards) for an authorized user: each board's `id`, `title`, `initialPhase`, declaration-ordered `phases` (with `kind`, and for working phases `role` and the `skill` the runner starts), and transition topology. Handlers, policies, and prompts are never serialized. The Factory UI reads this catalog instead of assuming Work and Review:
 
 - Installed boards appear in the sidebar — built-ins first, then custom boards in registry order. Work and Review keep `/factories/:id/work` and `/factories/:id/review`; custom boards open at `/factories/:id/boards/:boardId`. An unknown board ID or a failed catalog request shows an explicit unavailable state rather than falling back to Work.
 - Columns, phase labels, and working/terminal presentation come from the phase definitions. Card creation sends the selected `board`, so the server picks the initial phase. Card menus offer only moves the topology declares; the server still enforces policy, authorization, and revisions.
@@ -528,7 +595,7 @@ Custom phase signals and persisted tool-result ingestion use the item's installe
 Intake bindings are explicit. A Linear project, Jira project, or GitHub repository is only offered as a candidate feed once it is bound to a board; nothing is materialized just by opening a board. Review only accepts pull requests and is not offered for issue routing.
 
 - **Linear:** each project binding selects one installed board. Changing the board moves that source's existing cards to the new board's initial phase, skipping terminal cards and cards with an active session.
-- **Jira:** each connected-site project binding selects one installed board. The create-Factory flow can select a Jira project and initially binds it to Work. The browser checks routed projects for new issues every 30 seconds and on window focus; issues observed for a routed project materialize automatically as work items on the bound board (mirroring Linear), and closed issues transition their linked card to done or canceled. Both `JiraIntegration` and `PlatformJiraIntegration` reconcile imported cards every five minutes by default so status and metadata continue to refresh without an open browser, and both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_ENABLED=false` to disable reconciliation or `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
+- **Jira:** each connected-site project binding selects one installed board. One Jira project can feed several Factory projects: each binding takes either all issues or only issues carrying its labels (Settings › Intake › Jira routing, or `labels` on `PUT /web/intake/bindings`). Each label belongs to one binding per Jira project, and only one binding per project can take all issues. Label bindings win over the all-issues binding; an issue carrying labels of two label bindings goes to the binding created first. The split happens in the JQL each Factory sends, so every issue is filed in exactly one Factory. Labels only decide placement when an issue is first filed: relabelling an issue, or editing a binding's labels, does not move existing cards. Remove one Factory's binding with `DELETE /web/intake/bindings?integrationId=jira&sourceId=…&factoryProjectId=…`. The create-Factory flow can select a Jira project and initially binds it to Work. The browser checks routed projects for new issues every 30 seconds and on window focus; issues observed for a routed project materialize automatically as work items on the bound board (mirroring Linear), and closed issues transition their linked card to done or canceled. Both `JiraIntegration` and `PlatformJiraIntegration` reconcile imported cards every five minutes by default so status and metadata continue to refresh without an open browser, and both accept a `rules` option to replace or disable the `issueObserved` / `issueClosed` defaults. Agents on Jira-sourced runs get `jira_get_issue` and `jira_create_comment`. Set `MASTRACODE_JIRA_RECONCILE_ENABLED=false` to disable reconciliation or `MASTRACODE_JIRA_RECONCILE_INTERVAL_MS` to a positive millisecond interval to change its cadence.
 - **GitHub:** Settings › Intake › GitHub routing maps a label to a board per Factory project (`GET`/`PUT /web/intake/label-routes`). Labels match case-insensitively; unrouted issues go to Work. Saving a route relocates matching cards the same way, and `issues.labeled` / `issues.unlabeled` webhooks move a card between its routed board and Work while refreshing its label metadata. Routes apply to every repository linked to the project; label input is free text (no repository label autocomplete yet).
 
 ### GitHub event rules

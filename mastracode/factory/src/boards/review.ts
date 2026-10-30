@@ -1,6 +1,6 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
 import { legacyGithubWorkItemBranch, workItemBranch, workItemNumber } from '../work-item-branch.js';
-import { defineBoard } from './define-board.js';
+import { compileBoardDefinition } from './define-board.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 function sourceRef(item: FactoryRuleItemContext): string {
@@ -146,7 +146,7 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
   } as const;
 }
 
-export const reviewBoard = defineBoard({
+export const reviewBoard = compileBoardDefinition({
   id: 'review',
   name: 'Review',
   initialPhase: 'intake',

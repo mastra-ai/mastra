@@ -714,6 +714,14 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toContain('background-work-signals');
   });
 
+  it('forwards observability to the server-owned Mastra', async () => {
+    const { prepareAgentControllerMount } = await import('../index.js');
+
+    const prepared = await prepareAgentControllerMount();
+
+    expect(prepared.mastraArgs.observability).toBe(prepared.base.observability);
+  });
+
   it('configures server-owned background tasks only when enabled', async () => {
     const { prepareAgentControllerMount } = await import('../index.js');
 
