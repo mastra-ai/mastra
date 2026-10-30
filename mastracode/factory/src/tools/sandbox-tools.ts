@@ -66,7 +66,7 @@ export function createFactorySandboxTools(
       'Get the link that opens a port in your sandbox in a browser, so you or the person you are working with can see a server you started there (a dev server, a preview, an API).',
       'Start the server first and bind it to 0.0.0.0, not 127.0.0.1.',
       'The link only opens for people signed in with access to this sandbox and does not expire, so you can share it.',
-      'It also lets your own browser tool open every port of this sandbox for the next hour. If your browser later lands on a sign-in page, call this again.',
+      'It also lets your own browser tool open that port for the next hour. If your browser later lands on a sign-in page, call this again.',
     ].join(' '),
     inputSchema: z
       .object({

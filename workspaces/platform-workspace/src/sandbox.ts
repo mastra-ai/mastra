@@ -298,17 +298,6 @@ export type CaptureCheckpointResult =
   | { status: 'coalesced'; checkpointName: string }
   | { status: 'skipped'; reason: 'no-checkpoint-name-configured' | 'sandbox-not-running' };
 
-/**
- * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
- * (Railway destroy, quota reclamation, etc.). The client cannot recover from
- * this on its own because it does not own the binding store; only the fleet
- * layer can clear the stale sandbox id and provision a fresh one. Callers
- * (typically `SandboxFleet`) must catch this and reprovision-and-replay.
- *
- * When this is thrown the cached `_lease` and `_sandboxId` on the sandbox
- * instance are cleared, so the next `ensureRunning()` on a reused instance
- * will re-provision cleanly.
- */
 /** E2B's sandbox control port (envd). Never exposed as a preview. */
 const E2B_CONTROL_PORT = 49983;
 
@@ -331,6 +320,17 @@ export interface SandboxPortLinks {
   cookie: SandboxPreviewCookie;
 }
 
+/**
+ * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
+ * (Railway destroy, quota reclamation, etc.). The client cannot recover from
+ * this on its own because it does not own the binding store; only the fleet
+ * layer can clear the stale sandbox id and provision a fresh one. Callers
+ * (typically `SandboxFleet`) must catch this and reprovision-and-replay.
+ *
+ * When this is thrown the cached `_lease` and `_sandboxId` on the sandbox
+ * instance are cleared, so the next `ensureRunning()` on a reused instance
+ * will re-provision cleanly.
+ */
 export class SandboxDestroyedError extends Error {
   readonly sandboxId: string | undefined;
   readonly command: string;
