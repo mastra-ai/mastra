@@ -94,14 +94,15 @@ const results = await store.query({
     type: 'number',
     isOptional: true,
     defaultValue: 5,
-    description: 'Maximum retries for write operations that hit an `SQLITE_BUSY` error',
+    description:
+      'Total attempts allowed for a write that hits a database lock (`SQLITE_BUSY`, `SQLITE_LOCKED`, or a "database is locked" error). The default of 5 means one attempt plus at most four retries. Use at least 1: with 0 the write is never attempted and the call throws',
   },
   {
     name: 'initialBackoffMs',
     type: 'number',
     isOptional: true,
     defaultValue: 100,
-    description: 'Initial retry backoff in milliseconds. The delay doubles on each retry',
+    description: 'Backoff before the first retry, in milliseconds. Each later retry waits twice as long',
   },
   {
     name: 'vectorTopKOverFetchMultiplier',
