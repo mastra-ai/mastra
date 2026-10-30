@@ -55,7 +55,7 @@ importers:
         version: link:../../pubsub/redis-streams
     devDependencies:
       '@ai-sdk/openai':
-        specifier: ^3.0.130
+        specifier: ^3.0.132
         version: 3.0.134(zod@4.6.7)
       '@copilotkit/aimock':
         specifier: ^1.29.0
