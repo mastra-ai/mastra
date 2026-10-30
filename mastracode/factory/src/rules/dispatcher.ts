@@ -6,7 +6,12 @@ import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
 import { boardForWorkItem, cardRuleFacts, resolvePhaseSemantics, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
-import { heldForPerson, resolveIntakePlacement } from '../boards/intake-routing.js';
+import {
+  heldForPerson,
+  INTAKE_ROUTE_METADATA_KEY,
+  placedByIntakeRoute,
+  resolveIntakePlacement,
+} from '../boards/intake-routing.js';
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -1329,7 +1334,10 @@ export class FactoryDecisionDispatcher {
     const boards = await this.#boards.load(record);
     // Intake routes place only a card this decision files (or is still filing,
     // on a retry); a card already on the board stays where it is.
-    const decision = !existing || materializedHere ? await this.#routeArrival(record, requested, boards) : requested;
+    const decision =
+      !existing || materializedHere
+        ? await this.#routeArrival(record, requested, boards)
+        : this.#keepRoutedCard(existing, requested, boards);
     if (materializedHere) {
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
@@ -1526,7 +1534,30 @@ export class FactoryDecisionDispatcher {
       externalSource: externalSourceForDecision(decision),
     });
     const placement = resolveIntakePlacement(routes, facts, boards);
-    return placement ? { ...decision, board: placement.board, stage: placement.phase } : decision;
+    if (!placement) return decision;
+    return {
+      ...decision,
+      board: placement.board,
+      stage: placement.phase,
+      metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: placement.routeId },
+    };
+  }
+
+  /**
+   * A card an intake route placed stays on the route's board when its source is filed again
+   * (a reconcile replaying "opened" with today's label route or binding): the decision lands
+   * on the card's board at its first phase, so it only backfills facts and moves nothing.
+   * An explicit placement (`skipRules`) still wins.
+   */
+  #keepRoutedCard(
+    existing: WorkItemRow,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    boards: BoardRegistry,
+  ): Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }> {
+    if (decision.skipRules === true || !placedByIntakeRoute(existing)) return decision;
+    const board = boards.get(boardForWorkItem(existing));
+    if (!board || board.id === decision.board) return decision;
+    return { ...decision, board: board.id, stage: board.initialPhase };
   }
 
   /** Drops `claimKey` when the card holding it belongs to a deleted Factory project; true when it is free again. */

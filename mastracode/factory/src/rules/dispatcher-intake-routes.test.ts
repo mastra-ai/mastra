@@ -126,15 +126,22 @@ describe('intake routes placing linked cards', () => {
 
   it("sends a trusted author's issue through Intake to Triage and leaves an untrusted one in Intake", async () => {
     const { route, deliver } = await setup();
-    await route({ name: 'Trusted to triage', when: TRUSTED, target: { boardKey: 'work', phaseKey: 'triage' } });
+    const toTriage = await route({
+      name: 'Trusted to triage',
+      when: TRUSTED,
+      target: { boardKey: 'work', phaseKey: 'triage' },
+    });
 
     const trusted = await deliver({ sourceKey: 'github-issue:1', metadata: { authorTrusted: true } });
     expect(placed(trusted)).toEqual({ board: 'work', stages: ['triage'] });
+    // The card remembers the route, so label routes and replays leave it where the route put it.
+    expect(trusted?.metadata).toMatchObject({ intakeRouteId: toTriage.id });
     // Entered through the board's initial phase, then moved by a recorded transition.
     expect(trusted?.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'triage']);
 
     const untrusted = await deliver({ sourceKey: 'github-issue:2', metadata: { authorTrusted: false } });
     expect(placed(untrusted)).toEqual({ board: 'work', stages: ['intake'] });
+    expect(untrusted?.metadata).not.toHaveProperty('intakeRouteId');
   });
 
   it("doesn't start an outsider's card a route sends into a working phase, even with auto-run on", async () => {

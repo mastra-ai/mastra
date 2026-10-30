@@ -8,7 +8,18 @@ import type { BoardRegistry } from './registry.js';
 /** Reads a project's intake routes, in order. */
 export type IntakeRoutesReader = Pick<StoredBoardsStorage, 'listIntakeRoutes'>;
 
-type IntakeRoute = Pick<StoredIntakeRouteRecord, 'enabled' | 'when' | 'target' | 'hold'>;
+type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'hold'>;
+
+/**
+ * Card metadata naming the intake route that placed the card. Label routes, repository
+ * bindings and replayed arrivals leave such a card where the route put it.
+ */
+export const INTAKE_ROUTE_METADATA_KEY = 'intakeRouteId';
+
+/** Whether an intake route chose this card's board when it arrived. */
+export function placedByIntakeRoute(item: Pick<WorkItemRow, 'metadata'>): boolean {
+  return typeof item.metadata?.[INTAKE_ROUTE_METADATA_KEY] === 'string';
+}
 
 /**
  * The built-in "needs a person" condition: a GitHub or GitLab card whose author is not
@@ -76,7 +87,7 @@ export function resolveIntakePlacement(
   routes: readonly IntakeRoute[],
   facts: RuleFacts,
   registry: BoardRegistry,
-): { board: string; phase: string } | undefined {
+): { board: string; phase: string; routeId: string } | undefined {
   for (const route of routes) {
     if (!route.enabled || !route.target || !evaluateRuleGroup(route.when, facts)) continue;
     const board = registry.get(route.target.boardKey);
@@ -87,7 +98,7 @@ export function resolveIntakePlacement(
       board.phaseKind(phase) !== undefined &&
       !board.isTerminal(phase) &&
       board.allowsTransition(board.initialPhase, phase);
-    return { board: board.id, phase: usable ? phase : board.initialPhase };
+    return { board: board.id, phase: usable ? phase : board.initialPhase, routeId: route.id };
   }
   return undefined;
 }

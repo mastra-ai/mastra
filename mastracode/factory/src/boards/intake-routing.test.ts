@@ -16,6 +16,7 @@ const DOCS: RuleGroup = {
 
 function route(overrides: Partial<Parameters<typeof intakeHold>[0][number]> = {}) {
   return {
+    id: 'route',
     enabled: true,
     when: null,
     target: { boardKey: 'work', phaseKey: 'triage' },
@@ -61,10 +62,12 @@ describe('resolveIntakePlacement', () => {
     expect(resolveIntakePlacement(target('triaged'), issue(), stepwise)).toEqual({
       board: 'stepwise',
       phase: 'triaged',
+      routeId: 'route',
     });
     expect(resolveIntakePlacement(target('fixing'), issue(), stepwise)).toEqual({
       board: 'stepwise',
       phase: 'reported',
+      routeId: 'route',
     });
     expect(intakeTargetProblem(stepwise, { boardKey: 'stepwise', phaseKey: 'fixing' })).toMatchObject({
       code: 'unreachable_phase',
@@ -78,26 +81,34 @@ describe('resolveIntakePlacement', () => {
 
   it('takes the first enabled route that matches and has a target', () => {
     const routes = [
-      route({ enabled: false, target: { boardKey: 'release', phaseKey: 'shipping' } }),
-      route({ when: DOCS, target: { boardKey: 'work', phaseKey: 'planning' } }),
-      route({ target: null, hold: 'always' }),
-      route({ target: { boardKey: 'release', phaseKey: null } }),
-      route(),
+      route({ id: 'disabled', enabled: false, target: { boardKey: 'release', phaseKey: 'shipping' } }),
+      route({ id: 'docs', when: DOCS, target: { boardKey: 'work', phaseKey: 'planning' } }),
+      route({ id: 'hold-only', target: null, hold: 'always' }),
+      route({ id: 'release', target: { boardKey: 'release', phaseKey: null } }),
+      route({ id: 'last' }),
     ];
-    expect(resolveIntakePlacement(routes, issue(['docs']), registry)).toEqual({ board: 'work', phase: 'planning' });
-    expect(resolveIntakePlacement(routes, issue(), registry)).toEqual({ board: 'release', phase: 'queued' });
+    expect(resolveIntakePlacement(routes, issue(['docs']), registry)).toEqual({
+      board: 'work',
+      phase: 'planning',
+      routeId: 'docs',
+    });
+    expect(resolveIntakePlacement(routes, issue(), registry)).toEqual({
+      board: 'release',
+      phase: 'queued',
+      routeId: 'release',
+    });
   });
 
   it('skips a board that is not installed and lands a missing or terminal phase in the initial phase', () => {
     expect(
       resolveIntakePlacement([route({ target: { boardKey: 'gone', phaseKey: null } }), route()], issue(), registry),
-    ).toEqual({ board: 'work', phase: 'triage' });
+    ).toEqual({ board: 'work', phase: 'triage', routeId: 'route' });
     expect(
       resolveIntakePlacement([route({ target: { boardKey: 'work', phaseKey: 'gone' } })], issue(), registry),
-    ).toEqual({ board: 'work', phase: 'intake' });
+    ).toEqual({ board: 'work', phase: 'intake', routeId: 'route' });
     expect(
       resolveIntakePlacement([route({ target: { boardKey: 'work', phaseKey: 'done' } })], issue(), registry),
-    ).toEqual({ board: 'work', phase: 'intake' });
+    ).toEqual({ board: 'work', phase: 'intake', routeId: 'route' });
   });
 
   it('keeps pull requests off the Work board and everything else off the Review board', () => {
@@ -107,7 +118,7 @@ describe('resolveIntakePlacement', () => {
     ).toBeUndefined();
     expect(
       resolveIntakePlacement([route({ target: { boardKey: 'review', phaseKey: 'review' } })], pullRequest, registry),
-    ).toEqual({ board: 'review', phase: 'review' });
+    ).toEqual({ board: 'review', phase: 'review', routeId: 'route' });
   });
 });
 

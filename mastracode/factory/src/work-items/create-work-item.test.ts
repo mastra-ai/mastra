@@ -52,6 +52,7 @@ describe('createFactoryWorkItem with intake routes', () => {
     if (created.status !== 'created') return;
     expect(created.item).toMatchObject({ board: 'work', stages: ['planning'] });
     expect(created.item.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'planning']);
+    expect(created.item.metadata).toMatchObject({ labels: ['docs'], intakeRouteId: expect.any(String) });
   });
 
   it("doesn't count the route's move as the person's consent to start work", async () => {
