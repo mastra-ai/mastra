@@ -2,11 +2,6 @@ import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
 import { useEntityNames, useEnvironments } from '@mastra/react/hooks/traces';
 import { useCallback, useMemo } from 'react';
 import {
-  TRACE_TIME_RANGE_FIELD,
-  TRACE_TIME_RANGE_FIELD_ID,
-  TRACE_TIME_RANGE_ITEM,
-} from '../../traces/components/trace-time-range-chip';
-import {
   filterBarExpressionToTraceFilters,
   traceFiltersToFilterBarExpression,
   traceTokensToFilterBarItems,
@@ -16,6 +11,11 @@ import type { TraceDatePreset } from '../../traces/types';
 import { createThreadFilterBarFields } from '../thread-filters';
 import { isFilterBarGroup } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
+import {
+  FILTER_BAR_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
+  FILTER_BAR_TIME_RANGE_ITEM,
+} from '@/ds/components/FilterBar/filter-bar-time-range';
 
 /** The time range presets the threads filter bar offers. */
 export const THREAD_TIME_RANGE_PRESETS: readonly TraceDatePreset[] = [
@@ -41,7 +41,7 @@ export function useThreadsFilterBarFields(): FilterBarField[] {
   // `items`, which loops if handed a new array on every render.
   return useMemo(
     () => [
-      TRACE_TIME_RANGE_FIELD,
+      FILTER_BAR_TIME_RANGE_FIELD,
       ...createThreadFilterBarFields({ withTimeToFirstChunk, withTimeToFirstToken, entityNames, environments }),
     ],
     [withTimeToFirstChunk, withTimeToFirstToken, entityNames, environments],
@@ -56,7 +56,7 @@ export type UseThreadsFilterBarOptions = {
 
 /**
  * The thread filters as a filter bar value, and the handlers that write bar edits back.
- * The time-range chip is a synthetic, always-present item; it never round-trips to tokens.
+ * The time range is a synthetic, always-present item; it never round-trips to tokens.
  */
 export function useThreadsFilterBar({ tokens, groups, onFiltersChange }: UseThreadsFilterBarOptions): {
   filterBarValue: FilterBarExpression;
@@ -68,14 +68,16 @@ export function useThreadsFilterBar({ tokens, groups, onFiltersChange }: UseThre
 
   const filterBarValue = useMemo<FilterBarExpression>(() => {
     const groupsExpression = traceFiltersToFilterBarExpression([], groups);
-    return { ...groupsExpression, nodes: [TRACE_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes] };
+    return { ...groupsExpression, nodes: [FILTER_BAR_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes] };
   }, [items, groups]);
 
   const onFilterBarChange = useCallback(
     (expression: FilterBarExpression) => {
       const next = filterBarExpressionToTraceFilters({
         ...expression,
-        nodes: expression.nodes.filter(node => isFilterBarGroup(node) || node.fieldId !== TRACE_TIME_RANGE_FIELD_ID),
+        nodes: expression.nodes.filter(
+          node => isFilterBarGroup(node) || node.fieldId !== FILTER_BAR_TIME_RANGE_FIELD_ID,
+        ),
       });
       onFiltersChange(next.tokens, next.groups);
     },

@@ -9,7 +9,7 @@ export type TracesPageSkeletonProps = {
 
 /**
  * Page-level placeholder shown while filter-field discovery is pending. Pills sized like the
- * toolbar controls (time chip and filter input, then columns menu and auto-refresh) stand in
+ * toolbar controls (time range and filter input, then columns menu and auto-refresh) stand in
  * for the action row, spaced from the list skeleton as the action row is from the list.
  */
 export function TracesPageSkeleton({ columnPreferences = DEFAULT_TRACE_COLUMN_PREFERENCES }: TracesPageSkeletonProps) {

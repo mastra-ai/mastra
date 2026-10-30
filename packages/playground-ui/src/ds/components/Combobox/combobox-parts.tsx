@@ -2,11 +2,11 @@
 // built on Base UI like theirs, styled with our design system. The root is `ComboboxRoot` because
 // `Combobox` is the options-driven component in combobox.tsx.
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
-import { Check, ChevronDown, ChevronsUpDown, Search, X } from 'lucide-react';
+import { Check, ChevronDown, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { isIconButtonSize } from '@/ds/components/Button/Button';
+import { ButtonChevron, ButtonIcon, TriggerChevron, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -38,8 +38,7 @@ function ComboboxRoot<Value, Multiple extends boolean | undefined = false>(
 const fieldClass = (size: TextButtonSize = 'md') =>
   cn(
     comboboxTriggerClass({ variant: 'default', size }),
-    // The Button recipe brightens icons on hover; a field's chevron stays muted.
-    'cursor-text gap-2 focus-within:[--surface-rim:var(--field-rim-focus)] not-disabled:hover:[&_svg]:text-muted-foreground',
+    'cursor-text gap-2 focus-within:[--surface-rim:var(--field-rim-focus)]',
     // Disabled like other form elements (muted text, not-allowed cursor), keyed off the input.
     'has-[input:disabled]:cursor-not-allowed has-[input:disabled]:bg-field-disabled has-[input:disabled]:[&_*]:cursor-not-allowed has-[input:disabled]:[&_*]:text-muted-foreground',
     // The input inside carries `aria-invalid`; the field shows it like other invalid fields.
@@ -145,17 +144,12 @@ function ComboboxTrigger({
           <span className="sr-only">{children}</span>
         </>
       ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          {icon}
-          <span className="truncate">{children}</span>
-        </span>
+        <>
+          {icon && <ButtonIcon size={size}>{icon}</ButtonIcon>}
+          <span className="min-w-0 flex-1 truncate text-left">{children}</span>
+        </>
       )}
-      {/* Wrapped so the svg escapes Button's `[&>svg]` adornments, like today's Combobox chevron. */}
-      {showChevron ? (
-        <span className="flex shrink-0 items-center">
-          <ChevronsUpDown className={cn(comboboxStyles.chevron, iconOnly && 'ml-0')} />
-        </span>
-      ) : null}
+      {showChevron && (iconOnly ? <TriggerChevron /> : <ButtonChevron size={size} />)}
     </BaseCombobox.Trigger>
   );
 }

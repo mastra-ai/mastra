@@ -19,7 +19,7 @@ import { isTraceFilterGroup, scalarPredicate } from '../traces/trace-query-filte
 import type { TraceFilterGroup, TraceFilterOperatorId, TraceFilterToken } from '../traces/trace-query-filters';
 import type { FilterBarField, FilterBarOption } from '@/ds/components/FilterBar/types';
 
-/** Thread query fields the filter bar offers. `startedAt`/`endedAt` are left to the time-range chip. */
+/** Thread query fields the filter bar offers. `startedAt`/`endedAt` are left to the time range. */
 export const THREAD_FILTER_FIELD_IDS = [
   'status',
   'traceCount',

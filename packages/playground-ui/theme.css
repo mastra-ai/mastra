@@ -47,6 +47,10 @@
      text read as a second ink instead of stepping back. */
   --muted-foreground: var(--gray-8);
   --placeholder: var(--gray-7);
+  /* The icons inside an interactive control (see `controlIconState`): supporting at rest,
+     the label's ink on hover. Contexts retune the pair, never the rule. */
+  --control-icon-rest: var(--muted-foreground);
+  --control-icon-hover: var(--foreground);
 }
 
 /* Semantic aliases stay inline so utilities resolve var(--token) on the styled

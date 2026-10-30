@@ -7,6 +7,7 @@ import type { DialogSize } from '@/ds/components/Dialog';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { controlIconState } from '@/ds/primitives/control-icon';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { heightTransition, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -292,7 +293,9 @@ const CommandItem = React.forwardRef<
       // cmdk's selection follows both the pointer and the arrow keys; the row paints it instantly.
       'data-[selected=true]:bg-fill data-[selected=true]:text-foreground',
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
-      '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground data-[selected=true]:[&>svg]:text-foreground',
+      '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0',
+      controlIconState,
+      'data-[selected=true]:[--control-icon:var(--control-icon-hover)]',
       className,
     )}
     {...props}

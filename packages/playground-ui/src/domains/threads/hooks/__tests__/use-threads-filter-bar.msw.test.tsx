@@ -2,7 +2,6 @@
 import { act, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
-import { TRACE_TIME_RANGE_FIELD_ID, TRACE_TIME_RANGE_ITEM } from '../../../traces/components/trace-time-range-chip';
 import type { TraceFilterGroup, TraceFilterToken } from '../../../traces/trace-query-filters';
 import {
   discoveredEntityNames,
@@ -13,6 +12,10 @@ import {
 } from '../../__tests__/fixtures/threads';
 import { THREAD_FILTER_FIELD_IDS } from '../../thread-filters';
 import { useThreadsFilterBar, useThreadsFilterBarFields } from '../index';
+import {
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
+  FILTER_BAR_TIME_RANGE_ITEM,
+} from '@/ds/components/FilterBar/filter-bar-time-range';
 import { server } from '@/test/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -41,7 +44,9 @@ describe('useThreadsFilterBarFields', () => {
       setDiscoveryHandlers();
       const { result } = await renderFields();
 
-      expect(fieldIds(result.current).sort()).toEqual([TRACE_TIME_RANGE_FIELD_ID, ...THREAD_FILTER_FIELD_IDS].sort());
+      expect(fieldIds(result.current).sort()).toEqual(
+        [FILTER_BAR_TIME_RANGE_FIELD_ID, ...THREAD_FILTER_FIELD_IDS].sort(),
+      );
     });
 
     it('suggests the discovered primitive names', async () => {
@@ -90,7 +95,7 @@ describe('useThreadsFilterBar', () => {
     it('only holds the time range item', () => {
       const { result } = renderFilterBar([], []);
 
-      expect(result.current.filterBarValue.nodes).toEqual([TRACE_TIME_RANGE_ITEM]);
+      expect(result.current.filterBarValue.nodes).toEqual([FILTER_BAR_TIME_RANGE_ITEM]);
     });
 
     it('writes back no filters when the bar keeps only the time range', () => {
@@ -106,7 +111,7 @@ describe('useThreadsFilterBar', () => {
     it('puts the time range item first', () => {
       const { result } = renderFilterBar(statusAndRunTokens, [entityTypeGroup]);
 
-      expect(result.current.filterBarValue.nodes[0]).toBe(TRACE_TIME_RANGE_ITEM);
+      expect(result.current.filterBarValue.nodes[0]).toBe(FILTER_BAR_TIME_RANGE_ITEM);
     });
 
     it('writes the same tokens and groups back, without the time range', () => {

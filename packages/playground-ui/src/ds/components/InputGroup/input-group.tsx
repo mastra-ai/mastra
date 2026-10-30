@@ -6,7 +6,8 @@ import * as React from 'react';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
-import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
+import { controlIconState } from '@/ds/primitives/control-icon';
+import { ControlSizeContext, controlHeight, controlSpacing } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import {
   deprecatedErrorAria,
@@ -83,7 +84,14 @@ function InputGroup({ className, size, ...props }: InputGroupProps) {
       role="group"
       data-slot="input-group"
       data-size={resolved}
-      className={cn(inputGroupClassName, controlHeight[resolved], className)}
+      className={cn(
+        inputGroupClassName,
+        controlHeight[resolved],
+        controlSpacing[resolved],
+        controlIconState,
+        'has-[:disabled]:[--control-icon:var(--control-icon-rest)]',
+        className,
+      )}
       {...props}
     />
   );
@@ -95,12 +103,20 @@ const inputGroupControlTextBySize = cn(
   'group-data-[size=lg]/input-group:text-body',
 );
 
+// An addon's icon takes the group's rung, as a Button's does (`iconSizeClasses`), unless it
+// sizes itself.
+const inputGroupIconBySize = cn(
+  "group-data-[size=sm]/input-group:[&>svg:not([class*='size-'])]:size-icon-sm",
+  "group-data-[size=md]/input-group:[&>svg:not([class*='size-'])]:size-icon-md",
+  "group-data-[size=lg]/input-group:[&>svg:not([class*='size-'])]:size-icon-lg",
+);
+
 const inputGroupAddonVariants = cva(
   cn(
     'flex items-center justify-center gap-2 text-muted-foreground select-none',
     inputGroupControlTextBySize,
     'group-has-[:disabled]/input-group:text-muted-foreground',
-    "[&>svg:not([class*='size-'])]:size-4",
+    inputGroupIconBySize,
   ),
   {
     variants: {

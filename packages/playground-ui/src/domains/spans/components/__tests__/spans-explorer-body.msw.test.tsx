@@ -184,15 +184,14 @@ describe('SpansExplorerBody', () => {
   });
 
   describe('when the store returns span rows', () => {
-    it('puts the Columns button ahead of the filters', async () => {
+    it('puts the Columns button after the filters', async () => {
       setHandlers(spanRowsPage);
 
       renderBody();
       const columns = await screen.findByRole('button', { name: 'Columns' });
 
-      const dateChip = document.querySelector('[data-slot="filter-bar-chip"]');
-      if (!dateChip) throw new Error('date chip not rendered');
-      expect(columns.compareDocumentPosition(dateChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const timeRange = screen.getByRole('group', { name: 'Time range', hidden: true });
+      expect(columns.compareDocumentPosition(timeRange) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     });
 
     it('lists each span', async () => {
@@ -645,9 +644,8 @@ describe('SpansExplorerBody histogram', () => {
       await screen.findByRole('region', { name: 'Spans over time' });
       onAggregate.mockClear();
 
-      const dateChip = document.querySelector<HTMLElement>('[data-slot="filter-bar-chip"]');
-      if (!dateChip) throw new Error('date chip not rendered');
-      fireEvent.click(within(dateChip).getByRole('button', { name: 'Value: Last 7 days', hidden: true }));
+      const picker = screen.getByRole('group', { name: 'Time range', hidden: true });
+      fireEvent.click(within(picker).getByRole('button', { name: 'Last 7 days', hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
 
       await waitFor(() => expect(onAggregate).toHaveBeenCalled());
@@ -697,7 +695,7 @@ describe('SpansExplorerBody histogram', () => {
       const reset = onAggregate.mock.lastCall?.[0].timeRange;
       expect(Date.parse(reset.to) - Date.parse(reset.from)).toBe(7 * 24 * 60 * 60 * 1000);
       expect(onSpanQuery.mock.lastCall?.[0].timeRange).toEqual(reset);
-      expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
 
@@ -705,7 +703,7 @@ describe('SpansExplorerBody histogram', () => {
     const span = (timeRange?: { from: string; to: string }) =>
       timeRange ? Date.parse(timeRange.to) - Date.parse(timeRange.from) : undefined;
     const pickPreset = async (current: string, next: string) => {
-      fireEvent.click(screen.getByRole('button', { name: `Value: ${current}`, hidden: true }));
+      fireEvent.click(screen.getByRole('button', { name: current, hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: next, hidden: true }));
     };
     const zoomIn = async () => {
@@ -730,7 +728,7 @@ describe('SpansExplorerBody histogram', () => {
 
       await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
       expect(span(onSpanQuery.mock.lastCall?.[0].timeRange)).toBe(DAY);
-      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
     });
 
     it('resets nested zooms back to the range picked before the first one', async () => {
@@ -744,10 +742,10 @@ describe('SpansExplorerBody histogram', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
 
       await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
-      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
     });
 
-    it('resets to the default range once the zoom is undone', async () => {
+    it('offers no reset once the zoom is undone back to a preset', async () => {
       setHistogramHandlers();
       await renderSettled();
       await pickPreset('Last 7 days', 'Last 24 hours');
@@ -755,10 +753,9 @@ describe('SpansExplorerBody histogram', () => {
       await zoomIn();
 
       fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
-      await screen.findByRole('button', { name: 'Value: Last 24 hours' });
-      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
 
-      expect(await screen.findByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      // The × stands in for a custom range only; a preset changes through the picker's menu.
+      expect(await screen.findByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
   });

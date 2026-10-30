@@ -47,7 +47,7 @@ describe('thread filter fields', () => {
       expect(fields.map(field => field.id).sort()).toEqual([...THREAD_FILTER_FIELD_IDS].sort());
     });
 
-    it('leaves the start and end timestamps to the time-range chip', () => {
+    it('leaves the start and end timestamps to the time range', () => {
       expect(fields.map(field => field.id)).not.toContain('startedAt');
       expect(fields.map(field => field.id)).not.toContain('endedAt');
     });
