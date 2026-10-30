@@ -139,7 +139,7 @@ describe('KnowledgePageGraph', () => {
         within(legend)
           .getAllByRole('listitem')
           .map(item => item.textContent),
-      ).toEqual(['Scope', 'Page', 'Mentioned in notes', 'Parent', 'Pinned']);
+      ).toEqual(['Scope', 'Page', 'Mentioned in notes', 'Parent → child', 'Pinned']);
     });
   });
 
@@ -155,6 +155,26 @@ describe('KnowledgePageGraph', () => {
       );
       expect(parent?.style.stroke).toBe('var(--foreground)');
       expect(parent?.style.strokeDasharray).toBe('4 4');
+    });
+
+    it('points each parent line at the child with an open arrowhead unlike a mention head', async () => {
+      const { container } = renderGraph({ pages: withBilling, edges: mention });
+      await screen.findAllByTestId('knowledge-page-node');
+      const markerOf = (edgeId: string) => {
+        const path = container.querySelector<SVGPathElement>(`[data-id="${edgeId}"] path.react-flow__edge-path`);
+        const ref = path?.getAttribute('marker-end')?.match(/^url\('#(.*)'\)$/)?.[1];
+        return [...container.querySelectorAll('marker')].find(marker => marker.id === ref) ?? null;
+      };
+      const parent = markerOf('parent:org->refunds');
+      const mentionHead = markerOf('mention:refunds->billing');
+      if (!parent || !mentionHead) throw new Error('arrowheads not drawn');
+      const chevron = parent.querySelector('polyline');
+      expect(chevron?.getAttribute('style')).toContain('var(--muted-foreground)');
+      expect(chevron?.getAttribute('fill')).toBe('none');
+      expect(mentionHead.id).not.toBe(parent.id);
+      expect(
+        within(screen.getByRole('list', { name: 'Legend' })).getByTestId('knowledge-legend-parent-arrow'),
+      ).toBeTruthy();
     });
 
     it('reports both ends and where it was clicked when a mention line is clicked', async () => {

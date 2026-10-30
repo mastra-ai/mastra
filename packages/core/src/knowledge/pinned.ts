@@ -141,6 +141,8 @@ function overflowLine(names: string[], more: number): string {
  * are delivered. A run costs a fixed handful of store calls however many pins exist.
  */
 export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudget): Promise<PinEntry[]> {
+  // Store calls per turn: (pinPriority tiers the run holds) + 2 (one count, one getPages), plus the
+  // config-pin lookups; never one per pin.
   const configured = (await configPinPages(run)).filter(page => page.body?.trim());
   const entries: PinEntry[] = [];
 

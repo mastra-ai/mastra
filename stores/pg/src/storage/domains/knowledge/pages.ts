@@ -17,6 +17,7 @@ import type {
   KnowledgePageSearchHit,
   KnowledgePageTemplateInput,
   KnowledgePageStore,
+  KnowledgeListedPin,
   KnowledgePin,
   KnowledgeProvenance,
   KnowledgeReadScope,
@@ -132,6 +133,8 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
       "schemaVersion" integer NOT NULL
     )`,
     index('mastra_knowledge_pages_address_uq', t.pages, '"address"', '"isScope"', true),
+    // Earlier alpha schema-4 databases kept page keys unique per scope; keys are now unique among siblings.
+    `DROP INDEX IF EXISTS ${q('mastra_knowledge_pages_key_uq')}`,
     index(
       'mastra_knowledge_pages_parent_key_uq',
       t.pages,
@@ -139,6 +142,7 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
       '"key" IS NOT NULL AND "deletedAt" IS NULL',
       true,
     ),
+    index('mastra_knowledge_pages_scope_decl_parent_idx', t.pages, '"declaration","parentId"', '"isScope"'),
     index('mastra_knowledge_pages_parent_idx', t.pages, '"parentId","position","id"'),
     index('mastra_knowledge_pages_scope_name_idx', t.pages, '"scopeId","name","id"', '"deletedAt" IS NULL'),
     index('mastra_knowledge_pages_name_idx', t.pages, '"name","id"', '"deletedAt" IS NULL AND NOT "isScope"'),
@@ -146,6 +150,7 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
     index('mastra_knowledge_notes_page_idx', t.notes, '"pageId","createdAt","id"'),
     index('mastra_knowledge_stamps_scope_idx', t.stamps, '"scopeId"'),
     index('mastra_knowledge_mentions_page_idx', t.mentions, '"pageId"'),
+    `CREATE INDEX IF NOT EXISTS "mastra_knowledge_pins_audience_gin" ON ${q(t.pins)} USING gin ("audience")`,
     index('mastra_knowledge_pins_created_idx', t.pins, '"createdAt","id"'),
     index('mastra_knowledge_activity_page_idx', t.activity, '"pageId","createdAt","id"'),
     index('mastra_knowledge_activity_created_idx', t.activity, '"createdAt","id"'),
@@ -172,18 +177,30 @@ class Params {
  */
 class ReadFilter {
   readonly #all: boolean;
+  readonly #pages: string;
   readonly #addresses?: string;
-  readonly #prefixes?: [string, string];
+  readonly #prefixes?: [string, string, string];
+  readonly #openPrefixes?: [string, string];
   readonly #children?: [string, string];
 
-  constructor(read: KnowledgeReadScope, params: Params) {
+  constructor(read: KnowledgeReadScope, params: Params, pages: string) {
     this.#all = read === 'all';
+    this.#pages = pages;
     if (read === 'all') return;
     if (read.addresses.length) this.#addresses = `${params.add(read.addresses)}::text[]`;
-    if (read.prefixes.length) {
+    const bounded = read.prefixes.filter(entry => prefixUpperBound(entry.prefix) !== null);
+    const open = read.prefixes.filter(entry => prefixUpperBound(entry.prefix) === null);
+    if (bounded.length) {
       this.#prefixes = [
-        `${params.add(read.prefixes.map(entry => entry.declaration))}::text[]`,
-        `${params.add(read.prefixes.map(entry => entry.prefix))}::text[]`,
+        `${params.add(bounded.map(entry => entry.declaration))}::text[]`,
+        `${params.add(bounded.map(entry => entry.prefix))}::text[]`,
+        `${params.add(bounded.map(entry => prefixUpperBound(entry.prefix)))}::text[]`,
+      ];
+    }
+    if (open.length) {
+      this.#openPrefixes = [
+        `${params.add(open.map(entry => entry.declaration))}::text[]`,
+        `${params.add(open.map(entry => entry.prefix))}::text[]`,
       ];
     }
     if (read.children.length) {
@@ -194,23 +211,55 @@ class ReadFilter {
     }
   }
 
-  /** True when a scope page aliased `scope` is readable. Matching is binary and case-sensitive. */
-  readable(scope: string): string {
-    if (this.#all) return 'TRUE';
-    const clauses: string[] = [];
-    if (this.#addresses) clauses.push(`${scope}."address" = ANY(${this.#addresses})`);
+  /** Whether the filter admits every scope (no restriction to apply). */
+  get all(): boolean {
+    return this.#all;
+  }
+
+  /**
+   * The ids of every readable scope page, resolved through indexes: exact addresses hit the
+   * address index, prefixes become a binary range on it (`address >= prefix AND address < upper`,
+   * rechecked with `starts_with`; a prefix with no finite upper bound uses `>=` alone; the declaration test is `IS NOT DISTINCT FROM` on purpose so the
+   * planner walks the address range instead of every scope of that declaration, so `_` and `%` stay literal and matching stays case-sensitive),
+   * and one-hop children hit `(declaration, parentId)`.
+   */
+  readableIds(): string {
+    if (this.#all) return `SELECT "id" FROM ${this.#pages} WHERE "isScope"`;
+    const branches: string[] = [];
+    if (this.#addresses) {
+      branches.push(`SELECT "id" FROM ${this.#pages} WHERE "isScope" AND "address" = ANY(${this.#addresses})`);
+    }
     if (this.#prefixes) {
-      clauses.push(
-        `EXISTS (SELECT 1 FROM unnest(${this.#prefixes[0]}, ${this.#prefixes[1]}) AS pr("declaration", "prefix") WHERE ${scope}."declaration" = pr."declaration" AND starts_with(${scope}."address", pr."prefix"))`,
+      branches.push(
+        `SELECT ps."id" FROM unnest(${this.#prefixes[0]}, ${this.#prefixes[1]}, ${this.#prefixes[2]}) AS pr("declaration", "prefix", "upper") JOIN ${this.#pages} ps ON ps."isScope" AND ps."address" >= pr."prefix" AND ps."address" < pr."upper" AND ps."declaration" IS NOT DISTINCT FROM pr."declaration" AND starts_with(ps."address", pr."prefix")`,
+      );
+    }
+    if (this.#openPrefixes) {
+      branches.push(
+        `SELECT os."id" FROM unnest(${this.#openPrefixes[0]}, ${this.#openPrefixes[1]}) AS po("declaration", "prefix") JOIN ${this.#pages} os ON os."isScope" AND os."address" >= po."prefix" AND os."declaration" IS NOT DISTINCT FROM po."declaration" AND starts_with(os."address", po."prefix")`,
       );
     }
     if (this.#children) {
-      clauses.push(
-        `EXISTS (SELECT 1 FROM unnest(${this.#children[0]}, ${this.#children[1]}) AS ch("declaration", "parentId") WHERE ${scope}."declaration" = ch."declaration" AND ${scope}."parentId" = ch."parentId")`,
+      branches.push(
+        `SELECT cs."id" FROM unnest(${this.#children[0]}, ${this.#children[1]}) AS ch("declaration", "parentId") JOIN ${this.#pages} cs ON cs."isScope" AND cs."declaration" = ch."declaration" AND cs."parentId" = ch."parentId"`,
       );
     }
-    return clauses.length ? `(${clauses.join(' OR ')})` : 'FALSE';
+    return branches.length ? branches.join(' UNION ') : `SELECT "id" FROM ${this.#pages} WHERE FALSE`;
   }
+
+  /** True when a scope page aliased `scope` is readable. Matching is binary and case-sensitive. */
+  readable(scope: string): string {
+    if (this.#all) return 'TRUE';
+    return `${scope}."id" IN (${this.readableIds()})`;
+  }
+}
+
+/** Smallest string greater than every string starting with `prefix`, or null when none exists. */
+function prefixUpperBound(prefix: string): string | null {
+  const points = Array.from(prefix);
+  const last = points.pop()?.codePointAt(0);
+  if (last === undefined || last >= 0x10ffff || (last >= 0xd7ff && last < 0xe000)) return null;
+  return points.join('') + String.fromCodePoint(last + 1);
 }
 
 function encodeCursor(parts: unknown[]): string {
@@ -299,6 +348,10 @@ function toPin(row: Row): KnowledgePin {
     createdAt: new Date(row.createdAt as string | Date),
     updatedAt: new Date(row.updatedAt as string | Date),
   };
+}
+
+function toListedPin(row: Row): KnowledgeListedPin {
+  return { ...toPin(row), pageName: String(row.pageName) };
 }
 
 function escapeLike(term: string): string {
@@ -676,7 +729,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null> {
     const params = new Params();
     const id = params.add(input.id);
-    const filter = new ReadFilter(input.read, params);
+    const filter = new ReadFilter(input.read, params, this.#pages);
     const rows = await this.#rows(
       this.#client,
       `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId" WHERE p."id" = ${id} AND ${filter.readable('s')}`,
@@ -695,7 +748,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     let parentId = input.scopeId;
     for (const key of input.path) {
       const params = new Params();
-      const filter = new ReadFilter(input.read, params);
+      const filter = new ReadFilter(input.read, params, this.#pages);
       const rows = await this.#rows(
         this.#client,
         `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId"
@@ -723,7 +776,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       `p."deletedAt" IS NULL`,
     ];
     if (input.scopeId) where.push(`p."scopeId" = ${params.add(input.scopeId)}`);
-    const filter = new ReadFilter(input.read, params);
+    const filter = new ReadFilter(input.read, params, this.#pages);
     where.push(filter.readable('s'));
     const rows = await this.#rows(
       this.#client,
@@ -744,7 +797,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
     const where = [`p."parentId" = ${params.add(input.parentId)}`, `NOT p."isScope"`, `p."deletedAt" IS NULL`];
-    const filter = new ReadFilter(input.read, params);
+    const filter = new ReadFilter(input.read, params, this.#pages);
     where.push(filter.readable('s'));
     if (input.cursor) {
       const [position, id] = decodeCursor(input.cursor, 2);
@@ -769,20 +822,34 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
-    const where = [`NOT p."isScope"`, `p."deletedAt" IS NULL`];
-    if (input.scopeId) where.push(`p."scopeId" = ${params.add(input.scopeId)}`);
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const where = [`p."scopeId" = r."id"`, `NOT p."isScope"`, `p."deletedAt" IS NULL`];
     if (input.namePrefix)
       where.push(`starts_with(p."canonicalName", ${params.add(core.canonicalKnowledgeName(input.namePrefix))})`);
-    const filter = new ReadFilter(input.read, params);
-    where.push(filter.readable('s'));
     if (input.cursor) {
       const [name, id] = decodeCursor(input.cursor, 2);
       where.push(`(p."name", p."id") > (${params.add(name)}, ${params.add(id)})`);
     }
+    if (filter.all) {
+      const direct = where.slice(1);
+      if (input.scopeId) direct.unshift(`p."scopeId" = ${params.add(input.scopeId)}`);
+      const rows = await this.#rows(
+        this.#client,
+        `SELECT p.* FROM ${this.#pages} p WHERE ${direct.join(' AND ')} ORDER BY p."name", p."id" LIMIT ${limit + 1}`,
+        params.values,
+      );
+      return this.#pageOutput(rows, limit, page => [page.name, page.id]);
+    }
+    const scopes = input.scopeId
+      ? `SELECT "id" FROM (${filter.readableIds()}) ri WHERE "id" = ${params.add(input.scopeId)}`
+      : filter.readableIds();
+    // Readable scopes first, then each scope's pages through (scopeId, name, id), merged: a
+    // tenant's listing never walks other tenants' rows.
     const rows = await this.#rows(
       this.#client,
-      `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId"
-       WHERE ${where.join(' AND ')} ORDER BY p."name", p."id" LIMIT ${limit + 1}`,
+      `SELECT x.* FROM (${scopes}) r CROSS JOIN LATERAL (
+         SELECT p.* FROM ${this.#pages} p WHERE ${where.join(' AND ')} ORDER BY p."name", p."id" LIMIT ${limit + 1}
+       ) x ORDER BY x."name", x."id" LIMIT ${limit + 1}`,
       params.values,
     );
     return this.#pageOutput(rows, limit, page => [page.name, page.id]);
@@ -1076,7 +1143,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   }): Promise<KnowledgeNote | null> {
     const params = new Params();
     const id = params.add(input.id);
-    const filter = new ReadFilter(input.read, params);
+    const filter = new ReadFilter(input.read, params, this.#pages);
     const rows = await this.#rows(
       this.#client,
       `SELECT ${this.#noteColumns()} FROM ${this.#visibleNotes(filter)} AND n."id" = ${id}${input.includeDeleted ? '' : ' AND n."deletedAt" IS NULL'}`,
@@ -1095,7 +1162,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
-    const filter = new ReadFilter(input.read, params);
+    const filter = new ReadFilter(input.read, params, this.#pages);
     const extra = [`n."pageId" = ${params.add(input.pageId)}`];
     if (!input.includeDeleted) extra.push(`n."deletedAt" IS NULL`);
     if (input.cursor) {
@@ -1119,7 +1186,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
-    const filter = new ReadFilter(input.read, params);
+    const filter = new ReadFilter(input.read, params, this.#pages);
     const pageParam = params.add(input.pageId);
     const extra = [
       `n."deletedAt" IS NULL`,
@@ -1303,7 +1370,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
     {
       const params = new Params();
-      const filter = new ReadFilter(input.read, params);
+      const filter = new ReadFilter(input.read, params, this.#pages);
       const patterns = words.map(word => params.add(`%${escapeLike(word)}%`));
       const phrasePattern = params.add(`%${escapeLike(phrase)}%`);
       const where = [`p."deletedAt" IS NULL`, `NOT p."isScope"`, filter.readable('s')];
@@ -1324,7 +1391,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
     {
       const params = new Params();
-      const filter = new ReadFilter(input.read, params);
+      const filter = new ReadFilter(input.read, params, this.#pages);
       const extra = [`n."deletedAt" IS NULL`, `np."deletedAt" IS NULL`];
       if (input.scopeIds?.length) extra.push(`np."scopeId" = ANY(${params.add(input.scopeIds)}::text[])`);
       for (const word of words) extra.push(`n."text" ILIKE ${params.add(`%${escapeLike(word)}%`)}`);
@@ -1350,7 +1417,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
-    const filter = new ReadFilter(input.read, params);
+    const filter = new ReadFilter(input.read, params, this.#pages);
     const where = [filter.readable('s'), `(a."noteId" IS NULL OR ${this.#noteVisible(filter, 'a."noteId"')})`];
     if (input.scopeId) where.push(`s."id" = ${params.add(input.scopeId)}`);
     if (input.pageId) where.push(`a."pageId" = ${params.add(input.pageId)}`);
@@ -1472,35 +1539,67 @@ export class PgKnowledgePages implements KnowledgePageStore {
     await this.#client.query(`TRUNCATE ${tables}`);
   }
 
+  async getPages(input: { ids: string[]; read: KnowledgeReadScope }): Promise<KnowledgePage[]> {
+    if (!input.ids.length) return [];
+    const params = new Params();
+    const ids = params.add([...new Set(input.ids)]);
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId"
+       WHERE p."id" = ANY(${ids}::text[]) AND p."deletedAt" IS NULL AND ${filter.readable('s')}`,
+      params.values,
+    );
+    return rows.map(toPage);
+  }
+
   async listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
     pageIds?: string[];
+    excludePageIds?: string[];
+    withBody?: boolean;
+    count?: boolean;
     cursor?: string;
     limit?: number;
-  }): Promise<{ pins: KnowledgePin[]; nextCursor?: string }> {
+  }): Promise<{ pins: KnowledgeListedPin[]; nextCursor?: string; total?: number }> {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const params = new Params();
-    const filter = new ReadFilter(input.read, params);
+    const filter = new ReadFilter(input.read, params, this.#pages);
     const where = [`p."deletedAt" IS NULL`, filter.readable('s')];
     if (input.audience !== 'all') where.push(`pn."audience" && ${params.add(input.audience)}::text[]`);
     if (input.pageIds) where.push(`pn."pageId" = ANY(${params.add(input.pageIds)}::text[])`);
+    if (input.excludePageIds?.length) where.push(`pn."pageId" <> ALL(${params.add(input.excludePageIds)}::text[])`);
+    if (input.withBody) where.push(`p."body" ~ '\\S'`);
+    const from = `FROM ${this.#pins} pn JOIN ${this.#pages} p ON p."id" = pn."pageId" JOIN ${this.#pages} s ON s."id" = p."scopeId"`;
+    // The total ignores the cursor and the limit; it shares every other condition and parameter.
+    const totalWhere = where.join(' AND ');
     if (input.cursor) {
       const [createdAt, id] = decodeCursor(input.cursor, 2);
       where.push(`(pn."createdAt", pn."id") < (${params.add(createdAt)}::timestamptz, ${params.add(id)})`);
     }
     const rows = await this.#rows(
       this.#client,
-      `SELECT pn.* FROM ${this.#pins} pn JOIN ${this.#pages} p ON p."id" = pn."pageId" JOIN ${this.#pages} s ON s."id" = p."scopeId"
+      `SELECT pn.*, p."name" AS "pageName" ${from}
        WHERE ${where.join(' AND ')} ORDER BY pn."createdAt" DESC, pn."id" DESC LIMIT ${limit + 1}`,
       params.values,
     );
-    const pins = rows.slice(0, limit).map(toPin);
+    let total: number | undefined;
+    if (input.count) {
+      const counted = await this.#rows(
+        this.#client,
+        `SELECT count(*)::int AS "total" ${from} WHERE ${totalWhere}`,
+        params.values.slice(0, params.values.length - (input.cursor ? 2 : 0)),
+      );
+      total = Number(counted[0]?.total ?? 0);
+    }
+    const pins = rows.slice(0, limit).map(toListedPin);
     const last = pins[pins.length - 1];
     return {
       pins,
       ...(rows.length > limit && last ? { nextCursor: encodeCursor([iso(last.createdAt), last.id]) } : {}),
+      ...(total === undefined ? {} : { total }),
     };
   }
 }

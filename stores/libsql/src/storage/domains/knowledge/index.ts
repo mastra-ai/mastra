@@ -19,7 +19,7 @@ import type {
   SqliteTransaction as Transaction,
 } from '../../db/client';
 import { withClientWriteLock } from '../../db/write-lock';
-import { KNOWLEDGE_PAGE_DDL, LibSQLKnowledgePages } from './pages';
+import { KNOWLEDGE_PAGE_DDL, KNOWLEDGE_PAGE_TABLES, LibSQLKnowledgePages } from './pages';
 
 interface Executor {
   execute(statement: string | { sql: string; args?: InValue[] }): Promise<ResultSet>;
@@ -132,7 +132,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   override async dangerouslyReset(): Promise<void> {
     await withClientWriteLock(this.#client, async () => {
       await this.#client.batch(
-        KNOWLEDGE_RESETTABLE_TABLE_NAMES.map(table => ({ sql: `DROP TABLE IF EXISTS "${table}"`, args: [] })),
+        [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences].map(table => ({
+          sql: `DROP TABLE IF EXISTS "${table}"`,
+          args: [],
+        })),
         'write',
       );
     });
@@ -273,6 +276,10 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['removePinAudience']>[0],
   ): ReturnType<KnowledgePageStore['removePinAudience']> {
     return this.#pages.removePinAudience(input);
+  }
+
+  override getPages(input: Parameters<KnowledgePageStore['getPages']>[0]): ReturnType<KnowledgePageStore['getPages']> {
+    return this.#pages.getPages(input);
   }
 
   override listPins(input: Parameters<KnowledgePageStore['listPins']>[0]): ReturnType<KnowledgePageStore['listPins']> {

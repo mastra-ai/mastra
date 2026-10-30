@@ -5,7 +5,7 @@ import type {
   KnowledgePageSearchHit,
   KnowledgeStorage,
 } from '../storage/domains/knowledge';
-import { knowledgeScopeReadable } from '../storage/domains/knowledge';
+import { KnowledgePageHasChildrenError, knowledgeScopeReadable } from '../storage/domains/knowledge';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import { knowledgeRoleOn } from './access';
@@ -294,7 +294,7 @@ function readTool(host: KnowledgePageToolHost) {
 }
 
 type PageInput = {
-  op: 'write' | 'move' | 'merge';
+  op: 'write' | 'move' | 'merge' | 'delete';
   page?: string;
   scope?: string;
   parent?: string;
@@ -310,16 +310,21 @@ function pageTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_page',
     description:
-      'Write, move or merge pages. A page body is the curated summary of its topic (needs editor to change); discrete attributed details belong in notes (knowledge_note). ' +
+      'Write, move, merge or delete pages. A page body is the curated summary of its topic (needs editor to change); discrete attributed details belong in notes (knowledge_note). ' +
       'op "write": with `page`, edits that page (name, description, body); without `page`, creates a page named `name` in `scope`. ' +
       'op "move": moves `page` under `parent` or to the top of `scope`. op "merge": merges `page` into `into`, keeping both pages\' notes. ' +
+      'op "delete": deletes `page` (needs owner on its scope); a page with child pages, a scope page and a page declared in config can\'t be deleted. ' +
       '`scope` is only for where content lands (create, move destination); edits and merges take none. ' +
-      'Pages declared in config can be edited and merged into, but not moved or merged away.',
+      'Pages declared in config can be edited and merged into, but not moved, merged away or deleted.',
     inputSchema: {
       type: 'object',
       properties: {
-        op: { type: 'string', enum: ['write', 'move', 'merge'] },
-        page: { type: 'string', minLength: 1, description: `The page to edit, move or merge. ${pageRefDescription}` },
+        op: { type: 'string', enum: ['write', 'move', 'merge', 'delete'] },
+        page: {
+          type: 'string',
+          minLength: 1,
+          description: `The page to edit, move, merge or delete. ${pageRefDescription}`,
+        },
         scope: { type: 'string', minLength: 1, description: 'Create: the home scope. Move: the destination scope.' },
         parent: { type: 'string', minLength: 1, description: 'Create or move: a parent page in that scope.' },
         into: { type: 'string', minLength: 1, description: 'Merge: the page that remains.' },
@@ -392,12 +397,33 @@ function pageTool(host: KnowledgePageToolHost) {
 
       if (!args.page) throw new Error(`op "${args.op}" needs page.`);
       const page = await run.page(args.page);
+      if (page.isScope)
+        throw new Error(`"${args.page}" is a scope page; scope pages can't be moved, merged or deleted.`);
       const home = await run.scopeOf(page);
       const template = await host.runtime.templatePageRef(page);
       if (template) {
         throw new Error(
           `"${template}" is declared in config; change the scope's pages to ${args.op === 'move' ? 'move' : 'remove'} it.`,
         );
+      }
+
+      if (args.op === 'delete') {
+        await run.require(home, 'owner', 'Deleting a page');
+        let deleted: KnowledgePage;
+        try {
+          deleted = await storage.deletePage({
+            id: page.id,
+            expectedVersion: args.expectedVersion ?? page.version,
+            deletedBy: provenance.author,
+          });
+        } catch (error) {
+          if (error instanceof KnowledgePageHasChildrenError) {
+            throw new Error(`"${page.name}" has child pages; move or delete them first.`);
+          }
+          throw error;
+        }
+        await reindex(host, index => index.remove([`page:${page.id}`]));
+        return done(deleted);
       }
 
       if (args.op === 'move') {
