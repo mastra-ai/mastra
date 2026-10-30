@@ -1173,6 +1173,161 @@ Third line has learning too`;
   });
 });
 
+describe('SearchEngine with a vector store that embeds server-side', () => {
+  const makeStore = (overrides: Record<string, unknown> = {}): any => ({
+    isSelfEmbedding: true,
+    createIndex: vi.fn(async () => {}),
+    upsert: vi.fn(async () => []),
+    query: vi.fn(async () => []),
+    deleteVector: vi.fn(async () => {}),
+    ...overrides,
+  });
+
+  const makeEngine = (store: any, config: { lazy?: boolean; bm25?: boolean } = {}) =>
+    new SearchEngine({
+      ...(config.bm25 ? { bm25: {} } : {}),
+      vector: { vectorStore: store, indexName: 'test-index' },
+      lazyVectorIndex: config.lazy,
+    });
+
+  it('offers vector search without an embedder', () => {
+    const engine = makeEngine(makeStore());
+
+    expect(engine.canVector).toBe(true);
+  });
+
+  it('refuses a store that does not embed server-side when there is no embedder', () => {
+    const store = makeStore({ isSelfEmbedding: false });
+
+    expect(() => makeEngine(store)).toThrow(/requires an embedder/);
+  });
+
+  it('creates the index without a dimension and upserts the text', async () => {
+    const store = makeStore();
+    const engine = makeEngine(store);
+
+    await engine.index({ id: 'doc1', content: 'Hello world' });
+
+    expect(store.createIndex).toHaveBeenCalledTimes(1);
+    expect(store.createIndex).toHaveBeenCalledWith({ indexName: 'test-index' });
+    expect(store.upsert).toHaveBeenCalledWith({
+      indexName: 'test-index',
+      documents: ['Hello world'],
+      metadata: [{ id: 'doc1', text: 'Hello world' }],
+      ids: ['doc1'],
+    });
+  });
+
+  it('writes a batch of documents in one upsert', async () => {
+    const store = makeStore();
+    const engine = makeEngine(store);
+
+    await engine.indexMany([
+      { id: 'doc1', content: 'First' },
+      { id: 'doc2', content: 'Second' },
+      { id: 'doc1', content: 'First, revised' },
+    ]);
+
+    expect(store.upsert).toHaveBeenCalledTimes(1);
+    expect(store.upsert).toHaveBeenCalledWith({
+      indexName: 'test-index',
+      documents: ['First, revised', 'Second'],
+      metadata: [
+        { id: 'doc1', text: 'First, revised' },
+        { id: 'doc2', text: 'Second' },
+      ],
+      ids: ['doc1', 'doc2'],
+    });
+  });
+
+  it('splits a large batch into upserts of at most 100 documents', async () => {
+    const store = makeStore();
+    const engine = makeEngine(store);
+    const docs = Array.from({ length: 250 }, (_, i) => ({ id: `doc${i}`, content: `Document ${i}` }));
+
+    await engine.indexMany(docs);
+
+    expect(store.upsert.mock.calls.map((call: any[]) => call[0].ids.length)).toEqual([100, 100, 50]);
+    expect(store.createIndex).toHaveBeenCalledTimes(1);
+  });
+
+  it('writes pending documents in one upsert when the lazy index is flushed by a search', async () => {
+    const store = makeStore();
+    const engine = makeEngine(store, { lazy: true });
+
+    await engine.index({ id: 'doc1', content: 'First' });
+    await engine.index({ id: 'doc2', content: 'Second' });
+    expect(store.upsert).not.toHaveBeenCalled();
+
+    await engine.search('anything', { mode: 'vector' });
+
+    expect(store.upsert).toHaveBeenCalledTimes(1);
+    expect((store.upsert.mock.calls[0] as any[])[0].documents).toEqual(['First', 'Second']);
+  });
+
+  it('queries with the search string and returns the stored text', async () => {
+    const store = makeStore({
+      query: vi.fn(async () => [{ id: 'doc1', score: 0.9, metadata: { id: 'doc1', text: 'Hello world', topic: 'x' } }]),
+    });
+    const engine = makeEngine(store);
+
+    const results = await engine.search('greeting', { mode: 'vector', topK: 3, filter: { topic: 'x' } });
+
+    expect(store.query).toHaveBeenCalledWith({
+      indexName: 'test-index',
+      queryText: 'greeting',
+      topK: 3,
+      filter: { topic: 'x' },
+    });
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      id: 'doc1',
+      content: 'Hello world',
+      score: 0.9,
+      metadata: { topic: 'x' },
+      scoreDetails: { vector: 0.9 },
+    });
+  });
+
+  it('combines keyword and vector results in hybrid mode', async () => {
+    const store = makeStore({
+      query: vi.fn(async () => [{ id: 'doc2', score: 0.8, metadata: { id: 'doc2', text: 'Semantic match' } }]),
+    });
+    const engine = makeEngine(store, { bm25: true });
+
+    await engine.index({ id: 'doc1', content: 'Keyword match' });
+    const results = await engine.search('keyword', { mode: 'hybrid' });
+
+    expect(store.query).toHaveBeenCalledWith(expect.objectContaining({ queryText: 'keyword' }));
+    expect(results.map(r => r.id).sort()).toEqual(['doc1', 'doc2']);
+  });
+
+  it('removes a document by id', async () => {
+    const store = makeStore();
+    const engine = makeEngine(store);
+    await engine.index({ id: 'doc1', content: 'Hello world' });
+
+    await engine.remove('doc1');
+
+    expect(store.deleteVector).toHaveBeenCalledWith({ indexName: 'test-index', id: 'doc1' });
+  });
+
+  it('keeps embedding on the client when an embedder is configured', async () => {
+    const store = makeStore();
+    const embedder = vi.fn(async () => [1, 2, 3]);
+    const engine = new SearchEngine({ vector: { vectorStore: store, embedder, indexName: 'test-index' } });
+
+    await engine.index({ id: 'doc1', content: 'Hello world' });
+    await engine.search('hello', { mode: 'vector' });
+
+    expect(store.createIndex).toHaveBeenCalledWith({ indexName: 'test-index', dimension: 3 });
+    expect(store.upsert).toHaveBeenCalledWith(expect.objectContaining({ vectors: [[1, 2, 3]] }));
+    expect(store.upsert.mock.calls[0][0].documents).toBeUndefined();
+    expect(store.query).toHaveBeenCalledWith(expect.objectContaining({ queryVector: [1, 2, 3] }));
+    expect(store.query.mock.calls[0][0].queryText).toBeUndefined();
+  });
+});
+
 describe('splitIntoChunks', () => {
   const lastLine = (c: { content: string; startLine: number }) => c.startLine + c.content.split('\n').length - 1;
   const expectNoRedundantChunks = (chunks: { content: string; startLine: number }[]) => {
