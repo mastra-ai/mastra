@@ -1,11 +1,10 @@
 import { compileBoardDefinition } from './define-board.js';
-import { reviewPullRequest, reviewTransitionPolicy } from './pull-request-review.js';
+import { reviewPullRequest } from './pull-request-review.js';
 
 export const reviewBoard = compileBoardDefinition({
   id: 'review',
   name: 'Review',
   initialPhase: 'intake',
-  transitionPolicy: reviewTransitionPolicy,
   phases: {
     intake: {
       name: 'Intake',
@@ -23,6 +22,9 @@ export const reviewBoard = compileBoardDefinition({
       name: 'Done',
       kind: 'terminal',
       nextPhases: ['review'],
+      // Done means the pull request merged. A reviewer records its verdict and leaves the
+      // card in Reviewing, so a blocking finding never reads as finished work.
+      agentEnterWhen: false,
     },
     canceled: {
       name: 'Canceled',

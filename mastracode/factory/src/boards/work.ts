@@ -1,3 +1,4 @@
+import type { RuleCondition, RuleGroup } from '../rules/rule-group.js';
 import type { FactoryRuleItemContext, FactoryStageRuleContext, FactoryToolResultRuleContext } from '../rules/types.js';
 import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
@@ -5,7 +6,6 @@ import { compileBoardDefinition } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 import { reviewPullRequest } from './pull-request-review.js';
 import { advanceApprovedPlan } from './work-tool-rules.js';
-import { workTransitionPolicy } from './work-transition-policy.js';
 
 const INCIDENTIO_SOURCE_KEY_PREFIX = 'incidentio:issue:';
 
@@ -292,11 +292,58 @@ const ALL_PHASES: readonly WorkBoardPhase[] = [
   'canceled',
 ];
 
+/** A pull request's own card on Work is only reviewed: it never enters these phases, whoever moves it. */
+const NON_PULL_REQUEST_PHASES: ReadonlySet<string> = new Set(['triage', 'planning', 'execute']);
+
+/**
+ * Why a move breaks the shape of a pull request's card on Work, or undefined when it does not.
+ * The one Work rule that binds people too, so it cannot be an agent-only phase condition.
+ */
+export function workPullRequestCardRejection(isPullRequest: boolean, toStage: string): string | undefined {
+  if (!isPullRequest || !NON_PULL_REQUEST_PHASES.has(toStage)) return undefined;
+  return `A pull request card is reviewed on the Work board; it cannot enter ${toStage}. Move it to review, done, or canceled.`;
+}
+
+const NOT_A_PULL_REQUEST: RuleCondition = { field: 'source.kind', operator: 'not_equals', value: 'pull_request' };
+
+/** Self-review hit its round limit and parked the card in Intake; a person moves it on. */
+const NOT_PARKED_FOR_A_PERSON: RuleGroup = {
+  operator: 'OR',
+  conditions: [
+    { field: 'item.phase', operator: 'not_equals', value: 'intake' },
+    { field: 'item.selfReviewNeedsHuman', operator: 'not_exists' },
+  ],
+};
+
+const agentMayStartWork: RuleGroup = { operator: 'AND', conditions: [NOT_A_PULL_REQUEST, NOT_PARKED_FOR_A_PERSON] };
+
+/**
+ * Done means the work shipped. Agents leave a card with an open pull request to its merge, a
+ * card whose review requested changes to the fix, a card still in self-review to the verdict,
+ * and a pull request's own card to its merge.
+ */
+const agentMayFinish: RuleGroup = {
+  operator: 'AND',
+  conditions: [
+    NOT_A_PULL_REQUEST,
+    NOT_PARKED_FOR_A_PERSON,
+    { field: 'item.openPullRequest', operator: 'not_exists' },
+    { field: 'item.reviewVerdict', operator: 'not_equals', value: 'request changes' },
+    {
+      operator: 'OR',
+      conditions: [
+        { field: 'item.phase', operator: 'not_equals', value: 'review' },
+        { field: 'item.selfReviewVerdict', operator: 'equals', value: 'approve' },
+        { field: 'item.reviewVerdict', operator: 'exists' },
+      ],
+    },
+  ],
+};
+
 export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: 'work',
   name: 'Work',
   initialPhase: 'intake',
-  transitionPolicy: workTransitionPolicy,
   sourceClosed: { completed: 'done', canceled: 'canceled' },
   tools: {
     submit_plan: { onResult: advanceApprovedPlan },
@@ -313,6 +360,7 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       kind: 'working',
       runner: { context: 'triage' },
       nextPhases: ALL_PHASES,
+      agentEnterWhen: agentMayStartWork,
       onEnter: {
         issue: triageIssueEntry,
         gitlabIssue: investigateTriagedGitLabIssue,
@@ -327,6 +375,9 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       // Planning and Building share one session, so the builder keeps the plan's context.
       runner: { context: 'work' },
       nextPhases: ALL_PHASES,
+      agentEnterWhen: agentMayStartWork,
+      // Its success moves the card into Building (advanceApprovedPlan); an agent cannot move it there itself.
+      exitTool: { id: 'submit_plan', autoApprove: false },
       onEnter: {
         issue: planWorkItem,
         gitlabIssue: planWorkItem,
@@ -341,6 +392,11 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       kind: 'working',
       runner: { context: 'work' },
       nextPhases: ALL_PHASES,
+      // Agents never skip Planning; a parked card rests in Intake, so this also holds it for a person.
+      agentEnterWhen: {
+        operator: 'AND',
+        conditions: [NOT_A_PULL_REQUEST, { field: 'item.phase', operator: 'not_in', value: ['intake', 'triage'] }],
+      },
       onEnter: {
         issue: buildWorkItem,
         gitlabIssue: buildWorkItem,
@@ -358,6 +414,7 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       kind: 'working',
       runner: { context: 'work' },
       nextPhases: ALL_PHASES,
+      agentEnterWhen: NOT_PARKED_FOR_A_PERSON,
       onEnter: {
         issue: selfReviewWorkItem,
         gitlabIssue: selfReviewWorkItem,
@@ -384,12 +441,14 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       name: 'Done',
       kind: 'terminal',
       nextPhases: ALL_PHASES,
+      agentEnterWhen: agentMayFinish,
       onEnter: { issue: completeIssue },
     },
     canceled: {
       name: 'Canceled',
       kind: 'terminal',
       nextPhases: ALL_PHASES,
+      agentEnterWhen: NOT_PARKED_FOR_A_PERSON,
     },
   },
 });
