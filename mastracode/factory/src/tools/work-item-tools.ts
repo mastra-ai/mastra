@@ -271,13 +271,13 @@ export function createFactoryWorkItemTools(
             .literal(true)
             .optional()
             .describe(
-              "Pre-approve the item's plans, so its runs no longer stop for plan approval. Can't be undone here.",
+              'Legacy: recorded on the card but has no effect. Plans on the Work board always wait for a person to approve them.',
             ),
         })
         .strict()
         .refine(input => Object.keys(input).some(key => key !== 'workItem'), 'Pass at least one field to change.'),
       execute: async ({ workItem, title, repository, parentWorkItem, plansPreapproved }) => {
-        // Pre-approval drops the plan-approval gate for good, so it is the person's call.
+        // Legacy flag with no effect on plan approval; still a person's call, as before.
         if (plansPreapproved) requirePerson(scope, 'pre-approve plans');
         const item = await requireItem(workItem);
         if (repository) await requireRepository(repository, item.metadata);
