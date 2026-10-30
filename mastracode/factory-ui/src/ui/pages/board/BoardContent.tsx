@@ -92,7 +92,6 @@ export function BoardContent({
   const view = useBoardView({ factoryProjectId, kind, currentUserId, personId });
   const { searchParams, filters, sort, layout } = view;
   const targetItemId = searchParams.get('item') || undefined;
-  const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
   const items = useBoardItems({ factoryProjectId, kind, currentUserId });
   const repositoryChoice = useRepositoryChoice(factory, definition);
@@ -205,7 +204,7 @@ export function BoardContent({
     .map(stage => stage.id);
   const collapsedStages = useCollapsedStages(
     targetItemId && targetStages.length > 0
-      ? { itemId: targetItemId, commentId: targetCommentId, stages: targetStages }
+      ? { itemId: targetItemId, stages: targetStages }
       : undefined,
   );
 
@@ -396,11 +395,6 @@ export function BoardContent({
         layout={layout}
         stages={stageViews}
         totalTaskCount={totalTaskCount}
-        linkedComment={
-          targetItemId !== undefined && targetCommentId !== undefined && targetStages[0] !== undefined
-            ? { cardKey: workItemCardKey(targetStages[0], targetItemId), commentId: targetCommentId }
-            : undefined
-        }
         onDrop={dropWithRepository}
         toolbar={
           <BoardViewControls

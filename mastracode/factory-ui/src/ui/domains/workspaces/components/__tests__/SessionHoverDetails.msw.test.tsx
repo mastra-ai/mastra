@@ -45,9 +45,6 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
       HttpResponse.json(fixtures.activeRunsResponse),
     ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/mention-roster`, () =>
-      HttpResponse.json(fixtures.rosterResponse),
-    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/audit`, ({ request }) => {
       const query = new URL(request.url).searchParams;
       if (query.get('namespaces') === 'session') return HttpResponse.json(fixtures.transfersResponse);
@@ -133,10 +130,10 @@ describe('Workspace session hover details', () => {
       await user.hover(workRow);
 
       const card = await screen.findByLabelText(`${workName} session details`);
-      expect(await within(card).findByText('Taken over from Grace Hopper')).toBeInTheDocument();
+      expect(await within(card).findByText('Taken over from user-grace')).toBeInTheDocument();
       expect(
         within(card).getByRole('img', {
-          name: 'Session timeline. Triage 1h, Building 3h. 1 agent run. Grace Hopper moved it to Building. Ada Lovelace took over',
+          name: 'Session timeline. Triage 1h, Building 3h. 1 agent run. user-grace moved it to Building. Ada Lovelace took over',
         }),
       ).toBeInTheDocument();
     });
@@ -144,9 +141,6 @@ describe('Workspace session hover details', () => {
     it('names the viewer on the track when the host lists no members', async () => {
       stubSessionDetails(new Date().toISOString());
       server.use(
-        http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/mention-roster`, () =>
-          HttpResponse.json({ members: [] }),
-        ),
         http.get('*/auth/me', () =>
           HttpResponse.json({ authenticated: true, user: { userId: 'user-1', name: 'Ada Lovelace' } }),
         ),
@@ -184,7 +178,7 @@ describe('Workspace session hover details', () => {
             ...takeover,
             targets: [{ type: 'session', id: ownSession.id, name: ownSession.title }],
           };
-          return HttpResponse.json({ events: [ownTakeover], actors: {} });
+          return HttpResponse.json({ events: [ownTakeover], actors: fixtures.transfersResponse.actors });
         }),
       );
       const user = userEvent.setup();

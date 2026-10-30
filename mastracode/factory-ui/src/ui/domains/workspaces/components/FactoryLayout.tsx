@@ -4,7 +4,6 @@ import { Navigate, Outlet, useParams } from 'react-router';
 
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { AuthPendingSkeleton } from '../../auth/components/RootGuards';
-import { FeedEventsProvider } from '../../factory/context/FeedEventsProvider';
 import { GitHubAppCallbackHandler } from './GitHubAppCallbackHandler';
 import type { FactoryProject } from '../services/github';
 import { SessionRunObserver } from './SessionRunObserver';
@@ -48,10 +47,8 @@ export function FactoryLayout() {
   return (
     <ActiveFactoryContext.Provider value={factory}>
       <GitHubAppCallbackHandler />
-      <FeedEventsProvider factoryProjectId={factory.id}>
-        {factory.repositories.length > 0 && <SessionRunObserver factoryId={factory.id} />}
-        <Outlet />
-      </FeedEventsProvider>
+      {factory.repositories.length > 0 && <SessionRunObserver factoryId={factory.id} />}
+      <Outlet />
     </ActiveFactoryContext.Provider>
   );
 }

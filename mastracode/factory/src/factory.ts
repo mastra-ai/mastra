@@ -26,7 +26,6 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
-import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
@@ -56,7 +55,6 @@ import type { ProjectBoardSource } from './boards/project-boards.js';
 import { boardForWorkItem } from './boards/semantics.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
-import { touchFeed } from './feed-events.js';
 import type { FactoryIntegration, IntegrationPostToolContext, IntegrationTools } from './integrations/base.js';
 import { reconcileGithubAcceptanceLabels } from './integrations/github/acceptance-labels.js';
 import type { GithubRuleOverrides } from './integrations/github/default-rules.js';
@@ -136,10 +134,6 @@ import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from './storage/domains/boards/base.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
-import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
-import { CommentsDomain } from './storage/domains/comments/domain.js';
-import { FactoryFeedReader } from './storage/domains/comments/feed-context.js';
-import type { WorkItemFeedPublisher } from './storage/domains/comments/feed-sync.js';
 import { ModelCredentialsStorage } from './storage/domains/credentials/base.js';
 import { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import { FilesystemStorage } from './storage/domains/filesystem/base.js';
@@ -432,16 +426,6 @@ function buildDefaultStudioAuth(): IMastraAuthProvider {
   return new MastraAuthStudio();
 }
 
-/** A session parking or being answered is inbox news, so the registry bumps the project's feed. */
-function liveSessionsTouchingTheFeed(controller: BuildApiRoutesDeps['controller'], eventBus: PubSub): LiveSessions {
-  const liveSessions = new LiveSessions(controller);
-  liveSessions.onParkedChanged(session => {
-    const { factoryOrgId, factoryProjectId } = session.state.get();
-    if (factoryOrgId && factoryProjectId) touchFeed(eventBus, { orgId: factoryOrgId, factoryProjectId });
-  });
-  return liveSessions;
-}
-
 let warnedDefinedBoards = false;
 
 /** Warns once per process when the app declares boards in code; Factory's own boards never warn. */
@@ -560,9 +544,6 @@ export class MastraFactory {
     const storage = instrumentAsyncMethods(this.#config.storage, 'storage');
     const vector = this.#config.vector;
     const pubsub = this.#config.pubsub;
-    // One bus for feed/attention events: a second fallback instance would leave
-    // SSE subscribers and producers on different emitters in single-process runs.
-    const eventBus = pubsub ?? new EventEmitterPubSub();
     // Default auth: honor an explicitly-passed provider (including `null` to
     // disable auth) as-is; otherwise fall back to `MastraAuthStudio`
     // (platform-proxied identity). The default derives its cookie domain
@@ -657,7 +638,6 @@ export class MastraFactory {
     const intakeStorage = storage.registerDomain(new IntakeStorage());
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
-    workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
     workItemsStorage.useTerminalPhasePredicate(item =>
       isTerminalWorkItem(this.#projectBoards?.forProject(item) ?? this.#boards, item),
     );
@@ -676,7 +656,6 @@ export class MastraFactory {
     // Reverse index from a platform sender (Slack/Discord/...) to a Mastra
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
-    const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -690,7 +669,6 @@ export class MastraFactory {
       queueHealth: queueHealthStorage,
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
-      comments: workItemCommentsStorage,
     };
     const auditDomain = new AuditDomain({
       auth: routeAuth,
@@ -703,19 +681,6 @@ export class MastraFactory {
         return { orgId: getFactoryAuthOrgId(user), userId: getFactoryAuthUserId(user) };
       },
     });
-    // Held by reference: the channel attach below pushes into it, long after this.
-    const feedPublishers: WorkItemFeedPublisher[] = [];
-    const commentsDomain = new CommentsDomain({
-      auth: routeAuth,
-      comments: workItemCommentsStorage,
-      workItems: workItemsStorage,
-      projects: factoryProjectsStorage,
-      channelIdentity: channelIdentityStorage,
-      audit: auditDomain,
-      publishers: feedPublishers,
-      pubsub: eventBus,
-    });
-
     const sandboxOption = this.#config.sandbox;
     let sandboxConfig: FactorySandbox | undefined;
     if (sandboxOption === undefined) {
@@ -1069,8 +1034,6 @@ export class MastraFactory {
     // One set of storage and services behind the Factory tools, shared by agent sessions and the MCP endpoint.
     const factoryToolDeps: FactoryToolDependencies = {
       workItems: workItemsStorage,
-      comments: workItemCommentsStorage,
-      feed: commentsDomain,
       audit: auditStorage,
       boards: boards,
       transitionService,
@@ -1758,7 +1721,7 @@ export class MastraFactory {
           ...assembleFactoryApiRoutes({
             controllerId: CONTROLLER_ID,
             controller,
-            liveSessions: liveSessionsTouchingTheFeed(controller, eventBus),
+            liveSessions: new LiveSessions(controller),
             auth: routeAuth,
             ...(auth && isUserProvider(auth) ? { users: auth } : {}),
             authStorage,
@@ -1781,7 +1744,6 @@ export class MastraFactory {
             integrationStorage,
             sourceControlStorage,
             domains,
-            feed: commentsDomain,
             integrations: integrationRegistrations,
             intakeReady,
             factoryReady,
@@ -1821,7 +1783,6 @@ export class MastraFactory {
                 },
                 reconcileToolResults: () => factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
                 prepareBinding,
-                feedReader: new FactoryFeedReader(workItemCommentsStorage),
                 ...(githubIntegration
                   ? {
                       dismissStaleReviews: async decision => {
@@ -1863,7 +1824,6 @@ export class MastraFactory {
           }),
           ...projectRoutes.routes(),
           ...auditDomain.routes(),
-          ...commentsDomain.routes(),
           // Connect/reconnect session minting for Platform-managed providers.
           // Server-side because only the deploy holds Platform machine
           // credentials; the SPA runs the OAuth popup with the minted token.
@@ -2062,7 +2022,6 @@ export class MastraFactory {
           boardRegistry: this.#boards,
           factoryReady,
           domains,
-          feed: commentsDomain,
           ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
         },
         integration.id,
@@ -2074,38 +2033,6 @@ export class MastraFactory {
         const disconnect = (adapter as unknown as { disconnect?: () => Promise<void> }).disconnect;
         if (disconnect) this.#channelShutdowns.push(() => disconnect.call(adapter));
       }
-    }
-
-    // Feed publishers mirror web-feed comments outward (a chat bridge, a
-    // webhook, an issue tracker). Independent of channels(): an integration may
-    // publish without owning a chat channel. READY integrations only — the
-    // array is held by reference by CommentsDomain (see `feedPublishers` above),
-    // so pushing here wires the publisher into comment dispatch.
-    for (const { integration } of integrationRegistrations.filter(
-      ({ integration, ready }) => ready && integration.feedPublisher,
-    )) {
-      const context = buildIntegrationContext(
-        {
-          controller: prepared.base.controller,
-          publicOrigin,
-          auth: routeAuth,
-          stateSigner,
-          sandbox: sandboxConfig,
-          factoryStorage: storage,
-          integrationStorage,
-          sourceControlStorage,
-          integrations: integrationRegistrations,
-          configVersion,
-          boardRegistry: this.#boards,
-          factoryReady,
-          domains,
-          feed: commentsDomain,
-          ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
-        },
-        integration.id,
-      );
-      const publisher = integration.feedPublisher!(context);
-      if (publisher) feedPublishers.push(publisher);
     }
 
     // Integration lifecycle workers (e.g. polling an upstream without
@@ -2133,7 +2060,6 @@ export class MastraFactory {
               boardRegistry: this.#boards,
               factoryReady,
               domains,
-              feed: commentsDomain,
               ...(githubIntegration ? { sourceControlOwnerId: 'github' } : {}),
             },
             integration.id,

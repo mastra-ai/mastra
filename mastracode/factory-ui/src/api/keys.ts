@@ -97,17 +97,6 @@ export const queryKeys = {
     ['intake', 'label-routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
-  /** Every comment read, all work items — the catch-up target after a stream drop. */
-  workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
-  /** Every comment read for a work item — the invalidation target for a feed event. */
-  workItemCommentsRoot: (workItemId: string | undefined) =>
-    [...queryKeys.workItemCommentsAll(), workItemId ?? null] as const,
-  // Page size is baked into the service, so feed surfaces share one cache entry
-  // per anchor: a deep link opens on a different first page than a plain read.
-  workItemComments: (workItemId: string | undefined, aroundCommentId?: string) =>
-    [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
-  factoryMembers: (factoryProjectId: string | undefined) =>
-    ['factory', 'mention-roster', factoryProjectId ?? null] as const,
   knowledgeScopes: (factoryProjectId: string | undefined, threadId?: string) =>
     ['factory', 'knowledge-scopes', factoryProjectId ?? null, threadId ?? null] as const,
   knowledgeSearch: (factoryProjectId: string | undefined, query: string, threadId?: string) =>

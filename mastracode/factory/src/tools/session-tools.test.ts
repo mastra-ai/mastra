@@ -1413,7 +1413,7 @@ describe('session tools on a turn nobody signed in started', () => {
 
   it('mounts every user tool but refuses to answer an approval', async () => {
     const env = await setup('org', wake);
-    const deps = { ...env.deps, comments: {} } as unknown as FactoryToolDependencies;
+    const deps = env.deps as unknown as FactoryToolDependencies;
     const answer = (scope: FactoryToolScope) =>
       (
         createFactoryTools({ scope, deps }).factory_answer_approval as unknown as {

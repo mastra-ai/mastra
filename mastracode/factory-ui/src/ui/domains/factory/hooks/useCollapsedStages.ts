@@ -2,13 +2,13 @@ import { useState } from 'react';
 
 import type { BoardStageId } from '../stages';
 
-type CollapseRevealTarget = { itemId: string; commentId: string | undefined; stages: BoardStageId[] };
+type CollapseRevealTarget = { itemId: string; stages: BoardStageId[] };
 
 export function useCollapsedStages(revealTarget: CollapseRevealTarget | undefined) {
   const [collapsed, setCollapsed] = useState<ReadonlySet<BoardStageId>>(() => new Set());
   const [revealedTargetKey, setRevealedTargetKey] = useState<string>();
   const targetKey =
-    revealTarget && `${revealTarget.itemId}:${revealTarget.commentId ?? ''}:${revealTarget.stages.join(',')}`;
+    revealTarget && `${revealTarget.itemId}:${revealTarget.stages.join(',')}`;
 
   if (targetKey !== revealedTargetKey) {
     setRevealedTargetKey(targetKey);

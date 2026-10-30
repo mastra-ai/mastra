@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { AuditEventRow } from '../storage/domains/audit/base.js';
-import type { WorkItemCommentRow } from '../storage/domains/comments/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
@@ -44,8 +43,6 @@ function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
     autonomyArmedAt: null,
     plansPreapprovedAt: null,
     acceptedAt: null,
-    commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdBy: 'someone-else',
     createdAt: new Date(clock),
@@ -106,14 +103,12 @@ function setup({
   bindings = [],
   decisions = [],
   audit = [],
-  comments = [],
   subscriptions = [],
 }: {
   items?: WorkItemRow[];
   bindings?: FactoryRunBindingRecord[];
   decisions?: FactoryDeferredDecisionRecord[];
   audit?: AuditEventRow[];
-  comments?: WorkItemCommentRow[];
   subscriptions?: WorkItemSubscription[];
 }) {
   const deps: FactoryReadToolDependencies = {
@@ -142,7 +137,6 @@ function setup({
         subscriptions.filter(row => row.factoryProjectId === factoryProjectId && row.sessionId === sessionId),
       ),
     },
-    comments: { listRecent: vi.fn(async () => comments) },
     audit: { list: vi.fn(async () => ({ events: audit })) },
     boards: createBoardRegistry(),
   };
@@ -291,7 +285,6 @@ describe('factory_inspect_work_item', () => {
       decisions: [
         decision({ id: 'd1', workItemId: TARGET, lastError: 'e'.repeat(1000), failureCode: 'session_unavailable' }),
       ],
-      comments: [{ id: 'c1', kind: 'comment', body: 'b'.repeat(1000), author: { type: 'human', id: 'u' } } as never],
       audit: [
         {
           id: 'a1',
@@ -318,7 +311,6 @@ describe('factory_inspect_work_item', () => {
     });
     const decisions = byId.decisions as Array<{ error: string }>;
     expect(decisions[0]!.error).toHaveLength(MAX_ERROR);
-    expect((byId.feed as Array<{ body: string }>)[0]!.body).toHaveLength(MAX_TEXT);
   });
 
   it('shows whether each session is mid-run and when its thread last moved (#27742)', async () => {

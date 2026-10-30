@@ -33,8 +33,6 @@ import type { StateSigner } from '../state-signing.js';
 import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
-import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
@@ -125,7 +123,6 @@ export interface FactoryApiRoutesDeps {
     queueHealth: QueueHealthStorage;
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
-    comments: WorkItemCommentsStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -144,8 +141,6 @@ export interface FactoryApiRoutesDeps {
   boardRegistry: BoardRegistry | ProjectBoardSource;
   /** Stored boards and their cache; mounts the board management routes when present. */
   storedBoards?: { storage: StoredBoardsStorage; cache: ProjectBoardCache };
-  /** Work-item feed service, handed to integrations that ingest platform messages. */
-  feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Moves a thread with its observation vectors onto another memory resource. */
@@ -473,8 +468,6 @@ export function buildIntegrationContext(
     configVersion: string;
     boardRegistry: BoardRegistry;
     factoryReady: boolean;
-    /** Work-item feed service, so a channel integration can ingest platform messages. */
-    feed: CommentsDomain;
     domains: Pick<
       FactoryApiRoutesDeps['domains'],
       'projects' | 'intake' | 'workItems' | 'channelIdentity' | 'memorySettings' | 'modelDefaults'
@@ -511,7 +504,7 @@ export function buildIntegrationContext(
       memorySettings: deps.domains.memorySettings,
       modelDefaults: deps.domains.modelDefaults,
     },
-    ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
+    ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
     ...(deps.factoryReady
       ? {
           runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
@@ -837,7 +830,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
-          comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
           startCoordinator,

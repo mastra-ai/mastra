@@ -47,12 +47,10 @@ const pullRequest = (number: number, parentWorkItemId: string) =>
 const workItems = [
   workItem('manual-1', {
     title: 'Move durable streams from DurableAgent into base Agent',
-    commentCount: 1,
     metadata: { selfReviewVerdict: 'approve' },
   }),
   workItem('manual-2', {
     title: 'Manage incident banners from the Platform admin panel',
-    commentCount: 1,
     metadata: { selfReviewVerdict: 'request changes', selfReviewRounds: 2 },
   }),
   githubIssue(
@@ -114,10 +112,6 @@ test.describe('Factory board list row layout', () => {
       url => url.origin === baseURL && /^\/(web|auth|api)\//.test(url.pathname),
       async route => {
         const request = route.request();
-        if (request.url().endsWith('/feed-events')) {
-          await route.fulfill({ contentType: 'text/event-stream', body: '' });
-          return;
-        }
         const response = await fetch(request.url(), { method: request.method() });
         await route.fulfill({
           status: response.status,

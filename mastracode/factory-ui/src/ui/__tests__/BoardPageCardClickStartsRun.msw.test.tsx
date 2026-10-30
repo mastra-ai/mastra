@@ -118,7 +118,6 @@ function stubBoardEndpoints({
   const transitions: TransitionRequest[] = [];
   const patches: Array<{ itemId: string; body: Record<string, unknown> }> = [];
   const created: Array<Record<string, unknown>> = [];
-  const comments: Array<{ itemId: string; body: Record<string, unknown> }> = [];
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -222,10 +221,6 @@ function stubBoardEndpoints({
         workItem: { ...issueWorkItem, id: 'item-filed', title: String(body.title), stages: ['intake'] },
       });
     }),
-    http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, async ({ params, request }) => {
-      comments.push({ itemId: String(params.itemId), body: (await request.json()) as Record<string, unknown> });
-      return HttpResponse.json({ comment: { id: 'comment-1' } });
-    }),
     http.patch(`${TEST_BASE_URL}/web/factory/work-items/:itemId`, async ({ params, request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       patches.push({ itemId: String(params.itemId), body });
@@ -257,7 +252,7 @@ function stubBoardEndpoints({
     ),
   );
 
-  return { transitions, patches, created, comments };
+  return { transitions, patches, created };
 }
 
 function renderWorkBoard() {
@@ -437,8 +432,8 @@ describe('Board card buttons move the card', () => {
     expect(screen.queryByRole('menuitem', { name: /hands-off/i })).not.toBeInTheDocument();
   });
 
-  it('files a candidate in Intake, posts its custom prompt as a comment, then moves it', async () => {
-    const { transitions, created, comments } = stubBoardEndpoints({
+  it('files a candidate in Intake, saves its custom prompt as the description, then moves it', async () => {
+    const { transitions, created } = stubBoardEndpoints({
       issues: [logoutIssue],
     });
     const { client } = renderWorkBoard();
@@ -454,31 +449,10 @@ describe('Board card buttons move the card', () => {
 
     await waitFor(() => expect(transitions).toHaveLength(1));
     await waitForMutationsIdle(client);
-    expect(created).toEqual([expect.objectContaining({ title: 'Crash on logout', stages: ['intake'] })]);
-    expect(comments).toEqual([
-      { itemId: 'item-filed', body: expect.objectContaining({ body: 'Guidance for this run: Check the token TTL' }) },
+    expect(created).toEqual([
+      expect.objectContaining({ title: 'Crash on logout', stages: ['intake'], description: 'Check the token TTL' }),
     ]);
     expect(transitions[0]).toMatchObject({ itemId: 'item-filed', body: { stage: 'triage', cause: 'card_action' } });
-  });
-
-  it('reports the guidance that could not be posted, and leaves the card in Intake', async () => {
-    const { transitions } = stubBoardEndpoints({ issues: [logoutIssue] });
-    server.use(
-      http.post(`${TEST_BASE_URL}/web/factory/work-items/:itemId/comments`, () =>
-        HttpResponse.json({ error: 'The guidance could not be posted.' }, { status: 500 }),
-      ),
-    );
-    renderWorkBoard();
-
-    const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Details for Crash on logout' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Crash on logout' });
-    await user.click(within(dialog).getByRole('button', { name: 'Custom prompt…' }));
-    await user.type(await screen.findByRole('textbox', { name: 'Prompt for Crash on logout' }), 'Check the token TTL');
-    await user.click(screen.getByRole('button', { name: 'Run' }));
-
-    expect(await screen.findByText('The guidance could not be posted.')).toBeInTheDocument();
-    expect(transitions).toEqual([]);
   });
 
   it('offers no hands-off twin for Prepare approval, whose outcome is a maintainer decision', async () => {

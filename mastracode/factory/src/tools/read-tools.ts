@@ -10,7 +10,6 @@ import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import { factoryDispatchFailureMetadata } from '../rules/dispatch-errors.js';
 import type { AuditStorage } from '../storage/domains/audit/base.js';
-import type { WorkItemCommentsStorage } from '../storage/domains/comments/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
@@ -39,7 +38,6 @@ export interface FactoryReadToolDependencies {
     | 'listWorkItemSubscribers'
     | 'listSessionSubscriptions'
   >;
-  comments: Pick<WorkItemCommentsStorage, 'listRecent'>;
   audit: Pick<AuditStorage, 'list'>;
   /** A fixed registry, or the per-project boards. */
   boards: BoardRegistry | ProjectBoardSource;
@@ -223,16 +221,15 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
     factory_inspect_work_item: createTool({
       id: 'factory_inspect_work_item',
       description:
-        'Everything the Factory knows about one work item: stage history, sessions by role (with whether each is mid-run and when its thread last moved), decisions with errors, recent audit events, recent feed comments, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
+        'Everything the Factory knows about one work item: its description, stage history, sessions by role (with whether each is mid-run and when its thread last moved), decisions with errors, recent audit events, labels, linked items and the sessions following it. Use it to explain why an item is where it is.',
       inputSchema: z.object({ workItem: workItemRefSchema }).strict(),
       execute: async ({ workItem }) => {
         const item = await findWorkItem(deps.workItems, scope, workItem);
         if (!item) throw workItemNotFound(workItem);
-        const [bindings, decisions, audit, feed, all, subscribers] = await Promise.all([
+        const [bindings, decisions, audit, all, subscribers] = await Promise.all([
           deps.workItems.listRunBindings(scope.orgId, scope.factoryProjectId, item.id),
           deps.workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId, { workItemId: item.id }),
           deps.audit.list({ ...project, limit: 200 }),
-          deps.comments.listRecent({ ...project, workItemId: item.id, limit: 10 }),
           deps.workItems.list(project),
           deps.workItems.listWorkItemSubscribers({ orgId: scope.orgId, workItemId: item.id }),
         ]);
@@ -275,6 +272,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         return {
           item: {
             ...summarizeItem(item, bindings),
+            description: item.description,
             source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
             sourceUrl: typeof item.metadata?.url === 'string' ? item.metadata.url : null,
             triageType: item.triageType,
@@ -298,13 +296,6 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
               actorType: event.actorType,
               occurredAt: iso(event.occurredAt),
             })),
-          feed: feed.map(comment => ({
-            id: comment.id,
-            kind: comment.kind,
-            author: comment.author,
-            occurredAt: iso(comment.occurredAt),
-            body: truncate(comment.body, MAX_TEXT),
-          })),
           parent: parent ? summarizeItem(parent, bindings) : null,
           children: children.slice(0, MAX_LIST).map(child => summarizeItem(child, bindings)),
           subscribers: subscribers.slice(0, MAX_LIST).map(subscription => ({

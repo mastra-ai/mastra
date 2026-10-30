@@ -15,7 +15,6 @@ import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivi
 import {
   CardActions,
   CardStatus,
-  CommentCount,
   MetadataLabels,
   SourceTitle,
   WorkItemSourceIcon,
@@ -64,7 +63,6 @@ export function WorkItemCardRows({
             {workItemMeta(item)}
           </Txt>
           {relatedLinks}
-          <CommentCount count={item.commentCount} />
         </div>
         <div className="flex min-w-0 items-center gap-1.5">
           <WorkItemSourceIcon item={item} />

@@ -14,7 +14,6 @@ import type { WorkItemActivity as WorkItemActivityData } from '../workItemActivi
 import {
   CardActions,
   CardStatus,
-  CommentCount,
   MetadataLabels,
   SourceTitle,
   WorkItemSourceIcon,
@@ -81,12 +80,7 @@ export function WorkItemListRow({
           </Txt>
         ),
         links: relatedLinks,
-        labels: (
-          <span className="flex items-center gap-2">
-            <CommentCount count={item.commentCount} />
-            <MetadataLabels metadata={item.metadata} />
-          </span>
-        ),
+        labels: <MetadataLabels metadata={item.metadata} />,
         status: (status.kind !== 'idle' || verdict) && (
           <span className="flex min-w-0 items-center gap-2">
             <CardStatus status={status} compact />
