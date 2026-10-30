@@ -10,7 +10,8 @@
  *
  * @example Basic setup with SSO and RBAC
  * ```typescript
- * import { MastraAuthWorkos, MastraRBACWorkos } from '@mastra/auth-workos';
+ * import { MastraAuthWorkos } from '@mastra/auth-workos';
+ * import { MastraRBACWorkos } from '@mastra/auth-workos/ee';
  *
  * const mastra = new Mastra({
  *   server: {
@@ -37,11 +38,27 @@
 // Main auth provider
 export { MastraAuthWorkos } from './auth-provider';
 
-// RBAC provider for role mapping
-export { MastraRBACWorkos } from './rbac-provider';
+// RBAC and FGA providers now live in `@mastra/auth-workos/ee`. These aliases keep old imports working.
+import { MastraFGAWorkos as EEMastraFGAWorkos } from './fga-provider';
+import { MastraRBACWorkos as EEMastraRBACWorkos } from './rbac-provider';
 
-// FGA provider for fine-grained authorization
-export { MastraFGAWorkos, WorkOSFGAMembershipResolutionError, WorkOSFGAResourceNotFoundError } from './fga-provider';
+/**
+ * @deprecated Import `MastraRBACWorkos` from `@mastra/auth-workos/ee` instead.
+ * RBAC requires a Mastra Enterprise Edition license in production.
+ */
+export const MastraRBACWorkos = EEMastraRBACWorkos;
+/** @deprecated Import `MastraRBACWorkos` from `@mastra/auth-workos/ee` instead. */
+export type MastraRBACWorkos = EEMastraRBACWorkos;
+
+/**
+ * @deprecated Import `MastraFGAWorkos` from `@mastra/auth-workos/ee` instead.
+ * FGA requires a Mastra Enterprise Edition license in production.
+ */
+export const MastraFGAWorkos = EEMastraFGAWorkos;
+/** @deprecated Import `MastraFGAWorkos` from `@mastra/auth-workos/ee` instead. */
+export type MastraFGAWorkos = EEMastraFGAWorkos;
+
+export { WorkOSFGAMembershipResolutionError, WorkOSFGAResourceNotFoundError } from './fga-provider';
 
 // Directory Sync (SCIM) webhook handler
 export { WorkOSDirectorySync } from './directory-sync';

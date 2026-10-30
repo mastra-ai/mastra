@@ -86,7 +86,8 @@ By default, `MastraAuthWorkos` grants access to any authenticated WorkOS user. T
 Set `fetchMemberships: true` when you use [`MastraFGAWorkos`](/docs/auth/fga). This tells the auth provider to load the user's WorkOS organization memberships during authentication so FGA checks can resolve the correct organization membership ID.
 
 ```typescript title="src/mastra/auth.ts"
-import { MastraAuthWorkos, MastraFGAWorkos } from '@mastra/auth-workos'
+import { MastraAuthWorkos } from '@mastra/auth-workos'
+import { MastraFGAWorkos } from '@mastra/auth-workos/ee'
 
 const workosAuth = new MastraAuthWorkos({
   apiKey: process.env.WORKOS_API_KEY,

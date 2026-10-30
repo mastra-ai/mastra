@@ -18,7 +18,8 @@ import PropertiesTable from "@site/src/components/PropertiesTable"
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
-import { MastraAuthNeon, MastraRBACNeon } from '@mastra/auth-neon'
+import { MastraAuthNeon } from '@mastra/auth-neon'
+import { MastraRBACNeon } from '@mastra/auth-neon/ee'
 
 const auth = new MastraAuthNeon()
 
