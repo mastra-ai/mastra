@@ -6,6 +6,7 @@ import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
 import {
   boardForWorkItem,
+  isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
   reviewsPullRequest,
@@ -1401,7 +1402,15 @@ export class FactoryDecisionDispatcher {
           reuseMode: 'preserve',
         });
     const itemBoard = boardForWorkItem(result.item);
-    if (!skipRules && itemBoard !== decision.board) {
+    // New pull request cards are filed on Work, but one filed on Review before
+    // that stays there: filing its pull request again acts on it where it sits.
+    const board =
+      itemBoard === 'review' &&
+      decision.board === 'work' &&
+      isPullRequestCard({ source: workItemSource(result.item.externalSource) })
+        ? itemBoard
+        : decision.board;
+    if (!skipRules && itemBoard !== board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
     }
     // A re-evaluation for an already-filed card (poll/reconcile re-emitting
@@ -1459,7 +1468,6 @@ export class FactoryDecisionDispatcher {
     if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))
       return;
 
-    const board = decision.board;
     let expectedRevision = result.item.revision;
     if (materializedByDecision) {
       const initial = await this.#transitionService.transition({
