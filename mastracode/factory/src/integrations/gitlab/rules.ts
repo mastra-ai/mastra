@@ -21,7 +21,7 @@ import type {
   SourceControlStorageHandle,
 } from '../../storage/domains/source-control/base.js';
 import { WorkItemUpdateConflictError } from '../../storage/domains/work-items/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GitLabEventRules } from './default-rules.js';
@@ -384,7 +384,7 @@ export class GitLabRules {
       pushedReviewItem = (await this.options.storage.get({ orgId: reviewItem.orgId, id: reviewItem.id })) ?? reviewItem;
       if (unchangedListedHead) return { status: 'ignored' };
     }
-    const candidates: Array<WorkItemRow | undefined> =
+    const candidates: Array<Card | undefined> =
       event === 'mergeRequestMerged'
         ? [...new Map([reviewItem, authoringItem].filter(Boolean).map(item => [item!.id, item!])).values()]
         : event === 'mergeRequestCommented'
@@ -554,7 +554,7 @@ export class GitLabRules {
       mergeRequestIid: number | undefined;
       mergeRequestKey: string | undefined;
       factoryAuthored: boolean;
-      item: WorkItemRow | undefined;
+      item: Card | undefined;
       ingressIdentity: string;
       mergeRequestOpenedScope?: 'intake' | 'board';
     },

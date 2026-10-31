@@ -1,14 +1,14 @@
 import type { FactoryRuleJsonValue } from '../../rules/types.js';
 import type { IntegrationStorageHandle } from '../../storage/domains/integrations/base.js';
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
-import type { FactoryRunBindingRecord, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { GithubIntegration } from './integration.js';
 import { cardBelongsToRepository } from './rules.js';
 import { parseCreatedPullRequest } from './session-subscriptions.js';
 
 export interface RecordFactoryPullRequestProvenanceInput {
   binding: FactoryRunBindingRecord;
-  item: WorkItemRow;
+  item: Card;
   assistantMessageId: string;
   toolCallId: string;
   toolName: string;

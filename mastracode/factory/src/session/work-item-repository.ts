@@ -1,6 +1,6 @@
 import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { WorkItemRow } from '../storage/domains/work-items/base.js';
+import type { Card } from '../storage/domains/work-items/base.js';
 
 export type WorkItemRepositoryResolution =
   | { status: 'resolved'; projectRepositoryId: string; slug: string }
@@ -91,7 +91,7 @@ export async function resolveWorkItemRepository(args: {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   factoryProjectId: string;
-  item: Pick<WorkItemRow, 'metadata'>;
+  item: Pick<Card, 'metadata'>;
   linearRepositoryMap?: Record<string, string>;
 }): Promise<WorkItemRepositoryResolution> {
   const { sourceControl, item, linearRepositoryMap } = args;

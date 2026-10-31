@@ -1,4 +1,4 @@
-import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/base';
+import type { Card } from '@mastra/factory/storage/domains/work-items/base';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -27,7 +27,7 @@ function deferred() {
 }
 
 function stubReviewBoard(candidate = false, decision?: FactoryDecisionSummary) {
-  const items: WorkItemRow[] = candidate ? [] : [{ ...reviewItem, stages: decision ? ['review'] : ['intake'] }];
+  const items: Card[] = candidate ? [] : [{ ...reviewItem, stages: decision ? ['review'] : ['intake'] }];
   const decisions: FactoryDecisionSummary[] = decision ? [decision] : [];
   const runningSessionIds: string[] = [];
   const data = { items, decisions, runningSessionIds, transitionCommitted: false, decisionRefreshStarted: false };

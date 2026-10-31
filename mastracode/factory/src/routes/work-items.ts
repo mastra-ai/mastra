@@ -36,7 +36,7 @@ import type {
   CreateWorkItemInput,
   FactoryDeferredDecisionRecord,
   UpdateWorkItemInput,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import {
@@ -75,7 +75,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
-function toWireWorkItem(item: WorkItemRow): WorkItemRow {
+function toWireWorkItem(item: Card): Card {
   if (
     !item.metadata ||
     (!(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata) &&
@@ -88,7 +88,7 @@ function toWireWorkItem(item: WorkItemRow): WorkItemRow {
 }
 
 /** Session ids of the listed cards that the predicate picks, each once. */
-function sessionIdsWhere(items: readonly WorkItemRow[], predicate: (sessionId: string) => boolean): string[] {
+function sessionIdsWhere(items: readonly Card[], predicate: (sessionId: string) => boolean): string[] {
   const picked = new Set<string>();
   for (const item of items) {
     for (const { sessionId } of Object.values(item.sessions)) {
@@ -282,7 +282,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     patch,
   }: {
     context: Context;
-    item: WorkItemRow;
+    item: Card;
     patch: Record<string, unknown>;
   }): Promise<void> {
     await this.deps.audit.emit({

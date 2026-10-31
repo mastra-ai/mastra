@@ -764,14 +764,14 @@ describe('WorkItemsStorage', () => {
     const deleteMany = vi.fn();
     interceptTransactionOps(backend, ops => ({
       insertOne: async (collection: string, record: any) => {
-        if (collection === 'work_items' && record.parent_work_item_id === parent.item.id) {
+        if (collection === 'factory_board_items' && record.parent_board_item_id === parent.item.id) {
           childInsertReached.resolve();
           await releaseChildInsert.promise;
         }
         return ops.insertOne(collection, record);
       },
       deleteMany: (collection: string, where: any) => {
-        if (collection === 'work_items') deleteMany(collection, where);
+        if (collection === 'factory_board_items') deleteMany(collection, where);
         return ops.deleteMany(collection, where);
       },
     }));
@@ -815,14 +815,14 @@ describe('WorkItemsStorage', () => {
     const deleteMany = vi.fn();
     interceptTransactionOps(backend, ops => ({
       updateAtomic: async (collection: string, where: any, updater: any) => {
-        if (collection === 'work_items' && where.id === child.item.id) {
+        if (collection === 'factory_board_items' && where.id === child.item.id) {
           childUpdateReached.resolve();
           await releaseChildUpdate.promise;
         }
         return ops.updateAtomic(collection, where, updater);
       },
       deleteMany: (collection: string, where: any) => {
-        if (collection === 'work_items') deleteMany(collection, where);
+        if (collection === 'factory_board_items') deleteMany(collection, where);
         return ops.deleteMany(collection, where);
       },
     }));
@@ -1026,6 +1026,8 @@ describe('WorkItemsStorage', () => {
     await storage.delete({ orgId: 'org1', id: parent.item.id });
 
     expect(withTransaction.mock.calls.map(([, options]) => options)).toEqual([
+      // The parent has no relationship to check: a plain transaction.
+      undefined,
       { isolationLevel: 'serializable' },
       { isolationLevel: 'serializable' },
       { isolationLevel: 'serializable' },

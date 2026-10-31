@@ -226,6 +226,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(created.status).toBe(200);
       const card = created.json.workItem as { id: string; revision: number; stages: string[] };
       expect(card.stages).toEqual(['reported']);
+      const listed = await replica.send('GET', `/web/factory/projects/${projectId}/work-items`);
+      expect(listed.status).toBe(200);
+      expect(listed.json.workItems).toEqual([
+        expect.objectContaining({
+          id: card.id,
+          board: 'bugs',
+          stages: ['reported'],
+          workItem: expect.objectContaining({ provider: 'factory', title: 'Login button does nothing' }),
+        }),
+      ]);
 
       const skipped = await transition(replica, projectId, card, 'fixed');
       expect(skipped.json.result).toMatchObject({ status: 'rejected' });

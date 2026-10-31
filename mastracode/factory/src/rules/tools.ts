@@ -9,7 +9,7 @@ import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { SELF_REVIEW_ROUND_LIMIT } from '../boards/work.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -268,7 +268,7 @@ async function recordSelfReviewVerdict(input: {
   storage: WorkItemsStorage;
   transitionService: Pick<FactoryTransitionService, 'transition'>;
   binding: { id: string; orgId: string; factoryProjectId: string; workItemId: string; role: string };
-  item: WorkItemRow;
+  item: Card;
   verdict: (typeof REVIEW_VERDICTS)[number];
   reviewedHeadSha: string;
   findings: string | undefined;

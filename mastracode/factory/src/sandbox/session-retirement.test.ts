@@ -10,7 +10,7 @@ import {
 } from '../session/environment-state-processor.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
-import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { SessionRetirementCoordinator } from './session-retirement.js';
 import {
   __clearSessionSandboxesForTests,
@@ -25,7 +25,7 @@ afterEach(() => {
   __clearSessionEnvironmentsForTests();
 });
 
-function workItem(sessionId: string): WorkItemRow {
+function workItem(sessionId: string): Card {
   const session = { sessionId, branch: 'factory/issue-1', threadId: 'thread-1', startedBy: 'user-1' };
   return {
     id: 'item-1',
@@ -45,7 +45,7 @@ function workItem(sessionId: string): WorkItemRow {
   };
 }
 
-function workItems(item: WorkItemRow): Pick<WorkItemsStorage, 'get'> {
+function workItems(item: Card): Pick<WorkItemsStorage, 'get'> {
   return { get: async () => item };
 }
 

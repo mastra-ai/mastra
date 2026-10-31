@@ -15,8 +15,9 @@ import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage
 import type { FactoryStorageOps } from '@mastra/core/storage';
 
 import { externalSourceKey } from '../work-items/base.js';
-import type { ExternalWorkItemSource } from '../work-items/base.js';
+import type { ExternalWorkItemSource, WorkItemsStorage } from '../work-items/base.js';
 import { bumpBoardVersions, FACTORY_BOARD_VERSIONS_SCHEMA, trackBoardWrites } from '../work-items/board-version.js';
+import { FACTORY_BOARD_ITEMS_SCHEMA } from '../work-items/work-item-schema.js';
 import { fanOutWorkItemActivity, listActivityForUser, PARTICIPANT_SCAN_LIMIT } from './activity.js';
 import type { WorkItemActivityRow } from './activity.js';
 import type { FactoryActorExternalIdentity, FactoryActorRef } from './actor.js';
@@ -309,6 +310,14 @@ function dedupeMentions(mentions: FactoryMentionRef[] | undefined): FactoryMenti
 }
 
 export class WorkItemCommentsStorage extends FactoryStorageDomain {
+  get #legacyMode(): boolean {
+    return this.storage.hasDomain('work-items') && this.storage.getDomain<WorkItemsStorage>('work-items').legacyMode;
+  }
+
+  get #boardItemsTable(): string {
+    return this.#legacyMode ? 'work_items' : FACTORY_BOARD_ITEMS_SCHEMA.name;
+  }
+
   constructor() {
     super('work-item-comments');
   }
@@ -415,7 +424,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
    * rather than in the fan-out, which must stay free of its own queries.
    */
   async #fanOutActivity(comment: WorkItemCommentRow): Promise<void> {
-    const item = await this.ops.findOne<{ created_by: string } & Record<string, unknown>>('work_items', {
+    const item = await this.ops.findOne<{ created_by: string } & Record<string, unknown>>(this.#boardItemsTable, {
       id: comment.workItemId,
       org_id: comment.orgId,
       factory_project_id: comment.factoryProjectId,
@@ -469,6 +478,10 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     workItemId: string;
     now?: Date;
   }): Promise<void> {
+    if (!this.#legacyMode) {
+      await bumpBoardVersions(this.ops, [{ orgId, factoryProjectId }]);
+      return;
+    }
     const commentCount = await this.countForWorkItem({ orgId, factoryProjectId, workItemId });
     // Every feed mutation stamps `updated_at`, edits and tombstones included,
     // so the newest one is when this feed last moved.
@@ -479,7 +492,7 @@ export class WorkItemCommentsStorage extends FactoryStorageDomain {
     );
     const feedActivityAt = latest?.updated_at ?? now;
     await this.ops.updateAtomic<WorkItemFeedColumns>(
-      'work_items',
+      this.#boardItemsTable,
       { id: workItemId, org_id: orgId, factory_project_id: factoryProjectId },
       row => {
         const next = { commentCount, feedActivityAt };
