@@ -25,6 +25,7 @@ import {
 import { createRoute } from '../server-adapter/routes/route-builder';
 
 import { handleError } from './error';
+import { getHandlerFGAProvider } from './utils';
 
 /**
  * Read-only browsing of Knowledge instances registered on Mastra, for Studio. Nothing here writes.
@@ -81,7 +82,7 @@ async function accessibleInstances(
   requestContext: RequestContext | undefined,
   entries: Array<{ id: string; key: string }>,
 ): Promise<Set<string>> {
-  const fgaProvider = (mastra as any).getServer?.()?.fga;
+  const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
   const user = requestContext?.get('user');
   if (!fgaProvider || !user || typeof user !== 'object' || entries.length === 0) {
     return new Set(entries.map(entry => entry.key));
@@ -165,7 +166,7 @@ async function resolveStore(
     throw new HTTPException(404, { message: `Knowledge ${knowledgeKey ?? ''} not found` });
 
   // An instance the caller may not read looks the same as one that does not exist.
-  const fgaProvider = (mastra as any).getServer?.()?.fga;
+  const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
   const user = requestContext?.get('user');
   if (fgaProvider && user && typeof user === 'object') {
     const allowed = await fgaProvider.check(user, {
