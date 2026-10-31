@@ -126,7 +126,9 @@ export const chargebacksPage = page({
   id: 'page-chargebacks',
   scopeId: 'scope-acme',
   parentId: 'scope-acme',
+  isScope: false,
   name: 'Chargebacks',
+  position: 'a9',
 });
 
 /** The org scope's tree level after `chargebacksPage` was added. */

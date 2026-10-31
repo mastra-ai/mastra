@@ -107,6 +107,37 @@ describe('Knowledge tool cards', () => {
     });
   });
 
+  describe('when knowledge_page deletes a page', () => {
+    it('says it deleted the page and names it without a link', () => {
+      renderCard({
+        toolName: 'knowledge_page',
+        input: { op: 'delete', page: 'Refunds' },
+        output: { page: refunds },
+      });
+      const badge = open();
+      expect(badge.textContent).toContain('Deleted page');
+      expect(badge.textContent).not.toContain('Updated page');
+      expect(badge.textContent).toContain('Refunds');
+      expect(within(badge).queryByRole('link', { name: 'Refunds' })).toBeNull();
+    });
+  });
+
+  describe('when knowledge_read reads a scope with child scopes', () => {
+    it('lists the child scopes by name and address', () => {
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'org:acme' },
+        output: {
+          page: { id: 'scope-acme', name: 'Acme', scope: 'org:acme' },
+          notes: [],
+          children: [],
+          childScopes: [{ address: 'team:acme:support', name: 'Support' }],
+        },
+      });
+      expect(open().textContent).toContain('Child scopes: Support (team:acme:support)');
+    });
+  });
+
   describe('when knowledge_page writes', () => {
     it('says it updated an existing page and shows the new body and version', () => {
       renderCard({
