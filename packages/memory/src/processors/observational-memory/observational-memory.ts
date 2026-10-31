@@ -874,7 +874,6 @@ export class ObservationalMemory {
       resolveModel: (inputTokens, options) => this.resolveReflectionModel(inputTokens, options),
       mastra: config.mastra,
       memory: this.memory,
-      onReflectionCommitted: config.onReflectionCommitted,
       hooks: this.hooks,
       trackBackgroundWork: (work, lockKey) => this.trackBackgroundWork(work, lockKey),
     });

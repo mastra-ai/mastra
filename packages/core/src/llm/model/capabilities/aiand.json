@@ -36,10 +36,52 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
+    "zai-org/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "google/gemma-4-31b-it": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "meta/muse-spark-open": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "deepseek-ai/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "deepseek-ai/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-ai/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "motif-technologies/motif-3": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "qwen/qwen3.6-27b": [
@@ -64,48 +106,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "zai-org/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "motif-technologies/motif-3": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "google/gemma-4-31b-it": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ]
   }

@@ -4,10 +4,10 @@ Builds published `.d.ts` output for packages that bundle `@internal/*` (and othe
 
 ## Boundary rule: bundled types must be structural
 
-Bundled declaration files are **copies** — multiple published packages ship their own duplicate of the same `@internal/*` declaration (e.g. `@mastra/core` and every auth provider each embed `MastraAuthProvider`/`MastraBase`). TypeScript checks `#private` and `protected` members **nominally**, so two identical copies with those members are mutually unassignable. This broke `server.auth = new MastraAuthWorkos()` in userland (#18682).
+Bundled declaration files are **copies** — multiple published packages ship their own duplicate of the same `@internal/*` declaration (e.g. `@mastra/core` and every auth provider each embed `MastraAuthProvider`/`MastraBase`). TypeScript checks `#private` and `protected` members **nominally**, so two identical copies with those members are mutually unassignable. This broke `server.auth = new MastraAuthWorkos()` (#18682) and `new Agent({ voice: new OpenAIRealtimeVoice() })` (#29016) in userland.
 
 Rules:
 
 - Types that cross a published package boundary via `@internal/*` bundling must be **structural**. Do not rely on `#private` fields, `protected` members, or `instanceof` checks for identity across the boundary — expose structural interfaces (e.g. `IMastraAuthProvider`) at public contract points and use duck-typing at runtime.
 - The bundled class declarations themselves keep their brands, so a nominal class type (e.g. `MastraAuthProvider`) must never appear in a position that receives instances from another published package. Accept the structural interface instead, and have the class declare `implements` on it so the compiler keeps the two in sync.
-- Regression coverage lives in `packages/core/src/server/server.test-d.ts` (interface assignability, including a simulated bundled duplicate copy) and `e2e-tests/type-check/template/core/auth.test-d.ts` (packed artifacts under `exactOptionalPropertyTypes`).
+- Regression coverage lives in `packages/core/src/server/server.test-d.ts` (interface assignability, including a simulated bundled duplicate copy) and `e2e-tests/type-check/template/core/auth.test-d.ts` (packed artifacts under `exactOptionalPropertyTypes`). `e2e-tests/type-check/template/core/voice.test-d.ts` covers voice providers.

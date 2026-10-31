@@ -8,6 +8,8 @@ import {
   toolEdit,
 } from '@mastra/playground-ui/components/ai/tool-call';
 
+import { KNOWLEDGE_TOOLS, knowledgeCard } from '@mastra/playground-ui/domains/chat/knowledge';
+
 import { useEffect, useRef, useState } from 'react';
 
 import type { ToolCall } from '../../services/transcript';
@@ -20,12 +22,19 @@ function screenshotSrc(tool: ToolCall): string | undefined {
   return typeof result.base64 === 'string' && result.base64 ? `data:image/png;base64,${result.base64}` : undefined;
 }
 
+/** A finished Knowledge tool call drawn as its card body (pages linked to the viewer), or undefined. */
+export function toolKnowledgeCard(tool: ToolCall) {
+  if (tool.status !== 'done' || !KNOWLEDGE_TOOLS.has(tool.toolName)) return undefined;
+  return knowledgeCard(tool.toolName, tool.args, tool.result) ?? undefined;
+}
+
 function toolResultText(tool: ToolCall): string | undefined {
   if (tool.status === 'running' || tool.result === undefined || tool.result === null) return undefined;
   return stripSerializedAnsi(stringifyToolValue(tool.result)) || undefined;
 }
 
 export function toolHasBody(tool: ToolCall, command: string | undefined): boolean {
+  if (toolKnowledgeCard(tool)) return true;
   if (command !== undefined || tool.output) return true;
   return hasToolArguments(tool) || toolResultText(tool) !== undefined;
 }
@@ -82,6 +91,9 @@ export function ToolBody({ tool, command }: { tool: ToolCall; command?: string }
   const screenshot = screenshotSrc(tool);
 
   if (screenshot) return <Screenshot src={screenshot} />;
+
+  const knowledge = toolKnowledgeCard(tool);
+  if (knowledge) return <>{knowledge.body}</>;
 
   if (edit) {
     return (

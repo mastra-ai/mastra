@@ -1564,6 +1564,9 @@ export const mastra = new Mastra({
       // Automatic version resolution must read the copy installed for the app (0.4.0),
       // not the older copy installed at the workspace root (0.2.0) (#18849).
       expect(dependencies['unicorn-magic']).toBe('0.4.0');
+
+      // read-excel-file/node/package.json is named "read-excel-file/node" at 1.0.0 (#28828).
+      expect(dependencies['read-excel-file']).toBe('9.3.12');
     });
   });
 

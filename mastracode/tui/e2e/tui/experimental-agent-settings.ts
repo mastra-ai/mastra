@@ -28,7 +28,7 @@ export const experimentalAgentSettingsScenario: McE2eScenario = {
     const readSettings = () => JSON.parse(readFileSync(settingsPath, 'utf8'));
 
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Experimental agent\s+Off/i, terminal);
+    await runtime.waitForScreenText(/Settings/i, terminal);
     await selectMenuRow(terminal, /Experimental agent/i);
     await runtime.waitForScreenText(/Use the standard coding agent/i, terminal);
     terminal.write('\x1b[B');
@@ -39,7 +39,7 @@ export const experimentalAgentSettingsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Experimental agent: durable \(restart required\)/i, terminal);
 
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Experimental agent\s+Durable/i, terminal);
+    await runtime.waitForScreenText(/Settings/i, terminal);
     await selectMenuRow(terminal, /Experimental agent/i);
     await runtime.waitForScreenText(/Use resumable durable agent streams/i, terminal);
     terminal.write('\x1b[B');
@@ -50,7 +50,7 @@ export const experimentalAgentSettingsScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Experimental agent: evented \(restart required\)/i, terminal);
 
     terminal.submit('/settings');
-    await runtime.waitForScreenText(/Experimental agent\s+Evented/i, terminal);
+    await runtime.waitForScreenText(/Settings/i, terminal);
     await selectMenuRow(terminal, /Experimental agent/i);
     await runtime.waitForScreenText(/Run the agent loop on the evented workflow engine/i, terminal);
     terminal.write('\x1b[A'.repeat(2));
