@@ -72,6 +72,55 @@ jobs:
             echo "has_code=false" >> "$GITHUB_OUTPUT"
           fi
 
+  # Deployer changes must come with monorepo E2E coverage (packages/deployer/AGENTS.md).
+  # Its own job, not a step in `changes`: a failing `changes` job would skip every test job.
+  deployer-e2e-coverage:
+    name: Deployer E2E coverage
+    # The Changesets release PR only bumps versions and changelogs, so it can never add the
+    # coverage. A fork can pick any branch name, so the head must also live in this repository.
+    if: >-
+      github.event_name == 'pull_request' &&
+      !(github.event.pull_request.head.repo.full_name == github.repository &&
+      startsWith(github.head_ref, 'changeset-release/'))
+    runs-on: starsling-ubuntu-26.04-2
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+          # Partial clone: name-only diffs need trees, not blob contents.
+          filter: blob:none
+
+      - name: Require monorepo E2E changes alongside deployer changes
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed_files=$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")
+          # The package instructions and the generated changelog are exempt.
+          deployer_file=$(printf '%s\n' "$changed_files" \
+            | grep '^packages/deployer/' \
+            | grep -vxE 'packages/deployer/(AGENTS|CHANGELOG)\.md' \
+            | head -n 1 || true)
+          if [ -z "$deployer_file" ]; then
+            echo "No deployer changes."
+            exit 0
+          fi
+          # Here-string, not a pipe: under pipefail, grep -q exiting early can fail printf.
+          if grep -q '^e2e-tests/monorepo/' <<< "$changed_files"; then
+            echo "Deployer changes come with monorepo E2E changes."
+            exit 0
+          fi
+          deployer_file="${deployer_file//%/%25}"
+          deployer_file="${deployer_file//:/%3A}"
+          deployer_file="${deployer_file//,/%2C}"
+          echo "::error file=${deployer_file},title=Monorepo E2E coverage required::This PR changes packages/deployer/ but has no changes under e2e-tests/monorepo/. Deployer unit tests alone do not validate generated monorepo applications; add or update a monorepo E2E test. See packages/deployer/AGENTS.md."
+          exit 1
+
   prebuild:
     name: Build
     needs: changes
