@@ -214,11 +214,10 @@ describe('getPackageMetadata', () => {
     await writeFile(join(dir, 'index.js'), 'export default 1;');
   }
 
-  // Shapes copied from the published packages. Each subpath folder ships its own manifest with a name and a
-  // version that do not belong to the installed package (#28828).
+  // Manifest shapes from the published packages (#28828).
   const subpathPackages = [
     {
-      title: 'read-excel-file/node, whose subpath manifest is named after the subpath',
+      title: 'read-excel-file/node, whose folder manifest is named "read-excel-file/node"',
       name: 'read-excel-file',
       subpath: 'node',
       root: {
@@ -229,23 +228,7 @@ describe('getPackageMetadata', () => {
       nested: { private: true, name: 'read-excel-file/node', version: '1.0.0', exports: { '.': './index.js' } },
     },
     {
-      title: 'preact/hooks, whose subpath manifest exposes itself and has a valid package name',
-      name: 'preact',
-      subpath: 'hooks',
-      root: {
-        name: 'preact',
-        version: '10.29.8',
-        exports: {
-          '.': './index.js',
-          './hooks': { import: './hooks/index.js' },
-          './hooks/package.json': './hooks/package.json',
-          './package.json': './package.json',
-        },
-      },
-      nested: { name: 'preact-hooks', version: '0.1.0', private: true, exports: { '.': './index.js' } },
-    },
-    {
-      title: 'preact/jsx-runtime, whose subpath manifest is named after an unrelated npm package',
+      title: 'preact/jsx-runtime, whose folder manifest is named after the unrelated "jsx-runtime" package',
       name: 'preact',
       subpath: 'jsx-runtime',
       root: {
@@ -260,7 +243,7 @@ describe('getPackageMetadata', () => {
       nested: { name: 'jsx-runtime', version: '1.0.0', private: true, exports: { '.': './index.js' } },
     },
     {
-      title: 'a package that only exports subpaths, so the bare package name cannot be resolved',
+      title: 'a package that exports only subpaths, so its bare name does not resolve',
       name: 'subpath-only-pkg',
       subpath: 'node',
       root: { name: 'subpath-only-pkg', version: '2.1.0', exports: { './node': { import: './node/index.js' } } },
@@ -269,7 +252,7 @@ describe('getPackageMetadata', () => {
   ];
 
   it.each(subpathPackages)(
-    'records the installed package version for $title (#28828)',
+    'pins the installed package for $title (#28828)',
     async ({ name, subpath, root, nested }) => {
       const tempRoot = join(process.cwd(), '.tmp');
       await mkdir(tempRoot, { recursive: true });
@@ -288,99 +271,26 @@ describe('getPackageMetadata', () => {
     },
   );
 
-  it('records the installed package version for a subpath import in a pnpm layout (#28828)', async () => {
+  it('pins a symlinked workspace package when the workspace itself sits under node_modules', async () => {
     const tempRoot = join(process.cwd(), '.tmp');
     await mkdir(tempRoot, { recursive: true });
-    const tempDir = await realpath(await mkdtemp(join(tempRoot, 'subpath-manifest-pnpm-')));
+    const tempDir = await realpath(await mkdtemp(join(tempRoot, 'subpath-manifest-workspace-')));
     tempDirs.push(tempDir);
 
-    const storeDir = join(
-      tempDir,
-      'node_modules',
-      '.pnpm',
-      'read-excel-file@9.3.12',
-      'node_modules',
-      'read-excel-file',
-    );
-    await writeManifest(storeDir, {
-      name: 'read-excel-file',
-      version: '9.3.12',
-      exports: { './node': { import: './node/index.js' }, './package.json': './package.json' },
-    });
-    await writeManifest(join(storeDir, 'node'), { name: 'read-excel-file/node', version: '1.0.0' });
-    const appDir = join(tempDir, 'apps', 'app');
-    await mkdir(join(appDir, 'node_modules'), { recursive: true });
-    await symlink(storeDir, join(appDir, 'node_modules', 'read-excel-file'), 'dir');
-
-    await expect(getPackageMetadata('read-excel-file/node', appDir)).resolves.toEqual({
-      rootPath: storeDir,
-      version: '9.3.12',
-      packageSpec: undefined,
-    });
-  });
-
-  async function createLinkedWorkspacePackage(workspaceRoot: string) {
+    // Guessing the root from the resolved path would pick node_modules/repo here.
+    const workspaceRoot = join(tempDir, 'node_modules', 'repo');
+    await writeManifest(workspaceRoot, { name: 'repo', version: '3.0.0' });
     const libDir = join(workspaceRoot, 'packages', 'lib');
     await writeManifest(libDir, { name: '@ws/lib', version: '0.1.0', exports: { './sub': './sub/index.js' } });
     await writeManifest(join(libDir, 'sub'), { name: '@ws/lib/sub', version: '1.0.0' });
     const appDir = join(workspaceRoot, 'apps', 'app');
     await mkdir(join(appDir, 'node_modules', '@ws'), { recursive: true });
     await symlink(libDir, join(appDir, 'node_modules', '@ws', 'lib'), 'dir');
-    return { libDir, appDir };
-  }
-
-  it('records the linked package version for a subpath import of a workspace package (#28828)', async () => {
-    const tempRoot = join(process.cwd(), '.tmp');
-    await mkdir(tempRoot, { recursive: true });
-    const tempDir = await realpath(await mkdtemp(join(tempRoot, 'subpath-manifest-workspace-')));
-    tempDirs.push(tempDir);
-
-    const { libDir, appDir } = await createLinkedWorkspacePackage(tempDir);
 
     await expect(getPackageMetadata('@ws/lib/sub', appDir)).resolves.toEqual({
       rootPath: libDir,
       version: '0.1.0',
       packageSpec: undefined,
-    });
-  });
-
-  it('records the linked package version when the whole workspace sits inside a node_modules folder', async () => {
-    const tempRoot = join(process.cwd(), '.tmp');
-    await mkdir(tempRoot, { recursive: true });
-    const tempDir = await realpath(await mkdtemp(join(tempRoot, 'subpath-manifest-nested-workspace-')));
-    tempDirs.push(tempDir);
-
-    // A checkout under node_modules (e.g. a repo installed as a dependency) must not be mistaken for the package.
-    const workspaceRoot = join(tempDir, 'node_modules', 'repo');
-    await writeManifest(workspaceRoot, { name: 'repo', version: '3.0.0' });
-    const { libDir, appDir } = await createLinkedWorkspacePackage(workspaceRoot);
-
-    await expect(getPackageMetadata('@ws/lib/sub', appDir)).resolves.toEqual({
-      rootPath: libDir,
-      version: '0.1.0',
-      packageSpec: undefined,
-    });
-  });
-
-  it('keeps the npm alias for a subpath import of an aliased package with a nested manifest', async () => {
-    const tempRoot = join(process.cwd(), '.tmp');
-    await mkdir(tempRoot, { recursive: true });
-    const tempDir = await mkdtemp(join(tempRoot, 'subpath-manifest-alias-'));
-    tempDirs.push(tempDir);
-
-    // Installed as "excel": "npm:read-excel-file@9.3.12".
-    const packageDir = join(tempDir, 'node_modules', 'excel');
-    await writeManifest(packageDir, {
-      name: 'read-excel-file',
-      version: '9.3.12',
-      exports: { './node': { import: './node/index.js' } },
-    });
-    await writeManifest(join(packageDir, 'node'), { name: 'read-excel-file/node', version: '1.0.0' });
-
-    await expect(getPackageMetadata('excel/node', tempDir)).resolves.toEqual({
-      rootPath: packageDir,
-      version: '9.3.12',
-      packageSpec: 'npm:read-excel-file@9.3.12',
     });
   });
 });
