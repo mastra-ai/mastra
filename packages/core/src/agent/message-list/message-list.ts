@@ -60,7 +60,11 @@ import type { AIV5Type, AIV5ResponseMessage, AIV6Type, MessageInput, MessageList
 import { dropCrossProviderExecutedParts } from './utils/provider-compat';
 import { preserveResponseItemIdsOnMerge } from './utils/response-item-metadata';
 import { stampPart, stampToolPartUpdate } from './utils/stamp-part';
-import { advancesToolInvocationState, isClientToolInvocationUpdate } from './utils/tool-invocation-state';
+import {
+  advancesToolInvocationState,
+  isClientToolInvocationUpdate,
+  isTerminalToolInvocationState,
+} from './utils/tool-invocation-state';
 
 function isSignalDataMessage<T extends { role: string; parts: Array<{ type: string }> }>(message: T): boolean {
   return message.role === 'system' && message.parts.length > 0 && message.parts.every(p => p.type.startsWith('data-'));
@@ -1036,11 +1040,21 @@ export class MessageList {
 
     // Drop the marker itself along with the step it opened, so the next iteration's
     // openStepBoundary() writes a fresh marker for the retry rather than reusing the rejected one.
-    parts.splice(boundaryIndex);
+    this.#truncateParts(message, boundaryIndex);
+    return true;
+  }
+
+  /**
+   * Cut a message back to its first `length` parts, removing it when none remain, and keep the
+   * mirrors `MessageMerger` maintains beside the parts in step with what survived.
+   */
+  #truncateParts(message: MastraDBMessage, length: number): void {
+    const parts = message.content.parts;
+    parts.splice(length);
 
     if (parts.length === 0) {
-      this.removeByIds([messageId]);
-      return true;
+      this.removeByIds([message.id]);
+      return;
     }
 
     // `content.toolInvocations` is the legacy AIV4 mirror of the tool-invocation parts, also
@@ -1087,8 +1101,72 @@ export class MessageList {
       this.stateManager.removeMessage(message);
       this.stateManager.addToSource(message, 'response');
     }
+  }
 
-    return true;
+  /** Response parts per message as of the last completed step; undefined until a step completes. */
+  #completedStepParts: Map<string, number> | undefined;
+  /** Structured output per message as of the last completed step. */
+  #completedStepStructuredOutput: Map<string, unknown> | undefined;
+
+  /**
+   * Record the response as it stands now as the end of a completed step. Called by the loop when a
+   * step finishes, before the next one can add to the response.
+   * @internal
+   */
+  public markStepCompleted(): void {
+    this.#completedStepParts = new Map(
+      this.get.response.db().map(message => [message.id, message.content.parts?.length ?? 0]),
+    );
+    this.#completedStepStructuredOutput = new Map(
+      this.get.response
+        .db()
+        .flatMap(message =>
+          message.content.metadata?.structuredOutput !== undefined
+            ? [[message.id, message.content.metadata.structuredOutput] as const]
+            : [],
+        ),
+    );
+  }
+
+  /**
+   * A copy of this list holding the input and only the response of completed steps: the parts and
+   * messages a step still in flight added since the last {@link markStepCompleted} are left out.
+   * A step whose tool calls all have results (an aborted call records a notice) counts as completed
+   * even though the loop never reached its step-finish, and is kept whole. When the step is cut,
+   * `inFlightText` (the text it already streamed) is added as its own assistant message.
+   * @internal
+   */
+  public cloneWithCompletedSteps(inFlightText = ''): MessageList {
+    const clone = this.clone();
+    const completed = this.#completedStepParts;
+    const pending = clone.get.response
+      .db()
+      .flatMap(message => (message.content.parts ?? []).slice(completed?.get(message.id) ?? 0));
+    const toolCalls = pending.filter(part => part.type === 'tool-invocation');
+    if (toolCalls.length > 0 && toolCalls.every(part => isTerminalToolInvocationState(part.toolInvocation.state)))
+      return clone;
+    for (const message of clone.get.response.db()) {
+      const length = completed?.get(message.id);
+      if (length === undefined) clone.removeByIds([message.id]);
+      else if ((message.content.parts?.length ?? 0) > length) {
+        // clone() shares content with this list; truncating it in place would cut the live step too.
+        message.content = {
+          ...message.content,
+          parts: [...message.content.parts],
+          ...(message.content.metadata ? { metadata: { ...message.content.metadata } } : {}),
+        };
+        clone.#truncateParts(message, length);
+        // #truncateParts drops structuredOutput for rollback; a completed step keeps the object it produced.
+        const structuredOutput = this.#completedStepStructuredOutput?.get(message.id);
+        if (structuredOutput !== undefined) {
+          message.content.metadata = { ...message.content.metadata, structuredOutput };
+        }
+      }
+    }
+    if (inFlightText.trim().length > 0) {
+      clone.add({ role: 'assistant', content: [{ type: 'text', text: inFlightText }] }, 'response', { merge: false });
+    }
+    return clone;
   }
 
   private all = {
