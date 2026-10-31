@@ -85,8 +85,15 @@ inputProcessors: [
             name: 'onResult',
             type: '(answers, context) => void | Promise<void>',
             description:
-              'Called after each classification. answers is typed from the classifier questions. context provides abort(reason) to stop the request with a tripwire, filter() to drop the message or chunk, phase, and the full ClassifierResult including usage and provider metadata.',
+              'Called after each classification. answers is typed from the classifier questions. context provides abort(reason, { metadata }?) to stop the request with a tripwire, filter() to drop the message or chunk, phase, and the full ClassifierResult including usage and provider metadata. The metadata is set on the tripwire the caller receives.',
             isOptional: false,
+          },
+          {
+            name: 'onDecision',
+            type: '(decision: ClassifierProcessorDecision) => void | Promise<void>',
+            description:
+              'Called after each classification, including failed classifier calls. Use it to write an audit record. See [Audit decisions](#audit-decisions).',
+            isOptional: true,
           },
           {
             name: 'id',
@@ -100,7 +107,7 @@ inputProcessors: [
             name: 'errorStrategy',
             type: "'warn' | 'strict'",
             description:
-              "How to handle decision model failures. 'strict' is fail-closed: it aborts the request, including during streaming. 'warn' is fail-open: it logs the failure and lets the content through. Classifier configuration errors always throw.",
+              "How to handle decision model failures. 'strict' is fail-closed: it aborts the request, including during streaming, with tripwire metadata { processorId, classifierId, code: 'CLASSIFIER_FAILED' }. 'warn' is fail-open: it logs the failure and lets the content through. Classifier configuration errors always throw.",
             isOptional: true,
             default: "'strict'",
           },
@@ -148,6 +155,76 @@ inputProcessors: [
 | Stream (`outputProcessors`) | chunk emitted | abort the stream | chunk not emitted |
 
 Messages with no text content are passed through without calling the classifier.
+
+## Audit decisions
+
+`onDecision` receives a `ClassifierProcessorDecision` after each classifier call, once `onResult` has run. A failed classifier call produces a decision too.
+
+```typescript
+const processor = new ClassifierProcessor({
+  classifier: safety,
+  onResult: (answers, { abort }) => {
+    if ((answers.unsafe.probability ?? 1) > 0.8) {
+      abort('Message rejected by safety policy', { metadata: { policy: 'unsafe' } })
+    }
+  },
+  onDecision: async decision => {
+    await auditLog.insert({
+      threadId: decision.ids.threadId,
+      messageId: decision.ids.messageId,
+      tenantId: decision.requestContext?.get('tenantId'),
+      outcome: decision.outcome,
+      answers: decision.result ? decision.result.answers : null,
+      error: decision.result ? null : String(decision.error),
+      durationMs: decision.durationMs,
+    })
+  },
+})
+```
+
+`ClassifierProcessorDecision` has these fields:
+
+```typescript
+type ClassifierProcessorDecision = {
+  processorId: string
+  classifierId: string
+  phase: 'input' | 'output' | 'stream'
+  // 'aborted' when onResult called abort(), or when the call failed under errorStrategy 'strict'
+  outcome: 'allowed' | 'filtered' | 'aborted'
+  // Text sent to the classifier, after maxInputLength truncation
+  state: ClassifierState
+  // Set when the classifier answered
+  result?: ClassifierResult
+  // Set when the classifier call failed
+  error?: unknown
+  // Set when outcome is 'aborted', with the same reason and metadata as the tripwire the caller receives
+  tripwire?: { reason: string; metadata?: unknown }
+  // Duration of the classifier call, including retries
+  durationMs: number
+  ids: {
+    runId?: string
+    threadId?: string
+    resourceId?: string
+    messageId?: string
+    traceId?: string
+    spanId?: string
+  }
+  requestContext?: RequestContext
+}
+```
+
+The ids that are set depend on the phase:
+
+| Phase | Ids |
+| - | - |
+| Input and output result | `messageId`, and `threadId` and `resourceId` when the agent uses memory |
+| Stream | `runId`, and `threadId` and `resourceId` when the agent uses memory |
+
+`threadId` and `resourceId` come from the agent's memory options. Without memory, the processor reads them from the message, then from the `MASTRA_THREAD_ID_KEY` and `MASTRA_RESOURCE_ID_KEY` request context keys. `traceId` and `spanId` are set when the run is traced, and `spanId` is the processor span.
+
+The processor waits for `onDecision` before it passes the content on. In the stream phase it runs once per text chunk, so a slow write delays the stream. Queue writes that take long. Errors thrown by `onDecision` are logged and don't change the outcome.
+
+`onDecision` isn't called when `onResult` throws an error that isn't a tripwire, or when the user stops a streaming reply during the classifier call. Stopping the reply also cancels the classifier call, except on durable agents.
 
 ## Extended usage examples
 
