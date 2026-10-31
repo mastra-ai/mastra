@@ -31,7 +31,7 @@ authorize: async (path, method, user, context) => {
 };
 ```
 
-The routes are gated by a new `knowledge:read` permission. With an FGA provider configured, `GET /knowledge` lists only the instances the caller can read and the other routes answer 404 for any other instance.
+The routes are gated by a new `knowledge:read` permission. With an FGA provider configured, instances are checked by their registered key: `GET /knowledge` lists only the instances the caller can read, and the other routes refuse any other instance with 403.
 
 Scope pages in tree, page, graph and search responses carry their declaration's `displayLabel` when the declaration sets one, with the address's `$params` filled in (`"$orgId policy"` on `policy:$orgId` shows as `"acme policy"` for `policy:acme`), so the explorer can caption a scope by its kind.
 

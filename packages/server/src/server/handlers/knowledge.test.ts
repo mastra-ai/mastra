@@ -211,6 +211,7 @@ describe('Knowledge read routes', () => {
     const requestContext = new RequestContext();
     requestContext.set('user', { id: 'u1' });
     expect(await call(LIST_KNOWLEDGE_ROUTE, { mastra, requestContext })).toEqual({ instances: [] });
+    expect(filterAccessible.mock.calls[0]![1]).toEqual([{ key: 'main', id: 'main' }]);
     expect(filterAccessible.mock.calls[0]![2]).toBe('knowledge');
     expect(filterAccessible.mock.calls[0]![3]).toBe('knowledge:read');
     for (const route of [GET_KNOWLEDGE_TREE_ROUTE, GET_KNOWLEDGE_GRAPH_ROUTE, GET_KNOWLEDGE_ACTIVITY_ROUTE]) {
@@ -226,7 +227,7 @@ describe('Knowledge read routes', () => {
     ).toEqual(['Acme']);
     expect(check).toHaveBeenCalledWith(
       { id: 'u1' },
-      { resource: { type: 'knowledge', id: 'kb' }, permission: 'knowledge:read' },
+      { resource: { type: 'knowledge', id: 'main' }, permission: 'knowledge:read' },
     );
   });
 

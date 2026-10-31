@@ -87,9 +87,10 @@ async function accessibleInstances(
   if (!fgaProvider || !user || typeof user !== 'object' || entries.length === 0) {
     return new Set(entries.map(entry => entry.key));
   }
+  // FGA names a Knowledge instance by its registered key, as the route metadata does (`:knowledgeKey`).
   const accessible: Array<{ id: string; key: string }> = await fgaProvider.filterAccessible(
     user,
-    entries,
+    entries.map(entry => ({ ...entry, id: entry.key })),
     'knowledge',
     MastraFGAPermissions.KNOWLEDGE_READ,
   );
@@ -172,7 +173,7 @@ async function resolveStore(
   const user = requestContext?.get('user');
   if (fgaProvider && user && typeof user === 'object') {
     const allowed = await fgaProvider.check(user, {
-      resource: { type: 'knowledge', id: instance.id },
+      resource: { type: 'knowledge', id: knowledgeKey },
       permission: MastraFGAPermissions.KNOWLEDGE_READ,
     });
     if (!allowed) throw new HTTPException(404, { message: `Knowledge ${knowledgeKey} not found` });
