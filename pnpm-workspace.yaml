@@ -222,7 +222,8 @@ minimumReleaseAgeExclude:
   - ws@8.21.3 || 7.5.13
   - undici@8.11.2 || 7.29.1 || 6.28.1
   - qs@6.16.0
-  - joi@17.13.8
+  # Renovate security update: joi@17.13.9
+  - joi@17.13.8 || 17.13.9
   - nanoid@3.3.19
   - browserslist@4.28.9
   # Renovate security update: ip-address@10.7.4
@@ -305,6 +306,8 @@ minimumReleaseAgeExclude:
   - storybook@10.6.2
   # Renovate security update: serialize-javascript@7.1.4
   - serialize-javascript@7.1.4
+  # Renovate security update: follow-redirects@1.16.2
+  - follow-redirects@1.16.2
 trustPolicyExclude:
   # Storybook 9.1.21 fixes the Storybook preview origin-validation advisories. It is
   # the official `v9` backport (GitHub Actions trusted publisher), but pnpm compares
@@ -398,7 +401,7 @@ overrides:
   '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
   path-to-regexp@<0.1.13: 0.1.13
-  joi@>=17.0.0 <17.13.8: 17.13.8
+  joi@>=17.0.0 <17.13.8: 17.13.9
   svgo@>=3.0.0 <3.3.5: 3.3.5
   e2b>undici8: npm:undici@8.12.2
   multer@<2.5.0: 2.5.0
@@ -627,7 +630,7 @@ overrides:
   # Vanta 2026-10-09: GHSA-8r5x-fm3f-whwj, GHSA-p8wg-vrv2-v86f (critical), GHSA-xw65-4hp5-5hc7 / AIKIDO-2026-258160, -970464, -869467; @verdaccio/hooks pins handlebars 4.7.9
   'handlebars@<4.7.10': 4.7.10
   # Vanta 2026-10-09: AIKIDO-2026-231269, AIKIDO-2026-154218 (follow-redirects header leak on redirect); axios declares ^1.15.x
-  'follow-redirects@<1.16.1': 1.16.1
+  'follow-redirects@<1.16.1': 1.16.2
 allowBuilds:
   '@clerk/shared': false
   '@datadog/native-appsec': false
