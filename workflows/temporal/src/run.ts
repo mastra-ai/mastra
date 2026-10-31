@@ -78,6 +78,7 @@ export class TemporalRun<
             tracingOptions: args.tracingOptions,
             perStep: args.perStep,
             recordStepMeta: true,
+            validateInputs: this.validateInputs,
           },
         ],
       });
@@ -166,6 +167,7 @@ export class TemporalRun<
           outputOptions: args.outputOptions,
           tracingOptions: args.tracingOptions,
           perStep: args.perStep,
+          validateInputs: this.validateInputs,
         },
       ],
     });
