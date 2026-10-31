@@ -234,7 +234,11 @@ jobs:
     name: Merge Test Reports
     runs-on: starsling-ubuntu-26.04
     needs: [unit-test, affected-unit-test, e2e-test]
-    if: ${{ !cancelled() }}
+    # Required check: stays always() so a run cancelled mid-tests still reaches the
+    # "Require every test job to finish" step and fails. A skipped required job counts
+    # as a pass. The heavy steps below skip on cancel instead, so a superseded run
+    # spends seconds here, not minutes.
+    if: always()
     permissions:
       actions: read
       contents: read
@@ -245,7 +249,7 @@ jobs:
         run: echo "No unit or E2E tests selected; skipping report merge."
 
       - name: Checkout repo
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        if: ${{ !cancelled() && inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') }}
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
@@ -253,11 +257,11 @@ jobs:
           ref: ${{ inputs.head_sha }}
 
       - name: Setup pnpm and Node.js
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        if: ${{ !cancelled() && inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') }}
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Download test results
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        if: ${{ !cancelled() && inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') }}
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: vitest-blob-*
@@ -265,7 +269,7 @@ jobs:
           merge-multiple: true
 
       - name: Merge reports
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        if: ${{ !cancelled() && inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '') }}
         run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
 
       # A test job that failed or was cancelled before uploading its blob would otherwise
