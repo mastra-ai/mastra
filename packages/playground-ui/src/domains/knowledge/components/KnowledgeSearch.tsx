@@ -1,24 +1,23 @@
-import { Input } from '@mastra/playground-ui/components/Input';
-import { overlaySurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { Search } from 'lucide-react';
 import { useDeferredValue, useId, useState } from 'react';
 
-import { useKnowledgeSearch } from '../../../../../hooks/useKnowledgeGraph';
-import type { KnowledgeSearchResult } from '../../services/knowledge';
+import { useKnowledgeDataSource } from '../data-source-context';
+import type { KnowledgeSearchResult } from '../types';
+
+import { Input } from '@/ds/components/Input';
+import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 
 interface KnowledgeSearchProps {
-  factoryProjectId: string | undefined;
-  threadId?: string;
   onSelect: (result: KnowledgeSearchResult) => void;
 }
 
-export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: KnowledgeSearchProps) {
+export function KnowledgeSearch({ onSelect }: KnowledgeSearchProps) {
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const listboxId = useId();
   const deferredQuery = useDeferredValue(query);
-  const search = useKnowledgeSearch(factoryProjectId, deferredQuery, threadId);
+  const search = useKnowledgeDataSource().useSearch(deferredQuery);
   const results = search.data?.results ?? [];
   const open = focused && query.trim().length >= 2;
   const resultsReady = !search.isPending && !search.isError && deferredQuery === query && results.length > 0;
@@ -38,8 +37,8 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
 
   return (
     <div className="relative w-full max-w-sm">
-      <div className="border-border bg-field flex items-center gap-2 rounded-md border px-2">
-        <Search className="text-muted-foreground size-4 shrink-0" />
+      <div className="flex items-center gap-2 rounded-md border border-border bg-field px-2">
+        <Search className="size-4 shrink-0 text-muted-foreground" />
         <Input
           variant="unstyled"
           role="combobox"
@@ -49,7 +48,7 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
           aria-expanded={open}
           aria-activedescendant={activeResult ? `${listboxId}-option-${activeIndex}` : undefined}
           autoComplete="off"
-          className="text-foreground placeholder:text-placeholder h-9 min-w-0 flex-1 p-0"
+          className="h-9 min-w-0 flex-1 p-0 text-foreground placeholder:text-placeholder"
           placeholder="Search"
           value={query}
           onFocus={() => setFocused(true)}
@@ -92,9 +91,9 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
           onMouseDown={event => event.preventDefault()}
         >
           {search.isPending || deferredQuery !== query ? (
-            <div className="text-muted-foreground px-3 py-2 text-xs">Searching…</div>
+            <div className="px-3 py-2 text-caption text-muted-foreground">Searching…</div>
           ) : search.isError ? (
-            <div className="px-3 py-2 text-xs text-red-400">Unable to search knowledge.</div>
+            <div className="px-3 py-2 text-caption text-red-400">Unable to search knowledge.</div>
           ) : search.data?.results.length ? (
             <>
               {results.map((result, index) => (
@@ -113,23 +112,23 @@ export function KnowledgeSearch({ factoryProjectId, threadId, onSelect }: Knowle
                   onClick={() => selectResult(result)}
                 >
                   <span className="min-w-0">
-                    <span className="text-foreground block truncate text-sm">{result.name}</span>
+                    <span className="block truncate text-body text-foreground">{result.name}</span>
                     {result.type === 'scope' && result.address ? ' ' : null}
                     {result.type === 'scope' && result.address ? (
-                      <span className="text-muted-foreground block truncate text-xs">{result.address}</span>
+                      <span className="block truncate text-caption text-muted-foreground">{result.address}</span>
                     ) : null}
                   </span>{' '}
-                  <span className="text-muted-foreground shrink-0 text-xs">
+                  <span className="shrink-0 text-caption text-muted-foreground">
                     {result.type === 'scope' ? 'scope' : result.kind}
                   </span>
                 </button>
               ))}
               {search.data.truncated ? (
-                <div className="text-muted-foreground px-3 py-1.5 text-xs">Keep typing to narrow the results.</div>
+                <div className="px-3 py-1.5 text-caption text-muted-foreground">Keep typing to narrow the results.</div>
               ) : null}
             </>
           ) : (
-            <div className="text-muted-foreground px-3 py-2 text-xs">No matching knowledge.</div>
+            <div className="px-3 py-2 text-caption text-muted-foreground">No matching knowledge.</div>
           )}
         </div>
       ) : null}
