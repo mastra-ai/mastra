@@ -84,8 +84,11 @@ export function isBatchEmbedder(embedder: Embedder): embedder is BatchEmbedder {
 export interface VectorConfig {
   /** Vector store for semantic search */
   vectorStore: MastraVector;
-  /** Embedder function for generating vectors */
-  embedder: Embedder;
+  /**
+   * Embedder function for generating vectors. Optional when the vector store generates
+   * embeddings itself (`vectorStore.isSelfEmbedding`); it then receives text instead.
+   */
+  embedder?: Embedder;
   /** Index name for the vector store */
   indexName: string;
 }
@@ -353,6 +356,9 @@ export class SearchEngine {
 
     // Store vector config if provided
     if (config.vector) {
+      if (!config.vector.embedder && !config.vector.vectorStore.isSelfEmbedding) {
+        throw new Error('Vector search requires an embedder, or a vector store that generates embeddings itself.');
+      }
       this.#vectorConfig = config.vector;
     }
 
@@ -420,8 +426,14 @@ export class SearchEngine {
 
     // A batch-capable embedder is only worth grouping for on the eager vector path. Lazy mode
     // already batches at flush time, and a single-text embedder gains nothing from grouping.
+    // A self-embedding store is grouped the same way, bounded by the upsert size.
     const embedder = this.#vectorConfig?.embedder;
-    if (!embedder || this.#lazyVectorIndex || !isBatchEmbedder(embedder)) {
+    const groupSize = this.#isSelfEmbedding
+      ? MAX_VECTORS_PER_UPSERT
+      : embedder && isBatchEmbedder(embedder)
+        ? resolveEmbedGroupSize(embedder)
+        : undefined;
+    if (!this.#vectorConfig || this.#lazyVectorIndex || groupSize === undefined) {
       const pMap = (await import('p-map')).default;
       await pMap(docs, doc => this.index(doc), { stopOnError, concurrency });
       return;
@@ -430,7 +442,7 @@ export class SearchEngine {
     // Match the lazy path: a repeated id must not appear twice in one upsert payload.
     const unique = this.#dedupeDocsLastWins(docs);
 
-    const groups = chunkItems(unique, resolveEmbedGroupSize(embedder));
+    const groups = chunkItems(unique, groupSize);
     if (groups.length === 0) return;
 
     // Contract for `stopOnError: false`: every document is processed and the call rejects with a
@@ -656,6 +668,22 @@ export class SearchEngine {
   // ===========================================================================
 
   /**
+   * True when the vector store produces the embeddings itself, so it receives text.
+   * An explicitly configured embedder always wins, keeping the client-side path intact.
+   */
+  get #isSelfEmbedding(): boolean {
+    return !!this.#vectorConfig && !this.#vectorConfig.embedder && this.#vectorConfig.vectorStore.isSelfEmbedding;
+  }
+
+  #requireEmbedder(): Embedder {
+    const embedder = this.#vectorConfig?.embedder;
+    if (!embedder) {
+      throw new Error('An embedder is required to embed text.');
+    }
+    return embedder;
+  }
+
+  /**
    * Determine the effective search mode
    */
   #determineSearchMode(requestedMode?: SearchMode): SearchMode {
@@ -694,7 +722,7 @@ export class SearchEngine {
     if (!this.#vectorConfig) {
       throw new Error('Vector configuration is required to embed text.');
     }
-    const { embedder } = this.#vectorConfig;
+    const embedder = this.#requireEmbedder();
     if (isBatchEmbedder(embedder)) {
       const [embedding] = await embedder([text]);
       if (!embedding) {
@@ -717,7 +745,7 @@ export class SearchEngine {
     if (texts.length === 0) return [];
 
     const pMap = (await import('p-map')).default;
-    const { embedder } = this.#vectorConfig;
+    const embedder = this.#requireEmbedder();
 
     if (isBatchEmbedder(embedder)) {
       // Same sanitized size the callers group by, so an unusable `maxBatchSize` can never turn
@@ -748,6 +776,11 @@ export class SearchEngine {
    */
   async #indexVector(doc: IndexDocument): Promise<void> {
     if (!this.#vectorConfig) return;
+
+    if (this.#isSelfEmbedding) {
+      await this.#embedAndUpsertGroup([doc]);
+      return;
+    }
 
     const { vectorStore, indexName } = this.#vectorConfig;
 
@@ -793,9 +826,9 @@ export class SearchEngine {
     if (!this.#vectorConfig || docs.length === 0) return;
 
     const pMap = (await import('p-map')).default;
-    const { embedder } = this.#vectorConfig;
+    const embedder = this.#vectorConfig.embedder;
 
-    if (!isBatchEmbedder(embedder)) {
+    if (embedder && !isBatchEmbedder(embedder)) {
       // Single-text embedder: parallelize per-doc work, preserving prior semantics.
       await pMap(docs, doc => this.#indexVector(doc), {
         concurrency: DEFAULT_INDEX_MANY_CONCURRENCY,
@@ -803,7 +836,7 @@ export class SearchEngine {
       return;
     }
 
-    const groups = chunkItems(docs, resolveEmbedGroupSize(embedder));
+    const groups = chunkItems(docs, embedder ? resolveEmbedGroupSize(embedder) : MAX_VECTORS_PER_UPSERT);
 
     // The first group runs alone so `createIndex` happens once, before any parallel writes.
     await this.#embedAndUpsertGroup(groups[0]!);
@@ -825,6 +858,11 @@ export class SearchEngine {
     if (!this.#vectorConfig || docs.length === 0) return;
 
     const { vectorStore, indexName } = this.#vectorConfig;
+
+    if (this.#isSelfEmbedding) {
+      await this.#upsertTextGroup(docs);
+      return;
+    }
 
     const embeddings = await this.#embedAll(docs.map(d => d.content));
     if (embeddings.length !== docs.length) {
@@ -855,6 +893,39 @@ export class SearchEngine {
 
       // Mark index as ready only after a successful upsert so createIndex is retried
       // on subsequent writes if the previous attempt did not produce a usable index.
+      this.#vectorIndexReady = true;
+    }
+  }
+
+  /**
+   * Write a group of documents as text to a vector store that embeds them itself, using upserts
+   * no larger than {@link MAX_VECTORS_PER_UPSERT}.
+   */
+  async #upsertTextGroup(docs: IndexDocument[]): Promise<void> {
+    const { vectorStore, indexName } = this.#vectorConfig!;
+
+    if (!this.#vectorIndexReady) {
+      try {
+        // The store owns the embedding model, so there is no dimension to pass.
+        await vectorStore.createIndex({ indexName } as never);
+      } catch {
+        // Already exists, temporarily unavailable, or not required by backend.
+      }
+    }
+
+    for (let start = 0; start < docs.length; start += MAX_VECTORS_PER_UPSERT) {
+      const slice = docs.slice(start, start + MAX_VECTORS_PER_UPSERT);
+      // `documents` is not on the shared UpsertVectorParams; only self-embedding stores accept it.
+      await vectorStore.upsert({
+        indexName,
+        documents: slice.map(d => d.content),
+        metadata: slice.map(doc => ({
+          id: doc.id,
+          text: doc.content,
+          ...doc.metadata,
+        })),
+        ids: slice.map(d => d.id),
+      } as never);
       this.#vectorIndexReady = true;
     }
   }
@@ -938,14 +1009,15 @@ export class SearchEngine {
 
     const { vectorStore, indexName } = this.#vectorConfig;
 
-    const queryEmbedding = await this.#embedOne(query);
-
-    const vectorResults = await vectorStore.query({
-      indexName,
-      queryVector: queryEmbedding,
-      topK,
-      filter: filter as VectorFilter,
-    });
+    // `queryText` is not on the shared QueryVectorParams; only self-embedding stores accept it.
+    const vectorResults = this.#isSelfEmbedding
+      ? await vectorStore.query({ indexName, queryText: query, topK, filter: filter as VectorFilter } as never)
+      : await vectorStore.query({
+          indexName,
+          queryVector: await this.#embedOne(query),
+          topK,
+          filter: filter as VectorFilter,
+        });
 
     const queryTokens = tokenize(query, this.#tokenizeOptions);
     const results: SearchResult[] = [];
