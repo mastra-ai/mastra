@@ -1,0 +1,95 @@
+name: Durable Stream Tests
+
+# Drives real worker processes against a real Redis stream broker and a Postgres
+# workflow store. Nothing else in CI provisions both, so durability regressions
+# (lease ownership, worker takeover, API loss) otherwise ship untested.
+on:
+  workflow_call:
+    inputs:
+      head_sha:
+        required: true
+        type: string
+    secrets:
+      TURBO_TOKEN:
+        required: false
+      TURBO_TEAM:
+        required: false
+
+permissions: {}
+
+jobs:
+  worker-takeover:
+    name: Worker takeover (Redis + Postgres)
+    if: ${{ github.repository == 'mastra-ai/mastra' }}
+    runs-on: starsling-ubuntu-26.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5436:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:8
+        ports:
+          - 6381:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+      TURBO_CACHE: remote:r
+      REDIS_URL: redis://localhost:6381
+      POSTGRES_CONNECTION_STRING: postgres://postgres:postgres@localhost:5436/postgres
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
+        timeout-minutes: 20
+        with:
+          ref: ${{ inputs.head_sha }}
+          persist-credentials: false
+
+      - name: Setup pnpm and Node.js
+        uses: ./.github/actions/setup-pnpm-node
+
+      - name: Cache turbo build setup
+        if: ${{ env.TURBO_TOKEN == '' }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-
+
+      # Fixture child processes import the built packages, so `dist` must exist.
+      - name: Build dependencies
+        run: pnpm turbo build --filter @mastra/core --filter @mastra/pg --filter @mastra/redis-streams
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      - name: Typecheck durability fixtures
+        run: pnpm --filter @mastra/redis-streams run --if-present check:test
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
+
+      - name: Run worker takeover tests
+        run: pnpm vitest run src/durable-worker-takeover.test.ts
+        working-directory: pubsub/redis-streams
+        env:
+          NODE_OPTIONS: '--max_old_space_size=8192'
