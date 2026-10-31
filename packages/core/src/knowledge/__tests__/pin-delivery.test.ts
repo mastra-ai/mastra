@@ -81,8 +81,8 @@ describe('Knowledge pin delivery cost', () => {
       'listPins',
       'listPins',
       'getPages',
-      'getPages',
       'countNotes',
+      'getPages',
     ]);
     // And the same store calls as a run with a handful of pins.
     const few = await seed(25);
@@ -153,9 +153,22 @@ describe('Knowledge pin delivery cost', () => {
 
     const pins = await knowledge.__deliveredPins(context as never);
     expect(pins.map(pin => pin.text).sort()).toEqual([
-      `Loose (${loose.id}, no notes): No key here.`,
-      'Refund Policy (org:acme#policies/refund, 2 notes): Full refund within 30 days.',
+      `Loose (${loose.id}, v${loose.version}, no notes): No key here.`,
+      `Refund Policy (org:acme#policies/refund, v${refund.version}, 2 notes): Full refund within 30 days.`,
     ]);
+
+    // r92: the version lets an agent edit a pinned page without reading it first; an edit changes the entry.
+    const edited = await storage.updatePage({
+      id: refund.id,
+      expectedVersion: refund.version,
+      body: 'Full refund within 45 days.',
+      provenance: host,
+    });
+    expect(edited.version).toBe(refund.version + 1);
+    const after = await knowledge.__deliveredPins(context as never);
+    expect(after.find(pin => pin.id === refund.id)!.text).toBe(
+      `Refund Policy (org:acme#policies/refund, v${edited.version}, 2 notes): Full refund within 45 days.`,
+    );
   });
   // An adapter older than countNotes must not cost the pins; nor may a failed count while the tree walk
   // is still waiting on the store (that rejection used to go unhandled).
@@ -192,7 +205,7 @@ describe('Knowledge pin delivery cost', () => {
       const pins = await knowledge.__deliveredPins(context as never);
       await new Promise(resolve => setTimeout(resolve, 20));
       expect(pins.map(pin => pin.text)).toEqual([
-        'Refund Policy (org:acme#policies/refund): Full refund within 30 days.',
+        `Refund Policy (org:acme#policies/refund, v${refund.version}): Full refund within 30 days.`,
       ]);
       expect(unhandled).toEqual([]);
     } finally {

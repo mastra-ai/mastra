@@ -438,8 +438,16 @@ describe.each(adapters)('Knowledge pages on a real store, curated by an agent (%
   );
 
   it('drops a published v1 Knowledge database on startup, rows included, while Memory keeps working', async () => {
-    const { storage, location } = await createStorage('knowledge-upgrade', adapter);
-    const { countV1Nodes, hasTable } = await seedPublishedKnowledgeV1(adapter, storage, location);
+    const created = await createStorage('knowledge-upgrade', adapter);
+    const { location } = created;
+    const { countV1Nodes, hasTable } = await seedPublishedKnowledgeV1(adapter, created.storage, location);
+    // The LibSQL client opens its file when constructed. Seeding that file from another driver afterwards leaves the
+    // client on a view no second connection shares, so open the store the upgrade runs on only after the seed.
+    let storage = created.storage;
+    if (adapter === 'libsql') {
+      storage = new LibSQLStore({ id: 'knowledge-upgrade-seeded', url: `file:${location}` });
+      stores.push(storage);
+    }
 
     const plainMemory = new Memory({ storage });
     new Mastra({ memory: { default: plainMemory }, logger: false });
