@@ -165,12 +165,12 @@ export default function KnowledgePage() {
         ) : null}
         {!knowledgeKey || graph.isPending ? (
           <p className="text-ui-md p-4 text-muted-foreground">Loading knowledge…</p>
-        ) : graph.isError ? (
+        ) : !graph.data ? (
           <EmptyState
             tone="error"
             variant="fill"
             titleSlot="Failed to load Knowledge"
-            descriptionSlot={graph.error.message}
+            descriptionSlot={graph.error?.message}
           />
         ) : graph.data.pages.length === 0 ? (
           <EmptyState

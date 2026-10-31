@@ -190,6 +190,18 @@ describe('Knowledge read routes', () => {
     );
   });
 
+  it.each(['constructor', '__proto__', 'toString'])('404s %s rather than reading Object.prototype', async key => {
+    const { mastra } = await setup();
+    await expect(call(GET_KNOWLEDGE_TREE_ROUTE, { mastra, knowledgeKey: key })).rejects.toMatchObject({ status: 404 });
+  });
+
+  it('treats an empty tree cursor as no cursor', async () => {
+    const { mastra } = await setup();
+    expect(names((await call(GET_KNOWLEDGE_TREE_ROUTE, { mastra, knowledgeKey: 'main', cursor: '' })).pages)).toEqual([
+      'Acme',
+    ]);
+  });
+
   it('filters instances and gates reads by FGA when configured', async () => {
     const { mastra } = await setup();
     const filterAccessible = vi.fn(async (_user: unknown, items: Array<{ key: string }>) =>

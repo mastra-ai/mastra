@@ -23,8 +23,11 @@ What they return depends on whether the app configures auth. Without auth they r
 import { MASTRA_KNOWLEDGE_PRINCIPALS_KEY } from '@mastra/server/server-adapter';
 
 authorize: async (path, method, user, context) => {
-  context.get('requestContext').set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, [`team:${user.orgId}:${user.teamId}`]);
-  return true;
+  if (path.startsWith('/api/knowledge')) {
+    context.get('requestContext').set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, [`team:${user.orgId}:${user.teamId}`]);
+    return true;
+  }
+  return appAuthorize(path, method, user, context); // keep your existing decision for other routes
 };
 ```
 
