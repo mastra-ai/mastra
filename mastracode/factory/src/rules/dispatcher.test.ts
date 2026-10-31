@@ -6185,6 +6185,39 @@ describe('custom-board deferred targets', () => {
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
   });
 
+  it('places a pull request card filed on Review before where it sits, not on Work', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        board: 'review',
+        title: 'Legacy review card',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:legacy-placement' },
+      },
+    });
+    await persist(storage, {
+      ...linkedDecision,
+      idempotencyKey: 'legacy-placement',
+      board: 'work',
+      stage: 'review',
+      source: 'github-pr',
+      sourceKey: 'github-pr:legacy-placement',
+      skipRules: true,
+    });
+
+    await dispatcherFor(storage, createLifecycleTestRegistry({})).runOnce();
+
+    // The same board the rule-running path resolves: a legacy Review card is
+    // acted on where it sits, so placement does not relocate it onto Work.
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'review', stages: ['review'] });
+    expect(await decisionByKey(storage, 'legacy-placement')).toMatchObject({ status: 'succeeded' });
+  });
+
   it('leaves an existing card that already carries the materialization key where it moved to', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item } = await storage.upsert({
