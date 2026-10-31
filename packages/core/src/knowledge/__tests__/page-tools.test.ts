@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import { standardSchemaToJSONSchema } from '../../schema';
@@ -359,6 +359,25 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     expect((await am.read('account:acme:123')).childScopes.map((s: Result) => s.address)).toEqual([
       'account:acme:123/internal',
     ]);
+  });
+
+  it('bounds the lookups a read spends linking [[mentions]] that no longer resolve', async () => {
+    const am = as('am', ['org:acme', 'role:acme:account-manager']);
+    await am.page({ op: 'write', scope: 'account:acme:123', name: 'Acme Account 123' });
+    await am.page({ op: 'write', scope: 'account:acme:123/internal', name: 'Renewal Risk' });
+    const missing = Array.from({ length: 30 }, (_, i) => `[[Gone ${i}]]`).join(' ');
+    await am.note({
+      op: 'add',
+      page: 'Acme Account 123',
+      scope: ['account:acme:123'],
+      text: `${missing} [[Renewal Risk]]`,
+    });
+
+    const byName = vi.spyOn(store, 'findPagesByName');
+    const read = await am.read('Acme Account 123');
+    const goneLookups = byName.mock.calls.filter(([args]) => args.name.startsWith('Gone ')).length;
+    expect(goneLookups).toBeLessThanOrEqual(3);
+    expect(read.notes[0].text).toContain('[[Gone 29]]');
   });
 
   it('names the page each resolved [[mention]] in a note links to; unresolved names stay text', async () => {

@@ -49,6 +49,8 @@ type Tools = Record<string, ToolAction<any, any, any>>;
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 const MENTION = /\[\[([^\]]+)\]\]/g;
+/** Misses a note's mention linking may spend beyond its stored mentions (renamed or ambiguous refs). */
+const MENTION_LOOKUP_SLACK = 2;
 
 const limitSchema = { type: 'integer', minimum: 1, maximum: MAX_LIMIT } as const;
 const scopeListSchema = {
@@ -98,29 +100,54 @@ function noteSummary(note: KnowledgeNote, mentions?: Record<string, string>) {
   };
 }
 
+/** Ref → page id (or null when it didn't resolve), shared by the notes of one tool response. */
+type MentionCache = Map<string, string | null>;
+
 /**
  * Which `[[ref]]` in a note's text names which page id, for a caller that links them. Each ref is
  * resolved the way the note's write resolved it and kept only when it lands on one of the note's
- * stored mentions; refs that no longer resolve (a renamed page) stay plain text.
+ * stored mentions; refs that no longer resolve (a renamed page) stay plain text. Lookups are
+ * bounded: refs are cached across the response, resolving stops once every stored mention is
+ * linked, and a note gets at most a couple of misses beyond its stored mentions.
  */
-async function noteMentions(run: KnowledgeRun, note: KnowledgeNote): Promise<Record<string, string> | undefined> {
+async function noteMentions(
+  run: KnowledgeRun,
+  note: KnowledgeNote,
+  cache: MentionCache = new Map(),
+): Promise<Record<string, string> | undefined> {
   if (!note.mentions.length) return undefined;
   const links: Record<string, string> = {};
+  const linked = new Set<string>();
+  let lookups = 0;
+  const maxLookups = note.mentions.length + MENTION_LOOKUP_SLACK;
   for (const [, raw] of note.text.matchAll(MENTION)) {
+    if (linked.size === note.mentions.length) break;
     const ref = (raw ?? '').trim();
     if (ref in links) continue;
-    try {
-      const page = await run.page(ref);
-      if (note.mentions.includes(page.id)) links[ref] = page.id;
-    } catch {
-      // Not found or now ambiguous: leave it as text.
+    let id = cache.get(ref);
+    if (id === undefined) {
+      if (lookups >= maxLookups) break;
+      lookups++;
+      try {
+        id = (await run.page(ref)).id;
+      } catch {
+        // Not found or now ambiguous: leave it as text.
+        id = null;
+      }
+      cache.set(ref, id);
+    }
+    if (id && note.mentions.includes(id)) {
+      links[ref] = id;
+      linked.add(id);
     }
   }
   return Object.keys(links).length ? links : undefined;
 }
 
-async function noteSummaries(run: KnowledgeRun, notes: KnowledgeNote[]) {
-  return Promise.all(notes.map(async note => noteSummary(note, await noteMentions(run, note))));
+async function noteSummaries(run: KnowledgeRun, notes: KnowledgeNote[], cache: MentionCache = new Map()) {
+  const summaries = [];
+  for (const note of notes) summaries.push(noteSummary(note, await noteMentions(run, note, cache)));
+  return summaries;
 }
 
 /** Scope pages for addresses the run names; each must be readable. */
@@ -227,6 +254,7 @@ function searchTool(host: KnowledgePageToolHost) {
         run,
         hits.map(hit => hit.page),
       );
+      const mentionCache: MentionCache = new Map();
       return {
         results: await Promise.all(
           hits.map(async hit =>
@@ -235,7 +263,7 @@ function searchTool(host: KnowledgePageToolHost) {
               : {
                   type: 'note' as const,
                   page: pageSummary(hit.page, addresses),
-                  note: noteSummary(hit.note, await noteMentions(run, hit.note)),
+                  note: noteSummary(hit.note, await noteMentions(run, hit.note, mentionCache)),
                 },
           ),
         ),
@@ -301,6 +329,7 @@ function readTool(host: KnowledgePageToolHost) {
       const mentionPages = await Promise.all(
         mentioning.notes.map(note => run.storage.getPage({ id: note.pageId, read: run.read })),
       );
+      const mentionCache: MentionCache = new Map();
       const addresses = await scopeAddresses(run, [
         page,
         ...children.pages,
@@ -312,11 +341,11 @@ function readTool(host: KnowledgePageToolHost) {
           version: page.version,
           ...(page.body ? { body: page.body } : {}),
         },
-        notes: await noteSummaries(run, notes.notes),
+        notes: await noteSummaries(run, notes.notes, mentionCache),
         ...(notes.nextCursor ? { nextCursor: notes.nextCursor } : {}),
         children: children.pages.map(child => pageSummary(child, addresses)),
         ...(childScopes.length ? { childScopes } : {}),
-        mentionedIn: (await noteSummaries(run, mentioning.notes)).map((note, i) => ({
+        mentionedIn: (await noteSummaries(run, mentioning.notes, mentionCache)).map((note, i) => ({
           ...note,
           page: mentionPages[i] ? pageSummary(mentionPages[i]!, addresses) : undefined,
         })),
