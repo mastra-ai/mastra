@@ -367,7 +367,7 @@ function SelectedPage({
       activity={activity.data?.events}
       childPages={
         source.useTreeLevels ? (
-          <ChildPages useTreeLevels={source.useTreeLevels} parentId={pageId} onPageClick={onPageClick} />
+          <ChildPages key={pageId} useTreeLevels={source.useTreeLevels} parentId={pageId} onPageClick={onPageClick} />
         ) : undefined
       }
       notesMore={
