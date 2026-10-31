@@ -274,7 +274,7 @@
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router": "^8.5.0",
-    "rollup-plugin-node-externals": "^8.1.2",
+    "rollup-plugin-node-externals": "^9.0.1",
     "storybook": "^10.6.2",
     "tailwind-merge": "^3.7.0",
     "tailwindcss": "4.3.3",
