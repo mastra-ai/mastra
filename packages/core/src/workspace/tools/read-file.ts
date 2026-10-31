@@ -4,18 +4,9 @@ import { WORKSPACE_TOOLS } from '../constants';
 import { extractLinesWithLimit, formatWithLineNumbers } from '../line-utils';
 import { emitWorkspaceMetadata, requireFilesystem } from './helpers';
 import type { MediaToolResult } from './media';
-import { DEFAULT_MAX_MEDIA_BYTES, mediaToModelOutput } from './media';
+import { DEFAULT_MAX_MEDIA_BYTES, DEFAULT_MEDIA_TYPES, mediaToModelOutput } from './media';
 import { applyTokenLimit } from './output-helpers';
 import { startWorkspaceSpan } from './tracing';
-
-/**
- * Default mime types surfaced to the model as media parts. The list is
- * intentionally the intersection of image formats supported by the major
- * model providers (Anthropic, OpenAI, Gemini) plus `application/pdf`.
- * `image/*` is *not* used so we don't surface exotic subtypes like SVG/BMP
- * that some providers reject. Override `mediaTypes` to broaden this.
- */
-const DEFAULT_MEDIA_TYPES: string[] = ['image/png', 'image/jpeg', 'image/webp', 'application/pdf'];
 
 /**
  * `application/*` mime types that are actually text content and safe to read
