@@ -16,6 +16,7 @@ import {
   handleExitCommand,
   handleHooksCommand,
   handleMcpCommand,
+  handleReloadCommand,
   handleModeCommand,
   handleSkillCommand,
   handleSkillsCommand,
@@ -286,6 +287,9 @@ export async function dispatchSlashCommand(
       return true;
     case 'mcp':
       await handleMcpCommand(ctx, args);
+      return true;
+    case 'reload':
+      await handleReloadCommand(ctx);
       return true;
     case 'review':
       await handleReviewCmd(ctx, args);
