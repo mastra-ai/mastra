@@ -55,7 +55,6 @@ describe('purge barrier snapshot', () => {
         await store.init();
         const datasets = store.stores.datasets!;
         const experiments = store.stores.experiments!;
-        await experiments.dangerouslyClearAll();
 
         const dataset = await datasets.createDataset({ name: `purge-barrier-${method}` });
         const item = await datasets.addItem({ datasetId: dataset.id, input: { patient: 'Alice' } });
