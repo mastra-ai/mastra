@@ -48,10 +48,12 @@ What the routes return depends on whether your app configures auth (`server.auth
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
-import { MASTRA_KNOWLEDGE_PRINCIPALS_KEY } from '@mastra/server/server-adapter'
+import { KNOWLEDGE_ROUTES, MASTRA_KNOWLEDGE_PRINCIPALS_KEY } from '@mastra/server/server-adapter'
+import { appAuthorize } from './auth' // your existing authorization
 
 export const mastra = new Mastra({
   server: {
+    apiRoutes: [...KNOWLEDGE_ROUTES],
     auth: {
       // authenticateToken, ...
       authorize: async (path, method, user, context) => {
@@ -62,13 +64,16 @@ export const mastra = new Mastra({
               MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
               user.isAdmin ? 'all' : [`org:${user.orgId}`, `team:${user.orgId}:${user.teamId}`],
             )
+          return true
         }
-        return true
+        return appAuthorize(path, method, user, context)
       },
     },
   },
 })
 ```
+
+An `authorize` function replaces the server's rules and role checks for every route, so keep your app's existing decision for the other paths, as above. Returning `true` for everything would let any signed-in user call any route.
 
 Set the value to a string array of principals, or `'all'` for someone who should see the whole instance. An empty array reads nothing. A principal that matches no declared scope type is a configuration error and returns `500`. If you configure `studio.auth`, Studio requests use it instead of `server.auth`, so set the key in that `authorize`.
 

@@ -298,6 +298,26 @@ describe('Knowledge page', () => {
     }, 15_000);
   });
 
+  describe('when a later poll of the graph fails', () => {
+    it('keeps the explorer and its selection on screen', async () => {
+      withInstance();
+      let failing = false;
+      server.use(
+        http.get(`${api}/main/graph`, () =>
+          failing ? HttpResponse.json({ error: 'boom' }, { status: 500 }) : HttpResponse.json(knowledgeGraph),
+        ),
+        http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageView)),
+      );
+      renderPage('/knowledge?page=page-payments&view=graph');
+      expect(await screen.findByRole('tree')).toBeTruthy();
+      failing = true;
+      await new Promise(resolve => setTimeout(resolve, 7_000));
+      expect(screen.queryByText('Failed to load Knowledge')).toBeNull();
+      expect(screen.getByRole('tree')).toBeTruthy();
+      expect(screen.getByTestId('location-search').textContent).toContain('page=page-payments');
+    }, 15_000);
+  });
+
   describe('when the server cannot stream changes', () => {
     it('asks for the stream once and then only polls', async () => {
       withInstance();

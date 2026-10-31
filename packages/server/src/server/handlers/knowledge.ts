@@ -161,7 +161,9 @@ async function resolveStore(
   requestContext: RequestContext | undefined,
   knowledgeKey: string | undefined,
 ): Promise<{ instance: Knowledge; store: KnowledgeStorage; read: KnowledgeReadScope; readers: KnowledgePageReaders }> {
-  const instance = knowledgeKey ? mastra.listKnowledge()[knowledgeKey] : undefined;
+  const instances = mastra.listKnowledge();
+  // Own keys only: `constructor` or `__proto__` must not resolve to an Object.prototype member.
+  const instance = knowledgeKey && Object.hasOwn(instances, knowledgeKey) ? instances[knowledgeKey] : undefined;
   if (!knowledgeKey || !instance)
     throw new HTTPException(404, { message: `Knowledge ${knowledgeKey ?? ''} not found` });
 
@@ -230,7 +232,13 @@ export const GET_KNOWLEDGE_TREE_ROUTE = createRoute({
   handler: async ({ mastra, requestContext, knowledgeKey, parentId, cursor, limit }) => {
     try {
       const { instance, store, read, readers } = await resolveStore(mastra, requestContext, knowledgeKey);
-      const level = await readers.listKnowledgeTreeChildren(store, { parentId: parentId ?? null, read, cursor, limit });
+      const level = await readers.listKnowledgeTreeChildren(store, {
+        parentId: parentId ?? null,
+        read,
+        // An empty `?cursor=` means no cursor, so root scopes are still listed.
+        cursor: cursor || undefined,
+        limit,
+      });
       return { ...level, pages: level.pages.map(page => withDisplayLabel(instance, page)) };
     } catch (error) {
       return handleError(error, 'Error reading Knowledge tree');
