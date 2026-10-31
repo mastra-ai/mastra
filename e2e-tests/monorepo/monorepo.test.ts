@@ -346,6 +346,13 @@ await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProje
       expect(body).toEqual({ typeName: 'google.protobuf.Timestamp' });
     });
 
+    it('should load a subpath import whose folder has its own package.json (#28828)', async () => {
+      const res = await fetch(`http://localhost:${port}/excel-subpath`);
+      const body = await res.json();
+      expect(res.status).toBe(200);
+      expect(body).toEqual({ readXlsxFile: 'function' });
+    });
+
     it('reports hasBrowser for an agent with a workspace-level CLI browser', async () => {
       const res = await fetch(`http://localhost:${port}/api/agents/browser-agent`);
       const body = await res.json();
@@ -1564,6 +1571,10 @@ export const mastra = new Mastra({
       // Automatic version resolution must read the copy installed for the app (0.4.0),
       // not the older copy installed at the workspace root (0.2.0) (#18849).
       expect(dependencies['unicorn-magic']).toBe('0.4.0');
+
+      // `read-excel-file/node` ships a nested package.json named "read-excel-file/node" at 1.0.0. The output
+      // must pin the installed package, not an invalid `npm:read-excel-file/node@1.0.0` alias (#28828).
+      expect(dependencies['read-excel-file']).toBe('9.3.12');
     });
   });
 

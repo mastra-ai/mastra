@@ -3,18 +3,78 @@
  * It is in a separate file to avoid including local-pkg in runtime code.
  */
 
-import { statSync } from 'node:fs';
-import { dirname, isAbsolute, resolve, sep } from 'node:path';
+import { realpathSync, statSync } from 'node:fs';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findUp } from 'find-up-simple';
-import { readJson, readJSON } from 'fs-extra/esm';
+import { pathExists, readJson, readJSON } from 'fs-extra/esm';
 import { getPackageInfo as getOriginalPackageInfo } from 'local-pkg';
 import { getPackageName } from './utils';
+
+function isDirectory(path: string) {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Returns the real path of the folder Node loads when `packageName` is imported from `baseDir`, or undefined when
+ * no `node_modules/<packageName>` folder exists between `baseDir` and the filesystem root.
+ *
+ * Copied and adapted from the bare specifier lookup in Node.js internals (`getPackageJSONURL()` in
+ * https://github.com/nodejs/node/blob/main/lib/internal/modules/package_json_reader.js, MIT License, Copyright
+ * Node.js contributors), the PACKAGE_RESOLVE step of the ESM resolution algorithm. Node exposes it as
+ * `module.findPackageJSON()`, which is still experimental (stability 1.1) and missing before Node 22.14. Replace
+ * this with `findPackageJSON(packageName, base)` once that API is stable in every supported Node version.
+ *
+ * Unlike Node, this skips the package self-reference step and returns a real path, because callers compare the
+ * result against rollup module ids.
+ */
+function findInstalledPackageRoot(packageName: string, baseDir: string): string | undefined {
+  let dir = baseDir;
+  let previousDir: string;
+
+  do {
+    const candidate = join(dir, 'node_modules', packageName);
+    if (isDirectory(candidate)) {
+      return realpathSync(candidate);
+    }
+    previousDir = dir;
+    dir = dirname(dir);
+  } while (dir !== previousDir);
+
+  return undefined;
+}
 
 export async function getPackageInfo(
   packageName: string,
   options?: { paths?: string[] },
 ): Promise<ReturnType<typeof getOriginalPackageInfo>> {
+  // For a bare specifier, the nearest manifest above the resolved file can belong to a subpath folder with its own
+  // name and version (read-excel-file/node, preact/hooks), which would record a bogus `npm:<name>@<version>` alias.
+  // Read the package Node actually loads instead (#28828).
+  const name = getPackageName(packageName);
+  if (name && !isAbsolute(packageName) && !packageName.startsWith('.')) {
+    const baseDirs = options?.paths?.length ? options.paths.map(path => fileURLToPath(path)) : [process.cwd()];
+
+    for (const baseDir of baseDirs) {
+      const rootPath = findInstalledPackageRoot(name, baseDir);
+
+      if (!rootPath) {
+        continue;
+      }
+
+      const packageJsonPath = join(rootPath, 'package.json');
+
+      if (await pathExists(packageJsonPath)) {
+        const packageJson = await readJson(packageJsonPath);
+        return { name: packageJson.name, version: packageJson.version, rootPath, packageJsonPath, packageJson };
+      }
+    }
+  }
+
   const pkgInfo = await getOriginalPackageInfo(packageName, options);
 
   // A manifest without a version is still the package root when it is named after the requested package. When a
