@@ -1,6 +1,7 @@
 import pg from 'pg';
+import type { TestProject } from 'vitest/node';
 
-import { TEST_WORKER_COUNT, workerDatabaseName } from './vitest.setup';
+import { workerDatabaseName } from './vitest.setup';
 
 const servers = [
   {
@@ -11,13 +12,14 @@ const servers = [
 ];
 
 async function forEachWorkerDatabase(
+  workers: number,
   run: (admin: pg.Client, name: string, server: (typeof servers)[number]) => Promise<void>,
 ) {
   for (const server of servers) {
     const admin = new pg.Client({ connectionString: server.url });
     await admin.connect();
     try {
-      for (let worker = 1; worker <= TEST_WORKER_COUNT; worker++) {
+      for (let worker = 1; worker <= workers; worker++) {
         await run(admin, workerDatabaseName(worker), server);
       }
     } finally {
@@ -26,8 +28,11 @@ async function forEachWorkerDatabase(
   }
 }
 
-export async function setup() {
-  await forEachWorkerDatabase(async (admin, name, server) => {
+// VITEST_POOL_ID runs 1..maxWorkers. Read the resolved value so --maxWorkers or
+// VITEST_MAX_WORKERS can't start a worker that has no database.
+export default async function setup(project: TestProject) {
+  const workers = project.config.maxWorkers;
+  await forEachWorkerDatabase(workers, async (admin, name, server) => {
     await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
     await admin.query(`CREATE DATABASE ${name}`);
     const db = new pg.Client({ connectionString: server.url.replace(/\/[^/]*$/, `/${name}`) });
@@ -38,10 +43,8 @@ export async function setup() {
       await db.end();
     }
   });
-}
-
-export async function teardown() {
-  await forEachWorkerDatabase(async (admin, name) => {
-    await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
-  });
+  return () =>
+    forEachWorkerDatabase(workers, async (admin, name) => {
+      await admin.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+    });
 }

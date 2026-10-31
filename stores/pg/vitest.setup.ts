@@ -1,6 +1,3 @@
-// Matches maxWorkers in vitest.config.ts; VITEST_POOL_ID runs 1..maxWorkers.
-export const TEST_WORKER_COUNT = 4;
-
 export const workerDatabaseName = (worker: number | string) => `mastra_test_w${worker}`;
 
 // Runs in each worker before test files import, so test-utils' TEST_CONFIG and the
