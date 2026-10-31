@@ -399,6 +399,7 @@ describe('getFollowTarget', () => {
     contentElement.getBoundingClientRect = () => rectAt(-scrollTop, contentHeight);
     const row = document.createElement('div');
     row.getBoundingClientRect = () => rectAt(rowTop, rowHeight);
+    Object.defineProperty(row, 'getClientRects', { value: () => [rectAt(rowTop, rowHeight)] });
     contentElement.appendChild(row);
     document.body.appendChild(contentElement);
 
@@ -415,6 +416,16 @@ describe('getFollowTarget', () => {
     const withRoom = makeScroll({ rowTop: 100, rowHeight: 100, contentHeight: 900 });
     // The box runs 500 further than the reply does: going there empties the view.
     expect(getFollowTarget(withRoom)).toBe(0);
+  });
+
+  it('rests the last drawn row, not a hidden one registered after it', () => {
+    const scroll = makeScroll({ rowTop: 700, rowHeight: 100 });
+    const hidden = document.createElement('div');
+    hidden.getBoundingClientRect = () => rectAt(0, 0);
+    Object.defineProperty(hidden, 'getClientRects', { value: () => [] });
+    const items = [...scroll.items, ['hidden', { element: hidden, scrollAnchor: false }] as const];
+
+    expect(getFollowTarget({ ...scroll, items })).toBe(400);
   });
 
   it('falls back to the end of the box while there are no rows to rest on', () => {
