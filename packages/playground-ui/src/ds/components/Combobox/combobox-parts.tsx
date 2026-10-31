@@ -250,7 +250,8 @@ type ComboboxContentProps = BaseCombobox.Popup.Props &
 /**
  * The popup. Under a field (ComboboxInput or ComboboxChips) it opens at the field's width; under a
  * compact ComboboxTrigger it takes the trigger's width, at least 11rem. Either way the width never
- * follows the filtered items, so it holds still while you type; long labels truncate.
+ * follows the filtered items, so it holds still while you type. (`Combobox`'s `popupWidth` picks a
+ * fixed, wider width for long options instead.)
  */
 function ComboboxContent({
   className,
@@ -303,7 +304,7 @@ function ComboboxList({ className, ...props }: BaseCombobox.List.Props) {
 function ComboboxItem({ className, children, ref, ...props }: BaseCombobox.Item.Props) {
   return (
     <BaseCombobox.Item ref={ref} data-slot="combobox-item" className={cn(comboboxItemClass({}), className)} {...props}>
-      <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
+      <span className={comboboxStyles.itemContent}>{children}</span>
       <span className={comboboxStyles.checkContainer}>
         <BaseCombobox.ItemIndicator>
           <Check className={comboboxStyles.checkIcon} />

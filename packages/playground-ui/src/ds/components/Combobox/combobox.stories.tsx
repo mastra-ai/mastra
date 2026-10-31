@@ -24,6 +24,10 @@ const meta: Meta<typeof Combobox> = {
     iconOnlyValue: {
       control: { type: 'boolean' },
     },
+    popupWidth: {
+      control: { type: 'select' },
+      options: [undefined, 'sm', 'md', 'lg', 'xl'],
+    },
   },
 };
 
@@ -141,6 +145,24 @@ export const ModelSelector: Story = {
     placeholder: 'Select a model...',
     searchPlaceholder: 'Search models...',
     className: 'w-[220px]',
+  },
+};
+
+/** `popupWidth` gives a compact trigger a wider, fixed popup; labels past it wrap and clamp at two lines. */
+export const PopupWidth: Story = {
+  args: {
+    options: [
+      'moonshotai/kimi-k2',
+      'moonshotai/kimi-k2-0905',
+      'moonshotai/kimi-k2-thinking',
+      'moonshotai/kimi-k3.1-pro',
+      'cognitivecomputations/dolphin-mistral-24b-venice-edition',
+    ].map(id => ({ label: id, value: id })),
+    placeholder: 'Select model...',
+    searchPlaceholder: 'Search models...',
+    variant: 'ghost',
+    popupWidth: 'lg',
+    className: 'w-auto max-w-40',
   },
 };
 

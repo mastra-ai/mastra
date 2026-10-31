@@ -15,8 +15,8 @@ import {
   ComboboxTrigger,
   ComboboxValue,
 } from './combobox-parts';
-import { comboboxStyles } from './combobox-styles';
-import type { ComboboxVariant } from './combobox-styles';
+import { comboboxPopupWidthClass, comboboxStyles } from './combobox-styles';
+import type { ComboboxPopupWidth, ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName, useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
@@ -26,7 +26,7 @@ import { deprecatedErrorAria } from '@/ds/primitives/form-element';
 import type { PortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
-export type { ComboboxVariant } from './combobox-styles';
+export type { ComboboxPopupWidth, ComboboxVariant } from './combobox-styles';
 
 export type ComboboxOption = {
   label: string;
@@ -62,6 +62,8 @@ type ComboboxSharedProps = {
   'aria-describedby'?: string;
   /** Which edge of the trigger the popup lines up with. `end` opens it leftwards (e.g. an icon trigger at the end of a row). */
   align?: 'start' | 'center' | 'end';
+  /** A fixed popup width for long options (e.g. model ids). Without it the popup takes the trigger's width, at least 11rem. */
+  popupWidth?: ComboboxPopupWidth;
   showChevron?: boolean;
   iconOnlyValue?: boolean;
   allowCustomValue?: boolean;
@@ -196,12 +198,17 @@ function triggerClassName({ iconOnlyValue, className }: { iconOnlyValue: boolean
   return cn(iconOnlyValue && 'w-auto px-2.5', className);
 }
 
-function ComboboxOptionText({ option }: { option: ComboboxOption }) {
+/** An option row's content: start slot, label over description, end slot. */
+function ComboboxOptionContent({ option }: { option: ComboboxOption }) {
   return (
-    <span className={comboboxStyles.optionText}>
-      <span className={comboboxStyles.optionLabel}>{option.label}</span>
-      {option.description && <span className={comboboxStyles.optionDescription}>{option.description}</span>}
-    </span>
+    <>
+      {option.start}
+      <span className={comboboxStyles.optionText}>
+        <span className={comboboxStyles.optionLabel}>{option.label}</span>
+        {option.description && <span className={comboboxStyles.optionDescription}>{option.description}</span>}
+      </span>
+      {option.end ? <span className={comboboxStyles.optionEnd}>{option.end}</span> : null}
+    </>
   );
 }
 
@@ -224,6 +231,7 @@ function ComboboxClearFooter({ label, onClear }: { label: string; onClear: () =>
 
 /** The popup: the search row for a compact trigger (a field searches in itself), then the options. */
 function ComboboxOptionsContent({
+  popupWidth,
   showSearch,
   searchPlaceholder,
   emptyText,
@@ -231,6 +239,7 @@ function ComboboxOptionsContent({
   container,
   footer,
 }: {
+  popupWidth?: ComboboxPopupWidth;
   showSearch: boolean;
   searchPlaceholder: string;
   emptyText: string;
@@ -239,15 +248,13 @@ function ComboboxOptionsContent({
   footer?: React.ReactNode;
 }) {
   return (
-    <ComboboxContent align={align} container={container}>
+    <ComboboxContent align={align} container={container} className={popupWidth && comboboxPopupWidthClass[popupWidth]}>
       {showSearch ? <ComboboxSearch placeholder={searchPlaceholder} /> : null}
       <ComboboxEmpty>{emptyText}</ComboboxEmpty>
       <ComboboxList>
         {(option: ComboboxOption) => (
           <ComboboxItem key={option.value} value={option}>
-            {option.start}
-            <ComboboxOptionText option={option} />
-            {option.end ? <span className={comboboxStyles.optionEnd}>{option.end}</span> : null}
+            <ComboboxOptionContent option={option} />
           </ComboboxItem>
         )}
       </ComboboxList>
@@ -369,6 +376,7 @@ function SingleCombobox({
   onOpenChange,
   container,
   align = 'start',
+  popupWidth,
   showChevron = true,
   iconOnlyValue = false,
   allowCustomValue = false,
@@ -418,6 +426,7 @@ function SingleCombobox({
         look={{ variant, size, showChevron, iconOnlyValue, className }}
       />
       <ComboboxOptionsContent
+        popupWidth={popupWidth}
         showSearch={!inField}
         searchPlaceholder={searchPlaceholder}
         emptyText={emptyText}
@@ -446,6 +455,7 @@ function MultipleCombobox({
   onOpenChange,
   container,
   align = 'start',
+  popupWidth,
   showChevron = true,
   iconOnlyValue = false,
 }: ComboboxMultipleProps & ShapeProps) {
@@ -477,6 +487,7 @@ function MultipleCombobox({
         look={{ variant, size, showChevron, iconOnlyValue, className }}
       />
       <ComboboxOptionsContent
+        popupWidth={popupWidth}
         showSearch={shape !== 'chips'}
         searchPlaceholder={searchPlaceholder}
         emptyText={emptyText}
