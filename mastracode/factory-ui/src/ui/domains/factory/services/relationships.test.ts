@@ -4,6 +4,7 @@ import {
   inferredParentWorkItemId,
   relatedWorkItemIndex,
   relationshipLabel,
+  relationshipPath,
   workItemReferenceLabel,
 } from './relationships';
 import type { WorkItem } from './workItems';
@@ -200,5 +201,17 @@ describe('related work item index', () => {
     expect(relatedItemsFor(unrelated)).toEqual([]);
     // Board order decides, not the order the buckets are read in.
     expect(relatedItemsFor(multiLinked)).toEqual([branchPr, childOfMultiLinked]);
+  });
+});
+
+describe('relationshipPath', () => {
+  it('opens the board holding a pull request card, and Work for one not filed yet', () => {
+    const pullRequest = workItem({ id: 'pr', source: 'github-pr' });
+    expect(relationshipPath({ ...pullRequest, board: 'work' }, 'f1')).toBe('/factories/f1/work');
+    expect(relationshipPath({ ...pullRequest, board: 'review' }, 'f1')).toBe('/factories/f1/review');
+    // Filed before pull requests moved to Work, so it still lives on Review.
+    expect(relationshipPath({ ...pullRequest, board: null }, 'f1')).toBe('/factories/f1/review');
+    expect(relationshipPath({ source: 'gitlab-pr' }, 'f1')).toBe('/factories/f1/work');
+    expect(relationshipPath(workItem({ id: 'issue', source: 'github-issue' }), 'f1')).toBe('/factories/f1/work');
   });
 });

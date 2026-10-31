@@ -39,7 +39,7 @@ GitHub and Linear integrations exclusively own their event handlers; configure t
 
 Do not create an `actions` config or execute authoritative policy in React. Each handler returns one typed `FactoryRuleDecision` or `undefined`.
 
-Work and Review cards move independently. Never mirror their stages or mark Work Done only because a pull request merged.
+A pull request's own card and the Work card that authored it move independently, whether the pull request card sits on Work or on the legacy Review board. Never mirror their stages or mark Work Done only because a pull request merged.
 
 ## Configure board transition policy
 
