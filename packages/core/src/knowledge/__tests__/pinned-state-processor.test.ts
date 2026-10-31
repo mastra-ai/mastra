@@ -55,11 +55,13 @@ describe('PinnedStateProcessor', () => {
     expect(preamble).toContain('pass that ref and version to knowledge_page as page and expectedVersion');
     expect(preamble).toContain('Do not knowledge_search or knowledge_read a pinned page to confirm it');
     expect(preamble).toContain('a note count alone is no reason to read it');
+    expect(preamble).toContain('never write one built from a cut-off entry: read the page first');
     expect(KNOWLEDGE_READ_INSTRUCTIONS).toMatch(
       /^Use the Knowledge tools.*Pinned knowledge pages may already be in your context if <pinned-knowledge> tags are present/,
     );
     expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('without searching for or reading them again');
     expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('edit one straight from its body and the version shown');
+    expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('unless its body was cut off: then read it first, since a write replaces the whole body');
     expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('only when the answer depends on what its notes say');
   });
 
