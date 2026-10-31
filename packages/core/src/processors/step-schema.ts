@@ -150,7 +150,7 @@ export type SerializableOutputResult = {
   finishReason: string;
   steps: unknown[];
   /**
-   * @deprecated No longer set. Message history now keeps every turn; check `finishReason === 'error'` to detect failed runs.
+   * @deprecated No longer set. `MessageHistory` no longer drops failed turns it receives; check `finishReason === 'error'` to detect failed runs.
    */
   inputAccepted?: boolean;
 };
