@@ -2542,6 +2542,8 @@ Notes:
     await this.vector.createIndex({
       indexName,
       dimension: usedDimensions,
+      // Observation search filters by these fields. Semantic recall indexes the same ones.
+      metadataIndexes: ['resource_id', 'thread_id'],
     } as any);
 
     return { indexName };

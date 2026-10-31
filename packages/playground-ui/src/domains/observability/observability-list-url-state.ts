@@ -49,24 +49,27 @@ function parseDate(raw: string | null): Date | undefined {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
-export function readObservabilityListDates(params: URLSearchParams): ObservabilityListDates {
+/** `defaultPreset` is the range the host shows when the URL names none. */
+export function readObservabilityListDates(
+  params: URLSearchParams,
+  defaultPreset: TraceDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
+): ObservabilityListDates {
   const preset = params.get(TRACE_DATE_PRESET_PARAM);
   const datePreset =
-    preset && TRACE_DATE_PRESET_VALUES.has(preset as TraceDatePreset)
-      ? (preset as TraceDatePreset)
-      : OBSERVABILITY_LIST_DEFAULT_DATE_PRESET;
+    preset && TRACE_DATE_PRESET_VALUES.has(preset as TraceDatePreset) ? (preset as TraceDatePreset) : defaultPreset;
   if (datePreset !== 'custom') return { datePreset };
   const dateFrom = parseDate(params.get(TRACE_DATE_FROM_PARAM));
   const dateTo = parseDate(params.get(TRACE_DATE_TO_PARAM));
   return { datePreset, ...(dateFrom ? { dateFrom } : {}), ...(dateTo ? { dateTo } : {}) };
 }
 
-/** Mutates `params`. The default preset is left out of the URL; dates are only kept for `custom`. */
+/** Mutates `params`. The host's default preset is left out of the URL; dates are only kept for `custom`. */
 export function writeObservabilityListDates(
   params: URLSearchParams,
   { datePreset, dateFrom, dateTo }: ObservabilityListDates,
+  defaultPreset: TraceDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
 ) {
-  if (datePreset === OBSERVABILITY_LIST_DEFAULT_DATE_PRESET) params.delete(TRACE_DATE_PRESET_PARAM);
+  if (datePreset === defaultPreset) params.delete(TRACE_DATE_PRESET_PARAM);
   else params.set(TRACE_DATE_PRESET_PARAM, datePreset);
   const custom = datePreset === 'custom';
   if (custom && dateFrom) params.set(TRACE_DATE_FROM_PARAM, dateFrom.toISOString());

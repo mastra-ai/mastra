@@ -13,7 +13,8 @@ import {
   getUnobservedParts,
   stripThreadTags,
 } from '../message-utils';
-import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
+import { generateAnchorId, parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
+import type { ObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import { getLineageHead } from '../record-lineage';
 import type { ReflectorRunner } from '../reflector-runner';
@@ -28,6 +29,7 @@ import type {
 } from '../types';
 
 import type {
+  ObservationIndexWrite,
   ObservationPersistOutcome,
   ObservationRunOpts,
   ObservationRunResult,
@@ -96,15 +98,7 @@ export interface StrategyDeps {
   reflector: ReflectorRunner;
   observedMessageIds: Set<string>;
   obscureThreadIds: boolean;
-  onIndexObservations?: (observation: {
-    text: string;
-    groupId: string;
-    range: string;
-    threadId: string;
-    resourceId: string;
-    observedAt?: Date;
-    recordId?: string;
-  }) => Promise<void>;
+  onIndexObservations?: (observation: ObservationIndexWrite) => Promise<void>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
   /** Applies `observation.previousObserverTokens` to the previous observations the Observer sees. */
   prepareObserverContext: (
@@ -331,16 +325,26 @@ export abstract class ObservationStrategy {
    * Wrap observations in a thread attribution tag.
    * In resource scope, thread IDs can be obscured via xxhash.
    */
-  protected async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
-    const cleanObservations = stripThreadTags(observations);
-    const groupedObservations =
-      this.retrieval && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
+  protected async wrapWithThreadTag(threadId: string, observations: string, group?: ObservationGroup): Promise<string> {
+    const groupedObservations = group
+      ? wrapInObservationGroup(group.content, group.range, group.id)
+      : stripThreadTags(observations);
     let displayId = threadId;
     if (this.deps.obscureThreadIds) {
       const hasher = await hasherPromise;
       displayId = hasher.h32ToString(threadId);
     }
     return `<thread id="${displayId}">\n${groupedObservations}\n</thread>`;
+  }
+
+  /**
+   * Build the observation group a cycle adds, or undefined when retrieval is off. The group is
+   * what the cycle wraps into the observations and what it indexes, so both carry the same ID.
+   */
+  protected createObservationGroup(observations: string, range: string): ObservationGroup | undefined {
+    if (!this.retrieval) return undefined;
+    const content = this.scope === 'resource' ? stripThreadTags(observations) : observations;
+    return { id: generateAnchorId(), range, content: content.trim() };
   }
 
   /**
@@ -354,22 +358,22 @@ export abstract class ObservationStrategy {
   /**
    * Wrap raw observations — in resource scope, wraps with thread tag and merges;
    * in thread scope, simply appends with a message boundary delimiter.
+   * `group` is the cycle's new observation group when retrieval is on.
    */
   protected wrapObservations(
     rawObservations: string,
     existingObservations: string,
     threadId: string,
     lastObservedAt?: Date,
-    messageRange?: string,
+    group?: ObservationGroup,
   ): Promise<string> | string {
     if (this.scope === 'resource') {
       return (async () => {
-        const threadSection = await this.wrapWithThreadTag(threadId, rawObservations, messageRange);
+        const threadSection = await this.wrapWithThreadTag(threadId, rawObservations, group);
         return this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection, lastObservedAt);
       })();
     }
-    const grouped =
-      this.retrieval && messageRange ? wrapInObservationGroup(rawObservations, messageRange) : rawObservations;
+    const grouped = group ? wrapInObservationGroup(group.content, group.range, group.id) : rawObservations;
     if (!existingObservations) return grouped;
     const boundary = lastObservedAt ? ObservationStrategy.createMessageBoundary(lastObservedAt) : '\n\n';
     return `${existingObservations}${boundary}${grouped}`;
@@ -416,10 +420,15 @@ export abstract class ObservationStrategy {
     }
 
     if (existingSection) {
-      const dateLineEnd = newThreadSection.indexOf('\n', newThreadSection.indexOf('Date:'));
+      const dateIdx = newThreadSection.indexOf('Date:');
+      const dateLineEnd = newThreadSection.indexOf('\n', dateIdx);
       const newCloseIdx = newThreadSection.lastIndexOf(threadClose);
+      // A retrieval group opens before its Date line. Merge the whole group so its opening tag,
+      // and with it the group's ID, survives; only ungrouped sections drop the repeated date.
+      const groupIdx = newThreadSection.indexOf('<observation-group ');
+      const contentStart = groupIdx !== -1 && groupIdx < dateIdx ? groupIdx : dateLineEnd + 1;
       if (dateLineEnd !== -1 && newCloseIdx !== -1) {
-        const newObsContent = newThreadSection.slice(dateLineEnd + 1, newCloseIdx).trim();
+        const newObsContent = newThreadSection.slice(contentStart, newCloseIdx).trim();
         if (newObsContent) {
           const withoutClose = existingSection.slice(0, existingSection.length - threadClose.length).trimEnd();
           const merged = `${withoutClose}\n${newObsContent}\n${threadClose}`;
@@ -501,6 +510,7 @@ export abstract class ObservationStrategy {
             ...processed,
             observations: target.activeObservations ?? '',
             observationTokens: target.observationTokenCount,
+            newObservationGroup: undefined,
           },
           record: target,
           alreadyCovered: true,
@@ -531,6 +541,7 @@ export abstract class ObservationStrategy {
     );
   }
 
+  /** Index every group parsed out of `observations` (used for buffered chunks, which carry no producer group). */
   protected async indexObservationGroups(
     observations: string,
     threadId: string,
@@ -538,20 +549,30 @@ export abstract class ObservationStrategy {
     observedAt: Date | undefined,
     recordId: string,
   ): Promise<void> {
-    if (!resourceId || !this.deps.onIndexObservations) {
+    const groups = parseObservationGroups(observations).map(group => ({ group, threadId, observedAt }));
+    await this.indexNewObservationGroups(groups, resourceId, recordId);
+  }
+
+  /**
+   * Write the vectors for the groups a commit added, once. Call this right after the commit. The
+   * observations are already committed, so a failed write is logged and must not fail the cycle:
+   * that would skip its end markers and reflection.
+   */
+  protected async indexNewObservationGroups(
+    groups: Array<{ group: ObservationGroup; threadId: string; observedAt?: Date }>,
+    resourceId: string | undefined,
+    recordId: string,
+  ): Promise<void> {
+    const onIndexObservations = this.deps.onIndexObservations;
+    if (!resourceId || !onIndexObservations || groups.length === 0) {
       return;
     }
 
-    const groups = parseObservationGroups(observations);
-    if (groups.length === 0) {
-      return;
-    }
-
-    await Promise.all(
-      groups.map(group =>
+    const results = await Promise.allSettled(
+      groups.map(({ group, threadId, observedAt }) =>
         withRetry(
           () =>
-            this.deps.onIndexObservations!({
+            onIndexObservations({
               text: group.content,
               groupId: group.id,
               range: group.range,
@@ -564,6 +585,14 @@ export abstract class ObservationStrategy {
         ),
       ),
     );
+    const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+    if (failures.length > 0) {
+      const reason = failures[0]!.reason;
+      omError('[OM] Indexing committed observation groups failed', reason);
+      console.warn(
+        `[observational-memory] Storing observation vectors failed for ${failures.length} of ${groups.length} group(s) (${reason instanceof Error ? reason.message : String(reason)}).`,
+      );
+    }
   }
 
   // ── Marker persistence ──────────────────────────────────────

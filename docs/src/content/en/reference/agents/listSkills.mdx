@@ -40,13 +40,6 @@ for (const skill of skills) {
             isOptional: true,
             description: 'Request context passed to dynamic skill resolvers.',
           },
-          {
-            name: 'resolveDynamicProviders',
-            type: 'boolean',
-            isOptional: true,
-            description:
-              "When `false`, skips workspace skills read from a filesystem resolver, so the resolver isn't called. Agent-level skills and skills from a static filesystem or `skillSource` are still returned. Defaults to `true`.",
-          },
         ],
       },
     ],

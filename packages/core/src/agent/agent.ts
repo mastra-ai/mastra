@@ -176,7 +176,7 @@ import { createStep, createStepFromProcessor, isProcessor } from '../workflows/w
 import type { AnyWorkspace } from '../workspace';
 import { createWorkspaceTools } from '../workspace';
 import { ThreadStateFileReadTracker } from '../workspace/filesystem/thread-state-read-tracker';
-import { createSkillTools, ResolvedSourceWorkspaceSkills } from '../workspace/skills';
+import { createSkillTools } from '../workspace/skills';
 import type { SkillFormat } from '../workspace/skills';
 import type { Skill, SkillMetadata, WorkspaceSkills } from '../workspace/skills/types';
 import { AgentLegacyHandler } from './agent-legacy';
@@ -1793,7 +1793,6 @@ export class Agent<
     requestContext?: RequestContext,
     workspaceOverride?: AnyWorkspace,
     tracingContext?: TracingContext,
-    resolveDynamicProviders = true,
   ): Promise<WorkspaceSkills | undefined> {
     const rc = requestContext || new RequestContext();
 
@@ -1818,13 +1817,9 @@ export class Agent<
     // Resolve workspace-level skills (if configured)
     const workspace = workspaceOverride ?? (await this.getWorkspace({ requestContext: rc }));
     const configuredWorkspaceSkills = workspace?.skills;
-    // Resolved-source skills read from a filesystem resolver; skip them when the caller must not resolve providers.
-    const workspaceSkills =
-      !resolveDynamicProviders && configuredWorkspaceSkills instanceof ResolvedSourceWorkspaceSkills
-        ? undefined
-        : configuredWorkspaceSkills?.getScoped
-          ? await configuredWorkspaceSkills.getScoped({ requestContext: rc })
-          : configuredWorkspaceSkills;
+    const workspaceSkills = configuredWorkspaceSkills?.getScoped
+      ? await configuredWorkspaceSkills.getScoped({ requestContext: rc })
+      : configuredWorkspaceSkills;
 
     // Merge if both exist (agent skills win on name conflicts)
     if (agentSkills && workspaceSkills) {
@@ -3083,9 +3078,7 @@ export class Agent<
   /**
    * List all skills available to this agent (from both agent-level and workspace).
    *
-   * @param options - Optional request context for dynamic skill resolution.
-   *   Set `resolveDynamicProviders: false` to skip workspace skills that come from a
-   *   filesystem resolver, so listing doesn't call the resolver.
+   * @param options - Optional request context for dynamic skill resolution
    * @returns Array of skill metadata (name, description, path)
    *
    * @example
@@ -3096,16 +3089,8 @@ export class Agent<
    * }
    * ```
    */
-  public async listSkills(options?: {
-    requestContext?: RequestContext;
-    resolveDynamicProviders?: boolean;
-  }): Promise<SkillMetadata[]> {
-    const skills = await this.resolveSkills(
-      options?.requestContext,
-      undefined,
-      undefined,
-      options?.resolveDynamicProviders ?? true,
-    );
+  public async listSkills(options?: { requestContext?: RequestContext }): Promise<SkillMetadata[]> {
+    const skills = await this.resolveSkills(options?.requestContext);
     if (!skills) return [];
     return skills.list();
   }
@@ -9881,8 +9866,30 @@ export class Agent<
       });
     }
 
+    // Register the run with the thread runtime like stream() does. Without it a thread-bound generate()
+    // is invisible to signals: a signal sent mid-turn finds an idle thread and wakes a second run that
+    // never sees this turn. The wait also reserves the thread for this runId.
+    const threadStreamPubSub = this.getPubSub();
+    mergedOptions.runId ??=
+      this.#mastra?.generateId({
+        idType: 'run',
+        source: 'agent',
+        entityId: this.id,
+      }) ?? globalThis.crypto.randomUUID();
+    await agentThreadStreamRuntime.waitForCrossAgentThreadRun(
+      this as Agent<any, any, any, any>,
+      { ...loopOptions, runId: mergedOptions.runId } as AgentExecutionOptions<any>,
+      threadStreamPubSub,
+    );
+
+    const preparedOptions = agentThreadStreamRuntime.prepareRunOptions(
+      { ...loopOptions, runId: mergedOptions.runId, actor } as AgentExecutionOptions<any>,
+      threadStreamPubSub,
+      () => this.#deleteAbortedSuspendedRun(mergedOptions.runId!),
+    );
+
     const executeOptions = {
-      ...loopOptions,
+      ...preparedOptions,
       actor,
       structuredOutput: mergedOptions.structuredOutput
         ? {
@@ -9897,48 +9904,71 @@ export class Agent<
       methodType: 'generate',
       // Use agent's maxProcessorRetries as default, allow options to override
       maxProcessorRetries: mergedOptions.maxProcessorRetries ?? this.#maxProcessorRetries,
+      _threadStreamPubSub: threadStreamPubSub,
     } as unknown as InnerAgentExecutionOptions<any> & { _threadStreamPubSub?: PubSub };
 
-    const result = await this.#execute(executeOptions);
+    try {
+      const result = await this.#execute(executeOptions);
 
-    if (result.status !== 'success') {
-      if (result.status === 'failed') {
-        throw new MastraError(
-          {
-            id: 'AGENT_GENERATE_FAILED',
-            domain: ErrorDomain.AGENT,
-            category: ErrorCategory.USER,
-          },
-          // pass original error to preserve stack trace
-          result.error,
-        );
+      if (result.status !== 'success') {
+        if (result.status === 'failed') {
+          throw new MastraError(
+            {
+              id: 'AGENT_GENERATE_FAILED',
+              domain: ErrorDomain.AGENT,
+              category: ErrorCategory.USER,
+            },
+            // pass original error to preserve stack trace
+            result.error,
+          );
+        }
+        throw new MastraError({
+          id: 'AGENT_GENERATE_UNKNOWN_ERROR',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: 'An unknown error occurred while streaming',
+        });
       }
-      throw new MastraError({
-        id: 'AGENT_GENERATE_UNKNOWN_ERROR',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'An unknown error occurred while streaming',
-      });
-    }
 
-    if (typeof result.result?.getFullOutput !== 'function') {
-      throw new MastraError({
-        id: 'AGENT_GENERATE_MALFORMED_RESULT',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.SYSTEM,
-        text: 'Execution workflow produced a result without getFullOutput',
-      });
-    }
+      if (typeof result.result?.getFullOutput !== 'function') {
+        throw new MastraError({
+          id: 'AGENT_GENERATE_MALFORMED_RESULT',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.SYSTEM,
+          text: 'Execution workflow produced a result without getFullOutput',
+        });
+      }
 
-    const fullOutput = await result.result.getFullOutput();
+      await agentThreadStreamRuntime.registerRun(
+        this as Agent<any, any, any, any>,
+        result.result,
+        preparedOptions as AgentExecutionOptions<any>,
+        threadStreamPubSub,
+      );
 
-    const error = fullOutput.error;
+      const fullOutput = await result.result.getFullOutput();
 
-    if (error) {
+      const error = fullOutput.error;
+
+      if (error) {
+        throw error;
+      }
+
+      return fullOutput;
+    } catch (error) {
+      // Release the thread reservation taken by waitForCrossAgentThreadRun so
+      // a failed setup does not block subsequent runs on this thread.
+      agentThreadStreamRuntime.releaseThreadRunReservation(
+        mergedOptions.runId,
+        threadStreamPubSub,
+        {
+          agent: this,
+          streamOptions: preparedOptions,
+        },
+        preparedOptions.abortSignal,
+      );
       throw error;
     }
-
-    return fullOutput;
   }
 
   subscribeToThread<OUTPUT = TOutput>(
@@ -11472,16 +11502,15 @@ export class Agent<
     }
 
     const pubsub = this.getPubSub();
-    const hasLocalRun = agentThreadStreamRuntime.hasThreadRun(runId, pubsub);
     let resumableRun = agentThreadStreamRuntime.getResumableThreadRun(
       { threadId, resourceId, runId, toolCallId },
       pubsub,
     );
+    const resumableFromLocal = Boolean(resumableRun);
 
-    if (!resumableRun && !hasLocalRun) {
-      // The thread runtime only tracks runs seen by this process. Recover the
-      // explicitly targeted run from snapshot storage after a restart or when
-      // the resume request reaches another server instance.
+    if (!resumableRun) {
+      // A local run can belong to an earlier segment of a cross-instance
+      // execution. Check storage when it does not hold this suspension.
       let suspendedRuns: AgentRun[] = [];
       try {
         ({ runs: suspendedRuns } = await this.listSuspendedRuns({ threadId, resourceId }));
@@ -11520,7 +11549,7 @@ export class Agent<
     await agentThreadStreamRuntime.queueStreamResume(
       runId,
       async () => {
-        const queuedResumableRun = hasLocalRun
+        const queuedResumableRun = resumableFromLocal
           ? agentThreadStreamRuntime.getResumableThreadRun(
               { threadId, resourceId, runId, toolCallId: resumableRun.toolCallId },
               this.getPubSub(),
