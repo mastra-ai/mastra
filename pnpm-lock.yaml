@@ -3988,8 +3988,8 @@ importers:
         specifier: ^0.2.17
         version: 0.2.17
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -4056,8 +4056,8 @@ importers:
         specifier: ^2.0.4
         version: 2.0.4
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4113,8 +4113,8 @@ importers:
         specifier: ^2.0.4
         version: 2.0.4
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4174,8 +4174,8 @@ importers:
         specifier: ^2.0.4
         version: 2.0.4
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4232,8 +4232,8 @@ importers:
         specifier: ^2.0.4
         version: 2.0.4
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4576,8 +4576,8 @@ importers:
         specifier: 3.9.10
         version: 3.9.10
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4856,8 +4856,8 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -20429,8 +20429,8 @@ packages:
     resolution: {integrity: sha512-w071DSzP94YfN6XiWhOxnLpYT3uqtxJBDYdh6Jdjzt+Ce6DNspJsPQgpC7rbts/B8tEkq0LHoYuIF/O5Jh5rPg==}
     engines: {node: '>=18'}
 
-  '@ts-morph/common@0.28.1':
-    resolution: {integrity: sha512-W74iWf7ILp1ZKNYXY5qbddNaml7e9Sedv5lvU1V8lftlitkc9Pq1A+jlH23ltDgWYeZFFEqGCD1Ies9hqu3O+g==}
+  '@ts-morph/common@0.29.0':
+    resolution: {integrity: sha512-35oUmphHbJvQ/+UTwFNme/t2p3FoKiGJ5auTjjpNTop2dyREspirjMy82PLSC1pnDJ8ah1GU98hwpVt64YXQsg==}
 
   '@turbo/darwin-64@2.11.10':
     resolution: {integrity: sha512-By4idRap5+nLnMuRzLB4qkOPRlvNdyY1ne4VJYDyUoUB11H94k7uif9mbe3JT8JSNXs1D68uMcBj6hJ/jMQRvA==}
@@ -30519,8 +30519,8 @@ packages:
   ts-mixer@6.0.4:
     resolution: {integrity: sha512-ufKpbmrugz5Aou4wcr5Wc1UUFWOLhq+Fm6qa6P0w0K5Qw2yhaUoiWszhCVuNQyNwrlGiscHOmqYoAox1PtvgjA==}
 
-  ts-morph@27.0.2:
-    resolution: {integrity: sha512-fhUhgeljcrdZ+9DZND1De1029PrE+cMkIP7ooqkLRTrRLTqcki2AstsyJm0vRNbTbVCNJ0idGlbBrfqc7/nA8w==}
+  ts-morph@28.0.0:
+    resolution: {integrity: sha512-Wp3tnZ2bzwxyTZMtgWVzXDfm7lB1Drz+y9DmmYH/L702PQhPyVrp3pkou3yIz4qjS14GY9kcpmLiOOMvl8oG1g==}
 
   tsc-files@1.1.4:
     resolution: {integrity: sha512-RePsRsOLru3BPpnf237y1Xe1oCGta8rmSYzM76kYo5tLGsv5R2r3s64yapYorGTPuuLyfS9NVbh9ydzmvNie2w==}
@@ -43533,7 +43533,7 @@ snapshots:
       '@ts-graphviz/ast': 2.0.7
       '@ts-graphviz/common': 2.1.5
 
-  '@ts-morph/common@0.28.1':
+  '@ts-morph/common@0.29.0':
     dependencies:
       minimatch: 10.2.6
       path-browserify: 1.0.1
@@ -55882,9 +55882,9 @@ snapshots:
 
   ts-mixer@6.0.4: {}
 
-  ts-morph@27.0.2:
+  ts-morph@28.0.0:
     dependencies:
-      '@ts-morph/common': 0.28.1
+      '@ts-morph/common': 0.29.0
       code-block-writer: 13.0.3
 
   tsc-files@1.1.4(typescript@7.0.2):
