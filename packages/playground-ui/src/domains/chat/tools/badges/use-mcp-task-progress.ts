@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import type { McpInputRequestPayload } from '../mcp-input-request';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 
 export type McpTaskStatus = 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
@@ -52,13 +53,24 @@ export interface McpTaskView extends McpTaskProgress {
  *
  * A deferred call (one running as a Mastra background task) settles its part with a placeholder
  * long before the task ends, so its end is never inferred here: the background task says when.
+ *
+ * While the call is suspended on the task's input request, the request names the task, so the chip
+ * reads `input_required` even on a reloaded card with no progress.
  */
 export function useMcpTaskProgress(
   result: unknown,
   status: ActivityStatus,
-  { deferred = false }: { deferred?: boolean } = {},
+  { deferred = false, request }: { deferred?: boolean; request?: McpInputRequestPayload } = {},
 ): McpTaskView | undefined {
-  const live = latestProgress(result);
+  const live: McpTaskProgress | undefined = request
+    ? {
+        type: 'mcp-task',
+        taskId: request.taskId,
+        status: 'input_required',
+        createdAt: request.createdAt,
+        serverName: request.serverName,
+      }
+    : latestProgress(result);
   const [seen, setSeen] = useState(live);
   if (live && (live.taskId !== seen?.taskId || live.status !== seen.status)) setSeen(live);
 

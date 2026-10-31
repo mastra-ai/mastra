@@ -2,9 +2,12 @@ import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
+import { DeferredMcpInputRequest, ForegroundMcpInputRequest } from './badges/mcp-input-request-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
+import { useDeferredInputRequest } from './badges/use-deferred-input-request';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
+import { suspendedMcpInputRequest } from './mcp-input-request';
 import { SubmitPlanTool } from './submit-plan-tool';
 import { ToolResultMedia } from './tool-result-media';
 import type { MessageMetadata } from '@/domains/chat';
@@ -17,6 +20,7 @@ import {
   badgeStatus,
   codeModeCall,
   isAgentCall,
+  isDeferredCall,
   isSettledState,
   isWorkflowCall,
   toolCardKind,
@@ -91,178 +95,231 @@ export const ToolCardInner = ({
   );
   useWorkflowStream(output);
 
-  const kind = toolCardKind({ toolName, toolCallId, input, output, state }, { metadata, mcpAppTools });
+  const kind = toolCardKind(
+    { toolName, toolCallId, input, output, state, backgroundTaskId, backgroundTaskStatus },
+    { metadata, mcpAppTools },
+  );
   const { approval: toolApprovalMetadata, suspended: suspendedToolMetadata } = toolInteraction(
     metadata,
     toolName,
     toolCallId,
   );
   const status = badgeStatus(state, isRunning);
+  // Any deferred call, whatever its output looks like: live it holds the MCP task's progress records,
+  // after a reload the "Background task started" placeholder.
+  const deferredRequest = useDeferredInputRequest(
+    backgroundTaskId ?? '',
+    isDeferredCall(backgroundTaskId, backgroundTaskStatus) && !readOnly,
+  );
   const isNetwork = metadata?.mode === 'network';
   const toolCalled = isNetwork && metadata?.hasMoreMessages ? true : undefined;
   const agentToolName = stripPrefix(toolName, 'agent-');
   const workflowToolName = stripPrefix(toolName, 'workflow-');
+  const deferredCard = deferredRequest && backgroundTaskId && (
+    <DeferredMcpInputRequest
+      key={String(deferredRequest.suspendedAt)}
+      backgroundTaskId={backgroundTaskId}
+      request={deferredRequest}
+    />
+  );
 
-  switch (kind) {
-    case 'hidden':
-      return null;
-    case 'observation':
-      return <ObservationMarkerBadge toolName={toolName} omData={output?.omData ?? input} />;
-    case 'ask_user':
-      if (!readOnly) {
-        return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
-      }
-      break;
-    case 'connect_prompt':
-      return <ConnectPromptTool output={output} readOnly={readOnly} />;
-    case 'submit_plan':
-      return (
-        <SubmitPlanTool
-          agentId={chatAgent?.agentId}
-          agentVersionId={chatAgent?.agentVersionId}
-          requestContext={chatAgent?.requestContext}
-          toolName={toolName}
-          toolCallId={toolCallId}
-          output={output}
-          metadata={metadata}
-        />
-      );
-    case 'background': {
-      const isAgent = isAgentCall(metadata, toolName);
-      const isWorkflow = isWorkflowCall(metadata, toolName);
-      return (
-        <ToolBadge
-          toolName={isAgent ? agentToolName : isWorkflow ? workflowToolName : toolName}
-          args={input}
-          result={output}
-          toolOutput={[]}
-          metadata={metadata}
-          toolCallId={toolCallId}
-          toolApprovalMetadata={toolApprovalMetadata}
-          suspendPayload={suspendedToolMetadata?.suspendPayload}
-          isNetwork={isNetwork}
-          toolCalled={toolCalled}
-          withoutArgs={isAgent || isWorkflow}
-          status={status}
-          backgroundTaskId={backgroundTaskId}
-          backgroundTaskStatus={backgroundTaskStatus}
-        />
-      );
-    }
-    case 'agent':
-      return (
-        <AgentBadgeWrapper
-          agentId={agentToolName}
-          result={output}
-          metadata={metadata}
-          toolCallId={toolCallId}
-          toolApprovalMetadata={toolApprovalMetadata}
-          toolName={toolName}
-          isNetwork={isNetwork}
-          suspendPayload={suspendedToolMetadata?.suspendPayload}
-          toolCalled={toolCalled}
-          isComplete={isSettledState(state)}
-          status={status}
-          errorText={errorText}
-        />
-      );
-    case 'workflow':
-      return (
-        <WorkflowBadge
-          workflowId={workflowToolName}
-          isStreaming={metadata?.mode === 'stream' || isNetwork}
-          result={output}
-          metadata={metadata}
-          toolCallId={toolCallId}
-          toolApprovalMetadata={toolApprovalMetadata}
-          suspendPayload={suspendedToolMetadata?.suspendPayload}
-          toolName={toolName}
-          isNetwork={isNetwork}
-          toolCalled={toolCalled}
-        />
-      );
-    case 'file_tree':
-      return (
-        <FileTreeBadge
-          toolName={toolName}
-          args={input}
-          result={output}
-          metadata={metadata}
-          toolCallId={toolCallId}
-          toolApprovalMetadata={toolApprovalMetadata}
-          isNetwork={isNetwork}
-          toolCalled={toolCalled}
-          dataParts={dataParts}
-          status={status}
-        />
-      );
-    case 'sandbox':
-      return (
-        <SandboxExecutionBadge
-          toolName={toolName}
-          args={input}
-          result={output}
-          metadata={metadata}
-          toolCallId={toolCallId}
-          toolApprovalMetadata={toolApprovalMetadata}
-          isNetwork={isNetwork}
-          toolCalled={toolCalled}
-          dataParts={dataParts}
-          status={status}
-        />
-      );
-    case 'code_mode': {
-      const call = codeModeCall(input, output);
-      if (call) {
+  const body = renderKind();
+  // A deferred call's question shows under whichever badge draws the call. One fragment either way, so
+  // the badge (and its task progress) isn't remounted when the question comes and goes.
+  return (
+    <>
+      {body}
+      {body !== null && deferredCard}
+    </>
+  );
+
+  function renderKind() {
+    switch (kind) {
+      case 'hidden':
+        return null;
+      case 'observation':
+        return <ObservationMarkerBadge toolName={toolName} omData={output?.omData ?? input} />;
+      case 'ask_user':
+        if (!readOnly) {
+          return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
+        }
+        break;
+      case 'connect_prompt':
+        return <ConnectPromptTool output={output} readOnly={readOnly} />;
+      case 'submit_plan':
         return (
-          <CodeModeBadge
+          <SubmitPlanTool
+            agentId={chatAgent?.agentId}
+            agentVersionId={chatAgent?.agentVersionId}
+            requestContext={chatAgent?.requestContext}
             toolName={toolName}
-            code={call.code}
-            result={call.result}
+            toolCallId={toolCallId}
+            output={output}
+            metadata={metadata}
+          />
+        );
+      case 'mcp_input_request': {
+        const payload = suspendedMcpInputRequest(metadata, toolCallId);
+        if (!payload) break;
+        return (
+          <>
+            <ToolBadge
+              toolName={toolName}
+              args={input}
+              result={output}
+              toolOutput={[]}
+              metadata={metadata}
+              toolCallId={toolCallId}
+              toolApprovalMetadata={toolApprovalMetadata}
+              isNetwork={isNetwork}
+              toolCalled={toolCalled}
+              status={status}
+              mcpInputRequest={payload}
+            />
+            <ForegroundMcpInputRequest toolCallId={toolCallId} payload={payload} readOnly={readOnly} />
+          </>
+        );
+      }
+      case 'background': {
+        const isAgent = isAgentCall(metadata, toolName);
+        const isWorkflow = isWorkflowCall(metadata, toolName);
+        return (
+          <>
+            <ToolBadge
+              toolName={isAgent ? agentToolName : isWorkflow ? workflowToolName : toolName}
+              args={input}
+              result={output}
+              toolOutput={[]}
+              metadata={metadata}
+              toolCallId={toolCallId}
+              toolApprovalMetadata={toolApprovalMetadata}
+              suspendPayload={suspendedToolMetadata?.suspendPayload}
+              isNetwork={isNetwork}
+              toolCalled={toolCalled}
+              withoutArgs={isAgent || isWorkflow}
+              status={status}
+              backgroundTaskId={backgroundTaskId}
+              backgroundTaskStatus={backgroundTaskStatus}
+              mcpInputRequest={deferredRequest?.payload}
+            />
+          </>
+        );
+      }
+      case 'agent':
+        return (
+          <AgentBadgeWrapper
+            agentId={agentToolName}
+            result={output}
+            metadata={metadata}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            toolName={toolName}
+            isNetwork={isNetwork}
+            suspendPayload={suspendedToolMetadata?.suspendPayload}
+            toolCalled={toolCalled}
+            isComplete={isSettledState(state)}
+            status={status}
+            errorText={errorText}
+          />
+        );
+      case 'workflow':
+        return (
+          <WorkflowBadge
+            workflowId={workflowToolName}
+            isStreaming={metadata?.mode === 'stream' || isNetwork}
+            result={output}
+            metadata={metadata}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            suspendPayload={suspendedToolMetadata?.suspendPayload}
+            toolName={toolName}
+            isNetwork={isNetwork}
+            toolCalled={toolCalled}
+          />
+        );
+      case 'file_tree':
+        return (
+          <FileTreeBadge
+            toolName={toolName}
+            args={input}
+            result={output}
             metadata={metadata}
             toolCallId={toolCallId}
             toolApprovalMetadata={toolApprovalMetadata}
             isNetwork={isNetwork}
             toolCalled={toolCalled}
+            dataParts={dataParts}
+            status={status}
           />
         );
+      case 'sandbox':
+        return (
+          <SandboxExecutionBadge
+            toolName={toolName}
+            args={input}
+            result={output}
+            metadata={metadata}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            isNetwork={isNetwork}
+            toolCalled={toolCalled}
+            dataParts={dataParts}
+            status={status}
+          />
+        );
+      case 'code_mode': {
+        const call = codeModeCall(input, output);
+        if (call) {
+          return (
+            <CodeModeBadge
+              toolName={toolName}
+              code={call.code}
+              result={call.result}
+              metadata={metadata}
+              toolCallId={toolCallId}
+              toolApprovalMetadata={toolApprovalMetadata}
+              isNetwork={isNetwork}
+              toolCalled={toolCalled}
+            />
+          );
+        }
+        break;
       }
-      break;
+      case 'mcp_app':
+      case 'plain':
+        break;
     }
-    case 'mcp_app':
-    case 'plain':
-      break;
-  }
 
-  const mcpAppInfo = mcpAppTools?.[toolName];
+    const mcpAppInfo = mcpAppTools?.[toolName];
 
-  return (
-    <>
-      <ToolBadge
-        toolName={toolName}
-        args={input}
-        result={output ?? errorText}
-        toolOutput={output?.toolOutput || []}
-        metadata={metadata}
-        toolCallId={toolCallId}
-        toolApprovalMetadata={toolApprovalMetadata}
-        suspendPayload={suspendedToolMetadata?.suspendPayload}
-        isNetwork={isNetwork}
-        toolCalled={toolCalled}
-        status={status}
-        backgroundTaskId={backgroundTaskId}
-        backgroundTaskStatus={backgroundTaskStatus}
-      />
-      <ToolResultMedia modelOutput={modelOutput} />
-      {mcpAppInfo && output !== undefined && (
-        <McpAppToolResult
-          appInfo={mcpAppInfo}
-          toolArgs={input}
-          toolResult={output}
-          onSendMessage={handleMcpAppSendMessage}
-          readOnly={readOnly}
+    return (
+      <>
+        <ToolBadge
+          toolName={toolName}
+          args={input}
+          result={output ?? errorText}
+          toolOutput={output?.toolOutput || []}
+          metadata={metadata}
+          toolCallId={toolCallId}
+          toolApprovalMetadata={toolApprovalMetadata}
+          suspendPayload={suspendedToolMetadata?.suspendPayload}
+          isNetwork={isNetwork}
+          toolCalled={toolCalled}
+          status={status}
+          backgroundTaskId={backgroundTaskId}
+          backgroundTaskStatus={backgroundTaskStatus}
         />
-      )}
-    </>
-  );
+        <ToolResultMedia modelOutput={modelOutput} />
+        {mcpAppInfo && output !== undefined && (
+          <McpAppToolResult
+            appInfo={mcpAppInfo}
+            toolArgs={input}
+            toolResult={output}
+            onSendMessage={handleMcpAppSendMessage}
+            readOnly={readOnly}
+          />
+        )}
+      </>
+    );
+  }
 };

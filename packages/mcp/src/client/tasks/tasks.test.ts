@@ -4,7 +4,7 @@ import { startTasksFixtureServer } from '../../__fixtures__/tasks-server';
 import type { TasksFixtureServer } from '../../__fixtures__/tasks-server';
 import { taskKeyOf } from '../../shared/tasks';
 import { MCPClient } from '../configuration';
-import type { MastraMCPServerDefinition } from '../types';
+import type { MastraMCPServerDefinition, MCPInputRequestSuspendPayload } from '../types';
 
 let server: TasksFixtureServer | undefined;
 let mcp: MCPClient | undefined;
@@ -119,7 +119,7 @@ describe('MCPClient with MCP Tasks', () => {
     expect(writes.every(write => (write as { taskId: string }).taskId === taskId)).toBe(true);
   });
 
-  it('fails a task needing input when no inputRequests handler is configured', async () => {
+  it('fails a task needing input when no inputRequests handler is configured and the caller cannot suspend', async () => {
     const { call } = await connect();
 
     const error = await caught(call('confirm'));
@@ -299,6 +299,193 @@ describe('MCPClient with MCP Tasks', () => {
     expect(await pending).toMatchObject({ id: 'MCP_CLIENT_TOOL_TASK_CANCELLED' });
     const missing = await caught(mcp!.tasks.get('reports', 'unknown'));
     expect(missing).toMatchObject({ id: 'MCP_CLIENT_GET_TASK_FAILED', cause: { code: -32602 } });
+  });
+});
+
+/**
+ * A tool call whose MCP task asks for input, with no `inputRequests` handler configured, is answered from
+ * the agent chat: the call suspends with the server's requests, and the chat's answer resumes it on the
+ * same remote task (issue #28986).
+ */
+describe('MCPClient answering MCP task input from the agent chat', () => {
+  const approve = { approve: { action: 'accept', content: { ok: true } } };
+
+  /** The execution context an agent (or workflow) gives a tool, recording what the tool suspends with. */
+  function chat(where: 'agent' | 'workflow' = 'agent') {
+    const suspensions: MCPInputRequestSuspendPayload[] = [];
+    const suspend = async (payload: MCPInputRequestSuspendPayload) => void suspensions.push(payload);
+    const context = (resume?: { resumeData: unknown; suspendPayload: unknown }) => ({
+      [where]: where === 'agent' ? { toolCallId: 'call-1', messages: [], suspend, ...resume } : { suspend, ...resume },
+    });
+    return { suspensions, context };
+  }
+
+  it.each(['agent', 'workflow'] as const)(
+    'suspends a %s tool call with the server requests and leaves the remote task waiting',
+    async where => {
+      const { call } = await connect();
+      const { suspensions, context } = chat(where);
+      const writes: unknown[] = [];
+      const writer = { write: async (data: unknown) => void writes.push(data) };
+
+      expect(await call('confirm', {}, { ...context(), writer })).toBeUndefined();
+
+      const taskId = server!.requests.find(request => request.method === 'tasks/get')!.params.taskId as string;
+      expect(suspensions).toEqual([
+        {
+          type: 'mcp-input-request',
+          serverName: 'reports',
+          toolName: 'confirm',
+          taskId,
+          createdAt: expect.any(String),
+          requests: {
+            approve: {
+              method: 'elicitation/create',
+              params: expect.objectContaining({ message: 'Send it?', requestedSchema: expect.any(Object) }),
+            },
+          },
+        },
+      ]);
+      expect(methods()).not.toContain('tasks/cancel');
+      expect((await server!.store.get(taskId, { principal: 'anonymous' }))?.status).toBe('input_required');
+      expect(writes.map(write => (write as { status: string }).status)).toContain('input_required');
+    },
+  );
+
+  it.each(['agent', 'workflow'] as const)(
+    'resumes a %s tool call on the same remote task without calling the tool again',
+    async where => {
+      const { call } = await connect();
+      const { suspensions, context } = chat(where);
+      await call('confirm', {}, context());
+
+      const result = await call(
+        'confirm',
+        {},
+        context({ resumeData: { inputResponses: approve }, suspendPayload: suspensions[0] }),
+      );
+
+      expect(result).toMatchObject({ content: [{ type: 'text', text: 'sent' }] });
+      expect(methods().filter(method => method === 'tools/call')).toHaveLength(1);
+      expect(server!.runs.confirm).toBe(1);
+      const updates = server!.requests.filter(request => request.method === 'tasks/update');
+      expect(updates.map(update => update.params)).toEqual([
+        expect.objectContaining({ taskId: suspensions[0]!.taskId, inputResponses: approve }),
+      ]);
+      expect(suspensions).toHaveLength(1);
+    },
+  );
+
+  it('suspends again with only the new request when the server asks a second time', async () => {
+    const { call } = await connect();
+    const { suspensions, context } = chat();
+    await call('confirm_twice', {}, context());
+
+    const second = await call(
+      'confirm_twice',
+      {},
+      context({ resumeData: { inputResponses: approve }, suspendPayload: suspensions[0] }),
+    );
+
+    expect(second).toBeUndefined();
+    expect(suspensions[1]).toMatchObject({ taskId: suspensions[0]!.taskId, toolName: 'confirm_twice' });
+    expect(Object.keys(suspensions[1]!.requests)).toEqual(['confirm']);
+
+    const done = await call(
+      'confirm_twice',
+      {},
+      context({
+        resumeData: { inputResponses: { confirm: { action: 'accept', content: { ok: true } } } },
+        suspendPayload: suspensions[1],
+      }),
+    );
+    expect(done).toMatchObject({ content: [{ text: 'sent twice confirmed' }] });
+    expect(methods().filter(method => method === 'tools/call')).toHaveLength(1);
+    expect(server!.runs.confirm_twice).toBe(1);
+  });
+
+  it('lets a configured inputRequests handler answer instead of suspending', async () => {
+    const { call } = await connect({
+      tasks: true,
+      inputRequests: async () => ({ action: 'accept', content: { ok: true } }),
+    });
+    const { suspensions, context } = chat();
+
+    expect(await call('confirm', {}, context())).toMatchObject({ content: [{ text: 'sent' }] });
+    expect(suspensions).toEqual([]);
+  });
+
+  it('fails the resumed call when the remote task was cancelled meanwhile, without calling the tool again', async () => {
+    const { call } = await connect();
+    const { suspensions, context } = chat();
+    await call('confirm', {}, context());
+    await mcp!.tasks.cancel('reports', suspensions[0]!.taskId);
+
+    const error = await caught(
+      call('confirm', {}, context({ resumeData: { inputResponses: approve }, suspendPayload: suspensions[0] })),
+    );
+
+    expect(error).toMatchObject({ id: 'MCP_CLIENT_TOOL_TASK_CANCELLED' });
+    expect(methods().filter(method => method === 'tools/call')).toHaveLength(1);
+  });
+
+  it('fails the resumed call when the server no longer knows the task', async () => {
+    const { call } = await connect();
+    const { suspensions, context } = chat();
+    await call('confirm', {}, context());
+    server!.store.close();
+
+    const error = await caught(
+      call('confirm', {}, context({ resumeData: { inputResponses: approve }, suspendPayload: suspensions[0] })),
+    );
+
+    expect(error).toMatchObject({ id: 'MCP_CLIENT_TOOL_TASK_POLL_FAILED' });
+    expect(methods().filter(method => method === 'tools/call')).toHaveLength(1);
+  });
+
+  it.each([
+    ['no answers', undefined],
+    ['answers that are not an object', { inputResponses: 'yes' }],
+    ['an answer missing for a request', { inputResponses: {} }],
+    ['an unknown action', { inputResponses: { approve: { action: 'maybe' } } }],
+  ])('rejects resume data with %s without answering the task', async (_, resumeData) => {
+    const { call } = await connect();
+    const { suspensions, context } = chat();
+    await call('confirm', {}, context());
+
+    const error = await caught(call('confirm', {}, context({ resumeData, suspendPayload: suspensions[0] })));
+
+    expect(error).toMatchObject({ id: 'MCP_CLIENT_TOOL_TASK_RESUME_INVALID' });
+    expect(methods()).not.toContain('tasks/update');
+    expect(methods().filter(method => method === 'tools/call')).toHaveLength(1);
+  });
+
+  it('tags the resumed tool call span with the same task key, never the task id', async () => {
+    const { call } = await connect();
+    const { suspensions, context } = chat();
+    const spanFor = (updates: Array<{ metadata?: Record<string, unknown> }>) => ({
+      isValid: true,
+      traceId: '0af7651916cd43dd8448eb211c80319c',
+      id: 'b7ad6b7169203331',
+      update: (options: { metadata?: Record<string, unknown> }) => updates.push(options),
+    });
+    const first: Array<{ metadata?: Record<string, unknown> }> = [];
+    const resumed: Array<{ metadata?: Record<string, unknown> }> = [];
+
+    await call('confirm', {}, { ...context(), tracingContext: { currentSpan: spanFor(first) } });
+    await call(
+      'confirm',
+      {},
+      {
+        ...context({ resumeData: { inputResponses: approve }, suspendPayload: suspensions[0] }),
+        tracingContext: { currentSpan: spanFor(resumed) },
+      },
+    );
+
+    const taskId = suspensions[0]!.taskId;
+    expect(resumed).toEqual([{ metadata: { mcpTaskKey: taskKeyOf(taskId) } }]);
+    expect(resumed).toEqual(first);
+    expect(JSON.stringify(resumed)).not.toContain(taskId);
   });
 });
 
