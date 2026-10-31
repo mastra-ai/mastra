@@ -321,6 +321,12 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * browser capabilities for web automation, screenshots, and data extraction.
    */
   browser?: MastraBrowser;
+  /**
+   * Skips the tool's own `tools:execute` FGA check. Only for callers that authorize every
+   * execution themselves against their own resource, like `MCPServer` for the tools it serves.
+   * @internal
+   */
+  skipToolExecuteFGA?: boolean;
 }
 
 /**

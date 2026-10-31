@@ -371,6 +371,9 @@ export class MCPServer extends MCPServerBase {
         mastra: this.mastra,
         logger: this.logger,
         description: 'description' in tool ? tool.description : undefined,
+        // enforceToolExecutionFGA authorizes every call against this server's tool resource. The
+        // builder's own check would ask about the standalone tool instead (#28787).
+        skipToolExecuteFGA: true,
       }) as InternalCoreTool;
       converted[name] = { ...coreTool, id: name } as InternalCoreTool;
     };
