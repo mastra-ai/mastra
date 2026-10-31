@@ -2,11 +2,11 @@
 '@mastra/core': minor
 ---
 
-Fixed evented durable agents stopping when their API process shuts down when using shared storage-backed run fencing. Surviving workers keep run and thread ownership alive and complete terminal cleanup, allowing the next message to start immediately. API shutdown now detaches the API's local participation instead of abandoning a claim a remote worker still holds.
+Fixed evented durable agents stopping when the API process shuts down. Workers now keep running the agent, finish cleanup, and free the thread, so the next message starts right away.
 
-Workers follow only the delivering run's claim or an explicitly declared workflow ancestor. Nested durable agents and sequential runs sharing a `RequestContext` keep independent ownership instead of inheriting unrelated claims. Canceling a suspended run notifies terminal consumers without renewing its released claim, and stale cancellation cannot abort or clean up a successor execution.
+Each run keeps its own ownership. Nested durable agents and runs that share a `RequestContext` no longer pick up each other's ownership. Canceling a suspended run still notifies listeners, and a late cancel can no longer stop a newer run of the same agent.
 
-Shared deployments without a durable storage generation keep their existing behavior and log a warning once per agent: API shutdown or loss can still interrupt remote workers. These configurations are not rejected, but the API-loss fix does not apply to them. Process-local execution and existing hostless or non-atomic-storage fallbacks are unchanged.
+This needs storage that supports run fencing. Other shared setups keep their current behavior and log a warning once per agent: API shutdown can still stop remote workers. Single-process setups are unchanged.
 
 To enable worker continuity across API loss, use a shared fencing-capable adapter, such as `PostgresStore` from `@mastra/pg`, and a shared pubsub transport:
 

@@ -663,6 +663,64 @@ it('finalizes cancellation of a suspended run after its execution claim is relea
   }
 }, 15_000);
 
+it('carries the execution claim on a cancel sent before the first step finishes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-cancel-first-step-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const workflow = createWorkflow({ id: 'durable-agentic-loop', inputSchema: z.object({}), outputSchema: z.object({}) })
+    .then(
+      createStep({
+        id: 'llm',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ abortSignal }) => {
+          await new Promise(resolve => abortSignal.addEventListener('abort', resolve, { once: true }));
+          return {};
+        },
+      }),
+    )
+    .commit();
+  const mastra = new Mastra({ storage, pubsub, workflows: { workflow }, logger: false });
+  instances.push(mastra);
+  const workflows = (await storage.getStore('workflows'))!;
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore: workflows,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'first-step-run',
+    mode: 'acquire',
+  });
+  const requestContext = new RequestContext([[MASTRA_DURABLE_EXECUTIONS_KEY, { 'first-step-run': coordinator.claim }]]);
+  const published = vi.spyOn(pubsub, 'publish');
+  try {
+    const run = await workflow.createRun({ runId: 'first-step-run' });
+    const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+    let canceled: Promise<void> | undefined;
+    vi.spyOn(workflows, 'persistWorkflowSnapshot').mockImplementation(async args => {
+      await persist(args);
+      // Cancel in the window between the processor's running snapshot and the first step result.
+      if (args.runId === run.runId && 'guardedOnlySnapshot' in args.snapshot) canceled ??= run.cancel();
+    });
+    await mastra.startWorkers();
+    const result = run.start({ inputData: {}, requestContext });
+    await vi.waitFor(() => expect(canceled).toBeDefined());
+    await canceled;
+    const cancel = published.mock.calls.find(
+      ([topic, event]) => topic === 'workflows' && event.type === 'workflow.cancel',
+    );
+    expect(cancel?.[1].data?.requestContext).toMatchObject({
+      [MASTRA_DURABLE_EXECUTIONS_KEY]: { 'first-step-run': coordinator.claim },
+    });
+    await result;
+  } finally {
+    coordinator.stopHeartbeat();
+    await mastra.shutdown();
+    published.mockRestore();
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);
+
 it('does not admit a late step after the execution claim is released', async () => {
   const { mastra, event, coordinator } = await createExecution();
   await coordinator.settle(async () => true);
