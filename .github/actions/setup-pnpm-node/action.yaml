@@ -106,6 +106,25 @@ runs:
           echo "force-install=true" >> "$GITHUB_OUTPUT"
         fi
 
+    # pnpm re-checks every lockfile entry against the supply-chain policies in
+    # pnpm-workspace.yaml (minimumReleaseAge, trustPolicy) on a fresh install,
+    # ~25s per job. It records each pass in <cache-dir>/lockfile-verified.jsonl,
+    # keyed by lockfile hash and the policy it was checked against, and skips the
+    # check only when that policy is at least as strict as the current one. Carry
+    # the record between jobs so a lockfile is verified once per change, not per job.
+    - name: Locate pnpm lockfile verification record
+      id: lockfile-verified
+      if: ${{ inputs.install-dependencies == 'true' }}
+      shell: bash
+      run: echo "path=${XDG_CACHE_HOME:-$HOME/.cache}/pnpm/lockfile-verified.jsonl" >> "$GITHUB_OUTPUT"
+
+    - name: Restore pnpm lockfile verification record
+      if: ${{ inputs.install-dependencies == 'true' }}
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ steps.lockfile-verified.outputs.path }}
+        key: pnpm-lockfile-verified-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml') }}
+
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
       shell: bash
