@@ -6,6 +6,7 @@ import {
   listBackgroundTaskResponseSchema,
   listBackgroundTasksQuerySchema,
   backgroundTaskIdPathParams,
+  resumeBackgroundTaskBodySchema,
 } from '../schemas/background-tasks';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { getContextResourceId } from './utils';
@@ -123,5 +124,57 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
       throw new HTTPException(404, { message: 'Background task not found' });
     }
     return task;
+  },
+});
+
+export const RESUME_BACKGROUND_TASK_ROUTE = createRoute({
+  method: 'POST',
+  path: '/background-tasks/:backgroundTaskId/resume',
+  responseType: 'json' as const,
+  pathParamSchema: backgroundTaskIdPathParams,
+  bodySchema: resumeBackgroundTaskBodySchema,
+  responseSchema: backgroundTaskResponseSchema,
+  summary: 'Resume a suspended background task',
+  description:
+    'Answers a suspended background task with resumeData. Pass the suspendedAt you read from the task to reject the answer with 409 if the task has resumed or suspended again since.',
+  tags: ['Background Tasks'],
+  requiresAuth: true,
+  handler: async ({ mastra, backgroundTaskId, resumeData, suspendedAt, requestContext }) => {
+    const { resourceId, scoped } = resolveResourceScope(requestContext, undefined);
+    const bgManager = mastra.backgroundTaskManager;
+    if (!bgManager) {
+      throw new HTTPException(404, { message: 'Background task not found' });
+    }
+
+    const task = await bgManager.getTask(backgroundTaskId);
+    // Report another resource's task as missing so its existence is not disclosed.
+    if (!task || (scoped && task.resourceId !== resourceId)) {
+      throw new HTTPException(404, { message: 'Background task not found' });
+    }
+    if (task.status !== 'suspended') {
+      throw new HTTPException(409, { message: `Background task is ${task.status}, not suspended` });
+    }
+    if (suspendedAt !== undefined && new Date(suspendedAt).getTime() !== task.suspendedAt?.getTime()) {
+      throw new HTTPException(409, { message: 'Background task suspension has changed since it was read' });
+    }
+
+    try {
+      await bgManager.resume(
+        backgroundTaskId,
+        resumeData,
+        suspendedAt !== undefined ? { suspendedAt: new Date(suspendedAt) } : undefined,
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      // Lost a race with another resume, a new suspension or a cancel, or no slot is free right now.
+      if (message.startsWith('Cannot resume task') || message.startsWith('Concurrency limit reached')) {
+        throw new HTTPException(409, { message });
+      }
+      throw error;
+    }
+
+    const resumed = await bgManager.getTask(backgroundTaskId);
+    if (!resumed) throw new HTTPException(404, { message: 'Background task not found' });
+    return resumed;
   },
 });

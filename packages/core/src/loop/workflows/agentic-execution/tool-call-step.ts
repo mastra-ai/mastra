@@ -50,7 +50,10 @@ import {
 } from '../../run-scope-keys';
 import { approvalResumeSchema } from '../../shared/approval-schema';
 import { dispatchBackgroundTool } from '../../shared/steps/background-dispatch-core';
-import { applyBackgroundToolResult } from '../../shared/steps/background-task-result-core';
+import {
+  applyBackgroundToolExecution,
+  applyBackgroundToolResult,
+} from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
@@ -113,6 +116,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
   mcp,
+  agent,
 }: OuterLLMRun<Tools, OUTPUT>) {
   // Shared by every suspension of the run, so parallel suspends verify recalled messages once.
   const memoryMessageRefs = new MemoryMessageRefs();
@@ -1216,6 +1220,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
             let backgroundChunkTransformQueue: Promise<void> = Promise.resolve();
             const emittedReplayedToolCalls = new Set<string>();
+            const flushBackgroundMessages = async () => {
+              const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
+              const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+              const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
+              // readOnly runs must not persist background-task updates to memory —
+              // mirrors the durable engine's readOnly flush guard.
+              if (sqm && tid && !mcfg?.readOnly) {
+                await sqm.flushMessages(messageList, tid, mcfg);
+              }
+            };
 
             return {
               // Executor — uses the tool from the current closure
@@ -1228,6 +1242,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     suspend?: (data?: unknown, options?: SuspendOptions) => Promise<void>;
                     resumeData?: unknown;
                     suspendedToolRunId?: string;
+                    suspendPayload?: unknown;
                   },
                 ) => {
                   // Override the agent loop's `suspend`/`resumeData` (which
@@ -1251,7 +1266,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                           invocationKind: isAgentTool ? 'agent' : 'tool',
                           disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
                         },
-                        ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                        ...(opts?.resumeData !== undefined
+                          ? { resumeData: opts.resumeData, suspendPayload: opts.suspendPayload }
+                          : {}),
                         // Framework-resolved delegated run id recovered from persisted
                         // suspension state (#23739) — never the model-authored one.
                         suspendedToolRunId: opts?.suspendedToolRunId,
@@ -1451,16 +1468,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       ?.toModelOutput,
                     generateId: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId'),
                     logger,
-                    flush: async () => {
-                      const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
-                      const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
-                      const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
-                      // readOnly runs must not persist the patched background result
-                      // to memory — mirrors the durable engine's readOnly flush guard.
-                      if (sqm && tid && !mcfg?.readOnly) {
-                        await sqm.flushMessages(messageList, tid, mcfg);
-                      }
-                    },
+                    flush: flushBackgroundMessages,
                   });
 
                   resolveReconciliation({});
@@ -1473,24 +1481,44 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
                     status: params.status === 'failed' ? 'failed' : 'completed',
                   });
+                  if (info.disposition !== 'awaited') {
+                    const threadId = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+                    const resourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
+                    if (agent && threadId && resourceId) {
+                      void agent.__notifyBackgroundTaskFinished({
+                        threadId,
+                        resourceId,
+                        taskId: params.taskId,
+                        toolCallId: params.toolCallId,
+                        toolName: params.toolName,
+                        status: params.status === 'failed' ? 'failed' : 'completed',
+                      });
+                    }
+                  }
                 } catch (error) {
                   resolveReconciliation({ error });
                   throw error;
                 }
               },
-              // Execution injector — records background task lifecycle metadata on the
-              // assistant message without changing the model-visible tool result.
+              // Execution injector — records background task lifecycle metadata (and an
+              // open suspension) on the assistant message without changing the
+              // model-visible tool result.
               onExecution: async params => {
-                messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
-                  mode: 'stream',
-                  backgroundTasks: {
-                    [params.toolCallId]: {
-                      startedAt: params.startedAt,
-                      suspendedAt: params.suspendedAt,
-                      taskId: params.taskId,
-                    },
-                  },
+                const changed = await applyBackgroundToolExecution({
+                  params,
+                  args,
+                  messageList,
+                  transformChunk: chunk =>
+                    applyToolPayloadTransformToChunk(chunk, {
+                      policy: transformSource.policy,
+                      toolTransform: transformSource.toolTransform,
+                      logger,
+                      transformInput: {
+                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                      },
+                    }),
                 });
+                if (changed) await flushBackgroundMessages();
               },
 
               // Per-task callbacks

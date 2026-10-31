@@ -6088,6 +6088,23 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /background-tasks/:backgroundTaskId/resume": {
+    "method": "POST",
+    "path": "/background-tasks/:backgroundTaskId/resume",
+    "pathParams": [
+      "backgroundTaskId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resumeData",
+      "suspendedAt"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /editor/builder/settings": {
     "method": "GET",
     "path": "/editor/builder/settings",

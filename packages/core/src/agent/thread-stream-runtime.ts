@@ -7841,8 +7841,10 @@ export class AgentThreadStreamRuntime {
       try {
         const output = toModelOutput<OUTPUT>(
           await agent.stream(signal, {
+            // The woken run ends after its own turn. Deferred background tasks report back
+            // through a `background-task` signal when they finish, unless the caller passes
+            // `untilIdle` to keep this run open until they do.
             ...(target.ifIdle?.streamOptions as any),
-            untilIdle: true,
             runId: reservedRunId,
             memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
           }),

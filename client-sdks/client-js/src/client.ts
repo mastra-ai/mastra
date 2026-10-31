@@ -2747,6 +2747,24 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Answers a suspended background task with `resumeData`. Pass the task's
+   * `suspendedAt` to have the server reject the answer (409) when the task has
+   * resumed or suspended again since you read it.
+   */
+  public resumeBackgroundTask(
+    backgroundTaskId: string,
+    resumeData: unknown,
+    options: { suspendedAt?: Date | string | number } = {},
+  ): Promise<BackgroundTaskResponse> {
+    return this.request(`/background-tasks/${encodeURIComponent(backgroundTaskId)}/resume`, {
+      method: 'POST',
+      body: { resumeData, suspendedAt: options.suspendedAt },
+      // A retry after a lost response could deliver this answer to a later suspension.
+      retries: 0,
+    });
+  }
+
+  /**
    * Opens an SSE stream of background task events (completed/failed).
    * Returns a Response that can be consumed as a ReadableStream.
    */
