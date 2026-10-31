@@ -7,7 +7,7 @@ import type { BoardStageId } from '../stages';
 import { BoardColumnEmptyState } from './BoardColumnEmptyState';
 import { IntakeColumnExtras } from './IntakeColumnExtras';
 import { IntakeFeedNotice } from './IntakeFeedNotice';
-import type { ArchiveColumn } from '../hooks/useBoardArchive';
+import type { BoardColumn } from '../hooks/useBoardColumns';
 import { BoardItemsSkeleton } from './BoardItemsSkeleton';
 import { LoadMoreSentinel } from './LoadMoreSentinel';
 import { OpenOnView } from './OpenOnView';
@@ -46,7 +46,7 @@ export function BoardStageCards({
   composer?: ReactNode;
   emptyStateActions?: ReactNode;
   /** A Done or Canceled column: its older cards load as it scrolls. */
-  archive?: ArchiveColumn;
+  archive?: BoardColumn;
   children: ReactNode;
 }) {
   const showEmptyState = !loading && !composer && taskCount === 0 && !feed?.error;

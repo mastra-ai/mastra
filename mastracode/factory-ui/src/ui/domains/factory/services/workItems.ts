@@ -242,6 +242,8 @@ export interface BoardSnapshot {
   resetAt?: number;
   /** Server-side cards per board and phase, counting the Done and Canceled cards the board never loaded. */
   counts?: WorkItemCounts;
+  /** Cards deleted since the last full sync, so readers holding their own copies drop them too. */
+  deletedIds?: string[];
 }
 
 /** Cards per board and phase, counted by the server over every card including the ones never loaded. */
@@ -267,15 +269,20 @@ const projectWorkItemsUrl = (baseUrl: string, factoryProjectId: string, suffix =
 
 /**
  * Sync the board: without a cursor the server sends every open card, with one only the cards written or
- * deleted since. Done and Canceled cards come from {@link listWorkItemPage} instead.
+ * deleted since. `cards: 'changed'` drops the open cards from a reset too, for a reader that pages its
+ * cards with {@link listWorkItemPage} and only needs to hear what changed.
  */
 export async function syncWorkItems(
   baseUrl: string,
   factoryProjectId: string,
   cursor: string | undefined,
   signal?: AbortSignal,
+  options: { cards?: 'open' | 'changed' } = {},
 ): Promise<WorkItemSync> {
-  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+  const params = new URLSearchParams();
+  if (cursor) params.set('cursor', cursor);
+  if (options.cards) params.set('cards', options.cards);
+  const query = params.size > 0 ? `?${params.toString()}` : '';
   const data = await requestJson<{
     cursor: string;
     reset: boolean;
@@ -291,7 +298,7 @@ export async function syncWorkItems(
 export type WorkItemPageSort = 'recent' | 'recent-mine' | 'created-newest' | 'created-oldest';
 
 /** Server-side filters, named after the query parameters of the paged list. */
-export interface WorkItemPageQuery {
+export interface WorkItemPageQuery extends WorkItemFilterQuery {
   board?: string;
   stage?: string;
   q?: string;
@@ -304,6 +311,18 @@ export interface WorkItemPageQuery {
   thread?: string;
   /** Also return the matched cards' parents, children and pull requests. */
   related?: '1';
+}
+
+/** The board's own filters, each a comma-separated list; the server matches them as the board does. */
+export interface WorkItemFilterQuery {
+  source?: string;
+  linearProject?: string;
+  label?: string;
+  teammate?: string;
+  author?: string;
+  assignee?: string;
+  reviewer?: string;
+  worked?: string;
 }
 
 export interface WorkItemPage {
@@ -327,6 +346,20 @@ export async function listWorkItemPage(
     { signal },
   );
   return { workItems: data.workItems.map(fromWireWorkItem), ...(data.nextCursor ? { nextCursor: data.nextCursor } : {}) };
+}
+
+/** Cards per board and phase matching a filter; stage filters aside, every column is counted. */
+export async function countWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  query: WorkItemFilterQuery & { board?: string; q?: string },
+  signal?: AbortSignal,
+): Promise<WorkItemCounts> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  }
+  return requestJson(projectWorkItemsUrl(baseUrl, factoryProjectId, `/counts?${params.toString()}`), { signal });
 }
 
 /** When the project's cards came in and shipped since a time, and how many cards it has: the activity chart's input. */

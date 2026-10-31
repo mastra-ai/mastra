@@ -1,7 +1,7 @@
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../../hooks/useFactories';
-import { useWorkItemsQuery } from '../../../../../hooks/useWorkItems';
+import { useThreadWorkItem } from '../../../../../hooks/useThreadWorkItem';
 import { isPullRequestSource } from '../../../factory/services/workItems';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { PullRequestLinks } from '../PullRequestLinks';
@@ -26,11 +26,9 @@ export function StatusLine() {
   );
   const factoryProjectId = factorySessionState?.factoryProjectId;
   const factoryProjectKey = typeof factoryProjectId === 'string' ? factoryProjectId : undefined;
-  const workItems = useWorkItemsQuery(factoryProjectKey);
-  const currentItem = workItems.data?.find(item =>
-    Object.values(item.sessions).some(session => session.threadId === threadId),
-  );
-  const workItemsPending = Boolean(factoryProjectKey) && workItems.isPending;
+  const workItem = useThreadWorkItem(factoryProjectKey, threadId);
+  const currentItem = workItem.data;
+  const workItemsPending = Boolean(factoryProjectKey) && workItem.isPending;
 
   return (
     <div

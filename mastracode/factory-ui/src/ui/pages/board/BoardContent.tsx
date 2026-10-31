@@ -22,9 +22,8 @@ import { useCollapsedStages } from '../../domains/factory/hooks/useCollapsedStag
 import { useBoardDecisions } from '../../domains/factory/hooks/useBoardDecisions';
 import { useBoardIntake } from '../../domains/factory/hooks/useBoardIntake';
 import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessionStatuses';
-import { useBoardArchive } from '../../domains/factory/hooks/useBoardArchive';
+import { useBoardColumns } from '../../domains/factory/hooks/useBoardColumns';
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
-import { useBoardCounts, useWorkItemsQuery } from '../../../hooks/useWorkItems';
 import { useBoardRuns } from '../../domains/factory/hooks/useBoardRuns';
 import { useRepositoryChoice } from '../../domains/factory/hooks/useRepositoryChoice';
 import { boardLabels, candidateMatchesLabels, workItemMatchesLabels } from '../../domains/factory/boardLabels';
@@ -32,9 +31,10 @@ import {
   boardParticipants,
   boardPersonIdentity,
   candidateMatchesPeople,
+  withPeopleUnfolded,
   workItemMatchesPeople,
 } from '../../domains/factory/boardPeople';
-import { boardFiltersActive } from '../../domains/factory/boardFilters';
+import { boardFilterQuery, boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
 import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
 import { candidatePayload } from '../../domains/factory/boardDrag';
@@ -50,6 +50,7 @@ import { VirtualBoardItems } from '../../domains/factory/components/VirtualBoard
 import { WorkItemCard } from '../../domains/factory/components/WorkItemCard';
 import { InlineWorkItemComposer } from '../../domains/factory/components/InlineWorkItemComposer';
 import { BoardStageCandidates } from '../../domains/factory/components/BoardStageCandidates';
+import { boardOpenCard, useOpenCardChoice } from '../../domains/factory/hooks/useOpenCardState';
 import { BoardStages } from './BoardStages';
 import { cardProjectRepositoryId } from '../../domains/factory/boardRepository';
 
@@ -96,20 +97,22 @@ export function BoardContent({
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
-  // Done and Canceled are paged in per column; the board sync carries only the open cards.
-  const terminalStages = stages.filter(stage => stage.kind === 'terminal').map(stage => stage.id);
-  const synced = useWorkItemsQuery(factoryProjectId);
-  const archive = useBoardArchive({
+  // Every column reads a page at a time, narrowed on the server; Done and Canceled wait to come on screen.
+  const openCardChoice = useOpenCardChoice();
+  const openCardKey = openCardChoice[0]?.key;
+  const deferredStages = new Set(stages.filter(stage => stage.kind === 'terminal').map(stage => stage.id));
+  const columns = useBoardColumns({
     factoryProjectId,
     board: kind,
-    stages: terminalStages,
+    stages: stages.map(stage => stage.id),
+    deferred: deferredStages,
     sort,
     search: view.search,
+    filters: boardFilterQuery(withPeopleUnfolded(filters, personId)),
     targetItemId,
-    enabled: synced.isSuccess,
+    openItemId: openCardKey?.slice(openCardKey.indexOf('/') + 1),
   });
-  const items = useBoardItems({ factoryProjectId, kind, currentUserId, archived: archive.items });
-  const serverCounts = useBoardCounts(factoryProjectId)?.boards[kind];
+  const items = useBoardItems({ factoryProjectId, kind, currentUserId, board: columns });
   const repositoryChoice = useRepositoryChoice(factory, definition);
   const cardForDrop = (payload: DragPayload) => {
     if (payload.kind === 'candidate') return payload.candidate;
@@ -158,7 +161,7 @@ export function BoardContent({
     sourceFilters: filters,
   });
   const sourceFiltered = hasBoardSourceFilters(filters);
-  const runs = useBoardRuns({ factoryProjectId, refetchItems: items.refetch });
+  const runs = useBoardRuns({ factoryProjectId });
   const relatedItemsFor = relatedWorkItemIndex(items.all);
   const sessionStatuses = useItemSessionStatuses({
     factoryProjectId,
@@ -171,7 +174,7 @@ export function BoardContent({
   const activity = useRecentAuditEvents(factoryProjectId, `board-${kind}-activity`, 200, activityProfileActorIds);
   const activityPage = activity.data;
   const participants = boardParticipants({
-    items: items.all,
+    items: columns.known,
     candidates: intake.participantCandidates,
     activityPage,
     currentUser: auth.data?.user,
@@ -180,7 +183,7 @@ export function BoardContent({
   const participantCandidateBySourceKey = new Map(
     intake.participantCandidates.map(candidate => [candidate.sourceKey, candidate]),
   );
-  const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
+  const availableLabels = boardLabels({ items: columns.known, candidates: intake.participantCandidates });
   const candidateMatchesView = (candidate: BoardCandidate): boolean => {
     if (!candidateMatchesPeople(candidate, filters, personId)) return false;
     if (!candidateMatchesLabels(candidate, filters.label)) return false;
@@ -203,7 +206,8 @@ export function BoardContent({
   };
   const workItemsByStage = new Map(stages.map(stage => [stage.id, workItemsForStage(stage.id)]));
   const boardWorkItems = [...workItemsByStage.values()].flat();
-  const targetReady = !items.isPending && (!targetItemId || boardWorkItems.some(item => item.id === targetItemId));
+  // The linked card is read on its own, so it can be placed before the columns around it finish loading.
+  const targetReady = targetItemId ? boardWorkItems.some(item => item.id === targetItemId) : !items.isPending;
   const loadingStages = boardLoadingStages({
     stages,
     itemsPending: items.isPending,
@@ -253,19 +257,19 @@ export function BoardContent({
     const isInitialPhase = stage.id === definition.initialPhase;
     const stageWorkItems = workItemsByStage.get(stage.id) ?? [];
     const stageCandidates = filteredCandidates.filter(candidate => candidate.column === stage.id);
-    const archiveColumn = archive.columns[stage.id];
-    // A Done column waiting to come on screen shows a skeleton where the server says it has cards.
-    const archiveWaiting = archiveColumn
-      ? archiveColumn.opened
-        ? archiveColumn.isPending
-        : (serverCounts?.[stage.id] ?? 0) > 0
+    const column = columns.columns[stage.id];
+    // A column waiting on its first page, or on coming to screen, shows a skeleton where the server says it has cards.
+    const columnWaiting = column
+      ? column.opened
+        ? column.isPending
+        : (column.serverCount ?? 0) > 0
       : false;
-    const loading = loadingStages.has(stage.id) || (archiveWaiting && stageWorkItems.length === 0);
+    const loading = loadingStages.has(stage.id) || (columnWaiting && stageWorkItems.length === 0);
     const loadedCount = stageContentCount(stage.id, stages, stageWorkItems, filteredCandidates);
-    // A Done column shows only its first page, so its header counts what the server holds; a filter
-    // runs over the loaded cards only, so then the header counts those.
-    const taskCount =
-      archiveColumn && !anyFilterActive ? Math.max(loadedCount, serverCounts?.[stage.id] ?? 0) : loadedCount;
+    // A column shows only its loaded pages, so its header counts what the server holds under the same
+    // filters and search; Intake candidates are not cards, so they count on top.
+    const stageCandidateCount = stageCandidates.length;
+    const taskCount = Math.max(loadedCount, (column?.serverCount ?? 0) + stageCandidateCount);
     const composerOpen = composer.stage === stage.id;
     const columnFeed = intake.feedByColumn[stage.id];
     const feedFailed = Boolean(columnFeed?.error);
@@ -280,7 +284,7 @@ export function BoardContent({
       !composerOpen &&
       !feedFailed &&
       !columnFeed?.hasNextPage &&
-      !archiveColumn?.hasNextPage &&
+      !column?.hasNextPage &&
       taskCount === 0;
     return {
       stage,
@@ -316,7 +320,7 @@ export function BoardContent({
           hasIntakeSource={hasIntakeSource}
           filtersExcludeAll={filtersExcludeAll}
           alreadyMaterialized={isInitialPhase ? intake.alreadyMaterialized : 0}
-          archive={archiveColumn}
+          archive={column}
           emptyStateActions={
             showEmptyStateActions && (
               <BoardEmptyStateActions
@@ -426,11 +430,12 @@ export function BoardContent({
         layout={layout}
         stages={stageViews}
         totalTaskCount={totalTaskCount}
-        linkedComment={
+        openCard={boardOpenCard(
+          openCardChoice,
           targetItemId !== undefined && targetCommentId !== undefined && targetStages[0] !== undefined
             ? { cardKey: workItemCardKey(targetStages[0], targetItemId), commentId: targetCommentId }
-            : undefined
-        }
+            : undefined,
+        )}
         onDrop={dropWithRepository}
         toolbar={
           <BoardViewControls

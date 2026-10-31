@@ -2,24 +2,21 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 
+import { useApiConfig } from '../../../../api/config';
 import { useStartFactoryRun } from '../../../../hooks/useStartFactoryRun';
 import { useCardRepositorySlug } from './useCardRepositorySlug';
-import type { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemSessionSpec, itemThreadSession } from '../boardItems';
 import { repositoryMatchesCardSource } from '../boardRepository';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import { RequestError } from '../services/request';
+import { getWorkItem } from '../services/workItems';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 const PREPARING_SESSION_LABEL = 'Preparing session…';
 
 /** Opening the chat session a card carries, and minting one when it has none yet. */
-export function useBoardRuns({
-  factoryProjectId,
-  refetchItems,
-}: {
-  factoryProjectId: string;
-  refetchItems: ReturnType<typeof useWorkItemsQuery>['refetch'];
-}) {
+export function useBoardRuns({ factoryProjectId }: { factoryProjectId: string }) {
+  const { baseUrl } = useApiConfig();
   const { start, startingItemIds, enabled, repositories } = useStartFactoryRun();
   const repositorySlugFor = useCardRepositorySlug(repositories);
   const navigate = useNavigate();
@@ -32,7 +29,7 @@ export function useBoardRuns({
     ? repositories.filter(repository => repositoryMatchesCardSource(repository, repositorySelection.item.source))
     : [];
 
-  // A card click refetches items before it can decide whether to open an
+  // A card click reads the card again before it can decide whether to open an
   // existing thread or mint a new session. That wait is a round trip long and
   // the mutation isn't pending yet, so without this the card sits completely
   // silent after the click.
@@ -63,18 +60,15 @@ export function useBoardRuns({
   // Refetch failures here used to be silent: an expired auth cookie made every
   // board click a no-op with no feedback. Toast so the click never dies quietly.
   const refreshItem = async (itemId: string) => {
-    const refreshedItems = await refetchItems();
-    if (!refreshedItems.isSuccess) {
-      const cause = refreshedItems.error;
+    try {
+      return await getWorkItem(baseUrl, factoryProjectId, itemId);
+    } catch (cause) {
+      if (cause instanceof RequestError && cause.status === 404) {
+        toast.error('This card no longer exists — the board may be out of date');
+        return;
+      }
       toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board — try reloading the page');
-      return;
     }
-    const item = refreshedItems.data.find(candidate => candidate.id === itemId);
-    if (!item) {
-      toast.error('This card no longer exists — the board may be out of date');
-      return;
-    }
-    return item;
   };
 
   const openOrCreateSession = async (item: WorkItem) => {

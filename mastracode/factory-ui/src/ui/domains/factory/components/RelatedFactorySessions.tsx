@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { Link, useMatch, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
-import { useWorkItemsWithLookup } from '../../../../hooks/useWorkItems';
+import { useLookedUpWorkItems } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
@@ -64,12 +64,8 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const userSessionId = sessionId ?? threadId;
   const sessionQuery = useUserSessionQuery(userSessionId);
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
-  // A session of a Done or Canceled card the board never loaded is looked up, with its related cards.
-  const items = useWorkItemsWithLookup(factoryId, cards =>
-    factoryId && sessionId && threadId && !activeWorkItem(cards, factoryId, sessionId, threadId)
-      ? { kind: 'session', ids: [sessionId] }
-      : undefined,
-  );
+  // The session's card with its related cards, read by session id instead of the whole board.
+  const items = useLookedUpWorkItems(factoryId, sessionId ? { kind: 'session', ids: [sessionId] } : undefined);
   const workspaces = useWorkspacesQuery(factoryId);
 
   const allItems = items.data ?? [];

@@ -2,6 +2,7 @@ import type { FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 
 import { BOARD_PERSON_FIELDS } from './boardPeople';
 import type { BoardKind } from './boardStages';
+import type { WorkItemFilterQuery } from './services/workItems';
 
 /** Every board filter, in menu order. Each id is also its query parameter and its saved-view item's `fieldId`. */
 export const BOARD_FILTER_FIELDS = ['source', 'linearProject', ...BOARD_PERSON_FIELDS, 'label'] as const;
@@ -67,6 +68,18 @@ export function boardFilterItems(state: BoardFilterState): FilterBarItem[] {
 /** Whether anything is narrowing the board — the one fact both the menu and the empty state read. */
 export function boardFiltersActive(state: BoardFilterState): boolean {
   return BOARD_FILTER_FIELDS.some(fieldId => state[fieldId].size > 0);
+}
+
+/**
+ * The server read narrowed like `state`: each filter's picks comma-joined under its own parameter. Pass
+ * people unfolded, so the server matches every id a pick stands for.
+ */
+export function boardFilterQuery(state: BoardFilterState): WorkItemFilterQuery {
+  const query: WorkItemFilterQuery = {};
+  for (const fieldId of BOARD_FILTER_FIELDS) {
+    if (state[fieldId].size > 0) query[fieldId] = [...state[fieldId]].sort().join(',');
+  }
+  return query;
 }
 
 /** `state` with one filter's picks replaced. Linear projects only narrow Linear, so they leave with it. */

@@ -139,7 +139,7 @@ function matchesPeople(item: WorkItemRow, people: WorkItemFilters['people']): bo
 
 export function matchesWorkItemFilters(item: WorkItemRow, filters: WorkItemFilters): boolean {
   if (filters.boards?.length && !filters.boards.includes(boardForWorkItem(item))) return false;
-  if (filters.stages?.length && !filters.stages.includes(item.stages[0] ?? '')) return false;
+  if (filters.stages?.length && !workItemColumns(item).some(stage => filters.stages?.includes(stage))) return false;
   const sources = filters.sources?.length ? filters.sources : filters.linearProjects?.length ? ['linear'] : undefined;
   if (sources && !sources.includes(itemSource(item))) return false;
   if (filters.linearProjects?.length && itemSource(item) === 'linear') {
@@ -224,6 +224,11 @@ export function withRelatedWorkItems(all: readonly WorkItemRow[], matched: reado
   return [...matched, ...related];
 }
 
+/** The columns a card shows in, as the board places it: every stage it holds, or Intake when it holds none. */
+function workItemColumns(item: WorkItemRow): readonly string[] {
+  return item.stages.length > 0 ? item.stages : ['intake'];
+}
+
 export function countWorkItems(
   items: readonly WorkItemRow[],
   filters: WorkItemFilters = {},
@@ -238,8 +243,7 @@ export function countWorkItems(
     if (!matchesWorkItemFilters(item, across)) continue;
     total += 1;
     const stages = (boards[boardForWorkItem(item)] ??= {});
-    const stage = item.stages[0] ?? '';
-    stages[stage] = (stages[stage] ?? 0) + 1;
+    for (const stage of workItemColumns(item)) stages[stage] = (stages[stage] ?? 0) + 1;
   }
   return { total, boards };
 }

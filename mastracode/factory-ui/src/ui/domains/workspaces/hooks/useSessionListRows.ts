@@ -4,14 +4,14 @@ import { useActiveRunResources } from '../../../../hooks/useActiveRunResources';
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
-import { useParkedSessions, useWorkItemsWithLookup } from '../../../../hooks/useWorkItems';
+import { useLookedUpWorkItems, useParkedSessions } from '../../../../hooks/useWorkItems';
 import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { itemAwaitsPerson } from '../../factory/boardCardState';
 import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
 import { buildFactorySessionRow, buildUserSessionRow } from '../services/sessionRows';
 import type { SessionListRow } from '../services/sessionRows';
-import { missingSessionLookup, sessionWorkItemIndex } from '../services/sessionWorkItems';
+import { sessionWorkItemIndex } from '../services/sessionWorkItems';
 import { usePinnedSessions } from './usePinnedSessions';
 
 export function useSessionListRows(factoryId: string | undefined): {
@@ -25,10 +25,11 @@ export function useSessionListRows(factoryId: string | undefined): {
   const { pathname } = useLocation();
   const query = useWorkspacesQuery(factoryId);
   const factory = useFactoryQuery(factoryId);
-  // Factory sessions all belong to a card; one the board lacks went Done or Canceled, so look up just those.
-  const workItems = useWorkItemsWithLookup(factoryId, cards =>
-    missingSessionLookup(cards, query.data?.workspaces ?? []),
-  );
+  // Each listed session's card, with its related cards, read by session id instead of the whole board.
+  const workItems = useLookedUpWorkItems(factoryId, {
+    kind: 'session',
+    ids: allSessionRows(query.data).map(session => session.sessionId),
+  });
   const parkedSessions = useParkedSessions(factoryId);
   const { proposalByItem, effectByItem } = useItemDecisions(factoryId);
   const catalog = useBoardCatalog(factoryId);

@@ -19,6 +19,8 @@ import { inferredParentWorkItemId } from '../services/relationships';
 import type { WorkItem } from '../services/workItems';
 import type { BoardStageId } from '../stages';
 
+const NO_CARDS: WorkItem[] = [];
+
 interface MoveOptions {
   /** What the server records as the reason for the move; a drag says so, a card button does not. */
   cause?: string;
@@ -30,19 +32,19 @@ export function useBoardItems({
   factoryProjectId,
   kind,
   currentUserId,
-  archived,
+  board,
   onFailure,
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
   currentUserId?: string;
-  /** Done and Canceled cards read from the archive pages, which the board sync leaves out. */
-  archived?: readonly WorkItem[];
+  /** The board page's cards, read a page per column; without them the full open board is read. */
+  board?: { items: WorkItem[]; isPending: boolean; error: unknown };
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
   const { baseUrl } = useApiConfig();
-  const items = useWorkItemsQuery(factoryProjectId);
+  const items = useWorkItemsQuery(board ? undefined : factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
@@ -53,13 +55,7 @@ export function useBoardItems({
   const movingRef = useRef<Set<string>>(new Set());
 
   const sources = useWorkItemSources(factoryProjectId);
-  const all = useMemo(() => {
-    const synced = items.data ?? [];
-    if (!archived?.length) return synced;
-    // The synced copy wins: it is the one every edit patches, and a card reopened off Done is only there.
-    const onBoard = new Set(synced.map(item => item.id));
-    return [...synced, ...archived.filter(item => !onBoard.has(item.id))];
-  }, [items.data, archived]);
+  const all = board?.items ?? items.data ?? NO_CARDS;
   // The board holds only open cards, so an issue whose card closed long ago is known by its source.
   const knownSourceKeys = useMemo(() => persistedSourceKeys([...all, ...sources]), [all, sources]);
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
@@ -169,12 +165,11 @@ export function useBoardItems({
     visible,
     knownSourceKeys,
     elsewhereSourceKeys,
-    isPending: items.isPending,
-    error: items.isError ? items.error : undefined,
+    isPending: board ? board.isPending : items.isPending,
+    error: board ? (board.error ?? undefined) : items.isError ? items.error : undefined,
     mutationError: [upsert, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
-    refetch: items.refetch,
     move,
     remove: (id: string) => remove.mutate(id),
     handleDrop,

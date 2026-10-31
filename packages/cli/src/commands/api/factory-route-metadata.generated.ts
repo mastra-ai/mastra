@@ -366,11 +366,12 @@ export const FACTORY_API_ROUTE_METADATA = {
     "contractKey": "workItemSync",
     "method": "GET",
     "path": "/web/factory/projects/:id/work-items/sync",
-    "description": "Keep a board current. Without a cursor (or with one older than deletes are kept), returns every open card with `reset`; with one, only cards written or deleted since. Feed events named `board` say when to ask again.",
+    "description": "Keep a board current. Without a cursor (or with one older than deletes are kept), returns every open card with `reset`; with one, only cards written or deleted since. With `cards=changed` a reset carries no cards, for a board that pages its columns itself. Feed events named `board` say when to ask again.",
     "pathParams": [
       "id"
     ],
     "queryParams": [
+      "cards",
       "cursor"
     ],
     "bodyParams": [],
@@ -2696,6 +2697,13 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       "$schema": "https://json-schema.org/draft/2020-12/schema",
       "type": "object",
       "properties": {
+        "cards": {
+          "type": "string",
+          "enum": [
+            "open",
+            "changed"
+          ]
+        },
         "cursor": {
           "type": "string"
         }

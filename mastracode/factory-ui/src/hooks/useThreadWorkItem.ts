@@ -1,10 +1,9 @@
 import type { WorkItem } from '../ui/domains/factory/services/workItems';
-import { useWorkItemsWithLookup } from './useWorkItems';
+import { useLookedUpWorkItems } from './useWorkItems';
 
 /**
- * Threads carry no work-item ref of their own, so the card is found in the
- * board snapshot by its session's threadId — the board query is already
- * mounted and polling on both thread routes, so this adds no request.
+ * Threads carry no work-item ref of their own, so the card is found by its
+ * session's threadId.
  */
 export function findThreadWorkItem(
   items: WorkItem[],
@@ -27,11 +26,7 @@ export function useThreadWorkItem(
   threadId: string | undefined,
   sessionId?: string,
 ) {
-  // A thread of a Done or Canceled card the board never loaded is looked up by its thread id.
-  const items = useWorkItemsWithLookup(factoryProjectId, cards =>
-    threadId !== undefined && !findThreadWorkItem(cards, threadId, sessionId)
-      ? { kind: 'thread', ids: [threadId] }
-      : undefined,
-  );
+  // The thread's card, Done and Canceled included, read by thread id instead of the whole board.
+  const items = useLookedUpWorkItems(factoryProjectId, threadId ? { kind: 'thread', ids: [threadId] } : undefined);
   return { ...items, data: items.data && findThreadWorkItem(items.data, threadId, sessionId) };
 }

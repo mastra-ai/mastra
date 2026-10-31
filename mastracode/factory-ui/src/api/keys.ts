@@ -102,17 +102,25 @@ export const queryKeys = {
     ['factory', 'work-item-lookup', factoryProjectId ?? null] as const,
   workItemLookup: (factoryProjectId: string | undefined, kind: 'session' | 'thread', ids: string) =>
     [...queryKeys.workItemLookupRoot(factoryProjectId), kind, ids] as const,
-  /** Every Done/Canceled page a board has read; deletes invalidate it so a removed card leaves. */
-  workItemArchiveRoot: (factoryProjectId: string | undefined) =>
-    ['factory', 'work-item-archive', factoryProjectId ?? null] as const,
-  workItemArchive: (
+  /**
+   * The board page's lean sync: the cursor, counts and sessions, plus only the cards changed since its
+   * last reset. Nested under `workItems` so every board invalidation reaches it too.
+   */
+  workItemChanges: (factoryProjectId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'changes'] as const,
+  /** Every column page and filtered count a board has read; deletes and resyncs invalidate it. */
+  workItemColumnsRoot: (factoryProjectId: string | undefined) =>
+    ['factory', 'work-item-columns', factoryProjectId ?? null] as const,
+  workItemColumn: (
     factoryProjectId: string | undefined,
     board: string,
     stage: string,
     sort: string,
-    search: string,
+    filters: string,
     cursor: string | null,
-  ) => [...queryKeys.workItemArchiveRoot(factoryProjectId), board, stage, sort, search, cursor] as const,
+  ) => [...queryKeys.workItemColumnsRoot(factoryProjectId), board, stage, sort, filters, cursor] as const,
+  workItemColumnCounts: (factoryProjectId: string | undefined, filters: string) =>
+    [...queryKeys.workItemColumnsRoot(factoryProjectId), 'counts', filters] as const,
   workItemActivity: (factoryProjectId: string | undefined, depth: string) =>
     ['factory', 'work-item-activity', factoryProjectId ?? null, depth] as const,
   workItemSources: (factoryProjectId: string | undefined) =>

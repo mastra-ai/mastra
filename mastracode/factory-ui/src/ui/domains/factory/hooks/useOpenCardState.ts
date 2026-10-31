@@ -7,7 +7,7 @@ export interface LinkedComment {
   commentId: string;
 }
 
-interface OpenCardChoice {
+export interface OpenCardChoice {
   linkedComment: LinkedComment | undefined;
   key: string | undefined;
 }
@@ -18,10 +18,19 @@ const sameLink = (a: LinkedComment | undefined, b: LinkedComment | undefined) =>
 const openKeyOf = (choice: OpenCardChoice | undefined, linkedComment: LinkedComment | undefined) =>
   choice !== undefined && sameLink(choice.linkedComment, linkedComment) ? choice.key : linkedComment?.cardKey;
 
-/** A comment link opens its card; a click or a dismissal overrides it until the next link arrives. */
-export function useOpenCardState(linkedComment: LinkedComment | undefined): BoardOpenCard {
-  const [choice, setChoice] = useState<OpenCardChoice>();
+/**
+ * Which card the user opened. Held apart from the comment link that may override it, so the board can
+ * keep the open card loaded before it knows where that link points.
+ */
+export function useOpenCardChoice() {
+  return useState<OpenCardChoice>();
+}
 
+/** A comment link opens its card; a click or a dismissal overrides it until the next link arrives. */
+export function boardOpenCard(
+  [choice, setChoice]: ReturnType<typeof useOpenCardChoice>,
+  linkedComment: LinkedComment | undefined,
+): BoardOpenCard {
   return {
     openKey: openKeyOf(choice, linkedComment),
     setCardOpen: (key, open) => {

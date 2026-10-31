@@ -78,12 +78,14 @@ export const server = setupServer(
   // The board reads its cards through `/work-items/sync`, card sources and single cards through their own
   // routes. Tests stub the plain list, so these answer from it: every sync is a full one carrying all of
   // the test's cards, sources are those cards' sources, and a single card is looked up in the list.
+  // A `cards=changed` sync, like the server's, resets with no cards: that reader pages its cards itself.
   http.get('*/web/factory/projects/:id/work-items/sync', async ({ request }) => {
     const list = await readStubbedList(request.url);
+    const openCards = new URL(request.url).searchParams.get('cards') !== 'changed';
     return HttpResponse.json({
       cursor: 'test-cursor',
       reset: true,
-      workItems: list.workItems,
+      workItems: openCards ? list.workItems : [],
       deletedIds: [],
       counts: { total: list.workItems.length, boards: {} },
       runningSessionIds: list.runningSessionIds ?? [],
