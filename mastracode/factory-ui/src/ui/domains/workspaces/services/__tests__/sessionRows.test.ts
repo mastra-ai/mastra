@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { releaseBoard } from '../../../../../../e2e/ui/board-catalog';
+import { providerFactsCard } from '../../../../__tests__/fixtures/providerFactsCard';
 import { sessionActivityStatus, sessionBoard } from '../sessionRows';
 import { factoryRow, testSession, testWorkItem, userRow } from './fixtures/sessionRows';
 
@@ -62,6 +63,17 @@ describe('title regeneration', () => {
 });
 
 describe('external links', () => {
+  it.each(['github-pr', 'gitlab-pr'] as const)('shows a normalized merged %s without a legacy merged flag', source => {
+    const pullRequest = testWorkItem({
+      source,
+      metadata: { merged: false },
+      workItem: { ...providerFactsCard.workItem, state: 'merged', metadata: {} },
+    });
+    const row = factoryRow(testSession('s1'), { pullRequest });
+
+    expect(row.pullRequest).toMatchObject({ knownMerged: true });
+  });
+
   const slackThread = testWorkItem({ source: 'slack-thread', url: 'https://app.slack.com/client/T-1/C-1' });
   const pullRequest = testWorkItem({ id: 'pr-1', source: 'github-pr', url: 'https://github.com/acme/app/pull/43' });
   const mergeRequest = testWorkItem({

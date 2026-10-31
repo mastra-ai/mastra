@@ -7,6 +7,7 @@
  */
 
 import type { FactoryRuleStage, FactoryTriageType } from '@mastra/factory/rules/types';
+import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/work-item-schema';
 
 import { requestJson } from './request';
 
@@ -42,6 +43,8 @@ export interface WorkItemStageEntry {
 }
 
 export interface WorkItem {
+  /** Optional during the one-release legacy wire migration. */
+  workItem?: Pick<WorkItemRow, 'provider' | 'key' | 'url' | 'title' | 'state' | 'labels' | 'author' | 'metadata'>;
   id: string;
   orgId: string;
   createdBy: string;
@@ -195,7 +198,11 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
     githubProjectId: factoryProjectId,
     source: sourceFromExternalSource(externalSource),
     sourceKey: externalSource?.externalId ?? null,
-    url: externalSourceUrl(externalSource),
+    title: item.workItem?.title ?? item.title,
+    url:
+      sourceFromExternalSource(externalSource) === 'slack-thread'
+        ? externalSourceUrl(externalSource)
+        : (item.workItem?.url ?? externalSourceUrl(externalSource)),
     metadata: metadata ?? {},
     commentCount: commentCount ?? 0,
     feedActivityAt: feedActivityAt ?? null,

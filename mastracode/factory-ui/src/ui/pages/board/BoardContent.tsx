@@ -117,7 +117,7 @@ export function BoardContent({
     if (!card) return;
     void repositoryChoice.choose(
       card.source,
-      card.metadata,
+      { ...card.metadata, ...('workItem' in card ? card.workItem?.metadata : undefined) },
       stage,
       slug => {
         if (payload.kind === 'work-item') items.move(payload.id, stage, { cause, repositorySlug: slug });
@@ -342,7 +342,7 @@ export function BoardContent({
                 onMove={toStage =>
                   void repositoryChoice.choose(
                     item.source,
-                    item.metadata,
+                    { ...item.metadata, ...item.workItem?.metadata },
                     toStage,
                     slug => items.move(item.id, toStage, { repositorySlug: slug }),
                     () => items.move(item.id, toStage),

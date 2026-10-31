@@ -1,4 +1,4 @@
-import { hasLabel, metadataLabels, pullRequestStatusForItem, sourceCreatedAt } from './boardItems';
+import { hasLabel, metadataLabels, pullRequestStatusForItem, sourceCreatedAt, sourceMetadata } from './boardItems';
 import { belongsToBoard, boardStages, itemAppearsInStage } from './boardStages';
 import { awaitsTriageDecision, TRIAGE_DECISIONS } from './cardPrimaryAction';
 import { reviewVerdict } from './reviewVerdict';
@@ -61,7 +61,7 @@ function theBatch(total: number, verb: string, which: string): string {
 }
 
 function openedAt(item: WorkItem): number {
-  return Date.parse(sourceCreatedAt(item.metadata) ?? item.createdAt);
+  return Date.parse(sourceCreatedAt(sourceMetadata(item)) ?? item.createdAt);
 }
 
 function isOpen(item: WorkItem): boolean {
@@ -85,7 +85,7 @@ function waitsForReview(item: WorkItem): boolean {
 }
 
 function areaLabels(item: WorkItem): string[] {
-  return metadataLabels(item.metadata).filter(
+  return metadataLabels(sourceMetadata(item)).filter(
     label => !label.includes(':') && !GITHUB_TYPE_LABELS.has(label.toLowerCase()),
   );
 }
@@ -141,7 +141,7 @@ function bug(cards: readonly WorkItem[]) {
   const unplanned = cards.filter(
     item =>
       notStarted(item) &&
-      (item.triageType === 'bug' || hasLabel(metadataLabels(item.metadata), 'bug')) &&
+      (item.triageType === 'bug' || hasLabel(metadataLabels(sourceMetadata(item)), 'bug')) &&
       item.sessions.plan === undefined,
   ).length;
   if (unplanned === 0) return undefined;

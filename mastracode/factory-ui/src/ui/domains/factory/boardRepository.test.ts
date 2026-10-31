@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { LinkedRepositoryPayload } from '../workspaces/services/github';
-import { cardRepositorySlug } from './boardRepository';
+import { providerFactsCard } from '../../__tests__/fixtures/providerFactsCard';
+import { cardProjectRepositoryId, cardRepositorySlug } from './boardRepository';
 
 function repository(provider: 'github' | 'gitlab', externalId: string, slug: string): LinkedRepositoryPayload {
   return {
@@ -15,6 +16,24 @@ function repository(provider: 'github' | 'gitlab', externalId: string, slug: str
 }
 
 describe('cardRepositorySlug', () => {
+  it.each(['github', 'gitlab'] as const)('locates a %s card repository using normalized provider ids', provider => {
+    const card = {
+      source: `${provider}-issue`,
+      metadata: { githubRepositoryId: 202, gitlabProjectId: '202', repository: 'acme/old' },
+      workItem: {
+        ...providerFactsCard.workItem,
+        metadata: provider === 'github' ? { githubRepositoryId: 101 } : { gitlabProjectId: '101' },
+      },
+    };
+    expect(
+      cardProjectRepositoryId(
+        [repository(provider, '101', 'acme/current'), repository(provider, '202', 'acme/stale')],
+        card,
+        'fallback',
+      ),
+    ).toBe('acme/current');
+  });
+
   describe.each(['github-issue', 'github-pr', 'gitlab-issue', 'gitlab-pr'])('%s with both provider ids', source => {
     const provider = source.startsWith('github-') ? 'github' : 'gitlab';
     const metadata = { repository: 'acme/stored', githubRepositoryId: 101, gitlabProjectId: '202' };

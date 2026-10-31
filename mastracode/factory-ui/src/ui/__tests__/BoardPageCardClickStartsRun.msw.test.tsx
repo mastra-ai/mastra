@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
+import { providerFactsCard } from './fixtures/providerFactsCard';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -274,6 +275,35 @@ async function moveFromCardDetails(cardTitle: string, action: string) {
 }
 
 describe('Board card buttons move the card', () => {
+  it('moves a card using its normalized source repository mapping without prompting for a repository', async () => {
+    const item = {
+      ...linearWorkItem,
+      stages: ['intake'],
+      metadata: { linearProjectId: 'stale-project', authorTrusted: true },
+      workItem: {
+        ...providerFactsCard.workItem,
+        provider: 'linear',
+        title: linearWorkItem.title,
+        key: 'ENG-42',
+        state: 'open',
+        metadata: { ...linearWorkItem.metadata, linearProjectId: 'linear-project-1' },
+      },
+    };
+    const { patches, transitions } = stubBoardEndpoints({
+      multiRepository: true,
+      mappedLinearRepository: true,
+      workItems: [item],
+    });
+    renderWorkBoard();
+
+    await moveFromCardDetails(item.title, 'Investigate');
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+    expect(patches).toHaveLength(0);
+    expect(transitions[0]).toMatchObject({ itemId: item.id, body: { stage: 'triage' } });
+  });
+
   it('issues a transition to Triage with cause card_action when Investigate is clicked', async () => {
     const { transitions } = stubBoardEndpoints({ workItems: [intakeWorkItem] });
     renderWorkBoard();
@@ -325,6 +355,41 @@ describe('Board card buttons move the card', () => {
     ]);
     expect(transitions[0]).toMatchObject({
       itemId: 'linear-item-1',
+      body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
+    });
+  });
+
+  it('patches only the chosen repository when moving a normalized card with stale provider metadata', async () => {
+    const item = {
+      ...linearWorkItem,
+      stages: ['intake'],
+      metadata: {
+        ...linearWorkItem.metadata,
+        labels: ['stale-label'],
+        state: 'closed',
+        githubRepositoryId: 202,
+      },
+      workItem: {
+        ...providerFactsCard.workItem,
+        provider: 'linear',
+        title: linearWorkItem.title,
+        key: 'ENG-42',
+        state: 'open',
+        labels: ['bug'],
+        metadata: linearWorkItem.metadata,
+      },
+    };
+    const { patches, transitions } = stubBoardEndpoints({ multiRepository: true, workItems: [item] });
+    renderWorkBoard();
+
+    await moveFromCardDetails(item.title, 'Investigate');
+    const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
+    await userEvent.setup().click(within(dialog).getByRole('button', { name: /acme\/other/ }));
+
+    await waitFor(() => expect(transitions).toHaveLength(1));
+    expect(patches).toEqual([{ itemId: item.id, body: { metadata: { repository: 'acme/other' } } }]);
+    expect(transitions[0]).toMatchObject({
+      itemId: item.id,
       body: { stage: 'triage', cause: 'card_action', expectedRevision: 5 },
     });
   });
