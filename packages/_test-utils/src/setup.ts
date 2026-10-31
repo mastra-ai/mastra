@@ -74,3 +74,39 @@ function wrapMastraModule(original: any) {
 // vi.mock calls are hoisted by vitest, so module paths must be static string literals.
 vi.mock('@mastra/core', async importOriginal => wrapMastraModule(await importOriginal()));
 vi.mock('@mastra/core/mastra', async importOriginal => wrapMastraModule(await importOriginal()));
+
+// ---------------------------------------------------------------------------
+// Instant retry backoff
+// ---------------------------------------------------------------------------
+// Every retry backoff in core (the default StreamErrorRetryProcessor's 3s
+// delays, provider Retry-After up to 30s, model-call retries) waits through
+// `waitDelay`. Tests exercising retries would otherwise sleep for real. The
+// mock keeps one microtask yield so ordering is preserved, and is a vi.fn so a
+// test can assert the requested delay from its call args instead of elapsed time.
+// Files that test the delay itself opt out with
+// `vi.unmock('<relative path to>/utils/retry-after')`.
+// Only reaches code that imports core from source (resolved relative to this
+// file, which runs from dist/ at the same depth as src/).
+vi.mock('../../core/src/utils/retry-after', async importOriginal => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  waitDelay: vi.fn(async (_delayMs: number, abortSignal?: AbortSignal) => {
+    if (abortSignal?.aborted) return;
+    await Promise.resolve();
+  }),
+}));
+
+// The agent's model-call retry (core stream/aisdk/v5/execute.ts) runs through
+// p-retry, whose own exponential backoff (1s, 2s, ...) never goes through
+// waitDelay. Zero it; retry counts and shouldRetry/onFailedAttempt are unchanged.
+// Opt out with `vi.mock('<relative path to>/core/node_modules/p-retry', importOriginal => importOriginal())`
+// (`vi.unmock` on this path leaves p-retry's lazy import unresolved under fake timers).
+vi.mock('../../core/node_modules/p-retry', async importOriginal => {
+  // p-retry is core's dependency, not this package's, so type only what is used.
+  type PRetry = (input: unknown, options?: Record<string, unknown>) => Promise<unknown>;
+  const original = await importOriginal<{ default: PRetry }>();
+  return {
+    ...original,
+    default: ((input, options) =>
+      original.default(input, { ...options, minTimeout: 0, maxTimeout: 0, randomize: false })) satisfies PRetry,
+  };
+});
