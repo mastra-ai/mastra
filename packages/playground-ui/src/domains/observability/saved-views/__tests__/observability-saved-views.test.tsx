@@ -67,6 +67,7 @@ const renderBar = ({
   source,
   withColumns = false,
   canEdit,
+  canCreate,
   defaultDatePreset,
 }: {
   page: SavedViewPage;
@@ -74,10 +75,11 @@ const renderBar = ({
   source: InMemorySavedViewsSource;
   withColumns?: boolean;
   canEdit?: (view: SavedViewRecord) => boolean;
+  canCreate?: boolean;
   defaultDatePreset?: string;
 }) =>
   renderWithProviders(
-    <SavedViewsProvider source={source} queryKeyScope={['project', 'p1']} canEdit={canEdit}>
+    <SavedViewsProvider source={source} queryKeyScope={['project', 'p1']} canEdit={canEdit} canCreate={canCreate}>
       <Page page={page} initial={initial} withColumns={withColumns} defaultDatePreset={defaultDatePreset} />
     </SavedViewsProvider>,
   );
@@ -300,6 +302,61 @@ describe('ObservabilitySavedViews', () => {
     expect(await screen.findByRole('button', { name: 'Reset' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
     expect(source.calls.filter(call => call.method !== 'list')).toEqual([]);
+  });
+
+  describe('when the user cannot create views', () => {
+    const sorted = (params: URLSearchParams) => {
+      params.sort();
+      return params.toString();
+    };
+    const errorsUrl = sorted(applySavedView(spansView, new URLSearchParams()).params);
+    const sortedUrl = () => sorted(new URLSearchParams(url()));
+
+    it('applies and edits views but offers no way to create one', async () => {
+      const source = createInMemorySavedViewsSource([{ name: 'Errors', state: spansView }]);
+      renderBar({ page: 'spans', initial: '', source, canCreate: false });
+
+      await pickView('Errors');
+      await waitFor(() => expect(sortedUrl()).toBe(errorsUrl));
+      expect(screen.queryByRole('button', { name: 'Save as new view' })).toBeNull();
+
+      const menu = await openViewMenu('Errors');
+      expect(within(menu).getByRole('menuitem', { name: 'Rename' })).toBeTruthy();
+      expect(within(menu).getByRole('menuitem', { name: 'Delete view' })).toBeTruthy();
+      expect(within(menu).queryByRole('menuitem', { name: 'Duplicate' })).toBeNull();
+      fireEvent.keyDown(menu, { key: 'Escape' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Save changes' }));
+      await waitFor(() => expect(source.calls.some(call => call.method === 'update')).toBe(true));
+      expect(source.calls.some(call => call.method === 'create')).toBe(false);
+    });
+
+    it('with no view editable either, views can only be applied', async () => {
+      const source = createInMemorySavedViewsSource([{ name: 'Errors', state: spansView }]);
+      renderBar({ page: 'spans', initial: '', source, canCreate: false, canEdit: () => false });
+
+      // Edits on the page default leave nothing to save and no action behind.
+      fireEvent.click(await screen.findByRole('button', { name: 'Filter errors' }));
+      await waitFor(() => expect(url()).not.toBe(''));
+      expect(picker().getAttribute('aria-label')).toBe('View: All spans');
+      expect(screen.queryByRole('button', { name: 'Save as new view' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Reset' })).toBeNull();
+
+      await pickView('Errors');
+      await waitFor(() => expect(sortedUrl()).toBe(errorsUrl));
+      expect(screen.queryByRole('button', { name: 'View actions' })).toBeNull();
+
+      // Edits to a view can only be reset to it.
+      fireEvent.click(screen.getByRole('button', { name: 'Filter errors' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Reset' }));
+      expect(screen.queryByRole('button', { name: 'Save changes' })).toBeNull();
+      await waitFor(() => expect(sortedUrl()).toBe(errorsUrl));
+
+      await pickView('All spans');
+      await waitFor(() => expect(url()).toBe(''));
+      expect(source.calls.filter(call => call.method !== 'list')).toEqual([]);
+    });
   });
 
   describe('when the host defaults to another range', () => {

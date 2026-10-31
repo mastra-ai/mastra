@@ -37,6 +37,7 @@ export type SavedViewsContextValue = {
   source: SavedViewsSource;
   queryKeyScope: readonly unknown[];
   canEdit?: (view: SavedViewRecord) => boolean;
+  canCreate?: boolean;
 };
 
 export const SavedViewsContext = createContext<SavedViewsContextValue | undefined>(undefined);
