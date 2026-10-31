@@ -57,6 +57,18 @@ describe('page tree', () => {
     expect(roots[1]?.children[0]?.children.map(node => node.page.id)).toEqual(['z']);
   });
 
+  it('cuts the cycle itself when a page hanging under it sorts first', () => {
+    const roots = buildPageTree([
+      page('org', null, 'a0'),
+      page('z', 'y', 'a1'),
+      page('x', 'y', 'a2'),
+      page('y', 'x', 'a3'),
+    ]);
+    expect(roots.map(node => node.page.id)).toEqual(['org', 'x']);
+    expect(roots[1]?.children.map(node => node.page.id)).toEqual(['y']);
+    expect(roots[1]?.children[0]?.children.map(node => node.page.id)).toEqual(['z']);
+  });
+
   it('lists rows only under expanded pages', () => {
     const roots = buildPageTree(pages);
     expect(visiblePageRows(roots, new Set()).map(row => row.page.id)).toEqual(['org', 'orphan']);
