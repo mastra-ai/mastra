@@ -37,6 +37,11 @@ export interface VoiceSpanConfig {
   realtimeModel?: string;
 }
 
+/**
+ * Public surface of `MastraVoice` without its `#private`/`protected` members.
+ * Provider packages bundle their own copy of the class, so APIs that accept
+ * user voices must take this interface (#29016).
+ */
 export interface IMastraVoice<
   TSpeakOptions = unknown,
   TListenOptions = unknown,
