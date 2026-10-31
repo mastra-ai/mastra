@@ -5,7 +5,7 @@ import type { ReactNode } from 'react';
 import { parseRecordSegments } from '../lib/recordText';
 import type {
   KnowledgeActivityAction,
-  KnowledgeActivityPayload,
+  KnowledgePageActivityPayload,
   KnowledgeNotePayload,
   KnowledgePagePayload,
   KnowledgePinPayload,
@@ -259,7 +259,7 @@ export function KnowledgePageDetail({
   notesMore?: ReactNode;
   /** The page's children, when the host can list them. */
   childPages?: ReactNode;
-  activity?: KnowledgeActivityPayload[];
+  activity?: KnowledgePageActivityPayload[];
 }) {
   const firstHighlighted = useRef<HTMLLIElement | null>(null);
   useEffect(() => {
