@@ -415,6 +415,39 @@ describe('workspace_read_file', () => {
     expect(result).not.toContain('binary file not readable as text');
   });
 
+  it.each([
+    'application/jsonl',
+    'application/x-jsonl',
+    'application/ndjson',
+    'application/x-ndjson',
+    'application/jsonlines',
+    'application/json-lines',
+    'application/x-jsonlines',
+    'Application/X-NDJSON; charset=utf-8',
+    'application/jsonl; charset=UTF-8',
+  ])('reads line-delimited JSON with MIME type %s as paginated text', async mimeType => {
+    await fs.writeFile(path.join(tempDir, 'events.ndjson'), '{"a":1}\n{"a":2}\n{"a":3}');
+    class NDJSONFilesystem extends LocalFilesystem {
+      override async stat(filePath: string) {
+        return { ...(await super.stat(filePath)), mimeType };
+      }
+    }
+    const workspace = new Workspace({ filesystem: new NDJSONFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute(
+      { path: 'events.ndjson', offset: 2, limit: 1, showLineNumbers: false },
+      { workspace },
+    );
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain('lines 2-2 of 3');
+    expect(result).toContain('{"a":2}');
+    expect(result).not.toContain('{"a":1}');
+    expect(result).not.toContain('{"a":3}');
+    expect(result).not.toContain('binary file not readable as text');
+  });
+
   it('should read files with unknown extensions as text (octet-stream fallback)', async () => {
     // An unknown extension maps to application/octet-stream but is likely text.
     await fs.writeFile(path.join(tempDir, 'app.log'), 'INFO server started\nWARN slow query');
