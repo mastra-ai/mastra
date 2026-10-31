@@ -11,10 +11,25 @@ export type SavedViewsProviderProps = {
    * org-wide views are read-only. Read-only views can still be applied and duplicated. Defaults to all.
    */
   canEdit?: (view: SavedViewRecord) => boolean;
+  /**
+   * Whether new views can be saved here (save as new view, duplicate), e.g. `false` for a user who may only
+   * read views. With `canEdit={() => false}` the views can only be applied. Defaults to true.
+   */
+  canCreate?: boolean;
   children: ReactNode;
 };
 
 /** Turns saved views on for the observability pages below it. Without it, the pages show none. */
-export function SavedViewsProvider({ source, queryKeyScope = [], canEdit, children }: SavedViewsProviderProps) {
-  return <SavedViewsContext.Provider value={{ source, queryKeyScope, canEdit }}>{children}</SavedViewsContext.Provider>;
+export function SavedViewsProvider({
+  source,
+  queryKeyScope = [],
+  canEdit,
+  canCreate,
+  children,
+}: SavedViewsProviderProps) {
+  return (
+    <SavedViewsContext.Provider value={{ source, queryKeyScope, canEdit, canCreate }}>
+      {children}
+    </SavedViewsContext.Provider>
+  );
 }

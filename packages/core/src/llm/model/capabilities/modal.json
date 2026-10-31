@@ -32,12 +32,6 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "Qwen/Qwen3.8-2.4T-A95B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
     "nvidia/GLM-5.3-Flash-NVFP4": [
       {
         "type": "effort",
@@ -60,6 +54,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "Qwen/Qwen3.8-2.4T-A95B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ]
   }
