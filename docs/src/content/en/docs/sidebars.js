@@ -220,6 +220,66 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'category',
+          label: 'Knowledge',
+          link: {
+            type: 'doc',
+            id: 'knowledge/overview',
+          },
+          items: [
+            {
+              type: 'doc',
+              id: 'knowledge/concepts',
+              label: 'Concepts',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/setup',
+              label: 'Setup',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/scope-types',
+              label: 'Scope types',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/run-scopes',
+              label: 'Run scopes',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/agents-and-tools',
+              label: 'Tools',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/pins',
+              label: 'Pins',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/access-patterns',
+              label: 'Access patterns',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/instructions',
+              label: 'Instructions',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/limits',
+              label: 'Limits',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/mastra-code',
+              label: 'Mastra Code',
+            },
+          ],
+        },
       ],
     },
     {
