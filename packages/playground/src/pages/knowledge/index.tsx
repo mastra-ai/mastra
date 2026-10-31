@@ -110,8 +110,9 @@ export default function KnowledgePage() {
       </Shell>
     );
   }
-  // The Knowledge routes are opt-in, so a server that has not registered them 404s.
-  if (instances.error && is404NotFoundError(instances.error)) {
+  // The Knowledge routes are opt-in, so a server that has not registered them 404s. A failed refetch
+  // with instances already loaded keeps the explorer, like a failed graph poll does.
+  if (instances.error && !instances.data && is404NotFoundError(instances.error)) {
     return (
       <Shell>
         <EmptyState
@@ -122,7 +123,7 @@ export default function KnowledgePage() {
       </Shell>
     );
   }
-  if (instances.error) {
+  if (instances.error && !instances.data) {
     return (
       <Shell>
         <EmptyState
