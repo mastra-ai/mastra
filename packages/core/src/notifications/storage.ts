@@ -1,5 +1,6 @@
 import { StorageDomain } from '../storage/domains/base';
 import type {
+  ClaimNotificationSummaryInput,
   CreateNotificationInput,
   ListDueNotificationsInput,
   ListNotificationsInput,
@@ -44,7 +45,23 @@ export abstract class NotificationsStorage extends StorageDomain {
     }
     return updated;
   }
+
+  /**
+   * Claim a due summary record for one dispatch pass: move `summaryAt` to `claimUntil`, but only
+   * if the record is still pending and its `summaryAt` still equals `expectedSummaryAt`.
+   * Returns the claimed record, or `null` when another pass already claimed or changed it.
+   * Adapters should override this with a single conditional update — the default reads then
+   * writes, so two passes can still both win between the read and the write.
+   */
+  async claimNotificationSummary(input: ClaimNotificationSummaryInput): Promise<NotificationRecord | null> {
+    const existing = await this.getNotification({ threadId: input.threadId, id: input.id });
+    if (!isClaimableSummary(existing, input.expectedSummaryAt)) return null;
+    return this.updateNotification({ threadId: input.threadId, id: input.id, summaryAt: input.claimUntil });
+  }
 }
+
+const isClaimableSummary = (record: NotificationRecord | null | undefined, expectedSummaryAt: Date): boolean =>
+  record?.status === 'pending' && record.summaryAt?.getTime() === expectedSummaryAt.getTime();
 
 const FALLBACK_UPDATE_CONCURRENCY = 20;
 
@@ -233,6 +250,14 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
       updated.push(cloneRecord(next));
     }
     return updated;
+  }
+
+  override async claimNotificationSummary(input: ClaimNotificationSummaryInput): Promise<NotificationRecord | null> {
+    const existing = this.#notifications.get(notificationKey(input.threadId, input.id));
+    if (!isClaimableSummary(existing, input.expectedSummaryAt)) return null;
+    const next: NotificationRecord = { ...existing!, summaryAt: new Date(input.claimUntil), updatedAt: new Date() };
+    this.#notifications.set(notificationKey(next.threadId, next.id), next);
+    return cloneRecord(next);
   }
 
   async dangerouslyClearAll(): Promise<void> {

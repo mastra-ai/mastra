@@ -380,6 +380,23 @@ export class NotificationsMongoDB extends NotificationsStorage {
     return updated;
   }
 
+  // Inlined instead of importing `ClaimNotificationSummaryInput` for the same older-core reason as above.
+  override async claimNotificationSummary(input: {
+    threadId: string;
+    id: string;
+    expectedSummaryAt: Date;
+    claimUntil: Date;
+  }): Promise<NotificationRecord | null> {
+    const collection = await this.getCollection();
+    // A single conditional update, so of two overlapping dispatch passes only one moves summaryAt.
+    const row = await collection.findOneAndUpdate(
+      { threadId: input.threadId, id: input.id, status: 'pending', summaryAt: input.expectedSummaryAt },
+      { $set: { summaryAt: input.claimUntil, updatedAt: new Date() } },
+      { returnDocument: 'after' },
+    );
+    return row ? rowToNotification(row) : null;
+  }
+
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {
     if (!input.dedupeKey && !input.coalesceKey) return undefined;
     const collection = await this.getCollection();

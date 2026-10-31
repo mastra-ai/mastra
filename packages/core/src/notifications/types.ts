@@ -127,6 +127,15 @@ export type UpdateNotificationsStatusInput = {
   status: NotificationStatus;
 };
 
+export type ClaimNotificationSummaryInput = {
+  threadId: string;
+  id: string;
+  /** The `summaryAt` the dispatcher listed the record with. The claim fails if it has changed. */
+  expectedSummaryAt: Date;
+  /** New `summaryAt` while the summary is in flight. If the claimer dies, the record becomes due again then. */
+  claimUntil: Date;
+};
+
 export type NotificationSummary = {
   threadId: string;
   resourceId?: string;

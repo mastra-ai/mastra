@@ -1176,6 +1176,210 @@ describe('notification inbox', () => {
     });
   });
 
+  describe('overlapping summary dispatch', () => {
+    const now = new Date('2026-05-30T12:00:00Z');
+    const createSummaryRecords = async (storage: NotificationsStorage, summaryAt = now) => {
+      for (const id of ['n1', 'n2']) {
+        await storage.createNotification({
+          id,
+          agentId: 'agent-1',
+          resourceId: 'resource-1',
+          threadId: 'thread-1',
+          source: 'github',
+          kind: 'mention',
+          priority: 'medium',
+          summary: `${id} summary`,
+          summaryAt,
+        });
+      }
+    };
+    // The send settles a tick later, like a real agent, so an overlapping pass reads the
+    // records while the first pass is still waiting on it.
+    const slowAgent = () => {
+      const sendSignal = vi.fn((signal, _target) => ({
+        accepted: new Promise(resolve => setTimeout(() => resolve({ action: 'deliver', runId: 'run-1' }), 5)),
+        persisted: new Promise(resolve => setTimeout(resolve, 5)),
+        signal,
+      }));
+      return { sendSignal, mastra: { getAgentById: vi.fn(async () => ({ sendSignal })) } as any };
+    };
+
+    it('sends one summary when two dispatch passes overlap', async () => {
+      const storage = new InMemoryNotificationsStorage();
+      await createSummaryRecords(storage);
+      const { sendSignal, mastra } = slowAgent();
+
+      const [first, second] = await Promise.all([
+        dispatchDueNotifications({ mastra, storage, now }),
+        dispatchDueNotifications({ mastra, storage, now }),
+      ]);
+
+      expect(sendSignal).toHaveBeenCalledTimes(1);
+      const signals = [...first.signals, ...second.signals];
+      expect(signals).toHaveLength(1);
+      expect([...first.failed, ...second.failed]).toEqual([]);
+      for (const id of ['n1', 'n2']) {
+        await expect(storage.getNotification({ threadId: 'thread-1', id })).resolves.toMatchObject({
+          status: 'pending',
+          summaryAt: undefined,
+          summarySignalId: signals[0]!.id,
+          deliveryAttempts: 0,
+        });
+      }
+    });
+
+    it('gives the same records due at the same time the same summary signal id', async () => {
+      const dispatchOnce = async (summaryAt: Date) => {
+        const storage = new InMemoryNotificationsStorage();
+        await createSummaryRecords(storage, summaryAt);
+        const { mastra } = slowAgent();
+        const result = await dispatchDueNotifications({ mastra, storage, now });
+        return result.signals[0]!.id;
+      };
+
+      const id = await dispatchOnce(now);
+      expect(id).toMatch(/^notification-summary:[0-9a-f]{32}$/);
+      await expect(dispatchOnce(now)).resolves.toBe(id);
+      await expect(dispatchOnce(new Date(now.getTime() - 1000))).resolves.not.toBe(id);
+    });
+
+    it('puts summaryAt back when the summary send fails, so the next pass retries it', async () => {
+      const storage = new InMemoryNotificationsStorage();
+      await createSummaryRecords(storage);
+      let reject = true;
+      const sendSignal = vi.fn((signal, _target) => ({
+        accepted: reject ? Promise.reject(new Error('no model configured')) : Promise.resolve({ action: 'deliver' }),
+        signal,
+      }));
+      const mastra = { getAgentById: vi.fn(async () => ({ sendSignal })) } as any;
+
+      const failedPass = await dispatchDueNotifications({ mastra, storage, now });
+
+      expect(failedPass.failed.map(entry => [entry.record.id, entry.error])).toEqual([
+        ['n1', 'no model configured'],
+        ['n2', 'no model configured'],
+      ]);
+      for (const id of ['n1', 'n2']) {
+        await expect(storage.getNotification({ threadId: 'thread-1', id })).resolves.toMatchObject({
+          status: 'pending',
+          summaryAt: now,
+          deliveryAttempts: 1,
+          lastDeliveryError: 'no model configured',
+        });
+      }
+
+      reject = false;
+      const retry = await dispatchDueNotifications({ mastra, storage, now });
+      expect(retry.signals).toHaveLength(1);
+      expect(sendSignal).toHaveBeenCalledTimes(2);
+    });
+
+    it('leaves held summaries unclaimed', async () => {
+      const storage = new InMemoryNotificationsStorage();
+      await createSummaryRecords(storage);
+      const claim = vi.spyOn(storage, 'claimNotificationSummary');
+      const sendSignal = vi.fn();
+      const mastra = {
+        getAgentById: vi.fn(async () => ({
+          sendSignal,
+          resolveNotificationDeliveryDecision: () => ({ action: 'summarize' as const, hold: true }),
+        })),
+      } as any;
+
+      await dispatchDueNotifications({ mastra, storage, now });
+
+      expect(claim).not.toHaveBeenCalled();
+      expect(sendSignal).not.toHaveBeenCalled();
+      await expect(storage.getNotification({ threadId: 'thread-1', id: 'n1' })).resolves.toMatchObject({
+        summaryAt: now,
+      });
+    });
+
+    it('sends a summary another pass claimed once its claim runs out', async () => {
+      const storage = new InMemoryNotificationsStorage();
+      await createSummaryRecords(storage);
+      // A pass that claimed both records and then died before sending.
+      const claimUntil = new Date(now.getTime() + 5 * 60 * 1000);
+      for (const id of ['n1', 'n2']) {
+        await storage.claimNotificationSummary({ threadId: 'thread-1', id, expectedSummaryAt: now, claimUntil });
+      }
+      const { sendSignal, mastra } = slowAgent();
+
+      await dispatchDueNotifications({ mastra, storage, now });
+      expect(sendSignal).not.toHaveBeenCalled();
+
+      const later = await dispatchDueNotifications({ mastra, storage, now: new Date(claimUntil.getTime() + 1) });
+      expect(later.signals).toHaveLength(1);
+      expect(later.signals[0]!.metadata).toMatchObject({ notificationIds: ['n1', 'n2'] });
+    });
+
+    it('summarizes only the records this pass claimed', async () => {
+      const storage = new InMemoryNotificationsStorage();
+      await createSummaryRecords(storage);
+      // Another pass claims n2 between this pass listing and claiming it.
+      const claim = storage.claimNotificationSummary.bind(storage);
+      vi.spyOn(storage, 'claimNotificationSummary').mockImplementation(async input => {
+        if (input.id === 'n2') {
+          await claim({ ...input, claimUntil: new Date(now.getTime() + 60_000) });
+          return null;
+        }
+        return claim(input);
+      });
+      const { mastra } = slowAgent();
+
+      const result = await dispatchDueNotifications({ mastra, storage, now });
+
+      expect(result.signals[0]!.metadata).toMatchObject({ notificationIds: ['n1'] });
+      expect(result.delivered.map(record => record.id)).toEqual(['n1']);
+      await expect(storage.getNotification({ threadId: 'thread-1', id: 'n2' })).resolves.toMatchObject({
+        summaryAt: new Date(now.getTime() + 60_000),
+        deliveryAttempts: 0,
+      });
+    });
+  });
+
+  it('claims a due summary record once, and only while it is pending and unchanged', async () => {
+    const now = new Date('2026-05-30T12:00:00Z');
+    const claimUntil = new Date(now.getTime() + 60_000);
+    for (const storage of [
+      new InMemoryNotificationsStorage(),
+      new (class LegacyStorage extends InMemoryNotificationsStorage {
+        override claimNotificationSummary = NotificationsStorage.prototype.claimNotificationSummary;
+      })(),
+    ]) {
+      await storage.createNotification({
+        id: 'n1',
+        threadId: 't',
+        source: 's',
+        kind: 'k',
+        summary: 'a',
+        summaryAt: now,
+      });
+      await storage.createNotification({
+        id: 'n2',
+        threadId: 't',
+        source: 's',
+        kind: 'k',
+        summary: 'b',
+        summaryAt: now,
+      });
+      await storage.updateNotification({ threadId: 't', id: 'n2', status: 'dismissed' });
+
+      await expect(
+        storage.claimNotificationSummary({ threadId: 't', id: 'n1', expectedSummaryAt: now, claimUntil }),
+      ).resolves.toMatchObject({ id: 'n1', summaryAt: claimUntil });
+      await expect(
+        storage.claimNotificationSummary({ threadId: 't', id: 'n1', expectedSummaryAt: now, claimUntil }),
+      ).resolves.toBeNull();
+      await expect(
+        storage.claimNotificationSummary({ threadId: 't', id: 'n2', expectedSummaryAt: now, claimUntil }),
+      ).resolves.toBeNull();
+      await expect(
+        storage.claimNotificationSummary({ threadId: 't', id: 'missing', expectedSummaryAt: now, claimUntil }),
+      ).resolves.toBeNull();
+    }
+  });
+
   it('keeps the persist behavior for all-low-priority summaries and passes only the policy request context', async () => {
     const storage = new InMemoryNotificationsStorage();
     const now = new Date('2026-05-30T12:00:00Z');

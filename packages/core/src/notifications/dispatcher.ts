@@ -266,6 +266,103 @@ async function sendNotificationSummary({
     now,
   });
   if (decision.hold) return null;
+
+  // Claim the records before sending, so an overlapping pass that listed the same
+  // records skips the ones this pass won instead of sending the summary again.
+  const claimUntil = new Date(now.getTime() + NOTIFICATION_SUMMARY_CLAIM_LEASE_MS);
+  const claimed: Array<{ record: NotificationRecord; summaryAt: Date }> = [];
+  for (const record of records) {
+    const claimedRecord = await storage.claimNotificationSummary({
+      threadId: record.threadId,
+      id: record.id,
+      expectedSummaryAt: record.summaryAt!,
+      claimUntil,
+    });
+    if (claimedRecord) claimed.push({ record: claimedRecord, summaryAt: record.summaryAt! });
+  }
+  if (claimed.length === 0) return null;
+
+  const claimedRecords = claimed.map(entry => entry.record);
+  try {
+    return await sendClaimedNotificationSummary({
+      agent,
+      storage,
+      records: claimedRecords,
+      decision,
+      signalId: await notificationSummarySignalId(first.threadId, claimed),
+      now,
+    });
+  } catch (error) {
+    // Put the original `summaryAt` back with the failed attempt, so the next pass retries
+    // the summary (until the attempt limit) instead of waiting out the claim.
+    const failedRecords: NotificationRecord[] = [];
+    for (const { record, summaryAt } of claimed) {
+      failedRecords.push(
+        await storage.updateNotification({
+          id: record.id,
+          threadId: record.threadId,
+          ...resolveDeliveryFailureUpdate(record),
+          summaryAt,
+          lastDeliveryAttemptAt: now,
+          lastDeliveryError: errorMessage(error),
+        }),
+      );
+    }
+    throw new NotificationSummaryDeliveryError(errorMessage(error), failedRecords);
+  }
+}
+
+/**
+ * How long a pass holds the records of a summary it is sending. If the pass dies
+ * mid-send, the records become due again once this passes.
+ */
+const NOTIFICATION_SUMMARY_CLAIM_LEASE_MS = 5 * 60 * 1000;
+
+/** A summary send failed after its records were claimed; the failure is already recorded on them. */
+class NotificationSummaryDeliveryError extends Error {
+  constructor(
+    message: string,
+    readonly records: NotificationRecord[],
+  ) {
+    super(message);
+  }
+}
+
+/**
+ * The same records due at the same time always get the same summary signal id, so a
+ * summary that is sent twice anyway (an expired claim, a store without an atomic
+ * claim) persists as one message.
+ */
+async function notificationSummarySignalId(
+  threadId: string,
+  claimed: Array<{ record: NotificationRecord; summaryAt: Date }>,
+): Promise<string> {
+  const entries = claimed.map(({ record, summaryAt }) => `${record.id}@${summaryAt.toISOString()}`).sort();
+  const digest = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(JSON.stringify([threadId, ...entries])),
+  );
+  const hex = Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  return `notification-summary:${hex.slice(0, 32)}`;
+}
+
+async function sendClaimedNotificationSummary({
+  agent,
+  storage,
+  records,
+  decision,
+  signalId,
+  now,
+}: {
+  agent: NotificationDispatchAgent;
+  storage: NotificationsStorage;
+  records: NotificationRecord[];
+  decision: Awaited<ReturnType<typeof resolveDeliveryTimeDecision>>;
+  signalId: string;
+  now: Date;
+}): Promise<{ records: NotificationRecord[]; signal: CreatedAgentSignal }> {
+  const first = records[0]!;
+  const resourceId = first.resourceId!;
   // The all-low-priority batch persists without waking, so it never starts a
   // run. It still needs the policy's request context: resolving the agent's
   // memory to write the summary can depend on who the thread belongs to.
@@ -274,11 +371,11 @@ async function sendNotificationSummary({
     record => readNotificationRoutingRequirement(record.metadata)?.requireClaimedOwner === true,
   );
   const summary = summarizeNotifications(records);
-  const signal = createNotificationSummarySignal(summary);
+  const signal = createNotificationSummarySignal(summary, { id: signalId });
   const persistRequestContext = decision.streamOptions?.requestContext;
   const target: SendAgentSignalOptions = allLowPriority
     ? {
-        resourceId: first.resourceId,
+        resourceId,
         threadId: first.threadId,
         ifIdle: {
           behavior: 'persist',
@@ -286,7 +383,7 @@ async function sendNotificationSummary({
         },
       }
     : delayedDeliveryTarget({
-        resourceId: first.resourceId,
+        resourceId,
         threadId: first.threadId,
         streamOptions: decision.streamOptions,
         requireClaimedOwner,
@@ -444,6 +541,10 @@ async function dispatchRecords({
           delivered.push(...result.records);
           signals.push(result.signal);
         } catch (error) {
+          if (error instanceof NotificationSummaryDeliveryError) {
+            for (const record of error.records) failed.push({ record, error: error.message });
+            continue;
+          }
           for (const record of item.records) {
             await recordDeliveryFailure({ storage, record, now, error });
             failed.push({ record, error: errorMessage(error) });

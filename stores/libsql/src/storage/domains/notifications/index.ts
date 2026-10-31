@@ -401,6 +401,34 @@ export class NotificationsLibSQL extends NotificationsStorage {
     return updated;
   }
 
+  // Inlined instead of importing `ClaimNotificationSummaryInput` for the same older-core reason as above.
+  override async claimNotificationSummary(input: {
+    threadId: string;
+    id: string;
+    expectedSummaryAt: Date;
+    claimUntil: Date;
+  }): Promise<NotificationRecord | null> {
+    // A single conditional UPDATE, so of two overlapping dispatch passes only one moves summaryAt.
+    const result = await this.#db.executeWriteOperationWithRetry(
+      () =>
+        withClientWriteLock(this.#client, () =>
+          this.#client.execute({
+            sql: `UPDATE "${TABLE_NOTIFICATIONS}" SET "summaryAt" = ?, "updatedAt" = ? WHERE "threadId" = ? AND "id" = ? AND "status" = 'pending' AND "summaryAt" = ? RETURNING ${buildSelectColumns(TABLE_NOTIFICATIONS)}`,
+            args: [
+              input.claimUntil.toISOString(),
+              new Date().toISOString(),
+              input.threadId,
+              input.id,
+              input.expectedSummaryAt.toISOString(),
+            ],
+          }),
+        ),
+      `claim notification summary in table ${TABLE_NOTIFICATIONS}`,
+    );
+    const row = result.rows?.[0];
+    return row ? rowToNotification(row as Record<string, unknown>) : null;
+  }
+
   private async findCoalescable(input: CreateNotificationInput): Promise<NotificationRecord | undefined> {
     if (!input.dedupeKey && !input.coalesceKey) return undefined;
 

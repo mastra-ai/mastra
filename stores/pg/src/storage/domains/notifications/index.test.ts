@@ -419,6 +419,36 @@ describe('NotificationsPG', () => {
     expect(due[0]?.deliverAt?.toISOString()).toBe(deliverAt.toISOString());
   });
 
+  it('lets only one of two overlapping claims take a due summary, and only while it is pending and unchanged', async () => {
+    const now = new Date('2026-01-01T12:00:00.000Z');
+    const summaryAt = new Date('2026-01-01T11:55:00.123Z');
+    const claimUntil = new Date('2026-01-01T12:05:00.456Z');
+    for (const id of ['claim-me', 'dismissed']) {
+      await store.createNotification({
+        id,
+        threadId: 'thread-1',
+        source: 'github',
+        kind: 'ci-status',
+        summary: id,
+        summaryAt,
+      });
+    }
+    await store.updateNotification({ threadId: 'thread-1', id: 'dismissed', status: 'dismissed' });
+    // Claim with the value the dispatcher read back, so a lossy timestamp round-trip would miss.
+    const [due] = await store.listDueNotifications({ now });
+    const claim = (id: string, expectedSummaryAt = due!.summaryAt!) =>
+      store.claimNotificationSummary({ threadId: 'thread-1', id, expectedSummaryAt, claimUntil });
+
+    const results = await Promise.all([claim('claim-me'), claim('claim-me')]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+    expect(results.find(Boolean)?.summaryAt?.toISOString()).toBe(claimUntil.toISOString());
+    await expect(store.listDueNotifications({ now })).resolves.toEqual([]);
+    await expect(claim('claim-me', claimUntil)).resolves.not.toBeNull();
+    await expect(claim('dismissed', summaryAt)).resolves.toBeNull();
+    await expect(claim('missing', summaryAt)).resolves.toBeNull();
+  });
+
   it('exposes notifications through PostgresStore and includes notification DDL in schema export', async () => {
     const composite = new PostgresStore({ id: 'pg-notifications-composite', pool: createTestPool() });
     try {
