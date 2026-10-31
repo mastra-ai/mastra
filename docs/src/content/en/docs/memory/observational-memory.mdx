@@ -98,7 +98,7 @@ The agent now has humanlike long-term memory that persists across conversations.
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'deepseek/deepseek-reasoner',
+      model: 'deepseek/deepseek-flash',
     },
   },
 })
@@ -151,7 +151,7 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       observationalMemory: {
-        model: 'google/gemini-2.5-flash',
+        model: 'auto',
         temporalMarkers: true,
       },
     },
@@ -177,7 +177,7 @@ import { Memory } from '@mastra/memory'
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       activateAfterIdle: 'auto',
       activateOnProviderChange: true,
     },
@@ -193,7 +193,7 @@ import { Memory } from '@mastra/memory'
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       activateAfterIdle: '5m',
       observation: {
         activateAfterIdle: false,
@@ -455,7 +455,7 @@ new Agent({
     options: {
       observationalMemory: {
         observation: {
-          model: 'deepseek/deepseek-reasoner',
+          model: 'deepseek/deepseek-flash',
           observeAttachments: false,
         },
       },
@@ -522,7 +522,7 @@ Set `retrieval: true` to enable the recall tool for browsing raw messages. No ve
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       retrieval: true,
     },
   },
@@ -540,7 +540,7 @@ const memory = new Memory({
   embedder: myEmbedder,
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       retrieval: { vector: true },
     },
   },
@@ -557,7 +557,7 @@ By default, the recall tool scope is `'resource'`, the agent can list threads an
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       retrieval: { vector: true, scope: 'thread' },
     },
   },
@@ -572,7 +572,7 @@ Mastra injects scope-aware instructions that teach the agent when to search, lis
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       retrieval: {
         vector: true,
         instructions: `
@@ -638,13 +638,13 @@ const memory = new Memory({
 
 Mastra recommends using a model that has a large context window (128K+ tokens) and is fast enough to run in the background without slowing down your actions.
 
-To pin a model instead, set a concrete model ID. We've also successfully tested `__GATEWAY_OPENAI_MODEL_LUNA__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, `deepseek/deepseek-reasoner`, `deepseek/deepseek-v4-pro`, `deepseek/deepseek-v4-flash`, `xai/grok-4-1-fast`, `qwen3`, and `glm-4.7`.
+To pin a model instead, set a concrete model ID. We've also successfully tested `__GATEWAY_OPENAI_MODEL_LUNA__`, `__GATEWAY_ANTHROPIC_MODEL_HAIKU__`, and `deepseek/deepseek-flash`.
 
 ```typescript
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'deepseek/deepseek-reasoner',
+      model: 'deepseek/deepseek-flash',
     },
   },
 })
@@ -654,9 +654,9 @@ See [model configuration](/reference/memory/observational-memory#custom-model) f
 
 :::note
 
-`google/gemini-2.5-flash` is unusually good at preserving detail in long output. As a result, the Reflector can produce reflections that stay above the configured `reflection.observationTokens` threshold even after the maximum compression retry. When this happens, the Reflector returns the smallest non-degenerate candidate produced during retries so the loop terminates instead of running forever.
+Some models preserve detail in long output unusually well, including the Gemini Flash family that supplies the package default. As a result, the Reflector can produce reflections that stay above the configured `reflection.observationTokens` threshold even after the maximum compression retry. When this happens, the Reflector returns the smallest non-degenerate candidate produced during retries so the loop terminates instead of running forever.
 
-If you'd rather have more aggressive compression on the Reflector, swap to a model that condenses more readily, such as `xai/grok-4-1-fast`, `deepseek/deepseek-v4-pro`, or `deepseek/deepseek-v4-flash`. You can keep `google/gemini-2.5-flash` for the Observer and use a different model for the Reflector. See [different models per agent](/reference/memory/observational-memory#different-models-per-agent).
+If you'd rather have more aggressive compression on the Reflector, pick a model that condenses more readily, such as `deepseek/deepseek-flash`. You can use a detail-preserving model for the Observer and a condensing one for the Reflector. See [different models per agent](/reference/memory/observational-memory#different-models-per-agent).
 
 :::
 
@@ -679,7 +679,7 @@ const memory = new Memory({
             5_000: 'openrouter/mistralai/ministral-8b-2512',
             20_000: 'openrouter/mistralai/mistral-small-2603',
             40_000: '__GATEWAY_OPENAI_MODEL_LUNA__',
-            1_000_000: 'google/gemini-3.1-flash-lite-preview',
+            1_000_000: '__GATEWAY_GOOGLE_MODEL_FLASH__',
           },
         }),
       },
@@ -687,7 +687,7 @@ const memory = new Memory({
         model: new ModelByInputTokens({
           upTo: {
             20_000: '__GATEWAY_OPENAI_MODEL_LUNA__',
-            100_000: 'google/gemini-2.5-flash',
+            100_000: 'deepseek/deepseek-flash',
           },
         }),
       },
@@ -710,7 +710,7 @@ Each thread has its own observations. This scope is well tested and works well a
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       scope: 'thread',
     },
   },
@@ -748,7 +748,7 @@ Use thread scope with one or both of these features instead:
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       retrieval: true,
     },
     workingMemory: {
@@ -767,7 +767,7 @@ OM uses token thresholds to decide when to observe and reflect. See [token budge
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       observation: {
         // when to run the Observer (default: 30,000)
         messageTokens: 30_000,
@@ -878,7 +878,7 @@ With `"auto"`, Mastra chooses an idle activation TTL from the active model provi
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       activateAfterIdle: 'auto',
       activateOnProviderChange: true,
     },
@@ -898,7 +898,7 @@ Changing models or providers mid-thread will invalidate the prompt cache. If you
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       activateAfterIdle: { default: 'auto', anthropic: '1h' },
     },
   },
@@ -922,7 +922,7 @@ To disable async buffering and use synchronous observation/reflection instead:
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       observation: {
         bufferTokens: false,
       },
@@ -949,7 +949,7 @@ Set `observation.previousObserverTokens` to limit how many tokens of previous ob
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: 'google/gemini-2.5-flash',
+      model: 'auto',
       observation: {
         previousObserverTokens: 10_000, // keep only ~10k tokens of recent observations
       },

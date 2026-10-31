@@ -72,6 +72,13 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     isOptional: true,
   },
   {
+    name: 'canUseProvider',
+    type: '(providerId: string, context: { requestContext?: RequestContext }) => boolean',
+    description:
+      'Decides whether `"auto"` treats a provider as usable. Replaces the built-in `GOOGLE_GENERATIVE_AI_API_KEY` check that decides whether automatic selection prefers Gemini. Return `false` for any provider the current request cannot authenticate, for example a provider whose key is not available in the request context. The `context.requestContext` is the request context of the run making the OM model call, so credentials can be resolved per request instead of from the server environment. See the `model` row for the selection order.',
+    isOptional: true,
+  },
+  {
     name: 'scope',
     type: "'resource' | 'thread'",
     description:
@@ -183,9 +190,9 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'observeAttachments',
             type: "'auto' | boolean | string[]",
             description:
-              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. `true` (default) forwards all attachments. `false` drops all attachments while keeping placeholders visible. `'auto'` uses the provider capabilities registry to decide: attachments are forwarded when the Observer model supports multimodal input, dropped otherwise, and forwarded when no capability data is available for the model. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model. Tool-result attachments are filtered using the same rule.",
+              "Controls which image/file attachments are forwarded to the Observer model alongside their placeholder text lines. By default only images and PDFs are forwarded. `true` forwards all attachments. `false` drops all attachments while keeping placeholders visible. `'auto'` uses the provider capabilities registry to decide: attachments are forwarded when the Observer model supports multimodal input, dropped otherwise, and forwarded when no capability data is available for the model. An array is a case-insensitive mimeType allowlist supporting exact matches (`'application/pdf'`), wildcard subtypes (`'image/*'`), and bare `'*'` for everything. Useful when the Observer model is text-only (e.g. some DeepSeek endpoints) while the main agent uses a multimodal model, or when you only want specific file types forwarded. Tool-result attachments are filtered using the same rule.",
             isOptional: true,
-            defaultValue: 'true',
+            defaultValue: "['image/*', 'application/pdf']",
           },
           {
             name: 'maxRetries',
