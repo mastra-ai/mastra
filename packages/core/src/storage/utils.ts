@@ -456,8 +456,10 @@ export function jsonValueEquals(a: unknown, b: unknown): boolean {
     const aKeys = Object.keys(a as object);
     const bKeys = Object.keys(b as object);
     if (aKeys.length !== bKeys.length) return false;
-    return aKeys.every(key =>
-      jsonValueEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
+    return aKeys.every(
+      key =>
+        Object.prototype.hasOwnProperty.call(b, key) &&
+        jsonValueEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
     );
   }
   return a === b;
