@@ -22,6 +22,18 @@ inputs:
     description: 'Explicit pnpm version (overrides packageManager detection)'
     required: false
     default: ''
+  store-group:
+    description: >-
+      Name for a partial install. When set, only the packages selected by
+      install-filter are installed, and the pnpm store is cached under its own
+      key for this group instead of the shared full-workspace store. Every job
+      in a group must use the same install-filter so the cached store matches.
+    required: false
+    default: ''
+  install-filter:
+    description: 'pnpm --filter arguments for a store-group install, e.g. "--filter {./stores/*}... --filter mastra-turbo" (braces make ... include dependencies of a path selector)'
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -41,8 +53,23 @@ runs:
         version: ${{ inputs.version || '' }}
         run_install: false
         package_json_file: ${{ inputs.package-json-file || 'package.json' }}
-        cache: ${{ inputs.package-manager-cache == 'true' }}
+        cache: ${{ inputs.package-manager-cache == 'true' && inputs.store-group == '' }}
         cache_dependency_path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
+
+    # A store-group job restores a store holding only its group's packages
+    # (a few hundred MB instead of the full ~2.7 GB workspace store).
+    - name: Locate pnpm store
+      id: store-path
+      if: ${{ inputs.package-manager-cache == 'true' && inputs.store-group != '' }}
+      shell: bash
+      run: echo "path=$(pnpm store path --silent)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore pnpm store for ${{ inputs.store-group }}
+      if: ${{ inputs.package-manager-cache == 'true' && inputs.store-group != '' }}
+      uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+      with:
+        path: ${{ steps.store-path.outputs.path }}
+        key: pnpm-store-${{ inputs.store-group }}-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles(inputs.cache-dependency-path || 'pnpm-lock.yaml') }}
 
     - name: Reset corrupt pnpm store cache
       id: reset-store
@@ -109,9 +136,15 @@ runs:
     - name: Install dependencies
       if: ${{ inputs.install-dependencies == 'true' }}
       shell: bash
+      env:
+        INSTALL_FILTER: ${{ inputs.store-group != '' && inputs.install-filter || '' }}
       run: |
+        # Word-split INSTALL_FILTER into separate --filter arguments, without
+        # expanding globs like ./stores/* against the filesystem.
+        set -f
+        # shellcheck disable=SC2086
         if [ "${{ steps.reset-store.outputs.force-install }}" = "true" ]; then
-          pnpm install --frozen-lockfile --force
+          pnpm install --frozen-lockfile --force $INSTALL_FILTER
         else
-          pnpm install --frozen-lockfile
+          pnpm install --frozen-lockfile $INSTALL_FILTER
         fi

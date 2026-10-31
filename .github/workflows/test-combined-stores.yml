@@ -94,6 +94,11 @@ jobs:
 
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
+        with:
+          # @mastra/memory: @internal/storage-test-utils imports its source by
+          # relative path, which the package graph doesn't record.
+          store-group: stores
+          install-filter: --filter {./stores/*}... --filter @mastra/memory... --filter mastra-turbo
 
       - name: Build combined storage packages
         run: pnpm turbo --filter "@mastra/${{ matrix.store }}" build
