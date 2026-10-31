@@ -648,6 +648,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         workItemId: item.id,
         board: entry.board,
         stage: entry.stage,
+        ...(entry.reenter ? { reenter: true } : {}),
         expectedRevision: item.revision,
         actor: { type: 'system', id: 'factory-tool-result-rule' },
         ingress: { type: 'rule', identity: `decision:${entry.idempotencyKey}` },
