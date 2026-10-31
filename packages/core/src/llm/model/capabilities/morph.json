@@ -21,7 +21,13 @@
     "morph-kimik3-fast"
   ],
   "reasoning": {
-    "morph-kimik3": [
+    "morph-dsv41flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "morph-dsv4flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -33,16 +39,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "morph-dsv41flash": [
+    "morph-kimik3": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "morph-dsv41flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "morph-glm53flash": [
@@ -57,16 +57,16 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "morph-dsv4flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "morph-kimik3-fast": [
       {
         "type": "effort",
         "values": ["none", "low", "high"]
+      }
+    ],
+    "morph-dsv41flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ]
   }

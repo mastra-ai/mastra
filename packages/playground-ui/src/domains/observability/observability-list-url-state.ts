@@ -23,10 +23,13 @@ import { SORT_DIR_PARAM, SORT_KEY_PARAM, readUrlSort } from '@/lib/sort/use-url-
  */
 export const OBSERVABILITY_LIST_FILTER_PARAM_PREFIX = 'filter.';
 export const OBSERVABILITY_LIST_SORT_FIELDS = ['startedAt'] as const;
+/** Spans can also be ordered by their streaming timings, where the store supports it. */
+export const SPAN_LIST_SORT_FIELDS = ['startedAt', 'timeToFirstChunkMs', 'timeToFirstTokenMs'] as const;
 export const OBSERVABILITY_LIST_DEFAULT_DATE_PRESET: TraceDatePreset = DEFAULT_TRACES_FILTERS.datePreset;
 
 export type ObservabilityListSortDirection = 'asc' | 'desc';
 export const OBSERVABILITY_LIST_DEFAULT_SORT_DIRECTION: ObservabilityListSortDirection = 'desc';
+export type ObservabilityListSort<F extends string = string> = { field: F; direction: ObservabilityListSortDirection };
 
 export type ObservabilityListDates = { datePreset: TraceDatePreset; dateFrom?: Date; dateTo?: Date };
 export type ObservabilityListFilters = { tokens: TraceFilterToken[]; groups: TraceFilterGroup[] };
@@ -46,24 +49,27 @@ function parseDate(raw: string | null): Date | undefined {
   return Number.isNaN(parsed.getTime()) ? undefined : parsed;
 }
 
-export function readObservabilityListDates(params: URLSearchParams): ObservabilityListDates {
+/** `defaultPreset` is the range the host shows when the URL names none. */
+export function readObservabilityListDates(
+  params: URLSearchParams,
+  defaultPreset: TraceDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
+): ObservabilityListDates {
   const preset = params.get(TRACE_DATE_PRESET_PARAM);
   const datePreset =
-    preset && TRACE_DATE_PRESET_VALUES.has(preset as TraceDatePreset)
-      ? (preset as TraceDatePreset)
-      : OBSERVABILITY_LIST_DEFAULT_DATE_PRESET;
+    preset && TRACE_DATE_PRESET_VALUES.has(preset as TraceDatePreset) ? (preset as TraceDatePreset) : defaultPreset;
   if (datePreset !== 'custom') return { datePreset };
   const dateFrom = parseDate(params.get(TRACE_DATE_FROM_PARAM));
   const dateTo = parseDate(params.get(TRACE_DATE_TO_PARAM));
   return { datePreset, ...(dateFrom ? { dateFrom } : {}), ...(dateTo ? { dateTo } : {}) };
 }
 
-/** Mutates `params`. The default preset is left out of the URL; dates are only kept for `custom`. */
+/** Mutates `params`. The host's default preset is left out of the URL; dates are only kept for `custom`. */
 export function writeObservabilityListDates(
   params: URLSearchParams,
   { datePreset, dateFrom, dateTo }: ObservabilityListDates,
+  defaultPreset: TraceDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
 ) {
-  if (datePreset === OBSERVABILITY_LIST_DEFAULT_DATE_PRESET) params.delete(TRACE_DATE_PRESET_PARAM);
+  if (datePreset === defaultPreset) params.delete(TRACE_DATE_PRESET_PARAM);
   else params.set(TRACE_DATE_PRESET_PARAM, datePreset);
   const custom = datePreset === 'custom';
   if (custom && dateFrom) params.set(TRACE_DATE_FROM_PARAM, dateFrom.toISOString());
@@ -114,12 +120,19 @@ export function writeObservabilityListFilters(params: URLSearchParams, { tokens,
   for (const group of groups) params.append(TRACE_FILTER_GROUP_PARAM, serializeTraceFilterGroup(group));
 }
 
-export function readObservabilityListSort(params: URLSearchParams): ObservabilityListSortDirection {
-  return readUrlSort(params, OBSERVABILITY_LIST_SORT_FIELDS)?.direction ?? OBSERVABILITY_LIST_DEFAULT_SORT_DIRECTION;
+/** The URL's sort when its field is one of `fields`, else start time, newest first. */
+export function readObservabilityListSort<F extends string>(
+  params: URLSearchParams,
+  fields: readonly F[],
+): ObservabilityListSort<F | 'startedAt'> {
+  const sort = readUrlSort(params, fields);
+  return sort
+    ? { field: sort.key, direction: sort.direction }
+    : { field: 'startedAt', direction: OBSERVABILITY_LIST_DEFAULT_SORT_DIRECTION };
 }
 
 /** Mutates `params`. */
-export function writeObservabilityListSort(params: URLSearchParams, direction: ObservabilityListSortDirection) {
-  params.set(SORT_KEY_PARAM, OBSERVABILITY_LIST_SORT_FIELDS[0]);
+export function writeObservabilityListSort(params: URLSearchParams, { field, direction }: ObservabilityListSort) {
+  params.set(SORT_KEY_PARAM, field);
   params.set(SORT_DIR_PARAM, direction);
 }

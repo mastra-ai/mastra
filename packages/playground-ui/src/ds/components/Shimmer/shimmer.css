@@ -42,6 +42,13 @@
   animation-play-state: paused;
 }
 
+/* A shimmer inside another owns its text: the outer one would paint the same glyphs twice,
+ * and paints none of them while the inner one moves on a layer of its own. */
+.shimmer-text:has(.shimmer-text) {
+  background-image: none;
+  -webkit-text-fill-color: currentcolor;
+}
+
 @keyframes shimmer-text {
   from {
     background-position: 100% 0;

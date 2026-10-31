@@ -514,6 +514,16 @@ describe('MastraFactory.prepare', () => {
     expect(config.subagents).toEqual([]);
   });
 
+  it('disables rich score storage by default and allows opting in', async () => {
+    const disabled = await prepareFactory({ storage: fakeStorage(), auth: null });
+    expect(disabled.disableScoreStorage).toBe(true);
+
+    vi.clearAllMocks();
+
+    const enabled = await prepareFactory({ storage: fakeStorage(), auth: null, disableScoreStorage: false });
+    expect(enabled.disableScoreStorage).toBe(false);
+  });
+
   it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage, auth: null });
@@ -666,12 +676,18 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
-    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
+    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge', scopes: {} });
     const knowledge = { key: 'mastra', instance };
 
     const config = await prepareFactory({ storage: fakeStorage(), knowledge });
 
     expect(config.knowledge).toEqual(knowledge);
+  });
+
+  it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+
+    expect(config.knowledge).toBe(false);
   });
 
   it('throws when called twice', async () => {
@@ -922,6 +938,7 @@ describe('MastraFactory.prepare', () => {
       'model-credentials',
       'model-defaults',
       'memory-settings',
+      'boards',
       'custom-providers',
       'queue-health',
       'integrations',

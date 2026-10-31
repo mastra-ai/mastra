@@ -48,7 +48,7 @@ import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
-import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
+import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput } from '../signals';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
@@ -116,6 +116,7 @@ import type {
   RunRegistryEntry,
   SerializableModelListEntry,
 } from './types';
+import { restoreCompletionPolicy } from './utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
@@ -133,6 +134,7 @@ function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra
 }
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
+const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
 /** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
 const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 /** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
@@ -876,11 +878,6 @@ export class DurableAgent<
   /** The stream segment (stream() or resume()) that currently owns each run id's shared state. */
   #segmentOwner = new Map<string, symbol>();
   #timedOutExecutions = new WeakSet<ExecutionFence>();
-  /**
-   * Accepted input of stream()/generate() executions not yet saved. A total
-   * deadline that settles the execution first saves it as a terminal write.
-   */
-  #unsavedInputs = new WeakMap<ExecutionFence, DurableAgenticWorkflowInput>();
 
   /** Timeout for auto-cleanup after stream finishes (0 = disabled) */
   readonly #cleanupTimeoutMs: number;
@@ -1710,7 +1707,16 @@ export class DurableAgent<
     }
     executionFence.throwIfLost();
 
+    const restoredCompletion = await restoreCompletionPolicy({
+      agent: wrapped,
+      persisted: workflowInput.options?.isTaskComplete,
+      requestContext,
+      runId,
+      logger: this.#mastra?.getLogger?.(),
+    });
+
     const registryEntry = {
+      isTaskComplete: restoredCompletion,
       // Call-time toolset tools died with the original process. Mark the entry
       // as a placeholder so the first step rebuilds tools and fails loudly
       // (DURABLE_AGENT_TOOLSETS_UNAVAILABLE) instead of running without them.
@@ -2003,6 +2009,7 @@ export class DurableAgent<
     });
     // Preserve the marker when the until-idle wrapper spreads these options.
     Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    Object.defineProperty(scopedOptions, RESOLVED_DEFAULT_OPTIONS, { value: defaultOptions, enumerable: true });
     return scopedOptions;
   }
 
@@ -2020,15 +2027,17 @@ export class DurableAgent<
   ): Promise<T> {
     const requestContext = options.requestContext ?? new RequestContext();
     // A resumed run keeps its suspended scopes, so the Agent's configuration is not consulted.
-    const agentScopes = snapshot?.scopes
-      ? []
-      : [...((await this.getScopes({ requestContext })) ?? []), ...(defaultScopes ?? [])];
-    if (!agentScopes.length && !callScopes?.length && !requestContext.has(MASTRA_SCOPES_KEY) && !snapshot?.scopes) {
+    const incomingScopes = snapshot?.scopes
+      ? undefined
+      : incomingAgentScopes({ requestContext, callScopes, defaultScopes, mastra: this.#mastra });
+    const agentScopes = incomingScopes ? await this.getScopes({ requestContext, scopes: incomingScopes }) : undefined;
+    if (!agentScopes?.length && !callScopes?.length && !requestContext.has(MASTRA_SCOPES_KEY) && !snapshot?.scopes) {
       return options;
     }
     const resolved = resolveAgentScopes({
       requestContext,
       agentScopes,
+      incomingScopes,
       callScopes,
       memory: options.memory,
       snapshot,
@@ -2435,13 +2444,8 @@ export class DurableAgent<
     }
   }
 
-  private async persistInitialInput(
-    runId: string,
-    workflowInput: DurableAgenticWorkflowInput,
-    fence: ExecutionFence,
-  ): Promise<void> {
+  private async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
     await persistDurableRunInput(runId, workflowInput, this.#mastra);
-    this.#unsavedInputs.delete(fence);
   }
 
   /**
@@ -2480,22 +2484,29 @@ export class DurableAgent<
       pubsub: this.fenceRunPubSub(executionFence, entry?.abortController),
     });
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
-    const result = await this.withSuspensionAfterPersist(runId, () =>
-      run.start({
-        inputData: workflowInput,
-        requestContext,
-        actor: workflowInput.options?.actor,
-        ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
-      }),
-    );
-    await this.settleExecution(runId, executionFence, {
-      status: result?.status,
-      error:
-        result?.status === 'failed'
-          ? this.workflowFailureError((result as any).error, 'Workflow execution failed')
-          : undefined,
-    });
-    return result;
+    let result;
+    try {
+      result = await this.withSuspensionAfterPersist(runId, () =>
+        run.start({
+          inputData: workflowInput,
+          requestContext,
+          actor: workflowInput.options?.actor,
+          ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
+        }),
+      );
+      await this.settleExecution(runId, executionFence, {
+        status: result?.status,
+        error:
+          result?.status === 'failed'
+            ? this.workflowFailureError((result as any).error, 'Workflow execution failed')
+            : undefined,
+      });
+      return result;
+    } finally {
+      if (result?.status !== 'suspended' && workflow.runs.get(runId) === run) {
+        workflow.runs.delete(runId);
+      }
+    }
   }
 
   /**
@@ -2785,9 +2796,6 @@ export class DurableAgent<
     // snapshots (and owner records) so `resume()` / `recoverActiveRuns()` can
     // find them.
     const finished = totalTimeout || (status !== undefined && status !== 'suspended');
-    const unsavedInput = totalTimeout && fence ? this.#unsavedInputs.get(fence) : undefined;
-    // Captured before the error below lets the caller clean the run up.
-    const unsavedInputEntry = unsavedInput && getRunRegistryEntry(runId, this.#mastra);
     let wrote = false;
     const writeTerminalState = async () => {
       wrote = true;
@@ -2795,23 +2803,6 @@ export class DurableAgent<
       // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
-      if (unsavedInput && unsavedInputEntry) {
-        // The request was accepted before the deadline, so the deadline alone must not drop it. A save
-        // already in flight carries the claim the deadline just replaced and is rejected, so save it again
-        // under the replacement. Saves upsert by ID.
-        this.#unsavedInputs.delete(fence!);
-        try {
-          await persistDurableRunInput(runId, unsavedInput, this.#mastra, {
-            entry: unsavedInputEntry,
-            assertOwnership: false,
-          });
-        } catch (saveError) {
-          this.logger.warn(`Failed to save the input of run ${runId} at its total deadline`, {
-            runId,
-            error: saveError,
-          });
-        }
-      }
     };
 
     if (!fence) return writeTerminalState();
@@ -3158,6 +3149,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
         durableAgentId: this.id,
@@ -3173,7 +3165,6 @@ export class DurableAgent<
     // Set after preparation so request-context schema validation never sees it.
     setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
-    this.#unsavedInputs.set(executionFence, workflowInput);
 
     // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
@@ -3343,7 +3334,7 @@ export class DurableAgent<
           }
           let result: { status?: string } | void;
           try {
-            await this.persistInitialInput(runId, workflowInput, executionFence);
+            await this.persistInitialInput(runId, workflowInput);
             result = await this.executeWorkflow(runId, workflowInput);
           } finally {
             await stopGoalActivity({ agentId: workflowInput.agentId, runId });
@@ -3895,15 +3886,20 @@ export class DurableAgent<
     // we overwrite the registry slot. If the caller passed an external
     // signal, forward it onto the new internal controller.
     const abortController = new AbortController();
-    if (resolvedOptions.abortSignal) {
-      if (resolvedOptions.abortSignal.aborted) {
-        abortController.abort((resolvedOptions.abortSignal as AbortSignal & { reason?: unknown }).reason);
+    const externalAbortSignal = resolvedOptions.abortSignal;
+    const forwardExternalAbort = () => abortController.abort(externalAbortSignal?.reason);
+    let externalAbortAttached = false;
+    const detachExternalAbort = () => {
+      if (!externalAbortAttached) return;
+      externalAbortSignal?.removeEventListener('abort', forwardExternalAbort);
+      externalAbortAttached = false;
+    };
+    if (externalAbortSignal) {
+      if (externalAbortSignal.aborted) {
+        forwardExternalAbort();
       } else {
-        resolvedOptions.abortSignal.addEventListener(
-          'abort',
-          () => abortController.abort((resolvedOptions.abortSignal as AbortSignal & { reason?: unknown }).reason),
-          { once: true },
-        );
+        externalAbortSignal.addEventListener('abort', forwardExternalAbort, { once: true });
+        externalAbortAttached = true;
       }
     }
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
@@ -4168,6 +4164,9 @@ export class DurableAgent<
             throw error;
           } finally {
             await stopGoalActivity({ agentId: this.id, runId });
+            if (result?.status !== 'suspended' && workflow.runs.get(runId) === run) {
+              workflow.runs.delete(runId);
+            }
           }
           await this.settleExecution(runId, executionFence, {
             status: result?.status,
@@ -4192,7 +4191,8 @@ export class DurableAgent<
           this.settleExecution(runId, executionFence, {
             error: this.workflowExecutionError(error, 'Workflow resume failed'),
           }),
-        ),
+        )
+        .finally(detachExternalAbort),
     );
     const trackedResumeEntry = getRunRegistryEntry(runId, this.#mastra);
     if (trackedResumeEntry) {
@@ -4791,6 +4791,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
         methodType: 'generate',
@@ -4807,7 +4808,6 @@ export class DurableAgent<
     // Set after preparation so request-context schema validation never sees it.
     setExecutionClaim(requestContext, runId, executionFence.claim);
     registryEntry.executionFence = executionFence;
-    this.#unsavedInputs.set(executionFence, workflowInput);
 
     // 1b. Install the abort controller for this run. The controller is owned
     // by this DurableAgent instance; the result's abort() method flips it,
@@ -4944,7 +4944,7 @@ export class DurableAgent<
             });
           }
           try {
-            await this.persistInitialInput(runId, workflowInput, executionFence);
+            await this.persistInitialInput(runId, workflowInput);
             return await this.executeWorkflow(runId, workflowInput);
           } finally {
             await stopGoalActivity({ agentId: workflowInput.agentId, runId });

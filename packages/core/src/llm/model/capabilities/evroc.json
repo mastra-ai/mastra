@@ -34,15 +34,6 @@
     "zai-org/GLM-5.2"
   ],
   "reasoning": {
-    "zai-org/GLM-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
     "mistralai/Mistral-Medium-3.5-128B": [
       {
         "type": "effort",
@@ -63,6 +54,15 @@
     "moonshotai/Kimi-K2.6": [
       {
         "type": "budget_tokens"
+      }
+    ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "Qwen/Qwen3.8-27B": [

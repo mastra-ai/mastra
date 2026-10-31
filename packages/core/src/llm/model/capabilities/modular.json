@@ -17,12 +17,6 @@
         "type": "toggle"
       }
     ],
-    "MiniMaxAI/MiniMax-M3.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "deepseek/deepseek-v4.1-flash": [
       {
         "type": "toggle"
@@ -30,6 +24,12 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "google/gemma-4-31b-it": [

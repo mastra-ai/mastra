@@ -19,6 +19,7 @@ export interface ChatRuntimeState {
   bufferingMessages: boolean;
   bufferingObservations: boolean;
   goal?: GoalSnapshot;
+  runsStarted: number;
   tokensPerSec: number;
   /** Assistant message the decode window measures; a different message starts a new window. */
   _decodeMessageId?: string;
@@ -29,6 +30,7 @@ export interface ChatRuntimeState {
 
 export const initialChatRuntime: ChatRuntimeState = {
   followUpCount: 0,
+  runsStarted: 0,
   omPhase: 'idle',
   bufferingMessages: false,
   bufferingObservations: false,
@@ -107,6 +109,7 @@ export function runtimeReducer(state: ChatRuntimeState, action: RuntimeAction): 
     case 'agent_start':
       return {
         ...state,
+        runsStarted: state.runsStarted + 1,
         tokensPerSec: 0,
         _decodeMessageId: undefined,
         _decodeStartedAt: 0,

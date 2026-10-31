@@ -39,55 +39,12 @@ describe('buildToolGuidance task tools', () => {
   });
 });
 
-describe('buildToolGuidance subconscious tools', () => {
-  it('omits subconscious guidance when the subconscious is off', () => {
+describe('buildToolGuidance knowledge tools', () => {
+  it('does not advertise Subconscious or ask_memory guidance', () => {
     const guidance = buildToolGuidance('build');
 
-    expect(guidance).not.toContain('Subconscious Memory');
+    expect(guidance).not.toContain('Subconscious');
     expect(guidance).not.toContain('ask_memory');
     expect(guidance).not.toContain('knowledge_search');
-  });
-
-  it('explains the subconscious, the knowledge tools, and async ask_memory when enabled', () => {
-    const guidance = buildToolGuidance('build', { hasSubconscious: true });
-
-    expect(guidance).toContain('# Subconscious Memory');
-    expect(guidance).toContain('**knowledge_search** / **knowledge_read** / **knowledge_browse**');
-    expect(guidance).toContain('**ask_memory**');
-    expect(guidance).toContain('ASYNCHRONOUS');
-    expect(guidance).toContain('<remind-answer source="subconscious" agent="remind"');
-    expect(guidance).toContain('moreComing="false"');
-    expect(guidance).toContain('Prefer these over `recall`');
-  });
-
-  it('drops denied subconscious tools individually', () => {
-    const guidance = buildToolGuidance('build', {
-      hasSubconscious: true,
-      deniedTools: new Set(['ask_memory', 'knowledge_browse']),
-    });
-
-    expect(guidance).toContain('# Subconscious Memory');
-    expect(guidance).toContain('**knowledge_search** / **knowledge_read**');
-    expect(guidance).not.toContain('knowledge_browse');
-    expect(guidance).not.toContain('ask_memory');
-  });
-
-  it('does not recommend a denied recall tool from the knowledge guidance', () => {
-    const guidance = buildToolGuidance('build', {
-      hasSubconscious: true,
-      deniedTools: new Set(['recall']),
-    });
-
-    expect(guidance).toContain('# Subconscious Memory');
-    expect(guidance).not.toContain('recall');
-  });
-
-  it('omits the whole section when every subconscious tool is denied', () => {
-    const guidance = buildToolGuidance('build', {
-      hasSubconscious: true,
-      deniedTools: new Set(['ask_memory', 'knowledge_search', 'knowledge_read', 'knowledge_browse']),
-    });
-
-    expect(guidance).not.toContain('Subconscious Memory');
   });
 });

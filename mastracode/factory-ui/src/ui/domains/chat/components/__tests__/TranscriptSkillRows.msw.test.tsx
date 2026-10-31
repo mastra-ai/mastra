@@ -285,7 +285,7 @@ describe('TranscriptEntries skill rows', () => {
     const row = screen.getByRole('group', { name: 'Skill: triage-issue' });
     expect(row).toHaveAttribute('data-skill-name', 'triage-issue');
     expect(screen.getByText(/github\.com\/org\/repo\/issues\/42/)).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Signal: skill' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /^Signal: skill$/i })).not.toBeInTheDocument();
 
     const feedRow = screen.getByRole('group', { name: 'Signal: Work item feed' });
     await userEvent.click(within(feedRow).getByRole('button'));

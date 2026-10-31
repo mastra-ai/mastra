@@ -5,8 +5,13 @@ import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
+import {
+  TRACE_DATE_PRESET_PARAM,
+  TRACE_FILTER_BAR_OPERATORS,
+  applyTracePropertyFilterTokens,
+} from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
+import type { TraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
 import type { TracesExplorerLayoutProps, TracesExplorerPanelProps } from '../index';
 import { DEFAULT_TRACES_FILTERS, DEFAULT_TRACES_SORT, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
@@ -22,6 +27,7 @@ import {
   emptyScores,
   emptyTraceQueryFields,
   emptyTracesPage,
+  firstChunkTracesPage,
   idleDeltaBatch,
   noDeltaPollingCapabilities,
   noRootDurationCapabilities,
@@ -31,6 +37,8 @@ import {
   noThreadRowsCapabilities,
   noTimeToFirstChunkCapabilities,
   noTimeToFirstChunkSortCapabilities,
+  noTimeToFirstTokenCapabilities,
+  noTimeToFirstTokenSortCapabilities,
   streamedTracesPage,
   traceQueryCapabilities,
   twoTracesPage,
@@ -43,11 +51,15 @@ import {
   OBSERVABILITY_LIST_POLL_INTERVAL_MS,
   OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
 } from '@/domains/observability/list-polling';
+import { savedViewFromSearchParams } from '@/domains/observability/saved-view-state';
+import { SavedViewsProvider } from '@/domains/observability/saved-views';
+import { createInMemorySavedViewsSource } from '@/domains/observability/saved-views/__tests__/fixtures/in-memory-source';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField } from '@/ds/components/FilterBar';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { SearchParamsHost } from '@/test/search-params-host';
 
 const TRACE_COLUMN_STORAGE_KEY = `mastra:traces:columns:${TEST_BASE_URL}:/api`;
 const SCOPE_TOKENS: TracesFilters['tokens'] = [
@@ -136,6 +148,8 @@ const setExplorerHandlers = (
 };
 
 type HarnessProps = {
+  /** Shown next to the view links in the layout's tabs row. */
+  tabs?: ReactNode;
   initialSelection?: TracesSelection;
   initialFilters?: TracesFilters;
   scope?: { entityId: string; entityType?: 'agent' };
@@ -178,6 +192,7 @@ function Harness({
   traceHref,
   renderError,
   panelProps,
+  tabs,
 }: HarnessProps) {
   const [selection, setSelection] = useState(initialSelection);
   const [filters, setFilters] = useState(initialFilters);
@@ -204,7 +219,12 @@ function Harness({
     >
       <TracesExplorer.Layout
         renderError={renderError}
-        tabs={<ViewLinks />}
+        tabs={
+          <>
+            <ViewLinks />
+            {tabs}
+          </>
+        }
         actionRow={
           <div>
             {filterBar}
@@ -408,6 +428,37 @@ describe('TracesExplorer', () => {
       const dialog = await openTrace();
 
       expect(within(dialog).queryByRole('link', { name: 'Open trace page' })).toBeNull();
+    });
+  });
+
+  describe('when a streamed trace is open on the timeline', () => {
+    const openTimeline = async (tracesPage: typeof twoTracesPage) => {
+      setExplorerHandlers(traceQueryCapabilities, tracesPage);
+      const { queryClient } = renderExplorer({
+        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather', spanView: 'timeline' },
+      });
+      await settle(queryClient);
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      await within(dialog).findByLabelText('View details for span weather-agent');
+      return dialog;
+    };
+
+    it('shows when the first chunk arrived and how long the model took to send it, from the listed row', async () => {
+      const dialog = await openTimeline(firstChunkTracesPage);
+      fireEvent.click(within(dialog).getByRole('button', { name: 'Metrics' }));
+
+      expect(within(dialog).getByRole('group', { name: 'Time to first chunk' }).textContent).toBe(
+        'Time to first chunk400ms',
+      );
+      expect(within(dialog).getByRole('group', { name: 'Time to first token' }).textContent).toBe(
+        'Time to first token150ms',
+      );
+    });
+
+    it('shows neither when the trace is not in the list', async () => {
+      const dialog = await openTimeline({ traces: [twoTracesPage.traces[1]], page: { next: null } });
+
+      expect(within(dialog).queryByRole('button', { name: 'Metrics' })).toBeNull();
     });
   });
 
@@ -757,6 +808,42 @@ describe('TracesExplorer', () => {
     });
   });
 
+  describe('when the filters hold time to first chunk and time to first token conditions', () => {
+    const streamingTokens = [
+      { fieldId: 'timeToFirstChunkMs', operatorId: 'gt', value: '400' },
+      { fieldId: 'spans.timeToFirstTokenMs', operatorId: 'lte', value: '600' },
+    ];
+    const renderWithStreamingFilters = async (capabilities?: GetObservabilityCapabilitiesResponse) => {
+      setExplorerHandlers(capabilities);
+      const { queryClient } = renderExplorer({
+        initialFilters: { ...DEFAULT_TRACES_FILTERS, tokens: streamingTokens },
+      });
+      await settle(queryClient);
+      return JSON.stringify(onTraceQuery.mock.calls.at(-1)?.[0]);
+    };
+
+    it('sends both conditions when the store records both', async () => {
+      const body = await renderWithStreamingFilters();
+
+      expect(body).toContain('timeToFirstChunkMs');
+      expect(body).toContain('timeToFirstTokenMs');
+    });
+
+    it('leaves out the time to first token condition when the store does not record it', async () => {
+      const body = await renderWithStreamingFilters(noTimeToFirstTokenCapabilities);
+
+      expect(body).toContain('timeToFirstChunkMs');
+      expect(body).not.toContain('timeToFirstTokenMs');
+    });
+
+    it('leaves out the time to first chunk condition when the store does not record it', async () => {
+      const body = await renderWithStreamingFilters(noTimeToFirstChunkCapabilities);
+
+      expect(body).not.toContain('timeToFirstChunkMs');
+      expect(body).toContain('timeToFirstTokenMs');
+    });
+  });
+
   describe('when metricsSupport is unsupported', () => {
     const renderUnsupported = async () => {
       setExplorerHandlers();
@@ -938,6 +1025,121 @@ describe('TracesExplorer', () => {
         });
 
         expect(requestedOrders()).toEqual([[{ field: 'startedAt', direction: 'desc' }]]);
+      });
+    });
+  });
+
+  describe('when the stored columns include time to first token', () => {
+    const renderWithTimeToFirstToken = async (
+      capabilities: GetObservabilityCapabilitiesResponse,
+      props: HarnessProps = {},
+      visibleColumns: TraceColumnPreferences['visibleColumns'] = ['input', 'timeToFirstToken'],
+    ) => {
+      localStorage.setItem(
+        TRACE_COLUMN_STORAGE_KEY,
+        serializeTraceColumnPreferences({ visibleColumns, customColumns: [], metadataKeys: [] }),
+      );
+      setExplorerHandlers(capabilities, streamedTracesPage);
+      const result = renderExplorer(props);
+      await settle(result.queryClient);
+      return result;
+    };
+    const requestedOrders = () => onTraceQuery.mock.calls.map(([body]) => (body as { orderBy?: unknown }).orderBy);
+
+    it("shows how long each root's model took to produce its first token", async () => {
+      await renderWithTimeToFirstToken(traceQueryCapabilities);
+
+      expect(screen.getByText('TTFT')).toBeTruthy();
+      expect(within(traceRow('What is the weather in Paris?')).getByText('538ms')).toBeTruthy();
+      expect(within(traceRow('Book a table for two')).queryByText(/ms$/)).toBeNull();
+    });
+
+    it('sorts the list by it, fastest first, when its header is clicked', async () => {
+      await renderWithTimeToFirstToken(traceQueryCapabilities);
+      onTraceQuery.mockClear();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Time to first token, not sorted, sort ascending' }));
+
+      await waitFor(() =>
+        expect(onTraceQuery.mock.calls.at(-1)?.[0]).toMatchObject({
+          orderBy: [{ field: 'timeToFirstTokenMs', direction: 'asc' }],
+        }),
+      );
+      expect(
+        screen.getByRole('button', { name: 'Time to first token, sorted ascending, sort descending' }),
+      ).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Start, not sorted, sort ascending' })).toBeTruthy();
+    });
+
+    it('moves the order from time to first chunk to time to first token when both columns are shown', async () => {
+      await renderWithTimeToFirstToken(traceQueryCapabilities, {}, ['input', 'timeToFirstChunk', 'timeToFirstToken']);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Time to first chunk, not sorted, sort ascending' }));
+      await waitFor(() =>
+        expect(onTraceQuery.mock.calls.at(-1)?.[0]).toMatchObject({
+          orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }],
+        }),
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Time to first token, not sorted, sort ascending' }));
+
+      await waitFor(() =>
+        expect(onTraceQuery.mock.calls.at(-1)?.[0]).toMatchObject({
+          orderBy: [{ field: 'timeToFirstTokenMs', direction: 'asc' }],
+        }),
+      );
+      expect(screen.getByRole('button', { name: 'Time to first chunk, not sorted, sort ascending' })).toBeTruthy();
+    });
+
+    describe('and the store records it but cannot sort by it', () => {
+      it('shows the column without a sort control', async () => {
+        await renderWithTimeToFirstToken(noTimeToFirstTokenSortCapabilities);
+
+        expect(screen.getByText('TTFT')).toBeTruthy();
+        expect(within(traceRow('What is the weather in Paris?')).getByText('538ms')).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /^Time to first token,/ })).toBeNull();
+      });
+
+      it("lists newest first instead of the host's sort, without rewriting it", async () => {
+        const onSortChange = vi.fn<(next: TracesSort) => void>();
+        await renderWithTimeToFirstToken(noTimeToFirstTokenSortCapabilities, {
+          initialSort: { field: 'timeToFirstTokenMs', direction: 'asc' },
+          onSortChange,
+        });
+
+        expect(requestedOrders()).toEqual([[{ field: 'startedAt', direction: 'desc' }]]);
+        expect(screen.getByRole('button', { name: 'Start, sorted descending, sort ascending' })).toBeTruthy();
+        expect(onSortChange).not.toHaveBeenCalled();
+      });
+    });
+
+    describe('and the host sorts by it while the column is hidden', () => {
+      it("lists newest first instead of sorting by a column that isn't shown", async () => {
+        await renderWithTimeToFirstToken(
+          traceQueryCapabilities,
+          { initialSort: { field: 'timeToFirstTokenMs', direction: 'asc' } },
+          ['input'],
+        );
+
+        expect(requestedOrders()).toEqual([[{ field: 'startedAt', direction: 'desc' }]]);
+      });
+    });
+
+    describe('and the store does not record it', () => {
+      it('drops the column rather than showing one that is always empty', async () => {
+        await renderWithTimeToFirstToken(noTimeToFirstTokenCapabilities);
+
+        expect(screen.queryByText('TTFT')).toBeNull();
+        expect(within(traceRow('What is the weather in Paris?')).queryByText('538ms')).toBeNull();
+      });
+
+      it('does not offer it in the columns menu', async () => {
+        await renderWithTimeToFirstToken(noTimeToFirstTokenCapabilities);
+
+        fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+
+        expect(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeTruthy();
+        expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first token' })).toBeNull();
       });
     });
   });
@@ -1394,6 +1596,54 @@ describe('TracesExplorer.Layout', () => {
 
       expect(await screen.findByText('Failed to load traces')).toBeTruthy();
       expect(screen.getByRole('toolbar', { name: 'Trace filters' })).toBeTruthy();
+    });
+  });
+
+  describe('saved views', () => {
+    it('applies a view to the URL and the explorer columns', async () => {
+      localStorage.clear();
+      setExplorerHandlers();
+      const byHand = new URLSearchParams();
+      applyTracePropertyFilterTokens(byHand, [{ fieldId: 'status', value: 'error' }]);
+      byHand.set(TRACE_DATE_PRESET_PARAM, 'last-24h');
+      const state = savedViewFromSearchParams('traces', byHand, {
+        columns: { visibleColumns: ['type', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+      });
+      const source = createInMemorySavedViewsSource([{ name: 'Errors', state }]);
+      renderWithProviders(
+        <SavedViewsProvider source={source} queryKeyScope={['test']}>
+          <TestLinkProvider>
+            <SearchParamsHost initial="">
+              {urlState => <Harness tabs={<TracesExplorer.SavedViews {...urlState} />} />}
+            </SearchParamsHost>
+          </TestLinkProvider>
+        </SavedViewsProvider>,
+      );
+      await screen.findByText('What is the weather in Paris?');
+
+      fireEvent.click(await screen.findByLabelText(/^View: /));
+      fireEvent.click(await screen.findByRole('option', { name: 'Errors' }));
+
+      await waitFor(() => expect(screen.getByTestId('search-params').textContent).toBe(byHand.toString()));
+      fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+      expect((await screen.findByRole('menuitemcheckbox', { name: 'Input' })).getAttribute('aria-checked')).toBe(
+        'false',
+      );
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Output' }).getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('shows no saved views when the host does not store them', async () => {
+      setExplorerHandlers();
+      renderWithProviders(
+        <TestLinkProvider>
+          <SearchParamsHost initial="">
+            {urlState => <Harness tabs={<TracesExplorer.SavedViews {...urlState} />} />}
+          </SearchParamsHost>
+        </TestLinkProvider>,
+      );
+      await screen.findByText('What is the weather in Paris?');
+
+      expect(screen.queryByLabelText(/^View: /)).toBeNull();
     });
   });
 });

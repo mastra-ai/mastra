@@ -19,11 +19,23 @@ export const threadQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryRootDuration: true,
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
+    traceQueryTimeToFirstChunk: true,
+    traceQueryTimeToFirstToken: true,
     threadQuery: true,
     threadQueryRows: true,
     spanQuery: true,
     spanQueryContextFields: true,
     feedback: true,
+  },
+};
+
+/** A store that queries threads but records neither time to first chunk nor time to first token. */
+export const noStreamingTimingsThreadCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...threadQueryCapabilities,
+  capabilities: {
+    ...threadQueryCapabilities.capabilities,
+    traceQueryTimeToFirstChunk: false,
+    traceQueryTimeToFirstToken: false,
   },
 };
 
@@ -83,7 +95,13 @@ function makeThread(
 /** One page of thread rows, as `POST /observability/threads/query` returns it. */
 export const threadRowsPage: QueryTraceThreadsResult = {
   threads: [
-    makeThread({ threadId: 'thread-1', firstTraceId: 'trace-1a', lastTraceId: 'trace-1b' }),
+    makeThread({
+      threadId: 'thread-1',
+      firstTraceId: 'trace-1a',
+      lastTraceId: 'trace-1b',
+      timeToFirstChunkMs: 412,
+      timeToFirstTokenMs: 538,
+    }),
     makeThread({
       threadId: 'thread-2',
       firstTraceId: 'trace-2a',

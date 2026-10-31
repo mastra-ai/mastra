@@ -107,15 +107,14 @@ function GroupProgress({ steps }: { steps: ToolCallGroupStep[] }) {
 }
 
 function GroupKinds({ steps }: { steps: ToolCallGroupStep[] }) {
-  const iconByLabel = new Map(
-    steps.map(step => presentTool(step.toolName, step.args)).map(({ label, icon }) => [label, icon]),
-  );
-  const kinds = [...iconByLabel].slice(0, MAX_KIND_GLYPHS);
+  const presented = steps.map(step => presentTool(step.toolName, step.args));
+  const labels = new Set(presented.map(({ label }) => label));
+  const glyphs = [...new Map(presented.map(({ pose, icon }) => [pose, icon]))].slice(0, MAX_KIND_GLYPHS);
 
   return (
-    <ActivitySummary role="img" aria-label={kinds.map(([label]) => label).join(', ')} className="shrink-0 gap-1.5">
-      {kinds.map(([label, Kind]) => (
-        <Kind key={label} size={12} className="text-placeholder" />
+    <ActivitySummary role="img" aria-label={[...labels].join(', ')} className="shrink-0 gap-1.5">
+      {glyphs.map(([pose, Kind]) => (
+        <Kind key={pose} size={12} className="text-placeholder" />
       ))}
     </ActivitySummary>
   );

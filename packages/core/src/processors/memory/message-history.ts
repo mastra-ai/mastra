@@ -320,7 +320,8 @@ export class MessageHistory implements Processor {
 
     // Don't persist an input-only failed turn: if the provider errored before
     // producing any output, saving the user message would orphan it in history.
-    if (result?.finishReason === 'error' && newOutput.length === 0) {
+    // A run that accepted the input before failing (e.g. cut off by its total deadline) keeps it.
+    if (result?.finishReason === 'error' && newOutput.length === 0 && !result.inputAccepted) {
       return messageList;
     }
 

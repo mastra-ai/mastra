@@ -8,10 +8,21 @@ import {
   TASKS_ERROR_CODES,
   TASKS_METHODS,
   TaskAckResultSchema,
+  taskKeyOf,
   UpdateTaskHandlerParamsSchema,
 } from '../../shared/tasks';
 import type { MCPDetailedTask, MCPTaskInputResponses } from '../../shared/tasks';
-import type { MCPTaskStore } from './store';
+import type { MCPTaskStore, MCPTaskTrace } from './store';
+
+/** How a `tasks/*` request is traced. */
+export interface TaskRequestTracing {
+  /** Run without a span: polls are frequent and change nothing. */
+  untraced?: boolean;
+  /** The task's trace, which the request's span joins; `undefined` traces the request on its own. */
+  parentOf?: (requestContext: RequestContext) => Promise<MCPTaskTrace | undefined>;
+  /** Recorded on the request's span. Never the task id, which is a bearer token. */
+  metadata?: Record<string, unknown>;
+}
 
 export interface TaskHandlerDeps {
   store: MCPTaskStore;
@@ -22,6 +33,7 @@ export interface TaskHandlerDeps {
     params: Record<string, unknown>,
     ctx: ServerContext,
     fn: (requestContext: RequestContext) => Promise<T>,
+    tracing?: TaskRequestTracing,
   ) => Promise<T>;
   /** The authenticated caller of a request, as tasks are bound to it at creation. */
   principal: (ctx: ServerContext, requestContext: RequestContext) => string | Promise<string>;
@@ -53,26 +65,49 @@ export function registerTaskHandlers(server: Server, deps: TaskHandlerDeps): voi
     params: { taskId: string },
     ctx: ServerContext,
     fn: (access: { principal: string }) => Promise<T>,
-  ) =>
-    trace(server, method, params, ctx, async requestContext => {
-      const principal = await deps.principal(ctx, requestContext);
-      if (authorize) {
-        const task = await store.get(params.taskId, { principal });
-        if (!task || !(await authorize({ principal, task, requestContext }))) throw notFound();
-      }
-      return fn({ principal });
-    });
+    metadata?: Record<string, unknown>,
+  ) => {
+    const mcpTaskKey = taskKeyOf(params.taskId);
+    return trace(
+      server,
+      method,
+      { mcpTaskKey },
+      ctx,
+      async requestContext => {
+        const principal = await deps.principal(ctx, requestContext);
+        if (authorize) {
+          const task = await store.get(params.taskId, { principal });
+          if (!task || !(await authorize({ principal, task, requestContext }))) throw notFound();
+        }
+        return fn({ principal });
+      },
+      {
+        parentOf: store.traceOf
+          ? async requestContext =>
+              store.traceOf!(params.taskId, { principal: await deps.principal(ctx, requestContext) })
+          : undefined,
+        metadata: { mcpTaskKey, ...metadata },
+      },
+    );
+  };
 
   server.setRequestHandler(
     TASKS_METHODS.get,
     { params: GetTaskRequestParamsSchema, result: GetTaskResultSchema },
     (params, ctx) =>
-      trace(server, TASKS_METHODS.get, params, ctx, async requestContext => {
-        const principal = await deps.principal(ctx, requestContext);
-        const task = await store.get(params.taskId, { principal });
-        if (!task || (authorize && !(await authorize({ principal, task, requestContext })))) throw notFound();
-        return task;
-      }),
+      trace(
+        server,
+        TASKS_METHODS.get,
+        {},
+        ctx,
+        async requestContext => {
+          const principal = await deps.principal(ctx, requestContext);
+          const task = await store.get(params.taskId, { principal });
+          if (!task || (authorize && !(await authorize({ principal, task, requestContext })))) throw notFound();
+          return task;
+        },
+        { untraced: true },
+      ),
   );
 
   server.setRequestHandler(
@@ -91,9 +126,15 @@ export function registerTaskHandlers(server: Server, deps: TaskHandlerDeps): voi
     TASKS_METHODS.cancel,
     { params: CancelTaskRequestParamsSchema, result: TaskAckResultSchema },
     (params, ctx) =>
-      serve(TASKS_METHODS.cancel, params, ctx, async access => {
-        if (!(await store.cancel(params.taskId, access))) throw notFound();
-        return {};
-      }),
+      serve(
+        TASKS_METHODS.cancel,
+        params,
+        ctx,
+        async access => {
+          if (!(await store.cancel(params.taskId, access))) throw notFound();
+          return {};
+        },
+        { mcpTaskStatus: 'cancelled' },
+      ),
   );
 }

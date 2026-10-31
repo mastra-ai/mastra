@@ -40,12 +40,6 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "qwen3.6-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
     "qwen3.5-397b-a17b": [
       {
         "type": "effort",
@@ -56,6 +50,12 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "qwen3.6-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "qwen3.8-27b": [
