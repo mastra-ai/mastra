@@ -3,7 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
-import { MASTRA_KNOWLEDGE_PRINCIPALS_KEY } from '../constants';
+import { MASTRA_AUTH_MODE_KEY, MASTRA_KNOWLEDGE_PRINCIPALS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import { knowledgeActivityQuerySchema, knowledgeSearchQuerySchema } from '../schemas/knowledge';
 import { deriveAction, extractResource } from '../server-adapter/routes/permissions';
@@ -216,6 +216,61 @@ describe('Knowledge read routes', () => {
       { id: 'u1' },
       { resource: { type: 'knowledge', id: 'kb' }, permission: 'knowledge:read' },
     );
+  });
+
+  describe('when only studio.fga is configured', () => {
+    const studioRequest = () => {
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'u1' });
+      requestContext.set(MASTRA_AUTH_MODE_KEY, 'studio');
+      return requestContext;
+    };
+
+    it('filters instances and gates reads for Studio requests', async () => {
+      const { mastra } = await setup();
+      const filterAccessible = vi.fn(async () => []);
+      (mastra as any).getStudio = () => ({ fga: { filterAccessible, check: async () => false } });
+      const requestContext = studioRequest();
+      expect(await call(LIST_KNOWLEDGE_ROUTE, { mastra, requestContext })).toEqual({ instances: [] });
+      expect(filterAccessible).toHaveBeenCalledOnce();
+      for (const route of [GET_KNOWLEDGE_TREE_ROUTE, GET_KNOWLEDGE_GRAPH_ROUTE, GET_KNOWLEDGE_ACTIVITY_ROUTE]) {
+        await expect(call(route, { mastra, requestContext, knowledgeKey: 'main' })).rejects.toMatchObject({
+          status: 404,
+        });
+      }
+    });
+
+    it('refuses requests that did not come through Studio auth', async () => {
+      const { mastra } = await setup();
+      (mastra as any).getStudio = () => ({ fga: { filterAccessible: async () => [], check: async () => true } });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'u1' });
+      await expect(call(LIST_KNOWLEDGE_ROUTE, { mastra, requestContext })).rejects.toMatchObject({ status: 403 });
+      await expect(
+        call(GET_KNOWLEDGE_TREE_ROUTE, { mastra, requestContext, knowledgeKey: 'main' }),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+  });
+
+  it('checks a Studio request against studio.fga when both providers are set', async () => {
+    const { mastra } = await setup();
+    const serverCheck = vi.fn(async () => true);
+    const serverFilter = vi.fn(async (_user: unknown, items: unknown[]) => items);
+    const studioCheck = vi.fn(async () => false);
+    const studioFilter = vi.fn(async () => []);
+    (mastra as any).getServer = () => ({ fga: { filterAccessible: serverFilter, check: serverCheck } });
+    (mastra as any).getStudio = () => ({ fga: { filterAccessible: studioFilter, check: studioCheck } });
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'u1' });
+    requestContext.set(MASTRA_AUTH_MODE_KEY, 'studio');
+    expect(await call(LIST_KNOWLEDGE_ROUTE, { mastra, requestContext })).toEqual({ instances: [] });
+    await expect(
+      call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, requestContext, knowledgeKey: 'main' }),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(studioFilter).toHaveBeenCalledOnce();
+    expect(studioCheck).toHaveBeenCalledOnce();
+    expect(serverFilter).not.toHaveBeenCalled();
+    expect(serverCheck).not.toHaveBeenCalled();
   });
 
   it('parses repeated scopeId params and bounds query values', () => {
