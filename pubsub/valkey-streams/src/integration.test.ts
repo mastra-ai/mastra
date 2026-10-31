@@ -23,6 +23,38 @@ it('publishes and consumes through Valkey GLIDE', async () => {
   }
 });
 
+it('trims only saved run entries while preserving other runs, pinned entries, and terminal events', async () => {
+  const keyPrefix = `valkey-trim-${randomUUID()}`;
+  const topic = `thread-${randomUUID()}`;
+  const pubsub = new ValkeyStreamsPubSub({ url: 'valkey://localhost:6381', keyPrefix, maxStreamLength: 10_000 });
+  const key = `${keyPrefix}:${topic}`;
+  try {
+    for (let i = 0; i < 510; i++) {
+      await pubsub.publish(topic, { type: 'stream-part', runId: 'target', data: { producedAt: 10, index: i } });
+    }
+    await pubsub.publish(topic, { type: 'stream-part', runId: 'target', data: { producedAt: 11 } });
+    await pubsub.publish(topic, { type: 'stream-part', runId: 'target', data: { producedAt: 10, pinned: true } });
+    await pubsub.publish(topic, {
+      type: 'thread-event',
+      runId: 'target',
+      data: { type: 'run-completed', producedAt: 10 },
+    });
+    await pubsub.publish(topic, { type: 'stream-part', runId: 'other', data: { producedAt: 10 } });
+
+    await pubsub.trimTopic(topic, { runId: 'target', producedBefore: 10, retainTerminalEvents: true });
+    expect(await xlenOf(key)).toBe(4);
+
+    await pubsub.trimTopic(topic, { runId: 'target', retainTerminalEvents: true });
+    expect(await xlenOf(key)).toBe(2);
+
+    await pubsub.trimTopic(topic, { runId: 'target' });
+    expect(await xlenOf(key)).toBe(1);
+  } finally {
+    await pubsub.clearTopic(topic);
+    await pubsub.close();
+  }
+});
+
 it('reclaims idle pending entries to a sibling consumer, never back to their stuck owner', async () => {
   const pubsub = new ValkeyStreamsPubSub({
     url: 'valkey://localhost:6381',

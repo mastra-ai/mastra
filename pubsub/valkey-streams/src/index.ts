@@ -836,6 +836,56 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     }
   }
 
+  override async trimTopic(
+    topic: string,
+    {
+      runId,
+      producedBefore,
+      retainTerminalEvents,
+    }: { runId: string; producedBefore?: number; retainTerminalEvents?: boolean },
+  ): Promise<void> {
+    if (this.#closed) return;
+    try {
+      await this.#ensureWriterConnected();
+      const streamKey = this.#streamKey(topic);
+      let start = '-';
+      for (;;) {
+        const page = await this.#writeClient.xRange(streamKey, start, '+', { COUNT: REPLAY_PAGE_SIZE });
+        const ids: string[] = [];
+        for (const entry of page) {
+          try {
+            const event = JSON.parse(entry.message.event ?? '{}') as {
+              runId?: string;
+              data?: { type?: string; status?: string; producedAt?: unknown; pinned?: unknown };
+            };
+            if (event.runId !== runId) continue;
+            if (
+              retainTerminalEvents &&
+              event.data?.status !== 'suspended' &&
+              ['run-registered', 'run-completed', 'run-failed', 'run-aborted'].includes(event.data?.type ?? '')
+            )
+              continue;
+            if (producedBefore !== undefined) {
+              const producedAt = event.data?.producedAt;
+              if (typeof producedAt !== 'number' || producedAt > producedBefore || event.data?.pinned) continue;
+            }
+            ids.push(entry.id);
+          } catch {
+            // Unparseable entries cannot be attributed to this run.
+          }
+        }
+        if (ids.length > 0) await this.#writeClient.command(['XDEL', streamKey, ...ids]);
+        if (page.length < REPLAY_PAGE_SIZE) break;
+        start = `(${page[page.length - 1]!.id}`;
+      }
+    } catch (err) {
+      this.#logger?.warn?.('valkey-streams: trimTopic failed', {
+        topic,
+        err: err instanceof Error ? err.message : err,
+      });
+    }
+  }
+
   /**
    * Lease key used in Valkey. Distinct prefix from streams so leases and
    * streams can't collide on key namespace.
