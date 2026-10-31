@@ -6937,16 +6937,16 @@ importers:
         specifier: workspace:*
         version: link:../server-adapters-test-suite
       '@nestjs/common':
-        specifier: ^12.2.0
+        specifier: ^12.3.2
         version: 12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2)
       '@nestjs/core':
-        specifier: ^12.2.0
+        specifier: ^12.3.2
         version: 12.3.2(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/platform-express@12.3.2)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/platform-express':
-        specifier: ^12.2.0
+        specifier: ^12.3.2
         version: 12.3.2(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/core@12.3.2)(rxjs@7.8.2)(supports-color@10.2.2)
       '@nestjs/testing':
-        specifier: ^12.2.0
+        specifier: ^12.3.2
         version: 12.3.2(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/core@12.3.2)(@nestjs/platform-express@12.3.2)
       '@types/cors':
         specifier: ^2.8.19
