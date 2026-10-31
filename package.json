@@ -19,7 +19,7 @@
     "oxfmt": "catalog:",
     "oxlint": "1.88.0",
     "oxlint-tsgolint": "7.0.2004",
-    "path-to-regexp": "^8.4.2",
+    "path-to-regexp": "^9.0.0",
     "prettier": "3.9.10",
     "prettier-plugin-tailwindcss": "^0.7.4",
     "semver": "^7.8.5",
