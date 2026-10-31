@@ -2,6 +2,7 @@ import {
   boardEventHandlers,
   boardForWorkItem,
   eventBoardId,
+  isTerminalWorkItem,
   rulePhaseField,
   withBoardClosure,
 } from '../../boards/index.js';
@@ -80,13 +81,17 @@ export class LinearRules {
 
     const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
-    const itemsByIssueId = new Map(items.map(item => [item.metadata?.linearIssueId, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
       // One card per Linear issue per project; other projects may file their own.
-      // The stable issue id finds the card even after Linear renamed the
-      // identifier; the identifier covers cards filed without the id.
-      const relatedItem = itemsByIssueId.get(issue.id) ?? itemsBySourceKey.get(`linear:${issue.identifier}`);
+      // The identifier finds the card filed under it; after Linear renamed the
+      // identifier, the stable issue id finds it, preferring a live card over
+      // finished ones, as the issue detail route does.
+      const byIssueId = items.filter(item => item.metadata?.linearIssueId === issue.id);
+      const relatedItem =
+        itemsBySourceKey.get(`linear:${issue.identifier}`) ??
+        byIssueId.find(item => !isTerminalWorkItem(this.options.boards, item)) ??
+        byIssueId[0];
       statuses.push(await this.#ingestIssue(input, issue, relatedItem));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };

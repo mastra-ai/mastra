@@ -5387,6 +5387,79 @@ describe('FactoryDecisionDispatcher', () => {
     expect(await decisionByKey(storage, 'linked-renamed')).toMatchObject({ status: 'succeeded' });
   });
 
+  it.each([
+    { order: 'the finished card is older', finishedAt: '2030-01-01T00:00:00Z', liveAt: '2030-01-02T00:00:00Z' },
+    { order: 'the finished card is newer', finishedAt: '2030-01-02T00:00:00Z', liveAt: '2030-01-01T00:00:00Z' },
+  ])('reuses the live Linear card under an older identifier when $order', async ({ finishedAt, liveAt }) => {
+    const { workItems: storage, storage: db } = await createFactoryStorageForTests();
+    // One card finished as OLD-1, a later one is live as OPS-1; the issue is now ENG-1.
+    const fileCard = async (identifier: string, stage: string, createdAt: string) => {
+      const { item } = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: `linear:${identifier}` },
+          title: `${identifier}: moved teams`,
+          stages: [stage],
+          sessions: {},
+          metadata: { linearIssueId: 'issue-1' },
+        },
+      });
+      await db.ops.updateMany('work_items', { id: item.id }, { created_at: new Date(createdAt) });
+      return item;
+    };
+    const finished = await fileCard('OLD-1', 'done', finishedAt);
+    const live = await fileCard('OPS-1', 'intake', liveAt);
+    const parent = await createItem(storage);
+    const boards = createLifecycleTestRegistry({
+      execute: {
+        issue: {
+          onEnter: () => ({
+            type: 'upsertLinkedWorkItem',
+            idempotencyKey: 'linked-renamed-twice',
+            board: 'work',
+            source: 'linear-issue',
+            sourceKey: 'linear:ENG-1',
+            title: 'ENG-1: moved teams',
+            url: null,
+            stage: 'intake',
+            metadata: { linearIssueId: 'issue-1' },
+          }),
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: parent.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: parent.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-renamed-twice' },
+      cause: 'test',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    await dispatcher.runOnce(new Date('2030-01-03T00:00:00Z'));
+
+    const cards = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
+      item => item.metadata?.linearIssueId === 'issue-1',
+    );
+    expect(cards.map(card => card.id).sort()).toEqual([finished.id, live.id].sort());
+    expect(await storage.get({ orgId: 'org-1', id: live.id })).toMatchObject({ parentWorkItemId: parent.id });
+    expect(await storage.get({ orgId: 'org-1', id: finished.id })).toMatchObject({ parentWorkItemId: null });
+    expect(await decisionByKey(storage, 'linked-renamed-twice')).toMatchObject({ status: 'succeeded' });
+  });
+
   it('removes a newly materialized linked item when its initial Intake entry is rejected', async () => {
     const { workItems: storage } = await createFactoryStorageForTests();
     const parent = await createItem(storage);

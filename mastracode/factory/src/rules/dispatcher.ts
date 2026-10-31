@@ -4,7 +4,12 @@ import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/er
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { boardForWorkItem, resolvePhaseSemantics, workItemPhaseSemantics } from '../boards/index.js';
+import {
+  boardForWorkItem,
+  isTerminalWorkItem,
+  resolvePhaseSemantics,
+  workItemPhaseSemantics,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -1296,18 +1301,22 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  /** The project's card for a Linear issue by its stable id, wherever its identifier now points. */
+  /**
+   * The project's card for a Linear issue by its stable id, wherever its identifier now points.
+   * A live card wins over finished ones, as in the Linear rules and issue detail route.
+   */
   async #linearCardByIssueId(
     record: FactoryDeferredDecisionRecord,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    boards: BoardRegistry,
   ) {
     const issueId = decision.metadata?.linearIssueId;
     if (decision.source !== 'linear-issue' || typeof issueId !== 'string') return null;
     const items = await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
-    return (
-      items.find(item => item.externalSource?.integrationId === 'linear' && item.metadata?.linearIssueId === issueId) ??
-      null
+    const cards = items.filter(
+      item => item.externalSource?.integrationId === 'linear' && item.metadata?.linearIssueId === issueId,
     );
+    return cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0] ?? null;
   }
 
   async #upsertLinkedItem(
@@ -1363,7 +1372,7 @@ export class FactoryDecisionDispatcher {
       null;
     // A Linear identifier changes when its issue moves teams; the card filed
     // under the old one is still this issue's card.
-    const renamed = existing ? null : await this.#linearCardByIssueId(record, decision);
+    const renamed = existing ? null : await this.#linearCardByIssueId(record, decision, boards);
     let result: UpsertWorkItemResult = renamed
       ? {
           created: false,

@@ -37,7 +37,7 @@ async function setup(overrides?: LinearRuleOverrides, boards = createBoardRegist
     boards,
     linearRules: resolveLinearRules(overrides),
   });
-  return { project, service, workItems: seeded.workItems };
+  return { project, service, workItems: seeded.workItems, storage: seeded.storage };
 }
 
 describe('LinearRules', () => {
@@ -171,6 +171,52 @@ describe('LinearRules', () => {
 
     expect(evaluate).toHaveBeenCalledWith(expect.objectContaining({ workItemId: card.id, decisions: [] }));
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  // A card finished while claims were enforced, the issue moved teams and reopened, and a second
+  // live card was filed under the new identifier with the same stable issue id.
+  it.each([
+    { order: 'the finished card is older', finishedAt: '2030-01-01T00:00:00Z', liveAt: '2030-01-02T00:00:00Z' },
+    { order: 'the finished card is newer', finishedAt: '2030-01-02T00:00:00Z', liveAt: '2030-01-01T00:00:00Z' },
+  ])('evaluates the issue against its live card when $order', async ({ finishedAt, liveAt }) => {
+    const { project, service, workItems, storage } = await setup();
+    const fileCard = async (identifier: string, stage: string, createdAt: string) => {
+      const { item } = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: `linear:${identifier}`, url: issue.url },
+          title: `${identifier}: Fix intake sync`,
+          stages: [stage],
+          sessions: {},
+          metadata: { linearIssueId: issue.id },
+        },
+      });
+      await storage.ops.updateMany('work_items', { id: item.id }, { created_at: new Date(createdAt) });
+      return item;
+    };
+    const finished = await fileCard('OLD-42', 'done', finishedAt);
+    const live = await fileCard('OPS-42', 'intake', liveAt);
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+
+    // Under the identifier a card was filed with, that card is the issue's card.
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, identifier: 'OLD-42' }],
+    });
+    expect(evaluate).toHaveBeenLastCalledWith(expect.objectContaining({ workItemId: finished.id }));
+
+    // Under an identifier no card was filed with, the live card wins.
+    await service.ingest({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      issues: [{ ...issue, updatedAt: '2026-07-03T00:00:00Z' }],
+    });
+    expect(evaluate).toHaveBeenLastCalledWith(expect.objectContaining({ workItemId: live.id }));
   });
 
   it("ingests when the other Factory's card finished on its own board's terminal phase", async () => {
