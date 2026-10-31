@@ -59,7 +59,7 @@ describe('PinnedStateProcessor', () => {
       /^Use the Knowledge tools.*Pinned knowledge pages may already be in your context if <pinned-knowledge> tags are present/,
     );
     expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('without searching for or reading them again');
-    expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('edit one with the version shown');
+    expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('edit one straight from its body and the version shown');
     expect(KNOWLEDGE_READ_INSTRUCTIONS).toContain('only when the answer depends on what its notes say');
   });
 
