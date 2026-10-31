@@ -194,5 +194,32 @@
     "@mastra/sprites": "0.1.2",
     "@mastra/vercel": "1.6.3"
   },
-  "changesets": []
+  "changesets": [
+    "agent-scopes-function-narrows",
+    "all-jobs-decide",
+    "authorize-context-request-context",
+    "automated-model-pricing-20261031-003140",
+    "automated-provider-registry-20261031-003140",
+    "code-sdk-keeps-incoming-scopes",
+    "curly-ghosts-serve",
+    "elysia-repeated-query-params",
+    "factory-knowledge-page-store",
+    "generate-joins-thread-signals",
+    "knowledge-alpha-remove-subconscious-mastracode",
+    "knowledge-alpha-standalone",
+    "knowledge-chat-renderers-core",
+    "knowledge-chat-renderers-factory",
+    "knowledge-chat-renderers-playground-ui",
+    "knowledge-explorer-page-reads",
+    "knowledge-page-tree-view",
+    "knowledge-pages-storage-adapters",
+    "mcp-on-server-settled",
+    "mcp-stalled-connect-teardown",
+    "mcp-stalled-server-independent",
+    "studio-knowledge-page",
+    "studio-knowledge-routes",
+    "studio-knowledge-tool-cards",
+    "thread-lease-owner-encoding",
+    "witty-ducks-win"
+  ]
 }

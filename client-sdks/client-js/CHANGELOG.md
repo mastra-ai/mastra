@@ -1,5 +1,48 @@
 # @mastra/client-js
 
+## 1.59.0-alpha.0
+
+### Minor Changes
+
+- Added read-only Knowledge routes on the Mastra server (`GET /knowledge`, `/knowledge/:knowledgeKey/tree`, `/pages/:pageId`, `/graph`, `/search`, `/activity`) and matching `listKnowledge()` / `getKnowledge(key)` methods on the JS client. ([#29069](https://github.com/mastra-ai/mastra/pull/29069))
+
+  `GET /knowledge/:knowledgeKey/events` is a Server-Sent Events stream of the writes the caller can read, as `{ kind, op, pageId?, scopeId?, at }`; ids the caller can't read are left out. The server ends each stream after five minutes so a reconnect re-checks the caller's access; reconnect when it ends. Follow it from the client with `getKnowledge(key).events({ signal })`.
+
+  The routes are opt-in: they are not part of the default route set, so register them explicitly before they are served.
+
+  ```ts
+  import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter';
+
+  new Mastra({
+    server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
+  });
+  ```
+
+  What they return depends on whether the app configures auth. Without auth they read every scope, page and note in the instance. With auth they return only what the signed-in caller can read: set `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` on the request context in `authorize` to the caller's Knowledge principals (or `'all'` for an admin), and a caller with no mapping is refused with 403.
+
+  ```ts
+  import { MASTRA_KNOWLEDGE_PRINCIPALS_KEY } from '@mastra/server/server-adapter';
+
+  authorize: async (path, method, user, context) => {
+    if (path.startsWith('/api/knowledge')) {
+      context.get('requestContext').set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, [`team:${user.orgId}:${user.teamId}`]);
+      return true;
+    }
+    return appAuthorize(path, method, user, context); // keep your existing decision for other routes
+  };
+  ```
+
+  The routes are gated by a new `knowledge:read` permission. With an FGA provider configured, instances are checked by their registered key: `GET /knowledge` lists only the instances the caller can read, and the other routes refuse any other instance with 403.
+
+  Scope pages in tree, page, graph and search responses carry their declaration's `displayLabel` when the declaration sets one, with the address's `$params` filled in (`"$orgId policy"` on `policy:$orgId` shows as `"acme policy"` for `policy:acme`), so the explorer can caption a scope by its kind.
+
+  The graph response also lists `grants`: the declared access grants onto the scopes it shows (principal scope address, its page id when it has one, its `principalLabel`, the target scope's page id and the role), so the explorer can draw who reaches what. Only principal scopes the caller can read are included; an owner view (`'all'`) also gets declared principals nothing was written to yet. Servers on a core without grant support leave the field out.
+
+### Patch Changes
+
+- Updated dependencies [[`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d)]:
+  - @mastra/core@1.82.0-alpha.0
+
 ## 1.58.0
 
 ### Minor Changes

@@ -1,5 +1,63 @@
 # @mastra/playground-ui
 
+## 68.0.0-alpha.0
+
+### Minor Changes
+
+- Added `canCreate` to `SavedViewsProvider` so hosts can hide view creation for users who may only read saved views. When `false`, the observability saved views picker hides "Save as new view" and "Duplicate"; views can still be applied. Combine it with `canEdit` for a picker that only applies views. ([#29067](https://github.com/mastra-ai/mastra/pull/29067))
+
+  ```tsx
+  <SavedViewsProvider source={source} canCreate={false} canEdit={() => false}>
+    {children}
+  </SavedViewsProvider>
+  ```
+
+### Patch Changes
+
+- Pinned Knowledge now shows in chat as a card instead of raw `{id: …}` text. A snapshot reads "Pinned knowledge · N pages" and lists each pinned page by name and scope, with the text the agent was given behind a toggle. A delta lists the pages added (+), changed (~) and removed (−) since. A `[[Page Name]]` in a Knowledge note links to that page; a name that no longer resolves shows as plain text. ([#28942](https://github.com/mastra-ai/mastra/pull/28942))
+
+  Knowledge page links go to Studio's Knowledge page by default. A host with its own Knowledge route wraps chat in `KnowledgeLinksProvider` to point them there:
+
+  ```tsx
+  import { KnowledgeLinksProvider } from '@mastra/playground-ui/domains/chat/knowledge';
+
+  <KnowledgeLinksProvider pageHref={pageId => `/my-app/knowledge?page=${encodeURIComponent(pageId)}`}>
+    <Chat />
+  </KnowledgeLinksProvider>;
+  ```
+
+- Added `KnowledgePageExplorer`, a Knowledge browser any host can use: search, a page tree, a graph of scopes and pages, and a page view, all on one selection. ([#28361](https://github.com/mastra-ai/mastra/pull/28361))
+
+  - **Graph:** shows parent → child links, mentions between pages, pinned pages and, when the host passes `grants`, which scopes can reach which (role named on hover). The first click selects a page; a second click opens it. A click on empty canvas clears the selection, and dragging the canvas doesn't. Pages already on screen stay put when data refreshes.
+  - **Page view:** the body as markdown (raw HTML is escaped), notes with links for resolved `[[mentions]]`, child pages, the notes that mention the page, and recent activity.
+  - **Tree:** clicking a scope narrows the tree and graph to it; a page selected elsewhere opens its path.
+
+  The host owns the selection and view state and reads through its own routes:
+
+  ```tsx
+  import { KnowledgePageExplorer } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
+
+  <KnowledgePageExplorer
+    graph={graph} // { pages, edges, pinnedIds, truncated, grants? }
+    source={{ usePage, useSearch, useTreeLevels, useActivity }}
+    selectedPageId={pageId}
+    onSelect={id => setPageId(id)} // null when the selection is cleared
+    view={view}
+    onViewChange={setView}
+  />;
+  ```
+
+  `KnowledgePageTree`, `KnowledgePageDetail` and `KnowledgePageGraph` are exported for hosts that lay these out themselves.
+
+- Knowledge tool calls in chat now draw as readable cards instead of raw JSON. `knowledge_search` lists its hits, `knowledge_read` shows the page with its markdown body, notes, child pages and the notes that mention it, `knowledge_page` says whether it created, updated, moved or merged a page and shows the new body and version, `knowledge_note` shows the note it added, and `knowledge_pin` names the audience. Each page name links to that page in Studio's Knowledge viewer (`/knowledge?page=<id>&view=page`). Running and failed calls keep the plain tool badge. ([#28931](https://github.com/mastra-ai/mastra/pull/28931))
+
+- Updated dependencies [[`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`ba602f5`](https://github.com/mastra-ai/mastra/commit/ba602f5f4622d6a3e6beb6d2741e3d19efe57ca9), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d)]:
+  - @mastra/core@1.82.0-alpha.0
+  - @mastra/memory@1.41.0-alpha.0
+  - @mastra/client-js@1.59.0-alpha.0
+  - @mastra/ai-sdk@1.11.3
+  - @mastra/react@1.14.1-alpha.0
+
 ## 67.0.0
 
 ### Minor Changes

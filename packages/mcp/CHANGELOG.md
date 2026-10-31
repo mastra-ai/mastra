@@ -1,5 +1,33 @@
 # @mastra/mcp
 
+## 2.8.0-alpha.0
+
+### Minor Changes
+
+- Added an `onServerSettled` option to `listToolsWithErrors()`, `listToolsetsWithErrors()`, and `listToolDefinitionsWithErrors()`. It is called for each server as soon as that server's discovery succeeds, fails, or times out, so you can show healthy servers right away instead of waiting for the slowest one. ([#29028](https://github.com/mastra-ai/mastra/pull/29028))
+
+  A server that hits `perServerTimeoutMs` now reports an error with `code: MCP_DISCOVERY_TIMEOUT_CODE` (exported from `@mastra/mcp`), so you can tell a slow server apart from one that failed.
+
+  Added a `serverNames` option to the same methods to discover only the named servers. Use it to retry the servers that timed out without starting every other server again.
+
+  The `onServerSettled` callback may be `async`. If it throws or rejects, the error is logged and discovery is unaffected — a rejected callback never surfaces as an unhandled rejection.
+
+  ```ts
+  await mcp.listToolsetsWithErrors({
+    perServerTimeoutMs: 60_000,
+    onServerSettled: (serverName, { value, error, duration }) => {
+      console.log(serverName, error ? error.message : Object.keys(value), duration);
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Fixed `disconnect()` hanging, and stdio server processes being left running, when a server never answered its connection handshake. A connect that is still waiting is now closed when you call `disconnect()` or `reconnectServer()`, which stops the server process and lets `disconnect()` return right away. ([#29028](https://github.com/mastra-ai/mastra/pull/29028))
+
+- Updated dependencies [[`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d)]:
+  - @mastra/core@1.82.0-alpha.0
+
 ## 2.7.0
 
 ### Minor Changes
