@@ -51,7 +51,7 @@ function ProductTracker({ product }: { product: Product }) {
 }
 ```
 
-If initialization is genuinely expensive and only needed once per mount, use lazy `useState`; see `rerender-lazy-state-init`.
+If initialization is genuinely expensive and only needed once per mount, use lazy `useState`.
 
 ```tsx
 const [initialIndex] = useState(() => findInitialIndex(items));
