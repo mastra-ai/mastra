@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import { standardSchemaToJSONSchema } from '../../schema';
@@ -359,6 +359,62 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     expect((await am.read('account:acme:123')).childScopes.map((s: Result) => s.address)).toEqual([
       'account:acme:123/internal',
     ]);
+  });
+
+  it('links a [[mention]] whose name is also an Object.prototype member', async () => {
+    const am = as('am', ['org:acme', 'role:acme:account-manager']);
+    await am.page({ op: 'write', scope: 'account:acme:123', name: 'Acme Account 123' });
+    const ctor = await am.page({ op: 'write', scope: 'account:acme:123', name: 'constructor' });
+    const added = await am.note({
+      op: 'add',
+      page: 'Acme Account 123',
+      scope: ['account:acme:123'],
+      text: 'See [[constructor]].',
+    });
+    expect(added.note.mentions).toEqual({ constructor: ctor.page.id });
+  });
+
+  it('bounds the lookups a read spends linking [[mentions]] that no longer resolve', async () => {
+    const am = as('am', ['org:acme', 'role:acme:account-manager']);
+    await am.page({ op: 'write', scope: 'account:acme:123', name: 'Acme Account 123' });
+    await am.page({ op: 'write', scope: 'account:acme:123/internal', name: 'Renewal Risk' });
+    const missing = Array.from({ length: 30 }, (_, i) => `[[Gone ${i}]]`).join(' ');
+    await am.note({
+      op: 'add',
+      page: 'Acme Account 123',
+      scope: ['account:acme:123'],
+      text: `${missing} [[Renewal Risk]]`,
+    });
+
+    const byName = vi.spyOn(store, 'findPagesByName');
+    const read = await am.read('Acme Account 123');
+    const goneLookups = byName.mock.calls.filter(([args]) => args.name.startsWith('Gone ')).length;
+    expect(goneLookups).toBeLessThanOrEqual(3);
+    expect(read.notes[0].text).toContain('[[Gone 29]]');
+  });
+
+  it('names the page each resolved [[mention]] in a note links to; unresolved names stay text', async () => {
+    const am = as('am', ['org:acme', 'role:acme:account-manager']);
+    const account = await am.page({ op: 'write', scope: 'account:acme:123', name: 'Acme Account 123' });
+    const risk = await am.page({ op: 'write', scope: 'account:acme:123/internal', name: 'Renewal Risk' });
+    const added = await am.note({
+      op: 'add',
+      page: 'Acme Account 123',
+      scope: ['account:acme:123'],
+      text: 'See [[Renewal Risk]] and [[ Renewal Risk ]], not [[Nowhere]].',
+    });
+    expect(added.note.mentions).toEqual({ 'Renewal Risk': risk.page.id });
+
+    const read = await am.read('Acme Account 123');
+    expect(read.notes[0].mentions).toEqual({ 'Renewal Risk': risk.page.id });
+    expect((await am.read('Renewal Risk')).mentionedIn[0].mentions).toEqual({ 'Renewal Risk': risk.page.id });
+    const hit = (await am.search('Nowhere')).results.find((r: Result) => r.type === 'note');
+    expect(hit.note.mentions).toEqual({ 'Renewal Risk': risk.page.id });
+
+    await am.note({ op: 'add', page: account.page.id, scope: ['account:acme:123'], text: 'Uses SSO.' });
+    expect((await am.read('Acme Account 123')).notes.find((n: Result) => n.text === 'Uses SSO.')).not.toHaveProperty(
+      'mentions',
+    );
   });
 
   it('12: the public bot reads only published knowledge; publishing names kb-public explicitly', async () => {

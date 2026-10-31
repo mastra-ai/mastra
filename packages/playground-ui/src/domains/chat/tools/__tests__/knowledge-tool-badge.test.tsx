@@ -107,6 +107,22 @@ describe('Knowledge tool cards', () => {
     });
   });
 
+  describe('when a note names a page the server did not resolve, called like an Object member', () => {
+    it('shows the name as plain text with no link', () => {
+      renderCard({
+        toolName: 'knowledge_note',
+        input: { op: 'add', page: 'Refunds' },
+        output: {
+          page: 'page-refunds',
+          note: { id: 'n1', text: 'See [[constructor]].', author: 'agent:alex', mentions: {} },
+        },
+      });
+      const badge = open();
+      expect(within(badge).getByTestId('knowledge-unresolved-mention').textContent).toBe('constructor');
+      expect(within(badge).queryByRole('link', { name: 'constructor' })).toBeNull();
+    });
+  });
+
   describe('when knowledge_page deletes a page', () => {
     it('says it deleted the page and names it without a link', () => {
       renderCard({
@@ -173,6 +189,58 @@ describe('Knowledge tool cards', () => {
       expect(within(badge).getByRole('link', { name: 'Refunds' }).getAttribute('href')).toBe(
         '/knowledge?page=page-refunds&view=page',
       );
+    });
+
+    it('links each [[Page Name]] the server resolved and leaves the rest as plain text', () => {
+      const text = 'Raised to $150, see [[Escalation Process]] and [[Old Runbook]].';
+      renderCard({
+        toolName: 'knowledge_note',
+        input: { op: 'add', page: 'customer:cust-dana#profile', scope: ['customer:cust-dana'], text },
+        output: {
+          note: { id: 'n1', text, author: 'agent:alex', mentions: { 'Escalation Process': 'page-escalation' } },
+          page: 'page-profile',
+        },
+      });
+      const badge = open();
+      expect(within(badge).getByRole('link', { name: 'Escalation Process' }).getAttribute('href')).toBe(
+        '/knowledge?page=page-escalation&view=page',
+      );
+      expect(within(badge).queryByRole('link', { name: 'Old Runbook' })).toBeNull();
+      expect(within(badge).getByTestId('knowledge-unresolved-mention').textContent).toBe('Old Runbook');
+      expect(badge.textContent).toContain('Raised to $150, see Escalation Process and Old Runbook.');
+    });
+  });
+
+  describe('when knowledge_read returns notes that mention pages', () => {
+    it('links the mentions in its notes and in the notes that mention it', () => {
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'Refunds' },
+        output: {
+          page: refunds,
+          notes: [
+            { id: 'n1', text: 'Escalate per [[Escalation Process]]', mentions: { 'Escalation Process': 'p-esc' } },
+          ],
+          children: [],
+          mentionedIn: [
+            {
+              id: 'n2',
+              text: 'Start at [[Refunds]]',
+              mentions: { Refunds: 'page-refunds' },
+              page: { id: 'p-faq', name: 'FAQ', scope: 'org:acme' },
+            },
+          ],
+        },
+      });
+      const badge = open();
+      expect(within(badge).getByRole('link', { name: 'Escalation Process' }).getAttribute('href')).toBe(
+        '/knowledge?page=p-esc&view=page',
+      );
+      expect(
+        within(badge)
+          .getAllByRole('link', { name: 'Refunds' })
+          .map(link => link.getAttribute('href')),
+      ).toContain('/knowledge?page=page-refunds&view=page');
     });
   });
 

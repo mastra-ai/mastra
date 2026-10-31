@@ -1,5 +1,6 @@
 import { BookOpen } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { KnowledgePageLink } from '../../knowledge/knowledge-links';
 import { isRecord } from '../../messages/signal-data';
 import type { MessageMetadata } from '@/domains/chat';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
@@ -7,7 +8,6 @@ import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-bad
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
-import { useLinkComponent } from '@/lib/framework';
 
 /** The tools `Knowledge.createTools()` gives an agent. */
 export const KNOWLEDGE_TOOLS = new Set([
@@ -34,6 +34,8 @@ interface NoteSummary {
   text: string;
   author?: string;
   page?: PageSummary;
+  /** Which `[[ref]]` in `text` links to which page id; refs the server couldn't resolve aren't here. */
+  mentions?: Record<string, string>;
 }
 
 const str = (value: unknown): string | undefined => (typeof value === 'string' && value ? value : undefined);
@@ -49,21 +51,10 @@ function asNotes(value: unknown): NoteSummary[] {
     : [];
 }
 
-/** The Studio Knowledge page for a page id; Studio opens it in Page view. */
-export const knowledgePageHref = (pageId: string) => `/knowledge?page=${encodeURIComponent(pageId)}&view=page`;
-
 const where = (page: PageSummary) => page.address ?? page.scope;
 
 function PageLink({ page }: { page: PageSummary }) {
-  const { Link } = useLinkComponent();
-  return (
-    <Link
-      href={knowledgePageHref(page.id)}
-      className="min-w-0 truncate text-foreground underline-offset-2 hover:underline"
-    >
-      {page.name}
-    </Link>
-  );
+  return <KnowledgePageLink pageId={page.id}>{page.name}</KnowledgePageLink>;
 }
 
 function Meta({ children }: { children: ReactNode }) {
@@ -94,13 +85,46 @@ function Body({ markdown }: { markdown: string }) {
   );
 }
 
+const MENTION = /\[\[([^\]]+)\]\]/g;
+
+/** A note's text with each resolved `[[Page Name]]` linking to its page; unresolved names stay plain. */
+function NoteText({ note }: { note: NoteSummary }) {
+  const parts: ReactNode[] = [];
+  let last = 0;
+  for (const match of note.text.matchAll(MENTION)) {
+    const ref = (match[1] ?? '').trim();
+    // Own string values only: `[[constructor]]` must not read Object.prototype.
+    const mentioned = note.mentions && Object.hasOwn(note.mentions, ref) ? note.mentions[ref] : undefined;
+    const pageId = typeof mentioned === 'string' ? mentioned : undefined;
+    parts.push(note.text.slice(last, match.index));
+    parts.push(
+      pageId ? (
+        <KnowledgePageLink
+          key={match.index}
+          pageId={pageId}
+          className="text-foreground underline decoration-dotted underline-offset-2 hover:decoration-solid"
+        >
+          {ref}
+        </KnowledgePageLink>
+      ) : (
+        <span key={match.index} className="text-foreground" data-testid="knowledge-unresolved-mention">
+          {ref}
+        </span>
+      ),
+    );
+    last = match.index + match[0].length;
+  }
+  parts.push(note.text.slice(last));
+  return <>{parts}</>;
+}
+
 function NoteList({ notes }: { notes: NoteSummary[] }) {
   return (
     <ul className="flex flex-col gap-1">
       {notes.map(note => (
         <li key={note.id} className="flex flex-col">
           <Txt as="span" variant="body">
-            {note.text}
+            <NoteText note={note} />
           </Txt>
           {note.page || note.author ? (
             <Meta>
@@ -115,7 +139,7 @@ function NoteList({ notes }: { notes: NoteSummary[] }) {
   );
 }
 
-interface KnowledgeCard {
+export interface KnowledgeCard {
   title: string;
   detail?: string;
   body: ReactNode;
@@ -140,7 +164,11 @@ export function knowledgeCard(toolName: string, input: unknown, output: unknown)
               return page ? (
                 <li key={`${page.id}-${note?.id ?? index}`} className="flex flex-col">
                   <PageLine page={page} />
-                  {note ? <Meta>{note.text}</Meta> : null}
+                  {note ? (
+                    <Meta>
+                      <NoteText note={note} />
+                    </Meta>
+                  ) : null}
                 </li>
               ) : null;
             })}
@@ -245,7 +273,7 @@ export function knowledgeCard(toolName: string, input: unknown, output: unknown)
         body: (
           <div className="flex flex-col gap-1">
             <Txt as="span" variant="body">
-              {note.text}
+              <NoteText note={note} />
             </Txt>
             {pageId ? (
               <Meta>
