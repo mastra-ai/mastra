@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
+import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
+import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { jiraClaimKey } from './claim.js';
 import { resolveJiraRules } from './default-rules.js';
 import type { JiraRuleOverrides } from './default-rules.js';
 import { JiraRules } from './rules.js';
@@ -39,7 +40,25 @@ async function setup(overrides?: JiraRuleOverrides, boards = createBoardRegistry
     boards,
     jiraRules: resolveJiraRules(overrides),
   });
-  return { project, other, service, workItems: seeded.workItems };
+  const dispatcher = new FactoryDecisionDispatcher({
+    controller: {} as never,
+    storage: seeded.workItems,
+    boards,
+    transitionService: new FactoryTransitionService({
+      storage: seeded.workItems,
+      boards,
+      configVersion: 'factory-config-v1',
+    }),
+    isAutoRunEnabled: async () => false,
+    ownerId: 'jira-rules-test',
+  });
+  /** Files every committed decision, as the dispatcher's poll would. */
+  const drain = () => dispatcher.runOnce(new Date(Date.now() + 60_000));
+  const cardsFor = async (factoryProjectId: string) =>
+    (await seeded.workItems.list({ orgId: 'org-1', factoryProjectId })).filter(
+      item => item.externalSource?.externalId === issue.id,
+    );
+  return { project, other, service, workItems: seeded.workItems, drain, cardsFor };
 }
 
 describe('JiraRules', () => {
@@ -78,7 +97,6 @@ describe('JiraRules', () => {
           type: 'upsertLinkedWorkItem',
           source: 'jira-issue',
           sourceKey: issue.id,
-          claimKey: jiraClaimKey(issue.id),
           title: issue.title,
           url: issue.url,
           metadata: {
@@ -98,34 +116,75 @@ describe('JiraRules', () => {
         },
       },
     ]);
+    const [entry] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(entry?.decision).not.toHaveProperty('claimKey');
   });
 
-  it('does not mint a second card while another Factory holds a live card for the issue', async () => {
-    const { project, other, service, workItems } = await setup();
-    await workItems.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: other.id,
-      input: {
-        externalSource: {
-          integrationId: 'jira',
-          type: 'issue',
-          externalId: issue.id,
-          url: issue.url,
-        },
-        title: issue.title,
-        stages: ['intake'],
-        sessions: {},
-        metadata: {},
-      },
+  it('files the same Jira issue in a second project while the first still holds a live card', async () => {
+    const { project, other, service, drain, cardsFor } = await setup();
+    for (const factoryProjectId of [other.id, project.id]) {
+      await expect(
+        service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId, issues: [issue] }),
+      ).resolves.toEqual({ status: 'committed', ingested: 1 });
+      await drain();
+    }
+
+    const [held] = await cardsFor(other.id);
+    expect(held?.stages).toEqual(['intake']);
+    expect(await cardsFor(other.id)).toHaveLength(1);
+    expect(await cardsFor(project.id)).toHaveLength(1);
+    expect((await cardsFor(project.id))[0]?.id).not.toBe(held?.id);
+  });
+
+  it('re-observing an issue in the same project reuses its card, also after it finished', async () => {
+    const { project, service, workItems, drain, cardsFor } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest(issue);
+    await drain();
+    const [card] = await cardsFor(project.id);
+    expect(card).toBeDefined();
+
+    await workItems.update({ orgId: 'org-1', id: card!.id, userId: 'user-1', patch: { stages: ['done'] } });
+    await expect(ingest({ ...issue, updatedAt: '2026-07-03T00:00:00Z' })).resolves.toEqual({
+      status: 'committed',
+      ingested: 1,
     });
+    await drain();
 
-    await expect(
-      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
-    ).resolves.toEqual({ status: 'missing', ingested: 1 });
+    const cards = await cardsFor(project.id);
+    expect(cards.map(item => [item.id, item.stages])).toEqual([[card!.id, ['done']]]);
+    // The rules resolved the card, so the re-observation asked for no second one.
+    const upserts = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+      entry => entry.decision.type === 'upsertLinkedWorkItem',
+    );
+    expect(upserts).toHaveLength(1);
+  });
 
-    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
-    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+  it('a reopened issue finds its card', async () => {
+    const { project, service, workItems, drain, cardsFor } = await setup();
+    const ingest = (observed: typeof issue) =>
+      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [observed] });
+    await ingest(issue);
+    await drain();
+    const [card] = await cardsFor(project.id);
+
+    await ingest({ ...issue, state: 'Done', stateType: 'completed', updatedAt: '2026-07-03T00:00:00Z' });
+    await drain();
+    expect((await cardsFor(project.id)).map(item => item.stages)).toEqual([['done']]);
+
+    const evaluate = vi.spyOn(workItems, 'commitRuleEvaluation');
+    await ingest({ ...issue, state: 'To Do', stateType: 'unstarted', updatedAt: '2026-07-04T00:00:00Z' });
+    await drain();
+
+    expect(evaluate).toHaveBeenCalledWith(
+      expect.objectContaining({ workItemId: card!.id, decisions: [] }),
+    );
+    const upserts = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+      entry => entry.decision.type === 'upsertLinkedWorkItem',
+    );
+    expect(upserts).toHaveLength(1);
+    expect((await cardsFor(project.id)).map(item => item.id)).toEqual([card!.id]);
   });
 
   it('ingests an issue again once the other Factory finished its card', async () => {
@@ -157,32 +216,9 @@ describe('JiraRules', () => {
         decision: {
           type: 'upsertLinkedWorkItem',
           sourceKey: issue.id,
-          claimKey: jiraClaimKey(issue.id),
         },
       },
     ]);
-  });
-
-  it('finds the held card by claim key when the stored source key drifted', async () => {
-    const { project, other, service, workItems } = await setup();
-    await workItems.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: other.id,
-      input: {
-        externalSource: { integrationId: 'jira', type: 'issue', externalId: 'jira-issue:old-ref', url: issue.url },
-        claimKey: jiraClaimKey(issue.id),
-        title: 'OLD-1: Fix intake sync',
-        stages: ['intake'],
-        sessions: {},
-        metadata: {},
-      },
-    });
-
-    await expect(
-      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
-    ).resolves.toEqual({ status: 'missing', ingested: 1 });
-    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
   });
 
   it.each(['completed', 'canceled'])('closes linked issues in state %s with shared audit metadata', async stateType => {

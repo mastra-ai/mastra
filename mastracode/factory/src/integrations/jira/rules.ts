@@ -2,7 +2,6 @@ import {
   boardEventHandlers,
   boardForWorkItem,
   eventBoardId,
-  isTerminalWorkItem,
   rulePhaseField,
   withBoardClosure,
 } from '../../boards/index.js';
@@ -13,7 +12,6 @@ import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../..
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext } from '../base.js';
-import { jiraClaimKey, jiraIssueCards } from './claim.js';
 import type { JiraEventRules } from './default-rules.js';
 
 const RULE_TIMEOUT_MS = 5_000;
@@ -85,34 +83,14 @@ export class JiraRules {
 
     const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
     const itemsBySourceKey = new Map(items.map(item => [item.externalSource?.externalId, item]));
-    const itemsByClaimKey = new Map(items.filter(item => item.claimKey).map(item => [item.claimKey, item]));
     const statuses: IngressStatus[] = [];
     for (const issue of input.issues) {
-      // The claim finds the card even after a metadata drift; the raw issue
-      // reference covers cards filed before claims existed.
-      const relatedItem = itemsByClaimKey.get(jiraClaimKey(issue.id)) ?? itemsBySourceKey.get(issue.id);
-      // One live card per Jira issue per org. The store's claim index is the
-      // guarantee; this check spares the dispatcher a refused upsert.
-      if (!relatedItem && (await this.#heldElsewhere(input, issue))) {
-        statuses.push('missing');
-        continue;
-      }
-      statuses.push(await this.#ingestIssue(input, issue, relatedItem));
+      // One card per Jira issue per project; other projects may file their own.
+      statuses.push(await this.#ingestIssue(input, issue, itemsBySourceKey.get(issue.id)));
     }
     if (statuses.some(status => status === 'committed')) return { status: 'committed', ingested: statuses.length };
     if (statuses.some(status => status === 'replayed')) return { status: 'replayed', ingested: statuses.length };
     return { status: 'missing', ingested: statuses.length };
-  }
-
-  async #heldElsewhere(input: JiraRulesIngress, issue: JiraIssueIngress): Promise<boolean> {
-    const cards = await jiraIssueCards(this.options.storage, { orgId: input.orgId, issueRef: issue.id });
-    const liveElsewhere = cards.filter(
-      row => row.factoryProjectId !== input.factoryProjectId && !isTerminalWorkItem(this.options.boards, row),
-    );
-    for (const row of liveElsewhere) {
-      if (await this.options.projects.get({ orgId: input.orgId, id: row.factoryProjectId })) return true;
-    }
-    return false;
   }
 
   async #ingestIssue(
