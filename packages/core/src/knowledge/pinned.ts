@@ -63,7 +63,7 @@ function render(page: KnowledgePage, label: PinLabel, maxTokens: number): string
         : label.notes === 1
           ? ', 1 note'
           : `, ${label.notes} notes`;
-  const text = `${page.name} (${label.ref}${notes}): ${page.body!.trim()}`;
+  const text = `${page.name} (${label.ref}, v${page.version}${notes}): ${page.body!.trim()}`;
   if (estimateTokenCount(text) <= maxTokens) return text;
   const room = Math.max(maxTokens - estimateTokenCount(PIN_TRUNCATION_MARKER) - 1, 1);
   return `${sliceByTokens(text, 0, room).trimEnd()} ${PIN_TRUNCATION_MARKER}`;
@@ -243,12 +243,10 @@ async function pinLabels(
   const scopes = new Map<string, string>();
   if (pages.length === 0) return { labels, scopes };
   const known = new Map(pages.map(page => [page.id, page]));
-  // An adapter older than countNotes (or a failing count) must not cost the pins themselves. The count runs after
-  // the walk, not alongside it: concurrent reads here broke LibSQL's connection mid-run (no such table).
-  const counts = () =>
-    run.storage
-      .countNotes({ pageIds: pages.map(page => page.id), read: run.read })
-      .catch((): Record<string, number> | undefined => undefined);
+  // An adapter older than countNotes (or a failing count) must not cost the pins themselves.
+  const counts = run.storage
+    .countNotes({ pageIds: [...known.keys()], read: run.read })
+    .catch((): Record<string, number> | undefined => undefined);
   const walk = async () => {
     for (let level = 0; level <= MAX_KNOWLEDGE_PAGE_DEPTH; level++) {
       const missing = [
@@ -264,8 +262,7 @@ async function pinLabels(
       for (const page of found) known.set(page.id, page);
     }
   };
-  await walk();
-  const noteCounts = await counts();
+  const [noteCounts] = await Promise.all([counts, walk()]);
   for (const page of known.values()) if (page.isScope && page.address) scopes.set(page.id, page.address);
   for (const page of pages) {
     const path: string[] = [];

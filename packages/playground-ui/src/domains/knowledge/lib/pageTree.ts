@@ -31,7 +31,8 @@ function isLive(page: KnowledgePagePayload): boolean {
 
 /**
  * Builds the tree from whatever pages are loaded. A page whose parent isn't
- * loaded (or is deleted/merged) becomes a root so it is never lost.
+ * loaded (or is deleted/merged) becomes a root, and so does the first page (in
+ * sibling order) of any parent cycle, so no loaded live page is ever lost.
  */
 export function buildPageTree(pages: KnowledgePagePayload[]): KnowledgePageTreeNode[] {
   const nodes = new Map<string, KnowledgePageTreeNode>();
@@ -39,10 +40,30 @@ export function buildPageTree(pages: KnowledgePagePayload[]): KnowledgePageTreeN
     if (isLive(page) && !nodes.has(page.id)) nodes.set(page.id, { page, children: [] });
   }
   const roots: KnowledgePageTreeNode[] = [];
+  const parentOf = new Map<KnowledgePageTreeNode, KnowledgePageTreeNode>();
   for (const node of nodes.values()) {
     const parent = node.page.parentId ? nodes.get(node.page.parentId) : undefined;
-    if (parent && parent !== node) parent.children.push(node);
-    else roots.push(node);
+    if (parent && parent !== node) {
+      parent.children.push(node);
+      parentOf.set(node, parent);
+    } else roots.push(node);
+  }
+  const reached = new Set<KnowledgePageTreeNode>();
+  const reach = (node: KnowledgePageTreeNode) => {
+    if (reached.has(node)) return;
+    reached.add(node);
+    for (const child of node.children) reach(child);
+  };
+  roots.forEach(reach);
+  // Whatever no root reaches sits in a parent cycle (or under one): cut each cycle at its first page.
+  const stranded = [...nodes.values()].filter(node => !reached.has(node));
+  stranded.sort((a, b) => comparePagePosition(a.page, b.page));
+  for (const node of stranded) {
+    if (reached.has(node)) continue;
+    const parent = parentOf.get(node);
+    if (parent) parent.children.splice(parent.children.indexOf(node), 1);
+    roots.push(node);
+    reach(node);
   }
   const sort = (list: KnowledgePageTreeNode[]) => {
     list.sort((a, b) => comparePagePosition(a.page, b.page));

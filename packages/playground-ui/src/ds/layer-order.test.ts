@@ -21,10 +21,14 @@ function cssFiles(dir: string): string[] {
 describe('component stylesheets', () => {
   const layered = cssFiles(here).filter(path => /@layer\s+\w+\s*\{/.test(readFileSync(path, 'utf8')));
 
-  it.each(layered.map(path => [relative(here, path), path]))('%s states the full layer order first', (_name, path) => {
-    const css = readFileSync(path, 'utf8');
-    const order = css.indexOf(ORDER);
-    expect(order).toBeGreaterThanOrEqual(0);
-    expect(order).toBeLessThan(css.search(/@layer\s+\w+\s*\{/));
-  });
+  it.each(layered.map(path => [relative(here, path), path]))(
+    '%s states the full layer order before any other @layer',
+    (_name, path) => {
+      const css = readFileSync(path, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+      const order = css.indexOf(ORDER);
+      expect(order).toBeGreaterThanOrEqual(0);
+      // No other layer statement or block may come first, or it fixes the ranks instead.
+      expect(css.search(/@layer\b/)).toBe(order);
+    },
+  );
 });
