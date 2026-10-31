@@ -116,7 +116,7 @@ describe('Knowledge in Factory chat', () => {
     await userEvent.click(within(card).getByRole('button', { name: /Pinned knowledge updated/ }));
     const rows = within(card).getAllByTestId('pinned-knowledge-row');
     expect(rows.map(row => row.dataset.change)).toEqual(['add', 'change', 'remove']);
-    expect(within(rows[2] as HTMLElement).getByRole('link', { name: 'Pricing Exceptions' })).toBeVisible();
+    expect(within(rows[2]).getByRole('link', { name: 'Pricing Exceptions' })).toBeVisible();
   });
 
   it('names pinned pages without links in a chat outside any Factory', async () => {
@@ -190,7 +190,7 @@ describe('Knowledge in Factory chat', () => {
     );
 
     const card = screen.getByRole('group', { name: /customer:cust-dana#profile/ });
-    await userEvent.click(within(card).getAllByRole('button')[0] as HTMLElement);
+    await userEvent.click(within(card).getAllByRole('button')[0]);
     expect(within(card).getByRole('link', { name: 'Escalation Process' })).toHaveAttribute(
       'href',
       '/factories/fp-1/knowledge?page=p-esc&view=page',
