@@ -300,7 +300,6 @@ export const updateWorkItemBodySchema = z
     stages: stagesSchema.optional(),
     sessions: sessionsSchema.optional(),
     metadata: metadataSchema.optional(),
-    plansPreapproved: z.literal(true).optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one work-item field is required' });
 

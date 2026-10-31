@@ -527,11 +527,6 @@ export interface WorkItemRow {
    */
   autonomyArmedAt: Date | null;
   /**
-   * When a person chose to run this item hands-off. Legacy: nothing approves plans
-   * from it; a plan is approved by a person or by its phase's `submit_plan` exit tool.
-   */
-  plansPreapprovedAt: Date | null;
-  /**
    * When a person first moved this item out of Intake/Triage into working
    * stages. Non-bug items wait for that gesture; once it is recorded the
    * agents may advance the item through Planning and Execute on their own.
@@ -564,8 +559,6 @@ export interface UpdateWorkItemInput {
   stages?: WorkItemStage[];
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown> | null;
-  /** The person chose a hands-off run: stamped once, so a second grant never moves it. */
-  plansPreapproved?: true;
 }
 
 export interface WorkItemPriorState {
@@ -597,6 +590,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     metadata: { type: 'json', nullable: true },
     triage_type: { type: 'text', nullable: true },
     autonomy_armed_at: { type: 'timestamp', nullable: true },
+    // Retired hands-off plan grant: no longer read or written. Plans are approved per board (`exitTool`).
     plans_preapproved_at: { type: 'timestamp', nullable: true },
     accepted_at: { type: 'timestamp', nullable: true },
     comment_count: { type: 'integer', default: 0 },
@@ -768,7 +762,6 @@ function toWorkItem(row: WorkItemDbRow): WorkItemRow {
     metadata: row.metadata,
     triageType: row.triage_type ?? null,
     autonomyArmedAt: row.autonomy_armed_at ?? null,
-    plansPreapprovedAt: row.plans_preapproved_at ?? null,
     acceptedAt: row.accepted_at ?? null,
     commentCount: row.comment_count ?? 0,
     feedActivityAt: row.feed_activity_at ?? null,
@@ -903,7 +896,6 @@ function applyUpdate({
     ...(input.metadata !== undefined
       ? { metadata: input.metadata === null ? null : { ...(current.metadata ?? {}), ...input.metadata } }
       : {}),
-    ...(input.plansPreapproved && !current.plans_preapproved_at ? { plans_preapproved_at: now } : {}),
     revision: current.revision + 1,
     updated_at: now,
   };

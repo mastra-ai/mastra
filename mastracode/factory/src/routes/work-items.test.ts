@@ -761,19 +761,18 @@ describe('PATCH /web/factory/work-items/:id', () => {
     expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { title: '' })).status).toBe(400);
   });
 
-  it('stamps a hands-off grant once and refuses anything but true', async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+  it('no longer takes a hands-off plan grant: alone it changes nothing, beside a real field it is ignored', async () => {
     const item = await createItem();
-    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true })).status).toBe(200);
-    const granted = (await listItems())[0]?.plansPreapprovedAt;
-    expect(granted).toBeInstanceOf(Date);
+    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true })).status).toBe(400);
+    expect((await listItems())[0]).toMatchObject({ revision: item.revision });
+    expect((await listItems())[0]).not.toHaveProperty('plansPreapprovedAt');
 
-    vi.setSystemTime(new Date('2030-01-02T00:00:00.000Z'));
-    await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: true });
-    expect((await listItems())[0]?.plansPreapprovedAt).toEqual(granted);
-
-    expect((await json('PATCH', `/web/factory/work-items/${item.id}`, { plansPreapproved: false })).status).toBe(400);
+    const renamed = await json('PATCH', `/web/factory/work-items/${item.id}`, {
+      title: 'Renamed',
+      plansPreapproved: true,
+    });
+    expect(renamed.status).toBe(200);
+    expect((await listItems())[0]).toMatchObject({ title: 'Renamed' });
   });
 });
 

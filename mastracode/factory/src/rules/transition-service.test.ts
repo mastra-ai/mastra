@@ -2189,21 +2189,13 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     expect(result.decisions).toContainEqual(expect.objectContaining({ type: 'invokeSkill', role: 'work' }));
   });
 
-  it('does not treat legacy item preapproval as permission to skip plan approval', async () => {
+  it('keeps a plan agent in Planning on stock Work whoever started the run', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const service = new FactoryTransitionService({
       configVersion: 'plan-gate-v1',
       storage,
     });
-    let item = await planningItem(storage, 'preapproved');
-    const updated = await storage.update({
-      orgId: 'org-1',
-      id: item.id,
-      userId: 'user-1',
-      patch: { plansPreapproved: true },
-    });
-    assert(updated);
-    item = updated.item;
+    const item = await planningItem(storage, 'person-started');
 
     expect(await service.transition(planAgentToExecute(item, 'plan-execute'))).toMatchObject({
       status: 'rejected',

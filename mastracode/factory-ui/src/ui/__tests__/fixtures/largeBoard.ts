@@ -18,7 +18,6 @@ export function largeBoard(count: number, factoryProjectId = 'fp-1'): WorkItemRo
     triageType: null,
     acceptedAt: null,
     autonomyArmedAt: null,
-    plansPreapprovedAt: null,
     commentCount: 0,
     feedActivityAt: null,
     revision: 1,

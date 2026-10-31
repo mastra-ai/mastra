@@ -267,18 +267,10 @@ export function createFactoryWorkItemTools(
             .nullable()
             .optional()
             .describe('Parent work item (id or #number), or null to detach it from its parent.'),
-          plansPreapproved: z
-            .literal(true)
-            .optional()
-            .describe(
-              'Legacy: recorded on the card but has no effect. Plans on the Work board always wait for a person to approve them.',
-            ),
         })
         .strict()
         .refine(input => Object.keys(input).some(key => key !== 'workItem'), 'Pass at least one field to change.'),
-      execute: async ({ workItem, title, repository, parentWorkItem, plansPreapproved }) => {
-        // Legacy flag with no effect on plan approval; still a person's call, as before.
-        if (plansPreapproved) requirePerson(scope, 'pre-approve plans');
+      execute: async ({ workItem, title, repository, parentWorkItem }) => {
         const item = await requireItem(workItem);
         if (repository) await requireRepository(repository, item.metadata);
         let parentWorkItemId: string | null | undefined;
@@ -288,7 +280,6 @@ export function createFactoryWorkItemTools(
           ...(title !== undefined ? { title } : {}),
           ...(repository ? { metadata: { repository } } : {}),
           ...(parentWorkItemId !== undefined ? { parentWorkItemId } : {}),
-          ...(plansPreapproved ? { plansPreapproved } : {}),
         };
         let updated: Awaited<ReturnType<WorkItemsStorage['update']>>;
         try {
@@ -302,7 +293,6 @@ export function createFactoryWorkItemTools(
           ...(title !== undefined ? ['title'] : []),
           ...(repository ? ['metadata'] : []),
           ...(parentWorkItemId !== undefined ? ['parentWorkItemId'] : []),
-          ...(plansPreapproved ? ['plansPreapproved'] : []),
         ];
         await audit({
           action: 'factory.work_item.updated',
@@ -316,7 +306,6 @@ export function createFactoryWorkItemTools(
           updated: fields.map(field => (field === 'metadata' ? 'repository' : field)),
           repository: typeof metadata.repository === 'string' ? metadata.repository : null,
           parentWorkItemId: updated.item.parentWorkItemId,
-          plansPreapproved: updated.item.plansPreapprovedAt !== null,
         };
       },
     }),
