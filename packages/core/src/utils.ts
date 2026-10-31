@@ -322,11 +322,11 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    */
   browser?: MastraBrowser;
   /**
-   * Skips the tool's own `tools:execute` FGA check. Only for callers that authorize every
-   * execution themselves against their own resource, like `MCPServer` for the tools it serves.
+   * The caller that authorizes every execution of this tool against its own FGA resource, so the
+   * tool skips its own `tools:execute` check. Set by `MCPServer` for the tools it serves.
    * @internal
    */
-  skipToolExecuteFGA?: boolean;
+  authorizedBy?: 'mcp-server';
 }
 
 /**

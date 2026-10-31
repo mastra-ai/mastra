@@ -619,7 +619,10 @@ export class CoreToolBuilder extends MastraBase {
     requestContext: RequestContext | undefined,
     actor: ActorSignal | undefined,
   ) {
-    if (options.skipToolExecuteFGA) return;
+    if (options.authorizedBy) {
+      return;
+    }
+
     const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
     if (!fgaProvider) return;
     const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
