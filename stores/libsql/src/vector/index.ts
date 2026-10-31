@@ -898,8 +898,11 @@ export class LibSQLVector extends MastraVector<LibSQLVectorFilter> {
   }
 
   private async _doTruncateIndex({ indexName }: DeleteIndexParams): Promise<void> {
+    const parsedIndexName = parseSqlIdentifier(indexName, 'index name');
     await this.turso.execute({
-      sql: `DELETE FROM ${parseSqlIdentifier(indexName, 'index name')}`,
+      sql: this.databaseKey
+        ? `DELETE FROM ${parsedIndexName} WHERE rowid IS NOT NULL`
+        : `DELETE FROM ${parsedIndexName}`,
       args: [],
     });
   }
