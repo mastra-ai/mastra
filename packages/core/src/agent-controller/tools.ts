@@ -12,6 +12,7 @@ import { summarizeTaskCheck } from '../tools/builtin/task-tools';
 import { createTool } from '../tools/tool';
 import { createWorkspaceTools } from '../workspace/tools/tools';
 
+import { isToolResultError } from './tool-result';
 import type { AgentControllerRequestContext, AgentControllerSubagent } from './types';
 
 // `ask_user` is an agent-agnostic built-in tool. It is defined in
@@ -433,15 +434,16 @@ Use this tool when:
               }
               break;
 
-            case 'tool-result': {
-              const isErr = chunk.payload.isError ?? false;
+            case 'tool-result':
+            case 'tool-error': {
+              const isErr = chunk.type === 'tool-error' || isToolResultError(chunk.payload);
               if (!(runAsForked && chunk.payload.toolName === 'subagent')) {
                 emitEvent?.({
                   type: 'subagent_tool_end',
                   toolCallId,
                   agentType,
                   subToolName: chunk.payload.toolName,
-                  subToolResult: chunk.payload.result,
+                  subToolResult: chunk.type === 'tool-error' ? chunk.payload.error : chunk.payload.result,
                   isError: isErr,
                 });
               }
