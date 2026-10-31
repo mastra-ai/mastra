@@ -100,6 +100,36 @@
         "values": ["none", "high"]
       }
     ],
+    "zai-glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mistral-large-4-0-8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "labs-leanstral-1-5-1": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-medium-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
     "deepseek-v4-1-flash-1017": [
       {
         "type": "effort",
@@ -112,25 +142,13 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "labs-leanstral-1-5-1": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "mistral-large-4": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "zai-glm-5-3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mistral-small-2603": [
+    "mistral-medium-2604": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -142,25 +160,7 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-glm-5-3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mistral-medium-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-large-4-0-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "mistral-medium-2604": [
+    "mistral-small-2603": [
       {
         "type": "effort",
         "values": ["none", "high"]

@@ -10,7 +10,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "hy3": [
+    "hy4-preview": [
       {
         "type": "toggle"
       },
@@ -19,7 +19,7 @@
         "values": ["none", "high"]
       }
     ],
-    "hy4-preview": [
+    "hy3": [
       {
         "type": "toggle"
       },
