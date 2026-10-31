@@ -11,4 +11,16 @@ When intake routing sends an item to a different project, the new project files 
 - `claimKey` is removed from the `upsertLinkedWorkItem` decision type. Rules that still return it, and decisions saved before this release, keep working: the field is accepted and ignored.
 - `WorkItemClaimConflictError`, `getByClaimKey`, `claimWorkItem`, `releaseProjectClaims` and `WorkItemRow.claimKey` are removed.
 
+Drop `claimKey` from linked-item decisions your rules return:
+
+```ts
+// Before
+return { type: 'upsertLinkedWorkItem', source: 'jira-issue', sourceKey: issue.id, claimKey: `jira:issue:${issue.id}` /* … */ };
+
+// After
+return { type: 'upsertLinkedWorkItem', source: 'jira-issue', sourceKey: issue.id /* … */ };
+```
+
+Remove calls to `getByClaimKey`, `claimWorkItem` and `releaseProjectClaims`. To find a project's card for an item, use `getByProjectSource`.
+
 The `claim_key` column stays in the database. Values already stored there are left in place and no longer affect anything.
