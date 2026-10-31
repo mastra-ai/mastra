@@ -426,6 +426,16 @@ export const workItemListQuerySchema = workItemFilterQuerySchema.extend({
     .enum(['0', '1'])
     .optional()
     .transform(value => value === '1'),
+  /** `1`: only cards on a non-terminal phase, as the board's sync holds them. */
+  open: z
+    .enum(['0', '1'])
+    .optional()
+    .transform(value => value === '1'),
+  /** `0`: only cards with no session yet; `1`: only cards with one. */
+  started: z
+    .enum(['0', '1'])
+    .optional()
+    .transform(value => (value === undefined ? undefined : value === '1')),
   sort: z.enum(WORK_ITEM_SORTS).optional().default('recent'),
   limit: z
     .string()
@@ -814,6 +824,23 @@ export const FACTORY_ROUTE_CONTRACTS = {
       total: z.number().int(),
       createdAt: z.array(z.string()),
       doneAt: z.array(z.string()),
+    }),
+  },
+  workItemStarters: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/starters',
+    description:
+      "What the New page's starter cards count over every card, without the cards: failed runs, review feedback, waiting pull requests, undecided, untriaged and unplanned cards, the largest area backlog and stale pull requests",
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      failed: z.number().int(),
+      changesRequested: z.number().int(),
+      review: z.object({ count: z.number().int(), oldestOpenedAt: z.string().optional() }),
+      undecided: z.number().int(),
+      untriaged: z.number().int(),
+      unplannedBugs: z.number().int(),
+      sweep: z.object({ area: z.string(), count: z.number().int() }).optional(),
+      stale: z.number().int(),
     }),
   },
   workItemSources: {

@@ -1,3 +1,4 @@
+import { workItemStarters } from '@mastra/factory/routes/work-item-starters';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
@@ -11,6 +12,7 @@ interface StubbedCard {
   board?: string | null;
   externalSource?: unknown;
   metadata?: Record<string, unknown> | null;
+  acceptedAt?: string | null;
 }
 
 /** The plain `/work-items` list the running test stubbed, read through MSW so its handler answers. */
@@ -103,6 +105,26 @@ export const server = setupServer(
     });
   }),
   http.get('*/web/factory/projects/:id/work-items/counts', () => HttpResponse.json({ total: 0, boards: {} })),
+  // The New page's starters, counted from the test's cards and decisions by the server's own counter.
+  // Decisions list newest first, so a card's first one is its latest effect.
+  http.get('*/web/factory/projects/:id/work-items/starters', async ({ request }) => {
+    const list = await readStubbedList(request.url);
+    const decisionsUrl = request.url.replace(/\/work-items\/.*$/, '/decisions');
+    const { decisions } = (await (await fetch(decisionsUrl)).json()) as {
+      decisions: { workItemId: string | null; status: string }[];
+    };
+    const latest = new Map<string, string>();
+    for (const decision of decisions) {
+      if (decision.workItemId && !latest.has(decision.workItemId)) latest.set(decision.workItemId, decision.status);
+    }
+    const failed = new Set([...latest].filter(([, status]) => status === 'failed').map(([id]) => id));
+    const rows = list.workItems.map(item => ({
+      ...item,
+      createdAt: new Date(item.createdAt ?? 0),
+      acceptedAt: item.acceptedAt ? new Date(item.acceptedAt) : null,
+    })) as unknown as Parameters<typeof workItemStarters>[0];
+    return HttpResponse.json(workItemStarters(rows, failed, new Date()));
+  }),
   // The activity chart reads when cards came in and shipped; answered from the test's cards like the server does.
   http.get('*/web/factory/projects/:id/work-items/activity', async ({ request }) => {
     const since = Date.parse(new URL(request.url).searchParams.get('since') ?? '');

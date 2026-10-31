@@ -65,6 +65,10 @@ import {
   workItemSources,
   withRelatedWorkItems,
 } from './work-item-page.js';
+import { workItemStarters } from './work-item-starters.js';
+
+/** Effects a card's latest run can be in; the starters count cards whose latest one failed. */
+const STARTER_EFFECT_STATUSES = ['pending', 'leased', 'retry', 'failed'];
 
 export interface WorkItemRoutesDeps extends RouteDependencies {
   audit: AuditEmitter;
@@ -148,6 +152,7 @@ function workItemFilters(query: {
   worked?: string[];
   session?: string[];
   thread?: string[];
+  started?: boolean;
 }): WorkItemFilters {
   return {
     boards: query.board,
@@ -165,6 +170,7 @@ function workItemFilters(query: {
     },
     sessions: query.session,
     threads: query.thread,
+    started: query.started,
   };
 }
 
@@ -178,6 +184,7 @@ function hasFilters(filters: WorkItemFilters): boolean {
     filters.labels?.length ||
     filters.sessions?.length ||
     filters.threads?.length ||
+    filters.started !== undefined ||
     Object.values(filters.people ?? {}).some(ids => ids?.length),
   );
 }
@@ -483,23 +490,29 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             limit: context.req.query('limit'),
             cursor: context.req.query('cursor'),
             related: context.req.query('related'),
+            open: context.req.query('open'),
+            started: context.req.query('started'),
           });
           if (!query.success) {
             const field = query.error.issues[0]?.path[0];
             return c.json({ error: field === 'cursor' ? 'invalid_cursor' : 'invalid_work_item_query' }, 400);
           }
           await workItems.ensureReady();
-          const all = await workItems.listShared({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-          });
+          const [all, boards] = await Promise.all([
+            workItems.listShared({
+              orgId: resolved.orgId,
+              factoryProjectId: resolved.factoryProjectId,
+            }),
+            query.data.open ? this.#boards.load(resolved) : undefined,
+          ]);
           const { sort, limit, cursor } = query.data;
           const filters = workItemFilters(query.data);
-          const paged = hasFilters(filters) || limit !== undefined || cursor !== undefined;
+          const pool = boards ? all.filter(item => !isTerminalWorkItem(boards, item)) : all;
+          const paged = hasFilters(filters) || query.data.open || limit !== undefined || cursor !== undefined;
           // The query defaults `sort`, so ask the request whether the caller picked one.
           const sorted = paged || context.req.query('sort') !== undefined;
           const page = sorted
-            ? pageWorkItems(all, { ...filters, sort, userId: resolved.userId, limit, cursor })
+            ? pageWorkItems(pool, { ...filters, sort, userId: resolved.userId, limit, cursor })
             : { items: all };
           const items = query.data.related ? withRelatedWorkItems(all, page.items) : page.items;
           return c.json({
@@ -603,6 +616,28 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             factoryProjectId: resolved.factoryProjectId,
           });
           return c.json(workItemActivity(all, new Date(query.data.since)));
+        },
+      }),
+      // ── What the New page's starter cards count ─────────────────────────────
+      registerApiRoute(FACTORY_ROUTE_CONTRACTS.workItemStarters.path, {
+        method: FACTORY_ROUTE_CONTRACTS.workItemStarters.method,
+        requiresAuth: false,
+        handler: async c => {
+          const context = loose(c);
+          const resolved = await this.#resolveProject(context);
+          if ('response' in resolved) return resolved.response;
+          await workItems.ensureReady();
+          const [all, effects] = await Promise.all([
+            workItems.listShared({ orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId }),
+            workItems.listDeferredDecisions(resolved.orgId, resolved.factoryProjectId, {
+              statuses: STARTER_EFFECT_STATUSES,
+            }),
+          ]);
+          // Oldest first, so each card ends on the status of its latest effect.
+          const latest = new Map<string, string>();
+          for (const effect of effects) if (effect.workItemId) latest.set(effect.workItemId, effect.status);
+          const failed = new Set([...latest].flatMap(([id, status]) => (status === 'failed' ? [id] : [])));
+          return c.json(workItemStarters(all, failed, new Date()));
         },
       }),
       // ── One card, for deep links to cards outside the loaded pages ───────────

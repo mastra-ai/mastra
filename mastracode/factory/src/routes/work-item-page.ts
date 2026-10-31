@@ -40,6 +40,8 @@ export interface WorkItemFilters {
   sessions?: readonly string[];
   /** Cards holding a session on any of these thread ids. */
   threads?: readonly string[];
+  /** `false`: cards with no session yet; `true`: cards with one. */
+  started?: boolean;
 }
 
 export interface WorkItemPageQuery extends WorkItemFilters {
@@ -156,6 +158,7 @@ export function matchesWorkItemFilters(item: WorkItemRow, filters: WorkItemFilte
     if (filters.sessions?.length && !refs.some(ref => filters.sessions!.includes(ref.sessionId))) return false;
     if (filters.threads?.length && !refs.some(ref => filters.threads!.includes(ref.threadId))) return false;
   }
+  if (filters.started !== undefined && Object.keys(item.sessions).length > 0 !== filters.started) return false;
   const needle = filters.q?.trim().toLowerCase();
   if (!needle) return true;
   return (

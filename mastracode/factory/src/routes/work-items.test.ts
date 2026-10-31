@@ -684,6 +684,83 @@ describe('work item read wire', () => {
     expect(shipped.metadata.selfReviewFindings).toBeUndefined();
   });
 
+  it('narrows to open cards, and to cards with or without a session', async () => {
+    const seedCard = (title: string, stage: string, sessions: Record<string, unknown>) =>
+      seed.workItems.upsert({
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: PROJECT_ID,
+        input: { externalSource: null, title, stages: [stage], sessions, metadata: {} },
+      });
+    const ref = { sessionId: '/sb/s1', branch: 'b1', threadId: 't1', startedBy: 'u1' };
+    await seedCard('Idle', 'intake', {});
+    await seedCard('Running', 'execute', { work: ref });
+    await seedCard('Shipped', 'done', {});
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const titles = async (query: string) =>
+      (await (await json('GET', `${base}?${query}`)).json()).workItems
+        .map((item: { title: string }) => item.title)
+        .sort();
+
+    expect(await titles('open=1')).toEqual(['Idle', 'Running']);
+    expect(await titles('started=0')).toEqual(['Idle', 'Shipped']);
+    expect(await titles('started=1')).toEqual(['Running']);
+    expect(await titles('open=1&started=0')).toEqual(['Idle']);
+  });
+
+  it("counts the New page's starters, failed runs by each card's latest effect", async () => {
+    const create = async (title: string, externalId: string) =>
+      (
+        await (
+          await json(
+            'POST',
+            `/web/factory/projects/${PROJECT_ID}/work-items`,
+            createBody({ title, externalSource: { integrationId: 'github', type: 'issue', externalId } }),
+          )
+        ).json()
+      ).workItem;
+    const stillFailed = await create('Still failed', '1');
+    const retried = await create('Retried', '2');
+    await create('Untriaged', '3');
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    for (const [minute, [item, key]] of (
+      [
+        [stillFailed, 'starter-failed'],
+        [retried, 'starter-retried-old'],
+        [retried, 'starter-retried-new'],
+      ] as const
+    ).entries()) {
+      await seed.workItems.commitRuleEvaluation({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        ingress: { identity: key, triggerType: 'test' },
+        configVersion: 'rules-v1',
+        expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: item.id }))!.revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: key }],
+        causalChain: [],
+        now: new Date(now.getTime() + minute * 60_000),
+      });
+    }
+    const byKey = new Map(
+      (await seed.workItems.listDeferredDecisions('org1', PROJECT_ID)).map(decision => [
+        decision.idempotencyKey,
+        decision,
+      ]),
+    );
+    await seed.storage.ops.updateMany(
+      'factory_deferred_decisions',
+      { id: { in: [byKey.get('starter-failed')!.id, byKey.get('starter-retried-old')!.id] } },
+      { status: 'failed', last_error: 'Broke.', completed_at: now, updated_at: now },
+    );
+
+    const response = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items/starters`);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ failed: 1, untriaged: 3, review: { count: 0 } });
+  });
+
   it("adds a looked-up card's parent, children and branch pull requests when asked", async () => {
     const seedCard = async (title: string, input: Record<string, unknown> = {}) =>
       (

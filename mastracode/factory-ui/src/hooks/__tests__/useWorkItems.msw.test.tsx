@@ -10,8 +10,7 @@ import {
   useDeleteWorkItemMutation,
   useParkedSessions,
   useTransitionWorkItemMutation,
-  useWorkItemsQuery,
-  useWorkItemsWithLookup,
+  useBoardChangesQuery,
 } from '../useWorkItems';
 
 const board = (workItems: WorkItem[]): BoardSnapshot => ({ workItems, runningSessionIds: [], parkedSessionIds: [] });
@@ -212,7 +211,7 @@ describe('useDeleteWorkItemMutation', () => {
 });
 
 describe('board sync', () => {
-  it('loads open cards once, then merges only the changes the next sync sends', async () => {
+  it('takes the first sync whole, then merges only the changes the next sync sends', async () => {
     const seen: (string | null)[] = [];
     const keep = { ...item(1, 'intake'), id: 'keep', title: 'Keep' };
     const edit = { ...item(1, 'intake'), id: 'edit', title: 'Before' };
@@ -245,52 +244,17 @@ describe('board sync', () => {
       }),
     );
 
-    const { result, client } = renderHookWithProviders(() => useWorkItemsQuery(PROJECT_ID));
-    await waitFor(() => expect(result.current.data?.map(card => card.id)).toEqual(['keep', 'edit', 'doomed']));
+    const { result, client } = renderHookWithProviders(() => useBoardChangesQuery(PROJECT_ID));
+    await waitFor(() =>
+      expect(result.current.data?.workItems.map(card => card.id)).toEqual(['keep', 'edit', 'doomed']),
+    );
 
-    await act(() => client.invalidateQueries({ queryKey: queryKeys.workItems(PROJECT_ID) }));
-    await waitFor(() => expect(result.current.data?.map(card => card.title)).toEqual(['Fresh', 'Keep', 'After']));
+    await act(() => client.invalidateQueries({ queryKey: queryKeys.workItemChanges(PROJECT_ID) }));
+    await waitFor(() =>
+      expect(result.current.data?.workItems.map(card => card.title)).toEqual(['Fresh', 'Keep', 'After']),
+    );
 
     expect(seen).toEqual([null, 'c1']);
-    expect(client.getQueryData<BoardSnapshot>(queryKeys.workItems(PROJECT_ID))?.cursor).toBe('c2');
-  });
-});
-
-describe('useWorkItemsWithLookup', () => {
-  it("asks the server only for the sessions the board lacks and adds those cards to the board's", async () => {
-    const ref = (sessionId: string) => ({ sessionId, threadId: `thread-${sessionId}` });
-    const open = { ...item(1, 'execute'), id: 'open', sessions: { work: ref('s-open') } };
-    const shipped = { ...item(1, 'done'), id: 'shipped', sessions: { work: ref('s-shipped') } };
-    const lookups: string[] = [];
-    server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items/sync`, () =>
-        HttpResponse.json({
-          cursor: 'c1',
-          reset: true,
-          workItems: [open],
-          deletedIds: [],
-          counts: { total: 2, boards: {} },
-          runningSessionIds: [],
-          parkedSessionIds: [],
-        }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${PROJECT_ID}/work-items`, ({ request }) => {
-        lookups.push(new URL(request.url).search);
-        return HttpResponse.json({ workItems: [shipped], runningSessionIds: [], parkedSessionIds: [] });
-      }),
-    );
-    const sessions = ['s-open', 's-shipped'];
-
-    const { result } = renderHookWithProviders(() =>
-      useWorkItemsWithLookup(PROJECT_ID, cards => {
-        const onBoard = new Set(cards.flatMap(card => Object.values(card.sessions).map(r => r.sessionId)));
-        const ids = sessions.filter(id => !onBoard.has(id));
-        return ids.length > 0 ? { kind: 'session', ids } : undefined;
-      }),
-    );
-
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(result.current.data?.map(card => card.id)).toEqual(['open', 'shipped']);
-    expect(lookups).toEqual(['?session=s-shipped&related=1']);
+    expect(client.getQueryData<BoardSnapshot>(queryKeys.workItemChanges(PROJECT_ID))?.cursor).toBe('c2');
   });
 });

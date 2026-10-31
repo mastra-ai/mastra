@@ -56,10 +56,9 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
             // Whatever landed while this tab held no stream was never announced.
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
             // A board that just synced already has it; the backstop poll covers the few seconds between.
-            const boardKey = queryKeys.workItems(factoryProjectId);
-            const syncedAt = queryClient.getQueryState(boardKey)?.dataUpdatedAt ?? 0;
+            const syncedAt = queryClient.getQueryState(queryKeys.workItemChanges(factoryProjectId))?.dataUpdatedAt ?? 0;
             if (Date.now() - syncedAt > BOARD_JUST_SYNCED_MS) {
-              void queryClient.invalidateQueries({ queryKey: boardKey });
+              void queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryProjectId) });
             }
           },
         },

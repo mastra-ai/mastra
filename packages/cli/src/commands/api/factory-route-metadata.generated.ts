@@ -262,6 +262,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "label",
       "limit",
       "linearProject",
+      "open",
       "q",
       "related",
       "reviewer",
@@ -269,6 +270,7 @@ export const FACTORY_API_ROUTE_METADATA = {
       "sort",
       "source",
       "stage",
+      "started",
       "teammate",
       "thread",
       "worked"
@@ -360,6 +362,22 @@ export const FACTORY_API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "sources"
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/starters": {
+    "contractKey": "workItemStarters",
+    "method": "GET",
+    "path": "/web/factory/projects/:id/work-items/starters",
+    "description": "What the New page's starter cards count over every card, without the cards: failed runs, review feedback, waiting pull requests, undecided, untriaged and unplanned cards, the largest area backlog and stale pull requests",
+    "pathParams": [
+      "id"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "GET /web/factory/projects/:id/work-items/sync": {
@@ -2354,6 +2372,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "1"
           ]
         },
+        "open": {
+          "type": "string",
+          "enum": [
+            "0",
+            "1"
+          ]
+        },
+        "started": {
+          "type": "string",
+          "enum": [
+            "0",
+            "1"
+          ]
+        },
         "sort": {
           "default": "recent",
           "type": "string",
@@ -2676,6 +2708,99 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
       },
       "required": [
         "sources"
+      ]
+    }
+  },
+  "GET /web/factory/projects/:id/work-items/starters": {
+    "path": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+        }
+      },
+      "required": [
+        "id"
+      ]
+    },
+    "response": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "type": "object",
+      "properties": {
+        "failed": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "changesRequested": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "review": {
+          "type": "object",
+          "properties": {
+            "count": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            },
+            "oldestOpenedAt": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "count"
+          ]
+        },
+        "undecided": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "untriaged": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "unplannedBugs": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        },
+        "sweep": {
+          "type": "object",
+          "properties": {
+            "area": {
+              "type": "string"
+            },
+            "count": {
+              "type": "integer",
+              "minimum": -9007199254740991,
+              "maximum": 9007199254740991
+            }
+          },
+          "required": [
+            "area",
+            "count"
+          ]
+        },
+        "stale": {
+          "type": "integer",
+          "minimum": -9007199254740991,
+          "maximum": 9007199254740991
+        }
+      },
+      "required": [
+        "failed",
+        "changesRequested",
+        "review",
+        "undecided",
+        "untriaged",
+        "unplannedBugs",
+        "stale"
       ]
     }
   },
@@ -5878,6 +6003,7 @@ export const FACTORY_API_ROUTE_CATALOG = {
   "workItemActivity": "GET /web/factory/projects/:id/work-items/activity",
   "workItemCounts": "GET /web/factory/projects/:id/work-items/counts",
   "workItemSources": "GET /web/factory/projects/:id/work-items/sources",
+  "workItemStarters": "GET /web/factory/projects/:id/work-items/starters",
   "workItemSync": "GET /web/factory/projects/:id/work-items/sync",
   "projectUpdate": "PATCH /web/factory/projects/:id",
   "boardReplace": "PATCH /web/factory/projects/:id/boards/:boardKey",

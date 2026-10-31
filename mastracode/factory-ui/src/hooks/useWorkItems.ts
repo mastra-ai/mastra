@@ -35,6 +35,7 @@ import type {
   WorkItemStageEntry,
   WorkItemSync,
 } from '../ui/domains/factory/services/workItems';
+import { isTerminalStage } from '../ui/domains/factory/stages';
 
 function requireFactoryProjectId(factoryProjectId: string | undefined): string {
   if (!factoryProjectId) throw new Error('No Factory selected');
@@ -99,15 +100,18 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
   patchCards(queryClient, queryKeys.workItems(factoryProjectId), cards => cards.map(strip));
   // Column pages, the deep-linked card and lookups hold their own copies the lean sync only overlays once
   // the card changes again.
-  queryClient.setQueriesData<unknown>({ queryKey: queryKeys.workItemColumnsRoot(factoryProjectId) }, (data: unknown) => {
-    if (!data || typeof data !== 'object') return data;
-    if ('workItems' in data) {
-      const page = data as WorkItemPage;
-      return { ...page, workItems: page.workItems.map(strip) };
-    }
-    // Filtered counts share the root and carry no cards.
-    return 'sessions' in data ? strip(data as WorkItem) : data;
-  });
+  queryClient.setQueriesData<unknown>(
+    { queryKey: queryKeys.workItemColumnsRoot(factoryProjectId) },
+    (data: unknown) => {
+      if (!data || typeof data !== 'object') return data;
+      if ('workItems' in data) {
+        const page = data as WorkItemPage;
+        return { ...page, workItems: page.workItems.map(strip) };
+      }
+      // Filtered counts share the root and carry no cards.
+      return 'sessions' in data ? strip(data as WorkItem) : data;
+    },
+  );
   queryClient.setQueriesData<WorkItem[]>({ queryKey: queryKeys.workItemLookupRoot(factoryProjectId) }, cards =>
     cards?.map(strip),
   );
@@ -115,7 +119,6 @@ export function stripCachedSessionRefs(queryClient: QueryClient, factoryProjectI
 
 // Module-level so React Query can cache each derived value instead of
 // rebuilding it (and, for the set, breaking referential equality) per render.
-const selectCards = (board: BoardSnapshot) => board.workItems;
 const selectCounts = (board: BoardSnapshot) => board.counts;
 const selectParkedSessions = (board: BoardSnapshot): ReadonlySet<string> => new Set(board.parkedSessionIds);
 const NO_SESSIONS: ReadonlySet<string> = new Set();
@@ -154,27 +157,25 @@ export function applyBoardSync(previous: BoardSnapshot | undefined, sync: WorkIt
   };
 }
 
-function syncQueryOptions(baseUrl: string, factoryProjectId: string | undefined, cards: 'open' | 'changed') {
-  const queryKey = cards === 'open' ? queryKeys.workItems(factoryProjectId) : queryKeys.workItemChanges(factoryProjectId);
+/**
+ * The lean board sync: cursor, counts and session markers, plus only the cards written since its last
+ * reset. Readers that page or look up their own cards lay these over them to stay current.
+ */
+export function boardChangesQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  const queryKey = queryKeys.workItemChanges(factoryProjectId);
   return queryOptions({
     queryKey,
     queryFn: factoryProjectId
       ? async ({ signal, client }) => {
           const before = client.getQueryData<BoardSnapshot>(queryKey);
           const fresh = before?.resetAt !== undefined && Date.now() - before.resetAt < BOARD_RESYNC_MS;
-          const sync = await syncWorkItems(
-            baseUrl,
-            factoryProjectId,
-            fresh ? before.cursor : undefined,
-            signal,
-            cards === 'changed' ? { cards } : {},
-          );
+          const sync = await syncWorkItems(baseUrl, factoryProjectId, fresh ? before.cursor : undefined, signal, {
+            cards: 'changed',
+          });
           // A resync catches writes a delta could miss; the column pages and lookups read their cards again.
           if (sync.reset && before) {
             void client.invalidateQueries({ queryKey: queryKeys.workItemColumnsRoot(factoryProjectId) });
-            if (cards === 'changed') {
-              void client.invalidateQueries({ queryKey: queryKeys.workItemLookupRoot(factoryProjectId) });
-            }
+            void client.invalidateQueries({ queryKey: queryKeys.workItemLookupRoot(factoryProjectId) });
           }
           // Read again: an optimistic edit may have landed while the sync was in flight.
           return applyBoardSync(
@@ -193,29 +194,10 @@ function syncQueryOptions(baseUrl: string, factoryProjectId: string | undefined,
   });
 }
 
-/** The full board: every open card, kept current by deltas. */
-export function boardQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
-  return syncQueryOptions(baseUrl, factoryProjectId, 'open');
-}
-
-/**
- * The lean board sync: cursor, counts and session markers, plus only the cards written since its last
- * reset. Readers that page or look up their own cards lay these over them to stay current.
- */
-export function boardChangesQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
-  return syncQueryOptions(baseUrl, factoryProjectId, 'changed');
-}
-
 /** The lean board sync's snapshot; see {@link boardChangesQueryOptions}. */
 export function useBoardChangesQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery(boardChangesQueryOptions(baseUrl, factoryProjectId));
-}
-
-/** The org's persisted work items (kanban cards) for a project. */
-export function useWorkItemsQuery(factoryProjectId: string | undefined) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({ ...boardQueryOptions(baseUrl, factoryProjectId), select: selectCards });
 }
 
 /** Cards per board and phase as the server counts them, including every card no reader has loaded. */
@@ -269,42 +251,6 @@ export function workItemLookupQueryOptions(
   });
 }
 
-/**
- * The board's cards, plus the ones `lookup` names that the board lacks — Done and Canceled cards it never
- * loaded. `lookup` sees the board's cards and returns only the ids they miss, or nothing when none are
- * missing. Board cards win over looked-up copies, since the board is synced and patched by every edit.
- */
-export function useWorkItemsWithLookup(
-  factoryProjectId: string | undefined,
-  lookup: (cards: WorkItem[]) => WorkItemLookup | undefined,
-) {
-  const { baseUrl } = useApiConfig();
-  const board = useWorkItemsQuery(factoryProjectId);
-  const missing = board.isSuccess ? lookup(board.data) : undefined;
-  const enabled = missing !== undefined && missing.ids.length > 0;
-  const found = useQuery({
-    ...workItemLookupQueryOptions(baseUrl, factoryProjectId, enabled ? missing : undefined),
-    // A new session joining the list changes the key; keep naming the ones already found meanwhile.
-    placeholderData: keepPreviousData,
-  });
-  const data = useMemo(() => {
-    if (!board.data || !found.data) return board.data;
-    const onBoard = new Set(board.data.map(item => item.id));
-    return [...board.data, ...found.data.filter(item => !onBoard.has(item.id))];
-  }, [board.data, found.data]);
-  const settled = !enabled || found.isFetched;
-  return {
-    data,
-    isSuccess: board.isSuccess && settled,
-    isPending: board.isPending || !settled,
-    isFetched: board.isFetched,
-    isLoading: board.isLoading || (enabled && found.isLoading),
-    isError: board.isError,
-    dataUpdatedAt: board.dataUpdatedAt,
-    refetch: board.refetch,
-  };
-}
-
 /** Ids per lookup read, so a long session list never builds an oversized URL. */
 const LOOKUP_CHUNK = 40;
 
@@ -346,9 +292,7 @@ export function useLookedUpWorkItems(factoryProjectId: string | undefined, looku
     const overlay = changes.data.workItems.filter(
       card =>
         looked.has(card.id) ||
-        Object.values(card.sessions).some(ref =>
-          wanted.has(kind === 'thread' ? ref.threadId : ref.sessionId),
-        ),
+        Object.values(card.sessions).some(ref => wanted.has(kind === 'thread' ? ref.threadId : ref.sessionId)),
     );
     return mergeCards(found.data, overlay, gone);
   }, [found.data, changes.data, kind, idsKey]);
@@ -363,6 +307,45 @@ export function useLookedUpWorkItems(factoryProjectId: string | undefined, looku
     error: found.error,
     refetch: found.refetch,
   };
+}
+
+/** Big enough for any real backlog of unstarted cards, which search filters locally. */
+const UNSTARTED_LIMIT = 200;
+
+/** Open cards no session has started yet, read on their own instead of with the full board. */
+export function unstartedWorkItemsQueryOptions(baseUrl: string, factoryProjectId: string | undefined) {
+  return queryOptions({
+    queryKey: queryKeys.workItemsUnstarted(factoryProjectId),
+    queryFn: factoryProjectId
+      ? async ({ signal }) =>
+          (
+            await listWorkItemPage(
+              baseUrl,
+              factoryProjectId,
+              { open: '1', started: '0', limit: UNSTARTED_LIMIT },
+              signal,
+            )
+          ).workItems
+      : skipToken,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+}
+
+/**
+ * {@link unstartedWorkItemsQueryOptions} with the lean sync laid over them: a card that starts a session
+ * or closes leaves, a newly filed one joins.
+ */
+export function useUnstartedWorkItems(factoryProjectId: string | undefined) {
+  const { baseUrl } = useApiConfig();
+  const changes = useBoardChangesQuery(factoryProjectId);
+  const found = useQuery(unstartedWorkItemsQueryOptions(baseUrl, factoryProjectId));
+  const data = useMemo(() => {
+    if (!found.data || !changes.data) return found.data;
+    const merged = mergeCards(found.data, changes.data.workItems, new Set(changes.data.deletedIds));
+    return merged.filter(card => Object.keys(card.sessions).length === 0 && !card.stages.some(isTerminalStage));
+  }, [found.data, changes.data]);
+  return { data, isLoading: found.isLoading, isError: found.isError, refetch: found.refetch };
 }
 
 /** Sessions parked on a plan or a question, read with the board's lean sync so every route shares one poll. */

@@ -170,7 +170,7 @@ describe('the new session page', () => {
         HttpResponse.json({ workItems: [intakeCard] }),
       ),
     );
-    await client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) });
+    await client.invalidateQueries({ queryKey: queryKeys.workItemStarters(FACTORY_ID) });
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Plan a fix' })).not.toBeInTheDocument());
 
     expect(message).toHaveValue(previewed);
@@ -267,5 +267,47 @@ describe('the new session page', () => {
 
     expect(within(week).getByText('Nothing came in, ran or shipped this week.')).toBeInTheDocument();
     expect(within(week).queryByRole('img')).not.toBeInTheDocument();
+  });
+
+  it('counts the open cards whose session is running or waiting, reading only those cards', async () => {
+    const withSession = (id: string, stages: string[], sessionId: string) => ({
+      ...card(id, stages),
+      sessions: { work: { sessionId, branch: id, threadId: sessionId, startedBy: 'user-1' } },
+    });
+    const cards = [
+      withSession('building', ['execute'], 'run-a'),
+      withSession('asking', ['planning'], 'parked-a'),
+      withSession('shipped', ['done'], 'run-b'),
+      withSession('idle', ['execute'], 'idle-a'),
+    ];
+    stubDraftRoute({ workItems: cards });
+    const lookups: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, ({ request }) => {
+        const sessions = new URL(request.url).searchParams.get('session');
+        if (sessions === null) return HttpResponse.json({ workItems: cards, parkedSessionIds: ['parked-a'] });
+        lookups.push(sessions);
+        const wanted = new Set(sessions.split(','));
+        return HttpResponse.json({
+          workItems: cards.filter(item => wanted.has(item.sessions.work.sessionId)),
+        });
+      }),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
+        HttpResponse.json({
+          runs: ['run-a', 'run-b'].map(id => ({ runId: `r-${id}`, resourceId: id, threadId: id })),
+        }),
+      ),
+    );
+    renderDraft();
+
+    const week = await screen.findByRole('region', { name: 'This week' });
+    await waitFor(() =>
+      expect(
+        within(week)
+          .getByText(/working/)
+          .closest('p'),
+      ).toHaveTextContent('1 working · 1 waiting on you'),
+    );
+    expect(lookups.flatMap(ids => ids.split(',')).sort()).toEqual(['parked-a', 'run-a', 'run-b']);
   });
 });

@@ -102,6 +102,9 @@ export const queryKeys = {
     ['factory', 'work-item-lookup', factoryProjectId ?? null] as const,
   workItemLookup: (factoryProjectId: string | undefined, kind: 'session' | 'thread', ids: string) =>
     [...queryKeys.workItemLookupRoot(factoryProjectId), kind, ids] as const,
+  /** Open cards no session has started yet; under the lookup root so deletes and resyncs reach it. */
+  workItemsUnstarted: (factoryProjectId: string | undefined) =>
+    [...queryKeys.workItemLookupRoot(factoryProjectId), 'unstarted'] as const,
   /**
    * The board page's lean sync: the cursor, counts and sessions, plus only the cards changed since its
    * last reset. Nested under `workItems` so every board invalidation reaches it too.
@@ -121,6 +124,9 @@ export const queryKeys = {
   ) => [...queryKeys.workItemColumnsRoot(factoryProjectId), board, stage, sort, filters, cursor] as const,
   workItemColumnCounts: (factoryProjectId: string | undefined, filters: string) =>
     [...queryKeys.workItemColumnsRoot(factoryProjectId), 'counts', filters] as const,
+  /** The New page's starter counts. Apart from `workItems`, whose snapshots card patches assume. */
+  workItemStarters: (factoryProjectId: string | undefined) =>
+    ['factory', 'work-item-starters', factoryProjectId ?? null] as const,
   workItemActivity: (factoryProjectId: string | undefined, depth: string) =>
     ['factory', 'work-item-activity', factoryProjectId ?? null, depth] as const,
   workItemSources: (factoryProjectId: string | undefined) =>

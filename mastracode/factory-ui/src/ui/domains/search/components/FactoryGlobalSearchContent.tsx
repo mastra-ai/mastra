@@ -48,17 +48,21 @@ export function FactoryGlobalSearchContent({ factoryId, closeSearch }: { factory
   const sessions = useGlobalSearchSessions(searchableFactoryId);
   const workItems = useGlobalSearchWorkItems(searchableFactoryId);
   const intake = useGlobalSearchIntake(factoryId, activeFactory?.repositories ?? []);
+  // Moves and drops act on the cards search read, never the full board.
+  const searchedCards = { items: workItems.items, isPending: workItems.pending, error: undefined };
   const toastFailureAfterPaletteCloses = (message: string) => toast.error(message);
   const workBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
     kind: 'work',
     currentUserId,
+    board: searchedCards,
     onFailure: toastFailureAfterPaletteCloses,
   });
   const reviewBoard = useBoardItems({
     factoryProjectId: searchableFactoryId,
     kind: 'review',
     currentUserId,
+    board: searchedCards,
     onFailure: toastFailureAfterPaletteCloses,
   });
   const runs = useBoardRuns({ factoryProjectId: factoryId });

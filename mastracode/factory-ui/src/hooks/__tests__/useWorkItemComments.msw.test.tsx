@@ -15,7 +15,7 @@ import {
   usePendingCommentCreates,
   useWorkItemComments,
 } from '../useWorkItemComments';
-import { useWorkItemsQuery } from '../useWorkItems';
+import { useBoardChangesQuery } from '../useWorkItems';
 
 const PROJECT_ID = 'project-1';
 const ITEM_ID = 'item-1';
@@ -64,8 +64,8 @@ function firstPageComments(data: { pages: WorkItemCommentPage[] } | undefined): 
 }
 
 function useFeedFromBoard() {
-  // Production wiring: the board query flows on its own 5s poll alongside the feed.
-  useWorkItemsQuery(PROJECT_ID);
+  // Production wiring: the board sync polls alongside the feed.
+  useBoardChangesQuery(PROJECT_ID);
   return useWorkItemComments({ workItemId: ITEM_ID });
 }
 

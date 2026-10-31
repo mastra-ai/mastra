@@ -311,6 +311,10 @@ export interface WorkItemPageQuery extends WorkItemFilterQuery {
   thread?: string;
   /** Also return the matched cards' parents, children and pull requests. */
   related?: '1';
+  /** `1`: only cards on a non-terminal phase. */
+  open?: '1';
+  /** `0`: only cards with no session yet; `1`: only cards with one. */
+  started?: '0' | '1';
 }
 
 /** The board's own filters, each a comma-separated list; the server matches them as the board does. */
@@ -345,7 +349,10 @@ export async function listWorkItemPage(
     projectWorkItemsUrl(baseUrl, factoryProjectId, `?${params.toString()}`),
     { signal },
   );
-  return { workItems: data.workItems.map(fromWireWorkItem), ...(data.nextCursor ? { nextCursor: data.nextCursor } : {}) };
+  return {
+    workItems: data.workItems.map(fromWireWorkItem),
+    ...(data.nextCursor ? { nextCursor: data.nextCursor } : {}),
+  };
 }
 
 /** Cards per board and phase matching a filter; stage filters aside, every column is counted. */
@@ -371,6 +378,34 @@ export async function getWorkItemActivity(
 ): Promise<{ total: number; createdAt: string[]; doneAt: string[] }> {
   const params = new URLSearchParams({ since: since.toISOString() });
   return requestJson(projectWorkItemsUrl(baseUrl, factoryProjectId, `/activity?${params.toString()}`), { signal });
+}
+
+/** What the New page's starter cards count, counted by the server over every card of the project. */
+export interface WorkItemStarters {
+  /** Open cards whose latest run failed. */
+  failed: number;
+  /** Factory's open pull requests whose current review asked for changes. */
+  changesRequested: number;
+  /** Open pull requests waiting in Review Intake that were opened in the last month. */
+  review: { count: number; oldestOpenedAt?: string };
+  /** Work cards not started that triage classified and nobody accepted. */
+  undecided: number;
+  /** Cards in Work Intake that triage has not classified. */
+  untriaged: number;
+  /** Bugs not started that have no plan. */
+  unplannedBugs: number;
+  /** The area label with the most cards not started, when it has enough of them. */
+  sweep?: { area: string; count: number };
+  /** Open pull requests waiting in Review Intake for over a month. */
+  stale: number;
+}
+
+export async function getWorkItemStarters(
+  baseUrl: string,
+  factoryProjectId: string,
+  signal?: AbortSignal,
+): Promise<WorkItemStarters> {
+  return requestJson(projectWorkItemsUrl(baseUrl, factoryProjectId, '/starters'), { signal });
 }
 
 /** One card by id, Done and Canceled included: what a deep link to a card the board never loaded reads. */
