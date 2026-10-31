@@ -1,4 +1,5 @@
 import type { AgentSignalAttributes, AgentSignalType } from '../agent/signals';
+import type { ActorSignal } from '../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { Mastra } from '../mastra';
 import type { Schedule, ScheduleStatus, SchedulesStorage } from '../storage/domains/schedules/base';
@@ -141,6 +142,12 @@ export interface WorkflowSchedule {
   requestContext?: Record<string, unknown>;
   /** Resource that runs fired by this schedule are attributed to. */
   resourceId?: string;
+  /**
+   * Trusted system actor passed to every run this schedule fires, so nested
+   * workflows pass fine-grained authorization without an end user. Requires
+   * `requestContext.organizationId`. Code-only: not accepted over HTTP.
+   */
+  actor?: ActorSignal;
   metadata?: Record<string, unknown>;
   createdAt: number;
   updatedAt: number;
@@ -199,6 +206,12 @@ export interface CreateWorkflowScheduleInput {
   requestContext?: Record<string, unknown>;
   /** Resource that runs fired by this schedule are attributed to. */
   resourceId?: string;
+  /**
+   * Trusted system actor passed to every run this schedule fires, so nested
+   * workflows pass fine-grained authorization without an end user. Requires
+   * `requestContext.organizationId`. Code-only: not accepted over HTTP.
+   */
+  actor?: ActorSignal;
   metadata?: Record<string, unknown>;
   /** Schedule lifecycle status. Defaults to `'active'`. */
   status?: 'active' | 'paused';
@@ -235,6 +248,12 @@ export interface UpdateWorkflowScheduleInput {
   requestContext?: Record<string, unknown>;
   /** Resource that runs fired by this schedule are attributed to. */
   resourceId?: string;
+  /**
+   * Trusted system actor passed to every run this schedule fires, so nested
+   * workflows pass fine-grained authorization without an end user. Requires
+   * `requestContext.organizationId`. Code-only: not accepted over HTTP.
+   */
+  actor?: ActorSignal;
   metadata?: Record<string, unknown>;
   status?: 'active' | 'paused';
 }
@@ -431,6 +450,7 @@ export class Schedules {
       ...(input.initialState !== undefined ? { initialState: input.initialState } : {}),
       ...(input.requestContext !== undefined ? { requestContext: input.requestContext } : {}),
       ...(input.resourceId !== undefined ? { resourceId: input.resourceId } : {}),
+      ...(input.actor !== undefined ? { actor: input.actor } : {}),
     };
 
     const schedule: Schedule = {
@@ -639,6 +659,7 @@ export class Schedules {
       ...(wfPatch.initialState !== undefined ? { initialState: wfPatch.initialState } : {}),
       ...(wfPatch.requestContext !== undefined ? { requestContext: wfPatch.requestContext } : {}),
       ...(wfPatch.resourceId !== undefined ? { resourceId: wfPatch.resourceId } : {}),
+      ...(wfPatch.actor !== undefined ? { actor: wfPatch.actor } : {}),
     };
   }
 
@@ -727,7 +748,7 @@ export class Schedules {
     // processor consumes `workflow.start` and reuses the claim id as the run
     // id, so record the trigger row here (the scheduler is not involved in
     // manual fires).
-    const { workflowId, inputData, initialState, requestContext, resourceId } = existing.target;
+    const { workflowId, inputData, initialState, requestContext, resourceId, actor } = existing.target;
     const claimId = `sched_${existing.id}_${now}`;
     await this.#mastra.pubsub.publish(TOPIC_WORKFLOWS, {
       type: 'workflow.start',
@@ -739,6 +760,7 @@ export class Schedules {
         requestContext: requestContext ?? {},
         initialState: initialState ?? {},
         ...(resourceId !== undefined ? { resourceId } : {}),
+        ...(actor !== undefined ? { actor } : {}),
         scheduleTrigger: {
           scheduleId: existing.id,
           scheduledFireAt: now,
@@ -817,6 +839,7 @@ export function toWorkflowSchedule(schedule: Schedule): WorkflowSchedule | null 
     ...(target.initialState !== undefined ? { initialState: target.initialState } : {}),
     ...(target.requestContext !== undefined ? { requestContext: target.requestContext } : {}),
     ...(target.resourceId !== undefined ? { resourceId: target.resourceId } : {}),
+    ...(target.actor !== undefined ? { actor: target.actor } : {}),
     ...(schedule.metadata ? { metadata: schedule.metadata } : {}),
     createdAt: schedule.createdAt,
     updatedAt: schedule.updatedAt,
