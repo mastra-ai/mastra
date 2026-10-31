@@ -61,51 +61,79 @@ function getWorkflowIdMetadata(
   throw new Error(`Unable to determine workflow id for ${workflowName} in ${filePath}`);
 }
 
+type StaticProperty = { readable: true; value?: t.Node } | { readable: false };
+
+function getStaticKey(property: t.ObjectProperty | t.ObjectMethod): string | null {
+  if (property.computed && t.isTemplateLiteral(property.key) && property.key.expressions.length === 0) {
+    return property.key.quasis[0]?.value.cooked ?? null;
+  }
+
+  if (property.computed && t.isStringLiteral(property.key)) {
+    return property.key.value;
+  }
+
+  return getObjectPropertyName(property);
+}
+
+function isDynamicKey(property: t.ObjectProperty | t.ObjectMethod): boolean {
+  return (
+    property.computed &&
+    !t.isStringLiteral(property.key) &&
+    !(t.isTemplateLiteral(property.key) && property.key.expressions.length === 0)
+  );
+}
+
+// A later property overrides an earlier one, so a spread or `[key]` hides `name` only when it
+// comes after the last `name` written out in source.
+function findStaticProperty(object: t.ObjectExpression, name: string): StaticProperty {
+  let found: StaticProperty = { readable: true };
+
+  for (const property of object.properties) {
+    if (t.isSpreadElement(property) || isDynamicKey(property)) {
+      found = { readable: false };
+      continue;
+    }
+
+    if (getStaticKey(property) === name) {
+      found = t.isObjectProperty(property) ? { readable: true, value: property.value } : { readable: false };
+    }
+  }
+
+  return found;
+}
+
 /**
- * Read at build time, so runs started outside `TemporalRun` (Schedules, the Temporal CLI) are
- * checked too.
+ * Read at build time so runs started outside `TemporalRun` (Schedules, the Temporal CLI) use the
+ * workflow's setting too. `TemporalRun` also sends the setting, which covers `options` the build
+ * cannot read.
  */
 function getWorkflowValidateInputs(
   workflowConfig: t.ObjectExpression,
   workflowName: string,
   filePath: string,
 ): boolean | undefined {
-  const options = workflowConfig.properties.find(
-    (property): property is t.ObjectProperty =>
-      t.isObjectProperty(property) && getObjectPropertyName(property) === 'options',
-  );
-  if (!options) {
+  const options = findStaticProperty(workflowConfig, 'options');
+  if (options.readable && !options.value) {
     return undefined;
   }
 
-  if (!t.isObjectExpression(options.value)) {
-    throw createUnreadableError(workflowName, filePath);
+  if (options.readable && t.isObjectExpression(options.value)) {
+    const validateInputs = findStaticProperty(options.value, 'validateInputs');
+    if (validateInputs.readable && !validateInputs.value) {
+      return undefined;
+    }
+
+    if (validateInputs.readable && t.isBooleanLiteral(validateInputs.value)) {
+      return validateInputs.value.value;
+    }
   }
 
-  let validateInputs: boolean | undefined;
-  for (const property of options.value.properties) {
-    if (t.isSpreadElement(property)) {
-      throw createUnreadableError(workflowName, filePath);
-    }
-
-    if (!t.isObjectProperty(property) || getObjectPropertyName(property) !== 'validateInputs') {
-      continue;
-    }
-
-    if (!t.isBooleanLiteral(property.value)) {
-      throw createUnreadableError(workflowName, filePath);
-    }
-
-    validateInputs = property.value.value;
-  }
-
-  return validateInputs;
-}
-
-function createUnreadableError(workflowName: string, filePath: string): Error {
-  return new Error(
-    `options.validateInputs must be a boolean literal in an inline options object for ${workflowName} in ${filePath}`,
+  console.warn(
+    `[@mastra/temporal] Could not read options.validateInputs of ${workflowName} in ${filePath} at build time. ` +
+      'Runs started with run.start() or run.startAsync() use the workflow setting. ' +
+      'Runs started another way, such as from a Temporal Schedule, check step input.',
   );
+  return undefined;
 }
 
 /**

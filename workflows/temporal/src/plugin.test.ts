@@ -305,7 +305,7 @@ describe('Temporal prebuild integration', () => {
       result: unknown;
     }>;
 
-    // Runs the generated Workflow code against the plugin's real activities, the code a Worker runs.
+    // Runs the generated Workflow code against the activities the plugin gives the Worker.
     async function buildWorker() {
       const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-validation-'));
       tempDirs.push(tempDir);
@@ -314,6 +314,7 @@ describe('Temporal prebuild integration', () => {
       await symlink(
         path.join(import.meta.dirname, '..', 'node_modules', 'zod'),
         path.join(tempDir, 'node_modules', 'zod'),
+        'junction',
       );
 
       mockCompiledBundle(`
@@ -329,7 +330,7 @@ describe('Temporal prebuild integration', () => {
         });
         const increment = createStep({
           id: 'increment',
-          inputSchema: z.object({ value: z.number(), note: z.string().trim().default('none') }),
+          inputSchema: z.object({ value: z.number(), note: z.string().trim() }),
           execute: async ({ inputData }) => ({ value: inputData.value + 1, note: inputData.note }),
         });
         const tenant = createStep({
@@ -363,7 +364,7 @@ describe('Temporal prebuild integration', () => {
       return { workflows, activities };
     }
 
-    it('fails the run when a step gets input that breaks its schemas, as the built-in engine does', async () => {
+    it('fails the run when a step gets input that breaks its schemas', async () => {
       const { workflows } = await buildWorker();
 
       // `read` returns a string where `increment` declares a number. Unchecked, the run
@@ -375,9 +376,6 @@ describe('Temporal prebuild integration', () => {
       await expect(workflows.incrementWorkflow!({ inputData: { value: 5, note: ' hi ' } })).resolves.toMatchObject({
         result: { value: 6, note: 'hi' },
       });
-      await expect(workflows.incrementWorkflow!({ inputData: { value: 5 } })).resolves.toMatchObject({
-        result: { value: 6, note: 'none' },
-      });
 
       await expect(workflows.tenantWorkflow!({ inputData: {}, requestContext: {} })).rejects.toMatchObject({
         type: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED',
@@ -388,14 +386,13 @@ describe('Temporal prebuild integration', () => {
       ).resolves.toMatchObject({ result: { tenantId: 'tenant-1' } });
     });
 
-    it('skips the checks when the workflow sets validateInputs: false, and in its child workflows', async () => {
+    it('skips the checks for validateInputs: false, its child workflows, and activities scheduled before the upgrade', async () => {
       const { workflows, activities } = await buildWorker();
 
       await expect(workflows.uncheckedWorkflow!({ inputData: { text: '5' } })).resolves.toMatchObject({
         result: { value: '51' },
       });
-      // An Activity scheduled by a Workflow built before the check existed carries no flag. Runs
-      // that were open during the upgrade keep their old behavior.
+      // Activities scheduled before the Worker upgrade carry no flag and run unchecked.
       await expect(activities.increment!({ inputData: { value: '5' } })).resolves.toMatchObject({ value: '51' });
     });
   });

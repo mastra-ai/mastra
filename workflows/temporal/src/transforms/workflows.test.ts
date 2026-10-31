@@ -242,18 +242,28 @@ describe('workflow transform', () => {
     ).rejects.toThrow('requires an inline function or a statically declared function identifier');
   });
 
-  // Guessing a default here would check a workflow that turned checks off, or skip one that didn't.
-  it.each(['options: sharedOptions', 'options: { validateInputs: flag }', 'options: { ...sharedOptions }'])(
-    'fails the build when it cannot read validateInputs from %s',
-    async options => {
-      await expect(
-        transform(`
-          import { createWorkflow } from '@mastra/core/workflows';
-          export const checkedWorkflow = createWorkflow({ id: 'checked-workflow', ${options} }).commit();
-        `),
-      ).rejects.toThrow('options.validateInputs must be a boolean literal in an inline options object');
-    },
-  );
+  // A setting the build cannot read is left out, so the Worker uses the one run.start() sends.
+  const readSetting = 'validateInputs: false';
+  const leftOut = "createWorkflow('checked-workflow')";
+  it.each([
+    ['options: { ...sharedOptions, validateInputs: false }', readSetting],
+    ["options: { ['validateInputs']: false }", readSetting],
+    ['options: { validateInputs: false, tracingPolicy: sharedOptions.tracingPolicy }', readSetting],
+    ['options: sharedOptions', leftOut],
+    ['options: { validateInputs: flag }', leftOut],
+    ['options: { validateInputs: false, ...sharedOptions }', leftOut],
+    ['options: { [key]: false }', leftOut],
+  ])('reads validateInputs from %s at build time', async (options, expected) => {
+    const output = await transform(`
+      import { createWorkflow } from '@mastra/core/workflows';
+      const sharedOptions = {};
+      const flag = false;
+      const key = 'validateInputs';
+      export const checkedWorkflow = createWorkflow({ id: 'checked-workflow', ${options} }).commit();
+    `);
+
+    expect(output).toContain(expected);
+  });
 
   it('forwards mapping options while retaining the generated mapping activity id', async () => {
     const result = await transform(`
