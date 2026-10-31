@@ -1,8 +1,0 @@
-name: mastra CodeQL config
-paths-ignore:
-  - docs
-  - examples
-  - explorations
-  - e2e-tests
-  - '**/*.test.ts'
-  - '**/__tests__/**'
