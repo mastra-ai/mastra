@@ -375,11 +375,14 @@ export interface BackgroundTaskAdoptionContext {
 export interface ToolBackgroundConfig {
   /** Whether this tool is eligible for background execution. Default: false */
   enabled?: boolean;
+  /** Whether the model can override background behavior per call. Default: true. */
+  allowModelOverride?: boolean;
   /**
    * How an eligible tool runs when the call carries no `_background` override.
    * - `'deferred'` (default): eligible calls run in the background.
-   * - `'foreground'`: eligible calls run inline unless the model explicitly
-   *   opts in via `_background` — eligibility only grants the *option*.
+   * - `'foreground'`: eligible calls run inline by default. When model overrides
+   *   are allowed, the model can opt in via `_background`; otherwise `_background`
+   *   is ignored and calls remain inline.
    */
   defaultDisposition?: 'foreground' | 'deferred';
   /** Override the manager's default timeout for this tool */
@@ -396,7 +399,12 @@ export interface ToolBackgroundConfig {
 
 export type AgentBackgroundToolConfig =
   | boolean
-  | { enabled: boolean; timeoutMs?: number; defaultDisposition?: 'foreground' | 'deferred' };
+  | {
+      enabled: boolean;
+      timeoutMs?: number;
+      defaultDisposition?: 'foreground' | 'deferred';
+      allowModelOverride?: boolean;
+    };
 
 export interface AgentBackgroundConfig {
   /**
@@ -413,7 +421,7 @@ export interface AgentBackgroundConfig {
    * tool run inline unless the call opts in via `_background`.
    * - `true`: allow the tool's own background config
    * - `false`: always foreground, even if the tool is eligible
-   * - `{ enabled, timeoutMs, defaultDisposition }`: override specific settings
+   * - `{ enabled, timeoutMs, defaultDisposition, allowModelOverride }`: override specific settings
    * - `'all'`: make all tools eligible for background execution
    */
   tools?: Record<string, AgentBackgroundToolConfig> | 'all';
