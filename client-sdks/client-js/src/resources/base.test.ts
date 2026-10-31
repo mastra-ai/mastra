@@ -273,6 +273,37 @@ describe('BaseResource', () => {
     expect(result).toEqual({ success: true });
   });
 
+  // Fetch joins header names that differ only in case into "a, b". (#28667)
+  it('lets request headers replace client and default headers of any casing', async () => {
+    server.on('request', (req, res) => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(
+        JSON.stringify({
+          authorization: req.headers.authorization,
+          contentType: req.headers['content-type'],
+          client: req.headers['x-client'],
+        }),
+      );
+    });
+    const customResource = new BaseResource({
+      baseUrl: serverUrl,
+      retries: 0,
+      headers: { Authorization: 'Bearer client-token', 'X-Client': 'kept' },
+    });
+
+    const result = await customResource.request('/test', {
+      method: 'POST',
+      body: {},
+      headers: { authorization: 'Bearer request-token', 'Content-Type': 'application/vnd.example+json' },
+    });
+
+    expect(result).toEqual({
+      authorization: 'Bearer request-token',
+      contentType: 'application/vnd.example+json',
+      client: 'kept',
+    });
+  });
+
   describe('abort signals', () => {
     const okResponse = () => new Response(JSON.stringify({ ok: true }), { status: 200 });
 
