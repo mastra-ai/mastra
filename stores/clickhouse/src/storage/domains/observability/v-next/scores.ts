@@ -312,7 +312,10 @@ export async function listScores(
   const deltaCursorEnabled = deltaPollingSupported(strategy);
   const filter = buildScoresFilterConditions(parsed.filters, 's');
   const pagination = buildPaginationClause(parsed.pagination);
-  const orderBy = buildSignalOrderByClause(['timestamp', 'score'], parsed.orderBy, 's');
+  const primaryOrderBy = buildSignalOrderByClause(['timestamp', 'score'], parsed.orderBy, 's');
+  // Ties on timestamp or score would otherwise come back in whatever order parts are read, so pages
+  // could repeat or skip rows. scoreId is unique per current score.
+  const orderBy = `${primaryOrderBy}, s.scoreId ${parsed.orderBy?.direction === 'ASC' ? 'ASC' : 'DESC'}`;
   const whereClause = filter.conditions.length ? `WHERE ${filter.conditions.join(' AND ')}` : '';
 
   if (parsed.mode === 'delta') {
