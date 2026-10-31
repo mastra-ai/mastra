@@ -2,8 +2,8 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed long option labels being cut off in `Combobox` popups that need to show ids, such as model names. The new `popupWidth="content"` option fits the popup to its longest option (up to 20rem) instead of the trigger's width and keeps that width while you search. Labels longer than that wrap onto a second line.
+Fixed long option labels being cut off in `Combobox`. Labels and descriptions now wrap and stop at two lines instead of truncating on one. A new `popupWidth` prop (`sm`, `md`, `lg`, `xl`) gives a compact trigger a wider, fixed popup for long options such as model ids. Without it the popup keeps the trigger's width.
 
 ```tsx
-<Combobox options={modelOptions} popupWidth="content" />
+<Combobox options={modelOptions} popupWidth="lg" />
 ```

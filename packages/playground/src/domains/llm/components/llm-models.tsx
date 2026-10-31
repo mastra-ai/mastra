@@ -64,8 +64,8 @@ export const LLMModels = ({
       placeholder="Select model..."
       searchPlaceholder="Search models..."
       emptyText="No models found"
-      // Model ids are long and look alike past the provider prefix, so show them in full.
-      popupWidth="content"
+      // Model ids are long and look alike past the provider prefix, so give them room.
+      popupWidth="lg"
       variant={variant}
       className={className}
       open={open}

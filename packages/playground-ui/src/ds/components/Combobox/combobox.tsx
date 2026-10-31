@@ -15,8 +15,8 @@ import {
   ComboboxTrigger,
   ComboboxValue,
 } from './combobox-parts';
-import { comboboxStyles } from './combobox-styles';
-import type { ComboboxVariant } from './combobox-styles';
+import { comboboxPopupWidthClass, comboboxStyles } from './combobox-styles';
+import type { ComboboxPopupWidth, ComboboxVariant } from './combobox-styles';
 import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName, useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
@@ -26,7 +26,7 @@ import { deprecatedErrorAria } from '@/ds/primitives/form-element';
 import type { PortalContainer } from '@/ds/primitives/portal-container';
 import { cn } from '@/lib/utils';
 
-export type { ComboboxVariant } from './combobox-styles';
+export type { ComboboxPopupWidth, ComboboxVariant } from './combobox-styles';
 
 export type ComboboxOption = {
   label: string;
@@ -62,12 +62,8 @@ type ComboboxSharedProps = {
   'aria-describedby'?: string;
   /** Which edge of the trigger the popup lines up with. `end` opens it leftwards (e.g. an icon trigger at the end of a row). */
   align?: 'start' | 'center' | 'end';
-  /**
-   * `anchor` (default) opens the popup at the trigger's width, at least 11rem. `content` fits it to the longest
-   * option (e.g. model ids), measured over all options so it holds still while you type, up to 20rem; longer
-   * labels wrap onto a second line instead of truncating.
-   */
-  popupWidth?: 'anchor' | 'content';
+  /** A fixed popup width for long options (e.g. model ids). Without it the popup takes the trigger's width, at least 11rem. */
+  popupWidth?: ComboboxPopupWidth;
   showChevron?: boolean;
   iconOnlyValue?: boolean;
   allowCustomValue?: boolean;
@@ -202,13 +198,13 @@ function triggerClassName({ iconOnlyValue, className }: { iconOnlyValue: boolean
   return cn(iconOnlyValue && 'w-auto px-2.5', className);
 }
 
-/** An option row's content: start slot, label over description, end slot. Long labels truncate, or wrap when `wrap`. */
-function ComboboxOptionContent({ option, wrap }: { option: ComboboxOption; wrap: boolean }) {
+/** An option row's content: start slot, label over description, end slot. */
+function ComboboxOptionContent({ option }: { option: ComboboxOption }) {
   return (
     <>
       {option.start}
       <span className={comboboxStyles.optionText}>
-        <span className={wrap ? comboboxStyles.optionLabelWrap : comboboxStyles.optionLabel}>{option.label}</span>
+        <span className={comboboxStyles.optionLabel}>{option.label}</span>
         {option.description && <span className={comboboxStyles.optionDescription}>{option.description}</span>}
       </span>
       {option.end ? <span className={comboboxStyles.optionEnd}>{option.end}</span> : null}
@@ -233,37 +229,8 @@ function ComboboxClearFooter({ label, onClear }: { label: string; onClear: () =>
   );
 }
 
-/** The option whose rendered label has the most characters: a close enough stand-in for the widest row, without measuring them all. */
-function longestOption(options: ComboboxOption[]) {
-  return options.reduce<ComboboxOption | undefined>(
-    (longest, option) => (!longest || option.label.length > longest.label.length ? option : longest),
-    undefined,
-  );
-}
-
-/**
- * An invisible copy of the longest option's row, so a `content`-width popup sizes to it whatever the search shows.
- * Same item and list padding as a real row; the check slot is empty, its width is fixed.
- */
-function ComboboxPopupSizer({ options }: { options: ComboboxOption[] }) {
-  const option = longestOption(options);
-  if (!option) return null;
-
-  return (
-    <div aria-hidden className={comboboxStyles.sizer}>
-      <div className={comboboxStyles.item}>
-        <span className={comboboxStyles.itemContent}>
-          <ComboboxOptionContent option={option} wrap />
-        </span>
-        <span className={comboboxStyles.checkContainer} />
-      </div>
-    </div>
-  );
-}
-
 /** The popup: the search row for a compact trigger (a field searches in itself), then the options. */
 function ComboboxOptionsContent({
-  options,
   popupWidth,
   showSearch,
   searchPlaceholder,
@@ -272,8 +239,7 @@ function ComboboxOptionsContent({
   container,
   footer,
 }: {
-  options: ComboboxOption[];
-  popupWidth: 'anchor' | 'content';
+  popupWidth?: ComboboxPopupWidth;
   showSearch: boolean;
   searchPlaceholder: string;
   emptyText: string;
@@ -281,17 +247,14 @@ function ComboboxOptionsContent({
   container?: PortalContainer;
   footer?: React.ReactNode;
 }) {
-  const fitContent = popupWidth === 'content';
-
   return (
-    <ComboboxContent align={align} container={container} className={cn(fitContent && comboboxStyles.contentWidthPopup)}>
+    <ComboboxContent align={align} container={container} className={popupWidth && comboboxPopupWidthClass[popupWidth]}>
       {showSearch ? <ComboboxSearch placeholder={searchPlaceholder} /> : null}
-      {fitContent ? <ComboboxPopupSizer options={options} /> : null}
       <ComboboxEmpty>{emptyText}</ComboboxEmpty>
       <ComboboxList>
         {(option: ComboboxOption) => (
           <ComboboxItem key={option.value} value={option}>
-            <ComboboxOptionContent option={option} wrap={fitContent} />
+            <ComboboxOptionContent option={option} />
           </ComboboxItem>
         )}
       </ComboboxList>
@@ -413,7 +376,7 @@ function SingleCombobox({
   onOpenChange,
   container,
   align = 'start',
-  popupWidth = 'anchor',
+  popupWidth,
   showChevron = true,
   iconOnlyValue = false,
   allowCustomValue = false,
@@ -463,7 +426,6 @@ function SingleCombobox({
         look={{ variant, size, showChevron, iconOnlyValue, className }}
       />
       <ComboboxOptionsContent
-        options={options}
         popupWidth={popupWidth}
         showSearch={!inField}
         searchPlaceholder={searchPlaceholder}
@@ -493,7 +455,7 @@ function MultipleCombobox({
   onOpenChange,
   container,
   align = 'start',
-  popupWidth = 'anchor',
+  popupWidth,
   showChevron = true,
   iconOnlyValue = false,
 }: ComboboxMultipleProps & ShapeProps) {
@@ -525,7 +487,6 @@ function MultipleCombobox({
         look={{ variant, size, showChevron, iconOnlyValue, className }}
       />
       <ComboboxOptionsContent
-        options={options}
         popupWidth={popupWidth}
         showSearch={shape !== 'chips'}
         searchPlaceholder={searchPlaceholder}

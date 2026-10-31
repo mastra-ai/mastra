@@ -24,6 +24,10 @@ const meta: Meta<typeof Combobox> = {
     iconOnlyValue: {
       control: { type: 'boolean' },
     },
+    popupWidth: {
+      control: { type: 'select' },
+      options: [undefined, 'sm', 'md', 'lg', 'xl'],
+    },
   },
 };
 
@@ -144,8 +148,8 @@ export const ModelSelector: Story = {
   },
 };
 
-/** `popupWidth="content"`: the popup fits the longest id, up to 20rem (longer ids wrap), and keeps that width while you search. */
-export const ContentWidthPopup: Story = {
+/** `popupWidth` gives a compact trigger a wider, fixed popup; labels past it wrap and clamp at two lines. */
+export const PopupWidth: Story = {
   args: {
     options: [
       'moonshotai/kimi-k2',
@@ -157,7 +161,7 @@ export const ContentWidthPopup: Story = {
     placeholder: 'Select model...',
     searchPlaceholder: 'Search models...',
     variant: 'ghost',
-    popupWidth: 'content',
+    popupWidth: 'lg',
     className: 'w-auto max-w-40',
   },
 };
