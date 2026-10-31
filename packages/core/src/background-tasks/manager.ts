@@ -42,6 +42,12 @@ function toTaskError(err: unknown): { message: string; stack?: string } {
 /** Pending rows each lapsed-pin sweep reads; later pages are read on later ticks. */
 const PIN_SWEEP_PAGE_SIZE = 100;
 
+/** Test-only lower lease minimum; only ever lowers the default 3s. Read per manager, not at import. */
+function minLeaseOverride(): number | undefined {
+  const value = Number(process.env.MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS);
+  return Number.isFinite(value) && value > 0 && value < 3_000 ? value : undefined;
+}
+
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
   private readonly workerId = globalThis.crypto.randomUUID();
@@ -105,6 +111,8 @@ export class BackgroundTaskManager {
   // workers leave them alone until this manager claims them or dies.
   private pinnedPendingLeases = new Set<string>();
   private heartbeatInterval?: ReturnType<typeof setInterval>;
+  // Shortest heartbeat / stale-recovery delay: 1s, unless a test lowered the lease minimum.
+  readonly #timingFloorMs: number;
 
   // Pending follow-up pass for stale-task recovery. A running task whose lease
   // is still valid is left alone by a recovery scan, so if its owner died just
@@ -155,9 +163,15 @@ export class BackgroundTaskManager {
     // The heartbeat renews at `leaseDurationMs / 3`, floored to 1s. A lease
     // shorter than 3s therefore expires before it can be renewed, so reject it
     // rather than silently letting every task's lease lapse mid-run.
-    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < 3_000) {
+    //
+    // Internal, for tests that prove lease expiry: MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS
+    // lowers that 3s minimum, and the 1s timing floor scales down with it, so
+    // those tests wait milliseconds instead of seconds. Not a supported setting.
+    const minLeaseMs = minLeaseOverride() ?? 3_000;
+    this.#timingFloorMs = minLeaseMs / 3;
+    if (!Number.isFinite(leaseDurationMs) || leaseDurationMs < minLeaseMs) {
       throw new Error(
-        `BackgroundTaskManager leaseDurationMs must be a finite number of at least 3000ms (received: ${leaseDurationMs})`,
+        `BackgroundTaskManager leaseDurationMs must be a finite number of at least ${minLeaseMs}ms (received: ${leaseDurationMs})`,
       );
     }
     for (const [owner, limit] of Object.entries(config.perOwnerConcurrency ?? {})) {
@@ -2082,7 +2096,7 @@ export class BackgroundTaskManager {
 
   #startLeaseHeartbeat(): void {
     if (this.heartbeatInterval) return;
-    const intervalMs = Math.max(1_000, Math.floor(this.config.leaseDurationMs / 3));
+    const intervalMs = Math.max(this.#timingFloorMs, Math.floor(this.config.leaseDurationMs / 3));
     this.heartbeatInterval = setInterval(() => {
       void this.#renewOwnedLeases();
       // Storage-wide admission can be freed by another process, which never
@@ -2440,9 +2454,10 @@ export class BackgroundTaskManager {
 
     // Wait just past the lease expiry (clocks drift between workers), but bound
     // the delay so a stray far-future lease cannot park recovery indefinitely.
+    const floor = this.#timingFloorMs;
     const delay = Math.min(
-      Math.max(nextSweepAt - Date.now() + 1_000, 1_000),
-      Math.max(this.config.leaseDurationMs, 1_000),
+      Math.max(nextSweepAt - Date.now() + floor, floor),
+      Math.max(this.config.leaseDurationMs, floor),
     );
     this.staleRecoveryTimeout = setTimeout(() => {
       this.staleRecoveryTimeout = undefined;
