@@ -364,6 +364,11 @@ describe('jsonValueEquals', () => {
     expect(jsonValueEquals({ p: { x: 1, y: undefined } }, { p: { x: 1, z: undefined } })).toBe(false);
   });
 
+  it('should ignore non-enumerable keys when matching object keys', () => {
+    const withHiddenKey = Object.defineProperty({ b: 2 }, 'a', { value: 1, enumerable: false });
+    expect(jsonValueEquals({ a: 1 }, withHiddenKey)).toBe(false);
+  });
+
   it('should handle nested structures', () => {
     const obj1 = { a: [1, { b: 2 }], c: 3 };
     const obj2 = { a: [1, { b: 2 }], c: 3 };

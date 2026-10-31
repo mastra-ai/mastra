@@ -458,7 +458,7 @@ export function jsonValueEquals(a: unknown, b: unknown): boolean {
     if (aKeys.length !== bKeys.length) return false;
     return aKeys.every(
       key =>
-        Object.prototype.hasOwnProperty.call(b, key) &&
+        Object.prototype.propertyIsEnumerable.call(b, key) &&
         jsonValueEquals((a as Record<string, unknown>)[key], (b as Record<string, unknown>)[key]),
     );
   }
