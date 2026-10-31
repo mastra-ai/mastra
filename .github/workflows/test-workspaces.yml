@@ -43,6 +43,9 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
         with:
+          # Braces matter: `./workspaces/*...` selects the packages but not their
+          # dependencies; `{./workspaces/*}...` includes them (core, @internal/*).
+          # Both jobs in this file must use the same filter so the cached store fits all.
           store-group: workspaces
           install-filter: --filter {./workspaces/*}... --filter mastra-turbo
 
@@ -76,6 +79,9 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
         with:
+          # Braces matter: `./workspaces/*...` selects the packages but not their
+          # dependencies; `{./workspaces/*}...` includes them (core, @internal/*).
+          # Both jobs in this file must use the same filter so the cached store fits all.
           store-group: workspaces
           install-filter: --filter {./workspaces/*}... --filter mastra-turbo
 

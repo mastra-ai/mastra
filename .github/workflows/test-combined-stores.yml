@@ -95,8 +95,12 @@ jobs:
       - name: Setup pnpm and Node.js
         uses: ./.github/actions/setup-pnpm-node
         with:
+          # Braces matter: `./stores/*...` selects the stores but not their
+          # dependencies; `{./stores/*}...` includes them (core etc.).
           # @mastra/memory: @internal/storage-test-utils imports its source by
-          # relative path, which the package graph doesn't record.
+          # relative path, which the package graph doesn't record; without it
+          # the store builds fail to resolve @mastra/core types.
+          # Every job in the group must use the same filter so the cached store fits all.
           store-group: stores
           install-filter: --filter {./stores/*}... --filter @mastra/memory... --filter mastra-turbo
 
