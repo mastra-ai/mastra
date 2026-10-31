@@ -1476,7 +1476,7 @@ export class FactoryDecisionDispatcher {
           boardRegistry: boards,
           userId: 'factory-rule-dispatcher',
           item: result.item,
-          targetBoard: decision.board,
+          targetBoard: board,
           targetStage: decision.stage,
         });
       }
