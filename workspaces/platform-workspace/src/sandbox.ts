@@ -630,9 +630,9 @@ export class PlatformSandbox extends MastraSandbox {
       ...options,
       name: 'PlatformSandbox',
       processes: e2bBacked
-        ? // 0 lifts the SDK's 60s stream deadline, which would otherwise cut a
-          // long-running process's output; a set `timeout` still bounds it.
-          new PlatformCommandsProcessManager({ defaultTimeout: options.timeout ?? 0 })
+        ? // No default timeout for spawned processes: a dev server is meant to
+          // keep running. `timeout` bounds executeCommand, which runs to completion.
+          new PlatformCommandsProcessManager()
         : new PlatformProcessManager(),
     });
     this._hasRecoveryKey = options.id !== undefined;
