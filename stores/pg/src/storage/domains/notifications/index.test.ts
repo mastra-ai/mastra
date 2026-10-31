@@ -268,6 +268,8 @@ describe('NotificationsPG', () => {
     expect(updated.summarySignalId).toBe('summary-1');
   });
 
+  // 1,200 sequential inserts: ~0.4 s alone, up to ~1.8 s (once >5 s) while other
+  // files hit the same server in parallel, so the default timeout is load-dependent.
   it('bulk status update accepts more ids than one statement can bind and returns each record once', async () => {
     const ids = Array.from({ length: 1200 }, (_, index) => `n-${index}`);
     for (const id of ids) {
@@ -287,7 +289,7 @@ describe('NotificationsPG', () => {
     expect(new Set(updated.map(notification => notification.id)).size).toBe(ids.length);
     expect(updated.every(notification => notification.status === 'seen')).toBe(true);
     await expect(store.listNotifications({ threadId: 'thread-1', status: 'pending' })).resolves.toEqual([]);
-  });
+  }, 20_000);
 
   it('updates the status of many notifications in one write, scoped to the thread', async () => {
     for (const id of ['a', 'b', 'c']) {
