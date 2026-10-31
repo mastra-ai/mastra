@@ -824,10 +824,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           knowledge: async key => deps.controller.getMastra()?.getKnowledge(key),
           defaultKnowledgeKey: deps.knowledgeKey,
-          threadTitle: async threadId => {
-            const memory = await deps.controller.getMastra()?.getStorage()?.getStore('memory');
-            return (await memory?.getThreadById({ threadId }))?.title;
-          },
         }).routes()
       : []),
     ...(deps.factoryReady

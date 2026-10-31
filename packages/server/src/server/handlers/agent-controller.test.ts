@@ -401,6 +401,27 @@ describe('agent-controller routes', () => {
       expect(await controller.getSession('never-started')).toBeUndefined();
       expect(await controller.queryThreads({ resourceId: 'never-started' })).toEqual([]);
     });
+
+    // Scopes are authority: a remote caller never names them. Hosts derive them from
+    // trusted request context through the agent's `scopes` function instead.
+    it('never passes scopes from the request body to the session', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({ resourceId: 'user-scopes', id: 'user-scopes', ownerId: 'code' });
+      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
+
+      await expect(
+        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
+          mastra,
+          controllerId: 'code',
+          sessionId: 'user-scopes',
+          message: 'hello',
+          scopes: ['org:other'],
+        } as any),
+      ).resolves.toEqual({ ok: true });
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]![0]).not.toHaveProperty('scopes');
+    });
   });
 
   // The messages/steer/follow-up/tool-suspension routes ack immediately and let

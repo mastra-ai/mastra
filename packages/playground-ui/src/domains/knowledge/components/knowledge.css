@@ -1,0 +1,11 @@
+.knowledge-circle {
+  background: var(--card);
+  border-color: var(--knowledge-color);
+  transition: border-color var(--duration-fast) var(--ease-out-custom);
+}
+
+.knowledge-circle[data-selected='true'],
+.react-flow__node:focus-visible .knowledge-circle {
+  outline: 2px solid var(--knowledge-color);
+  outline-offset: 5px;
+}
