@@ -2117,15 +2117,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                     });
                     return;
                   }
-                  const turn = self.messageList.cloneWithCompletedSteps();
                   // Like a cancel, the text the unfinished step already streamed is part of the turn.
-                  if (self.#bufferedByStep.text.trim().length > 0) {
-                    turn.add(
-                      { role: 'assistant', content: [{ type: 'text', text: self.#bufferedByStep.text }] },
-                      'response',
-                      { merge: false },
-                    );
-                  }
+                  const turn = self.messageList.cloneWithCompletedSteps(self.#bufferedByStep.text);
                   try {
                     await self.processorRunner!.runOutputProcessors(
                       turn,

@@ -1132,10 +1132,11 @@ export class MessageList {
    * A copy of this list holding the input and only the response of completed steps: the parts and
    * messages a step still in flight added since the last {@link markStepCompleted} are left out.
    * A step whose tool calls all have results (an aborted call records a notice) counts as completed
-   * even though the loop never reached its step-finish.
+   * even though the loop never reached its step-finish, and is kept whole. When the step is cut,
+   * `inFlightText` (the text it already streamed) is added as its own assistant message.
    * @internal
    */
-  public cloneWithCompletedSteps(): MessageList {
+  public cloneWithCompletedSteps(inFlightText = ''): MessageList {
     const clone = this.clone();
     const completed = this.#completedStepParts;
     const pending = clone.get.response
@@ -1161,6 +1162,9 @@ export class MessageList {
           message.content.metadata = { ...message.content.metadata, structuredOutput };
         }
       }
+    }
+    if (inFlightText.trim().length > 0) {
+      clone.add({ role: 'assistant', content: [{ type: 'text', text: inFlightText }] }, 'response', { merge: false });
     }
     return clone;
   }

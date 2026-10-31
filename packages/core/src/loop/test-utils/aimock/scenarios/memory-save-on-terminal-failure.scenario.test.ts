@@ -339,6 +339,58 @@ describeForAllEngines('memory saves the turn when a run ends without finishing',
     TEST_TIMEOUT_MS,
   );
 
+  // The step streamed text, then its only call was cut off: the step is kept whole, text and all,
+  // so its text must not be added a second time as streamed text of an unfinished step.
+  itDeadline(
+    'total-timeout saves the text of a step whose call was cut off once',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `${THREAD}-timeout-text-then-call-${engine}`;
+      const hang = Promise.withResolvers<unknown>();
+      try {
+        await runLoopScenario({
+          engine,
+          llm: getMock(),
+          prompt: 'Check, then answer.',
+          memory,
+          threadId,
+          resourceId: RESOURCE,
+          stopWhen: stepCountIs(5),
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          expectStreamError: true,
+          tools: {
+            hanging: createTool({
+              id: 'hanging',
+              description: 'Never returns.',
+              inputSchema: z.object({}),
+              execute: async () => hang.promise,
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              { content: 'Let me check. ', toolCalls: [{ id: 'call_hang', name: 'hanging', arguments: {} }] },
+            );
+          },
+        });
+
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+          expect(JSON.stringify(messages)).toContain(TOOL_ABORT_NOTICE);
+        });
+        const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+        const texts = messages
+          .filter(message => message.role === 'assistant')
+          .flatMap(message => message.content.parts)
+          .flatMap(part => (part.type === 'text' ? [part.text] : []));
+        expect(texts).toEqual(['Let me check. ']);
+      } finally {
+        hang.resolve({});
+      }
+    },
+    TEST_TIMEOUT_MS,
+  );
+
   // A step whose calls all settled, one with an error and one with the abort notice, is saved whole.
   itDeadline(
     'total-timeout saves a step whose tool call failed alongside one cut off at the deadline',
