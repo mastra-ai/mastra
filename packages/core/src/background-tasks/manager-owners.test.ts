@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeAll, afterAll } from 'vitest';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore, MockStore } from '../storage';
@@ -10,6 +10,18 @@ import type { BackgroundTask, BackgroundTaskManagerConfig, TaskContext, TaskFilt
 // Background tasks owned by something other than an agent (for example an MCP
 // server, with `agentId: 'mcp-server:<id>'`) need their own retention, their
 // own concurrency budget, and a resume that can wait for a slot.
+
+// Lease expiry and heartbeat behaviour here is timing-only, so run it on a
+// 600ms lease instead of the 3s product minimum. manager-lifecycle.test.ts
+// still covers the real minimum.
+const LEASE_MS = 600;
+const HEARTBEAT_MS = LEASE_MS / 3;
+beforeAll(() => {
+  vi.stubEnv('MASTRA_BACKGROUND_TASKS_MIN_LEASE_MS', String(LEASE_MS));
+});
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 const storage = new MockStore();
 const cleanups: Array<() => Promise<void>> = [];
@@ -404,8 +416,8 @@ describe('BackgroundTaskManager: non-agent owners', () => {
     it('dispatches a queued portable resume when another worker frees the slot', async () => {
       // Portable tasks are admitted on storage-wide running counts. A slot freed
       // by another process sends no local completion event, so the queued
-      // resume has to be retried on a timer (the lease heartbeat, ~1s here).
-      const mgr = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: 3_000 });
+      // resume has to be retried on a timer (the lease heartbeat, every HEARTBEAT_MS here).
+      const mgr = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: LEASE_MS });
       mgr.registerStaticExecutor('mcp-server:ops:ask', {
         execute: async (_args, opts) => {
           if (!opts?.resumeData) return opts?.suspend?.({ needs: 'input' });
@@ -443,8 +455,8 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       );
     });
     it('drops a queued resume once another worker has resumed the task and it suspended again', async () => {
-      const a = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: 3_000 });
-      const b = await makeManager({ globalConcurrency: 10, perAgentConcurrency: 10, leaseDurationMs: 3_000 });
+      const a = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: LEASE_MS });
+      const b = await makeManager({ globalConcurrency: 10, perAgentConcurrency: 10, leaseDurationMs: LEASE_MS });
       const executor = {
         execute: async (_args: any, opts?: any) => {
           if (!opts?.resumeData) return opts?.suspend?.({ question: 1 });
@@ -470,8 +482,8 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       });
 
       await store.updateTask('other-worker-task', { status: 'completed', completedAt: new Date() });
-      // Give a's heartbeat (~1s) a few chances to drain.
-      await new Promise(resolve => setTimeout(resolve, 2_500));
+      // Give a's heartbeat a few chances to drain.
+      await new Promise(resolve => setTimeout(resolve, HEARTBEAT_MS * 2.5));
 
       expect(await a.getTask(task.id)).toMatchObject({ status: 'suspended', suspendPayload: { question: 2 } });
     });
@@ -487,10 +499,10 @@ describe('BackgroundTaskManager: non-agent owners', () => {
         }
       }
       const a = await makeManager(
-        { globalConcurrency: 1, perAgentConcurrency: 1, backpressure: 'reject', leaseDurationMs: 3_000 },
+        { globalConcurrency: 1, perAgentConcurrency: 1, backpressure: 'reject', leaseDurationMs: LEASE_MS },
         new ResumeGoesToB(),
       );
-      const b = await makeManager({ globalConcurrency: 10, perAgentConcurrency: 10, leaseDurationMs: 3_000 }, toB);
+      const b = await makeManager({ globalConcurrency: 10, perAgentConcurrency: 10, leaseDurationMs: LEASE_MS }, toB);
       const executor = {
         execute: async (_args: any, opts?: any) => opts?.resumeData ?? opts?.suspend?.({ needs: 'input' }),
       };
@@ -509,7 +521,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
 
     it('does not admit more queued portable resumes than there are free slots', async () => {
       const mgr = await makeManager(
-        { globalConcurrency: 1, perAgentConcurrency: 5, leaseDurationMs: 3_000 },
+        { globalConcurrency: 1, perAgentConcurrency: 5, leaseDurationMs: LEASE_MS },
         new DelayedPubSub(),
       );
       const g = gate();
@@ -535,7 +547,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       await vi.waitFor(async () => expect((await mgr.listTasks({ status: 'running' })).total).toBe(1), {
         timeout: 4_000,
       });
-      await new Promise(resolve => setTimeout(resolve, 2_500));
+      await new Promise(resolve => setTimeout(resolve, HEARTBEAT_MS * 2.5));
       expect((await mgr.listTasks({ status: 'running' })).total).toBe(1);
       expect((await mgr.listTasks({ status: 'suspended' })).total).toBe(1);
 
@@ -574,7 +586,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
 
     async function suspendedAgainAfterHeldResume(processAffine: boolean) {
       const pubsub = new HoldFirstResume();
-      const mgr = await makeManager({ leaseDurationMs: 3_000 }, pubsub);
+      const mgr = await makeManager({ leaseDurationMs: LEASE_MS }, pubsub);
       let taskId: string;
       if (processAffine) {
         ({
@@ -642,7 +654,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       }
       const backgroundTasks = new ResuspendAfterRead({ db: new InMemoryDB() });
       const mgr = await makeManager(
-        { leaseDurationMs: 3_000 },
+        { leaseDurationMs: LEASE_MS },
         new DelayedPubSub(),
         new MastraCompositeStore({ id: 'composite', default: new MockStore(), domains: { backgroundTasks } }),
       );
@@ -664,7 +676,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
     // pinned task waits in A's local queue: the window in which a peer could
     // otherwise pick the pending row up and run it a second time.
     async function pinnedOnBusyWorker(maxRetries: number, pubsub = new EventEmitterPubSub()) {
-      const a = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: 3_000 }, pubsub);
+      const a = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: LEASE_MS }, pubsub);
       const busy = gate();
       const { task: blocker } = await a.enqueue(
         payload('mcp-server:ops', 'blocker'),
@@ -684,7 +696,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
 
     async function peer(pubsub: EventEmitterPubSub) {
       const b = await makeManager(
-        { globalConcurrency: 10, perAgentConcurrency: 10, leaseDurationMs: 3_000, recoverStaleTasksOnStart: true },
+        { globalConcurrency: 10, perAgentConcurrency: 10, leaseDurationMs: LEASE_MS, recoverStaleTasksOnStart: true },
         pubsub,
       );
       const onB = vi.fn(async () => 'from-b');
@@ -714,7 +726,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
 
       // Outlive the original lease: A's heartbeat keeps the pin alive, so B's
       // rescheduled recovery pass still leaves the row alone.
-      await new Promise(resolve => setTimeout(resolve, 4_000));
+      await new Promise(resolve => setTimeout(resolve, LEASE_MS + HEARTBEAT_MS));
       expect(onB).not.toHaveBeenCalled();
       const waiting = await b.getTask(task.id);
       expect(waiting).toMatchObject({ status: 'pending', ownerId: a.ownerId });
@@ -816,7 +828,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
     it('keeps a lapsed pin pinned until a slot is free, so its retry is not spent without a dispatch', async () => {
       const pubsub = new EventEmitterPubSub();
       const b = await makeManager(
-        { globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: 3_000, recoverStaleTasksOnStart: true },
+        { globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: LEASE_MS, recoverStaleTasksOnStart: true },
         pubsub,
       );
       const onB = vi.fn(async () => 'from-b');
@@ -842,8 +854,8 @@ describe('BackgroundTaskManager: non-agent owners', () => {
         createdAt: new Date(),
       });
 
-      // Two sweeps run while B has no free slot.
-      await new Promise(resolve => setTimeout(resolve, 6_500));
+      // Two sweeps (one per lease) run while B has no free slot.
+      await new Promise(resolve => setTimeout(resolve, LEASE_MS * 2 + HEARTBEAT_MS));
       expect(await b.getTask('lapsed-pin')).toMatchObject({ status: 'pending', ownerId: 'dead-worker', retryCount: 0 });
 
       busy.release();
@@ -901,7 +913,7 @@ describe('BackgroundTaskManager: non-agent owners', () => {
     });
 
     it('releases the pin when the owner claims a row it can run immediately', async () => {
-      const mgr = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: 3_000 });
+      const mgr = await makeManager({ globalConcurrency: 1, perAgentConcurrency: 1, leaseDurationMs: LEASE_MS });
       const { task } = await mgr.enqueue(
         payload('mcp-server:ops', 'free'),
         ctx(async () => 'done'),
