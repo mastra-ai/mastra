@@ -201,6 +201,19 @@ describe('KnowledgePageExplorer page view', () => {
       expect(within(pageView()).getByRole('heading', { name: 'Child 2' })).toBeTruthy();
     });
 
+    it('starts the next page’s child list from its first batch, not where the last one was', () => {
+      renderWithProviders(<Host initial="refund" initialView="page" />);
+      const refundChildren = within(within(pageView()).getByRole('region', { name: 'Pages' }));
+      fireEvent.click(refundChildren.getByRole('button', { name: 'Load more' }));
+      expect(refundChildren.queryByRole('button', { name: 'Load more' })).toBeNull();
+
+      const crumbs = within(within(pageView()).getByRole('navigation', { name: 'Breadcrumb' }));
+      fireEvent.click(crumbs.getByRole('button', { name: 'Policies' }));
+      const policyChildren = within(within(pageView()).getByRole('region', { name: 'Pages' }));
+      expect(policyChildren.getAllByRole('listitem').map(item => item.textContent)).toEqual(['Refund Policy']);
+      expect(policyChildren.getByRole('button', { name: 'Load more' })).toBeTruthy();
+    });
+
     it('loads more notes past the first page', () => {
       renderWithProviders(<Host initial="refund" initialView="page" />);
       const notes = within(within(pageView()).getByRole('region', { name: 'Notes' }));

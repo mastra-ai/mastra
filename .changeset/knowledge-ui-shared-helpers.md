@@ -2,4 +2,12 @@
 '@mastra/playground-ui': patch
 ---
 
-Added the Knowledge explorer (graph, node and record views, pins, scope view, search) under `@mastra/playground-ui/domains/knowledge`, moved out of Factory UI so Mastra Studio can reuse it. Hosts supply their data through `KnowledgeDataSourceProvider`.
+The Knowledge explorer (graph, page and note views, pins, scopes, search) now lives in `@mastra/playground-ui/domains/knowledge`, so Mastra Studio can use the same views as Factory. A host supplies its data through `KnowledgeDataSourceProvider`:
+
+```tsx
+import { KnowledgeDataSourceProvider } from '@mastra/playground-ui/domains/knowledge/data-source-provider';
+
+<KnowledgeDataSourceProvider value={dataSource}>
+  <KnowledgeViews />
+</KnowledgeDataSourceProvider>;
+```
