@@ -83,7 +83,7 @@ export interface MountLinearRoutesOptions {
    * already holds after the issue's winning source was routed elsewhere. When
    * absent, details resolve only through sources routed to the Factory.
    */
-  workItems?: Pick<WorkItemsStorage, 'getByProjectSource' | 'list'>;
+  workItems?: Pick<WorkItemsStorage, 'getByProjectSource' | 'listShared'>;
   /** Installed boards, so a held card's terminal status follows its own board. */
   boards?: BoardRegistry;
 }
@@ -189,7 +189,7 @@ async function holdsLiveCardFor(
   });
   if (byIdentifier && isLive(byIdentifier)) return true;
   if (!issueId) return false;
-  const items = await options.workItems.list({ orgId, factoryProjectId });
+  const items = await options.workItems.listShared({ orgId, factoryProjectId });
   return items.some(item => item.metadata?.linearIssueId === issueId && isLive(item));
 }
 
