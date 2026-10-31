@@ -74,12 +74,12 @@ function Meta({ children }: { children: ReactNode }) {
   );
 }
 
-function PageLine({ page }: { page: PageSummary }) {
+function PageLine({ page, linked = true }: { page: PageSummary; linked?: boolean }) {
   const scope = where(page);
   return (
     <div className="flex min-w-0 items-baseline gap-2">
       <Txt as="span" variant="label">
-        <PageLink page={page} />
+        {linked ? <PageLink page={page} /> : page.name}
       </Txt>
       {scope ? <Meta>{page.key ? `${scope}#${page.key}` : scope}</Meta> : null}
     </div>
@@ -176,6 +176,7 @@ export function knowledgeCard(toolName: string, input: unknown, output: unknown)
         ? output.children.map(asPage).filter((child): child is PageSummary => child !== undefined)
         : [];
       const mentionedIn = asNotes(output.mentionedIn);
+      const childScopes = Array.isArray(output.childScopes) ? output.childScopes.filter(isRecord) : [];
       return {
         title: 'Read',
         detail: page.name,
@@ -186,6 +187,16 @@ export function knowledgeCard(toolName: string, input: unknown, output: unknown)
             {page.body ? <Body markdown={page.body} /> : null}
             {notes.length ? <NoteList notes={notes} /> : null}
             {children.length ? <Meta>Child pages: {children.map(child => child.name).join(', ')}</Meta> : null}
+            {childScopes.length ? (
+              <Meta>
+                Child scopes:{' '}
+                {childScopes
+                  .map(scope =>
+                    scope.address ? `${String(scope.name)} (${String(scope.address)})` : String(scope.name),
+                  )
+                  .join(', ')}
+              </Meta>
+            ) : null}
             {mentionedIn.length ? (
               <div className="flex flex-col gap-1">
                 <Meta>Mentioned in</Meta>
@@ -200,6 +211,10 @@ export function knowledgeCard(toolName: string, input: unknown, output: unknown)
       const page = asPage(output.page);
       if (!page) return null;
       const op = str(args.op);
+      if (op === 'delete') {
+        // The page no longer exists, so name it without a link.
+        return { title: 'Deleted page', detail: page.name, body: <PageLine page={page} linked={false} /> };
+      }
       const title =
         op === 'move' ? 'Moved page' : op === 'merge' ? 'Merged page' : args.page ? 'Updated page' : 'Created page';
       const body = str(args.body);
