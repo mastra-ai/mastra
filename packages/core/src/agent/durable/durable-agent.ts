@@ -3946,7 +3946,6 @@ export class DurableAgent<
       }
       if (cleanedUp) return;
 
-      detachExternalAbort();
       agentThreadStreamRuntime.closeRunContinuation(output, this.getPubSub());
       streamCleanup?.();
       if (this.#segmentOwner.get(runId) === segment) {
