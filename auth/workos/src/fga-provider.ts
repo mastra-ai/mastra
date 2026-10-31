@@ -71,7 +71,7 @@ export class WorkOSFGAMembershipResolutionError extends Error {
  *
  * @example Basic usage
  * ```typescript
- * import { MastraFGAWorkos } from '@mastra/auth-workos';
+ * import { MastraFGAWorkos } from '@mastra/auth-workos/ee';
  * import { MastraFGAPermissions } from '@internal/auth/ee';
  *
  * const fga = new MastraFGAWorkos({
