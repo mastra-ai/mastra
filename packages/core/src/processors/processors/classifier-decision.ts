@@ -67,9 +67,12 @@ export function createDecisionReporter<Q extends ClassifierQuestions>({
   getIds: () => ClassifierDecisionIds;
 }): ReportDecision<Q> {
   return async details => {
-    if (!onDecision) return;
-    const decision = { ...details, processorId, classifierId, phase, state, requestContext, ids: getIds() };
+    if (!onDecision) {
+      return;
+    }
+
     try {
+      const decision = { ...details, processorId, classifierId, phase, state, requestContext, ids: getIds() };
       await onDecision(decision as ClassifierProcessorDecision<Q>);
     } catch (error) {
       console.warn(`[ClassifierProcessor:${processorId}] onDecision failed:`, error);
