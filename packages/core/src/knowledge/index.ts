@@ -2,29 +2,40 @@ import { randomUUID } from 'node:crypto';
 import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
-import type {
-  AppendKnowledgeInput,
-  ClaimKnowledgeSemanticOutboxInput,
-  CreateKnowledgeNodeInput,
-  KnowledgeScope,
-  KnowledgeSemanticOutboxEntry,
-  KnowledgeStructurePlan,
-  KnowledgeStructureReconcileResult,
-  KnowledgeStorage,
-  ListKnowledgeNodesInput,
-  QueryKnowledgeBySourceInput,
-  QueryKnowledgeInput,
-  SearchKnowledgeInput,
-  UpdateKnowledgeNodeInput,
-} from '../storage/domains/knowledge';
+import type { KnowledgeReadScope, KnowledgeStorage } from '../storage/domains/knowledge';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
+import type { ToolAction } from '../tools';
+import { emitKnowledgeChanges } from './changes';
+import type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
 import type { KnowledgeConfig } from './config';
-import {
-  materializeKnowledgeScopePlan,
-  validateKnowledgeScopeTypes,
-  validateKnowledgeStructurePlan,
-} from './reconcile';
-import type { KnowledgeScopeTypesConfig, MaterializeKnowledgeScopeInput } from './reconcile';
+import { KnowledgeDeclarationError } from './declarations';
+import type { KnowledgeScopeDeclarationInfo } from './declarations';
+import { buildKnowledgeInstructions } from './instructions';
+import type { KnowledgeInstructionsOption } from './instructions';
+import { buildKnowledgePageTools } from './page-tools';
+import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins, MAX_PINNED_MAX_TOKENS } from './pinned';
+import type { PinBudget, PinEntry } from './pinned';
+import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
+import { KnowledgeRun, knowledgeRunPrincipals } from './run';
+import type { KnowledgeRunContext } from './run';
+import { KnowledgeScopeRuntime } from './scope-runtime';
+import type { KnowledgeAccessExplanation } from './scope-runtime';
+
+function resolvePins(pins: KnowledgeConfig['pinnedContext']): false | PinBudget {
+  if (!pins) return false;
+  const options = pins === true ? {} : pins;
+  const maxTokens = options.maxTokens ?? DEFAULT_PINNED_MAX_TOKENS;
+  if (maxTokens > MAX_PINNED_MAX_TOKENS) {
+    throw new Error(`Knowledge pinnedContext.maxTokens is at most ${MAX_PINNED_MAX_TOKENS}.`);
+  }
+  return { maxPins: options.maxPins ?? DEFAULT_MAX_PINS, maxTokens };
+}
+
+/** Below this share of the pin budget each, config pins are too cut down to be useful. */
+const MIN_TOKENS_PER_CONFIG_PIN = 50;
+
+/** Overrides which tool groups `createTools` and `getInstructions` cover. */
+type KnowledgeToolSelection = { read?: boolean; write?: boolean; pinnedContext?: boolean };
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {
@@ -36,20 +47,63 @@ export class Knowledge extends MastraBase {
   #storage?: MastraCompositeStore;
   #storageSource?: MastraCompositeStore;
   #storagePromise?: Promise<KnowledgeStorage>;
-  #structure?: KnowledgeStructurePlan;
-  #scopeTypes?: KnowledgeScopeTypesConfig;
-  #reconcilePromise?: Promise<KnowledgeStructureReconcileResult>;
-  #materializePromises = new Map<
-    string,
-    { plan: KnowledgeStructurePlan; promise: Promise<KnowledgeStructureReconcileResult> }
-  >();
+  #runtime: KnowledgeScopeRuntime;
+  #tools: { read: boolean; write: boolean };
+  #pins: false | PinBudget;
+  #instructions?: KnowledgeInstructionsOption;
+  #semantic?: KnowledgeSemanticIndex;
+  #listeners = new Set<KnowledgeChangeListener>();
 
-  constructor(config: KnowledgeConfig = {}) {
-    super({ component: 'STORAGE', name: config.name ?? config.id ?? 'Knowledge' });
+  /** Config pins are never dropped, so a scope with more of them than the budget holds is a setup mistake. */
+  #warnOnPinOvercommit(budget: PinBudget) {
+    const { declarations, concrete } = this.#runtime.compiled;
+    const entries: Array<[string, string[] | undefined]> = [
+      ...[...declarations.values()].map(
+        compiled => [compiled.key, compiled.declaration.pinnedContext] as [string, string[] | undefined],
+      ),
+      ...[...concrete].map(
+        ([address, entry]) => [address, entry.declaration.pinnedContext] as [string, string[] | undefined],
+      ),
+    ];
+    for (const [key, pins] of entries) {
+      const count = pins?.length ?? 0;
+      if (count === 0) continue;
+      if (count > budget.maxPins || budget.maxTokens / count < MIN_TOKENS_PER_CONFIG_PIN) {
+        this.logger.warn(
+          `Knowledge scope "${key}" has ${count} pinnedContext pages for a budget of ${budget.maxPins} pins / ${budget.maxTokens} tokens; pinnedContext pages are never dropped, so each will be cut to about ${Math.floor(budget.maxTokens / count)} tokens and stored pins won't fit. Pin fewer pages or raise pinnedContext.maxTokens.`,
+        );
+      }
+    }
+  }
+
+  constructor(config: KnowledgeConfig) {
+    super({ component: 'STORAGE', name: config?.name ?? config?.id ?? 'Knowledge' });
+    if (!config?.scopes || typeof config.scopes !== 'object') {
+      throw new KnowledgeDeclarationError(
+        'Knowledge needs `scopes`: declare the scopes its runs hold, e.g. `scopes: { ...knowledgeMemoryScopes() }`, or `{}` for none.',
+      );
+    }
     this.id = config.id ?? randomUUID();
     this.description = config.description;
-    this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
-    this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
+    const tools = config.tools;
+    this.#tools =
+      typeof tools === 'object'
+        ? { read: Boolean(tools.read), write: Boolean(tools.write) }
+        : { read: Boolean(tools), write: Boolean(tools) };
+    this.#pins = resolvePins(config.pinnedContext);
+    this.#instructions = config.instructions;
+    if (Boolean(config.vector) !== Boolean(config.embedder)) {
+      throw new Error('Knowledge semantic search needs both `vector` and `embedder`; pass both or neither.');
+    }
+    if (config.vector && config.embedder) {
+      this.#semantic = new KnowledgeSemanticIndex(config.vector, config.embedder, config.embedderOptions);
+    }
+    this.#runtime = new KnowledgeScopeRuntime(
+      config.scopes,
+      () => this.getStorage(),
+      message => this.logger.warn(message),
+    );
+    if (this.#pins) this.#warnOnPinOvercommit(this.#pins);
     this.hasOwnStorage = config.storage !== undefined;
     if (config.storage) {
       this.#storageSource = getStorageSource(config.storage);
@@ -57,15 +111,109 @@ export class Knowledge extends MastraBase {
     }
   }
 
-  /** @internal */
-  __registerMastra(_mastra: Mastra): void {
-    if (!this.#structure) return;
-    queueMicrotask(() => {
-      void this.reconcile().catch(error => {
-        this.logger.warn('Knowledge structure reconciliation failed; call reconcile() to retry', { error });
-      });
-    });
+  /**
+   * What a holder of `principals` reads: the principals themselves plus every scope their declared
+   * rules reach in one hop. Undeclared principals throw; an empty list reads nothing. Never `'all'`.
+   * Pass the result as `read` to the store's read methods.
+   */
+  readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope> {
+    return this.#runtime.readScopeFor(principals);
   }
+
+  /**
+   * Why a run holding `runScopes` can or can't reach a scope or page: its role there and the rules
+   * that give it. `runScopes` are raw run scopes, as passed to an agent run; undeclared ones throw
+   * like they do at run start. `target` is a scope address, or a page id or `<scope>#<key>[/<key>…]`.
+   *
+   * **Host-only.** It tells a missing page from a hidden one, which runs must never learn. Never
+   * expose it through an agent tool, or through a server route without admin-level auth.
+   *
+   * @experimental
+   */
+  explainAccess(
+    runScopes: readonly string[],
+    target: { scope: string } | { page: string },
+  ): Promise<KnowledgeAccessExplanation> {
+    return this.#runtime.explainAccess(runScopes, target);
+  }
+
+  /**
+   * After renaming a scope declaration key in `scopes`, moves the scopes stored under the old key
+   * (and its template children, `from/<name>`) to the new one, in one atomic step. Until then this
+   * instance refuses to run: stored scopes under an undeclared key would otherwise silently lose
+   * prefix and `belongsTo` reach. Refuses when `from` is still declared, `to` isn't, or any stored
+   * address doesn't match the `to` pattern; nothing changes then. Returns how many scopes moved.
+   *
+   * In a rolling deploy, instances with the new config fail until the rename runs, and instances
+   * still on the old config lose reach to those scopes after it; deploy, then rename right away.
+   *
+   * @experimental
+   */
+  renameScopeDeclaration(from: string, to: string): Promise<number> {
+    return this.#runtime.renameScopeDeclaration(from, to);
+  }
+
+  #groups(override?: KnowledgeToolSelection): { read: boolean; write: boolean; pins: boolean } {
+    const pinnedContext = override?.pinnedContext;
+    return {
+      read: override?.read ?? this.#tools.read,
+      write: override?.write ?? this.#tools.write,
+      pins: pinnedContext ?? this.#pins !== false,
+    };
+  }
+
+  /** Tools for explicit wiring; defaults to the groups configured on this Knowledge. */
+  createTools(options?: KnowledgeToolSelection): Record<string, ToolAction<any, any, any>> {
+    return buildKnowledgePageTools(
+      {
+        runtime: this.#runtime,
+        getStorage: () => this.getStorage(),
+        semantic: this.#semantic,
+        warn: message => this.logger.warn(message),
+      },
+      this.#groups(options),
+      // A pin write changes what the pins lane shows; drop the turn's memoized read.
+      context =>
+        (
+          context as KnowledgeRunContext & { requestContext?: { delete?(key: string): void } }
+        )?.requestContext?.delete?.(PINNED_READ_MEMO_KEY),
+    );
+  }
+
+  /**
+   * Re-embeds every live page and note into the vector store, for content written outside the tools
+   * or after a failed embed. Returns how many were indexed; throws without `vector` and `embedder`.
+   */
+  async reindex(): Promise<number> {
+    if (!this.#semantic) throw new Error('Knowledge has no `vector` and `embedder` to reindex into.');
+    return this.#semantic.reindex(await this.getStorage());
+  }
+
+  /** The usage block that goes with `createTools(options)`. */
+  getInstructions(options?: KnowledgeToolSelection): string {
+    return buildKnowledgeInstructions(this.#groups(options), this.#instructions);
+  }
+
+  /** Whether attached agents get pinned context delivered every turn. */
+  get pinnedContextEnabled(): boolean {
+    return this.#pins !== false;
+  }
+
+  /** The run's principals as a stable key; throws when the run has none or holds an undeclared scope. @internal */
+  __principalsKey(context: KnowledgeRunContext): string {
+    return knowledgeRunPrincipals(this.#runtime, context).sort().join('\n');
+  }
+
+  /** The pinned pages a run receives this turn. @internal */
+  async __deliveredPins(context: KnowledgeRunContext): Promise<PinEntry[]> {
+    const budget = this.#pins || resolvePins(true);
+    if (!budget) return [];
+    const run = await KnowledgeRun.start(this.#runtime, await this.getStorage(), context);
+    return knowledgeDeliveredPins(run, budget);
+  }
+
+  /** @internal */
+  __registerMastra(_mastra: Mastra): void {}
 
   /** @internal */
   __sharesStorageWith(other: Knowledge): boolean {
@@ -95,115 +243,6 @@ export class Knowledge extends MastraBase {
     );
   }
 
-  /** Returns trusted placement context for the exact scope addresses visible to an agent. @internal */
-  async __getDescriptionContext(scope: KnowledgeScope): Promise<{
-    description?: string;
-    scopes: Array<{ address: string; name: string; description: string }>;
-  }> {
-    const visibleAddresses = new Set(scope);
-    const placementScopes = await this.#placementScopes(scope);
-    const structural = new Set(
-      this.#visibleStructureScopes(scope, placementScopes).map(visibleScope => visibleScope.address),
-    );
-    return {
-      description: this.description?.trim() || undefined,
-      scopes: placementScopes.flatMap(configuredScope => {
-        const description = configuredScope.description?.trim();
-        if (!description) return [];
-        if (!visibleAddresses.has(configuredScope.address) && !structural.has(configuredScope.address)) return [];
-        return [{ address: configuredScope.address, name: configuredScope.name, description }];
-      }),
-    };
-  }
-
-  /**
-   * Host-configured scopes a writer holding `scope` could place into: the static structure plan
-   * plus the template children of each held address. Template children are derived from the
-   * scope-type config the store materializes them from, so they are host-vouched like the plan.
-   * Children are copied on create, so only those that exist in storage are offered: a scope
-   * materialized before its template gained a child does not have that child.
-   */
-  async #placementScopes(scope: KnowledgeScope): Promise<KnowledgeStructurePlan['scopes']> {
-    const configured = this.#structure?.scopes ?? [];
-    const known = new Set(configured.map(configuredScope => configuredScope.address));
-    const templated: KnowledgeStructurePlan['scopes'] = [];
-    for (const address of scope) {
-      let plan: KnowledgeStructurePlan;
-      try {
-        plan = materializeKnowledgeScopePlan(this.#scopeTypes, { address, contextualScopeAddress: address });
-      } catch {
-        continue;
-      }
-      for (const child of plan.scopes.slice(1)) {
-        if (known.has(child.address)) continue;
-        known.add(child.address);
-        templated.push(child);
-      }
-    }
-    if (templated.length === 0) return configured;
-    const storage = await this.getStorage();
-    const { scopes: existing } = await storage.listScopeNodes({
-      addresses: templated.map(child => child.address),
-      limit: templated.length,
-    });
-    const existingAddresses = new Set(existing.map(node => node.address));
-    return [...configured, ...templated.filter(child => existingAddresses.has(child.address))];
-  }
-
-  /**
-   * Structural scopes a writer holding `scope` may place content into: every configured
-   * or held-scope template child whose ancestor chain (via parent addresses) reaches a held address.
-   * Held identity addresses themselves are excluded — those are placed via rungs. The
-   * structure plan is host configuration, so this frontier is host-vouched. @internal
-   */
-  async __getVisibleStructureScopes(
-    scope: KnowledgeScope,
-  ): Promise<Array<{ address: string; name: string; description?: string; heldAncestors: string[] }>> {
-    return this.#visibleStructureScopes(scope, await this.#placementScopes(scope));
-  }
-
-  #visibleStructureScopes(
-    scope: KnowledgeScope,
-    configured: KnowledgeStructurePlan['scopes'],
-  ): Array<{ address: string; name: string; description?: string; heldAncestors: string[] }> {
-    const held = new Set(scope);
-    const parentsByAddress = new Map(configured.map(configuredScope => [configuredScope.address, configuredScope]));
-    // Held identity addresses reachable through the scope's ancestor chain. Placing a node
-    // into the scope should keep its identity scope at one of these so the node stays
-    // readable wherever the structural scope is.
-    const heldAncestorsOf = (address: string): string[] => {
-      // DFS over all declared parents (multi-parent scopes are valid); the plan is
-      // validated acyclic, the seen set is just belt-and-braces.
-      const seen = new Set<string>();
-      const reached: string[] = [];
-      const stack = [address];
-      while (stack.length > 0) {
-        const current = stack.pop()!;
-        if (seen.has(current)) continue;
-        seen.add(current);
-        if (held.has(current)) {
-          reached.push(current);
-          continue;
-        }
-        for (const parent of parentsByAddress.get(current)?.parentAddresses ?? []) stack.push(parent);
-      }
-      return reached;
-    };
-    const visible: Array<{ address: string; name: string; description?: string; heldAncestors: string[] }> = [];
-    for (const configuredScope of configured) {
-      if (held.has(configuredScope.address)) continue;
-      const heldAncestors = heldAncestorsOf(configuredScope.address);
-      if (heldAncestors.length === 0) continue;
-      visible.push({
-        address: configuredScope.address,
-        name: configuredScope.name,
-        ...(configuredScope.description ? { description: configuredScope.description } : {}),
-        heldAncestors,
-      });
-    }
-    return visible;
-  }
-
   /** @internal */
   setStorage(storage: MastraCompositeStore, source: MastraCompositeStore = storage): void {
     if (this.hasOwnStorage) return;
@@ -231,172 +270,95 @@ export class Knowledge extends MastraBase {
         'Knowledge requires a storage provider. Configure storage on the Knowledge instance or on the owning Mastra instance.',
       );
     }
-
     const storage = await this.#storage.getStore('knowledge');
     if (!storage) {
       throw new Error('The configured storage provider does not provide a Knowledge storage domain.');
     }
-
-    const capabilities = storage.getCapabilities();
-    if (!capabilities.supportsV2) {
-      throw new Error(
-        `The configured Knowledge storage adapter supports schema version ${capabilities.schemaVersion}, but Knowledge requires schema version 2.`,
-      );
-    }
-
-    return storage;
+    return emitKnowledgeChanges(
+      storage,
+      change => this.#emit(change),
+      () => this.#listeners.size > 0,
+      error => this.logger.error('Knowledge change event failed after a committed write', { error }),
+    );
   }
 
-  async reconcile(): Promise<KnowledgeStructureReconcileResult> {
-    if (!this.#structure) {
-      return { scopes: {}, createdScopeIds: [], changed: false, accessEpoch: 0 };
-    }
-    if (!this.#reconcilePromise) {
-      const promise = this.getStorage()
-        .then(storage => storage.reconcileStructure(this.#structure!))
-        .finally(() => {
-          if (this.#reconcilePromise === promise) this.#reconcilePromise = undefined;
-        });
-      this.#reconcilePromise = promise;
-    }
-    return this.#reconcilePromise;
-  }
-
-  async materializeScope(input: MaterializeKnowledgeScopeInput): Promise<KnowledgeStructureReconcileResult> {
-    const snapshot = structuredClone(input);
-    const plan = materializeKnowledgeScopePlan(this.#scopeTypes, snapshot);
-    const existing = this.#materializePromises.get(snapshot.address);
-    if (existing) {
-      if (JSON.stringify(existing.plan) !== JSON.stringify(plan)) {
-        throw new Error(`Conflicting materialization is already in progress for Knowledge scope ${snapshot.address}`);
+  #emit(change: Omit<KnowledgeChangeEvent, 'knowledgeId' | 'at'>) {
+    if (this.#listeners.size === 0) return;
+    const event = { ...change, knowledgeId: this.id, at: new Date() } as KnowledgeChangeEvent;
+    for (const listener of this.#listeners) {
+      try {
+        listener(event);
+      } catch (error) {
+        this.logger.error('Knowledge change listener threw', { error });
       }
-      return existing.promise;
     }
-
-    const promise = this.getStorage()
-      .then(async storage => {
-        // Template children are copied on create: a scope that already exists keeps the
-        // children it was created with, even when its scope type template changes later.
-        if (plan.scopes.length > 1) {
-          const { scopes } = await storage.listScopeNodes({ addresses: [snapshot.address], limit: 1 });
-          if (scopes.length > 0) return storage.reconcileStructure({ ...plan, scopes: plan.scopes.slice(0, 1) });
-        }
-        return storage.reconcileStructure(plan);
-      })
-      .then(result => {
-        if (result.deletedScopeAddresses?.includes(snapshot.address)) {
-          throw new Error(`Knowledge scope ${snapshot.address} was explicitly deleted and cannot be recreated lazily`);
-        }
-        return result;
-      })
-      .finally(() => {
-        if (this.#materializePromises.get(snapshot.address)?.promise === promise) {
-          this.#materializePromises.delete(snapshot.address);
-        }
-      });
-    this.#materializePromises.set(snapshot.address, { plan, promise });
-    return promise;
   }
 
-  async createNode(input: CreateKnowledgeNodeInput) {
-    return (await this.getStorage()).createNode(input);
+  /**
+   * Calls `listener` after each committed write made through this instance's store
+   * (`getStorage()`): tool writes, host writes and scope creation. Writes made on a store obtained
+   * some other way aren't seen. Events carry ids, not content and not access: anything that relays
+   * them to people must re-read each page under that person's read scope. Returns an unsubscribe.
+   */
+  onChange(listener: KnowledgeChangeListener): () => void {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
   }
 
-  async getNode(id: string) {
-    return (await this.getStorage()).getNode(id);
+  /**
+   * The declaration a scope page was created from, by its `declaration` key (template children
+   * included, e.g. `account:$orgId:$accountId/internal`), for display. Access rules are left out;
+   * use `explainAccess` for those. `undefined` for an unknown key.
+   */
+  scopeDeclaration(key: string): KnowledgeScopeDeclarationInfo | undefined {
+    const compiled = this.#runtime.compiled.declarations.get(key);
+    if (!compiled) return undefined;
+    const { description, displayLabel, belongsTo } = compiled.declaration;
+    return {
+      key,
+      ...(description !== undefined && { description }),
+      ...(displayLabel !== undefined && { displayLabel }),
+      ...(belongsTo !== undefined && { belongsTo }),
+      children: compiled.children.map(child => ({
+        key: child.key,
+        name: child.child!.name,
+        ...(child.declaration.description !== undefined && { description: child.declaration.description }),
+        ...(child.declaration.displayLabel !== undefined && { displayLabel: child.declaration.displayLabel }),
+      })),
+    };
   }
 
-  async getNodeByName(input: { name: string; scope: KnowledgeScope }) {
-    return (await this.getStorage()).getNodeByName(input);
-  }
-
-  async resolveNode(input: { name: string; scope: KnowledgeScope }) {
-    return (await this.getStorage()).resolveNode(input);
-  }
-
-  async listNodes(input: ListKnowledgeNodesInput) {
-    return (await this.getStorage()).listNodes(input);
-  }
-
-  async updateNode(input: UpdateKnowledgeNodeInput) {
-    return (await this.getStorage()).updateNode(input);
-  }
-
-  async mergeNodes(input: { sourceId: string; targetId: string; sourceVersion: number }) {
-    return (await this.getStorage()).mergeNodes(input);
-  }
-
-  async appendKnowledge(input: AppendKnowledgeInput) {
-    return (await this.getStorage()).appendKnowledge(input);
-  }
-
-  async getKnowledge(input: { id: string; includeDeleted?: boolean }) {
-    return (await this.getStorage()).getKnowledge(input);
-  }
-
-  async listKnowledgeAbout(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeAbout(input);
-  }
-
-  async listKnowledgeMentioning(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeMentioning(input);
-  }
-
-  async listKnowledgeRelatedTo(input: QueryKnowledgeInput) {
-    return (await this.getStorage()).listKnowledgeRelatedTo(input);
-  }
-
-  async knowledgeBySource(input: QueryKnowledgeBySourceInput) {
-    return (await this.getStorage()).knowledgeBySource(input);
-  }
-
-  async removeKnowledge(input: { id: string; deletedBy: string }) {
-    return (await this.getStorage()).removeKnowledge(input);
-  }
-
-  async restoreKnowledge(input: { id: string }) {
-    return (await this.getStorage()).restoreKnowledge(input);
-  }
-
-  async rescopeKnowledge(input: { id: string; scope: KnowledgeScope }) {
-    return (await this.getStorage()).rescopeKnowledge(input);
-  }
-
-  async search(input: SearchKnowledgeInput) {
-    return (await this.getStorage()).search(input);
-  }
-
-  async listActivity(input: { scope: KnowledgeScope; after?: string; limit?: number }) {
-    return (await this.getStorage()).listActivity(input);
-  }
-
-  async listSemanticOutbox(input?: {
-    status?: KnowledgeSemanticOutboxEntry['status'];
-    scope?: KnowledgeScope;
-    limit?: number;
-  }) {
-    return (await this.getStorage()).listSemanticOutbox(input);
-  }
-
-  async claimSemanticOutbox(input: ClaimKnowledgeSemanticOutboxInput) {
-    return (await this.getStorage()).claimSemanticOutbox(input);
-  }
-
-  async completeSemanticOutbox(input: { ids: string[]; workerId: string }) {
-    return (await this.getStorage()).completeSemanticOutbox(input);
-  }
-
-  async releaseSemanticOutbox(input: { ids: string[]; workerId: string; retryAt?: Date }) {
-    return (await this.getStorage()).releaseSemanticOutbox(input);
+  /**
+   * The display label for a canonical scope address (template children included), with the
+   * declaration's `$params` filled in from the address's decoded values: `'$orgId policy'` on
+   * `policy:$orgId` gives `'acme policy'` for `policy:acme`. A concrete address's own `displayLabel`
+   * wins over its pattern's. `undefined` when the address matches no declaration or has no label.
+   */
+  scopeLabel(address: string): string | undefined {
+    const match = this.#runtime.compiled.match(address);
+    const label = match?.concrete?.displayLabel ?? match?.compiled.declaration.displayLabel;
+    if (label === undefined) return undefined;
+    return label.replace(/\$([A-Za-z_][A-Za-z0-9_]*)/g, (token, name: string) =>
+      Object.hasOwn(match!.params, name) ? match!.params[name]! : token,
+    );
   }
 }
 
 export * from '../storage/domains/knowledge';
+export type { KnowledgeInstructionParts, KnowledgeInstructionsOption } from './instructions';
 export type { KnowledgeConfig } from './config';
+export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';
 export type {
-  KnowledgeScopeAccessConfig,
-  KnowledgeScopeChildTemplate,
-  KnowledgeScopeTypeConfig,
-  KnowledgeScopeTypesConfig,
-  MaterializeKnowledgeScopeInput,
-} from './reconcile';
+  KnowledgePageTemplate,
+  KnowledgeScopeDeclaration,
+  KnowledgeScopeDeclarationInfo,
+  KnowledgeScopeDeclarations,
+  KnowledgeAccessRule,
+  KnowledgeRole,
+} from './declarations';
+import { KnowledgeSemanticIndex } from './semantic';
+export type { KnowledgeAccessExplanation } from './scope-runtime';
+export type { KnowledgeAccessGrant } from './access';
+export type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
