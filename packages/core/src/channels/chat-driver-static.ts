@@ -169,13 +169,6 @@ export async function runStaticDriver({
       continue;
     }
 
-    if (chunk.type === 'text-end') {
-      // Flush as soon as the model finishes a text block so the message
-      // posts before any subsequent tool-call card.
-      await flushText();
-      continue;
-    }
-
     if (chunk.type === 'step-finish') {
       // Flush text accumulated in this step. Tool cards have already been
       // posted as they happened (cards mode) or suppressed (hidden mode),
@@ -214,7 +207,11 @@ export async function runStaticDriver({
     }
 
     if (chunk.type === 'tool-call') {
-      if (channelToolNames.has(chunk.payload.toolName)) continue;
+      if (channelToolNames.has(chunk.payload.toolName)) {
+        // Post the reply before the channel tool (e.g. a reaction) acts on it.
+        await flushText();
+        continue;
+      }
       const enr = tracker.trackStart({
         toolCallId: chunk.payload.toolCallId,
         toolName: chunk.payload.toolName,
