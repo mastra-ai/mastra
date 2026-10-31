@@ -1,5 +1,6 @@
 ---
 '@mastra/playground-ui': patch
+'mastra': patch
 ---
 
 Added `KnowledgePageExplorer`, a Knowledge browser that Studio and Factory share: search, a page tree, a graph of scopes and pages, and a page view, all on one selection.
