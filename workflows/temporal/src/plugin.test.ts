@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -230,10 +230,8 @@ describe('Temporal prebuild integration', () => {
       { exportName: 'mappingMappedWorkflow0', stepId: 'mapping_mapped-workflow_0' },
     ]);
 
-    const activitiesModule = (await import(moduleUrl(activitiesPath))) as Record<string, unknown>;
-    const activitiesByStepId = Object.fromEntries(
-      activityBindings.map(binding => [binding.stepId, activitiesModule[binding.exportName]]),
-    );
+    // The Worker's activities, as Temporal runs them: the plugin wrapper around each generated export.
+    const activitiesByStepId = workerOptions.activities;
     const sleep = vi.fn(async () => {});
     const executeChild = vi.fn(async (workflowType: string, options: { args: [{ inputData: unknown }] }) => {
       const childWorkflow = workflowModule[workflowType];
@@ -297,9 +295,109 @@ describe('Temporal prebuild integration', () => {
       ]),
     );
     expect(executeChild).toHaveBeenCalledWith('innerWorkflow', {
-      args: [{ inputData: { value: 'test-step1' }, workflowId: 'complex-workflow' }],
+      args: [{ inputData: { value: 'test-step1' }, validateInputs: true, workflowId: 'complex-workflow' }],
     });
     expect(sleep).toHaveBeenCalledWith(1000);
+  });
+
+  describe('step input validation (#28308)', () => {
+    type RunWorkflow = (args: { inputData: unknown; requestContext?: Record<string, unknown> }) => Promise<{
+      result: unknown;
+    }>;
+
+    // Runs the generated Workflow code against the plugin's real activities, the code a Worker runs.
+    async function buildWorker() {
+      const tempDir = await mkdtemp(path.join(os.tmpdir(), 'mastra-temporal-validation-'));
+      tempDirs.push(tempDir);
+      await writeMastraCoreShim(tempDir);
+      await writeTemporalWorkflowShim(tempDir);
+      await symlink(
+        path.join(import.meta.dirname, '..', 'node_modules', 'zod'),
+        path.join(tempDir, 'node_modules', 'zod'),
+      );
+
+      mockCompiledBundle(`
+        import { init } from '@mastra/temporal';
+        import { z } from 'zod';
+
+        const { createWorkflow, createStep } = init({ client: undefined, taskQueue: 'mastra' });
+
+        const read = createStep({
+          id: 'read',
+          inputSchema: z.object({ text: z.string() }),
+          execute: async ({ inputData }) => ({ value: inputData.text }),
+        });
+        const increment = createStep({
+          id: 'increment',
+          inputSchema: z.object({ value: z.number(), note: z.string().trim().default('none') }),
+          execute: async ({ inputData }) => ({ value: inputData.value + 1, note: inputData.note }),
+        });
+        const tenant = createStep({
+          id: 'tenant',
+          requestContextSchema: z.object({ tenantId: z.string() }),
+          execute: async ({ requestContext }) => ({ tenantId: requestContext.get('tenantId') }),
+        });
+
+        export const incrementWorkflow = createWorkflow({ id: 'increment-workflow' }).then(increment).commit();
+        export const readWorkflow = createWorkflow({ id: 'read-workflow' }).then(read).then(increment).commit();
+        export const uncheckedWorkflow = createWorkflow({ id: 'unchecked-workflow', options: { validateInputs: false } })
+          .then(read)
+          .then(incrementWorkflow)
+          .commit();
+        export const tenantWorkflow = createWorkflow({ id: 'tenant-workflow' }).then(tenant).commit();
+      `);
+
+      const plugin = new MastraPlugin(path.join(tempDir, 'src', 'index.ts'), tempDir);
+      const workerOptions = await plugin.configureWorker({ taskQueue: 'mastra' } as any);
+      const activities = workerOptions.activities as Record<string, (params: unknown) => Promise<unknown>>;
+
+      let workflows: Record<string, RunWorkflow> = {};
+      (globalThis as typeof globalThis & { __temporalWorkflowMock: unknown }).__temporalWorkflowMock = {
+        proxyActivities: () => activities,
+        executeChild: (workflowType: string, { args }: { args: [never] }) => workflows[workflowType]!(...args),
+        sleep: async () => {},
+        log: { info: () => {} },
+      };
+      workflows = await import(moduleUrl(path.join(tempDir, 'node_modules', '.mastra', 'workflow.mjs')));
+
+      return { workflows, activities };
+    }
+
+    it('fails the run when a step gets input that breaks its schemas, as the built-in engine does', async () => {
+      const { workflows } = await buildWorker();
+
+      // `read` returns a string where `increment` declares a number. Unchecked, the run
+      // succeeded with { value: '51' }.
+      await expect(workflows.readWorkflow!({ inputData: { text: '5' } })).rejects.toMatchObject({
+        type: 'WORKFLOW_STEP_INPUT_VALIDATION_FAILED',
+        nonRetryable: true,
+      });
+      await expect(workflows.incrementWorkflow!({ inputData: { value: 5, note: ' hi ' } })).resolves.toMatchObject({
+        result: { value: 6, note: 'hi' },
+      });
+      await expect(workflows.incrementWorkflow!({ inputData: { value: 5 } })).resolves.toMatchObject({
+        result: { value: 6, note: 'none' },
+      });
+
+      await expect(workflows.tenantWorkflow!({ inputData: {}, requestContext: {} })).rejects.toMatchObject({
+        type: 'WORKFLOW_STEP_REQUEST_CONTEXT_VALIDATION_FAILED',
+        nonRetryable: true,
+      });
+      await expect(
+        workflows.tenantWorkflow!({ inputData: {}, requestContext: { tenantId: 'tenant-1' } }),
+      ).resolves.toMatchObject({ result: { tenantId: 'tenant-1' } });
+    });
+
+    it('skips the checks when the workflow sets validateInputs: false, and in its child workflows', async () => {
+      const { workflows, activities } = await buildWorker();
+
+      await expect(workflows.uncheckedWorkflow!({ inputData: { text: '5' } })).resolves.toMatchObject({
+        result: { value: '51' },
+      });
+      // An Activity scheduled by a Workflow built before the check existed carries no flag. Runs
+      // that were open during the upgrade keep their old behavior.
+      await expect(activities.increment!({ inputData: { value: '5' } })).resolves.toMatchObject({ value: '51' });
+    });
   });
 
   it('excludes Node dependencies used inside activities from generated workflows', async () => {

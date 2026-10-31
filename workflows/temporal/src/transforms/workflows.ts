@@ -62,6 +62,53 @@ function getWorkflowIdMetadata(
 }
 
 /**
+ * Read at build time, so runs started outside `TemporalRun` (Schedules, the Temporal CLI) are
+ * checked too.
+ */
+function getWorkflowValidateInputs(
+  workflowConfig: t.ObjectExpression,
+  workflowName: string,
+  filePath: string,
+): boolean | undefined {
+  const options = workflowConfig.properties.find(
+    (property): property is t.ObjectProperty =>
+      t.isObjectProperty(property) && getObjectPropertyName(property) === 'options',
+  );
+  if (!options) {
+    return undefined;
+  }
+
+  if (!t.isObjectExpression(options.value)) {
+    throw createUnreadableError(workflowName, filePath);
+  }
+
+  let validateInputs: boolean | undefined;
+  for (const property of options.value.properties) {
+    if (t.isSpreadElement(property)) {
+      throw createUnreadableError(workflowName, filePath);
+    }
+
+    if (!t.isObjectProperty(property) || getObjectPropertyName(property) !== 'validateInputs') {
+      continue;
+    }
+
+    if (!t.isBooleanLiteral(property.value)) {
+      throw createUnreadableError(workflowName, filePath);
+    }
+
+    validateInputs = property.value.value;
+  }
+
+  return validateInputs;
+}
+
+function createUnreadableError(workflowName: string, filePath: string): Error {
+  return new Error(
+    `options.validateInputs must be a boolean literal in an inline options object for ${workflowName} in ${filePath}`,
+  );
+}
+
+/**
  * The helper runtime lives in its own `.mjs` module so it can be linted and unit-tested
  * like normal code. We parse that file directly here instead of using `Function#toString()`,
  * which keeps fixture output stable under Vitest/Vite instrumentation.
@@ -474,12 +521,19 @@ function createTemporalWorkflowStatements(
   stepBindings: Map<string, string>,
   workflowBindings: Map<string, WorkflowBinding>,
   runtimeOptions?: t.ObjectExpression,
+  validateInputs?: boolean,
 ): t.Statement[] {
   // Start from `createWorkflow(<static id>)` and rebuild the chain one call at a time
   // using normalized arguments from `rewriteChainMethod`.
   const createWorkflowArgs = [t.cloneNode(workflowId, true)];
-  if (runtimeOptions) {
-    createWorkflowArgs.push(t.cloneNode(runtimeOptions, true));
+  const optionProperties = runtimeOptions ? runtimeOptions.properties.map(property => t.cloneNode(property, true)) : [];
+
+  if (validateInputs !== undefined) {
+    optionProperties.push(t.objectProperty(t.identifier('validateInputs'), t.booleanLiteral(validateInputs)));
+  }
+
+  if (optionProperties.length > 0) {
+    createWorkflowArgs.push(t.objectExpression(optionProperties));
   }
 
   let expression: t.Expression = t.callExpression(t.identifier('createWorkflow'), createWorkflowArgs);
@@ -806,6 +860,7 @@ function rewriteWorkflowVariableDeclaration(
         state.stepBindings,
         state.workflowBindings,
         state.runtimeOptions,
+        getWorkflowValidateInputs(workflowConfig, declaration.id.name, filePath),
       ),
     );
   }

@@ -242,6 +242,19 @@ describe('workflow transform', () => {
     ).rejects.toThrow('requires an inline function or a statically declared function identifier');
   });
 
+  // Guessing a default here would check a workflow that turned checks off, or skip one that didn't.
+  it.each(['options: sharedOptions', 'options: { validateInputs: flag }', 'options: { ...sharedOptions }'])(
+    'fails the build when it cannot read validateInputs from %s',
+    async options => {
+      await expect(
+        transform(`
+          import { createWorkflow } from '@mastra/core/workflows';
+          export const checkedWorkflow = createWorkflow({ id: 'checked-workflow', ${options} }).commit();
+        `),
+      ).rejects.toThrow('options.validateInputs must be a boolean literal in an inline options object');
+    },
+  );
+
   it('forwards mapping options while retaining the generated mapping activity id', async () => {
     const result = await transform(`
       import { createWorkflow } from '@mastra/core/workflows';
