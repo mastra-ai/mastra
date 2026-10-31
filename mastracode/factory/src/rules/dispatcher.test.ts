@@ -306,12 +306,7 @@ async function armItem(storage: WorkItemsStorage, workItemId: string) {
   });
 }
 
-async function preapprovePlans(storage: WorkItemsStorage, workItemId: string) {
-  await storage.update({ orgId: 'org-1', id: workItemId, userId: 'user-1', patch: { plansPreapproved: true } });
-}
-
-async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, options?: { preapprovePlans?: boolean }) {
-  if (options?.preapprovePlans) await preapprovePlans(storage, workItemId);
+async function bindWorkRun(storage: WorkItemsStorage, workItemId: string) {
   const prepared = await storage.prepareRunStart({
     orgId: 'org-1',
     userId: 'user-1',
@@ -360,9 +355,8 @@ function plansAutoApprovedBoards(): BoardRegistry {
 }
 
 /** A card whose run someone asked for: a pending start still waiting to be sent. */
-async function queueRunKickoff(storage: WorkItemsStorage, options?: { preapprovePlans?: boolean }) {
+async function queueRunKickoff(storage: WorkItemsStorage) {
   const item = await createItem(storage);
-  if (options?.preapprovePlans) await preapprovePlans(storage, item.id);
   await storage.prepareRunStart({
     orgId: 'org-1',
     userId: 'user-1',
@@ -4267,9 +4261,9 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
-  it("leaves a legacy hands-off item's plan parked: only the board approves plans", async () => {
+  it("leaves a person-started run's plan parked on stock Work: only the board approves plans", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueRunKickoff(storage, { preapprovePlans: true });
+    const { transitionService } = await queueRunKickoff(storage);
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -4281,12 +4275,11 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.plansPreapprovedAt).toBeInstanceOf(Date);
     expect(session.respondToToolSuspension).not.toHaveBeenCalled();
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
-  it("leaves a legacy hands-off item's plan parked on rule-started follow-up runs too", async () => {
+  it('leaves the plan parked on stock Work for rule-started follow-up runs too', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
@@ -4294,7 +4287,7 @@ describe('FactoryDecisionDispatcher', () => {
       skillName: 'understand-issue',
       idempotencyKey: 'skill-plan-hands-off',
     });
-    await bindWorkRun(storage, item.id, { preapprovePlans: true });
+    await bindWorkRun(storage, item.id);
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -4657,7 +4650,7 @@ describe('FactoryDecisionDispatcher', () => {
     vi.spyOn(storage, 'commitRuleEvaluation').mockImplementation(async input => {
       if (input.ingress.triggerType === 'transition.message' && !raced) {
         raced = true;
-        await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { plansPreapproved: true } });
+        await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { title: 'Raced' } });
       }
       return commit(input);
     });

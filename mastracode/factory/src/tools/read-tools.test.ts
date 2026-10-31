@@ -41,7 +41,6 @@ function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
     metadata: null,
     triageType: null,
     autonomyArmedAt: null,
-    plansPreapprovedAt: null,
     acceptedAt: null,
     commentCount: 0,
     feedActivityAt: null,
