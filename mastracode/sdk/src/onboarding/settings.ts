@@ -1235,11 +1235,6 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
     };
 
     let settingsChanged = false;
-    // Persist the resolved preview line limit under its current key. Legacy quiet-mode keys are
-    // left untouched so older Mastra Code instances that are still running keep working.
-    if (!isFiniteNumber(raw.preferences?.previewLines)) {
-      settingsChanged = true;
-    }
     // Migrate legacy omModelId → omModelOverride
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
