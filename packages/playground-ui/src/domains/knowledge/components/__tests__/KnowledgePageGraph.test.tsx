@@ -78,6 +78,24 @@ describe('KnowledgePageGraph', () => {
     });
   });
 
+  describe('when a page is selected', () => {
+    it('rings it in its own colour, which every circle sets for knowledge.css', async () => {
+      renderWithProviders(
+        <div style={{ width: 800, height: 600 }}>
+          <KnowledgePageGraph pages={pages} edges={[]} selectedPageId="refunds" onSelect={() => {}} />
+        </div>,
+      );
+      const nodes = await screen.findAllByTestId('knowledge-page-node');
+      const circles = Object.fromEntries(
+        nodes.map(node => [node.dataset.pageId, node.querySelector<HTMLElement>('.knowledge-circle')]),
+      );
+      expect(circles.org?.style.getPropertyValue('--knowledge-color')).toBe('var(--chart-blue)');
+      expect(circles.refunds?.style.getPropertyValue('--knowledge-color')).toBe('var(--border-strong)');
+      expect(circles.refunds?.dataset.selected).toBe('true');
+      expect(circles.org?.dataset.selected).toBeUndefined();
+    });
+  });
+
   describe('pin badge', () => {
     it('sits on the circle’s rim, sized to the circle', async () => {
       renderGraph({ pinnedIds: ['refunds'] });

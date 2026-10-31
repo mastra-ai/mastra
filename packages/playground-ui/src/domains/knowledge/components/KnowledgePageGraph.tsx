@@ -16,6 +16,7 @@ import {
 import '@xyflow/react/dist/style.css';
 import { Maximize, Pin } from 'lucide-react';
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import type { CSSProperties } from 'react';
 
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
 import { grantGraph, pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
@@ -27,11 +28,13 @@ import { Txt } from '@/ds/components/Txt';
 
 import './knowledge.css';
 
-const SCOPE_STYLE = {
+// knowledge.css draws the border and the selection ring from this colour.
+type CircleStyle = CSSProperties & { '--knowledge-color': string };
+const SCOPE_STYLE: CircleStyle = {
+  '--knowledge-color': 'var(--chart-blue)',
   background: 'color-mix(in oklab, var(--chart-blue) 16%, var(--card))',
-  borderColor: 'var(--chart-blue)',
 };
-const PAGE_STYLE = { background: 'var(--card)', borderColor: 'var(--border-strong)' };
+const PAGE_STYLE: CircleStyle = { '--knowledge-color': 'var(--border-strong)' };
 
 const PARENT_EDGE_STYLE = {
   stroke: 'var(--foreground)',
@@ -226,7 +229,7 @@ function graphBounds(nodes: Array<{ position: { x: number; y: number }; width?: 
   return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
 }
 
-const LEGEND_SWATCH = 'inline-block size-3 shrink-0 rounded-full border-2';
+const LEGEND_SWATCH = 'knowledge-circle inline-block size-3 shrink-0 rounded-full border-2';
 
 /** What the circles, lines and badge mean. */
 function GraphLegend({ grants }: { grants: boolean }) {

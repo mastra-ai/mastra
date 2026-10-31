@@ -111,19 +111,20 @@ export interface KnowledgeAccessGrant {
 }
 
 /**
- * Every rule that gives one of `principals` a role on one scope. `parentAddress` is the address of
- * the scope page's tree parent, needed for rules that bind through `belongsTo`.
+ * Every rule that gives one of `principals` (or, with `'any'`, any principal) a role on one scope.
+ * `parentAddress` is the address of the scope page's tree parent, needed for rules that bind through
+ * `belongsTo`.
  *
  * @experimental
  */
 export function knowledgeAccessGrants(
   compiled: CompiledKnowledgeScopes,
-  principals: readonly string[],
+  principals: readonly string[] | 'any',
   scope: { address: string; parentAddress?: string | null },
 ): KnowledgeAccessGrant[] {
   const match = compiled.match(scope.address);
   if (!match) return [];
-  const held = new Set(principals);
+  const held = principals === 'any' ? null : new Set(principals);
   const belongsToParams =
     match.compiled.belongsTo && scope.parentAddress
       ? matchKnowledgePattern(match.compiled.belongsTo, scope.parentAddress)
@@ -148,7 +149,8 @@ export function knowledgeAccessGrants(
         principal = bindKnowledgePattern(rule.principal!, match.params);
         via = 'rule';
       }
-      if (principal !== null && held.has(principal)) grants.push({ principal, role: rule.role, rule: label, via });
+      if (principal !== null && (!held || held.has(principal)))
+        grants.push({ principal, role: rule.role, rule: label, via });
     }
   }
   return grants;

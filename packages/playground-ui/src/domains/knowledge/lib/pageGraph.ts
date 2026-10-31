@@ -8,9 +8,6 @@
 import type { Edge, Node } from '@xyflow/react';
 
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
-import type { KnowledgeGraphEdge } from '../types';
-import { degreeMap } from './graphModel';
-import type { NodeDegree } from './graphModel';
 
 /**
  * Edges among loaded, live pages: a parent edge for every loaded parent, and
@@ -108,7 +105,6 @@ export const KNOWLEDGE_PAGE_SIZE = 108;
 export type PageFlowNode = Node<{
   page: KnowledgePagePayload;
   size: number;
-  degree: NodeDegree;
   selected: boolean;
 }>;
 
@@ -120,23 +116,9 @@ export function toPageFlow(
   edges: KnowledgePageEdge[],
   selectedId?: string | null,
 ): { nodes: PageFlowNode[]; edges: PageFlowEdge[] } {
-  // Mention counts per page, for hosts that show them; parent edges add no signal.
-  const degrees = degreeMap(
-    edges
-      .filter(edge => edge.kind === 'mention')
-      .map(
-        (edge, index): KnowledgeGraphEdge => ({
-          id: String(index),
-          source: edge.source,
-          target: edge.target,
-          type: 'wikilink',
-        }),
-      ),
-  );
   const nodes = pages
     .filter(page => !page.deletedAt && !page.mergedInto)
     .map((page): PageFlowNode => {
-      const degree = degrees.get(page.id) ?? { incoming: 0, outgoing: 0 };
       return {
         id: page.id,
         type: 'page',
@@ -144,7 +126,6 @@ export function toPageFlow(
         data: {
           page,
           size: page.isScope ? KNOWLEDGE_SCOPE_SIZE : KNOWLEDGE_PAGE_SIZE,
-          degree,
           selected: page.id === selectedId,
         },
       };
