@@ -434,6 +434,23 @@ describe('init catalog snapshot', () => {
     expect(versions[0].name).toBe('Legacy Agent');
   }, 60000);
 
+  it('adds modelList to existing agent version tables', async () => {
+    const schema = uniqueSchema('agent_versions_model_list');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const first = await newStore(schema);
+    await first.init();
+    await first.close();
+
+    await admin(`ALTER TABLE "${schema}".mastra_agent_versions DROP COLUMN "modelList"`);
+
+    const second = await newStore(schema);
+    await second.init();
+
+    const versionColumns = await columnsIn(schema, 'mastra_agent_versions');
+    expect(versionColumns.has('modelList')).toBe(true);
+  }, 60000);
+
   it('migrates a snapshot-column agent_versions schema with the snapshot live', async () => {
     const schema = uniqueSchema('snapshot_versions');
     await admin(`CREATE SCHEMA "${schema}"`);

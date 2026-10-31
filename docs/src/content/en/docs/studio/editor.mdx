@@ -1,11 +1,11 @@
 ---
-title: "Editor"
-description: "Use Mastra Studio Editor so collaborators can change agent instructions and tools without modifying source code, from draft testing through publication."
+title: 'Editor'
+description: 'Use Mastra Studio Editor so collaborators can change agent instructions and tools without modifying source code, from draft testing through publication.'
 packages:
-  - "@mastra/core"
-  - "@mastra/editor"
-  - "@mastra/client-js"
-  - "@mastra/libsql"
+  - '@mastra/core'
+  - '@mastra/editor'
+  - '@mastra/client-js'
+  - '@mastra/libsql'
 ---
 
 # Editor
@@ -159,7 +159,7 @@ See the [Editor tools reference](/reference/editor/tools) for MCP configuration,
 
 ## Decide what collaborators can edit
 
-The `editor` field decides which fields Studio owns. When omitted, collaborators can change an agent's instructions and manage its tools, including their descriptions, starting from the values in code. The agent's `id`, `name`, and `model` always come from code.
+The `editor` field decides which fields Studio owns. When omitted, collaborators can change an agent's instructions and manage its tools, including their descriptions, starting from the values in code. The agent's `id`, `name`, and model configuration come from code unless you explicitly enable model editing.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -203,8 +203,11 @@ Here Studio owns the instructions, while tool membership stays in code: collabor
 | `{ instructions: true }` | Instructions | No `instructions`; tools are optional |
 | `{ tools: true }` | Tools and tool descriptions | `instructions`; no `tools` |
 | `{ tools: { description: true } }` | Descriptions of tools already added in code | `instructions`; the tools to describe |
+| `{ model: true }` | A static model fallback list | A static fallback array with immutable entry IDs |
 
-Studio shows everything else as read-only. See [editor overrides](/reference/agents/agent#editor-overrides) for the complete configuration.
+Model editing requires a code-defined fallback array with an immutable `id` for every entry. Studio can change the order, provider and model, enabled state, and `maxRetries`. Each edit creates or updates an Editor draft. Publish the draft to make it the active configuration and persist it in code-backed Editor storage.
+
+Function-valued model configuration remains code-owned and can't be edited in Studio. See [editor overrides](/reference/agents/agent#editor-overrides) for the complete configuration.
 
 ## Choose where changes are stored
 

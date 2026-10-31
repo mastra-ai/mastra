@@ -1,3 +1,4 @@
+import { Badge } from '@mastra/playground-ui/components/Badge';
 import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
@@ -15,6 +16,8 @@ import {
   useChannelPlatforms,
 } from '@mastra/react/hooks/agents';
 import { Boxes, Brain, Cpu, Folder, Gauge, Globe, Radio, Sparkles, Workflow, Wrench } from 'lucide-react';
+import type { ComponentProps } from 'react';
+import { useWatch } from 'react-hook-form';
 import { extractPrompt } from '../../utils/extractPrompt';
 import { AgentChannels } from '../agent-channels/agent-channels';
 import {
@@ -31,6 +34,9 @@ import { AgentMetadataModelList } from '../agent-metadata/agent-metadata-model-l
 import { AgentMetadataSection } from '../agent-metadata/agent-metadata-section';
 import { AgentMemoryConfig } from '../agent-settings/agent-memory-config';
 import { AgentSystemPrompt } from './agent-system-prompt';
+import type { AgentEditFormContextValue } from '@/domains/agents/context/agent-edit-form-context';
+import { useOptionalAgentEditFormContext } from '@/domains/agents/context/agent-edit-form-context';
+import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
 import { useRouteSidePanel } from '@/lib/route-side-panel';
 
@@ -63,15 +69,79 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
   );
 }
 
+type ModelListProps = ComponentProps<typeof AgentMetadataModelList>;
+
+function EditorOwnedModelList({
+  modelList,
+  editable,
+  readOnly,
+  form,
+}: Pick<ModelListProps, 'modelList' | 'editable' | 'readOnly'> & Pick<AgentEditFormContextValue, 'form'>) {
+  const formModelList = useWatch({ control: form.control, name: 'modelList' });
+
+  const reorderModelList: NonNullable<ModelListProps['reorderModelList']> = async params => {
+    const currentList = form.getValues('modelList') ?? [];
+    const entriesById = new Map(currentList.map(entry => [entry.id, entry]));
+    form.setValue(
+      'modelList',
+      params.reorderedModelIds.flatMap(id => {
+        const entry = entriesById.get(id);
+        return entry ? [entry] : [];
+      }),
+      { shouldDirty: true },
+    );
+    return { message: 'Model list reordered' };
+  };
+
+  const updateModelInModelList: NonNullable<ModelListProps['updateModelInModelList']> = async params => {
+    const currentList = form.getValues('modelList') ?? [];
+    form.setValue(
+      'modelList',
+      currentList.map(entry =>
+        entry.id === params.modelConfigId
+          ? {
+              ...entry,
+              enabled: params.enabled ?? entry.enabled,
+              maxRetries: params.maxRetries ?? entry.maxRetries,
+              model: {
+                ...entry.model,
+                provider: params.model?.provider ?? entry.model.provider,
+                modelId: params.model?.modelId ?? entry.model.modelId,
+              },
+            }
+          : entry,
+      ),
+      { shouldDirty: true },
+    );
+    return { message: 'Model updated' };
+  };
+
+  return (
+    <AgentMetadataModelList
+      modelList={formModelList ?? modelList}
+      editable={editable}
+      readOnly={readOnly}
+      updateModelInModelList={updateModelInModelList}
+      reorderModelList={reorderModelList}
+    />
+  );
+}
+
 function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
+  const editFormContext = useOptionalAgentEditFormContext();
   const { data: agent, isLoading } = useAgent({
     agentId: agentId,
+    version: { status: 'draft' },
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
   const { mutateAsync: reorderModelList } = useReorderModelList({ agentId: agentId });
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList({ agentId: agentId });
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+  const ownsModel = getEditorOwnership(
+    editFormContext?.isCodeAgentOverride ?? false,
+    editFormContext?.editorConfig,
+  ).ownsModel;
 
   const reportModelListError = (error: Error & { body?: { error?: string } }) => {
     toast.error(error.body?.error || error.message || 'Failed to update model list');
@@ -94,6 +164,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
       throw error;
     }
   };
+
   const { data: channelPlatforms } = useChannelPlatforms();
 
   if (isLoading) {
@@ -131,13 +202,27 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
   return (
     <>
       {agent.modelList && (
-        <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
-          <AgentMetadataModelList
-            modelList={agent.modelList}
-            editable={agent.modelListEditable !== false}
-            updateModelInModelList={handleUpdateModelInModelList}
-            reorderModelList={handleReorderModelList}
-          />
+        <AgentMetadataSection
+          title="Models"
+          accent="blue"
+          icon={<Boxes />}
+          actions={editFormContext?.readOnly ? <Badge variant="warning">Read-only</Badge> : undefined}
+        >
+          {ownsModel && editFormContext ? (
+            <EditorOwnedModelList
+              modelList={agent.modelList}
+              editable={agent.modelListEditable !== false}
+              readOnly={editFormContext.readOnly}
+              form={editFormContext.form}
+            />
+          ) : (
+            <AgentMetadataModelList
+              modelList={agent.modelList}
+              editable={agent.modelListEditable !== false}
+              updateModelInModelList={handleUpdateModelInModelList}
+              reorderModelList={handleReorderModelList}
+            />
+          )}
         </AgentMetadataSection>
       )}
 

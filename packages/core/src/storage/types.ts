@@ -410,6 +410,15 @@ export interface StorageModelConfig {
   [key: string]: unknown;
 }
 
+/** Serializable model fallback entry stored in agent snapshots. */
+export interface StorageModelListEntry {
+  id: string;
+  provider: string;
+  modelId: string;
+  enabled: boolean;
+  maxRetries: number;
+}
+
 /**
  * Default options stored in agent snapshots.
  * Based on AgentExecutionOptionsBase but omitting non-serializable properties.
@@ -503,6 +512,8 @@ export interface StorageAgentSnapshotType {
   instructions: string | AgentInstructionBlock[];
   /** Model configuration (provider, name, etc.) — static or conditional on request context */
   model: StorageConditionalField<StorageModelConfig>;
+  /** Ordered model fallback list owned by Studio for opted-in code agents. */
+  modelList?: StorageModelListEntry[];
   /** Tool keys with optional per-tool config — static or conditional on request context */
   tools?: StorageConditionalField<Record<string, StorageToolConfig>>;
   /** Default options for generate/stream calls — static or conditional on request context */

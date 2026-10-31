@@ -558,6 +558,7 @@ export type AgentEditorConfig =
   | {
       instructions?: boolean;
       tools?: boolean | { description?: boolean };
+      model?: boolean;
     };
 
 /**
