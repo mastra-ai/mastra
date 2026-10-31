@@ -59,7 +59,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
-  const { activeModelId, isLoading: modelLoading, error: modelError } = useChatModels();
+  const { error: modelError } = useChatModels();
   const {
     commands,
     composerDraft: draft,
@@ -84,13 +84,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const liveRun = phase === 'working' && !preparingThreadId;
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
-  const draftConfigNotReady = onUserDraft && (modelLoading || modelError !== undefined);
-  const attachDisabled = blocked || chatPreparing || planFeedback.pending;
+  // A draft send waits for a model still loading, so only a model that failed to load holds it back.
+  const draftModelFailed = onUserDraft && modelError !== undefined;
+  const startingDraft = createDraftSessionMutation.isPending;
+  const attachDisabled = blocked || chatPreparing || planFeedback.pending || startingDraft;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
-    disabled: chatPreparing || planFeedback.pending,
+    disabled: chatPreparing || planFeedback.pending || startingDraft,
   });
-  const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
-  const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
+  const composerDisabled = startingDraft || blocked || planFeedback.isSubmitting;
+  const sendDisabled = composerDisabled || draftModelFailed || chatPreparing || planFeedback.loading;
   const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
   const shownText = preview?.text ?? draft;
   const hasSubmittableDraft = shownText.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
@@ -102,7 +104,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       ? 'Steer the agent…'
       : 'Ask Mastra Code…';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
-  const sendTitle = chatPreparing ? 'Initializing session…' : undefined;
+  const sendTitle = chatPreparing ? 'Initializing session…' : startingDraft ? 'Starting session…' : undefined;
 
   const updateDraft = setComposerDraft;
 
@@ -250,7 +252,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       <ComposerHeader open={connectionNotice !== undefined}>
         {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
       </ComposerHeader>
-      <ComposerRing busy={(busy || chatPreparing) && !connectionLost}>
+      <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />

@@ -36,6 +36,16 @@ function acceptSessionCreate(title: string): unknown[] {
   return createBodies;
 }
 
+function deferred() {
+  let resolve = () => {};
+  let reject = (_reason: unknown) => {};
+  const promise = new Promise<void>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 async function draftReadyForImages() {
   const message = await screen.findByRole('textbox', { name: 'Message' });
   await waitFor(() => expect(screen.getByRole('button', { name: 'Attach image' })).toBeEnabled());
@@ -171,6 +181,68 @@ describe('Starting a user session with images attached', () => {
     });
   });
 
+  describe('sending before the draft model has loaded', () => {
+    it('holds the prompt and its images, then starts the session once the model is known', async () => {
+      const modelDefaults = deferred();
+      const preparation = stubPreparingSession({
+        createdSessionTitle: 'what is wrong here',
+        defaultModelGate: modelDefaults.promise,
+      });
+      const createBodies = acceptSessionCreate('what is wrong here');
+      const user = userEvent.setup();
+      const { client, container } = renderDraft();
+      const message = await draftReadyForImages();
+      expect(await screen.findByLabelText('Loading model')).toBeInTheDocument();
+      await dropScreenshot(container);
+
+      await user.type(message, 'what is wrong here');
+      await user.keyboard('{Enter}');
+
+      // Nothing is dropped and nothing can change while the session waits on the model.
+      expect(await screen.findByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'Starting session…');
+      expect(message).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled();
+      expect(createBodies).toEqual([]);
+      expect(screen.getByTestId('pathname')).toHaveTextContent(DRAFT_URL);
+
+      modelDefaults.resolve();
+
+      await waitFor(() => expect(screen.getByTestId('pathname')).toHaveTextContent(THREAD_URL));
+      expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'what is wrong here', visibility: 'private' }]);
+      await waitFor(() => expect(preparation.posted).toEqual(['what is wrong here']));
+      expect(preparation.postedFiles).toEqual([SENT_SHOT]);
+
+      preparation.finishWorkspace();
+      await waitForMutationsIdle(client);
+      await waitFor(() => expect(preparation.delivered).toEqual(['what is wrong here']));
+    });
+
+    it('gives the prompt and its images back when the model cannot be loaded', async () => {
+      const modelDefaults = deferred();
+      const preparation = stubPreparingSession({ defaultModelGate: modelDefaults.promise });
+      const createBodies = acceptSessionCreate('unused');
+      const user = userEvent.setup();
+      const { client, container } = renderDraft();
+      const message = await draftReadyForImages();
+      expect(await screen.findByLabelText('Loading model')).toBeInTheDocument();
+      await dropScreenshot(container);
+
+      await user.type(message, 'look at this');
+      await user.keyboard('{Enter}');
+      expect(await screen.findByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'Starting session…');
+
+      modelDefaults.reject(new Error('model settings down'));
+
+      expect(await screen.findByText(/Request failed \(500\)/)).toBeInTheDocument();
+      await waitForMutationsIdle(client);
+      expect(screen.getByTestId('pathname')).toHaveTextContent(DRAFT_URL);
+      expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('look at this');
+      expect(screen.getByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
+      expect(createBodies).toEqual([]);
+      expect(preparation.posted).toEqual([]);
+    });
+  });
+
   describe('when the first prompt fails', () => {
     it('keeps the text and images in the composer when the session cannot be created', async () => {
       const preparation = stubPreparingSession();
@@ -187,9 +259,10 @@ describe('Starting a user session with images attached', () => {
       await user.type(message, 'look at this');
       await user.keyboard('{Enter}');
 
+      // The draft opens its thread at once, then comes back when the create fails.
       expect(await screen.findByText(/Could not create the session: Database unavailable/)).toBeInTheDocument();
       expect(screen.getByTestId('pathname')).toHaveTextContent(DRAFT_URL);
-      expect(message).toHaveValue('look at this');
+      expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('look at this');
       expect(screen.getByRole('button', { name: 'Remove shot.png' })).toBeInTheDocument();
       expect(preparation.posted).toEqual([]);
     });

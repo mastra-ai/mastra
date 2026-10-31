@@ -1,5 +1,5 @@
 /**
- * SPA route table (React Router v7, data mode).
+ * SPA route table (React Router v8, data mode).
  *
  * Auth gating happens in React layout components, not loaders: `RequireAuth`
  * wraps the app routes and reads `/auth/me` through the `useFactoryAuth` custom
@@ -30,8 +30,12 @@ import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onb
 
 // Only the boards ship in the startup bundle; every other page loads on first
 // visit behind its own loader (see `lazyPage`).
-const NewPage = lazyPage(() => import('./pages/NewPage').then(module => module.NewPage));
 const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage));
+// A new session opens its thread on the first prompt, so that page loads alongside.
+const NewPage = lazyPage(() => {
+  void ThreadPage.preload();
+  return import('./pages/NewPage').then(module => module.NewPage);
+});
 const KnowledgePage = lazyPage(() => import('./pages/KnowledgePage').then(module => module.KnowledgePage));
 const SettingsPage = lazyPage(() => import('./pages/SettingsPage').then(module => module.SettingsPage));
 const SlackConnectionPage = lazyPage(() =>

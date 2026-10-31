@@ -9,8 +9,9 @@ import { useChatCommands } from '../context/ChatCommandsProvider';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useComposerImagesState } from '../context/useComposerImagesState';
+import type { PendingImage } from '../context/ComposerImagesContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { takeHandoffFiles } from '../services/handoffFiles';
+import { peekHandoffFiles, takeHandoffFiles } from '../services/handoffFiles';
 
 interface PromptHandoff {
   handoffPrompt: string;
@@ -44,6 +45,15 @@ function readHandoffPrompt(state: unknown): string | undefined {
   if (!isRecord(state)) return undefined;
   const value = state.handoffPrompt;
   return typeof value === 'string' ? value : undefined;
+}
+
+/** A thread opened with a first prompt to send: its session may still be being created. */
+export function opensWithPrompt(state: unknown): boolean {
+  return readHandoffPrompt(state) !== undefined;
+}
+
+function toOutgoing(files: PendingImage[]) {
+  return files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
 }
 
 const pendingHandoffKey = (sessionId: string) => `factory-pending-handoff:${sessionId}`;
@@ -89,33 +99,42 @@ export function useHandoffPrompt(): void {
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation(mutationArgs);
   const handedOff = useRef(false);
   const recovered = useRef(false);
+  const shown = useRef(false);
   const prompt = readHandoffPrompt(location.state);
   const modelId = readHandoffField(location.state, 'handoffModelId');
   const handoffThinkingLevel = readHandoffField(location.state, 'handoffThinkingLevel');
   const thinkingLevel = isThinkingLevelSetting(handoffThinkingLevel) ? handoffThinkingLevel : undefined;
 
   useEffect(() => {
-    if (!sessionEnabled) return;
     if (handedOff.current) return;
+    // The prompt shows as soon as the thread opens, while its session may still
+    // be being created; it sends once the session exists. Kept recoverable from
+    // then on: leaving before the send, or an interrupted send, must not lose it.
+    if (prompt !== undefined && !shown.current) {
+      shown.current = true;
+      storePendingHandoff(sessionId, prompt);
+      const files = peekHandoffFiles(sessionId);
+      if (prompt || files.length > 0) localUser(prompt, false, toOutgoing(files));
+    }
+    if (!sessionEnabled) return;
     if (prompt === undefined) {
       if (recovered.current) return;
       recovered.current = true;
       const interruptedPrompt = readPendingHandoff(sessionId);
-      if (interruptedPrompt) {
-        prefillComposer(interruptedPrompt);
+      const interruptedFiles = takeHandoffFiles(sessionId);
+      if (interruptedPrompt || interruptedFiles.length > 0) {
+        if (interruptedPrompt) prefillComposer(interruptedPrompt);
+        if (interruptedFiles.length > 0) setImages(current => [...interruptedFiles, ...current]);
         pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
       }
       return;
     }
     handedOff.current = true;
     const files = takeHandoffFiles(sessionId);
-    // Keep a recoverable draft before dropping history state. Never auto-resend
-    // after an interruption: the server may already have accepted the message.
-    storePendingHandoff(sessionId, prompt);
+    // Never auto-resend after an interruption: the server may already have accepted the message.
     void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
     if (!prompt && files.length === 0) return;
-    const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
-    localUser(prompt, false, outgoing);
+    const outgoing = toOutgoing(files);
     void (async () => {
       if (modelId) {
         await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>

@@ -4,7 +4,7 @@ import { useParams } from 'react-router';
 import type { AvailableModelsTarget } from '../../../../hooks/useAvailableModels';
 import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
 import { useSessionModelCatalogQuery } from '../../../../hooks/useSessionModelCatalog';
-import { newChatCatalogTarget } from './chatDefaultModel';
+import { draftModelScope, newChatCatalogTarget } from './chatDefaultModel';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import { useChatSessionContext } from './useChatSessionContext';
 
@@ -28,7 +28,7 @@ export function useChatModelScope() {
       };
   const sessionModelsQuery = useSessionModelCatalogQuery(sessionTarget);
   const storedScope = projectQuery.data?.modelScope;
-  const draftScope = storedScope === 'hybrid' ? kind : storedScope;
+  const draftScope = draftModelScope(storedScope, kind);
   const modelScope = sessionTarget
     ? (sessionModelsQuery.data?.modelScope ?? (sessionModelsQuery.isSuccess ? draftScope : undefined))
     : draftScope;
