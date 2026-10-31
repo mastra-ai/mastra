@@ -74,7 +74,7 @@ export interface CreateSubagentToolOptions {
   controllerTools?: ToolsInput;
   /** Fallback model ID when subagent definition has no defaultModelId */
   fallbackModelId?: string;
-  /** Returns the parent model ID for display when a subagent call is forked. */
+  /** Returns the active parent model ID, also used as the default for fresh subagents. */
   getParentModelId?: () => string;
   /**
    * Returns the parent Agent that owns the current run. Invoked when a
@@ -309,9 +309,10 @@ Use this tool when:
           }
         }
 
-        // Resolve model: explicit arg → controller setting → subagent default → fallback
+        // Resolve model: explicit arg → controller setting → active parent → subagent default → fallback
         const controllerModelId = controllerCtx?.getSubagentModelId?.({ agentType }) ?? undefined;
-        const maybeModelId = modelId ?? controllerModelId ?? definition.defaultModelId ?? fallbackModelId;
+        const maybeModelId =
+          modelId ?? controllerModelId ?? opts.getParentModelId?.() ?? definition.defaultModelId ?? fallbackModelId;
         if (!maybeModelId) {
           return { content: 'No model ID available for subagent. Configure defaultModelId.', isError: true };
         }
@@ -491,7 +492,34 @@ Use this tool when:
           return { content: abortResult, isError: false };
         }
 
-        const message = err instanceof Error ? err.message : String(err);
+        // A generic stream error can wrap the useful provider rejection. Read only
+        // messages and status, never request/response headers or arbitrary body fields.
+        const messages: string[] = [];
+        let current: unknown = err;
+        for (let depth = 0; current && typeof current === 'object' && depth < 4; depth++) {
+          const detail = current as {
+            message?: unknown;
+            statusCode?: unknown;
+            responseBody?: unknown;
+            cause?: unknown;
+          };
+          if (typeof detail.message === 'string') messages.push(detail.message.slice(0, 4096));
+          if (typeof detail.statusCode === 'number') messages.push(`HTTP ${detail.statusCode}`);
+          if (typeof detail.responseBody === 'string' && detail.responseBody.length <= 65536) {
+            try {
+              const body = JSON.parse(detail.responseBody);
+              const providerMessage = body?.error?.message ?? body?.message;
+              if (typeof providerMessage === 'string') messages.push(providerMessage.slice(0, 4096));
+            } catch {
+              // Non-JSON response bodies may contain unrelated private data.
+            }
+          }
+          current = detail.cause;
+        }
+        const message = ([...new Set(messages)].join('; ') || (err instanceof Error ? err.message : String(err))).slice(
+          0,
+          8192,
+        );
         emitEvent?.({ type: 'subagent_end', toolCallId, agentType, result: message, isError: true, durationMs });
 
         return { content: `Subagent "${definition.name}" failed: ${message}`, isError: true };
