@@ -23,6 +23,7 @@ import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import { createTool, isValidationError, validateToolInput } from '@mastra/core/tools';
 import type { InternalCoreTool, MCPToolExecutionContext, MCPToolType, ToolAction } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
+import type { ToolExecuteFGACheck } from '@mastra/core/utils';
 import type { SuspendOptions, Workflow } from '@mastra/core/workflows';
 import { PromptSchema } from '@modelcontextprotocol/core';
 import { RESOURCE_MIME_TYPE, RESOURCE_URI_META_KEY } from '@modelcontextprotocol/ext-apps';
@@ -371,9 +372,8 @@ export class MCPServer extends MCPServerBase {
         mastra: this.mastra,
         logger: this.logger,
         description: 'description' in tool ? tool.description : undefined,
-        // enforceToolExecutionFGA authorizes every call against this server's tool resource. The
-        // builder's own check would ask about the standalone tool instead (#28787).
-        authorizedBy: 'mcp-server',
+        // Without it the tool would check the standalone tool resource, not this server's (#28787).
+        resolveExecuteFGA: ({ user, requestContext }) => this.toolFGACheck(name, user, requestContext),
       }) as InternalCoreTool;
       converted[name] = { ...coreTool, id: name } as InternalCoreTool;
     };
@@ -2053,27 +2053,39 @@ export class MCPServer extends MCPServerBase {
 
     const { getMCPToolFGAResourceId, requireFGA, FGADeniedError, MastraFGAPermissions } =
       await import('@mastra/core/auth/ee');
-    const resourceId = getMCPToolFGAResourceId(this.id, toolId);
     const user = requestContext.get('user');
     if (!user) {
-      throw new FGADeniedError({ id: 'unknown' }, { type: 'tool', id: resourceId }, MastraFGAPermissions.TOOLS_EXECUTE);
+      const resource = { type: 'tool', id: getMCPToolFGAResourceId(this.id, toolId) };
+      throw new FGADeniedError({ id: 'unknown' }, resource, MastraFGAPermissions.TOOLS_EXECUTE);
     }
+    await requireFGA({ fgaProvider, user, requestContext, ...(await this.toolFGACheck(toolId, user, requestContext)) });
+  }
+
+  /**
+   * The check for one of this server's tools: its MCP tool resource, or the server's `fga` mapping.
+   * The tools it builds run the same check, so they keep it when used outside the server, such as
+   * through `tools()` on an agent.
+   */
+  private async toolFGACheck(
+    toolId: string,
+    user: unknown,
+    requestContext: RequestContext | undefined,
+  ): Promise<ToolExecuteFGACheck> {
+    const { getMCPToolFGAResourceId, MastraFGAPermissions } = await import('@mastra/core/auth/ee');
+    const resourceId = getMCPToolFGAResourceId(this.id, toolId);
     const permission =
       this.fga?.permissionMapping?.[MastraFGAPermissions.TOOLS_EXECUTE] ?? MastraFGAPermissions.TOOLS_EXECUTE;
     const mapping = this.fga?.resourceMapping?.tool ?? this.fga?.resourceMapping?.tools;
-    const resource = mapping
-      ? { type: mapping.fgaResourceType, id: mapping.deriveId?.({ user, resourceId, requestContext }) ?? resourceId }
-      : { type: 'tool', id: resourceId };
-
-    await requireFGA({
-      fgaProvider,
-      user,
-      resource,
+    // deriveId is only ever given a user; without one, requireFGA denies or defers to a trusted actor.
+    const derivedId = mapping && user ? mapping.deriveId?.({ user, resourceId, requestContext }) : undefined;
+    return {
+      resource: mapping
+        ? { type: mapping.fgaResourceType, id: derivedId ?? resourceId }
+        : { type: 'tool', id: resourceId },
       permission,
-      requestContext,
       context: { resourceId },
       metadata: { mcpServerId: this.id, mcpServerName: this.name, toolId },
-    });
+    };
   }
 
   private async authorizedToolEntries(requestContext: RequestContext): Promise<Array<[string, InternalCoreTool]>> {

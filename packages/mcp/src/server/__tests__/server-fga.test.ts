@@ -215,4 +215,21 @@ describe('MCP Server FGA checks', () => {
       expect.objectContaining({ resource: { type: 'mcp-user', id: 'user-1' }, permission: 'read' }),
     );
   });
+
+  // `tools()` hands these tools to agents (the editor's stored agents do), outside the server's own check.
+  it('checks the server tool resource when its tools run outside the server', async () => {
+    const { server, execute, resourceId } = makeServer();
+    const fga = provider([`tool:${resourceId('native')}`]);
+    server.__registerMastra(mockMastra(fga) as any);
+    const requestContext = userContext('user-1');
+    const tools = server.tools();
+
+    await expect(
+      tools['test-tool']!.execute!({ input: 'hello' }, { toolCallId: 'call-1', messages: [], requestContext }),
+    ).rejects.toMatchObject({ name: 'FGADeniedError' });
+    expect(execute).not.toHaveBeenCalled();
+    await expect(tools.native!.execute!({}, { toolCallId: 'call-2', messages: [], requestContext })).resolves.toBe(
+      'native ran',
+    );
+  });
 });
