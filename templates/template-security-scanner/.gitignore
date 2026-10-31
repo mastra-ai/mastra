@@ -11,3 +11,4 @@ data/
 *.log
 .DS_Store
 /package-lock.json
+/web/dist/

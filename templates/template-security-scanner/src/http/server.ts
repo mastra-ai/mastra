@@ -24,6 +24,7 @@ import { AdvisorySync } from '../advisory/sync.js';
 import { registerIntelligenceRoutes } from './intelligence-routes.js';
 import { InvestigationService } from '../investigation/service.js';
 import { registerInvestigationRoutes } from './investigation-routes.js';
+import { registerConsoleRoutes } from './console-routes.js';
 import { MastraInvestigationModels, type InvestigationModels } from '../investigation/models.js';
 import { OwnedGatewayVerifier } from '../investigation/driver.js';
 
@@ -111,6 +112,7 @@ export async function startControlPlane(
   registerDomainRoutes(app, service, scans);
   registerIntelligenceRoutes(app, catalog, playbooks, advisory, () => investigations!.processSchedules(OPERATOR_ID));
   registerInvestigationRoutes(app, investigations, settings.SCANNER_INVESTIGATION_ENABLED);
+  await registerConsoleRoutes(app, settings, investigations, service);
   app.get('/api/runtime', async context => {
     let scanningEnabled = false;
     if (settings.SCANNER_DISCOVERY_ENABLED)

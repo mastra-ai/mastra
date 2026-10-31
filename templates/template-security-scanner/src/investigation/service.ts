@@ -41,6 +41,12 @@ export interface VerificationDriver {
 
 export class InvestigationService {
   readonly store: InvestigationStore;
+  approvalCallback() {
+    return this.ownedLab?.callback ?? null;
+  }
+  modelConfigured() {
+    return this.enabled && !!this.models;
+  }
   private workerTimer?: NodeJS.Timeout;
   private readonly workers = new Set<Promise<unknown>>();
   private readonly active = new Map<string, Set<AbortController>>();

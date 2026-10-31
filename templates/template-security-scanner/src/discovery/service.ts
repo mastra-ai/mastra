@@ -102,6 +102,10 @@ export class ScanService {
             exhausted: false,
             reason: null,
           };
+          scan.budgetInitial = {
+            requests: context.target.scanLimits.maxRequests,
+            bytes: context.target.scanLimits.maxResponseBytes,
+          };
         },
       );
       if (result.created) {

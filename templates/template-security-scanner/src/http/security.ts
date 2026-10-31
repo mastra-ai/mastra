@@ -34,10 +34,21 @@ export function protectControlPlane(
     context.header('Cache-Control', 'no-store');
     context.header('X-Content-Type-Options', 'nosniff');
     context.header('Referrer-Policy', 'no-referrer');
+    context.header('X-Frame-Options', 'DENY');
+    context.header('Cross-Origin-Resource-Policy', 'same-origin');
+    context.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    context.header(
+      'Content-Security-Policy',
+      "default-src 'none'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+    );
+    const publicShell =
+      context.req.method === 'GET' &&
+      (context.req.path === '/' || /^\/assets\/(?:console|style)-[a-f0-9]{64}\.(?:js|css)$/.test(context.req.path));
     if (!bootstrapSecret) {
-      if (context.req.method !== 'GET' || context.req.path !== '/api/runtime')
+      if (!publicShell && (context.req.method !== 'GET' || context.req.path !== '/api/runtime'))
         return context.json({ code: 'EXECUTION_DISABLED' }, 403);
     } else if (
+      !publicShell &&
       !(context.req.path === '/api/session' && context.req.method === 'POST') &&
       !(context.req.path === '/api/runtime' && context.req.method === 'GET')
     ) {
@@ -67,6 +78,16 @@ export function protectControlPlane(
     sessions.set(token, { csrf, expiresAt });
     setCookie(context, COOKIE, token, { httpOnly: true, sameSite: 'Strict', path: '/', maxAge: sessionTtlSeconds });
     return context.json({ csrfToken: csrf, expiresAt: new Date(expiresAt).toISOString(), operator: OPERATOR_ID }, 201);
+  });
+  app.get('/api/session', context => {
+    const token = getCookie(context, COOKIE);
+    const session = token ? sessions.get(token) : undefined;
+    if (!session || session.expiresAt <= Date.now()) throw new ControlPlaneError('LOCAL_SESSION_REQUIRED', 403);
+    return context.json({
+      csrfToken: session.csrf,
+      expiresAt: new Date(session.expiresAt).toISOString(),
+      operator: OPERATOR_ID,
+    });
   });
   app.delete('/api/session', context => {
     const token = getCookie(context, COOKIE);

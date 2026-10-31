@@ -92,6 +92,25 @@ export type Approval = {
   createdAt: string;
   decidedAt: string | null;
 };
+export type Finding = {
+  id: string;
+  jobId: string;
+  investigationId: string;
+  owner: string;
+  hypothesisId: string;
+  evidenceIds: string[];
+  proofId: string;
+  createdAt: string;
+};
+export type StoredProof = {
+  id: string;
+  jobId: string;
+  investigationId: string;
+  owner: string;
+  hypothesisId: string;
+  proof: VerificationProof;
+  createdAt: string;
+};
 
 const read = <T>(row: object | undefined): T => {
   if (!row) throw new ControlPlaneError('NOT_FOUND', 404);
@@ -214,6 +233,21 @@ export class InvestigationStore {
   }
   getApproval(id: string, owner: string, tx?: Transaction) {
     return this.record<Approval>('scanner_approvals', id, owner, tx);
+  }
+  getFinding(id: string, owner: string) {
+    return this.record<Finding>('scanner_findings', id, owner);
+  }
+  getProof(id: string, owner: string) {
+    return this.record<StoredProof>('scanner_verification_proofs', id, owner);
+  }
+  async getRecurrence(targetId: string, owner: string) {
+    const result = await this.client.execute({
+      sql: 'SELECT data FROM scanner_recurrences WHERE target_id=? AND owner=?',
+      args: [targetId, owner],
+    });
+    return result.rows[0]
+      ? read<ScheduleInput & { owner: string; revision: number; nextAt: string }>(result.rows[0])
+      : null;
   }
   getOwnedResource(id: string, owner: string, tx?: Transaction) {
     return this.record<OwnedResource>('scanner_owned_resources', id, owner, tx);
@@ -1239,6 +1273,20 @@ export class InvestigationStore {
     });
     return result.rows.map(row => ({
       id: String(row.id),
+      role: String(row.role),
+      modelId: String(row.model_id),
+      usageTokens: row.usage_tokens === null ? null : Number(row.usage_tokens),
+      occurredAt: String(row.occurred_at),
+    }));
+  }
+  async recentModelEvents(owner: string, limit: number, offset: number) {
+    const result = await this.client.execute({
+      sql: 'SELECT id,investigation_id,role,model_id,usage_tokens,occurred_at FROM scanner_model_events WHERE owner=? ORDER BY occurred_at DESC,id DESC LIMIT ? OFFSET ?',
+      args: [owner, limit, offset],
+    });
+    return result.rows.map(row => ({
+      id: String(row.id),
+      investigationId: String(row.investigation_id),
       role: String(row.role),
       modelId: String(row.model_id),
       usageTokens: row.usage_tokens === null ? null : Number(row.usage_tokens),

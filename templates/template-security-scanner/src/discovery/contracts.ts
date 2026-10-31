@@ -179,6 +179,10 @@ export const scanSchema = z
       .default({ expiredCount: 0, lastExpiredAt: null }),
     cleanup: z.enum(['PENDING', 'COMPLETE', 'DEBT']),
     budget: budgetSchema,
+    budgetInitial: z
+      .object({ requests: z.number().int().nonnegative(), bytes: z.number().int().nonnegative() })
+      .strict()
+      .optional(),
     roles: z.array(roleResultSchema).max(32),
     diagnostic: runtimeCodeSchema.nullable(),
     networkCounters: z

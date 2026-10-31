@@ -296,6 +296,8 @@ except Exception as e:
   };
   return {
     settings,
+    url: () => running.url,
+    bootstrapSecret: bootstrap,
     request,
     async query(sql: string) {
       const database = createClient({ url: settings.databaseUrl });

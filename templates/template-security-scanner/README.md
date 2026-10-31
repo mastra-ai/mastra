@@ -1,6 +1,6 @@
 # Security Scanner
 
-Security Scanner maps explicitly authorized websites and APIs into a persisted inventory of endpoints, parameters, forms, and browser XHR requests. A protected local API manages target scopes and isolated public, header, bearer, or cookie profiles. Discovery uses a confined Katana/Chromium runtime and exports bounded, sanitized evidence with role and source provenance.
+Security Scanner maps explicitly authorized websites and APIs into a persisted inventory of endpoints, parameters, forms, and browser XHR requests. A local browser console and protected API manage target scopes and isolated public, header, bearer, or cookie profiles. Discovery uses a confined Katana/Chromium runtime and exports bounded, sanitized evidence with role and source provenance.
 
 ## Why we built this
 
@@ -24,19 +24,18 @@ A useful security inventory needs to show which identity observed a surface whil
 3. **Prepare the runtime**
    - Run `npm run setup`. It verifies the native sandbox, initializes local storage, prepares pinned gateway/firewall/browser inputs, and removes owned temporary resources.
    - Setup saves private receipts under `data/`. A receipt describes prerequisites; it does not authorize a target or start a scan.
-4. **Open the local API**
-   - Run `npm run dev`, then open [runtime diagnostics](http://127.0.0.1:4111/api/runtime). Follow the [first API interaction](CONTROL_PLANE.md#first-interaction) to create and retrieve a policy, target, and public profile.
-   - When discovery is explicitly enabled, follow [discovery operation](SCANNING.md) to admit an authorized target and retrieve its inventory. Stop the listener and active discovery with Ctrl+C.
+4. **Open the local console**
+   - Run `npm run dev`, open `http://127.0.0.1:4111/` (or the configured `PORT`), and sign in with `CONTROL_BOOTSTRAP_SECRET`. The page contains no operational data until the local session is established.
+   - Create a policy, an explicitly authorized target, and a public profile in the Policies and Targets views. Reopen the page to confirm the records remain available. The [first API interaction](CONTROL_PLANE.md#first-interaction) is available for command-line operation.
+   - When discovery is explicitly enabled, check the public profile's identity and choose **New scan** on the target, or follow [discovery operation](SCANNING.md). Stop the listener and active discovery with Ctrl+C.
 
 ## Try it out
 
-- Run `npm run doctor` to inspect runtime prerequisites and whether discovery admission is enabled, without creating an image, sandbox, or database.
-- Create a policy and authorized target through the local API, restart the server, and retrieve their persisted revisions.
-- Run public HTTP discovery, then compare a header, bearer, or cookie profile against the same authorized origin. Inventory keeps each observation's role; credentials are never returned.
-- Select headless discovery to collect browser XHR surfaces. Browser observations remain advertised surfaces without an upstream HTTP status claim. Discovery never submits forms or authorizes writes.
-- Cancel a running scan or update its bound target. Inspect the persisted partial state, cleanup outcome, and evidence rather than assuming the interrupted run completed.
-- Search the pinned offline references for a testing topic, then [manually sync the advisory inbox](INTELLIGENCE.md) and compare its stale status and material revision events across repeated imports.
-- In the owned Docker lab, enable investigation planning, create a bounded investigation from a completed scan, and inspect hypotheses, jobs, proofs and findings. A per-target recurrence or newly published/materially revised advisory can replan from an existing completed scan and investigation precedent; a new discovery scan is still an explicit operation.
+- Run `npm run doctor` to inspect runtime prerequisites and discovery admission without creating an image, sandbox, or database.
+- Use the console's ten views to inspect real records and empty states. Create a policy and authorized target, restart the server, and confirm their persisted revisions through the console or local API.
+- Run public HTTP discovery, then compare a header, bearer, or cookie profile against the same authorized origin. Select headless mode for browser XHR surfaces. Inventory retains each observation's role, while credentials are never returned; discovery does not submit forms or authorize writes.
+- Cancel a running scan or update its bound target. Inspect persisted partial state, cleanup outcome, and evidence instead of assuming the interrupted run completed.
+- Search pinned offline references, [manually sync the advisory inbox](INTELLIGENCE.md), and inspect its stale status and revision events. In the owned Docker lab, opt into bounded investigation planning from a completed scan; per-target recurrence and new or materially revised advisories can replan from existing precedent without automatically starting a new discovery scan.
 
 ## Customization
 
@@ -44,6 +43,8 @@ A useful security inventory needs to show which identity observed a surface whil
 - Adjust target scopes, finite budgets, explicit retention, and identity endpoints through the protected API. Use [discovery operation](SCANNING.md) when extending the driver or lab, and preserve the same authorization and confinement boundaries.
 
 ## Runtime operation
+
+The console is served by the same loopback listener as the API. Its public shell and local hashed assets contain no operational records; session-protected reads provide current state and a CSRF token after reload. The bootstrap secret is submitted only for sign-in and is cleared from the input. The console displays conflicts and failed requests, and its Settings view shows redacted runtime configuration. See [browser console operation](CONTROL_PLANE.md#browser-console) for supported actions and session behavior.
 
 Crawler containers run as a nonroot user with no outer Linux capabilities, no host mounts or namespaces, no Docker socket, finite resources, disabled container logging, and `no-new-privileges`. The pinned Moby seccomp profile permits the four reviewed namespace setup calls so Chromium can construct its own sandbox. Chromium must report Namespace, PID/network namespaces, and Seccomp-BPF active. No browser sandbox layer or upstream TLS check is disabled.
 
