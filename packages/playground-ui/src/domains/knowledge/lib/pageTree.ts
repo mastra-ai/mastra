@@ -60,10 +60,19 @@ export function buildPageTree(pages: KnowledgePagePayload[]): KnowledgePageTreeN
   stranded.sort((a, b) => comparePagePosition(a.page, b.page));
   for (const node of stranded) {
     if (reached.has(node)) continue;
-    const parent = parentOf.get(node);
-    if (parent) parent.children.splice(parent.children.indexOf(node), 1);
-    roots.push(node);
-    reach(node);
+    // Climb to the cycle this page hangs from, then cut it at the cycle's first page.
+    const path: KnowledgePageTreeNode[] = [];
+    let at: KnowledgePageTreeNode | undefined = node;
+    while (at && !path.includes(at)) {
+      path.push(at);
+      at = parentOf.get(at);
+    }
+    const cycle = at ? path.slice(path.indexOf(at)) : [node];
+    const cut = cycle.reduce((first, member) => (comparePagePosition(member.page, first.page) < 0 ? member : first));
+    const parent = parentOf.get(cut);
+    if (parent) parent.children.splice(parent.children.indexOf(cut), 1);
+    roots.push(cut);
+    reach(cut);
   }
   const sort = (list: KnowledgePageTreeNode[]) => {
     list.sort((a, b) => comparePagePosition(a.page, b.page));
