@@ -6,6 +6,7 @@ import {
   planUpdate,
 } from '@mastra/code-sdk/utils/update-check';
 import { Chalk } from 'chalk';
+import { formatDuration } from './tui/format-duration.js';
 import {
   formatInstallingLabel,
   formatRegistryError,
@@ -42,8 +43,8 @@ function startSpinner(stream: OutputStream, style: UpdateStyle, label: string, {
   const started = Date.now();
   let frame = 0;
   const draw = () => {
-    const seconds = Math.floor((Date.now() - started) / 1000);
-    stream.write(`\r\x1b[2K${style.accent(SPINNER_FRAMES[frame]!)} ${label}  ${style.muted(`${seconds}s`)}`);
+    const elapsed = formatDuration(Date.now() - started);
+    stream.write(`\r\x1b[2K${style.accent(SPINNER_FRAMES[frame]!)} ${label}  ${style.muted(elapsed)}`);
     frame = (frame + 1) % SPINNER_FRAMES.length;
   };
   draw();

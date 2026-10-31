@@ -82,7 +82,7 @@ describe('showFormattedError', () => {
       maxRetries: 10,
     });
 
-    expect(renderedText(state)).toContain('retry 1/10 in 0.5s');
+    expect(renderedText(state)).toContain('retry 1/10 in 500ms');
   });
 });
 
