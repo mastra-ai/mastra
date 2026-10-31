@@ -361,6 +361,19 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
     ]);
   });
 
+  it('links a [[mention]] whose name is also an Object.prototype member', async () => {
+    const am = as('am', ['org:acme', 'role:acme:account-manager']);
+    await am.page({ op: 'write', scope: 'account:acme:123', name: 'Acme Account 123' });
+    const ctor = await am.page({ op: 'write', scope: 'account:acme:123', name: 'constructor' });
+    const added = await am.note({
+      op: 'add',
+      page: 'Acme Account 123',
+      scope: ['account:acme:123'],
+      text: 'See [[constructor]].',
+    });
+    expect(added.note.mentions).toEqual({ constructor: ctor.page.id });
+  });
+
   it('bounds the lookups a read spends linking [[mentions]] that no longer resolve', async () => {
     const am = as('am', ['org:acme', 'role:acme:account-manager']);
     await am.page({ op: 'write', scope: 'account:acme:123', name: 'Acme Account 123' });

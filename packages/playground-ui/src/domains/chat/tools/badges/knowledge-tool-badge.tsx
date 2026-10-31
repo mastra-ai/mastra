@@ -93,7 +93,9 @@ function NoteText({ note }: { note: NoteSummary }) {
   let last = 0;
   for (const match of note.text.matchAll(MENTION)) {
     const ref = (match[1] ?? '').trim();
-    const pageId = note.mentions?.[ref];
+    // Own string values only: `[[constructor]]` must not read Object.prototype.
+    const mentioned = note.mentions && Object.hasOwn(note.mentions, ref) ? note.mentions[ref] : undefined;
+    const pageId = typeof mentioned === 'string' ? mentioned : undefined;
     parts.push(note.text.slice(last, match.index));
     parts.push(
       pageId ? (

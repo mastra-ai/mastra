@@ -107,6 +107,22 @@ describe('Knowledge tool cards', () => {
     });
   });
 
+  describe('when a note names a page the server did not resolve, called like an Object member', () => {
+    it('shows the name as plain text with no link', () => {
+      renderCard({
+        toolName: 'knowledge_note',
+        input: { op: 'add', page: 'Refunds' },
+        output: {
+          page: 'page-refunds',
+          note: { id: 'n1', text: 'See [[constructor]].', author: 'agent:alex', mentions: {} },
+        },
+      });
+      const badge = open();
+      expect(within(badge).getByTestId('knowledge-unresolved-mention').textContent).toBe('constructor');
+      expect(within(badge).queryByRole('link', { name: 'constructor' })).toBeNull();
+    });
+  });
+
   describe('when knowledge_page deletes a page', () => {
     it('says it deleted the page and names it without a link', () => {
       renderCard({

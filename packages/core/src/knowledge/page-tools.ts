@@ -116,7 +116,8 @@ async function noteMentions(
   cache: MentionCache = new Map(),
 ): Promise<Record<string, string> | undefined> {
   if (!note.mentions.length) return undefined;
-  const links: Record<string, string> = {};
+  // Null prototype, so `[[constructor]]` or `[[toString]]` is looked up like any other ref.
+  const links: Record<string, string> = Object.create(null);
   const linked = new Set<string>();
   let lookups = 0;
   const maxLookups = note.mentions.length + MENTION_LOOKUP_SLACK;

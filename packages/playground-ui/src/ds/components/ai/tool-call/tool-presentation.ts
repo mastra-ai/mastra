@@ -87,9 +87,9 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   skill_read: { pose: 'skill', label: 'Skill file', detailKeys: ['path'] },
   knowledge_search: { pose: 'searching', label: 'Search knowledge', detailKeys: ['query'] },
   knowledge_read: { pose: 'reading', label: 'Read page', detailKeys: ['page', 'scope'] },
-  knowledge_page: { pose: 'editing', label: 'Write page', detailKeys: ['name', 'page'] },
-  knowledge_note: { pose: 'editing', label: 'Note', detailKeys: ['page'] },
-  knowledge_pin: { pose: 'memory', label: 'Pin', detailKeys: ['page'] },
+  knowledge_page: { pose: 'editing', label: 'Edit page', detailKeys: ['name', 'page'] },
+  knowledge_note: { pose: 'editing', label: 'Edit note', detailKeys: ['page'] },
+  knowledge_pin: { pose: 'memory', label: 'Update pin', detailKeys: ['page'] },
 };
 
 /** Agents prefix commands with `cd <workspace> &&`, which crowds out the command itself on a one-line row. */

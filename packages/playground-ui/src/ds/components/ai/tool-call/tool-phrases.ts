@@ -56,9 +56,10 @@ const KIND_PHRASES = {
     many: 'searched knowledge',
   },
   'Read page': { live: 'Reading page', done: 'Read page', one: 'read a page', many: 'read pages' },
-  'Write page': { live: 'Writing page', done: 'Wrote page', one: 'wrote a page', many: 'wrote pages' },
-  Note: { live: 'Adding note', done: 'Added note', one: 'added a note', many: 'added notes' },
-  Pin: { live: 'Pinning', done: 'Pinned', one: 'pinned a page', many: 'pinned pages' },
+  // knowledge_page/note/pin also move, merge, delete, remove and unpin, so these name no one operation.
+  'Edit page': { live: 'Editing page', done: 'Edited page', one: 'edited a page', many: 'edited pages' },
+  'Edit note': { live: 'Editing note', done: 'Edited note', one: 'edited a note', many: 'edited notes' },
+  'Update pin': { live: 'Updating pin', done: 'Updated pin', one: 'updated a pin', many: 'updated pins' },
 } satisfies Record<string, ToolPhrases>;
 
 /** The kinds `presentTool` labels a call with; each one has its phrases. */
