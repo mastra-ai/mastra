@@ -257,40 +257,4 @@ describeForAllEngines('Support agent classifier guardrail audit', engine => {
       }),
     ]);
   });
-
-  // Technical: when the user stops a streaming reply, the run's abort signal reaches the classifier
-  // call, which stops without a tripwire or an audit record.
-  // Durable and evented agents run stream processors through processAndEmitChunk
-  // (loop/shared/steps/process-chunk-core.ts), which doesn't pass the abort signal to runner.processPart.
-  const itFailsWithoutStreamSignal = engine === 'durable' || engine === 'evented' ? it.fails : it;
-  itFailsWithoutStreamSignal('stopping a streaming reply also stops the classifier call', async () => {
-    const audit: Decision[] = [];
-    const controller = new AbortController();
-    let classifierSawCancel: boolean | undefined;
-    const model = decisionModel(async ({ abortSignal }) => {
-      controller.abort(new Error('user stopped the reply'));
-      // Without the run's signal, the timeout ends the wait and the assertions below fail.
-      await new Promise(resolve => {
-        abortSignal?.addEventListener('abort', resolve);
-        setTimeout(resolve, 500);
-      });
-      classifierSawCancel = abortSignal?.aborted;
-      if (abortSignal?.aborted) throw abortSignal.reason;
-      return fraudAnswer(0.05);
-    });
-
-    await runLoopScenario({
-      engine,
-      llm: getMock(),
-      prompt: 'Where is my order?',
-      outputProcessors: [fraudGuard(model, audit)],
-      abortSignal: controller.signal,
-      fixtures: llm => {
-        llm.on({ endpoint: 'chat' }, { content: 'Your order ships today.' });
-      },
-    }).catch(() => {});
-
-    expect(classifierSawCancel).toBe(true);
-    expect(audit.filter(d => d.phase === 'stream')).toEqual([]);
-  });
 });

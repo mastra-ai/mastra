@@ -222,7 +222,7 @@ The ids that are set depend on the phase:
 
 `threadId` and `resourceId` come from the agent's memory options. Without memory, the processor reads them from the message, then from the `MASTRA_THREAD_ID_KEY` and `MASTRA_RESOURCE_ID_KEY` request context keys. `traceId` and `spanId` are set when the run is traced, and `spanId` is the processor span.
 
-The processor waits for `onDecision` before it passes the content on. In the stream phase it runs once per text chunk, so a slow write delays the stream. Queue writes that take long. Errors thrown by `onDecision` are logged and don't change the outcome.
+The processor waits for `onDecision` before it passes the content on. In the stream phase it runs once per text chunk. A slow write delays every chunk. Queue writes that take long instead of awaiting them. Errors thrown by `onDecision` are logged and don't change the outcome.
 
 `onDecision` isn't called when `onResult` throws an error that isn't a tripwire, or when the user stops a streaming reply during the classifier call. Stopping the reply also cancels the classifier call, except on durable agents.
 

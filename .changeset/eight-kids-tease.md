@@ -23,7 +23,9 @@ new ClassifierProcessor({
 
 ```ts
 onResult: (answers, { abort }) => {
-  if ((answers.unsafe.probability ?? 1) > 0.8) abort('Blocked', { metadata: { policy: 'unsafe' } });
+  if ((answers.unsafe.probability ?? 1) > 0.8) {
+    abort('Blocked', { metadata: { policy: 'unsafe' } });
+  }
 };
 ```
 
