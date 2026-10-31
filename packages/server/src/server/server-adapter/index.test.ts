@@ -1145,6 +1145,64 @@ describe('FGA policy coverage validation', () => {
   });
 });
 
+describe('Knowledge route FGA metadata', () => {
+  const instanceRoutes = KNOWLEDGE_ROUTES.filter(route => route.path !== '/knowledge');
+
+  it('checks each instance route against the registered knowledge key', async () => {
+    const { checkRouteFGA } = await import('./index');
+    for (const route of instanceRoutes) {
+      const fgaProvider = { ...createMockFGAProvider(true), requireForProtectedRoutes: true };
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1' });
+
+      const result = await checkRouteFGA({ getServer: () => ({ fga: fgaProvider }) }, route as any, requestContext, {
+        knowledgeKey: 'main',
+      });
+
+      expect(result).toBeNull();
+      expect(fgaProvider.check).toHaveBeenCalledWith(
+        { id: 'user-1' },
+        expect.objectContaining({ resource: { type: 'knowledge', id: 'main' }, permission: 'knowledge:read' }),
+      );
+    }
+  });
+
+  it('refuses an instance route when the caller may not read that key', async () => {
+    const { checkRouteFGA } = await import('./index');
+    const fgaProvider = { ...createMockFGAProvider(false), requireForProtectedRoutes: true };
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1' });
+
+    const result = await checkRouteFGA(
+      { getServer: () => ({ fga: fgaProvider }) },
+      instanceRoutes[0] as any,
+      requestContext,
+      {
+        knowledgeKey: 'main',
+      },
+    );
+
+    expect(result).toMatchObject({ status: 403 });
+  });
+
+  it('leaves only the instance list out of the protected-route audit', async () => {
+    const mastra = new Mastra({
+      logger: false,
+      server: {
+        apiRoutes: [...KNOWLEDGE_ROUTES],
+        fga: { ...createMockFGAProvider(), requireForProtectedRoutes: true },
+      } as any,
+    });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn').mockImplementation(() => {});
+    const adapter = new TestMastraServer({ app: {}, mastra });
+
+    await adapter.validateFGAPolicyCoverage();
+
+    const routes: string[] = warn.mock.calls[0]?.[1]?.routes ?? [];
+    expect(routes.filter(route => route.includes('/knowledge'))).toEqual(['GET /knowledge']);
+  });
+});
+
 describe('validateCustomRoutePaths', () => {
   const mockHandler = vi.fn();
 

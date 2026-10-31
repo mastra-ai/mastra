@@ -81,5 +81,5 @@ Set the value to a string array of principals, or `'all'` for someone who should
 
 - **No auth configured:** the routes are open to anyone who can reach the server and read the whole instance. Enable them only where Studio itself is private.
 - **No RBAC provider:** the `knowledge:read` check is skipped, so any authenticated user with a principal mapping can read the pages those principals cover, in every instance.
-- **With an FGA provider:** `GET /knowledge` lists only the instances the caller can read, and the other routes answer `404` for any other instance.
+- **With an FGA provider:** Knowledge instances are checked as resource type `knowledge` by their registered key (`main` in `knowledge: { main }`) with `knowledge:read`. `GET /knowledge` lists only the instances the caller can read, and the other routes refuse any other instance with `403`. Like the other list routes, `GET /knowledge` has no route FGA metadata, so `requireForProtectedRoutes` refuses it.
 - **NestJS:** the NestJS adapter doesn't serve the Knowledge routes yet.
