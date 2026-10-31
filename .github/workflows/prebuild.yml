@@ -358,7 +358,7 @@ jobs:
   test-suite:
     name: Unit and E2E Tests
     needs: [changes, prebuild, affected-tests]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || needs.prebuild.result == 'success')
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.changes.result == 'success' && (needs.changes.outputs.has_code != 'true' || needs.prebuild.result == 'success') }}
     uses: ./.github/workflows/test-suite.yml
     permissions:
       actions: read
@@ -376,7 +376,7 @@ jobs:
   e2e-tests:
     name: E2E Tests
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && (needs.affected-tests.outputs.e2e_changed == 'true' || needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true') && needs.prebuild.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && (needs.affected-tests.outputs.e2e_changed == 'true' || needs.affected-tests.outputs.experiment_worker_e2e_changed == 'true') && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/e2e-tests.yml
     permissions:
       contents: read
@@ -390,7 +390,7 @@ jobs:
   mastracode-e2e:
     name: Mastra Code E2E
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.mastracode_e2e_changed == 'true' && needs.prebuild.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.mastracode_e2e_changed == 'true' && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/mastracode-e2e.yml
     permissions:
       contents: read
@@ -403,7 +403,7 @@ jobs:
   combined-stores-tests:
     name: Combined Store Tests
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.stores_changed == 'true' && needs.prebuild.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.stores_changed == 'true' && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/test-combined-stores.yml
     permissions:
       contents: read
@@ -421,7 +421,7 @@ jobs:
   workspace-tests:
     name: Workspace Tests
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.workspaces_changed == 'true' && needs.prebuild.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.workspaces_changed == 'true' && needs.prebuild.result == 'success' }}
     uses: ./.github/workflows/test-workspaces.yml
     permissions:
       contents: read
@@ -436,7 +436,7 @@ jobs:
   memory-test:
     name: Memory Tests
     needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.prebuild.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.memory_changed == 'true' && needs.prebuild.result == 'success' }}
     runs-on: starsling-ubuntu-26.04
     permissions:
       contents: read

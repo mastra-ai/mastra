@@ -234,7 +234,7 @@ jobs:
     name: Merge Test Reports
     runs-on: starsling-ubuntu-26.04
     needs: [unit-test, affected-unit-test, e2e-test]
-    if: always()
+    if: ${{ !cancelled() }}
     permissions:
       actions: read
       contents: read
