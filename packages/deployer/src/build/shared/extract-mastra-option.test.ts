@@ -1,9 +1,10 @@
 import { existsSync } from 'node:fs';
-import { mkdir, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { rollup } from 'rollup';
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { extractMastraOption } from './extract-mastra-option';
+import { extractMastraOption, typescriptSourcesResolver } from './extract-mastra-option';
 
 describe('Extract Mastra option', () => {
   const _dirname = dirname(fileURLToPath(import.meta.url));
@@ -18,6 +19,55 @@ describe('Extract Mastra option', () => {
     try {
       await rm(testOutputDir, { recursive: true, force: true });
     } catch {}
+  });
+
+  it('keeps installed dependencies external when extracting an option (#28645)', async () => {
+    const root = await mkdtemp(join(_dirname, 'option-extraction-'));
+    const appDir = join(root, 'app');
+    const dependencyDir = join(appDir, 'node_modules', 'large-dependency');
+    const outputDir = join(appDir, '.mastra', 'output');
+    const entryFile = join(appDir, 'index.ts');
+
+    try {
+      await mkdir(dependencyDir, { recursive: true });
+      await mkdir(outputDir, { recursive: true });
+      await writeFile(join(appDir, 'package.json'), JSON.stringify({ type: 'module' }));
+      await writeFile(join(dependencyDir, 'package.json'), JSON.stringify({ type: 'module', exports: './index.js' }));
+      await writeFile(
+        join(dependencyDir, 'index.js'),
+        "export const server = { port: 3000, marker: 'large-dependency-inlined' };\n",
+      );
+      await writeFile(
+        entryFile,
+        "import { server as externalServer } from 'large-dependency';\nexport const mastra = new Mastra({ server: externalServer });\n",
+      );
+
+      // The resolver must mark installed packages external before later plugins can load them.
+      const bundler = await rollup({
+        input: entryFile,
+        plugins: [
+          typescriptSourcesResolver(entryFile),
+          {
+            name: 'reject-installed-dependency-resolution',
+            resolveId(id) {
+              if (id === 'large-dependency') {
+                throw new Error('Installed dependency entered the option-extraction graph');
+              }
+              return null;
+            },
+          },
+        ],
+      });
+      await bundler.close();
+
+      const result = await extractMastraOption('server', entryFile, outputDir);
+      expect(result).not.toBeNull();
+      expect(result?.bundleOutput.output[0].code).toContain("from 'large-dependency'");
+      expect(result?.bundleOutput.output[0].code).not.toContain('large-dependency-inlined');
+      await expect(result?.getConfig()).resolves.toMatchObject({ port: 3000 });
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
   });
 
   it('extracts workers without initializing unrelated Mastra configuration', async () => {
