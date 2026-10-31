@@ -9850,8 +9850,8 @@ importers:
   workspaces/e2b:
     dependencies:
       e2b:
-        specifier: ^2.61.0
-        version: 2.61.0
+        specifier: ^2.62.0
+        version: 2.62.0
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -9908,8 +9908,8 @@ importers:
         specifier: workspace:^
         version: link:../e2b
       e2b:
-        specifier: ^2.61.0
-        version: 2.61.0
+        specifier: ^2.62.0
+        version: 2.62.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10123,8 +10123,8 @@ importers:
   workspaces/platform-workspace:
     dependencies:
       e2b:
-        specifier: ^2.61.0
-        version: 2.61.0
+        specifier: ^2.62.0
+        version: 2.62.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -23840,8 +23840,8 @@ packages:
   duplexify@4.1.3:
     resolution: {integrity: sha512-M3BmBhwJRZsSx38lZyhE53Csddgzl5R7xGJNk7CVddZD6CcmwMCH8J+7AprIrQKH7TonKxaCjcv27Qmf+sQ+oA==}
 
-  e2b@2.61.0:
-    resolution: {integrity: sha512-oTRYKs+3RQmZIWCzGKMPFGJeT4gYJgaAoBKSJdu6PyXx4I1zfUKoKG8jh4GtMyREW88dsie0+hAu/c/Xlv9/PQ==}
+  e2b@2.62.0:
+    resolution: {integrity: sha512-RKYzGLgFLJa9xCct6Bh255UbERo/yaYqG/3sUqau60sZ38TFZSAt2M+eXGfKWo3yD31iu9iNVC44H0x9ppaoJw==}
     engines: {node: '>=22.19.0'}
 
   eastasianwidth@0.2.0:
@@ -36578,7 +36578,7 @@ snapshots:
 
   '@e2b/desktop@2.5.0':
     dependencies:
-      e2b: 2.61.0
+      e2b: 2.62.0
 
   '@e2b/dockerfile-utils@0.1.1': {}
 
@@ -47402,7 +47402,7 @@ snapshots:
       readable-stream: 3.6.2
       stream-shift: 1.0.3
 
-  e2b@2.61.0:
+  e2b@2.62.0:
     dependencies:
       '@bufbuild/protobuf': 2.16.0
       '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
