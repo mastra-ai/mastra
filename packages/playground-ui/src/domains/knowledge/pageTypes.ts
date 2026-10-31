@@ -76,7 +76,7 @@ export type KnowledgeActivityAction =
   | 'pin-added'
   | 'pin-removed';
 
-export interface KnowledgeActivityPayload {
+export interface KnowledgePageActivityPayload {
   id: string;
   action: KnowledgeActivityAction;
   scopeId: string;

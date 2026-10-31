@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
 
 import type {
-  KnowledgeActivityPayload,
+  KnowledgePageActivityPayload,
   KnowledgeNotePayload,
   KnowledgePageEdge,
   KnowledgePagePayload,
@@ -52,7 +52,7 @@ export interface KnowledgeExplorerTreeLevel {
 }
 
 export interface KnowledgeExplorerActivity {
-  events: KnowledgeActivityPayload[];
+  events: KnowledgePageActivityPayload[];
 }
 
 export interface KnowledgeExplorerQueryState<T> {
