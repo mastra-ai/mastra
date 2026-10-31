@@ -109,6 +109,15 @@ export const googleDriveScenario: Scenario = {
         steps.push(makeStep('update comment', 'google_drive_update_comment', 'fail', errorMessage(error)));
       }
     }
+    if (fileId && commentId && tools['google_drive_get_comment']) {
+      try {
+        await call('google_drive_get_comment', { fileId, commentId });
+        steps.push(makeStep('get comment', 'google_drive_get_comment', 'pass'));
+      } catch (error) {
+        steps.push(makeStep('get comment', 'google_drive_get_comment', 'fail', errorMessage(error)));
+      }
+    }
+
     if (fileId && commentId && tools['google_drive_delete_comment']) {
       try {
         await call('google_drive_delete_comment', { fileId, commentId });
@@ -129,7 +138,8 @@ export const googleDriveScenario: Scenario = {
 
     if (fileId && tools['google_drive_find_file']) {
       try {
-        await call('google_drive_find_file', { query: `${runId}-smoke-renamed.txt` });
+        // The query param is Google Drive search syntax, not a bare filename.
+        await call('google_drive_find_file', { query: `name = '${runId}-smoke-renamed.txt'` });
         steps.push(makeStep('find file', 'google_drive_find_file', 'pass'));
       } catch (error) {
         steps.push(makeStep('find file', 'google_drive_find_file', 'fail', errorMessage(error)));
@@ -142,16 +152,6 @@ export const googleDriveScenario: Scenario = {
         steps.push(makeStep('find folder', 'google_drive_find_folder', 'pass'));
       } catch (error) {
         steps.push(makeStep('find folder', 'google_drive_find_folder', 'fail', errorMessage(error)));
-      }
-    }
-
-    if (fileId && commentId && tools['google_drive_get_comment']) {
-      try {
-        await call('google_drive_get_comment', { fileId, commentId });
-        steps.push(makeStep('get comment', 'google_drive_get_comment', 'pass'));
-      } catch (error) {
-        // Comment may have been deleted earlier; still exercises routing.
-        steps.push(makeStep('get comment', 'google_drive_get_comment', 'fail', errorMessage(error)));
       }
     }
 
@@ -231,7 +231,7 @@ export const googleDriveScenario: Scenario = {
       );
     }
 
-    // Move the file to a second folder, then back.
+    // Move the file to a second folder; cleanup deletes it from there.
     let secondFolderId: string | undefined;
     if (fileId && folderId && tools['google_drive_create_folder']) {
       try {
@@ -358,7 +358,18 @@ export const googleDriveScenario: Scenario = {
       );
     }
 
-    // Clean up second folder before the primary folder.
+    // Clean up: the file was moved into the second folder, and deleting a
+    // folder permanently deletes its descendants, so delete the file first.
+    if (fileId) {
+      try {
+        await call('google_drive_delete_file', { fileId });
+        steps.push(makeStep('delete file', 'google_drive_delete_file', 'pass'));
+      } catch (error) {
+        log.error(`Failed to delete smoke file ${fileId} — clean up manually.`, errorMessage(error));
+        steps.push(makeStep('delete file', 'google_drive_delete_file', 'fail', errorMessage(error)));
+      }
+    }
+
     if (secondFolderId) {
       try {
         await call('google_drive_delete_file', { fileId: secondFolderId });
@@ -388,16 +399,6 @@ export const googleDriveScenario: Scenario = {
       } catch (error) {
         log.error(`Failed to delete smoke copy ${copiedId} — clean up manually.`, errorMessage(error));
         steps.push(makeStep('delete copy', 'google_drive_delete_file', 'fail', errorMessage(error)));
-      }
-    }
-
-    if (fileId) {
-      try {
-        await call('google_drive_delete_file', { fileId });
-        steps.push(makeStep('delete file', 'google_drive_delete_file', 'pass'));
-      } catch (error) {
-        log.error(`Failed to delete smoke file ${fileId} — clean up manually.`, errorMessage(error));
-        steps.push(makeStep('delete file', 'google_drive_delete_file', 'fail', errorMessage(error)));
       }
     }
 
