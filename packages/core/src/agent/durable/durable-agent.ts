@@ -116,6 +116,7 @@ import type {
   RunRegistryEntry,
   SerializableModelListEntry,
 } from './types';
+import { restoreCompletionPolicy } from './utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
@@ -133,6 +134,7 @@ function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra
 }
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
+const RESOLVED_DEFAULT_OPTIONS = Symbol('mastra.durable.resolvedDefaultOptions');
 /** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
 const SCOPES_ALREADY_APPLIED = Symbol('mastra.durable.scopesAlreadyApplied');
 /** Carries the persisted spans a resume rebuilt from storage reattaches to into `prepare()`. */
@@ -1705,7 +1707,16 @@ export class DurableAgent<
     }
     executionFence.throwIfLost();
 
+    const restoredCompletion = await restoreCompletionPolicy({
+      agent: wrapped,
+      persisted: workflowInput.options?.isTaskComplete,
+      requestContext,
+      runId,
+      logger: this.#mastra?.getLogger?.(),
+    });
+
     const registryEntry = {
+      isTaskComplete: restoredCompletion,
       // Call-time toolset tools died with the original process. Mark the entry
       // as a placeholder so the first step rebuilds tools and fails loudly
       // (DURABLE_AGENT_TOOLSETS_UNAVAILABLE) instead of running without them.
@@ -1998,6 +2009,7 @@ export class DurableAgent<
     });
     // Preserve the marker when the until-idle wrapper spreads these options.
     Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    Object.defineProperty(scopedOptions, RESOLVED_DEFAULT_OPTIONS, { value: defaultOptions, enumerable: true });
     return scopedOptions;
   }
 
@@ -2470,22 +2482,29 @@ export class DurableAgent<
       pubsub: this.fenceRunPubSub(executionFence, entry?.abortController),
     });
     // Parent the workflow run under the AGENT_RUN span so the trace exports under it.
-    const result = await this.withSuspensionAfterPersist(runId, () =>
-      run.start({
-        inputData: workflowInput,
-        requestContext,
-        actor: workflowInput.options?.actor,
-        ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
-      }),
-    );
-    await this.settleExecution(runId, executionFence, {
-      status: result?.status,
-      error:
-        result?.status === 'failed'
-          ? this.workflowFailureError((result as any).error, 'Workflow execution failed')
-          : undefined,
-    });
-    return result;
+    let result;
+    try {
+      result = await this.withSuspensionAfterPersist(runId, () =>
+        run.start({
+          inputData: workflowInput,
+          requestContext,
+          actor: workflowInput.options?.actor,
+          ...createObservabilityContext({ currentSpan: entry?.agentSpan }),
+        }),
+      );
+      await this.settleExecution(runId, executionFence, {
+        status: result?.status,
+        error:
+          result?.status === 'failed'
+            ? this.workflowFailureError((result as any).error, 'Workflow execution failed')
+            : undefined,
+      });
+      return result;
+    } finally {
+      if (result?.status !== 'suspended' && workflow.runs.get(runId) === run) {
+        workflow.runs.delete(runId);
+      }
+    }
   }
 
   /**
@@ -3128,6 +3147,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
         durableAgentId: this.id,
@@ -3864,15 +3884,20 @@ export class DurableAgent<
     // we overwrite the registry slot. If the caller passed an external
     // signal, forward it onto the new internal controller.
     const abortController = new AbortController();
-    if (resolvedOptions.abortSignal) {
-      if (resolvedOptions.abortSignal.aborted) {
-        abortController.abort((resolvedOptions.abortSignal as AbortSignal & { reason?: unknown }).reason);
+    const externalAbortSignal = resolvedOptions.abortSignal;
+    const forwardExternalAbort = () => abortController.abort(externalAbortSignal?.reason);
+    let externalAbortAttached = false;
+    const detachExternalAbort = () => {
+      if (!externalAbortAttached) return;
+      externalAbortSignal?.removeEventListener('abort', forwardExternalAbort);
+      externalAbortAttached = false;
+    };
+    if (externalAbortSignal) {
+      if (externalAbortSignal.aborted) {
+        forwardExternalAbort();
       } else {
-        resolvedOptions.abortSignal.addEventListener(
-          'abort',
-          () => abortController.abort((resolvedOptions.abortSignal as AbortSignal & { reason?: unknown }).reason),
-          { once: true },
-        );
+        externalAbortSignal.addEventListener('abort', forwardExternalAbort, { once: true });
+        externalAbortAttached = true;
       }
     }
     if (agentThreadStreamRuntime.isRunAborted(runId, this.getPubSub())) {
@@ -4137,6 +4162,9 @@ export class DurableAgent<
             throw error;
           } finally {
             await stopGoalActivity({ agentId: this.id, runId });
+            if (result?.status !== 'suspended' && workflow.runs.get(runId) === run) {
+              workflow.runs.delete(runId);
+            }
           }
           await this.settleExecution(runId, executionFence, {
             status: result?.status,
@@ -4161,7 +4189,8 @@ export class DurableAgent<
           this.settleExecution(runId, executionFence, {
             error: this.workflowExecutionError(error, 'Workflow resume failed'),
           }),
-        ),
+        )
+        .finally(detachExternalAbort),
     );
     const trackedResumeEntry = getRunRegistryEntry(runId, this.#mastra);
     if (trackedResumeEntry) {
@@ -4760,6 +4789,7 @@ export class DurableAgent<
         runId,
         requestContext,
         optionsAreResolved: true,
+        resolvedDefaultOptions: (options as any)?.[RESOLVED_DEFAULT_OPTIONS],
         scopesResolved: true,
         mastra: this.#mastra,
         methodType: 'generate',

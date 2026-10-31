@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-v6",
-  "version": "0.0.93",
+  "version": "0.0.94",
   "description": "",
   "type": "module",
   "private": true,
@@ -38,7 +38,7 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/gateway": "^3.0.221",
+    "@ai-sdk/gateway": "^3.0.222",
     "@ai-sdk/provider": "^3.0.19",
     "@ai-sdk/provider-utils": "^4.0.62",
     "@internal/lint": "workspace:*",
@@ -48,7 +48,7 @@
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^6.0.315",
+    "ai": "^6.0.316",
     "json-schema": "^0.4.0",
     "msw": "^2.15.0",
     "resolve.exports": "^2.0.4",

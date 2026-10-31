@@ -7,6 +7,21 @@
   container-type: size;
 }
 
+/*
+ * A size container is its own stacking context, so the tooltip's z-index only counts inside its
+ * chart and a chart later on the page paints over it. Lift the chart being pointed at instead.
+ */
+.chart-plot-box:hover,
+.chart-plot-box:focus-within {
+  position: relative;
+  z-index: 1;
+}
+
+/* The pointer wins over a chart that kept keyboard focus elsewhere on the page. */
+.chart-plot-box:hover {
+  z-index: 2;
+}
+
 .chart-plot-stretch {
   transform-origin: 0 0;
   transform: scale(tan(atan2(100cqw, var(--chart-drawn-w))), tan(atan2(100cqh, var(--chart-drawn-h))));

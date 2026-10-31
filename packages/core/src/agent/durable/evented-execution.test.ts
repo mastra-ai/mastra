@@ -9,6 +9,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
 import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
+import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { resolveRunFence, runOutsideRunFenceScope, RUN_FENCE_CONFLICT_ERROR_ID } from '../../storage/run-fencing';
@@ -39,7 +40,12 @@ import {
   MASTRA_DURABLE_EXECUTIONS_KEY,
 } from './execution-fence';
 
-import { abandonDurableAgentExecutions, deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
+import {
+  abandonDurableAgentExecutions,
+  deleteRunRegistryEntry,
+  getRunRegistryEntry,
+  setRunRegistryEntry,
+} from './run-registry';
 
 it('detaches a registered shared coordinator on API shutdown without releasing its live claim', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'mastra-shutdown-'));
@@ -71,6 +77,74 @@ it('detaches a registered shared coordinator on API shutdown without releasing i
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+it('keeps a shared EventedAgent.stream() run owned by its worker when the API shuts down', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-api-loss-'));
+  const socket = join(directory, 'pubsub.sock');
+  const storage = new InMemoryStore();
+  const workflows = (await storage.getStore('workflows'))!;
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  // The reply must block deterministically on the worker while the API shuts down.
+  const { model } = deliveryModel('worker answer', undefined, async () => {
+    entered.resolve();
+    await release.promise;
+  });
+  const memory = new MockMemory({ storage });
+  const build = (pubsub: UnixSocketPubSub) =>
+    createEventedAgent({
+      agent: new Agent({ id: 'agent', name: 'agent', instructions: 'Answer.', model, memory }),
+      pubsub,
+    });
+  const apiPubsub = new UnixSocketPubSub(socket);
+  const workerPubsub = new UnixSocketPubSub(socket);
+  const apiAgent = build(apiPubsub);
+  const api = new Mastra({ agents: { agent: apiAgent }, storage, pubsub: apiPubsub, workers: false, logger: false });
+  const worker = new Mastra({ agents: { agent: build(workerPubsub) }, storage, pubsub: workerPubsub, logger: false });
+  const threadKey = 'resource\u0000thread';
+  try {
+    await worker.startWorkers();
+    const { runId } = await apiAgent.stream('Answer the question.', {
+      runId: 'api-loss-run',
+      memory: { resource: 'resource', thread: 'thread' },
+    });
+    await entered.promise;
+    expect(getRunRegistryEntry(runId, api)?.eventedExecution).toBe(true);
+    const claimed = await workflows.getRunOwnership({ runId });
+    expect(claimed).toMatchObject({ live: true });
+    const threadOwner = `mastra:thread-lease:${JSON.stringify([runId, 'generation', claimed!.generation])}`;
+    expect(await workerPubsub.getLeaseOwner(threadKey)).toBe(threadOwner);
+
+    await api.shutdown();
+    expect(await workflows.getRunOwnership({ runId })).toMatchObject({
+      live: true,
+      ownerId: claimed!.ownerId,
+      generation: claimed!.generation,
+    });
+    expect(await workerPubsub.getLeaseOwner(threadKey)).toBe(threadOwner);
+
+    release.resolve();
+    await vi.waitFor(
+      async () => {
+        expect(await workflows.getRunOwnership({ runId })).toMatchObject({
+          ownerId: claimed!.ownerId,
+          generation: claimed!.generation,
+          leaseExpiresAt: null,
+          live: false,
+        });
+        expect(await workerPubsub.getLeaseOwner(threadKey)).toBeUndefined();
+      },
+      { timeout: 5_000 },
+    );
+  } finally {
+    release.resolve();
+    await api.shutdown();
+    await worker.shutdown();
+    await apiPubsub.close();
+    await workerPubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 20_000);
 
 it.each([
   { staleContext: false, directClaim: true },
@@ -580,6 +654,64 @@ it('finalizes cancellation of a suspended run after its execution claim is relea
       leaseExpiresAt: null,
       live: false,
     });
+  } finally {
+    coordinator.stopHeartbeat();
+    await mastra.shutdown();
+    published.mockRestore();
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+}, 15_000);
+
+it('carries the execution claim on a cancel sent before the first step finishes', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-cancel-first-step-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const workflow = createWorkflow({ id: 'durable-agentic-loop', inputSchema: z.object({}), outputSchema: z.object({}) })
+    .then(
+      createStep({
+        id: 'llm',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ abortSignal }) => {
+          await new Promise(resolve => abortSignal.addEventListener('abort', resolve, { once: true }));
+          return {};
+        },
+      }),
+    )
+    .commit();
+  const mastra = new Mastra({ storage, pubsub, workflows: { workflow }, logger: false });
+  instances.push(mastra);
+  const workflows = (await storage.getStore('workflows'))!;
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore: workflows,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'first-step-run',
+    mode: 'acquire',
+  });
+  const requestContext = new RequestContext([[MASTRA_DURABLE_EXECUTIONS_KEY, { 'first-step-run': coordinator.claim }]]);
+  const published = vi.spyOn(pubsub, 'publish');
+  try {
+    const run = await workflow.createRun({ runId: 'first-step-run' });
+    const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+    let canceled: Promise<void> | undefined;
+    vi.spyOn(workflows, 'persistWorkflowSnapshot').mockImplementation(async args => {
+      await persist(args);
+      // Cancel in the window between the processor's running snapshot and the first step result.
+      if (args.runId === run.runId && 'guardedOnlySnapshot' in args.snapshot) canceled ??= run.cancel();
+    });
+    await mastra.startWorkers();
+    const result = run.start({ inputData: {}, requestContext });
+    await vi.waitFor(() => expect(canceled).toBeDefined());
+    await canceled;
+    const cancel = published.mock.calls.find(
+      ([topic, event]) => topic === 'workflows' && event.type === 'workflow.cancel',
+    );
+    expect(cancel?.[1].data?.requestContext).toMatchObject({
+      [MASTRA_DURABLE_EXECUTIONS_KEY]: { 'first-step-run': coordinator.claim },
+    });
+    await result;
   } finally {
     coordinator.stopHeartbeat();
     await mastra.shutdown();

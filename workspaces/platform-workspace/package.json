@@ -1,6 +1,6 @@
 {
   "name": "@mastra/platform-workspace",
-  "version": "1.11.0-alpha.0",
+  "version": "1.11.0",
   "description": "Mastra Platform workspace sandbox and filesystem providers",
   "type": "module",
   "main": "dist/index.js",
@@ -62,6 +62,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "e2b": "^2.59.0"
+    "e2b": "^2.61.0"
   }
 }

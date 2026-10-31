@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-v7",
-  "version": "0.0.93",
+  "version": "0.0.94",
   "description": "",
   "type": "module",
   "private": true,
@@ -38,9 +38,9 @@
   "author": "",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@ai-sdk/gateway": "^4.0.126",
+    "@ai-sdk/gateway": "^4.0.127",
     "@ai-sdk/provider": "^4.0.34",
-    "@ai-sdk/provider-utils": "^5.0.68",
+    "@ai-sdk/provider-utils": "^5.0.69",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@microsoft/api-extractor": "catalog:",
@@ -48,7 +48,7 @@
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "ai": "^7.0.153",
+    "ai": "^7.0.154",
     "json-schema": "^0.4.0",
     "msw": "^2.15.0",
     "resolve.exports": "^2.0.4",

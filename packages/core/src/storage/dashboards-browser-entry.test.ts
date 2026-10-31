@@ -140,6 +140,24 @@ describe.skipIf(!existsSync(esmEntry))('storage/dashboards build output', () => 
     },
   );
 
+  it.each(Object.entries(zodEntries))('loads and parses a saved view without Node (%s)', (_, zodEntry) => {
+    const entry = loadInBrowserLikeContext(cjsEntry, zodEntry);
+    const view = {
+      schemaVersion: 1,
+      page: 'traces',
+      filters: definition.defaults.filters,
+      dateRange: { preset: 'last-7d' },
+      sort: { field: 'startedAt', direction: 'asc' },
+      columns: [{ id: 'input', visible: false }],
+    };
+    const parsed = (entry.savedViewStateSchema as SafeParse).safeParse(view);
+    expect(parsed.error?.issues).toBeUndefined();
+    expect(parsed.success).toBe(true);
+    expect((entry.savedViewStateEnvelopeSchema as SafeParse).safeParse(view).success).toBe(true);
+    expect((entry.savedViewStateSchema as SafeParse).safeParse({ ...view, page: 'metrics' }).success).toBe(false);
+    expect(entry.SAVED_VIEW_STATE_MAX_BYTES).toBe(16 * 1024);
+  });
+
   it('really has no Node globals in that context', () => {
     expect(() => loadInBrowserLikeContext(path.join(distDir, 'storage/index.cjs'))).toThrow();
   });

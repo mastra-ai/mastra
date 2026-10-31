@@ -1,6 +1,6 @@
 {
   "name": "@mastra/e2b-desktop",
-  "version": "0.1.11-alpha.0",
+  "version": "0.1.11",
   "description": "E2B Desktop (computer-use) sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -33,7 +33,7 @@
   "dependencies": {
     "@e2b/desktop": "^2.5.0",
     "@mastra/e2b": "workspace:^",
-    "e2b": "^2.59.0"
+    "e2b": "^2.61.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

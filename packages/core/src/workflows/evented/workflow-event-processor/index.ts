@@ -1167,6 +1167,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         status: 'running',
         guardedOnlySnapshot: !!requiresGuardedSnapshot && !shouldPersist,
         value: initialState,
+        // A cancel sent before the first step result reads its execution claim from here.
+        requestContext: withoutAuthToken(requestContext),
       };
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflow.id,

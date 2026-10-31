@@ -513,6 +513,79 @@ describe('Agent signals: drain and lease handoff', () => {
     },
   );
 
+  it.each([
+    [
+      'an encoded generation owner',
+      'mixed-run',
+      `mastra:thread-lease:${JSON.stringify(['mixed-run', 'generation', 2])}`,
+    ],
+    ['an encoded retake token', 'mixed-run', `mastra:thread-lease:${JSON.stringify(['mixed-run', 'retake', 'token'])}`],
+    ['a legacy retake token', 'mixed-run', 'mixed-run\u0000retake\u0000token'],
+    [
+      'a legacy retake token whose run id contains the marker',
+      'mixed\u0000retake\u0000run',
+      'mixed\u0000retake\u0000run\u0000retake\u0000token',
+    ],
+    ['the bare run id', 'mixed-run', 'mixed-run'],
+  ])('queues a follow-up another process forwarded to %s of a run it owns', async (_label, runId, address) => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'mixed-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const threadId = 'mixed-thread';
+    const resourceId = 'mixed-user';
+    const options = { memory: { thread: threadId, resource: resourceId } } as any;
+    runtime.registerRun(agent, createFakeThreadRun(runId, new Promise<void>(() => {})), options, pubsub);
+    await pubsub.flush();
+
+    // A sender on the other lease-owner format addresses the follow-up with the owner it read verbatim.
+    const signal = createSignal({ type: 'user-message', contents: 'forwarded follow-up' });
+    const topic = `agent.thread-stream.${encodeURIComponent(`${resourceId}\u0000${threadId}`)}`;
+    await pubsub.publish(topic, {
+      type: 'signal-enqueued',
+      data: { type: 'signal-enqueued', runId: address, signal, sourceId: 'other-process' },
+    });
+    await pubsub.flush();
+    await nextTick();
+
+    expect(runtime.drainPendingSignals(runId, pubsub)).toMatchObject([{ contents: 'forwarded follow-up' }]);
+  });
+
+  it('addresses a follow-up to the run a legacy handover token resolves to', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'legacy-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const target = { resourceId: 'legacy-user', threadId: 'legacy-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    // A process on the previous release is handing the thread over to old-run.
+    pubsub.owners.set(key, 'old-run\u0000retake\u0000handover');
+    setTimeout(() => pubsub.owners.set(key, 'old-run'), 100);
+
+    const sent = runtime.sendMessage(agent, 'follow-up during handover', target, pubsub);
+    await sent.accepted;
+
+    const forwarded = pubsub.publishedData.filter(data => data?.type === 'signal-enqueued');
+    expect(forwarded.map(data => data.runId)).toEqual(['old-run']);
+    expect(agent.stream).not.toHaveBeenCalled();
+  });
+
+  it('addresses a follow-up to a run whose id contains the legacy marker once a handover resolves to it', async () => {
+    const runtime = new AgentThreadStreamRuntime();
+    const pubsub = new ControlledLeasePubSub();
+    const agent = { id: 'legacy-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const target = { resourceId: 'legacy-user', threadId: 'legacy-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const runId = 'ctl-run\u0000retake\u0000literal-suffix';
+    pubsub.owners.set(key, `${runId}\u0000retake\u0000handover`);
+    setTimeout(() => pubsub.owners.set(key, runId), 100);
+
+    const sent = runtime.sendMessage(agent, 'follow-up during handover', target, pubsub);
+    await sent.accepted;
+
+    const forwarded = pubsub.publishedData.filter(data => data?.type === 'signal-enqueued');
+    expect(forwarded.map(data => data.runId)).toEqual([runId]);
+    expect(agent.stream).not.toHaveBeenCalled();
+  });
+
   it('releases the thread lease with the failed run id when the handoff starts nothing', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const pubsub = new ControlledLeasePubSub();
