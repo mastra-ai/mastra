@@ -15,6 +15,7 @@ import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { ToolAfterHookContext, ToolHooks } from '@mastra/core/tools';
 import type { HookManager } from '../hooks/index.js';
 import type { McpManager } from '../mcp/index.js';
+import { stripMastraGatewayPrefix } from '../providers/model-ids.js';
 import type { MastraCodeComposedState } from '../schema.js';
 import { MC_TOOLS } from '../tool-names.js';
 import { createConfiguredWebTools, requestSandboxAccessTool } from '../tools/index.js';
@@ -140,7 +141,8 @@ export function createDynamicTools(
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeComposedState> | undefined;
     const state = ctx?.getState();
 
-    const modelId = ctx?.session?.modelId;
+    const rawModelId = ctx?.session?.modelId;
+    const modelId = rawModelId ? stripMastraGatewayPrefix(rawModelId) : rawModelId;
     const isAnthropicModel = modelId?.startsWith('anthropic/');
     const isOpenAIModel = modelId?.startsWith('openai/');
 
