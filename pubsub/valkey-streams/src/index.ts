@@ -848,9 +848,11 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     try {
       await this.#ensureWriterConnected();
       const streamKey = this.#streamKey(topic);
+      const [tail] = await this.#writeClient.xRevRange(streamKey, '+', '-', { COUNT: 1 });
+      if (!tail) return;
       let start = '-';
       for (;;) {
-        const page = await this.#writeClient.xRange(streamKey, start, '+', { COUNT: REPLAY_PAGE_SIZE });
+        const page = await this.#writeClient.xRange(streamKey, start, tail.id, { COUNT: REPLAY_PAGE_SIZE });
         const ids: string[] = [];
         for (const entry of page) {
           try {

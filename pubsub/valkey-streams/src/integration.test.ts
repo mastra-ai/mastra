@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Event } from '@mastra/core/events';
-import { expect, it } from 'vitest';
-import { createClient } from './client';
+import { expect, it, vi } from 'vitest';
+import { createClient, ValkeyStreamsClient } from './client';
 import { ValkeyStreamsPubSub } from './index';
 
 it('publishes and consumes through Valkey GLIDE', async () => {
@@ -52,6 +52,44 @@ it('trims only saved run entries while preserving other runs, pinned entries, an
   } finally {
     await pubsub.clearTopic(topic);
     await pubsub.close();
+  }
+});
+
+it('does not trim entries published after the cleanup scan begins', async () => {
+  const keyPrefix = `valkey-trim-tail-${randomUUID()}`;
+  const topic = `thread-${randomUUID()}`;
+  const pubsub = new ValkeyStreamsPubSub({ url: 'valkey://localhost:6381', keyPrefix });
+  const key = `${keyPrefix}:${topic}`;
+  const raw = createClient({ url: 'valkey://localhost:6381' });
+  await raw.connect();
+  const originalXRange = ValkeyStreamsClient.prototype.xRange;
+  let resumeScan!: () => void;
+  const scanPaused = new Promise<void>(resolve => (resumeScan = resolve));
+  let signalScan!: () => void;
+  const scanStarted = new Promise<void>(resolve => (signalScan = resolve));
+  let trim: Promise<void> | undefined;
+  try {
+    await pubsub.publish(topic, { type: 'stream-part', runId: 'target', data: { index: 'saved' } });
+    // Pause only the scan request, not Valkey itself: another writer can publish while cleanup is in flight.
+    vi.spyOn(ValkeyStreamsClient.prototype, 'xRange').mockImplementation(async function (...args) {
+      signalScan();
+      await scanPaused;
+      return originalXRange.apply(this, args);
+    });
+    trim = pubsub.trimTopic(topic, { runId: 'target' });
+    await scanStarted;
+    await pubsub.publish(topic, { type: 'stream-part', runId: 'target', data: { index: 'in-flight' } });
+    resumeScan();
+    await trim;
+    const remaining = await raw.xRange(key, '-', '+');
+    expect(remaining.map(entry => JSON.parse(entry.message.event!).data.index)).toEqual(['in-flight']);
+  } finally {
+    resumeScan();
+    await trim;
+    vi.restoreAllMocks();
+    await pubsub.clearTopic(topic);
+    await pubsub.close();
+    await raw.quit();
   }
 });
 
