@@ -484,6 +484,16 @@ When a card enters the phase and the skill does not exist, no run starts and the
 
 Settings › Skills shows the skill each custom phase runs, marks a phase whose skill is missing, marks built-in skills your app replaces, and lists your other skills under **App skills**.
 
+### Edit skills for one Factory
+
+Organization admins can change the instructions of any skill for one Factory, without redeploying. Open Settings › Skills, choose **Edit** on a skill, change its description or instructions, and save. This works for built-in, folder and code skills, including the review skills. Other members can open a skill but not change it.
+
+An edit applies to that Factory only and takes precedence over the code, folder and built-in versions of the skill. Sessions that start after the save use it; running sessions keep the version they started with. A skill name cannot change, and the saved `SKILL.md` must pass the same checks Factory uses when it loads skills, or the save is rejected. Review skills stay limited to review sessions when edited.
+
+An edited skill shows an **Edited** badge. When the original changes after the edit, for example in a new release of `@mastra/factory` or of your app, the editor says so; the edit stays in place until you choose **Revert to original**. If the original skill is removed from your app, its edit stops applying.
+
+Saves and reverts are recorded in the audit log as `factory.skill.updated` and `factory.skill.reverted`. The API is `PUT` and `DELETE` on `/web/factory/projects/:id/skills/:name`, and `GET /web/factory/skills?projectId=<id>` lists a Factory's skills with its edits.
+
 ### Execute a custom board
 
 Custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.

@@ -95,10 +95,18 @@ export interface FactorySkillInfo {
   builtIn?: boolean;
   /** Set when the SKILL.md fails runtime parsing/validation; the agent will not be able to load the skill. */
   error?: string;
+  /** Frontmatter fields besides name and description, kept when the skill is saved from the editor. */
+  frontmatter?: Record<string, unknown>;
+  /** Set when the project has an edited copy; description and content then come from the edit. */
+  edited?: { updatedBy: string; updatedAt: string };
+  /** True when the original SKILL.md changed since the project's edit was made. */
+  originalChanged?: boolean;
 }
 
 export interface FactorySkillsResponse {
   skills: FactorySkillInfo[];
+  /** Whether the caller may edit this project's skills. Present when the catalog is read for a project. */
+  canEdit?: boolean;
 }
 
 // ── Mutation request bodies ────────────────────────────────────────────────

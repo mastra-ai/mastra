@@ -134,7 +134,7 @@ export const queryKeys = {
   defaultModel: () => ['default-model'] as const,
   om: (sessionId: string | undefined, factoryId?: string, threadId?: string, resourceId?: string) =>
     ['om', sessionId ?? null, factoryId ?? null, threadId ?? null, resourceId ?? null] as const,
-  factorySkills: () => ['factory', 'skills'] as const,
+  factorySkills: (factoryProjectId?: string) => ['factory', 'skills', factoryProjectId ?? null] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
