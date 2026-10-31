@@ -70,7 +70,7 @@ describe('Subconscious project scope override', () => {
 
     // Session B with the override sees the pin.
     const withOverride = await processor.computeStateSignal(
-      makeSignalArgs(requestContextWith({ knowledgeResourceId: 'project-1' })),
+      makeSignalArgs(requestContextWith({ mastra__knowledgeResourceId: 'project-1' })),
     );
     expect(withOverride).toMatchObject({ mode: 'snapshot' });
     expect(withOverride!.contents).toContain(pinned.id);
@@ -95,14 +95,14 @@ describe('Subconscious project scope override', () => {
     const processor = new PinnedStateProcessor({
       getKnowledgeStore: async () => (storage as any).getStore('knowledge'),
     });
-    const requestContext = requestContextWith({ knowledgeResourceId: 'project-1' });
+    const requestContext = requestContextWith({ mastra__knowledgeResourceId: 'project-1' });
 
     const first = await processor.computeStateSignal(makeSignalArgs(requestContext));
     expect(first).toMatchObject({ mode: 'snapshot' });
 
     // Same request context, later step, but the override moved to another project:
     // the scope key differs, so the memo must not be served.
-    requestContext.set('knowledgeResourceId', 'project-2');
+    requestContext.set('mastra__knowledgeResourceId', 'project-2');
     const second = await processor.computeStateSignal(makeSignalArgs(requestContext, { stepNumber: 1 }));
     expect(second).toBeUndefined();
   });
@@ -131,7 +131,7 @@ describe('Subconscious project scope override', () => {
       current: 'Project Atlas launches soon.',
       rawObservations: 'Project Atlas launches soon.',
       memory,
-      requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
+      requestContext: requestContextWith({ mastra__knowledgeResourceId: 'project-1' }),
       observationCommitted: Promise.resolve(true),
     });
     await vi.waitFor(() => expect(curatorAgent).toBeDefined());
@@ -157,7 +157,7 @@ describe('Subconscious project scope override', () => {
           }),
         },
         sendSignal: vi.fn(async () => undefined),
-        requestContext: requestContextWith({ knowledgeResourceId: 'project-1' }),
+        requestContext: requestContextWith({ mastra__knowledgeResourceId: 'project-1' }),
       } as any),
     ).catch(() => undefined);
     expect(search).toHaveBeenCalled();

@@ -316,7 +316,7 @@ export function getDynamicMemory(
         reportOrgUnresolved(controller, identity.knowledgeResourceId, identity.reason);
       }
       if (identity.knowledgeResourceId) {
-        requestContext.set('knowledgeResourceId', identity.knowledgeResourceId);
+        requestContext.set('mastra__knowledgeResourceId', identity.knowledgeResourceId);
       }
     }
 
