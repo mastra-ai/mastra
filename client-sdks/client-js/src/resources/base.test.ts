@@ -304,6 +304,37 @@ describe('BaseResource', () => {
     });
   });
 
+  // Custom fetch wrappers read keys like `init.headers.Authorization`, so the winning casing must survive.
+  it('passes custom fetch a plain object keyed by the winning casing', async () => {
+    const customFetch = vi.fn(async () => new Response(JSON.stringify({ ok: true }), { status: 200 }));
+    const customResource = new BaseResource({
+      baseUrl: serverUrl,
+      retries: 0,
+      fetch: customFetch,
+      headers: { Authorization: 'Bearer client-token', 'X-Client': 'kept' },
+    });
+
+    await customResource.request('/test', {
+      method: 'POST',
+      body: {},
+      headers: { authorization: 'Bearer request-token', 'Content-Type': 'application/vnd.example+json' },
+    });
+    await customResource.request('/test', { method: 'POST', body: {} });
+
+    expect(customFetch.mock.calls.map(([, init]) => (init as RequestInit).headers)).toEqual([
+      {
+        'X-Client': 'kept',
+        authorization: 'Bearer request-token',
+        'Content-Type': 'application/vnd.example+json',
+      },
+      {
+        'content-type': 'application/json',
+        Authorization: 'Bearer client-token',
+        'X-Client': 'kept',
+      },
+    ]);
+  });
+
   describe('abort signals', () => {
     const okResponse = () => new Response(JSON.stringify({ ok: true }), { status: 200 });
 
