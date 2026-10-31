@@ -57,7 +57,7 @@
     "supertest": "^7.3.1",
     "tsdown": "0.23.1",
     "typescript": "catalog:",
-    "vitest": "^4.1.12",
+    "vitest": "^5.0.5",
     "zod": "^4.6.7"
   },
   "peerDependencies": {

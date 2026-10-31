@@ -38,7 +38,7 @@
     "tsdown": "0.23.1",
     "typescript": "catalog:",
     "undici": "^8.12.3",
-    "vitest": "^4.1.12"
+    "vitest": "^5.0.5"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.22.0 <2.0.0"
