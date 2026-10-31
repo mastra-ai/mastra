@@ -415,11 +415,11 @@ describe('LinearRules', () => {
   it.each(['throw', 'invalid', 'timeout'] as const)(
     'records %s handler failures without dispatching decisions',
     async failure => {
-      const handler = () => {
+      const handler = vi.fn(() => {
         if (failure === 'throw') throw new Error('handler failed');
         if (failure === 'timeout') return new Promise<never>(() => {});
         return { type: 'notify' as const, idempotencyKey: '', title: 'invalid decision' };
-      };
+      });
       const { project, service, workItems } = await setup({ issueObserved: handler });
       const commit = vi.spyOn(workItems, 'commitRuleEvaluation');
       if (failure === 'timeout') vi.useFakeTimers();
@@ -430,7 +430,10 @@ describe('LinearRules', () => {
           factoryProjectId: project.id,
           issues: [issue],
         });
-        if (failure === 'timeout') await vi.advanceTimersByTimeAsync(5_001);
+        if (failure === 'timeout') {
+          await vi.waitFor(() => expect(handler).toHaveBeenCalled());
+          await vi.advanceTimersByTimeAsync(5_001);
+        }
         await pending;
         expect(commit).toHaveBeenCalledWith(
           expect.objectContaining({

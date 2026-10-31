@@ -12,12 +12,12 @@ import type { ParsedGitLabWebhook } from './webhook.js';
 export type GitLabIssueReconciler = IssueReconciler;
 
 function stringMetadata(item: Card, key: string): string | undefined {
-  const value = item.metadata?.[key];
+  const value = item.workItem.metadata?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function numberMetadata(item: Card, key: string): number | undefined {
-  const value = item.metadata?.[key];
+  const value = item.workItem.metadata?.[key];
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 

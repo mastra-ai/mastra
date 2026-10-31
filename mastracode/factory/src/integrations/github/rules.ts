@@ -32,6 +32,7 @@ import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
+import { primarySource } from '../../storage/domains/work-items/work-item-schema.js';
 import type { IntegrationContext, IntegrationHooks } from '../base.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
@@ -182,7 +183,7 @@ export function cardBelongsToRepository(item: Card, repositoryId: number, reposi
   }
   // A renamed repository leaves the old owner/name in the card URL, so a URL
   // mismatch still defers to the stable intake-stamped repository id.
-  return item.metadata?.githubRepositoryId === repositoryId;
+  return item.workItem.metadata?.githubRepositoryId === repositoryId;
 }
 
 function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number): string {
@@ -223,7 +224,7 @@ export async function trustedCollaborator(
 // Terminal cards leave the reconcile loop below, so the ones that got there before author
 // trust was recorded have no other path to an answer.
 function authorAwaitingTrust(item: Card, repository: ReconcileRepository): string | undefined {
-  const metadata = item.metadata ?? {};
+  const metadata = { ...item.workItem.metadata, ...item.metadata };
   if (typeof metadata.author !== 'string' || metadata.authorTrusted !== undefined) return undefined;
   const tracked = reconcilablePullRequestNumber(item, repository) ?? reconcilableIssueNumber(item, repository);
   if (tracked === undefined) return undefined;
@@ -423,12 +424,12 @@ export class GithubRules {
     if (!sameLabels(cardLabels(item), labels)) {
       let updated;
       try {
-        updated = await this.options.storage.update({
+        updated = await this.options.storage.syncCard({
           orgId: item.orgId,
           id: item.id,
           userId: LABEL_ROUTE_USER_ID,
-          patch: { metadata: { ...(item.metadata ?? {}), labels } },
-          expectedRevision: item.revision,
+          patch: { metadata: { labels } },
+          expectedSourceRevision: primarySource(item)?.revision,
         });
       } catch (error) {
         // The card changed under us (a run wrote it, or a concurrent delivery won). The next
@@ -480,27 +481,26 @@ export class GithubRules {
     // Timestamps have one-second resolution, so equal timestamps still apply.
     const updatedAt = string(issue?.updated_at);
     const payloadTime = timestamp(updatedAt);
-    const storedTime = timestamp(item.metadata?.githubAssigneesUpdatedAt);
+    const storedTime = timestamp(item.workItem.metadata?.githubAssigneesUpdatedAt);
     if (payloadTime !== undefined && storedTime !== undefined && payloadTime < storedTime) {
       return { status: 'ignored' };
     }
     // A newer payload with unchanged assignees still advances the stored time, so a delayed older
     // payload cannot slip in behind it.
     const advancesTime = payloadTime !== undefined && (storedTime === undefined || payloadTime > storedTime);
-    if (sameStrings(item.metadata?.assignees, assignees) && !advancesTime) return { status: 'ignored' };
+    if (sameStrings(item.workItem.metadata?.assignees, assignees) && !advancesTime) return { status: 'ignored' };
     try {
-      const updated = await this.options.storage.update({
+      const updated = await this.options.storage.syncCard({
         orgId: item.orgId,
         id: item.id,
         userId: LABEL_ROUTE_USER_ID,
         patch: {
           metadata: {
-            ...(item.metadata ?? {}),
             assignees,
             ...(payloadTime !== undefined ? { githubAssigneesUpdatedAt: updatedAt } : {}),
           },
         },
-        expectedRevision: item.revision,
+        expectedSourceRevision: primarySource(item)?.revision,
       });
       return { status: updated ? 'committed' : 'ignored' };
     } catch (error) {
@@ -715,6 +715,7 @@ export class GithubRules {
                 title: item.title,
                 url: item.externalSource?.url ?? null,
                 stages: item.stages,
+                workItem: item.workItem,
                 acceptedAt: item.acceptedAt,
                 metadata: item.metadata,
               },
@@ -740,6 +741,7 @@ export class GithubRules {
                 ...(string(issue?.updated_at) ? { updatedAt: string(issue?.updated_at) } : {}),
                 assignees: actorLogins(issue?.assignees),
                 labels: labelNames(issue?.labels),
+                ...(string(object(issue?.user)?.login) ? { author: string(object(issue?.user)?.login) } : {}),
                 ...(string(issue?.state) === 'closed' || string(issue?.state) === 'open'
                   ? { state: string(issue?.state) as 'open' | 'closed' }
                   : {}),
@@ -963,8 +965,8 @@ export class GithubRules {
             : undefined;
         const stillOpen =
           companionStatus === 'replayed'
-            ? reviewCard !== undefined && reviewCard.metadata?.state !== 'closed'
-            : reviewCard?.metadata?.state !== 'closed';
+            ? reviewCard !== undefined && !['closed', 'merged'].includes(reviewCard.workItem.state ?? '')
+            : !['closed', 'merged'].includes(reviewCard?.workItem.state ?? '');
         if (authoringItem && trusted && stillOpen) {
           // The head comes along so a head recorded for an earlier pull
           // request cannot mark this one's verdict outdated. A replayed opening
@@ -1011,7 +1013,7 @@ export class GithubRules {
           }
           continue;
         }
-        await this.options.storage.update({
+        await this.options.storage.syncCard({
           orgId: card.orgId,
           id: card.id,
           userId: 'factory-rule-dispatcher',
@@ -1276,7 +1278,7 @@ export function reconcilableIssueNumber(item: Card, repository: ReconcileReposit
     if (!match) return undefined;
     // A renamed repository leaves the old owner/name in the card URL, so a
     // URL mismatch still defers to the stable intake-stamped repository id.
-    const belongs = match[1] === repository.fullName || item.metadata?.githubRepositoryId === repository.id;
+    const belongs = match[1] === repository.fullName || item.workItem.metadata?.githubRepositoryId === repository.id;
     return belongs ? Number(match[2]) : undefined;
   }
   const externalId = item.externalSource.externalId;
@@ -1287,7 +1289,7 @@ export function reconcilableIssueNumber(item: Card, repository: ReconcileReposit
   // Canonical keys carry no repository; only the intake-stamped repository id
   // can attribute a URL-less card, and guessing would let a multi-repo
   // project close repo B's card because repo A's same-numbered issue closed.
-  return item.metadata?.githubRepositoryId === repository.id ? Number(canonical[1]) : undefined;
+  return item.workItem.metadata?.githubRepositoryId === repository.id ? Number(canonical[1]) : undefined;
 }
 
 export function reconciledIssueClosedEvent(
@@ -1561,7 +1563,7 @@ export function createGithubPullRequestReconciler(
             if (unansweredAuthor) unanswered.push({ item, author: unansweredAuthor });
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
-            const metadata = item.metadata ?? {};
+            const metadata = { ...item.workItem.metadata, ...item.metadata };
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             const reconciledOutcome = reconciledPullRequestOutcome(metadata);
             if (
@@ -1583,7 +1585,7 @@ export function createGithubPullRequestReconciler(
       const authorTrust = sweepTrustLookup(options.github, repository);
       for (const { item, author } of unanswered) {
         try {
-          await options.storage.update({
+          await options.storage.syncCard({
             orgId: item.orgId,
             id: item.id,
             userId: 'factory-rule-dispatcher',
@@ -1614,7 +1616,7 @@ export function createGithubPullRequestReconciler(
           }
           for (const card of cards) {
             if (state.state === 'closed') continue;
-            const metadata = card.metadata ?? {};
+            const metadata = { ...card.workItem.metadata, ...card.metadata };
             const statusChanged =
               metadata.state !== state.state || metadata.draft !== state.draft || metadata.merged !== state.merged;
             const authorChanged = state.author !== undefined && metadata.author !== state.author;
@@ -1627,7 +1629,7 @@ export function createGithubPullRequestReconciler(
             const reconciliation = metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
             if (!metadataChanged && reconciliation !== 'merged' && reconciliation !== 'closed') continue;
             try {
-              await options.storage.update({
+              await options.storage.syncCard({
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
@@ -1661,7 +1663,7 @@ export function createGithubPullRequestReconciler(
             if (cleanupFailures.has(card.id)) continue;
             const trustStale = authorTrusted !== undefined && (card.metadata ?? {}).authorTrusted !== authorTrusted;
             try {
-              await options.storage.update({
+              await options.storage.syncCard({
                 orgId: card.orgId,
                 id: card.id,
                 userId: 'factory-rule-dispatcher',

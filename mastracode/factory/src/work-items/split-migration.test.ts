@@ -391,7 +391,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
       if (source) expect(source, fixture.name).not.toHaveProperty('claim_key');
       if (card.externalSource) expect(source, fixture.name).toMatchObject(fixture.expected);
       for (const key of fixture.providerKeys) {
-        expect(source!.metadata?.[key], `${fixture.name}: source ${key}`).toEqual(card.metadata![key]);
+        expect(source!.metadata?.[key], `${fixture.name}: source ${key}`).toEqual(fixture.input.metadata[key]);
         expect(boardItem!.metadata ?? {}, `${fixture.name}: board item ${key}`).not.toHaveProperty(key);
       }
       for (const key of fixture.boardKeys) {

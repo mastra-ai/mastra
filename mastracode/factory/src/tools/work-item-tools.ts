@@ -113,14 +113,17 @@ export function createFactoryWorkItemTools(
    * `metadata` would run in it (a card synced from an issue follows the
    * issue's repository, which a slug can't override).
    */
-  const requireRepository = async (slug: string, metadata: Record<string, unknown> | null = null) => {
+  const requireRepository = async (slug: string, item?: Pick<Card, 'metadata' | 'workItem'>) => {
     const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
     if (!sourceControl) throw new Error('This session has no source-control provider to look repositories up in.');
     const resolve = (repository?: string) =>
       resolveWorkItemRepository({
         sourceControl,
         ...project,
-        item: { metadata: repository ? { ...metadata, repository } : metadata },
+        item: {
+          metadata: repository ? { repository } : (item?.metadata ?? null),
+          workItem: item?.workItem ?? { metadata: null },
+        },
       });
     const resolution = await resolve(slug);
     if (resolution.status === 'resolved' && resolution.slug === slug) return;
@@ -280,7 +283,7 @@ export function createFactoryWorkItemTools(
         // Pre-approval drops the plan-approval gate for good, so it is the person's call.
         if (plansPreapproved) requirePerson(scope, 'pre-approve plans');
         const item = await requireItem(workItem);
-        if (repository) await requireRepository(repository, item.metadata);
+        if (repository) await requireRepository(repository, item);
         let parentWorkItemId: string | null | undefined;
         if (parentWorkItem === null) parentWorkItemId = null;
         else if (parentWorkItem !== undefined) parentWorkItemId = (await requireItem(parentWorkItem)).id;

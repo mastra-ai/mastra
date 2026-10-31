@@ -66,6 +66,59 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     return replica;
   }
 
+  it('checks source revisions independently from board moves and work identity revisions', async () => {
+    const { workItems, scope, item } = await setup();
+    const source = item.workItem.sources[0]!;
+    const refreshed = await workItems.syncCard({
+      ...scope,
+      id: item.id,
+      expectedSourceRevision: source.revision,
+      patch: { title: 'Refreshed title', metadata: { labels: ['fixed'], state: 'closed' } },
+    });
+    expect(refreshed?.item).toMatchObject({
+      title: 'Refreshed title',
+      revision: item.revision,
+      workItem: { revision: item.workItem.revision + 1, labels: ['fixed'], state: 'closed' },
+    });
+    expect(refreshed?.item.workItem.sources[0]?.revision).toBe(source.revision + 1);
+    const moved = await workItems.update({ ...scope, id: item.id, patch: { stages: ['planning'] } });
+    const next = await workItems.syncCard({
+      ...scope,
+      id: item.id,
+      expectedSourceRevision: source.revision + 1,
+      patch: { metadata: { author: 'maintainer' } },
+    });
+    expect(next?.item).toMatchObject({
+      revision: moved?.item.revision,
+      workItem: { revision: item.workItem.revision + 1, labels: ['fixed'], state: 'closed', author: 'maintainer' },
+    });
+    await expect(
+      workItems.syncCard({
+        ...scope,
+        id: item.id,
+        expectedSourceRevision: source.revision + 1,
+        patch: { metadata: { labels: ['stale'] } },
+      }),
+    ).rejects.toMatchObject({ code: 'work_item_update_conflict', reason: 'revision' });
+    expect((await workItems.get({ ...scope, id: item.id }))?.workItem.labels).toEqual(['fixed']);
+  });
+
+  it('refreshes Factory-native work without manufacturing an external source', async () => {
+    const { storage, workItems, scope } = await setup();
+    const { item } = await workItems.upsert({ ...scope, input: { title: 'Manual task', stages: ['intake'] } });
+    const refreshed = await workItems.syncCard({
+      ...scope,
+      id: item.id,
+      patch: { title: 'Updated manual task', metadata: { repository: 'acme/app' } },
+    });
+    expect(refreshed?.item).toMatchObject({
+      title: 'Updated manual task',
+      metadata: { repository: 'acme/app' },
+      workItem: { sources: [], provider: 'factory' },
+    });
+    expect(await storage.ops.findMany('factory_work_item_sources', { work_item_id: item.workItem.id })).toEqual([]);
+  });
+
   it('refuses to boot Factory in dry-run mode over migrated cards even though domains initialize fail-soft', async () => {
     const storage =
       backend === 'postgres'
@@ -502,7 +555,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     );
     expect(await workItems.get({ orgId: scope.orgId, id: item.id })).toMatchObject({
       revision: item.revision,
-      metadata: { labels: ['fixed'], state: 'closed' },
+      metadata: { authorTrusted: false },
       workItem: { labels: ['fixed'], state: 'closed', metadata: { labels: ['fixed'], state: 'closed' } },
     });
   });
@@ -633,8 +686,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     const read = await workItems.get({ orgId: scope.orgId, id: item.id });
     expect(read).toMatchObject({
       revision: item.revision + 1,
-      metadata: { state: 'closed', labels: ['fixed'], author: 'maintainer', identifier: 'acme/app#42' },
-      workItem: { sources: [{ state: 'closed', labels: ['fixed'], author: 'maintainer', key: 'acme/app#42' }] },
+      metadata: { authorTrusted: false, reviewVerdict: 'approved' },
+      workItem: {
+        metadata: { state: 'closed', labels: ['fixed'], author: 'maintainer', identifier: 'acme/app#42' },
+        sources: [{ state: 'closed', labels: ['fixed'], author: 'maintainer', key: 'acme/app#42' }],
+      },
     });
   });
 

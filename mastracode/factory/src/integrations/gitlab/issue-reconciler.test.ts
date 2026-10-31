@@ -142,7 +142,7 @@ describe('GitLab issue reconciler', () => {
 
       await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
       const [trustedItem] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-      expect(trustedItem?.metadata).toMatchObject({ author: 'Maintainer Person', authorTrusted: true });
+      expect((trustedItem)).toMatchObject({ metadata: {authorTrusted: true}, workItem: { metadata: {author: 'Maintainer Person'} } });
       accessLevel = 10;
       await expect(reconcile?.()).resolves.toMatchObject({ checked: 1, closed: 1, failed: 0 });
       const decisions = await seeded.workItems.listDeferredDecisions(project.orgId, project.id);
@@ -151,12 +151,7 @@ describe('GitLab issue reconciler', () => {
         decision: { type: 'transition', board: 'work', stage: 'done' },
       });
       const [item] = await seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-      expect(item?.metadata).toMatchObject({
-        author: 'Maintainer Person',
-        authorTrusted: false,
-        state: 'closed',
-        labelColors: { bug: '#428BCA' },
-      });
+      expect((item)).toMatchObject({ metadata: {authorTrusted: false}, workItem: { metadata: {author: 'Maintainer Person', state: 'closed', labelColors: { bug: '#428BCA' }} } });
     },
   );
 });

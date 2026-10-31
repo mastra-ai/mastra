@@ -43,14 +43,20 @@ describe('resolveWorkItemRepository', () => {
     const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
 
     await expect(
-      resolveWorkItemRepository({ ...args, item: { metadata: { repository: 'acme/two' } } }),
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: { repository: 'acme/two' }, workItem: { metadata: null } },
+      }),
     ).resolves.toEqual({
       status: 'resolved',
       projectRepositoryId: repositories[1]!.projectRepository.id,
       slug: 'acme/two',
     });
     await expect(
-      resolveWorkItemRepository({ ...args, item: { metadata: { githubRepositoryId: 1 } } }),
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: null, workItem: { metadata: { githubRepositoryId: 1 } } },
+      }),
     ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/one' });
   });
 
@@ -61,7 +67,7 @@ describe('resolveWorkItemRepository', () => {
     await expect(
       resolveWorkItemRepository({
         ...args,
-        item: { metadata: { repository: 'acme/old-name', githubRepositoryId: 1 } },
+        item: { metadata: { repository: 'acme/old-name' }, workItem: { metadata: { githubRepositoryId: 1 } } },
       }),
     ).resolves.toEqual({
       status: 'resolved',
@@ -70,7 +76,10 @@ describe('resolveWorkItemRepository', () => {
     });
     // A GitLab project id must not match a GitHub repository that happens to share it.
     await expect(
-      resolveWorkItemRepository({ ...args, item: { metadata: { repository: 'acme/old-name', gitlabProjectId: '2' } } }),
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: { repository: 'acme/old-name' }, workItem: { metadata: { gitlabProjectId: '2' } } },
+      }),
     ).resolves.toMatchObject({ status: 'unlinked' });
 
     const gitlab = await seedRepositories(['acme/gitlab-renamed'], 'gitlab');
@@ -79,13 +88,13 @@ describe('resolveWorkItemRepository', () => {
         sourceControl: gitlab.sourceControl,
         orgId: 'org-1',
         factoryProjectId: gitlab.project.id,
-        item: { metadata: { repository: 'acme/old-name', gitlabProjectId: '1' } },
+        item: { metadata: { repository: 'acme/old-name' }, workItem: { metadata: { gitlabProjectId: '1' } } },
       }),
     ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/gitlab-renamed' });
     await expect(
       resolveWorkItemRepository({
         ...args,
-        item: { metadata: { repository: 'acme/old-name', githubRepositoryId: 99 } },
+        item: { metadata: { repository: 'acme/old-name' }, workItem: { metadata: { githubRepositoryId: 99 } } },
       }),
     ).resolves.toEqual({ status: 'unlinked', hint: 'Repository acme/old-name is not linked to this Factory.' });
   });
@@ -97,7 +106,7 @@ describe('resolveWorkItemRepository', () => {
     await expect(
       resolveWorkItemRepository({
         ...args,
-        item: { metadata: { linearProjectId: 'linear-project' } },
+        item: { metadata: null, workItem: { metadata: { linearProjectId: 'linear-project' } } },
         linearRepositoryMap: { 'linear-project': 'acme/two' },
       }),
     ).resolves.toMatchObject({ status: 'resolved', projectRepositoryId: repositories[1]!.projectRepository.id });
@@ -108,7 +117,7 @@ describe('resolveWorkItemRepository', () => {
         sourceControl: single.sourceControl,
         orgId: 'org-1',
         factoryProjectId: single.project.id,
-        item: { metadata: null },
+        item: { metadata: null, workItem: { metadata: null } },
       }),
     ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/only' });
   });
@@ -117,12 +126,17 @@ describe('resolveWorkItemRepository', () => {
     const { sourceControl, project } = await seedRepositories(['acme/one', 'acme/two']);
     const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
 
-    await expect(resolveWorkItemRepository({ ...args, item: { metadata: null } })).resolves.toEqual({
+    await expect(
+      resolveWorkItemRepository({ ...args, item: { metadata: null, workItem: { metadata: null } } }),
+    ).resolves.toEqual({
       status: 'ambiguous',
       candidates: ['acme/one', 'acme/two'],
     });
     await expect(
-      resolveWorkItemRepository({ ...args, item: { metadata: { repository: 'other/repo' } } }),
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: { repository: 'other/repo' }, workItem: { metadata: null } },
+      }),
     ).resolves.toMatchObject({ status: 'unlinked' });
   });
 
@@ -136,7 +150,10 @@ describe('resolveWorkItemRepository', () => {
           sourceControl,
           orgId: 'org-1',
           factoryProjectId: project.id,
-          item: { metadata: { repository: 'acme/old-name', githubRepositoryId: 1, gitlabProjectId: '2' } },
+          item: {
+            metadata: { repository: 'acme/old-name' },
+            workItem: { metadata: { githubRepositoryId: 1, gitlabProjectId: '2' } },
+          },
         }),
       ).resolves.toMatchObject({ status: 'resolved', slug: integrationId === 'github' ? 'acme/one' : 'acme/two' });
     },
@@ -149,7 +166,7 @@ describe('resolveWorkItemRepository', () => {
         sourceControl,
         orgId: 'org-1',
         factoryProjectId: project.id,
-        item: { metadata: { repository: 'acme/one', githubRepositoryId: 99 } },
+        item: { metadata: { repository: 'acme/one' }, workItem: { metadata: { githubRepositoryId: 99 } } },
       }),
     ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/one' });
 
@@ -159,7 +176,7 @@ describe('resolveWorkItemRepository', () => {
         sourceControl: empty.sourceControl,
         orgId: 'org-1',
         factoryProjectId: empty.project.id,
-        item: { metadata: null },
+        item: { metadata: null, workItem: { metadata: null } },
       }),
     ).resolves.toEqual({ status: 'unlinked', hint: 'This Factory has no linked source-control repositories.' });
   });
@@ -201,17 +218,25 @@ describe('resolveWorkItemRepository', () => {
     const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
     const expected = { status: 'resolved', projectRepositoryId: environmentLink.id, slug: 'acme/one' };
 
-    await expect(resolveWorkItemRepository({ ...args, item: { metadata: null } })).resolves.toEqual(expected);
     await expect(
-      resolveWorkItemRepository({ ...args, item: { metadata: { repository: 'acme/one' } } }),
-    ).resolves.toEqual(expected);
-    await expect(
-      resolveWorkItemRepository({ ...args, item: { metadata: { githubRepositoryId: 1 } } }),
+      resolveWorkItemRepository({ ...args, item: { metadata: null, workItem: { metadata: null } } }),
     ).resolves.toEqual(expected);
     await expect(
       resolveWorkItemRepository({
         ...args,
-        item: { metadata: { linearProjectId: 'linear-project' } },
+        item: { metadata: { repository: 'acme/one' }, workItem: { metadata: null } },
+      }),
+    ).resolves.toEqual(expected);
+    await expect(
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: null, workItem: { metadata: { githubRepositoryId: 1 } } },
+      }),
+    ).resolves.toEqual(expected);
+    await expect(
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: null, workItem: { metadata: { linearProjectId: 'linear-project' } } },
         linearRepositoryMap: { 'linear-project': 'acme/one' },
       }),
     ).resolves.toEqual(expected);
@@ -245,7 +270,10 @@ describe('resolveWorkItemRepository', () => {
     const args = { sourceControl, orgId: 'org-1', factoryProjectId: project.id };
 
     await expect(
-      resolveWorkItemRepository({ ...args, item: { metadata: { githubRepositoryId: 1 } } }),
+      resolveWorkItemRepository({
+        ...args,
+        item: { metadata: null, workItem: { metadata: { githubRepositoryId: 1 } } },
+      }),
     ).resolves.toEqual({
       status: 'unlinked',
       hint: 'Source-control repository 1 is not linked to this Factory.',
@@ -253,7 +281,7 @@ describe('resolveWorkItemRepository', () => {
     await expect(
       resolveWorkItemRepository({
         ...args,
-        item: { metadata: { githubRepositoryId: 1, repository: 'acme/two' } },
+        item: { metadata: { repository: 'acme/two' }, workItem: { metadata: { githubRepositoryId: 1 } } },
       }),
     ).resolves.toMatchObject({ status: 'resolved', slug: 'acme/two' });
   });

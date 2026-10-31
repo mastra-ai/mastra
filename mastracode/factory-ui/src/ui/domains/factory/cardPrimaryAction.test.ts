@@ -60,6 +60,50 @@ describe('cardMoves', () => {
     ).toEqual([investigate, build]);
   });
 
+  const normalizedIssue = {
+    source: 'github-issue' as const,
+    metadata: { labels: ['stale-board-label'] },
+    workItem: {
+      provider: 'github',
+      kind: 'issue' as const,
+      key: 'acme/repo#42',
+      url: null,
+      title: 'Needs approval',
+      state: 'open',
+      labels: ['Status: Needs Approval'],
+      author: 'reporter',
+      metadata: null,
+    },
+    stages: ['intake'],
+  };
+
+  it('holds a persisted issue for its normalized approval label, not stale board labels', () => {
+    expect(cardMoves(normalizedIssue, 'intake')).toEqual([
+      { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
+    ]);
+    expect(cardMoves({ ...normalizedIssue, acceptedAt: '2026-08-30T00:00:00.000Z' }, 'triage')).toEqual([
+      investigate,
+      build,
+    ]);
+    expect(cardMoves({ ...normalizedIssue, stages: ['planning'] }, 'planning')).toEqual([investigate, build]);
+  });
+
+  it.each([{ labels: [] }, { labels: ['bug'] }])(
+    'does not restore stale approval labels when normalized labels are $labels',
+    ({ labels }) => {
+      expect(
+        cardMoves(
+          {
+            ...normalizedIssue,
+            metadata: { labels: ['Status: Needs Approval'] },
+            workItem: { ...normalizedIssue.workItem, labels },
+          },
+          'intake',
+        ),
+      ).toEqual([investigate, build]);
+    },
+  );
+
   it.each(['linear-issue', 'jira-issue', 'incidentio-follow-up'] as const)(
     'offers a %s the same issue lanes',
     source => {

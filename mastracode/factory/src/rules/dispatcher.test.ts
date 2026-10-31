@@ -5171,7 +5171,9 @@ describe('FactoryDecisionDispatcher', () => {
     const pending = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(pending.map(record => record.status)).toEqual(['succeeded']);
     const updated = await storage.get({ orgId: 'org-1', id: card.id });
-    expect(updated?.metadata).toMatchObject({ author: 'human-edited', sourceCreatedAt: '2029-12-01T00:00:00Z' });
+    expect(updated).toMatchObject({
+      workItem: { metadata: { author: 'human-edited', sourceCreatedAt: '2029-12-01T00:00:00Z' } },
+    });
     expect(updated?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY]).toBeUndefined();
     // Preserved: not re-entered into intake.
     expect(updated?.stages).toEqual(['review']);
@@ -6035,7 +6037,7 @@ describe('custom-board deferred targets', () => {
     expect(updated).toMatchObject({ board: 'work', stages: ['planning'] });
     // Placement leaves the card's own facts alone: the arrival decision's
     // metadata is not walked back onto it.
-    expect(updated?.metadata).toMatchObject({ labels: ['bug'] });
+    expect(updated).toMatchObject({ workItem: { metadata: { labels: ['bug'] } } });
     // The card left Intake for Planning without a governed transition.
     expect(updated?.stageHistory).toMatchObject([
       { stage: 'intake', exitedBy: 'factory-rule-dispatcher' },

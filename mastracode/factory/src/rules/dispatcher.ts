@@ -35,6 +35,7 @@ import type {
   UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
+import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -1416,13 +1417,17 @@ export class FactoryDecisionDispatcher {
       // Backfill source facts (e.g. sourceCreatedAt) that older cards were filed
       // without. Fill-only: never overwrite, and never adopt the card as
       // materialized by this decision.
+      const providerKeys = workItemProviderAdapter(result.item.externalSource).providerMetadataKeys;
       const missing = Object.fromEntries(
         Object.entries(decision.metadata ?? {}).filter(
-          ([key]) => key !== FACTORY_RULE_MATERIALIZATION_KEY && result.item.metadata?.[key] === undefined,
+          ([key]) =>
+            key !== FACTORY_RULE_MATERIALIZATION_KEY &&
+            (providerKeys.includes(key) ? result.item.workItem.metadata?.[key] : result.item.metadata?.[key]) ===
+              undefined,
         ),
       );
       if (Object.keys(missing).length > 0) {
-        const filled = await this.#storage.update({
+        const filled = await this.#storage.syncCard({
           orgId: record.orgId,
           id: result.item.id,
           userId: 'factory-rule-dispatcher',

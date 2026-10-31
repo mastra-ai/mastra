@@ -150,6 +150,7 @@ export class JiraRules {
               title: relatedItem.title,
               url: relatedItem.externalSource?.url ?? null,
               stages: relatedItem.stages,
+              workItem: relatedItem.workItem,
               acceptedAt: relatedItem.acceptedAt,
               metadata: relatedItem.metadata,
             },

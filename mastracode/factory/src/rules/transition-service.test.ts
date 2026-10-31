@@ -1047,7 +1047,9 @@ describe('FactoryTransitionService', () => {
 
     await service.transition(request(item, { stage: 'execute' }));
 
-    expect(rule.mock.calls[0]?.[0]).toMatchObject({ item: { metadata: { author: 'octocat' } } });
+    expect(rule.mock.calls[0]?.[0]).toMatchObject({
+      item: { workItem: expect.objectContaining({ metadata: expect.objectContaining({ author: 'octocat' }) }) },
+    });
   });
 
   it('invokes onTerminalStage only after a transition commits into a terminal stage', async () => {
