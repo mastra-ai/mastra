@@ -1,3 +1,4 @@
+import type { BrowserCookie, MastraBrowser } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -10,6 +11,18 @@ export interface FactorySandboxToolDependencies {
   sessions: Pick<SourceControlSessionLookup, 'getSourceControlBySessionId'>;
   /** `SessionRetirementCoordinator.resetSessionSandbox`. */
   resetSandbox: (input: RecreateSessionSandboxInput) => Promise<'reset' | 'not-found' | 'not-here'>;
+  /** The session's running sandbox, if this process has one. */
+  findSandbox: (input: RecreateSessionSandboxInput) => Promise<object | undefined>;
+  /** The browser session agents drive, when Factory has one. */
+  browser?: MastraBrowser;
+}
+
+interface PortUrlSandbox {
+  getPortUrl(port: number): Promise<{ url: string; cookie: BrowserCookie }>;
+}
+
+function hasPortUrl(sandbox: object): sandbox is PortUrlSandbox {
+  return typeof (sandbox as Partial<PortUrlSandbox>).getPortUrl === 'function';
 }
 
 /** Tools a session uses on its own sandbox. Every session with a sandbox gets them. */
@@ -46,5 +59,37 @@ export function createFactorySandboxTools(
       return { recreated: true, next: 'Your next command starts a fresh sandbox.' };
     },
   });
-  return { factory_recreate_sandbox: recreate };
+
+  const portUrl = createTool({
+    id: 'factory_sandbox_port_url',
+    description: [
+      'Get the link that opens a port in your sandbox in a browser, so you or the person you are working with can see a server you started there (a dev server, a preview, an API).',
+      'Start the server first and bind it to 0.0.0.0, not 127.0.0.1.',
+      'The link only opens for people signed in with access to this sandbox and does not expire, so you can share it.',
+      'It also lets your own browser tool open that port for the next hour. If your browser later lands on a sign-in page, call this again.',
+    ].join(' '),
+    inputSchema: z
+      .object({
+        port: z.number().int().min(1).max(65_535).describe('The port the server listens on inside the sandbox.'),
+      })
+      .strict(),
+    execute: async ({ port }, context) => {
+      const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
+      const sandbox =
+        sourceControl && (await deps.findSandbox({ sourceControl, orgId: scope.orgId, sessionId: scope.sessionId }));
+      if (!sandbox) throw new Error('This session has no sandbox running yet. Run a command to start one.');
+      if (!hasPortUrl(sandbox)) throw new Error("This session's sandbox can't expose ports.");
+      const { url, cookie } = await sandbox.getPortUrl(port);
+      // The browser tool can't sign in, so it gets the preview cookie directly.
+      // The cookie never goes back to the model.
+      const threadId = context?.agent?.threadId;
+      if (threadId && deps.browser) {
+        // Browsers that can't take cookies throw; the link still works, the browser just has to sign in.
+        await deps.browser.setCookies([cookie], threadId).catch(() => {});
+      }
+      return { url };
+    },
+  });
+
+  return { factory_recreate_sandbox: recreate, factory_sandbox_port_url: portUrl };
 }

@@ -298,6 +298,28 @@ export type CaptureCheckpointResult =
   | { status: 'coalesced'; checkpointName: string }
   | { status: 'skipped'; reason: 'no-checkpoint-name-configured' | 'sandbox-not-running' };
 
+/** E2B's sandbox control port (envd). Never exposed as a preview. */
+const E2B_CONTROL_PORT = 49983;
+
+/** A sandbox preview cookie, in the shape browsers like Playwright accept. */
+export interface SandboxPreviewCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  /** Unix time in seconds. */
+  expires: number;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'Lax';
+}
+
+/** What {@link PlatformSandbox.getPortUrl} returns. */
+export interface SandboxPortLinks {
+  url: string;
+  cookie: SandboxPreviewCookie;
+}
+
 /**
  * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
  * (Railway destroy, quota reclamation, etc.). The client cannot recover from
@@ -1311,6 +1333,38 @@ export class PlatformSandbox extends MastraSandbox {
    */
   async executeCommand(command: string, args?: string[], options?: ExecuteCommandOptions): Promise<CommandResult> {
     return this._executeCommand(command, args, options, { once: false });
+  }
+
+  /**
+   * Links that open a port of the sandbox in a browser. Sandbox ports are
+   * private:
+   *
+   * - `url` is the port's address. Anyone with access to the sandbox's
+   *   project can open it after signing in to the platform; anyone else is
+   *   turned away. It doesn't expire, so it's the link to share.
+   * - `cookie` signs a browser you control, such as an agent's own browser,
+   *   in to that port for an hour, so it opens `url` without signing in.
+   *   Never share it.
+   *
+   * The sandbox control port is refused.
+   */
+  async getPortUrl(port: number): Promise<SandboxPortLinks> {
+    if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+      throw new RangeError(`Port must be an integer from 1 to 65535, got ${port}`);
+    }
+    if (port === E2B_CONTROL_PORT) throw new Error(`Port ${port} is the sandbox control port`);
+    if (this._client.sandboxProvider !== 'e2b') {
+      throw new Error(`Port URLs aren't available for ${this._client.sandboxProvider} sandboxes`);
+    }
+    await this.ensureRunning();
+    if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+    const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}/preview-grants`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ port }),
+    });
+    const { url: grantUrl, cookie } = (await response.json()) as { url: string; cookie: SandboxPreviewCookie };
+    return { url: `${new URL(grantUrl).origin}/`, cookie };
   }
 
   /**
