@@ -72,13 +72,18 @@ function fadeShades(width: number, step: number): string[] {
   return Array.from({ length: Math.max(0, width) }, (_, col) => surfaceShade(step * (1 - (col / last) ** FADE_CURVE)));
 }
 
+/** An SGR sequence that sets a background color (48;2;… truecolor or 48;5;… 256-color). */
+const OWN_BG_RE = /^\x1b\[(?:[0-9;]*;)?48[;:]/;
+
 function fadeRow(line: string, shades: string[]): string {
   let out = '';
   let col = 0;
   let current = '';
+  // A span with its own background (a keycap chip) keeps it; the fade resumes after the span resets.
+  let ownBg = false;
   const cell = (text: string) => {
     const hex = shades[Math.min(col, shades.length - 1)] ?? '';
-    if (hex !== current) {
+    if (!ownBg && hex !== current) {
       current = hex;
       out += bgOpen(hex);
     }
@@ -89,7 +94,13 @@ function fadeRow(line: string, shades: string[]): string {
     if (!part) continue;
     if (part.startsWith('\x1b')) {
       out += part;
-      if (RESET_RE.test(part) && current) out += bgOpen(current);
+      if (RESET_RE.test(part)) {
+        ownBg = false;
+        if (current) out += bgOpen(current);
+      } else if (OWN_BG_RE.test(part)) {
+        ownBg = true;
+        current = '';
+      }
       continue;
     }
     for (const { segment } of graphemes.segment(part)) cell(segment);

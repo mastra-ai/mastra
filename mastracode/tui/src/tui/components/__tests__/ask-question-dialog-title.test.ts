@@ -2,26 +2,33 @@ import { describe, expect, it } from 'vitest';
 
 import { AskQuestionDialogComponent } from '../ask-question-dialog.js';
 
-function heading(title?: string): string {
-  const dialog = new AskQuestionDialogComponent({
-    question: 'Pick one',
+function dialog(question: string, title?: string): AskQuestionDialogComponent {
+  return new AskQuestionDialogComponent({
+    question,
     options: [{ label: 'A' }],
     ...(title ? { title } : {}),
     onSubmit: () => {},
     onCancel: () => {},
   });
-  return dialog
-    .render(60)
-    .map(line => line.replace(/\x1b\[[0-9;]*m/g, '').trim())
-    .find(line => line.length > 0)!;
 }
 
+const plainLines = (component: AskQuestionDialogComponent) =>
+  component.render(60).map(line => line.replace(/\x1b\[[0-9;]*m/g, '').trim());
+
 describe('AskQuestionDialogComponent title', () => {
-  it('defaults to "Question"', () => {
-    expect(heading()).toBe('Question');
+  it('uses a short one-line question as the menu title', () => {
+    const component = dialog('Pick one:');
+    expect(component.menuTitle()).toBe('Pick one');
+    expect(plainLines(component)).not.toContain('Pick one:');
+  });
+
+  it('defaults to "Question" and shows a long question above the options', () => {
+    const component = dialog('Line one\nLine two');
+    expect(component.menuTitle()).toBe('Question');
+    expect(plainLines(component).slice(0, 2)).toEqual(['Line one', 'Line two']);
   });
 
   it('uses the given title', () => {
-    expect(heading('Schedules')).toBe('Schedules');
+    expect(dialog('Pick one', 'Schedules').menuTitle()).toBe('Schedules');
   });
 });

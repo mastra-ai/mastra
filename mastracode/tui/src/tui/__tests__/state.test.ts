@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 const { requestUIRender } = vi.hoisted(() => ({ requestUIRender: vi.fn() }));
 
-vi.mock('@earendil-works/pi-tui', () => {
+vi.mock('@earendil-works/pi-tui', async importOriginal => {
+  const actual = (await importOriginal()) as Record<string, unknown>;
   class MockContainer {
     children: unknown[] = [];
 
@@ -28,6 +29,7 @@ vi.mock('@earendil-works/pi-tui', () => {
   }
 
   return {
+    ...actual,
     Container: MockContainer,
     ProcessTerminal: MockProcessTerminal,
     TUI: MockTUI,

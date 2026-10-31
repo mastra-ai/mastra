@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   selectLists: [] as any[],
 }));
 
-vi.mock('@earendil-works/pi-tui', () => {
+const mockUi = vi.hoisted(() => {
   class MockNode {
     children: MockNode[] = [];
 
@@ -42,7 +42,6 @@ vi.mock('@earendil-works/pi-tui', () => {
     constructor(
       public items: { value: string }[],
       _visibleRows?: number,
-      _theme?: unknown,
     ) {
       super();
       mocks.selectLists.push(this);
@@ -65,7 +64,6 @@ vi.mock('@earendil-works/pi-tui', () => {
     constructor(
       public items: { id: string; submenu?: (currentValue: string, done: (value?: string) => void) => MockNode }[],
       _visibleRows?: number,
-      _theme?: unknown,
       _onChange?: (id: string, value: string) => void,
       public onClose?: () => void,
     ) {
@@ -78,17 +76,19 @@ vi.mock('@earendil-works/pi-tui', () => {
     }
   }
 
-  return {
-    Box: MockNode,
-    Container: MockNode,
-    Input: MockInput,
-    SelectList: MockSelectList,
-    SettingsList: MockSettingsList,
-    Spacer: MockNode,
-    Text: MockNode,
-    matchesKey: (data: string, key: string) => data === `<${key}>`,
-  };
+  return { MockNode, MockInput, MockSelectList, MockSettingsList };
 });
+
+vi.mock('@earendil-works/pi-tui', () => ({
+  Box: mockUi.MockNode,
+  Container: mockUi.MockNode,
+  Input: mockUi.MockInput,
+  Spacer: mockUi.MockNode,
+  Text: mockUi.MockNode,
+  matchesKey: (data: string, key: string) => data === `<${key}>`,
+}));
+vi.mock('../menu-list.js', () => ({ MenuList: mockUi.MockSelectList }));
+vi.mock('../settings-menu.js', () => ({ SettingsMenu: mockUi.MockSettingsList }));
 
 import type { SettingsCallbacks, SettingsConfig } from '../settings.js';
 import { SettingsComponent } from '../settings.js';
@@ -299,8 +299,8 @@ describe('SettingsComponent web search provider submenu', () => {
   it('always lists all providers, marking those missing their API key', () => {
     const { select } = openWebSearchSubmenu(createConfig({ tavilyKeyAvailable: true }));
     expect(select.items.map((i: { value: string }) => i.value)).toEqual(['auto', 'tavily', 'parallel']);
-    expect(select.items[1].label).toBe('  Tavily');
-    expect(select.items[2].label).toBe('  Parallel (unavailable)');
+    expect(select.items[1].label).toBe('Tavily');
+    expect(select.items[2].label).toBe('Parallel (unavailable)');
     expect(select.items[2].description).toContain('PARALLEL_API_KEY');
   });
 

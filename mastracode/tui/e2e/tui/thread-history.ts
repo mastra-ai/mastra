@@ -101,7 +101,7 @@ values
     await runtime.waitForScreenText(/Unknown command: fork/i, terminal);
 
     terminal.submit('/clone');
-    await runtime.waitForScreenText(/Clone the current thread\?/i, terminal);
+    await runtime.waitForScreenText(/Clone the current thread/i, terminal);
     terminal.write('\r');
     await runtime.waitForScreenText(/Give the cloned thread a name\?/i, terminal);
     terminal.write('\x1b');

@@ -644,12 +644,12 @@ export const pluginsScaffoldInstallToolScenario: McE2eScenario = {
     terminal.submit('/plugins');
     await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Install plugin from/i, terminal, 8_000);
     terminal.write('\x1b[B');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Local plugin path or discovered plugin:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Local plugin path or discovered plugin/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Install scope:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Install scope/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Plugins run code inside Mastra Code/i, terminal, 8_000);
     terminal.write('\r');
@@ -778,12 +778,12 @@ function createGithubInstallScenario(
       terminal.submit('/plugins');
       await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
       terminal.write('\r');
-      await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
+      await runtime.waitForScreenText(/Install plugin from/i, terminal, 8_000);
       terminal.write('\r');
-      await runtime.waitForScreenText(/GitHub URL:/i, terminal, 8_000);
+      await runtime.waitForScreenText(/GitHub URL/i, terminal, 8_000);
       await typeTextSlowly(terminal, 'https://github.com/acme/github-install-plugin');
       terminal.write('\r');
-      await runtime.waitForScreenText(/Install scope:/i, terminal, 8_000);
+      await runtime.waitForScreenText(/Install scope/i, terminal, 8_000);
       terminal.write('\r');
       await runtime.waitForScreenText(/GitHub plugins also auto-update/i, terminal, 8_000);
       terminal.write('\r');
@@ -875,12 +875,12 @@ export const pluginsGithubInstallInvalidPackageManagerScenario: McE2eScenario = 
     terminal.submit('/plugins');
     await runtime.waitForScreenText(/Install new plugin/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Install plugin from/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/GitHub URL:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/GitHub URL/i, terminal, 8_000);
     await typeTextSlowly(terminal, 'https://github.com/acme/github-install-plugin');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Install scope:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Install scope/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/GitHub plugins also auto-update/i, terminal, 8_000);
     terminal.write('\r');
@@ -1148,7 +1148,7 @@ export const pluginsCommandUiScenario: McE2eScenario = {
     await runtime.waitForScreenText(/active/i, terminal, 8_000);
 
     terminal.write('\r');
-    await runtime.waitForScreenText(/Install plugin from:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Install plugin from/i, terminal, 8_000);
     await runtime.waitForScreenText(/Local path/i, terminal, 8_000);
     terminal.write('\x1b');
     await runtime.sleep(100);

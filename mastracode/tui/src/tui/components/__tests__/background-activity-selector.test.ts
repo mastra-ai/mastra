@@ -36,14 +36,14 @@ describe('BackgroundActivitySelectorComponent', () => {
     });
 
     const output = stripAnsi(component.render(100).join('\n'));
-    expect(output).toContain('Background activity');
+    expect(component.menuTitle()).toBe('Background activity');
     expect(output).toContain('◌ view');
     expect(output).toContain('✓ search_content');
     expect(output).toContain('✗ mastra_expert');
     expect(output).toContain('■ find_files');
     expect(output).toContain('running · task task-1');
     expect(output).not.toContain('thread-123456789');
-    expect(output).toContain('↑↓ inspect · D abort running · Esc close');
+    expect(component.menuHints()).toEqual([{ key: 'd', label: 'abort running' }]);
     expect(output).not.toContain('open thread');
   });
 

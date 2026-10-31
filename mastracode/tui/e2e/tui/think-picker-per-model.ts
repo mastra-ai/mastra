@@ -21,7 +21,7 @@ async function switchModel(
 ): Promise<void> {
   const escapedModel = model.replaceAll('.', '\\.');
   terminal.submit('/model');
-  await runtime.waitForScreenText(/Type to search/i, terminal, 8_000);
+  await runtime.waitForScreenText(/select model/i, terminal, 8_000);
   terminal.write(`${provider}/${model}`);
   await runtime.waitForScreenText(new RegExp(`${provider}/${escapedModel}`, 'i'), terminal, 8_000);
   terminal.write('\r');

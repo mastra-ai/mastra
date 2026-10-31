@@ -1,9 +1,13 @@
 import type { Component, OverlayHandle, OverlayOptions, SizeValue, TUI } from '@earendil-works/pi-tui';
 import { visibleWidth } from '@earendil-works/pi-tui';
 
+import { MenuFrame } from './prompt-slot.js';
+import type { MastraTUI, PromptSlotChrome } from './prompt-slot.js';
 import { theme } from './theme.js';
 
-type ModalOverlayOptions = {
+type ModalOverlayOptions = PromptSlotChrome & {
+  /** Covers the whole terminal (setup): shown as a pop-up as is, never in the prompt slot. */
+  fullscreen?: boolean;
   widthPercent?: number;
   maxWidth?: number;
   maxHeight?: OverlayOptions['maxHeight'];
@@ -89,6 +93,20 @@ export function modalOverlayOptions(tui: TUI, options: ModalOverlayOptions = {})
   };
 }
 
+/**
+ * Opens a menu or dialog. In the app it opens in the prompt slot (in place of the prompt, see
+ * prompt-slot.ts) with `title` as its search placeholder. While a pop-up such as the full-screen setup
+ * is open, or in a TUI without a slot, it opens as a pop-up on top instead, framed the same way.
+ */
 export function showModalOverlay(tui: TUI, component: Component, options: ModalOverlayOptions = {}): OverlayHandle {
-  return tui.showOverlay(new MinHeightOverlay(component, tui, options), modalOverlayOptions(tui, options));
+  const chrome = { title: options.title, hints: options.hints };
+  if (options.fullscreen) {
+    return tui.showOverlay(new MinHeightOverlay(component, tui, options), modalOverlayOptions(tui, options));
+  }
+  const app = tui as Partial<MastraTUI>;
+  if (app.promptSlot && !app.hasPopup?.()) return app.promptSlot.open(component, chrome);
+  return tui.showOverlay(
+    new MinHeightOverlay(new MenuFrame(component, chrome), tui, options),
+    modalOverlayOptions(tui, options),
+  );
 }

@@ -12,6 +12,8 @@ function answeredBox(): AskQuestionBorderedBox {
   return box;
 }
 
+const stripAnsi = (text: string) => text.replace(/\x1b\[[0-9;]*m/g, '');
+
 describe('AskQuestionBorderedBox render caching', () => {
   it('caches settled boxes: repeated renders at the same width return the identical array', () => {
     const box = answeredBox();
@@ -59,13 +61,13 @@ describe('AskQuestionBorderedBox render caching', () => {
     );
     const box = new AskQuestionBorderedBox(['Which option?'], 'hint', ITEMS, selectList);
     const first = box.render(80);
-    expect(first.join('\n')).toContain('→ Option A');
+    expect(stripAnsi(first.join('\n'))).toContain('→ Option A');
 
     // Same width, selection moved — a cached render would still show Option A selected.
     selectList.setSelectedIndex(1);
     const second = box.render(80);
     expect(second).not.toBe(first);
-    expect(second.join('\n')).toContain('→ Option B');
+    expect(stripAnsi(second.join('\n'))).toContain('→ Option B');
   });
 
   it('never caches unsettled boxes: streaming renders reflect updated args', () => {

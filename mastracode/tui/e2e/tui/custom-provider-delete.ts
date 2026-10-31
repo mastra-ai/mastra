@@ -52,7 +52,7 @@ export const customProviderDeleteScenario = {
 
     terminal.write('\x1b[B\x1b[B\x1b[B');
     terminal.write('\r');
-    await runtime.waitForScreenText(/Delete Delete Me E2E\?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Delete Delete Me E2E/i, terminal, 8_000);
     await runtime.waitForScreenText(/This cannot be undone/i, terminal, 8_000);
 
     terminal.write('\r');

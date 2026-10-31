@@ -43,7 +43,7 @@ import {
 } from './background-activity.js';
 import type { BackgroundActivity } from './background-activity.js';
 import { insertChatComponentWithBoundarySpacing } from './chat-boundary-reconciliation.js';
-import { dispatchSlashCommand } from './command-dispatch.js';
+import { dispatchSlashCommand, menuCommandName } from './command-dispatch.js';
 import { sendGoalReminder, setGoalWithDefaults } from './commands/goal.js';
 import { showThreadLockPrompt } from './commands/threads.js';
 import type { SlashCommandContext } from './commands/types.js';
@@ -1499,7 +1499,10 @@ export class MastraTUI {
   }
 
   private async handleSlashCommand(input: string): Promise<boolean> {
-    return dispatchSlashCommand(input, this.state, () => this.buildCommandContext());
+    const pending = dispatchSlashCommand(input, this.state, () => this.buildCommandContext());
+    const menu = menuCommandName(input);
+    if (menu) this.state.promptSlot.showLoadingWhile(menu, pending);
+    return pending;
   }
 
   // ===========================================================================
@@ -1650,7 +1653,6 @@ export class MastraTUI {
               models: availableModels,
               currentModelId: undefined,
               title,
-              titleColor: modeColor,
               onSelect: async (model: ModelItem) => {
                 this.state.ui.hideOverlay();
                 await promptForApiKeyIfNeeded(this.state.ui, model, this.state.authStorage);
@@ -1671,6 +1673,7 @@ export class MastraTUI {
       this.state.activeOnboarding = component;
       // Setup takes over the whole terminal (the component centers itself and fills every row).
       showModalOverlay(this.state.ui, component, {
+        fullscreen: true,
         widthPercent: 1,
         maxWidth: 10_000,
         maxHeight: '100%',

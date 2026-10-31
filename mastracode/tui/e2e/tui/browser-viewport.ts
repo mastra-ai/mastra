@@ -56,7 +56,7 @@ export const browserViewportScenario = {
 
     // Omitting the value opens the preset picker instead of erroring.
     terminal.submit('/browser set viewport');
-    await runtime.waitForScreenText(/Viewport size\?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Viewport size/i, terminal, 8_000);
     await runtime.waitForScreenText(/desktop-hd/i, terminal, 8_000);
     terminal.write('\x1b[B');
     terminal.write('\r');
