@@ -318,6 +318,27 @@ describe('Knowledge page', () => {
     }, 15_000);
   });
 
+  describe('when a later refetch of the instance list fails', () => {
+    it('keeps the explorer and its selection on screen', async () => {
+      withInstance();
+      let failing = false;
+      server.use(
+        http.get(api, () =>
+          failing ? HttpResponse.json({ error: 'boom' }, { status: 500 }) : HttpResponse.json(knowledgeInstances),
+        ),
+        http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(paymentsPageView)),
+      );
+      const { queryClient } = renderPage('/knowledge?page=page-payments&view=graph');
+      expect(await screen.findByRole('tree')).toBeTruthy();
+      failing = true;
+      await queryClient.refetchQueries({ queryKey: ['knowledge', 'instances'] });
+      await waitFor(() => expect(queryClient.getQueryState(['knowledge', 'instances'])?.status).toBe('error'));
+      expect(screen.queryByText('Failed to load Knowledge')).toBeNull();
+      expect(screen.getByRole('tree')).toBeTruthy();
+      expect(screen.getByTestId('location-search').textContent).toContain('page=page-payments');
+    });
+  });
+
   describe('when the server cannot stream changes', () => {
     it('asks for the stream once and then only polls', async () => {
       withInstance();
