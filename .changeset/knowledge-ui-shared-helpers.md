@@ -6,8 +6,9 @@ The Knowledge explorer (graph, page and note views, pins, scopes, search) now li
 
 ```tsx
 import { KnowledgeDataSourceProvider } from '@mastra/playground-ui/domains/knowledge/data-source-provider';
+import { KnowledgeSearch } from '@mastra/playground-ui/domains/knowledge/components/KnowledgeSearch';
 
 <KnowledgeDataSourceProvider value={dataSource}>
-  <KnowledgeViews />
+  <KnowledgeSearch onSelect={result => openPage(result)} />
 </KnowledgeDataSourceProvider>;
 ```
