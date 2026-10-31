@@ -271,6 +271,25 @@ describe('getPackageMetadata', () => {
     },
   );
 
+  it('pins the importing package itself when it imports its own name', async () => {
+    const tempRoot = join(process.cwd(), '.tmp');
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await realpath(await mkdtemp(join(tempRoot, 'self-reference-')));
+    tempDirs.push(tempDir);
+
+    // A published copy installed at the workspace root must not shadow the package importing itself.
+    await writeManifest(join(tempDir, 'node_modules', '@ws', 'lib'), { name: '@ws/lib', version: '0.0.9' });
+    const libDir = join(tempDir, 'packages', 'lib');
+    await writeManifest(libDir, { name: '@ws/lib', version: '0.1.0', exports: { './sub': './sub/index.js' } });
+    await writeManifest(join(libDir, 'sub'), { name: '@ws/lib/sub', version: '1.0.0' });
+
+    await expect(getPackageMetadata('@ws/lib/sub', join(libDir, 'index.js'))).resolves.toEqual({
+      rootPath: libDir,
+      version: '0.1.0',
+      packageSpec: undefined,
+    });
+  });
+
   it('pins a symlinked workspace package when the workspace itself sits under node_modules', async () => {
     const tempRoot = join(process.cwd(), '.tmp');
     await mkdir(tempRoot, { recursive: true });

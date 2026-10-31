@@ -4,7 +4,7 @@
  */
 
 import { realpathSync, statSync } from 'node:fs';
-import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { basename, dirname, isAbsolute, join, resolve, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findUp } from 'find-up-simple';
 import { pathExists, readJson, readJSON } from 'fs-extra/esm';
@@ -27,18 +27,39 @@ function isDirectory(path: string) {
  * Replace with `module.findPackageJSON()` once it is stable and available in every supported Node version. It is
  * experimental (stability 1.1) and missing before Node 22.14.
  *
- * Differs from Node: skips the package self-reference step, and returns a real path because callers match it
- * against rollup module ids.
+ * Differs from Node: returns a real path because callers match it against rollup module ids.
  */
-function findInstalledPackageRoot(packageName: string, baseDir: string): string | undefined {
+async function findInstalledPackageRoot(packageName: string, baseDir: string): Promise<string | undefined> {
+  // Self-reference: the nearest package.json, without crossing a node_modules folder, wins when it has exports and
+  // the same name.
+  for (let dir = baseDir; basename(dir) !== 'node_modules'; dir = dirname(dir)) {
+    const packageJsonPath = join(dir, 'package.json');
+
+    if (await pathExists(packageJsonPath)) {
+      const packageJson = await readJson(packageJsonPath, { throws: false });
+
+      if (packageJson?.exports != null && packageJson.name === packageName) {
+        return realpathSync(dir);
+      }
+
+      break;
+    }
+
+    if (dirname(dir) === dir) {
+      break;
+    }
+  }
+
   let dir = baseDir;
   let previousDir: string;
 
   do {
     const candidate = join(dir, 'node_modules', packageName);
+
     if (isDirectory(candidate)) {
       return realpathSync(candidate);
     }
+
     previousDir = dir;
     dir = dirname(dir);
   } while (dir !== previousDir);
@@ -57,7 +78,7 @@ export async function getPackageInfo(
     const baseDirs = options?.paths?.length ? options.paths.map(path => fileURLToPath(path)) : [process.cwd()];
 
     for (const baseDir of baseDirs) {
-      const rootPath = findInstalledPackageRoot(name, baseDir);
+      const rootPath = await findInstalledPackageRoot(name, baseDir);
 
       if (!rootPath) {
         continue;
