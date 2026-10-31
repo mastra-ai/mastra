@@ -19,7 +19,7 @@ permissions: {}
 
 jobs:
   analyze:
-    name: Analyze (javascript-typescript)
+    name: Analyze (${{ matrix.language }})
     # A fork can pick any branch name, so the release PR head must also live in this repository
     # (same guard as prebuild.yml and lint.yml).
     if: >-
@@ -29,6 +29,11 @@ jobs:
       startsWith(github.head_ref, 'changeset-release/')))
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        # Same languages as the default setup it replaces; `actions` scans the workflows themselves.
+        language: [javascript-typescript, actions]
     permissions:
       security-events: write
       contents: read
@@ -43,11 +48,10 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
-          languages: javascript-typescript
+          languages: ${{ matrix.language }}
           build-mode: none
-          config-file: ./.github/codeql/codeql-config.yml
 
       - name: Analyze
         uses: github/codeql-action/analyze@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4
         with:
-          category: /language:javascript-typescript
+          category: /language:${{ matrix.language }}
