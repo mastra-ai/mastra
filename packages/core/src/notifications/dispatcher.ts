@@ -329,9 +329,11 @@ class NotificationSummaryDeliveryError extends Error {
 }
 
 /**
- * The same records due at the same time always get the same summary signal id, so a
- * summary that is sent twice anyway (an expired claim, a store without an atomic
- * claim) persists as one message.
+ * The same records due at the same time always get the same summary signal id. Two
+ * passes that listed the same summaryAt (a store without an atomic claim) and a
+ * retry after a failed send (summaryAt is put back) therefore persist as one
+ * message. A resend after an expired claim does not share the id: the records are
+ * listed again with summaryAt set to the claim's end, so the id changes.
  */
 async function notificationSummarySignalId(
   threadId: string,
