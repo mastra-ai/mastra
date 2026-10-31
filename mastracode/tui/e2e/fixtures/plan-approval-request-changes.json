@@ -4,6 +4,17 @@
       "match": {
         "model": "gpt-5.4-mini",
         "endpoint": "chat",
+        "userMessage": "Goal: # E2E Request Changes Plan",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "{\"decision\":\"done\",\"reason\":\"The revised plan goal is verified.\"}"
+      }
+    },
+    {
+      "match": {
+        "model": "gpt-5.4-mini",
+        "endpoint": "chat",
         "turnIndex": 0,
         "userMessage": "Create a concise plan for the plan request-changes e2e test.",
         "hasToolResult": false

@@ -145,7 +145,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createMockState } from '../../__tests__/agent-controller-mock.js';
 import { getReminderView } from '../../db-message-parts.js';
 import { DEFAULT_MAX_TURNS, GoalManager } from '../../goal-manager.js';
-import { handleGoalCommand, handleJudgeCommand, startGoalWithDefaults } from '../goal.js';
+import { handleGoalCommand, handleJudgeCommand, setGoalWithDefaults, startGoalWithDefaults } from '../goal.js';
 
 describe('goal reminder metadata', () => {
   // The goal box is rendered from the echoed reminder signal, so the signal's
@@ -680,7 +680,7 @@ describe('handleGoalCommand', () => {
   });
 
   it('starts a goal from a plan-approval-style title+plan with only the goal reminder XML', async () => {
-    // Regression: plan approval "Use as /goal" must enter the same goal
+    // Regression: plan approval must enter the same goal
     // lifecycle as `/goal <text>` and send only the goal reminder. Sending an
     // extra "begin executing" reminder alongside it would render as a broken
     // combined system-reminder block on history reload (the legacy renderer
@@ -1081,5 +1081,103 @@ describe('handleGoalCommand', () => {
     expect(state.activeInlineQuestion).toBeUndefined();
     expect(state.pendingInlineQuestions).toHaveLength(0);
     expect((state.pendingAskUserComponents as Map<string, unknown>).size).toBe(0);
+  });
+});
+
+describe('setGoalWithDefaults session-model judge fallback', () => {
+  function createCtx() {
+    const goalManager = {
+      setGoal: vi.fn(async (_local: unknown, objective: string, judgeModelId: string, maxTurns: number) => ({
+        id: 'goal-1',
+        objective,
+        status: 'active' as const,
+        turnsUsed: 0,
+        maxTurns,
+        judgeModelId,
+      })),
+      persistOnNextThreadCreate: vi.fn(),
+      saveToThread: vi.fn().mockResolvedValue(undefined),
+    };
+    const listAvailableModels = vi.fn().mockResolvedValue([{ id: 'anthropic/claude-sonnet-4-5' }]);
+    const ctx = {
+      state: createMockState({
+        threadId: 'thread-1',
+        controller: { listAvailableModels },
+        extra: { pendingNewThread: false, goalManager, ui: { hideOverlay: vi.fn(), showOverlay: vi.fn() } },
+      }),
+      authStorage: {},
+      showError: vi.fn(),
+      updateStatusLine: vi.fn(),
+    } as any;
+    return { ctx, goalManager, listAvailableModels };
+  }
+
+  it('judges with the session model without prompting or saving when no judge is configured', async () => {
+    settingsMock.loadSettings.mockReturnValue({
+      models: { goalJudgeModel: null as unknown as string, goalMaxTurns: null as unknown as number },
+    });
+    settingsMock.saveSettings.mockClear();
+    const { ctx, goalManager, listAvailableModels } = createCtx();
+
+    const goal = await setGoalWithDefaults(ctx, 'ship the plan', 'Goal cancelled.', { useSessionModelAsJudge: true });
+
+    expect(goal?.judgeModelId).toBe('anthropic/claude-sonnet-4-5');
+    expect(goalManager.setGoal).toHaveBeenCalledWith(
+      expect.anything(),
+      'ship the plan',
+      'anthropic/claude-sonnet-4-5',
+      DEFAULT_MAX_TURNS,
+    );
+    expect(listAvailableModels).not.toHaveBeenCalled();
+    expect(settingsMock.saveSettings).not.toHaveBeenCalled();
+  });
+
+  it('keeps a saved max-turns setting when only the judge model is missing', async () => {
+    settingsMock.loadSettings.mockReturnValue({
+      models: { goalJudgeModel: null as unknown as string, goalMaxTurns: 7 },
+    });
+    const { ctx, goalManager } = createCtx();
+
+    await setGoalWithDefaults(ctx, 'ship the plan', 'Goal cancelled.', { useSessionModelAsJudge: true });
+
+    expect(goalManager.setGoal).toHaveBeenCalledWith(
+      expect.anything(),
+      'ship the plan',
+      'anthropic/claude-sonnet-4-5',
+      7,
+    );
+  });
+
+  it('prefers a configured judge model over the session model', async () => {
+    settingsMock.loadSettings.mockReturnValue({
+      models: { goalJudgeModel: 'openai/gpt-5.4-mini', goalMaxTurns: 4 },
+    });
+    const { ctx, goalManager } = createCtx();
+
+    await setGoalWithDefaults(ctx, 'ship the plan', 'Goal cancelled.', { useSessionModelAsJudge: true });
+
+    expect(goalManager.setGoal).toHaveBeenCalledWith(expect.anything(), 'ship the plan', 'openai/gpt-5.4-mini', 4);
+  });
+
+  it('still prompts for judge defaults without the fallback option', async () => {
+    settingsMock.loadSettings.mockReturnValue({
+      models: { goalJudgeModel: null as unknown as string, goalMaxTurns: null as unknown as number },
+    });
+    const { ctx, goalManager, listAvailableModels } = createCtx();
+
+    const promise = setGoalWithDefaults(ctx, 'ship the plan');
+    await vi.waitFor(() => expect(listAvailableModels).toHaveBeenCalled());
+    await vi.waitFor(() => expect(promptMocks.modelSelectHandler).toBeDefined());
+    promptMocks.modelSelectHandler?.({ id: 'anthropic/claude-sonnet-4-5' });
+    await Promise.resolve();
+    promptMocks.cyclesSubmitHandler?.(12);
+    await promise;
+
+    expect(goalManager.setGoal).toHaveBeenCalledWith(
+      expect.anything(),
+      'ship the plan',
+      'anthropic/claude-sonnet-4-5',
+      12,
+    );
   });
 });
