@@ -8209,7 +8209,7 @@ importers:
     dependencies:
       '@google-cloud/spanner':
         specifier: ^8.13.0
-        version: 8.13.0(supports-color@10.2.2)
+        version: 8.13.0(encoding@0.1.14)(supports-color@10.2.2)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9979,8 +9979,8 @@ importers:
   workspaces/gcs:
     dependencies:
       '@google-cloud/storage':
-        specifier: ^7.22.0
-        version: 7.22.0(encoding@0.1.14)(supports-color@10.2.2)
+        specifier: ^8.4.0
+        version: 8.4.0(supports-color@10.2.2)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -37232,7 +37232,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/opentelemetry-resource-util@2.4.0(@opentelemetry/resources@1.30.1(@opentelemetry/api@1.10.0))(supports-color@10.2.2)':
+  '@google-cloud/opentelemetry-resource-util@2.4.0(@opentelemetry/resources@1.30.1(@opentelemetry/api@1.10.0))(encoding@0.1.14)(supports-color@10.2.2)':
     dependencies:
       '@opentelemetry/resources': 1.30.1(@opentelemetry/api@1.10.0)
       '@opentelemetry/semantic-conventions': 1.43.0
@@ -37245,6 +37245,7 @@ snapshots:
     dependencies:
       arrify: 2.0.1
       extend: 3.0.2
+    optional: true
 
   '@google-cloud/paginator@6.1.0':
     dependencies:
@@ -37253,7 +37254,6 @@ snapshots:
   '@google-cloud/paginator@7.2.0':
     dependencies:
       extend: 3.0.2
-    optional: true
 
   '@google-cloud/precise-date@5.2.0': {}
 
@@ -37261,17 +37261,16 @@ snapshots:
 
   '@google-cloud/projectify@5.2.0': {}
 
-  '@google-cloud/projectify@6.2.1':
-    optional: true
+  '@google-cloud/projectify@6.2.1': {}
 
-  '@google-cloud/promisify@4.0.0': {}
+  '@google-cloud/promisify@4.0.0':
+    optional: true
 
   '@google-cloud/promisify@4.1.0': {}
 
   '@google-cloud/promisify@5.1.0': {}
 
-  '@google-cloud/promisify@6.2.1':
-    optional: true
+  '@google-cloud/promisify@6.2.1': {}
 
   '@google-cloud/pubsub@5.3.1(supports-color@10.2.2)':
     dependencies:
@@ -37301,14 +37300,14 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/spanner@8.13.0(supports-color@10.2.2)':
+  '@google-cloud/spanner@8.13.0(encoding@0.1.14)(supports-color@10.2.2)':
     dependencies:
       '@babel/core': 8.0.7
       '@babel/helpers': 7.27.6
       '@babel/traverse': 7.27.7(supports-color@10.2.2)
       '@google-cloud/common': 6.1.0(supports-color@10.2.2)
       '@google-cloud/monitoring': 5.4.0(supports-color@10.2.2)
-      '@google-cloud/opentelemetry-resource-util': 2.4.0(@opentelemetry/resources@1.30.1(@opentelemetry/api@1.10.0))(supports-color@10.2.2)
+      '@google-cloud/opentelemetry-resource-util': 2.4.0(@opentelemetry/resources@1.30.1(@opentelemetry/api@1.10.0))(encoding@0.1.14)(supports-color@10.2.2)
       '@google-cloud/precise-date': 5.2.0
       '@google-cloud/promisify': 5.1.0
       '@google-cloud/spanner-api': 0.2.0(supports-color@10.2.2)
@@ -37369,6 +37368,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+    optional: true
 
   '@google-cloud/storage@8.4.0(supports-color@10.2.2)':
     dependencies:
@@ -37388,7 +37388,6 @@ snapshots:
       teeny-request: 11.1.1(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   '@google-cloud/text-to-speech@6.4.1(supports-color@10.2.2)':
     dependencies:
@@ -43499,7 +43498,8 @@ snapshots:
 
   '@tokenizer/token@0.3.0': {}
 
-  '@tootallnate/once@3.0.1': {}
+  '@tootallnate/once@3.0.1':
+    optional: true
 
   '@tootallnate/quickjs-emscripten@0.23.0': {}
 
@@ -43660,7 +43660,8 @@ snapshots:
     dependencies:
       '@types/node': 22.19.15
 
-  '@types/caseless@0.12.5': {}
+  '@types/caseless@0.12.5':
+    optional: true
 
   '@types/chai@5.2.3':
     dependencies:
@@ -44086,6 +44087,7 @@ snapshots:
       '@types/node': 22.19.15
       '@types/tough-cookie': 4.0.5
       form-data: 2.5.6
+    optional: true
 
   '@types/resolve@1.20.2': {}
 
@@ -48436,6 +48438,7 @@ snapshots:
       hasown: '@socketregistry/hasown@1.0.7'
       mime-types: 2.1.35
       safe-buffer: '@socketregistry/safe-buffer@1.0.9'
+    optional: true
 
   form-data@4.0.6:
     dependencies:
@@ -48776,6 +48779,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+    optional: true
 
   google-gax@5.0.6(supports-color@10.2.2):
     dependencies:
@@ -48888,6 +48892,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+    optional: true
 
   gtoken@8.0.0(supports-color@10.2.2):
     dependencies:
@@ -49351,6 +49356,7 @@ snapshots:
       debug: 4.4.3(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   http-proxy-agent@7.0.2(supports-color@10.2.2):
     dependencies:
@@ -54500,6 +54506,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+    optional: true
 
   retry-request@8.0.4(supports-color@10.2.2):
     dependencies:
@@ -54511,7 +54518,6 @@ snapshots:
   retry-request@9.1.0:
     dependencies:
       extend: 3.0.2
-    optional: true
 
   retry@0.12.0: {}
 
@@ -55649,7 +55655,6 @@ snapshots:
       stream-events: 1.0.5
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   teeny-request@9.0.0(encoding@0.1.14)(supports-color@10.2.2):
     dependencies:
@@ -55661,6 +55666,7 @@ snapshots:
     transitivePeerDependencies:
       - encoding
       - supports-color
+    optional: true
 
   teex@1.0.1:
     dependencies:
