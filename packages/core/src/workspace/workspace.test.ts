@@ -964,12 +964,14 @@ Line 3 conclusion`;
           await scoped.list();
         }
 
+        // Each source indexes two documents per skill: the SKILL.md body and its name/description
         const indexedIds = new Set(indexSpy.mock.calls.map(([doc]) => doc.id));
-        expect(indexedIds.size).toBe(5);
-        // Three sources evicted → their documents removed
-        expect(removeSpy).toHaveBeenCalledTimes(3);
+        expect(indexedIds.size).toBe(10);
+        // Three sources evicted → both of their documents removed
+        expect(removeSpy).toHaveBeenCalledTimes(6);
         const removedIds = new Set(removeSpy.mock.calls.map(([id]) => id));
         for (const id of removedIds) expect(indexedIds.has(id)).toBe(true);
+        expect([...removedIds].filter(id => id.endsWith(':SKILL.md#metadata'))).toHaveLength(3);
 
         const scoped = await skills.getScoped({ requestContext: new RequestContext() });
         expect((await scoped.search('demo')).map(r => r.skillName)).toEqual(['demo']);
@@ -992,20 +994,21 @@ Line 3 conclusion`;
         // A second source evicts A and releases its search documents
         const viewB = await skills.getScoped({ requestContext: new RequestContext() });
         await viewB.list();
-        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+        // One skill per source, two documents each (body + name/description)
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(2);
 
         // A retained view (and the request-context cache) still searches correctly…
         expect((await viewA.search('demo')).map(r => r.skillName)).toEqual(['demo']);
         const viewAAgain = await skills.getScoped({ requestContext: ctxA });
         expect((await viewAAgain.search('demo')).map(r => r.skillName)).toEqual(['demo']);
         // …and re-admission evicted B instead of growing the index
-        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(2);
 
         // A refresh on the now-evicted B must not repopulate its namespace without re-admitting
         await viewB.refresh();
-        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(2);
         expect((await viewB.search('demo')).map(r => r.skillName)).toEqual(['demo']);
-        expect(searchEngine.countByPrefix('skill-scope:')).toBe(1);
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(2);
       });
 
       it('returns to the cache bound after concurrent live views re-admit each other', async () => {
@@ -1040,8 +1043,8 @@ Line 3 conclusion`;
           ]);
         }
 
-        // Only one source may hold documents once everything settles
-        expect(searchEngine.countByPrefix('skill-scope:')).toBe(skillsPerSource);
+        // Only one source may hold documents once everything settles (two per skill)
+        expect(searchEngine.countByPrefix('skill-scope:')).toBe(skillsPerSource * 2);
       });
 
       it('rejects a search engine that cannot remove evicted documents', () => {
