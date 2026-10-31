@@ -74,7 +74,7 @@ import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import type { MastraVoice } from '../voice';
+import type { IMastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace';
@@ -915,9 +915,9 @@ interface AgentConfigBase<
    * must not share a single mutable instance (ws, tools, instructions, request context). The caller owns the
    * lifecycle (e.g. `disconnect()`) of a resolver-produced instance.
    *
-   * A static `MastraVoice` remains shared across requests, which is appropriate for one-shot TTS.
+   * A static voice instance remains shared across requests, which is appropriate for one-shot TTS.
    */
-  voice?: DynamicArgument<MastraVoice, TRequestContext>;
+  voice?: DynamicArgument<IMastraVoice, TRequestContext>;
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
    *
