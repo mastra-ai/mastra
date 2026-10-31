@@ -8,11 +8,6 @@
   }
 }
 
-/* A component stylesheet can load before the app's Tailwind entry, and the first sheet to
- * name a layer fixes its rank. Restating the full order keeps preflight from winning over
- * these rules whichever one lands first. */
-@layer properties, theme, base, components, utilities;
-
 @layer components {
   [data-slot='notice'] {
     grid-template-columns: auto minmax(0, 1fr);

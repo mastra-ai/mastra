@@ -2,6 +2,25 @@
 '@mastra/playground-ui': patch
 ---
 
-Added `KnowledgePageTree`, `KnowledgePageDetail` and `KnowledgePageGraph` to the Knowledge explorer. The graph draws scopes and pages with their parent links and mentions, captions scopes with their declaration's `displayLabel` when the host passes one (otherwise "Scope"), marks pinned pages with a badge on the circle's rim, and has a small legend for its circles, lines and pin. Every scope and every page is drawn the same size, with its kind ("Page", or the scope's label) and its name inside the circle, and lines run straight from rim to rim: faint dashed lines with an open arrowhead pointing from parent to child, solid blue arrows for mentions. When the host passes `grants`, the graph also draws a purple dash-dot arrow from each principal scope (such as `role:acme:support`) to the scope it can reach, naming the access level (viewer, contributor, editor or owner) on hover, and a legend row for it; a declared principal with nothing written to it yet appears as a dashed placeholder circle that can't be opened. Clicking a mention line opens a popup over the graph listing the notes that make the mention, with links to both pages. The first click (or tap, or Enter or Space) on a page in the graph selects it, fading pages that are not its neighbours and selecting it in the tree; clicking it again opens its page view. Selecting a page from the tree, search or a link frames that page and its neighbours. When the pages change, pages already on screen stay where they are and new ones appear beside a page they link to; a refetch that changes nothing in the graph doesn't lay it out again. It fits the pages into view whenever its container gets a new size, so it stays readable when a host shows it from behind a toggle or the window is resized. The tree nests scopes and pages in stored order, marks pinned pages, opens the path to a page selected elsewhere (graph or search), and supports arrow-key navigation. The detail pane shows a page's home scope, synopsis, body, pin audience and notes, with each note's stamped scopes and author and links for resolved `[[mentions]]`.
+Added `KnowledgePageExplorer`, a Knowledge browser that Studio and Factory share: search, a page tree, a graph of scopes and pages, and a page view, all on one selection.
 
-Added `KnowledgePageExplorer`, which puts search, the tree and either the graph or the selected page together on one selection. Clicking a scope in the tree narrows the tree and the graph to that scope and what sits under it, with "All scopes" to go back. Wide screens show the tree beside a Graph/Page toggle; narrow screens add Tree to the same toggle. A search result opens its page straight away; a page in the graph opens on a second click, after the first selects it; a click on empty canvas clears the selection and closes a mention popup, while dragging the canvas keeps it; `onSelect` receives `null` when the selection is cleared; switching back to Graph keeps the selection and frames it. The page view renders the body as markdown (raw HTML is escaped, so agent-written bodies can't inject markup) in a reading column with the page's notes under it (author, relative time, stamped scopes), and a side rail with child pages, the notes that mention it, and its recent activity as a timeline. Hosts pass their own `usePage` and `useSearch` hooks, plus optional `useTreeLevels` for a sidebar tree that loads each level as it is opened (so pages past the graph's first 200 stay reachable) and `useActivity`, so Studio and Factory share the layout while each reads through its own routes.
+- **Graph:** shows parent → child links, mentions between pages, pinned pages and, when the host passes `grants`, which scopes can reach which (role named on hover). The first click selects a page; a second click opens it. A click on empty canvas clears the selection, and dragging the canvas doesn't. Pages already on screen stay put when data refreshes.
+- **Page view:** the body as markdown (raw HTML is escaped), notes with links for resolved `[[mentions]]`, child pages, the notes that mention the page, and recent activity.
+- **Tree:** clicking a scope narrows the tree and graph to it; a page selected elsewhere opens its path.
+
+The host owns the selection and view state and reads through its own routes:
+
+```tsx
+import { KnowledgePageExplorer } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
+
+<KnowledgePageExplorer
+  graph={graph} // { pages, edges, pinnedIds, grants? }
+  source={{ usePage, useSearch, useTreeLevels, useActivity }}
+  selectedPageId={pageId}
+  onSelect={id => setPageId(id)} // null when the selection is cleared
+  view={view}
+  onViewChange={setView}
+/>;
+```
+
+`KnowledgePageTree`, `KnowledgePageDetail` and `KnowledgePageGraph` are exported for hosts that lay these out themselves.
