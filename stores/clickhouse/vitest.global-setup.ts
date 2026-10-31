@@ -1,8 +1,9 @@
 import { createClient } from '@clickhouse/client';
+import type { TestProject } from 'vitest/node';
 
-import { TEST_WORKER_COUNT, workerName } from './vitest.setup';
+import { workerName } from './vitest.setup';
 
-async function forEachWorker(queries: (name: string, password: string) => string[]) {
+async function forEachWorker(workers: number, queries: (name: string, password: string) => string[]) {
   const password = process.env.CLICKHOUSE_PASSWORD || 'password';
   const admin = createClient({
     url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
@@ -10,7 +11,7 @@ async function forEachWorker(queries: (name: string, password: string) => string
     password,
   });
   try {
-    for (let worker = 1; worker <= TEST_WORKER_COUNT; worker++) {
+    for (let worker = 1; worker <= workers; worker++) {
       for (const query of queries(workerName(worker), password)) await admin.command({ query });
     }
   } finally {
@@ -21,15 +22,15 @@ async function forEachWorker(queries: (name: string, password: string) => string
 // The database goes first: the user is the definer of its materialized views.
 const drop = (name: string) => [`DROP DATABASE IF EXISTS ${name} SYNC`, `DROP USER IF EXISTS ${name}`];
 
-export async function setup() {
-  await forEachWorker((name, password) => [
+// VITEST_POOL_ID runs 1..maxWorkers. Read the resolved value so --maxWorkers or
+// VITEST_MAX_WORKERS can't start a worker that has no user.
+export default async function setup(project: TestProject) {
+  const workers = project.config.maxWorkers;
+  await forEachWorker(workers, (name, password) => [
     ...drop(name),
     `CREATE DATABASE ${name}`,
     `CREATE USER ${name} IDENTIFIED BY '${password}' DEFAULT DATABASE ${name}`,
     `GRANT CURRENT GRANTS ON *.* TO ${name} WITH GRANT OPTION`,
   ]);
-}
-
-export async function teardown() {
-  await forEachWorker(drop);
+  return () => forEachWorker(workers, drop);
 }
