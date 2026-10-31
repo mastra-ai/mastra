@@ -49,6 +49,7 @@ export interface IMastraVoice<
   TEventArgs extends VoiceEventMap = VoiceEventMap,
   TSpeakerMetadata = unknown,
 > {
+  name?: string;
   serializeForSpan(): VoiceSpanConfig;
   speak(
     input: string | NodeJS.ReadableStream,
