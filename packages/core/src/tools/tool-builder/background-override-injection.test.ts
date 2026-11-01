@@ -450,6 +450,110 @@ describe('CoreToolBuilder background override injection', () => {
     });
   });
 
+  describe('Model override opt-out (issue #28638)', () => {
+    const fixedBackground = { enabled: true, modelOverrides: false };
+
+    it('does NOT inject _background into a Zod v4 schema and still validates input', async () => {
+      const execute = vi.fn().mockResolvedValue({ ok: true });
+      const tool = createTool({
+        id: 'v4-tool',
+        description: 'Zod v4 tool',
+        inputSchema: z4.object({ query: z4.string() }),
+        execute,
+      });
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: { ...baseOptions(), backgroundConfig: fixedBackground },
+        backgroundTaskEnabled: true,
+      });
+
+      await expect(
+        builder.build().execute!({ query: 'docs' }, { toolCallId: 'call-1', messages: [] }),
+      ).resolves.toEqual({ ok: true });
+      const properties = extractJsonProperties(builder);
+      expect(properties).toHaveProperty('query');
+      expect(properties).not.toHaveProperty('_background');
+    });
+
+    it('does NOT inject _background into a Zod v3 schema (JSON fallback path)', () => {
+      const tool = createTool({
+        id: 'v3-tool',
+        description: 'Zod v3 tool',
+        inputSchema: z3.object({ query: z3.string() }),
+        execute: vi.fn(),
+      });
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: { ...baseOptions(), backgroundConfig: fixedBackground },
+        backgroundTaskEnabled: true,
+      });
+
+      const properties = extractJsonProperties(builder);
+      expect(properties).toHaveProperty('query');
+      expect(properties).not.toHaveProperty('_background');
+    });
+
+    it('does NOT inject _background into a raw JSON Schema', () => {
+      const tool = createTool({
+        id: 'json-tool',
+        description: 'JSON Schema tool',
+        inputSchema: vercelJsonSchema({
+          type: 'object',
+          properties: { query: { type: 'string' } },
+          required: ['query'],
+        }) as any,
+        execute: vi.fn(),
+      });
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: { ...baseOptions(), backgroundConfig: fixedBackground },
+        backgroundTaskEnabled: true,
+      });
+
+      const properties = extractJsonProperties(builder);
+      expect(properties).toHaveProperty('query');
+      expect(properties).not.toHaveProperty('_background');
+    });
+
+    it('honors modelOverrides: false on the agent per-tool entry', () => {
+      const tool = createTool({
+        id: 'plain-tool',
+        description: 'A plain tool',
+        inputSchema: z4.object({ query: z4.string() }),
+        execute: vi.fn(),
+      });
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: {
+          ...baseOptions(),
+          agentBackgroundConfig: { tools: { 'test-tool': { enabled: true, modelOverrides: false } } },
+        },
+        backgroundTaskEnabled: true,
+      });
+
+      expect(extractJsonProperties(builder)).not.toHaveProperty('_background');
+    });
+
+    it('keeps resume fields on resumable tools without injecting _background', () => {
+      const tool = createTool({
+        id: 'agent-foo',
+        description: 'Agent-as-tool',
+        inputSchema: z4.object({ message: z4.string() }),
+        execute: vi.fn(),
+      });
+      const builder = new CoreToolBuilder({
+        originalTool: tool,
+        options: { ...baseOptions(), name: 'agent-foo', backgroundConfig: fixedBackground },
+        backgroundTaskEnabled: true,
+      });
+
+      const properties = extractJsonProperties(builder);
+      expect(properties).toHaveProperty('suspendedToolCallId');
+      expect(properties).toHaveProperty('resumeData');
+      expect(properties).not.toHaveProperty('_background');
+    });
+  });
+
   describe('Schema is left untouched when neither flag applies', () => {
     it('does not inject override fields when backgroundTaskEnabled is false and id is not resumable', () => {
       const tool = createTool({
