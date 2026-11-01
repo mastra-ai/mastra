@@ -109,11 +109,11 @@ describe('work board build prompt', () => {
     expect(decision.prompt).toContain('1. Fix the test');
   });
 
-  it('passes the findings back when a person resumes a card parked at the round limit', async () => {
+  it('passes the findings back with the approved plan when a card parked at the round limit is resumed through Planning', async () => {
     const context = executeContext('github-issue');
     const decision = await workBoard.rules.execute?.issue?.onEnter?.({
       ...context,
-      fromStage: 'intake',
+      fromStage: 'planning',
       item: {
         ...context.item,
         metadata: {
@@ -126,6 +126,7 @@ describe('work board build prompt', () => {
       },
     });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
+    expect(decision.prompt).toContain('Implement the approved plan for the work item.');
     expect(decision.prompt).toContain('1. Fix the test');
   });
 });
