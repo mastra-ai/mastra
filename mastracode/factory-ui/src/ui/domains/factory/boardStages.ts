@@ -13,14 +13,16 @@ const REVIEW_BOARD_STAGE_VISIBILITY: Partial<Record<FactoryRuleStage, boolean>> 
   planning: false,
   execute: false,
   review: true,
+  'pr-review': false,
   done: true,
   canceled: true,
 } satisfies Record<(typeof FACTORY_RULE_STAGES)[number], boolean>;
 
-/** A pull request's card on Work moves only through the lanes that review it. */
-const PULL_REQUEST_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.filter(
-  stage => REVIEW_BOARD_STAGE_VISIBILITY[stage.id],
-);
+/** A pull request's card on Work moves only through the lanes that review it; Review is the builder's self-review. */
+const PULL_REQUEST_LANES: ReadonlySet<FactoryRuleStage> = new Set(['intake', 'pr-review', 'done', 'canceled']);
+const PULL_REQUEST_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.filter(stage => PULL_REQUEST_LANES.has(stage.id));
+/** Every other card on Work moves through every lane but PR review. */
+const WORK_ITEM_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.filter(stage => stage.id !== 'pr-review');
 
 const REVIEW_BOARD_STAGES: ReadonlyArray<BoardStage> = BOARD_STAGES.flatMap(stage => {
   if (!REVIEW_BOARD_STAGE_VISIBILITY[stage.id]) return [];
@@ -70,13 +72,15 @@ export function itemBoard(item: WorkItem): string {
 
 export function itemStageOptions(item: WorkItem): ReadonlyArray<BoardStage> {
   const board = itemBoard(item);
-  if (board === 'work' && isPullRequestSource(item.source)) return PULL_REQUEST_STAGES;
+  if (board === 'work') return isPullRequestSource(item.source) ? PULL_REQUEST_STAGES : WORK_ITEM_STAGES;
   return boardStages(board);
 }
 
-/** Whether a card from `source` on `board` may enter `stage`; only Work restricts pull requests. */
+/** Whether a card from `source` on `board` may enter `stage`: on Work, PR review is a pull request's own lane. */
 export function pullRequestMayEnter(board: string, source: WorkItemSource, stage: string): boolean {
-  return board !== 'work' || !isPullRequestSource(source) || PULL_REQUEST_STAGES.some(lane => lane.id === stage);
+  if (board !== 'work') return true;
+  if (!isPullRequestSource(source)) return stage !== 'pr-review';
+  return PULL_REQUEST_STAGES.some(lane => lane.id === stage);
 }
 
 export function itemStageLabel(item: WorkItem, stage: string): string {

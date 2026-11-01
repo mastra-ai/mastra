@@ -126,7 +126,7 @@ describe('Pull requests on the Work board', () => {
 
     expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/work`);
     expect(transitions).toEqual([
-      expect.objectContaining({ board: 'work', stage: 'review', cause: 'card_action', expectedRevision: 1 }),
+      expect.objectContaining({ board: 'work', stage: 'pr-review', cause: 'card_action', expectedRevision: 1 }),
     ]);
   });
 
@@ -141,7 +141,7 @@ describe('Pull requests on the Work board', () => {
     await waitForMutationsIdle(client);
 
     expect(created).toEqual([expect.objectContaining({ board: 'work', title: reviewCandidate.title })]);
-    expect(transitions).toEqual([expect.objectContaining({ board: 'work', stage: 'review' })]);
+    expect(transitions).toEqual([expect.objectContaining({ board: 'work', stage: 'pr-review' })]);
   });
 
   it('keeps a card filed on the Review board there, off Work', async () => {

@@ -215,6 +215,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         'planning:Planning',
         'execute:Building',
         'review:Review',
+        'pr-review:PR review',
         'done:Done',
         'canceled:Canceled',
       ]);
@@ -292,7 +293,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect((await restarted.workItems.listActiveRunBindings()).map(active => active.id)).not.toContain(binding.id);
     }, 30_000);
 
-    it("reviews a pull request card in the Work board's Review phase, as the project's boards serve it", async () => {
+    it("reviews a pull request card in the Work board's PR review phase, as the project's boards serve it", async () => {
       stubModel();
       const orgId = `org-${randomUUID()}`;
       const replica = await boot(database(), orgId);
@@ -324,13 +325,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         `/web/factory/projects/${projectId}/work-items/${card.id}/transition`,
         {
           board: 'work',
-          stage: 'review',
+          stage: 'pr-review',
           expectedRevision: card.revision,
           requestId: randomUUID(),
           cause: 'card_action',
         },
       );
-      expect(reviewing.json.result).toMatchObject({ status: 'accepted', stage: 'review' });
+      expect(reviewing.json.result).toMatchObject({ status: 'accepted', stage: 'pr-review' });
       const decisions = await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id });
       expect(decisions.map(record => record.decision)).toContainEqual(
         expect.objectContaining({ type: 'invokeSkill', role: 'review', skillName: 'factory-review' }),

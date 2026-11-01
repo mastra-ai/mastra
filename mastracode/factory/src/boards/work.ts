@@ -270,10 +270,27 @@ function completeIssue(context: FactoryStageRuleContext) {
   } as const;
 }
 
-export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled';
+export type WorkBoardPhase =
+  | 'intake'
+  | 'triage'
+  | 'planning'
+  | 'execute'
+  | 'review'
+  | 'pr-review'
+  | 'done'
+  | 'canceled';
 
 /** Every Work phase: a card may move from any phase to any other. */
-const ALL_PHASES: readonly WorkBoardPhase[] = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'];
+const ALL_PHASES: readonly WorkBoardPhase[] = [
+  'intake',
+  'triage',
+  'planning',
+  'execute',
+  'review',
+  'pr-review',
+  'done',
+  'canceled',
+];
 
 export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: 'work',
@@ -348,7 +365,17 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
         jiraIssue: selfReviewWorkItem,
         incidentioFollowUp: selfReviewWorkItem,
         manual: selfReviewWorkItem,
-        // A pull request's own card is reviewed here by the independent reviewer.
+      },
+    },
+    'pr-review': {
+      name: 'PR review',
+      // A pull request's own card is reviewed here by the independent reviewer, in its own
+      // review seat. Kept apart from Review, the builder's self-review, so a card never
+      // reaches the builder's lanes through a pull request's.
+      kind: 'working',
+      runner: { context: 'work' },
+      nextPhases: ALL_PHASES,
+      onEnter: {
         pullRequest: reviewPullRequest,
         gitlabPullRequest: reviewPullRequest,
       },

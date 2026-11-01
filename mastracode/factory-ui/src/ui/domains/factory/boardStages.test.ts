@@ -81,20 +81,25 @@ describe('itemAppearsInStage', () => {
 describe('pull request cards on the Work board', () => {
   it.each(['github-pr', 'gitlab-pr'] as const)('moves a %s card only through the lanes that review it', source => {
     const card = { ...workItem(source, ['intake']), board: 'work' };
-    expect(itemStageOptions(card).map(stage => stage.id)).toEqual(['intake', 'review', 'done', 'canceled']);
-    // Work labels the lane Review; only the Review board calls it Reviewing.
-    expect(itemStageOptions(card).find(stage => stage.id === 'review')?.label).not.toBe('Reviewing');
-    for (const stage of ['triage', 'planning', 'execute'])
+    expect(itemStageOptions(card).map(stage => stage.id)).toEqual(['intake', 'pr-review', 'done', 'canceled']);
+    expect(itemStageOptions(card).find(stage => stage.id === 'pr-review')?.label).toBe('PR review');
+    // Review is the builder's self-review: a pull request card never enters it.
+    for (const stage of ['triage', 'planning', 'execute', 'review'])
       expect(pullRequestMayEnter('work', source, stage)).toBe(false);
-    for (const stage of ['intake', 'review', 'done', 'canceled']) {
+    for (const stage of ['intake', 'pr-review', 'done', 'canceled']) {
       expect(pullRequestMayEnter('work', source, stage)).toBe(true);
     }
   });
 
-  it('leaves issues on Work and cards on other boards their full lanes', () => {
-    expect(itemStageOptions({ ...workItem('github-issue', ['intake']), board: 'work' })).toBe(boardStages('work'));
+  it('leaves issues on Work every lane but PR review, and cards on other boards their full lanes', () => {
+    const issueLanes = itemStageOptions({ ...workItem('github-issue', ['intake']), board: 'work' }).map(
+      stage => stage.id,
+    );
+    expect(issueLanes).toEqual(boardStages('work').flatMap(stage => (stage.id === 'pr-review' ? [] : [stage.id])));
     expect(itemStageOptions(workItem('github-pr', ['intake']))).toBe(boardStages('review'));
     expect(pullRequestMayEnter('work', 'github-issue', 'execute')).toBe(true);
+    // PR review is a pull request's own lane: an issue card is self-reviewed in Review instead.
+    expect(pullRequestMayEnter('work', 'github-issue', 'pr-review')).toBe(false);
     expect(pullRequestMayEnter('release', 'github-pr', 'execute')).toBe(true);
   });
 });

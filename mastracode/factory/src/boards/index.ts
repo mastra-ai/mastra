@@ -21,6 +21,7 @@ export {
   eventBoardId,
   isPullRequestCard,
   isTerminalWorkItem,
+  pullRequestReviewPhase,
   resolveBoardClosure,
   reviewsPullRequest,
   resolveBoardToolRule,

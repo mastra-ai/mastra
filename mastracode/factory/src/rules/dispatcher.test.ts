@@ -3487,7 +3487,15 @@ describe('FactoryDecisionDispatcher', () => {
         expectedRevision: item.revision,
         actor: { type: 'github', login: 'factory-platform[bot]', trusted: true, factoryAuthored: true },
         outcome: { status: 'accepted' },
-        decisions: [{ type: 'transition', board: 'work', stage: 'review', idempotencyKey: 're-review-w' }],
+        decisions: [
+          {
+            type: 'transition',
+            board: 'work',
+            // A pull request's own card is reviewed in PR review; an issue card's Review is self-review.
+            stage: type === 'pull-request' ? 'pr-review' : 'review',
+            idempotencyKey: 're-review-w',
+          },
+        ],
         causalChain: [],
         now: new Date('2030-01-01T00:00:00Z'),
       });

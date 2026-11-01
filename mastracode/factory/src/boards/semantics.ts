@@ -41,6 +41,15 @@ export function reviewsPullRequest(context: {
 }
 
 /**
+ * The phase a pull or merge request's own card is reviewed in: Work's `pr-review`, or Review's
+ * `review` for cards filed on the Review board before pull requests moved to Work. Work's own
+ * `review` phase is the builder's self-review, which a pull request card never enters.
+ */
+export function pullRequestReviewPhase(board: string | undefined): 'review' | 'pr-review' {
+  return board === 'review' ? 'review' : 'pr-review';
+}
+
+/**
  * What the installed board says `phase` means. Returns undefined when the board is not
  * installed or does not declare the phase; callers must fail closed on undefined rather
  * than guess from the phase name.

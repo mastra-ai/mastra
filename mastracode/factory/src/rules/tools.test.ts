@@ -780,7 +780,7 @@ describe('factory_transition_work_item', () => {
 
     it('records the published PR verdict on a pull request card reviewed on the Work board', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const id = await reviewingItem(storage);
+      const id = await reviewingItem(storage, 'pr-review');
       const parent = await storage.upsert({
         orgId: 'org-1',
         userId: 'user-1',
@@ -810,7 +810,7 @@ describe('factory_transition_work_item', () => {
 
       const item = await storage.get({ orgId: 'org-1', id });
       expect(item?.board).toBe('work');
-      expect(item?.stages).toEqual(['review']);
+      expect(item?.stages).toEqual(['pr-review']);
       expect(item?.metadata).toMatchObject({
         reviewVerdict: 'approve',
         reviewedHeadSha: 'abc1234def000000000000000000000000000000',

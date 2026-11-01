@@ -241,7 +241,7 @@ describe('starterPrompts', () => {
     });
     const cards = [
       onWork(1, ['intake'], { sourceCreatedAt: daysAgo(3) }),
-      onWork(2, ['review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
+      onWork(2, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
     ];
 
     expect(promptFor('review', cards)).toMatchObject({ value: 3, unit: 'days' });
