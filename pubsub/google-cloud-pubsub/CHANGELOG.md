@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 1.1.7-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#29113](https://github.com/mastra-ai/mastra/pull/29113))
+  - Updated dependency [`@google-cloud/pubsub@^6.3.1` ↗︎](https://www.npmjs.com/package/@google-cloud/pubsub/v/6.3.1) (from `^5.3.1`, in `dependencies`)
+- Updated dependencies [[`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563)]:
+  - @mastra/core@1.82.0-alpha.1
+
 ## 1.1.6
 
 ### Patch Changes

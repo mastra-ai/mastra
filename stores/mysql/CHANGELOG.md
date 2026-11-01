@@ -1,5 +1,14 @@
 # @mastra/mysql
 
+## 0.16.0-alpha.1
+
+### Patch Changes
+
+- Fixed experiment result writes putting plaintext back over a purged dataset item. When a purge committed while a result was being written, the writer could miss the purge marker and overwrite the redacted input, output, ground truth, error and metadata. ([#29106](https://github.com/mastra-ai/mastra/pull/29106))
+
+- Updated dependencies [[`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563)]:
+  - @mastra/core@1.82.0-alpha.1
+
 ## 0.16.0-alpha.0
 
 ### Minor Changes

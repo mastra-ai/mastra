@@ -1,5 +1,14 @@
 # @mastra/memory
 
+## 1.41.0-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#29124](https://github.com/mastra-ai/mastra/pull/29124))
+  - Updated dependency [`diff@^9.0.0` ↗︎](https://www.npmjs.com/package/diff/v/9.0.0) (from `^8.0.4`, in `dependencies`)
+- Updated dependencies [[`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563)]:
+  - @mastra/core@1.82.0-alpha.1
+
 ## 1.41.0-alpha.0
 
 ### Minor Changes
