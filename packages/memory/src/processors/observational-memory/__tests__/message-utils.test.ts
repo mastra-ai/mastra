@@ -2,6 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { MessageList } from '@mastra/core/agent';
 import { describe, it, expect } from 'vitest';
 import {
+  filterObservedMessages,
   findLastCompletedObservationBoundary,
   getObservableMessages,
   getUnobservedParts,
@@ -103,5 +104,119 @@ describe('reflection markers on the live user message', () => {
     const message = createMessage('input-1', 'Already observed');
     message.content.parts.push({ type: 'data-om-observation-end', data: { operationType: 'observation' } } as any);
     expect(findLastCompletedObservationBoundary(message)).toBe(1);
+  });
+});
+
+describe('pruning a message whose tool call is still pending', () => {
+  const reasoning = (text: string, signature?: string) =>
+    ({
+      type: 'reasoning',
+      reasoning: text,
+      details: [{ type: 'text', text }],
+      ...(signature ? { providerMetadata: { anthropic: { signature } } } : {}),
+    }) as any;
+
+  const call = (toolCallId: string) =>
+    ({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'call', toolCallId, toolName: 'lookup', args: {} },
+    }) as any;
+
+  const result = (toolCallId: string) =>
+    ({
+      type: 'tool-invocation',
+      toolInvocation: { state: 'result', toolCallId, toolName: 'lookup', args: {}, result: { ok: true } },
+    }) as any;
+
+  const endMarker = () => ({ type: 'data-om-observation-end', data: { operationType: 'observation' } }) as any;
+
+  const textPart = (text: string) => ({ type: 'text', text }) as any;
+
+  function pruneWith(markerParts: any[]) {
+    const messageList = new MessageList({ threadId: THREAD_ID, resourceId: RESOURCE_ID });
+    messageList.add(createMessage('user-1', 'go'), 'memory');
+    messageList.add(
+      {
+        id: 'assistant-1',
+        role: 'assistant',
+        content: { format: 2, parts: markerParts },
+        type: 'text',
+        createdAt: new Date('2026-07-20T00:00:01.000Z'),
+        threadId: THREAD_ID,
+        resourceId: RESOURCE_ID,
+      } as MastraDBMessage,
+      'memory',
+    );
+
+    filterObservedMessages({ messageList });
+    const marker = messageList.get.all.db().find(m => m.id === 'assistant-1');
+    return marker?.content.parts ?? [];
+  }
+
+  it('keeps the signed reasoning block of the call it preserves', () => {
+    const parts = pruneWith([
+      reasoning('observed thinking', 'sig-old'),
+      call('old'),
+      result('old'),
+      reasoning('pending thinking', 'sig-pending'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('pending thinking', 'sig-pending'), call('pending'), result('pending')]);
+  });
+
+  it('keeps the signed block shared by parallel calls when only one is pending', () => {
+    const parts = pruneWith([
+      reasoning('parallel thinking', 'sig-parallel'),
+      call('done'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('parallel thinking', 'sig-parallel'), call('pending'), result('pending')]);
+  });
+
+  it('drops unsigned reasoning and signed reasoning from an already-observed step', () => {
+    const parts = pruneWith([
+      reasoning('signed but observed', 'sig-old'),
+      call('old'),
+      result('old'),
+      reasoning('unsigned thinking'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([call('pending'), result('pending')]);
+  });
+
+  it('keeps the signed reasoning when text sits between it and the pending call', () => {
+    const parts = pruneWith([
+      reasoning('observed thinking', 'sig-old'),
+      call('old'),
+      result('old'),
+      reasoning('pending thinking', 'sig-pending'),
+      textPart('Here is what I found.'),
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('pending thinking', 'sig-pending'), call('pending'), result('pending')]);
+  });
+
+  it('keeps the signed reasoning when a step marker sits between it and the pending call', () => {
+    const parts = pruneWith([
+      reasoning('pending thinking', 'sig-pending'),
+      { type: 'step-start' } as any,
+      call('pending'),
+      endMarker(),
+      result('pending'),
+    ]);
+
+    expect(parts).toEqual([reasoning('pending thinking', 'sig-pending'), call('pending'), result('pending')]);
   });
 });
