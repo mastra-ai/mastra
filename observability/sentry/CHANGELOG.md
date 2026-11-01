@@ -1,5 +1,14 @@
 # @mastra/sentry
 
+## 1.2.31-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#29123](https://github.com/mastra-ai/mastra/pull/29123))
+  - Updated dependency [`@sentry/node@^11.10.0` ↗︎](https://www.npmjs.com/package/@sentry/node/v/11.10.0) (from `^10.76.2`, in `dependencies`)
+- Updated dependencies [[`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563)]:
+  - @mastra/core@1.82.0-alpha.1
+
 ## 1.2.31-alpha.0
 
 ### Patch Changes

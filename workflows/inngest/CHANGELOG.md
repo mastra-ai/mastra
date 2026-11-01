@@ -1,5 +1,14 @@
 # @mastra/inngest
 
+## 1.11.1-alpha.0
+
+### Patch Changes
+
+- Fixed `InngestRun.watch()` crashing the process with an unhandled rejection when the Inngest realtime subscription fails to connect (for example `fetch failed` or a WebSocket error). The failure is now logged as a warning and the run still completes through polling. Unwatching now also closes the realtime connection instead of leaving it open. ([#29103](https://github.com/mastra-ai/mastra/pull/29103))
+
+- Updated dependencies [[`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563)]:
+  - @mastra/core@1.82.0-alpha.1
+
 ## 1.11.0
 
 ### Minor Changes

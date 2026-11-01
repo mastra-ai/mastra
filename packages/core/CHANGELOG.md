@@ -1,5 +1,11 @@
 # @mastra/core
 
+## 1.82.0-alpha.1
+
+### Patch Changes
+
+- Fixed metadata filters in the in-memory store returning records whose nested metadata had different keys from the filter when one side contained an `undefined` value. ([#29101](https://github.com/mastra-ai/mastra/pull/29101))
+
 ## 1.82.0-alpha.0
 
 ### Minor Changes

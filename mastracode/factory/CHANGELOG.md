@@ -1,5 +1,50 @@
 # @mastra/factory
 
+## 0.27.0-alpha.1
+
+### Minor Changes
+
+- The same Jira, Linear or incident.io item can now be filed in more than one Factory project. Before, the first project to file an item held it for the whole org, and other projects that ingested it got no card. Each project now keeps its own card. Within a project the card is still reused when the item is seen again, after the card finishes and when the issue reopens. A Linear card is also found after the issue's identifier changes, for example when the issue moves to another team. ([#29059](https://github.com/mastra-ai/mastra/pull/29059))
+
+  When intake routing sends an item to a different project, the new project files its own card and the previous project's card stays where it is.
+
+  **Breaking changes**
+
+  - `claimKey` is removed from the `upsertLinkedWorkItem` decision type. Rules that still return it, and decisions saved before this release, keep working: the field is accepted and ignored.
+  - `WorkItemClaimConflictError`, `getByClaimKey`, `claimWorkItem`, `releaseProjectClaims` and `WorkItemRow.claimKey` are removed.
+
+  Drop `claimKey` from linked-item decisions your rules return:
+
+  ```ts
+  // Before
+  return {
+    type: 'upsertLinkedWorkItem',
+    source: 'jira-issue',
+    sourceKey: issue.id,
+    claimKey: `jira:issue:${issue.id}` /* … */,
+  };
+
+  // After
+  return { type: 'upsertLinkedWorkItem', source: 'jira-issue', sourceKey: issue.id /* … */ };
+  ```
+
+  Remove calls to `getByClaimKey`, `claimWorkItem` and `releaseProjectClaims`. To find a project's card for an item, use `getByProjectSource`.
+
+  The `claim_key` column stays in the database. Values already stored there are left in place and no longer affect anything.
+
+### Patch Changes
+
+- Fixed shell commands that exit with a failure code reading as successful in the Factory transcript. The command now reads as failed while the run streams, after a dropped stream reconnects, and after a reload. Stopping a process with `kill_process` still reads as a success. ([#28963](https://github.com/mastra-ai/mastra/pull/28963))
+
+  A system reminder that loads project instructions (`AGENTS.md`, `CLAUDE.md` or `CONTEXT.md`) now reads "Project instructions" and names the file by its path in the working directory, such as `packages/core/AGENTS.md`, instead of a bare "System reminder".
+
+- A board tool rule that moves a work item back into its current stage with `reenter: true` now runs that stage's entry rules, as documented. Previously the entry rules were skipped, so no new agent run started. ([#29104](https://github.com/mastra-ai/mastra/pull/29104))
+
+- Updated dependencies [[`5735a50`](https://github.com/mastra-ai/mastra/commit/5735a50c6ce6c66fcbc46f74b9a56d5998ae546b), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563)]:
+  - @mastra/platform-workspace@1.11.1-alpha.0
+  - @mastra/core@1.82.0-alpha.1
+  - @mastra/code-sdk@1.18.0-alpha.1
+
 ## 0.27.0-alpha.0
 
 ### Minor Changes
