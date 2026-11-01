@@ -675,6 +675,19 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
 
         const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
         expect(originalGeneration).toEqual(expect.any(Number));
+        // The real LLM execution boundary precedes any model or processor output.
+        const history = await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        const abandonedStartAt = history.findLast(event => event.type === AgentStreamEventTypes.ITERATION_START)?.index;
+        expect(abandonedStartAt).toEqual(expect.any(Number));
+        // Simulate a model step published before its result was checkpointed.
+        await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          type: AgentStreamEventTypes.STEP_START,
+          runId,
+          data: { type: 'step-start', payload: { messageId: 'same-message' } },
+          stepIndex: 0,
+          generation: originalGeneration,
+          producedAt: Date.now(),
+        });
         // The original execution's events so far carry its claim.
         await vi.waitFor(() => expect(events.length).toBeGreaterThan(0));
         expect(events.every(event => event.generation === originalGeneration)).toBe(true);
@@ -713,6 +726,16 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         // The claim is announced before the recovered execution publishes, and everything it publishes carries it.
         const claimedAt = events.findIndex(event => event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED);
         expect(events[claimedAt]?.generation).toBe(recoveredGeneration);
+        const replay = await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        expect((replay[claimedAt]?.data as { supersededFrom?: number }).supersededFrom).toBe(abandonedStartAt);
+        const replayed: Array<{ type: string; generation?: number }> = [];
+        const unsubscribe = await agentB.__subscribeToRunStream(runId, {}, event => replayed.push(event));
+        expect(
+          replayed.filter(
+            event => event.type === AgentStreamEventTypes.STEP_START && event.generation === originalGeneration,
+          ),
+        ).toHaveLength(0);
+        await unsubscribe();
         const afterClaim = events.slice(claimedAt + 1);
         expect(afterClaim.some(event => event.type === 'finish' && event.generation === recoveredGeneration)).toBe(
           true,
@@ -735,6 +758,52 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         ]);
 
         await startedStream.stop();
+        started.cleanup();
+        recovered.cleanup();
+      },
+    );
+
+    it.skipIf(backend === 'lease')(
+      'uses the highest generation when a stale step start arrives after its successor',
+      async () => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const cache = new InMemoryServerCache();
+        const original = gatedModel('original answer');
+        const agentA = buildAgent({ model: original.model, storage, memory, cache });
+        const started = await agentA.stream('What is the answer?', { memory: { thread: THREAD, resource: RESOURCE } });
+        const { runId } = started;
+        const originalStream = collect(started.fullStream);
+        await original.entered;
+        await waitForCheckpoint(storage, runId);
+        const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
+
+        // A prior takeover already started this iteration; its predecessor publishes a late start.
+        // The next recovery must select the highest generation, not the last appended start.
+        const successorStart = (await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0)).length;
+        for (const generation of [originalGeneration + 1, originalGeneration]) {
+          await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+            type: AgentStreamEventTypes.ITERATION_START,
+            runId,
+            data: {},
+            stepIndex: 0,
+            generation,
+            producedAt: Date.now(),
+          });
+        }
+
+        globalRunRegistry.clear();
+        __resetExecutionFencesForTests();
+        const recovering = gatedModel('recovered answer');
+        const agentB = buildAgent({ model: recovering.model, storage, memory, cache });
+        const recovered = await agentB.recover(runId, { force: true });
+        const claims = await (agentB.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        const claim = claims.findLast(event => event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED);
+        expect((claim?.data as { supersededFrom?: number })?.supersededFrom).toBe(successorStart);
+        original.release();
+        recovering.release();
+        await drain(recovered.fullStream);
+        await originalStream.stop();
         started.cleanup();
         recovered.cleanup();
       },

@@ -94,6 +94,7 @@ import {
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
+  createSupersededEventFilter,
   emitAbortEvent,
   emitChunkEvent,
   emitErrorEvent,
@@ -4388,6 +4389,7 @@ export class DurableAgent<
     let executionFence: ExecutionFence | undefined;
     let recoveryState: RehydratedRecoveryState;
     let finishPublishedBeforeCrash: boolean;
+    let claimedSnapshot: WorkflowRunState;
     try {
       // A run this process is still executing is not orphaned. Recovering it
       // here would replace the live execution's registry entry mid-flight
@@ -4419,6 +4421,7 @@ export class DurableAgent<
       // from the pre-claim copy.
       const loaded = await this.#loadRecoverableSnapshot(workflowsStore, runId);
       workflowInput = loaded.workflowInput;
+      claimedSnapshot = loaded.snapshot;
       // map-final-output publishes FINISH before saving its result. Restart skips
       // that saved success, so recovery must publish FINISH for the new subscriber.
       finishPublishedBeforeCrash = loaded.snapshot.context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success';
@@ -4447,9 +4450,10 @@ export class DurableAgent<
     const { requestContext, threadId, resourceId, messageList, recoverAgentSpan, recoverModelSpan, registryEntry } =
       recoveryState;
     if (executionFence.generation !== undefined) {
-      // Readers of the run's stream, including the superseded execution's own
-      // caller, drop what that execution still publishes from here on.
-      await emitOwnershipClaimedEvent(this.pubsub, runId, executionFence.generation).catch(error => {
+      // Record the earliest event from the step the persisted snapshot will re-execute.
+      // A replay can then omit the abandoned tail without losing completed iterations.
+      const supersededFrom = await this.#supersededFrom(workflowsStore, runId, claimedSnapshot);
+      await emitOwnershipClaimedEvent(this.pubsub, runId, executionFence.generation, supersededFrom).catch(error => {
         this.logger.warn(`[DurableAgent] recover(${runId}) failed to announce its claim on the run stream`, {
           runId,
           error,
@@ -5363,6 +5367,43 @@ export class DurableAgent<
     return { recovered, succeeded, failed };
   }
 
+  /** Locate the start of the model step that recovery will re-execute, if it was published. */
+  async #supersededFrom(
+    workflowsStore: WorkflowsStorage,
+    runId: string,
+    parentSnapshot: WorkflowRunState,
+  ): Promise<number | undefined> {
+    try {
+      const nestedRunId = parentSnapshot.context?.[DurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId;
+      const nested = await workflowsStore.getWorkflowRunById({
+        runId: typeof nestedRunId === 'string' ? nestedRunId : runId,
+        workflowName: DurableStepIds.AGENTIC_EXECUTION,
+      });
+      const snapshot = typeof nested?.snapshot === 'string' ? JSON.parse(nested.snapshot) : nested?.snapshot;
+      if (!snapshot || snapshot.context?.[DurableStepIds.LLM_EXECUTION]?.status === 'success') return;
+      const stepIndex = snapshot.context?.input?.iterationCount;
+      if (typeof stepIndex !== 'number') return;
+      const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
+      const starts = history.filter(
+        event =>
+          (event.type === AgentStreamEventTypes.ITERATION_START || event.type === AgentStreamEventTypes.STEP_START) &&
+          event.stepIndex === stepIndex,
+      );
+      const latestGeneration = starts.reduce<number | undefined>(
+        (latest, event) =>
+          typeof event.generation === 'number' ? Math.max(latest ?? event.generation, event.generation) : latest,
+        undefined,
+      );
+      return (
+        starts.find(
+          event => event.type === AgentStreamEventTypes.ITERATION_START && event.generation === latestGeneration,
+        ) ?? starts.find(event => event.generation === latestGeneration)
+      )?.index;
+    } catch (error) {
+      this.logger.warn(`[DurableAgent] recover(${runId}) couldn't locate the uncheckpointed stream tail`, { error });
+    }
+  }
+
   /**
    * A replay from an offset can start past the marker of the execution that
    * took the run over, and would then accept what the lost execution still
@@ -5378,19 +5419,41 @@ export class DurableAgent<
   async #readReplayFloor(
     runId: string,
     offset: number | undefined,
-  ): Promise<Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration'>> {
-    if (!offset) return {};
+  ): Promise<
+    Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent'> & {
+      refreshReplayFilter?: () => Promise<unknown>;
+    }
+  > {
     try {
-      const skipped = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).slice(0, offset);
+      const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
+      const initialFilter = createSupersededEventFilter(history);
+      let refreshedFilter: Promise<typeof initialFilter> | undefined;
+      let currentFilter: typeof initialFilter | undefined;
+      // Subscription can replay a newer claim than the snapshot above. Refresh
+      // before the first replayed event; live events and later deliveries stay synchronous.
+      const refreshReplayFilter = () => {
+        refreshedFilter ??= this.pubsub
+          .getHistory(AGENT_STREAM_TOPIC(runId), 0)
+          .then(entries => (currentFilter = createSupersededEventFilter(entries as AgentStreamEvent[])))
+          .catch(() => (currentFilter = initialFilter));
+        return refreshedFilter;
+      };
+      const keepReplayEvent = (event: AgentStreamEvent): boolean | Promise<boolean> => {
+        if (event.index === undefined) return (currentFilter ?? initialFilter)(event);
+        if (currentFilter) return currentFilter(event);
+        return refreshReplayFilter().then(filter => filter(event));
+      };
+      if (!offset) return { keepReplayEvent, refreshReplayFilter };
+      const skipped = history.slice(0, offset);
       if (skipped.length === offset) {
         let floor: number | undefined;
         for (const event of skipped) {
           const generation = event.generation;
           if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
         }
-        return { minGeneration: floor };
+        return { minGeneration: floor, keepReplayEvent, refreshReplayFilter };
       }
-      return { minGeneration: await readRunGeneration(this.#mastra, runId) };
+      return { minGeneration: await readRunGeneration(this.#mastra, runId), keepReplayEvent, refreshReplayFilter };
     } catch (error) {
       this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
         error,
@@ -5499,14 +5562,20 @@ export class DurableAgent<
     options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>> {
-    const keepGeneration = createRunGenerationFilter(await this.#readReplayFloor(runId, options.offset));
+    const replayFloor = await this.#readReplayFloor(runId, options.offset);
+    const keepGeneration = createRunGenerationFilter(replayFloor);
     const topic = AGENT_STREAM_TOPIC(runId);
     let subscribed = true;
     let activityVersion = 0;
+    let bufferingReplay = true;
+    const bufferedEvents: Array<() => Promise<void>> = [];
 
     const deliver = (event: AgentStreamEvent) => {
-      activityVersion++;
-      if (!subscribed || event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
+      if (
+        event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED ||
+        event.type === AgentStreamEventTypes.ITERATION_START
+      )
+        return;
       // `index` is log bookkeeping, not part of the client payload: the observe
       // route forwards events verbatim, so keep the payload exactly what
       // pre-#27352 clients already receive.
@@ -5517,39 +5586,66 @@ export class DurableAgent<
       }
       onEvent(event);
     };
-    // Acks every delivery, dropped ones included, so a durable backend doesn't
-    // keep them pending.
-    const callback = withAck(event => {
-      const streamEvent = event as unknown as AgentStreamEvent;
-      const keep = keepGeneration(streamEvent);
-      if (typeof keep === 'boolean') {
-        if (keep) deliver(streamEvent);
-        return;
-      }
-      return keep.then(kept => {
-        if (kept) deliver(streamEvent);
+    const filterEvent = (streamEvent: AgentStreamEvent) => {
+      const filterGeneration = () => {
+        const keep = keepGeneration(streamEvent);
+        if (typeof keep === 'boolean') {
+          if (keep) deliver(streamEvent);
+          return;
+        }
+        return keep.then(kept => {
+          if (kept) deliver(streamEvent);
+        });
+      };
+      const keepReplay = replayFloor.keepReplayEvent?.(streamEvent);
+      if (keepReplay === undefined || keepReplay === true) return filterGeneration();
+      if (keepReplay === false) return;
+      return keepReplay.then(keep => {
+        if (keep) return filterGeneration();
       });
-    });
-
-    await (options.offset !== undefined
-      ? this.pubsub.subscribeFromOffset(topic, options.offset, callback)
-      : this.pubsub.subscribeWithReplay(topic, callback));
-
+    };
+    // Replayed frames are held until attachment finishes and the claim history
+    // is refreshed; a claim can arrive partway through replay. Acknowledge only
+    // after filtering and delivery, including frames that are dropped.
+    const acknowledge = withAck(event => filterEvent(event as AgentStreamEvent));
+    const callback: ReturnType<typeof withAck> = (event, ...args) => {
+      if (!subscribed) return args[0]?.() ?? Promise.resolve();
+      activityVersion++;
+      if (bufferingReplay) {
+        bufferedEvents.push(async () => {
+          await acknowledge(event, ...args);
+        });
+        return Promise.resolve();
+      }
+      return acknowledge(event, ...args);
+    };
     const unsubscribe = async () => {
       if (!subscribed) return;
       subscribed = false;
       await this.pubsub.unsubscribe(topic, callback);
     };
+
     try {
+      await (options.offset !== undefined
+        ? this.pubsub.subscribeFromOffset(topic, options.offset, callback)
+        : this.pubsub.subscribeWithReplay(topic, callback));
+      await replayFloor.refreshReplayFilter?.();
+      // Index cursor keeps the drain linear; live frames can still append while draining.
+      for (let i = 0; i < bufferedEvents.length; i++) {
+        await bufferedEvents[i]!();
+      }
+      bufferedEvents.length = 0;
+      bufferingReplay = false;
+
       const reconciledVersion = activityVersion;
       if (options.onComplete && (await this.#isObservationComplete(runId)) && activityVersion === reconciledVersion) {
         options.onComplete();
       }
+      return unsubscribe;
     } catch (error) {
       await unsubscribe();
       throw error;
     }
-    return unsubscribe;
   }
 
   /**
