@@ -140,10 +140,11 @@ export function useHandoffPrompt(): void {
       const interruptedPrompt = readPendingHandoff(sessionId);
       const interruptedFiles = takeHandoffFiles(sessionId);
       if (interruptedPrompt || interruptedFiles.length > 0) {
-        if (leftModel) void startOn(leftModel);
-        if (interruptedPrompt) prefillComposer(interruptedPrompt);
-        if (interruptedFiles.length > 0) setImages(current => [...interruptedFiles, ...current]);
-        pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
+        void startOn(leftModel ?? {}).then(() => {
+          if (interruptedPrompt) prefillComposer(interruptedPrompt);
+          if (interruptedFiles.length > 0) setImages(current => [...interruptedFiles, ...current]);
+          pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
+        });
       }
       return;
     }

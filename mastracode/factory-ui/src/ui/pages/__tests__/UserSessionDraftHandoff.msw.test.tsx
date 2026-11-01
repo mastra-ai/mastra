@@ -390,12 +390,16 @@ describe('a user session draft on the real thread route', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('gives the prompt back on the model and thinking level picked in the draft when the thread is left early', async () => {
+  it('gives the prompt back on the model and thinking level picked in the draft once they apply, when the thread is left early', async () => {
     let finishCreate = () => {};
     const createGate = new Promise<void>(resolve => {
       finishCreate = resolve;
     });
-    const route = stubDraftRoute({ createGate, defaultModelId: 'openai/gpt-4o-mini' });
+    let finishModelSwitch = () => {};
+    const modelSwitchGate = new Promise<void>(resolve => {
+      finishModelSwitch = resolve;
+    });
+    const route = stubDraftRoute({ createGate, modelSwitchGate, defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
@@ -422,8 +426,12 @@ describe('a user session draft on the real thread route', () => {
     );
     finishCreate();
     await router.navigate(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`);
+    await waitFor(() => expect(route.modelSwitchRequests).toBe(1));
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('');
+
+    finishModelSwitch();
+
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('fix the login bug'));
-    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled());
     await user.click(screen.getByRole('textbox', { name: 'Message' }));
     await user.keyboard('{Enter}');
 

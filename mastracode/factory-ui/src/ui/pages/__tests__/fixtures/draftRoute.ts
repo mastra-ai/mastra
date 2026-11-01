@@ -32,6 +32,7 @@ export interface DraftRoute {
   posted: string[];
   bindings: string[];
   bindingsBeforePrompt: string[];
+  modelSwitchRequests: number;
   finishWorkspace: () => void;
 }
 
@@ -41,6 +42,8 @@ interface DraftRouteOptions {
   createGate?: Promise<void>;
   /** Answers this many session creates with a server error before accepting one. */
   failedCreates?: number;
+  /** Holds each session model switch response until it settles. */
+  modelSwitchGate?: Promise<void>;
   defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
@@ -57,6 +60,7 @@ export function stubDraftRoute({
   modelDefaultsGate,
   createGate,
   failedCreates = 0,
+  modelSwitchGate,
   defaultModelId = null,
   persistedMessages = [],
   workItems = [],
@@ -76,6 +80,7 @@ export function stubDraftRoute({
     posted: [],
     bindings: [],
     bindingsBeforePrompt: [],
+    modelSwitchRequests: 0,
     finishWorkspace: () => releaseWorkspace(),
   };
 
@@ -188,6 +193,8 @@ export function stubDraftRoute({
       const body = await request.json();
       const thinkingLevel = readBody(body, 'thinkingLevel');
       const thinkingSuffix = thinkingLevel ? ` thinking:${thinkingLevel}` : '';
+      route.modelSwitchRequests += 1;
+      await modelSwitchGate;
       route.bindings.push(`model:${readBody(body, 'modelId')}${thinkingSuffix}`);
       return HttpResponse.json({ ok: true });
     }),
