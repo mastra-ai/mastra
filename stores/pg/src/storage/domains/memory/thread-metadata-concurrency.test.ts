@@ -111,6 +111,31 @@ describe('PostgreSQL thread metadata writes across processes', () => {
     }
   });
 
+  it('metadata updates on legacy TEXT metadata that jsonb rejects still merge', async () => {
+    const { id } = await createThread();
+    const table = `"${schemaName}".mastra_threads`;
+    const pool = new Pool({ connectionString });
+    try {
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN metadata TYPE text`);
+      await pool.query(`UPDATE ${table} SET metadata = $1 WHERE id = $2`, ['{"v":"\\u0000","keep":1}', id]);
+      expect((await a.updateThread({ id, metadata: { k: 1 } })).metadata).toMatchObject({ keep: 1, k: 1 });
+      const updated = await a.updateThreadMetadata({ id, update: () => ({ j: 2 }) });
+      expect(updated?.metadata).toMatchObject({ keep: 1, k: 1, j: 2 });
+    } finally {
+      await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN metadata TYPE jsonb USING metadata::jsonb`);
+      await pool.end();
+    }
+  });
+
+  it('keys patched to undefined are removed from metadata', async () => {
+    const { id } = await createThread();
+    await a.updateThread({ id, metadata: { x: 1, y: 2 } });
+    expect((await a.updateThread({ id, metadata: { x: undefined } })).metadata).toEqual({ seed: true, y: 2 });
+    const updated = await a.updateThreadMetadata({ id, update: () => ({ y: undefined }) });
+    expect(updated?.metadata).toEqual({ seed: true });
+  });
+
   it('updateThreadMetadata respects resourceId, missing threads, and no-op updates', async () => {
     const thread = await createThread('owner');
     expect(await a.updateThreadMetadata({ id: thread.id, resourceId: 'other', update: () => ({ x: 1 }) })).toBeNull();

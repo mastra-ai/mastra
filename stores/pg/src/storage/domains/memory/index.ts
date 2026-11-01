@@ -213,6 +213,11 @@ function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
   return Array.from(deduped.values());
 }
 
+/** Shallow merge; keys patched to `undefined` are dropped when serialized. Non-object metadata is replaced. */
+function mergeMetadata(existing: unknown, patch: Record<string, unknown>): Record<string, unknown> {
+  const base = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
+  return { ...base, ...patch };
+}
 export class MemoryPG extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
@@ -923,25 +928,41 @@ export class MemoryPG extends MemoryStorage {
     };
   }
 
+  async #lockThread(
+    t: Queryable,
+    tableName: string,
+    { id, resourceId }: { id: string; resourceId?: string },
+  ): Promise<StorageThreadType | null> {
+    const params: unknown[] = [id];
+    let query = `SELECT * FROM ${tableName} WHERE id = $1`;
+    if (resourceId !== undefined) {
+      query += ` AND "resourceId" = $2`;
+      params.push(resourceId);
+    }
+    const row = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+      `${query} FOR UPDATE`,
+      params,
+    );
+    return row ? this.#toThread(row) : null;
+  }
+
   /**
-   * Shallow-merges `metadata` into the stored metadata in one statement, so the
-   * merge always applies to the latest committed row. The `::jsonb` casts keep it
-   * working on tables whose metadata column is still TEXT.
+   * Writes `title` (when given) and the full `metadata` value (when given).
+   * Callers that merge metadata must hold the row lock from `#lockThread`.
    */
-  async #mergeThreadUpdate(
+  async #writeThread(
     q: Queryable,
     tableName: string,
     { id, title, metadata }: { id: string; title?: string; metadata?: Record<string, unknown> },
   ): Promise<StorageThreadType | null> {
     const nowStr = toUtcISOString(new Date());
     const params: unknown[] = [title ?? null, nowStr, nowStr, id];
-    // Leave the column out entirely when no patch is given, so a title-only
-    // update never re-reads or re-casts the stored metadata.
+    // Leave the column out when no metadata is given, so a title-only update
+    // never touches the stored value.
     let metadataSet = '';
     if (metadata !== undefined) {
       params.push(toPgJson(metadata));
-      metadataSet = `metadata = (CASE WHEN jsonb_typeof(metadata::jsonb) = 'object' THEN metadata::jsonb ELSE '{}'::jsonb END)
-                    || $5::jsonb,`;
+      metadataSet = 'metadata = $5,';
     }
     const row = await q.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
       `UPDATE ${tableName}
@@ -979,23 +1000,13 @@ export class MemoryPG extends MemoryStorage {
       return await this.#db.client.tx(async t => {
         if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'updateThreadMetadata');
 
-        const params: unknown[] = [id];
-        let query = `SELECT * FROM ${threadsTable} WHERE id = $1`;
-        if (resourceId !== undefined) {
-          query += ` AND "resourceId" = $2`;
-          params.push(resourceId);
-        }
-        const row = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-          `${query} FOR UPDATE`,
-          params,
-        );
-        if (!row) return null;
+        const thread = await this.#lockThread(t, threadsTable, { id, resourceId });
+        if (!thread) return null;
 
-        const thread = this.#toThread(row);
         const metadata = update(thread);
         if (!metadata) return thread;
 
-        return this.#mergeThreadUpdate(t, threadsTable, { id, metadata });
+        return this.#writeThread(t, threadsTable, { id, metadata: mergeMetadata(thread.metadata, metadata) });
       });
     } catch (error) {
       if (error instanceof MastraError || isRunFenceConflictError(error)) throw error;
@@ -1015,7 +1026,7 @@ export class MemoryPG extends MemoryStorage {
     id,
     title,
     metadata,
-    fence,
+    fence: explicitFence,
   }: {
     id: string;
     title?: string;
@@ -1023,21 +1034,39 @@ export class MemoryPG extends MemoryStorage {
     fence?: RunFence;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const notFound = () =>
+      new MastraError({
+        id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread ${id} not found`,
+        details: {
+          threadId: id,
+          title: title ?? null,
+        },
+      });
     try {
-      return await this.#fenced(fence, 'updateThread', async q => {
-        const thread = await this.#mergeThreadUpdate(q, threadTableName, { id, title, metadata });
-        if (!thread) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Thread ${id} not found`,
-            details: {
-              threadId: id,
-              title: title ?? null,
-            },
-          });
-        }
+      if (metadata === undefined) {
+        return await this.#fenced(explicitFence, 'updateThread', async q => {
+          const thread = await this.#writeThread(q, threadTableName, { id, title });
+          if (!thread) throw notFound();
+          return thread;
+        });
+      }
+
+      // Merging metadata is a read-modify-write, so hold the row lock for the
+      // whole merge; otherwise writers in other processes drop each other's keys.
+      const fence = resolveRunFence(this, explicitFence);
+      return await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'updateThread');
+        const existing = await this.#lockThread(t, threadTableName, { id });
+        if (!existing) throw notFound();
+        const thread = await this.#writeThread(t, threadTableName, {
+          id,
+          title,
+          metadata: mergeMetadata(existing.metadata, metadata),
+        });
+        if (!thread) throw notFound();
         return thread;
       });
     } catch (error) {
