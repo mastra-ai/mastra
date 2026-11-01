@@ -16,23 +16,23 @@ function assistant(id: string, parts: MastraDBMessage['content']['parts']): Mast
   return { id, role: 'assistant', createdAt: CREATED_AT, content: { format: 2, parts } };
 }
 
-function ranCommand(toolCallId: string, toolName: string, result: string): MastraDBMessage {
-  return assistant(`call-${toolCallId}`, [
-    {
-      type: 'tool-invocation',
-      toolInvocation: { state: 'result', toolCallId, toolName, args: { command: 'git status' }, result },
-    },
-  ]);
+type MessagePart = MastraDBMessage['content']['parts'][number];
+
+function ran(toolCallId: string, toolName: string, args: unknown, result: string): MessagePart {
+  return { type: 'tool-invocation', toolInvocation: { state: 'result', toolCallId, toolName, args, result } };
 }
 
-function sandboxExit(toolCallId: string, exitCode: number): MastraDBMessage {
-  return assistant(`exit-${toolCallId}`, [
-    {
-      type: 'data-sandbox-exit',
-      data: { exitCode, success: exitCode === 0, killed: false, timedOut: false, toolCallId },
-    },
-  ]);
+function exited(toolCallId: string, exit: { exitCode: number; success: boolean; killed?: boolean }): MessagePart {
+  return { type: 'data-sandbox-exit', data: { ...exit, toolCallId } };
 }
+
+const gitStatus = ran(
+  'git',
+  'execute_command',
+  { command: 'git status' },
+  'fatal: not a git repository\n\nExit code: 128',
+);
+const gitStatusExit = exited('git', { exitCode: 128, success: false });
 
 function renderEntries(entries: TimelineEntry[]) {
   renderWithProviders(
@@ -75,14 +75,11 @@ describe('Transcript tool outcomes', () => {
   });
 
   describe('when a command exits with a failure code', () => {
-    it('reads as failed once the thread reloads, from the exit its sandbox reported', () => {
-      const { entries } = createInitialTranscript({
-        messages: [
-          ranCommand('git', 'execute_command', 'fatal: not a git repository\n\nExit code: 1'),
-          sandboxExit('git', 1),
-        ],
-      });
-      renderEntries(entries);
+    it.each([
+      ['with the call', [assistant('step', [gitStatus, gitStatusExit])]],
+      ['in a later message', [assistant('step', [gitStatus]), assistant('sealed', [gitStatusExit])]],
+    ])('reads as failed once the thread reloads, its exit saved %s', (_, messages) => {
+      renderEntries(createInitialTranscript({ messages }).entries);
 
       const line = screen.getByRole('group', { name: 'Ran git status' });
       expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
@@ -92,8 +89,13 @@ describe('Transcript tool outcomes', () => {
       const events = [
         { type: 'message_start', message: assistant('turn', []) },
         { type: 'tool_start', toolCallId: 'git', toolName: 'execute_command', args: { command: 'git status' } },
-        { type: 'command_exit', toolCallId: 'git', exitCode: 1, success: false },
-        { type: 'tool_end', toolCallId: 'git', result: 'fatal: not a git repository\n\nExit code: 1', isError: false },
+        { type: 'command_exit', toolCallId: 'git', exitCode: 128, success: false },
+        {
+          type: 'tool_end',
+          toolCallId: 'git',
+          result: 'fatal: not a git repository\n\nExit code: 128',
+          isError: false,
+        },
         { type: 'message_end', id: 'turn' },
       ] as const;
       const state = events.reduce(
@@ -109,10 +111,14 @@ describe('Transcript tool outcomes', () => {
     it('keeps a clean exit, and a process it killed, successful', () => {
       const { entries } = createInitialTranscript({
         messages: [
-          ranCommand('ls', 'mastra_workspace_execute_command', 'README.md'),
-          sandboxExit('ls', 0),
-          ranCommand('kill', 'kill_process', 'Process 4242 killed'),
-          sandboxExit('kill', 137),
+          assistant('list', [
+            ran('ls', 'mastra_workspace_execute_command', { command: 'ls' }, 'README.md'),
+            exited('ls', { exitCode: 0, success: true }),
+          ]),
+          assistant('stop', [
+            ran('kill', 'kill_process', { pid: 4242 }, 'Process 4242 has been killed.'),
+            exited('kill', { exitCode: 137, success: false, killed: true }),
+          ]),
         ],
       });
       renderEntries(entries);

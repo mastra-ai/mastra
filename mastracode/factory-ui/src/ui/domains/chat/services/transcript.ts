@@ -304,7 +304,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'shell_output':
       return withTool(state, event.toolCallId, t => ({ ...t, output: t.output + stripAnsi(event.output) }));
     case 'command_exit':
-      return toolAnchorIndex(state.entries, event.toolCallId, -1) === -1
+      return knownToolIndex(state.entries, event.toolCallId) === -1
         ? state
         : withTool(state, event.toolCallId, t => (runsCommand(t) ? { ...t, exitCode: event.exitCode } : t));
     case 'tool_update':
@@ -471,7 +471,7 @@ function runsCommand(tool: ToolCall): boolean {
   return COMMAND_TOOLS.has(tool.toolName);
 }
 
-/** A command's exit is saved in a message of its own, after the call it ends. */
+/** The exit shares its call's message, unless a sealed message pushed it into a later one. */
 function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, number> {
   const exits = new Map<string, number>();
   for (const part of messages.flatMap(message => message.content.parts)) {
@@ -1053,18 +1053,19 @@ function hasAssistantText(state: TranscriptState): boolean {
   );
 }
 
-function toolAnchorIndex(
-  entries: TimelineEntry[],
-  toolCallId: string,
-  fallback = currentTurnAssistantIndex(entries),
-): number {
+function knownToolIndex(entries: TimelineEntry[], toolCallId: string): number {
   for (let i = entries.length - 1; i >= 0; i--) {
     const entry = entries[i];
     if (entry.kind !== 'message') continue;
     if (entry.runtimeTools?.[toolCallId]) return i;
     if (entry.message.content.parts.some(part => toolCallIdForPart(part) === toolCallId)) return i;
   }
-  return fallback;
+  return -1;
+}
+
+function toolAnchorIndex(entries: TimelineEntry[], toolCallId: string): number {
+  const known = knownToolIndex(entries, toolCallId);
+  return known === -1 ? currentTurnAssistantIndex(entries) : known;
 }
 
 function currentTurnAssistantIndex(entries: TimelineEntry[]): number {
