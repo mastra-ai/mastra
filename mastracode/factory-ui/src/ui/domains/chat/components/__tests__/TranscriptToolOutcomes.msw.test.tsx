@@ -108,6 +108,26 @@ describe('Transcript tool outcomes', () => {
       expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
     });
 
+    it('reads as failed when the stream dropped its exit, once the refetched thread brings it in', () => {
+      const events = [
+        { type: 'message_start', message: assistant('turn', []) },
+        { type: 'tool_start', toolCallId: 'git', toolName: 'execute_command', args: { command: 'git status' } },
+        { type: 'message_end', id: 'turn' },
+      ] as const;
+      const streamed = events.reduce(
+        (next, event) => transcriptReducer(next, { type: 'event', event }),
+        initialTranscript,
+      );
+      const refetched = transcriptReducer(streamed, {
+        type: 'mergeWindow',
+        messages: [assistant('step', [gitStatus, gitStatusExit])],
+      });
+      renderEntries(refetched.entries);
+
+      const line = screen.getByRole('group', { name: 'Ran git status' });
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
+    });
+
     it('keeps a clean exit, and a process it killed, successful', () => {
       const { entries } = createInitialTranscript({
         messages: [

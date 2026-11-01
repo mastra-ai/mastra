@@ -177,7 +177,10 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         ],
       };
     case 'mergeWindow': {
-      const merged = dropNoticesOfSavedErrors(mergeServerWindow(state, action.messages), action.messages);
+      const merged = settleCommandExits(
+        dropNoticesOfSavedErrors(mergeServerWindow(state, action.messages), action.messages),
+        action.messages,
+      );
       // `pending` is otherwise cleared only by live stream events. When the
       // stream missed the run (dropped, or the tab was hidden), the refetched
       // window is what brings the reply in, so it has to clear `pending` too.
@@ -447,19 +450,11 @@ export function createInitialTranscript({
   messages?: MastraDBMessage[];
   threadId?: string;
 } = {}): TranscriptState {
-  return {
-    ...initialTranscript,
-    entries: messagesToEntries(messages),
-    threadId,
-  };
+  return settleCommandExits({ ...initialTranscript, entries: messagesToEntries(messages), threadId }, messages);
 }
 
 function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
-  const exits = commandExits(messages);
-  return messages.flatMap(message => [
-    toMessageEntry(message, { streaming: false, runtimeTools: exitedCommands(message, exits) }),
-    ...persistedPrompts(message),
-  ]);
+  return messages.flatMap(message => [toMessageEntry(message, { streaming: false }), ...persistedPrompts(message)]);
 }
 
 const COMMAND_TOOLS = new Set(['execute_command', 'mastra_workspace_execute_command']);
@@ -482,17 +477,32 @@ function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, number> 
   return exits;
 }
 
-function exitedCommands(
-  message: MastraDBMessage,
-  exits: ReadonlyMap<string, number>,
-): Record<string, ToolCall> | undefined {
-  const commands = message.content.parts.flatMap(part => {
-    const tool = toolCallFromPart(part);
-    if (!tool || !runsCommand(tool)) return [];
-    const exitCode = exits.get(tool.toolCallId);
-    return exitCode === undefined ? [] : [[tool.toolCallId, { ...tool, exitCode }] as const];
+// SSE gaps can swallow command_exit; the persisted exit settles the row.
+function settleCommandExits(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  const exits = commandExits(messages);
+  if (exits.size === 0) return state;
+
+  let changed = false;
+  const entries = state.entries.map(entry => {
+    if (entry.kind !== 'message') return entry;
+    const exited = exitedCommands(entry, exits);
+    if (exited.length === 0) return entry;
+    changed = true;
+    return { ...entry, runtimeTools: { ...entry.runtimeTools, ...Object.fromEntries(exited) } };
   });
-  return commands.length > 0 ? Object.fromEntries(commands) : undefined;
+
+  return changed ? { ...state, entries } : state;
+}
+
+function exitedCommands(entry: MessageEntry, exits: ReadonlyMap<string, number>): Array<readonly [string, ToolCall]> {
+  return entry.message.content.parts.flatMap(part => {
+    const persisted = toolCallFromPart(part);
+    if (!persisted) return [];
+    const tool = entry.runtimeTools?.[persisted.toolCallId] ?? persisted;
+    const exitCode = exits.get(tool.toolCallId);
+    if (exitCode === undefined || exitCode === tool.exitCode || !runsCommand(tool)) return [];
+    return [[tool.toolCallId, { ...tool, exitCode }] as const];
+  });
 }
 
 function persistedPrompts(message: MastraDBMessage): Array<ApprovalPrompt | SuspensionPrompt> {
