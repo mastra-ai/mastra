@@ -140,7 +140,7 @@ export function WorkItemCard({
     move: primaryMove,
     resumeStage: custom
       ? undefined
-      : resumeStage(columnStage, { board: item.board, sessions, stageHistory: item.stageHistory }),
+      : resumeStage(columnStage, { board: boardId, sessions, stageHistory: item.stageHistory }),
     nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,
