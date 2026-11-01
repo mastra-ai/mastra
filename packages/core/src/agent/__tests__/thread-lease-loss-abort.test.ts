@@ -138,7 +138,7 @@ class NoLeasePubSub extends EventEmitterPubSub {
   }
 }
 
-describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
+function threadLeaseLoss(engine: EngineVariant) {
   let llm: LLMock;
 
   beforeAll(async () => {
@@ -2780,4 +2780,8 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(modelCalls()).toBe(callsAtAbort);
     expect(shared.owner(key)).toBe('successor-run');
   }, 20_000);
-});
+}
+
+// 'fs' only changes how the agent is assembled and then runs on the normal engine (see EngineVariant),
+// so here it would repeat every 'normal' lease run; the other scenario files cover fs assembly.
+describeForAllEngines('thread lease loss', threadLeaseLoss, { skip: ['fs'] });
