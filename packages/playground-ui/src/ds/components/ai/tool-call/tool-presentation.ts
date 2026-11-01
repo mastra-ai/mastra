@@ -68,9 +68,10 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   string_replace: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
   str_replace: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
   ast_edit: { pose: 'editing', label: 'Edit', detailKeys: ['path'] },
+  apply_patch: { pose: 'editing', label: 'Edit' },
   execute_command: { pose: 'running', label: 'Run', detailKeys: ['command'], isCommand: true },
   get_process_output: { pose: 'reading', label: 'Process output', detailKeys: ['pid'] },
-  kill_process: { pose: 'running', label: 'Stop process', detailKeys: ['pid'] },
+  kill_process: { pose: 'stopping', label: 'Stop process', detailKeys: ['pid'] },
   find_files: { pose: 'finding', label: 'Find files', detailKeys: ['pattern', 'path'] },
   list_files: { pose: 'finding', label: 'List files', detailKeys: ['pattern', 'path'] },
   grep: { pose: 'searching', label: 'Search', detailKeys: ['pattern', 'path'] },
@@ -81,7 +82,7 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   file_stat: { pose: 'reading', label: 'File info', detailKeys: ['path'] },
   delete: { pose: 'deleting', label: 'Delete', detailKeys: ['path'] },
   delete_file: { pose: 'deleting', label: 'Delete', detailKeys: ['path'] },
-  mkdir: { pose: 'editing', label: 'New folder', detailKeys: ['path'] },
+  mkdir: { pose: 'creating', label: 'New folder', detailKeys: ['path'] },
   skill: { pose: 'skill', label: 'Skill', detailKeys: ['name'] },
   skill_search: { pose: 'skill', label: 'Search skills', detailKeys: ['query'] },
   skill_read: { pose: 'skill', label: 'Skill file', detailKeys: ['path'] },
@@ -91,6 +92,8 @@ const TOOL_STYLES: Record<string, ToolStyle> = {
   knowledge_note: { pose: 'editing', label: 'Edit note', detailKeys: ['page'] },
   knowledge_pin: { pose: 'memory', label: 'Update pin', detailKeys: ['page'] },
 };
+
+export const presentedToolNames = Object.keys(TOOL_STYLES);
 
 /** Agents prefix commands with `cd <workspace> &&`, which crowds out the command itself on a one-line row. */
 function withoutCdPrefix(command: string): string {

@@ -29,7 +29,9 @@ export const agentIndicatorStates = [
   'finding',
   'browsing',
   'editing',
+  'creating',
   'running',
+  'stopping',
   'deleting',
   'skill',
   'tool',
@@ -255,6 +257,20 @@ const finding: Pose = t => {
   );
 };
 
+const PLUS_AT: Point = [0, 1];
+
+const creating: Pose = t => {
+  const arm = 2.6 * (1 + 0.15 * Math.sin((TAU * t) / 1.6));
+  return withTrail(
+    kit(FOLDER, [0, 0.4], {
+      cuts: [
+        segment(shifted(PLUS_AT, [-arm, 0]), shifted(PLUS_AT, [arm, 0]), 1.7),
+        segment(shifted(PLUS_AT, [0, -arm]), shifted(PLUS_AT, [0, arm]), 1.7),
+      ],
+    }),
+  );
+};
+
 const PEN = anyOf(
   inCap([-2.6, 2.6], [5, -5], 2.3),
   inShape([
@@ -298,6 +314,12 @@ const running: Pose = t => {
     kit(SCREEN, [0, 0], { cuts: [segment([0.6, 2.8], [4.2, 2.8], 1.8 * cursor)] }),
     polyline(PROMPT, 0, 1.8),
   );
+};
+
+const stopping: Pose = t => {
+  const p = (t / 1.4) % 1;
+  const half = 2.8 - 0.5 * sstep(0, 0.12, p) * (1 - sstep(0.24, 0.6, p));
+  return withTrail(kit(SCREEN, [0, 0], { hole: inRoundRect(0, 0, half, half, 1) }));
 };
 
 const CAN = anyOf(inRoundRect(0, 1.6, 5.4, 5.2, 1.4), inRoundRect(0, -4.4, 7.2, 1, 1), inRoundRect(0, -6, 2.4, 1, 0.8));
@@ -433,7 +455,9 @@ export const poses: Record<AgentIndicatorState, Pose> = {
   finding: grown(finding),
   browsing: grown(browsing),
   editing: grown(editing),
+  creating: grown(creating),
   running: grown(running),
+  stopping: grown(stopping),
   deleting: grown(deleting),
   skill: grown(skill),
   tool: grown(tool),
