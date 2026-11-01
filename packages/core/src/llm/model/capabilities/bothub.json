@@ -31,6 +31,17 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "muse-spark-1.3-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gemma-4-31b-it:free": [
+      {
+        "type": "toggle"
+      }
+    ],
     "nemotron-3-ultra-550b-a55b:free": [
       {
         "type": "effort",
@@ -43,27 +54,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "gemma-4-31b-it:free": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "muse-spark-1.3-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
     "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
       }
     ]
   }
