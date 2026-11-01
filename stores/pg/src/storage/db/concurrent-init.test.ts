@@ -924,4 +924,64 @@ describe('concurrent first boot (COR-1495)', () => {
       await Promise.all(stores.map(store => store.close()));
     }
   }, 120000);
+
+  it.each(['plain', 'concurrent'] as const)(
+    "builds a new table's indexes without CONCURRENTLY and converges when the %s builder starts first",
+    async first => {
+      const name = await schema();
+      // The cold-booting process read its snapshot before the table existed, so
+      // it creates the table itself and builds plainly; the other process saw
+      // the table and takes the CONCURRENTLY path.
+      const coldPool = new Pool({ connectionString, application_name: `${name}_cold` });
+      const coldClient = new RoutingDbClient(new PoolAdapter(coldPool));
+      coldClient.setSchemaSnapshot(await loadSchemaSnapshot(coldClient, name));
+      const cold = new PgDB({ client: coldClient, schemaName: name });
+      await cold.createTable({
+        tableName: 'mastra_favorites' as any,
+        schema: { entityId: { type: 'text', nullable: true } } as any,
+      });
+      expect(cold.isTableCreatedInThisInit('mastra_favorites')).toBe(true);
+
+      const warmPool = new Pool({ connectionString, application_name: `${name}_warm` });
+      const warm = new PgDB({ client: new PoolAdapter(warmPool), schemaName: name });
+      const writer = await admin.connect();
+      const statements = captureIndexStatements(coldClient);
+      const builds: Promise<void>[] = [];
+      const waiting = (role: string) =>
+        waitFor(async () => {
+          const { rows } = await admin.query(
+            `SELECT 1 FROM pg_stat_activity WHERE application_name = $1 AND wait_event_type = 'Lock'`,
+            [`${name}_${role}`],
+          );
+          return rows.length > 0;
+        });
+      try {
+        // An open writer holds both builds mid-flight so they overlap on the
+        // same table: SHARE (plain) against SHARE UPDATE EXCLUSIVE (CONCURRENTLY).
+        await writer.query('BEGIN');
+        await writer.query(`INSERT INTO "${name}".mastra_favorites ("entityId") VALUES ('a')`);
+        const index = { name: 'idx_favorites_entity', table: 'mastra_favorites', columns: ['entityId'] };
+        const [a, b] = first === 'plain' ? ([cold, warm] as const) : ([warm, cold] as const);
+        builds.push(a.createIndex(index));
+        void builds[0]!.catch(() => {});
+        await waiting(first === 'plain' ? 'cold' : 'warm');
+        builds.push(b.createIndex(index));
+        void builds[1]!.catch(() => {});
+        // A plain build queues behind the writer; against an in-flight
+        // CONCURRENTLY build it defers to that builder instead (buildIndex).
+        if (first === 'plain') await waiting('warm');
+        await writer.query('COMMIT');
+        const results = await Promise.allSettled(builds);
+        expect(results.filter(result => result.status === 'rejected')).toEqual([]);
+        if (first === 'plain') expect(statements).toContainEqual(expect.stringMatching(/^CREATE INDEX IF NOT EXISTS/));
+        expect(await validIndexes(name)).toEqual([{ name: 'idx_favorites_entity', valid: true }]);
+      } finally {
+        await writer.query('ROLLBACK');
+        writer.release();
+        await Promise.allSettled(builds);
+        await Promise.all([coldPool.end(), warmPool.end()]);
+      }
+    },
+    60000,
+  );
 });

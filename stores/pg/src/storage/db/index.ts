@@ -1110,6 +1110,7 @@ export class PgDB extends MastraBase {
       // least-privilege role finish init instead of failing with
       // "permission denied".
       if (!snapshot || !this.snapshotShowsTableConverged(snapshot, tableName)) {
+        const isNewTable = snapshot ? !snapshot.tables.has(tableName) : false;
         const sql = generateTableSQL({ tableName, schema, schemaName: this.schemaName, compositePrimaryKey });
 
         try {
@@ -1123,6 +1124,7 @@ export class PgDB extends MastraBase {
 
         if (snapshot) {
           snapshot.tables.add(tableName);
+          if (isNewTable) snapshot.createdTables.add(tableName);
           // generateTableSQL emits the declared columns plus a `Z` twin for
           // every timestamp column; record both so the alterTable pass below
           // and later domains don't re-probe for them.
@@ -1797,7 +1799,7 @@ export class PgDB extends MastraBase {
       if (snapshot?.indexes.has(name)) return;
 
       const uniqueStr = unique ? 'UNIQUE ' : '';
-      const concurrentStr = concurrent ? 'CONCURRENTLY ' : '';
+      const concurrentStr = concurrent && !this.isTableCreatedInThisInit(table) ? 'CONCURRENTLY ' : '';
       const methodStr = method !== 'btree' ? `USING ${method} ` : '';
 
       const columnsStr = columns
@@ -1871,6 +1873,14 @@ export class PgDB extends MastraBase {
     ) {
       snapshot?.indexes.add(indexName);
     }
+  }
+
+  /**
+   * Whether `tableName` was absent when this init's snapshot was read and this
+   * init created it, so its indexes can be built without CONCURRENTLY.
+   */
+  isTableCreatedInThisInit(tableName: string): boolean {
+    return this.schemaSnapshot?.createdTables.has(tableName) ?? false;
   }
 
   private async timedIndexBuild(indexName: string, sql: string): Promise<void> {
