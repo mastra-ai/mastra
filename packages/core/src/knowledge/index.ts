@@ -255,7 +255,8 @@ export class Knowledge extends MastraBase {
 
   /**
    * Replaces a note's text. Notes are immutable, so this adds the new note and then removes the old
-   * one: the result has a **new id**. Host-only, like {@link Knowledge.upsertPage}.
+   * one: the result has a **new id**. If removing the old note fails after the add, both exist;
+   * call `removeNote` with the old id. Host-only, like {@link Knowledge.upsertPage}.
    *
    * @experimental
    */
