@@ -48,6 +48,7 @@ The configured observability store must support each API. Call `getObservability
 | `traceQueryTimeToFirstChunkSort` | `trace-query-time-to-first-chunk-sort` | `orderBy` on `timeToFirstChunkMs` |
 | `traceQueryTimeToFirstToken` | `trace-query-time-to-first-token` | `timeToFirstTokenMs` predicates and results |
 | `traceQueryTimeToFirstTokenSort` | `trace-query-time-to-first-token-sort` | `orderBy` on `timeToFirstTokenMs` |
+| `aggregateTimeToFirstMeasures` | `aggregate-time-to-first-measures` | `timeToFirstToken.*` and `timeToFirstChunk.*` measures in `aggregateTraces()` and `aggregateSpans()` |
 | `traceQueryContextIds` | `trace-query-context-ids` | `runId`, `sessionId`, `userId`, and `organizationId` predicates |
 | `traceQueryRootSpanFields` | `trace-query-root-span-fields` | Trace-scope `name` and `spanType` predicates, dimensions, and `countDistinct` measures |
 | `traceQueryRootEntityId` | `trace-query-root-entity-id` | Trace-scope `entityId` predicates, dimensions, and `countDistinct` measures |
@@ -829,6 +830,12 @@ Every dimension except `serviceName`, `executionSource`, and `experimentId` is a
 | `tokens.reasoning.sum`, `tokens.reasoning.avg` | Reasoning output tokens. |
 | `tokens.cached.sum`, `tokens.cached.avg` | Input tokens read from the provider's cache. |
 | `cost.sum`, `cost.avg` | Estimated model cost. |
+| `timeToFirstToken.avg`, `timeToFirstToken.min`, `timeToFirstToken.max` | Root span time to first token in milliseconds. Requires the `aggregateTimeToFirstMeasures` capability. |
+| `timeToFirstToken.p50`, `timeToFirstToken.p90`, `timeToFirstToken.p95`, `timeToFirstToken.p99` | Root span time to first token percentile in milliseconds. Requires the `aggregateTimeToFirstMeasures` capability. |
+| `timeToFirstToken.count` | Number of traces whose root span recorded a time to first token. Requires the `aggregateTimeToFirstMeasures` capability. |
+| `timeToFirstChunk.avg`, `timeToFirstChunk.min`, `timeToFirstChunk.max` | Root span time to first chunk in milliseconds. Requires the `aggregateTimeToFirstMeasures` capability. |
+| `timeToFirstChunk.p50`, `timeToFirstChunk.p90`, `timeToFirstChunk.p95`, `timeToFirstChunk.p99` | Root span time to first chunk percentile in milliseconds. Requires the `aggregateTimeToFirstMeasures` capability. |
+| `timeToFirstChunk.count` | Number of traces whose root span recorded a time to first chunk. Requires the `aggregateTimeToFirstMeasures` capability. |
 
 Numeric measures over metadata aren't supported.
 
@@ -848,6 +855,34 @@ When you request any `cost.*` measure, every row also includes a `cost` object:
 | `unit` | Cost unit of the priced metrics, such as `USD`. `'mixed'` when they use more than one unit, and `null` when none are priced. |
 
 `cost.sum` and `cost.avg` are `null` when the group has no priced traces or `unit` is `'mixed'`. A coverage below 1 means the cost understates the group's spend. The `cost` object isn't a measure, so `having` and `orderBy` can't reference it.
+
+#### Time to first token and chunk measures
+
+`timeToFirstToken.*` and `timeToFirstChunk.*` read the root span's `timeToFirstTokenMs` and `timeToFirstChunkMs`, the same values [`queryTraces()`](#query-traces) returns. An agent run copies them from the first model generation of its own loop:
+
+- `timeToFirstChunk.*` is measured from the agent run's start, so it includes work done before the first model call, such as input processors and memory recall.
+- `timeToFirstToken.*` is the time to first token of the model call that streamed that first chunk.
+
+Traces without a value are skipped, never counted as 0. This includes traces whose agent run didn't stream, and traces rooted in a workflow, since a workflow run records neither value. `avg`, `min`, `max`, and the percentiles are `null` for a group where no trace has a value, and `.count` is the number of traces that do have one. Percentiles can be approximate, depending on the store.
+
+Stores advertise support through the `aggregate-time-to-first-measures` feature, and the server reports it as the `aggregateTimeToFirstMeasures` capability. Against an older store, a request for any of these measures returns `501` before storage runs, and [field discovery](#discover-fields-and-values) omits them.
+
+```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.traceAggregate && capabilities.aggregateTimeToFirstMeasures) {
+  const { rows } = await mastraClient.aggregateTraces({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-02T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'entityType' }, right: { literal: 'agent' } },
+    groupBy: ['entityName'],
+    measures: ['timeToFirstChunk.p50', 'timeToFirstChunk.p95', 'timeToFirstChunk.count'],
+    orderBy: { field: 'timeToFirstChunk.p95', direction: 'desc' },
+  })
+}
+```
 
 ### Filter and order groups
 
@@ -979,6 +1014,15 @@ Aggregation uses the same span predicates as [`querySpans()`](#query-spans), wit
 - Only completed spans count. When a span was exported more than once, only its latest copy counts.
 
 `count` counts selected spans in each group or time bucket. Buckets use each span's `startedAt`. `duration.*` measures read the span's own duration, and `errorCount` and `errorRate` read whether the span itself recorded an error.
+
+`timeToFirstToken.*` and `timeToFirstChunk.*` read the span's own `timeToFirstTokenMs` and `timeToFirstChunkMs`, and skip spans without a value. Several span types record them:
+
+- `model_inference`: each provider call. Filter to this type for per-call time to first token.
+- `model_step`: each step of a generation, with the values of the inference that streamed the step's first chunk.
+- `model_generation`: the whole generation, with the values of its first streamed inference only. A multi-step generation, such as a tool loop, reports only its first call.
+- `agent_run`: the agent run, with time to first chunk measured from the run's start. Filter to this type for latency as the caller of each agent sees it.
+
+Without a `spanType` filter, one agent call contributes its agent run, its model generation, and every model step and model inference.
 
 On ClickHouse, a direct `spanType` `eq` or `in` predicate, or one immediately inside an `and`, can select the smaller branch table. All selected types must be branch types: `agent_run`, `workflow_run`, `processor_run`, `scorer_run`, `rag_ingestion`, `tool_call`, or `mcp_tool_call`. Every requested field must be available in that table. An equivalent `or` predicate doesn't select this optimization. The branch path can differ from `querySpans()`:
 
