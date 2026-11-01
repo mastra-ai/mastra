@@ -368,30 +368,62 @@ describe('AgentConfig.durable', () => {
     }
   });
 
-  it('does not lazy-wrap standalone durable agents after Mastra registration', async () => {
-    const { DurableAgent } = await import('../durable-agent');
+  describe('after Mastra registration (issue #28189)', () => {
+    const makeRaw = (id: string) =>
+      new Agent({ id, name: id, instructions: 'test', model: makeMockModel(), durable: true });
 
-    const raw = new Agent({
-      id: 'reg-a',
-      name: 'RegA',
-      instructions: 'test',
-      model: makeMockModel(),
-      durable: true,
+    for (const method of ['stream', 'generate'] as const) {
+      it(`\`${method}\` on the original reference routes through the registered wrapper`, async () => {
+        const { DurableAgent } = await import('../durable-agent');
+        const raw = makeRaw(`reg-${method}`);
+        const mastra = new Mastra({ agents: { regA: raw as any }, logger: false });
+        const wrapper = mastra.getAgent('regA' as any);
+
+        const sentinel = { routed: method };
+        const spy = vi.spyOn(DurableAgent.prototype as any, method).mockImplementation(async () => sentinel);
+        try {
+          expect(await (raw as any)[method]('hi')).toBe(sentinel);
+          expect(spy).toHaveBeenCalledTimes(1);
+          expect(spy.mock.contexts[0]).toBe(wrapper);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+    }
+
+    it('resolves the wrapper regardless of the registration key', async () => {
+      const { DurableAgent } = await import('../durable-agent');
+      const raw = makeRaw('reg-alias');
+      const mastra = new Mastra({ agents: { someOtherKey: raw as any }, logger: false });
+      const wrapper = mastra.getAgent('someOtherKey' as any);
+
+      const spy = vi.spyOn(DurableAgent.prototype as any, 'stream').mockImplementation(async () => ({}));
+      try {
+        await raw.stream('hi');
+        expect(spy.mock.contexts[0]).toBe(wrapper);
+      } finally {
+        spy.mockRestore();
+      }
     });
 
-    // Registering the raw agent on a Mastra causes Mastra to build its own
-    // DurableAgent wrapper. Subsequent direct calls on the raw agent must
-    // no longer lazy-wrap (the raw agent's `stream` should hit the plain
-    // path).
-    new Mastra({ agents: { regA: raw as any } });
+    it('ignores wrappers of a different agent that shares the same id', async () => {
+      const { DurableAgent } = await import('../durable-agent');
+      const registered = makeRaw('shared-id');
+      const mastra = new Mastra({ agents: { shared: registered as any }, logger: false });
+      const other = makeRaw('shared-id');
+      other.__registerMastra(mastra);
 
-    const spy = vi.spyOn(DurableAgent.prototype as any, 'stream');
-    try {
-      await raw.stream('hi').catch(() => {});
-      expect(spy).not.toHaveBeenCalled();
-    } finally {
-      spy.mockRestore();
-    }
+      const spy = vi.spyOn(DurableAgent.prototype as any, 'stream');
+      const warn = vi.fn();
+      other.__setLogger({ warn, debug: vi.fn(), info: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any);
+      try {
+        await other.stream('hi').catch(() => {});
+        expect(spy).not.toHaveBeenCalled();
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('no durable wrapper'));
+      } finally {
+        spy.mockRestore();
+      }
+    });
   });
 
   describe('durable-only delegator methods on standalone Agent', () => {
@@ -427,6 +459,30 @@ describe('AgentConfig.durable', () => {
           // undefined options), so compare only the required prefix.
           const received = spy.mock.calls[0]!.slice(0, args.length);
           expect(received).toEqual(args);
+        } finally {
+          spy.mockRestore();
+        }
+      });
+
+      it(`\`${name}\` on a registered \`durable: true\` Agent routes through the registered wrapper`, async () => {
+        const { DurableAgent } = await import('../durable-agent');
+
+        const agent = new Agent({
+          id: `rd-${name}`,
+          name: `RD_${name}`,
+          instructions: 'test',
+          model: makeMockModel(),
+          durable: true,
+        });
+        const mastra = new Mastra({ agents: { registered: agent as any }, logger: false });
+
+        const sentinel = { called: name };
+        const spy = vi.spyOn(DurableAgent.prototype as any, name).mockImplementation(async () => sentinel);
+
+        try {
+          expect(await (agent as any)[name](...args)).toBe(sentinel);
+          expect(spy).toHaveBeenCalledTimes(1);
+          expect(spy.mock.contexts[0]).toBe(mastra.getAgent('registered' as any));
         } finally {
           spy.mockRestore();
         }

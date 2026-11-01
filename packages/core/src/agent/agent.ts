@@ -961,6 +961,7 @@ export class Agent<
    * `agent → agent/durable → agent`.
    */
   #standaloneDurable?: unknown;
+  #warnedMissingDurableWrapper = false;
   #legacyHandler?: AgentLegacyHandler;
   #config: AgentConfig<TAgentId, TTools, TOutput, TRequestContext, TEditor>;
   #subAgentToolSchemas: Partial<Record<SubAgentToolSchemaVariant, SubAgentToolSchemas>> = {};
@@ -1731,27 +1732,23 @@ export class Agent<
   }
 
   /**
-   * Resolve the DurableAgent that should handle `stream`/`generate` calls when
-   * this agent was constructed with `durable: true` but is being used
-   * standalone (i.e. no `Mastra` instance auto-wrapped it during registration).
+   * Resolve the DurableAgent that should handle execution calls when this
+   * agent was constructed with `durable: true`. When attached to a Mastra
+   * instance, this is the wrapper Mastra registered for the agent. Otherwise,
+   * a standalone wrapper is created lazily.
    *
-   * The wrapper is created lazily via a dynamic `import()` of the durable
+   * The standalone wrapper is created lazily via a dynamic `import()` of the durable
    * module to avoid the ESM initialization cycle
    * `agent → agent/durable → agent` that would TDZ-break
    * `class DurableAgent extends Agent`. The result is cached on
    * `#standaloneDurable` so subsequent calls reuse the same wrapper.
    *
-   * Returns `undefined` when the agent has already been registered with a
-   * Mastra instance (Mastra performs the wrapping itself) or when no
-   * `durable` config is set.
+   * Returns `undefined` when no `durable` config is set, or when the agent is
+   * attached to a Mastra instance that has no wrapper registered for it.
    */
   async #getStandaloneDurable(): Promise<StandaloneDurableWrapper | undefined> {
     if (!this.#durable) return undefined;
-    // When attached to a Mastra instance, Mastra auto-wraps at registration
-    // and the caller is already talking to the DurableAgent — the raw
-    // `Agent` is only reached via internal delegation from the wrapper,
-    // which must not re-enter the durable path.
-    if (this.#mastra) return undefined;
+    if (this.#mastra) return this.#getRegisteredDurable(this.#mastra);
     if (this.#standaloneDurable) {
       return this.#standaloneDurable as StandaloneDurableWrapper;
     }
@@ -1760,6 +1757,29 @@ export class Agent<
     const wrapper = createDurableAgent({ agent: this as unknown as Agent, ...opts });
     this.#standaloneDurable = wrapper;
     return wrapper as unknown as StandaloneDurableWrapper;
+  }
+
+  /**
+   * Once attached to a Mastra instance, the durable path is owned by the
+   * DurableAgent that Mastra registered for this agent. Resolve it at call time
+   * by wrapped-agent identity (any registration key works; unrelated agents
+   * that share this id are ignored). The wrapper never calls this agent's
+   * public execution methods, so delegating to it cannot recurse.
+   */
+  #getRegisteredDurable(mastra: Mastra): StandaloneDurableWrapper | undefined {
+    const self: unknown = this;
+    for (const registered of Object.values(mastra.listAgents() ?? {})) {
+      if (registered !== self && (registered as { agent?: unknown }).agent === self) {
+        return registered as unknown as StandaloneDurableWrapper;
+      }
+    }
+    if (!this.#warnedMissingDurableWrapper) {
+      this.#warnedMissingDurableWrapper = true;
+      this.logger.warn(
+        `Agent "${this.id}" has durable enabled but no durable wrapper for it is registered on its Mastra instance, so it runs non-durably. Register the agent with Mastra (e.g. \`new Mastra({ agents })\`) or call \`mastra.getAgent()\`.`,
+      );
+    }
+    return undefined;
   }
 
   /**
@@ -4260,10 +4280,8 @@ export class Agent<
       this.#ephemeralMastra = undefined;
     }
 
-    // Drop the standalone durable wrapper (if any) — Mastra registration
-    // means the durable path is now owned by the DurableAgent that Mastra
-    // created (or was passed) and callers should be talking to that
-    // instance directly. The wrapper is only meaningful pre-registration.
+    // Drop the standalone durable wrapper (if any): once registered, durable
+    // calls resolve the DurableAgent that Mastra registered for this agent.
     if (this.#standaloneDurable) {
       this.#standaloneDurable = undefined;
     }
@@ -9796,11 +9814,9 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>> {
-    // Route standalone `new Agent({ durable: true })` calls through the
-    // durable execution path so callers using the agent outside of a
-    // `Mastra` instance still get durable execution. When attached to
-    // Mastra, the auto-wrap at registration means the caller already
-    // holds a `DurableAgent` and this branch is skipped.
+    // Route `new Agent({ durable: true })` calls through the durable
+    // execution path: the wrapper Mastra registered for this agent, or a
+    // standalone wrapper when the agent is used outside of Mastra.
     const durable = await this.#getStandaloneDurable();
     if (durable) {
       return durable.generate(messages, options) as Promise<FullOutput<OUTPUT>>;
@@ -10674,11 +10690,9 @@ export class Agent<
       structuredOutput?: PublicStructuredOutputOptions<any>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>> {
-    // Route standalone `new Agent({ durable: true })` calls through the
-    // durable execution path so callers using the agent outside of a
-    // `Mastra` instance still get durable streams. When attached to Mastra,
-    // the auto-wrap at registration means the caller already holds a
-    // `DurableAgent` and this branch is skipped.
+    // Route `new Agent({ durable: true })` calls through the durable
+    // execution path: the wrapper Mastra registered for this agent, or a
+    // standalone wrapper when the agent is used outside of Mastra.
     const durable = await this.#getStandaloneDurable();
     if (durable) {
       return durable.stream(messages, streamOptions) as Promise<MastraModelOutput<OUTPUT>>;
@@ -12069,12 +12083,9 @@ export class Agent<
   // callers get a clear error instead of a confusing "not a function" from a
   // typo-safe method that silently does nothing.
   //
-  // When the agent is attached to a `Mastra`, Mastra auto-wraps at
-  // registration and the caller already holds a `DurableAgent`, so the base
-  // methods below are unreachable via the wrapper — `#getStandaloneDurable()`
-  // returns `undefined` and the throw path fires. To avoid that misleading
-  // error, callers should either use the wrapper Mastra hands back or omit the
-  // `Mastra` registration and rely on the standalone wrapper.
+  // When the agent is attached to a `Mastra`, `#getStandaloneDurable()`
+  // resolves the DurableAgent Mastra registered for it, so these methods work
+  // on the original instance too.
   // ---------------------------------------------------------------------------
 
   async #requireStandaloneDurable(method: string): Promise<StandaloneDurableWrapper> {
