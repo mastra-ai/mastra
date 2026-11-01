@@ -807,7 +807,7 @@ function windowCopyCovers(onScreen: MastraMessagePart[], persisted: MastraMessag
   });
 }
 
-// SSE gaps can swallow tool_end; persisted results settle the row.
+// SSE gaps can swallow tool_start or tool_end; persisted invocations settle the row.
 function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
   const serverTerminalParts = new Map<string, ToolInvocationMessagePart>();
   for (const message of messages) {
@@ -824,9 +824,13 @@ function reconcileToolResults(state: TranscriptState, messages: MastraDBMessage[
     if (entry.kind !== 'message' || entry.message.role !== 'assistant') return entry;
     let entryChanged = false;
     const parts = entry.message.content.parts.map(part => {
-      if (part.type !== 'tool-invocation' || isTerminalInvocationState(part.toolInvocation.state)) return part;
+      if (part.type !== 'tool-invocation') return part;
       const serverPart = serverTerminalParts.get(part.toolInvocation.toolCallId);
       if (!serverPart) return part;
+      const settled =
+        isTerminalInvocationState(part.toolInvocation.state) &&
+        part.toolInvocation.toolName === serverPart.toolInvocation.toolName;
+      if (settled) return part;
       entryChanged = true;
       return serverPart;
     });

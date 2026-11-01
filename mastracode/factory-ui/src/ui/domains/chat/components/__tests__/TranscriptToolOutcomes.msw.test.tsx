@@ -108,21 +108,28 @@ describe('Transcript tool outcomes', () => {
       expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
     });
 
+    const survivingStart = {
+      type: 'tool_start',
+      toolCallId: 'git',
+      toolName: 'execute_command',
+      args: { command: 'git status' },
+    } as const;
+    const survivingEnd = {
+      type: 'tool_end',
+      toolCallId: 'git',
+      result: 'fatal: not a git repository\n\nExit code: 128',
+      isError: false,
+    } as const;
+
     it.each([
+      ['its exit', survivingStart, [assistant('step', [gitStatus, gitStatusExit])]],
+      ['its start and its exit', survivingEnd, [assistant('step', [gitStatus, gitStatusExit])]],
       [
-        'its exit',
-        { type: 'tool_start', toolCallId: 'git', toolName: 'execute_command', args: { command: 'git status' } },
+        'its start and its exit, saved in a later message',
+        survivingEnd,
+        [assistant('step', [gitStatus]), assistant('sealed', [gitStatusExit])],
       ],
-      [
-        'its start and its exit',
-        {
-          type: 'tool_end',
-          toolCallId: 'git',
-          result: 'fatal: not a git repository\n\nExit code: 128',
-          isError: false,
-        },
-      ],
-    ] as const)('reads as failed when the stream dropped %s, once the refetched thread brings it in', (_, survived) => {
+    ] as const)('reads as failed when the stream dropped %s, once the refetched thread brings it in', (_, survived, messages) => {
       const events = [
         { type: 'message_start', message: assistant('turn', []) },
         survived,
@@ -132,10 +139,7 @@ describe('Transcript tool outcomes', () => {
         (next, event) => transcriptReducer(next, { type: 'event', event }),
         initialTranscript,
       );
-      const refetched = transcriptReducer(streamed, {
-        type: 'mergeWindow',
-        messages: [assistant('step', [gitStatus, gitStatusExit])],
-      });
+      const refetched = transcriptReducer(streamed, { type: 'mergeWindow', messages: [...messages] });
       renderEntries(refetched.entries);
 
       const line = screen.getByRole('group', { name: 'Ran git status' });
