@@ -3457,6 +3457,64 @@ describe('FactoryDecisionDispatcher', () => {
     expect(run?.status).not.toBe('proposed');
   });
 
+  it.each([
+    ['pull-request', 'succeeded'],
+    ['issue', 'proposed'],
+  ] as const)(
+    're-reviews a push to a Factory-authored %s card on the Work board only when it is the PR card (%s)',
+    async (type, status) => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item } = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          board: 'work',
+          externalSource: { integrationId: 'github', type, externalId: `github-${type}:9` },
+          title: 'Factory change',
+          stages: ['done'],
+          sessions: {},
+          metadata: { authorTrusted: true, factoryAuthored: true },
+        },
+      });
+      const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+      await storage.commitRuleEvaluation({
+        orgId: 'org-1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        ingress: { identity: 'push-w', triggerType: 'github' },
+        configVersion: 'rules-v1',
+        expectedRevision: item.revision,
+        actor: { type: 'github', login: 'factory-platform[bot]', trusted: true, factoryAuthored: true },
+        outcome: { status: 'accepted' },
+        decisions: [
+          {
+            type: 'transition',
+            board: 'work',
+            // A pull request's own card is reviewed in PR review; an issue card's Review is self-review.
+            stage: type === 'pull-request' ? 'pr-review' : 'review',
+            idempotencyKey: 're-review-w',
+          },
+        ],
+        causalChain: [],
+        now: new Date('2030-01-01T00:00:00Z'),
+      });
+      const { controller } = createSession();
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => false,
+      });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+
+      const rows = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+      expect(rows.find(row => row.idempotencyKey === 're-review-w')?.status).toBe(status);
+    },
+  );
+
   it('lets an external push move a card a person already handed over', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createPullRequestItem(storage);
@@ -6133,6 +6191,39 @@ describe('custom-board deferred targets', () => {
     ]);
     // Planning's entry rule never fired, so the placement is the only decision.
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
+  });
+
+  it('places a pull request card filed on Review before where it sits, not on Work', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item } = await storage.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      input: {
+        board: 'review',
+        title: 'Legacy review card',
+        stages: ['intake'],
+        sessions: {},
+        metadata: {},
+        externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:legacy-placement' },
+      },
+    });
+    await persist(storage, {
+      ...linkedDecision,
+      idempotencyKey: 'legacy-placement',
+      board: 'work',
+      stage: 'review',
+      source: 'github-pr',
+      sourceKey: 'github-pr:legacy-placement',
+      skipRules: true,
+    });
+
+    await dispatcherFor(storage, createLifecycleTestRegistry({})).runOnce();
+
+    // The same board the rule-running path resolves: a legacy Review card is
+    // acted on where it sits, so placement does not relocate it onto Work.
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'review', stages: ['review'] });
+    expect(await decisionByKey(storage, 'legacy-placement')).toMatchObject({ status: 'succeeded' });
   });
 
   it('leaves an existing card that already carries the materialization key where it moved to', async () => {

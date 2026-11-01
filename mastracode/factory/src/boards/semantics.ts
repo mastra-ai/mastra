@@ -24,6 +24,32 @@ export function boardForWorkItem(item: Pick<WorkItemRow, 'board' | 'externalSour
 }
 
 /**
+ * A card that tracks a pull or merge request itself, as opposed to the card whose work opened it.
+ * Both can sit on Work, so rules tell them apart by source rather than by board.
+ */
+export function isPullRequestCard(item: { readonly source: string }): boolean {
+  return item.source === 'github-pr' || item.source === 'gitlab-pr';
+}
+
+/** Whether the rule's card is the change request's own card, which the reviewer reviews. */
+export function reviewsPullRequest(context: {
+  readonly board?: string;
+  readonly item?: { readonly source: string };
+}): boolean {
+  if (context.board === 'review') return true;
+  return context.board === 'work' && context.item !== undefined && isPullRequestCard(context.item);
+}
+
+/**
+ * The phase a pull or merge request's own card is reviewed in: Work's `pr-review`, or Review's
+ * `review` for cards filed on the Review board before pull requests moved to Work. Work's own
+ * `review` phase is the builder's self-review, which a pull request card never enters.
+ */
+export function pullRequestReviewPhase(board: string | undefined): 'review' | 'pr-review' {
+  return board === 'review' ? 'review' : 'pr-review';
+}
+
+/**
  * What the installed board says `phase` means. Returns undefined when the board is not
  * installed or does not declare the phase; callers must fail closed on undefined rather
  * than guess from the phase name.

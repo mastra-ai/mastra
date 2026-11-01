@@ -76,6 +76,18 @@ describe('cardMoves', () => {
     expect(cardMoves(mergeRequest, 'review')).toEqual([review]);
   });
 
+  it.each(['github-pr', 'gitlab-pr'] as const)(
+    'offers a %s card on the Work board Review into PR review from intake, and Re-review once merged-open in Done',
+    source => {
+      expect(cardMoves({ source, board: 'work', metadata: {} }, 'intake')).toEqual([
+        { label: 'Review', role: 'review', stage: 'pr-review' },
+      ]);
+      expect(cardMoves({ source, board: 'work', metadata: { state: 'open' }, stages: ['done'] }, 'done')).toEqual([
+        { label: 'Re-review', role: 'review', stage: 'pr-review' },
+      ]);
+    },
+  );
+
   it('offers a Work card in Review no lane, so its session is the action', () => {
     expect(cardMoves({ source: 'github-issue', metadata: {} }, 'review')).toEqual([]);
     expect(cardMoves({ source: 'linear-issue', metadata: {} }, 'review')).toEqual([]);

@@ -82,7 +82,16 @@ export function externallyAuthoredWorkItem(item: {
   return externallyAuthored({ source: workItemSource(item.externalSource), metadata: item.metadata });
 }
 
-export const FACTORY_RULE_STAGES = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'] as const;
+export const FACTORY_RULE_STAGES = [
+  'intake',
+  'triage',
+  'planning',
+  'execute',
+  'review',
+  'pr-review',
+  'done',
+  'canceled',
+] as const;
 export type FactoryRuleStage = (typeof FACTORY_RULE_STAGES)[number] | (string & {});
 
 // Each role and the working stage its run holds the card in. Key order is the

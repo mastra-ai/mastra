@@ -7,6 +7,7 @@ import { createTestBoard } from '../boards/test-utils.js';
 import type { BoardTransitionPolicy } from '../boards/transition-policy.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryRuleBoard, FactoryRuleDecision, FactoryRuleStage, FactoryStageRuleContext } from './types.js';
 import { MAX_FACTORY_RULE_CAUSAL_DEPTH } from './validation.js';
@@ -2528,5 +2529,186 @@ describe('onTransitionCommitted', () => {
     await vi.waitFor(() => expect(warn).toHaveBeenCalled());
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages[0]).toBe('shipped');
     warn.mockRestore();
+  });
+});
+
+describe('pull request cards on the Work board', () => {
+  async function prCard(
+    storage: WorkItemsStorage,
+    overrides: { source?: 'github-pr' | 'gitlab-pr'; stages?: string[]; metadata?: Record<string, unknown> } = {},
+  ) {
+    return createItem(storage, {
+      board: 'work',
+      source: overrides.source ?? 'github-pr',
+      stages: overrides.stages ?? ['intake'],
+      metadata: overrides.metadata ?? { authorTrusted: true },
+    });
+  }
+
+  it('runs the PR reviewer in its own review seat when a person clicks Review, into PR review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await prCard(storage);
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      selfReviewEnabled: async () => true,
+    });
+
+    const result = await service.transition({ ...request(item, { stage: 'pr-review' }), cause: 'card_action' });
+
+    expect(result).toMatchObject({
+      status: 'accepted',
+      stage: 'pr-review',
+      decisions: [{ type: 'invokeSkill', role: 'review', skillName: 'factory-review' }],
+    });
+    // Neither self-review nor a builder session: only the PR reviewer.
+    expect(result.status === 'accepted' && result.decisions).toHaveLength(1);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.board).toBe('work');
+  });
+
+  it('runs the GitLab reviewer for a merge request card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await prCard(storage, { source: 'gitlab-pr' });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    await expect(service.transition(request(item, { stage: 'pr-review' }))).resolves.toMatchObject({
+      status: 'accepted',
+      decisions: [{ type: 'invokeSkill', role: 'review', skillName: 'factory-gitlab-review' }],
+    });
+  });
+
+  it('re-reviews from Done with the full re-review skill, and supersedes a live pass on re-entry', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const done = await prCard(storage, {
+      stages: ['done'],
+      metadata: { authorTrusted: true, reviewVerdict: 'approve' },
+    });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const fromDone = await service.transition(request(done, { stage: 'pr-review', identity: 'from-done' }));
+    expect(fromDone).toMatchObject({
+      status: 'accepted',
+      decisions: [{ type: 'invokeSkill', role: 'review', skillName: 'factory-rereview' }],
+    });
+    assert(fromDone.status === 'accepted');
+    expect(fromDone.decisions[0]).not.toHaveProperty('cancelInFlight');
+
+    const reviewing = (await storage.get({ orgId: 'org-1', id: done.id }))!;
+    const again = await service.transition({
+      ...request(reviewing, { stage: 'pr-review', identity: 'again' }),
+      reenter: true,
+    });
+    expect(again).toMatchObject({
+      status: 'accepted',
+      decisions: [{ type: 'invokeSkill', role: 'review', skillName: 'factory-rereview', cancelInFlight: true }],
+    });
+  });
+
+  it.each(['triage', 'planning', 'execute'] as const)('keeps a PR card out of %s', async stage => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await prCard(storage);
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    await expect(service.transition(request(item, { stage }))).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['intake']);
+  });
+
+  it('reserves Done for the merge: the reviewer cannot close its PR card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await prCard(storage, { stages: ['pr-review'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'done' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
+      ingress: { type: 'agent', identity: 'agent-done' },
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+    assert(result.status === 'rejected');
+    expect(result.reason).toContain('Done is reserved for merged pull requests');
+  });
+
+  it('lets a person close or cancel a PR card', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await prCard(storage, { stages: ['pr-review'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    await expect(service.transition(request(item, { stage: 'canceled' }))).resolves.toMatchObject({
+      status: 'accepted',
+      stage: 'canceled',
+    });
+  });
+
+  it('refuses an agent pulling an untrusted PR card into PR review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await prCard(storage, { metadata: { authorTrusted: false } });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'pr-review' }),
+      actor: { type: 'agent', bindingId: 'binding-1', role: 'review' },
+      ingress: { type: 'agent', identity: 'self-resume' },
+    });
+
+    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+  });
+
+  it('still runs self-review, not the PR reviewer, for an issue card entering Review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { board: 'work', stages: ['execute'] });
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      selfReviewEnabled: async () => true,
+    });
+
+    await expect(service.transition(request(item, { stage: 'review' }))).resolves.toMatchObject({
+      status: 'accepted',
+      decisions: [{ type: 'invokeSkill', role: 'review', skillName: 'factory-self-review' }],
+    });
+  });
+
+  it('keeps PR review for pull request cards: an issue card cannot enter it, nor a PR card self-review', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const issue = await createItem(storage, { board: 'work', stages: ['intake'] });
+    const pr = await prCard(storage);
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
+
+    await expect(service.transition(request(issue, { stage: 'pr-review' }))).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+    });
+    await expect(
+      service.transition(request(pr, { stage: 'review', identity: 'pr-self-review' })),
+    ).resolves.toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+    });
+    expect((await storage.get({ orgId: 'org-1', id: issue.id }))?.stages).toEqual(['intake']);
+    expect((await storage.get({ orgId: 'org-1', id: pr.id }))?.stages).toEqual(['intake']);
+  });
+
+  it('keeps the PR review run applicable in PR review and overtaken once the card leaves it', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await prCard(storage);
+    const boards = createBoardRegistry();
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, boards });
+
+    await service.transition(request(item, { stage: 'pr-review' }));
+    const [record] = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+      row => row.decision.type === 'invokeSkill',
+    );
+    assert(record);
+    const reviewing = (await storage.get({ orgId: 'org-1', id: item.id }))!;
+    expect(decisionOvertaken({ boards, item: reviewing, record, role: 'review', siblings: [record] })).toBe(false);
+
+    await new Promise(resolve => setTimeout(resolve, 5));
+    await service.transition(request(reviewing, { stage: 'canceled', identity: 'cancel' }));
+    const canceled = (await storage.get({ orgId: 'org-1', id: item.id }))!;
+    expect(decisionOvertaken({ boards, item: canceled, record, role: 'review', siblings: [record] })).toBe(true);
   });
 });

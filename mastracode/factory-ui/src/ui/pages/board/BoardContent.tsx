@@ -360,6 +360,7 @@ export function BoardContent({
               cardProjectRepositoryId(factory.repositories, candidate, repository.projectRepositoryId)
             }
             factoryProjectId={factoryProjectId}
+            board={builtin ? kind : undefined}
             onRun={(candidate, move, prompt) =>
               dropWithRepository(candidatePayload(candidate, prompt), move.stage, 'card_action')
             }

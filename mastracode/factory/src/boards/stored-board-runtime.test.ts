@@ -215,6 +215,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         'planning:Planning',
         'execute:Building',
         'review:Review',
+        'pr-review:PR review',
         'done:Done',
         'canceled:Canceled',
       ]);
@@ -290,6 +291,64 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       // The binding is young, so only a finished card makes the sweep revoke it.
       await restarted.workItems.revokeStaleRunBindings({ olderThan: new Date(0), now: new Date() });
       expect((await restarted.workItems.listActiveRunBindings()).map(active => active.id)).not.toContain(binding.id);
+    }, 30_000);
+
+    it("reviews a pull request card in the Work board's PR review phase, as the project's boards serve it", async () => {
+      stubModel();
+      const orgId = `org-${randomUUID()}`;
+      const replica = await boot(database(), orgId);
+      const projectId = await createProject(replica, 'Pull requests project');
+      // A stored board beside the code boards, so the project's boards come from code and its database.
+      await addBugs(replica, orgId, projectId);
+      await vi.waitFor(
+        async () => expect((await catalog(replica, projectId)).map(board => board.id)).toContain('bugs'),
+        {
+          timeout: 5_000,
+        },
+      );
+
+      const { item: card } = await replica.workItems.upsert({
+        orgId,
+        userId: 'admin-user',
+        factoryProjectId: projectId,
+        input: {
+          board: 'work',
+          title: 'Add rate limiting',
+          externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'github-pr:42' },
+          metadata: { authorTrusted: true, headBranch: 'rate-limiting' },
+        },
+      });
+      expect(card.stages).toEqual(['intake']);
+
+      const reviewing = await replica.send(
+        'POST',
+        `/web/factory/projects/${projectId}/work-items/${card.id}/transition`,
+        {
+          board: 'work',
+          stage: 'pr-review',
+          expectedRevision: card.revision,
+          requestId: randomUUID(),
+          cause: 'card_action',
+        },
+      );
+      expect(reviewing.json.result).toMatchObject({ status: 'accepted', stage: 'pr-review' });
+      const decisions = await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: card.id });
+      expect(decisions.map(record => record.decision)).toContainEqual(
+        expect.objectContaining({ type: 'invokeSkill', role: 'review', skillName: 'factory-review' }),
+      );
+
+      const building = await replica.send(
+        'POST',
+        `/web/factory/projects/${projectId}/work-items/${card.id}/transition`,
+        {
+          board: 'work',
+          stage: 'execute',
+          expectedRevision: card.revision + 1,
+          requestId: randomUUID(),
+          cause: 'card_action',
+        },
+      );
+      expect(building.json.result).toMatchObject({ status: 'rejected', code: 'invalid_transition' });
     }, 30_000);
   },
 );
