@@ -33,7 +33,8 @@ import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onb
 const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage));
 // A new session opens its thread on the first prompt, so that page loads alongside.
 const NewPage = lazyPage(() => {
-  void ThreadPage.preload();
+  // A failed preload retries on the visit.
+  ThreadPage.preload().catch(() => undefined);
   return import('./pages/NewPage').then(module => module.NewPage);
 });
 const KnowledgePage = lazyPage(() => import('./pages/KnowledgePage').then(module => module.KnowledgePage));
