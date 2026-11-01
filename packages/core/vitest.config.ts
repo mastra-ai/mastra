@@ -39,7 +39,10 @@ export default defineConfig({
           exclude: ['src/**/*.e2e.test.ts', ...isolatedTestFiles],
           setupFiles: ['@internal/test-utils/setup', path.resolve(__dirname, 'vitest.no-isolate-setup.ts')],
           // Files share their worker's module cache, which removes most of the import cost.
-          // Files that touch process-wide state run in the isolated project below.
+          // Files that touch process-wide state run in the isolated project below; see the header of
+          // vitest.isolated-tests.ts before adding a test that mocks modules or sets env at import.
+          // A failure here can come from an earlier file in the same worker: rerun the named file
+          // alone, then with --sequence.shuffle.files, before blaming it.
           isolate: false,
           testTimeout: 120000,
           env: unitEnv,
