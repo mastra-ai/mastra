@@ -741,8 +741,12 @@ function TracePanelColumns({
   // unmounts — so every layout it reports is brought back to the pixel widths, unless the user is
   // dragging a separator. The layout it settles on after clamping to min sizes is left alone.
   const settledLayout = useRef<Layout | undefined>(undefined);
+  // setLayout reports the layout it applies through onLayoutChange before it returns. That report is
+  // our own correction, not a new layout to correct: correcting it again re-queues forever while the
+  // drawer is still widening, and microtasks never let the page paint.
+  const applyingLayout = useRef(false);
   const holdPixelWidths = (layout: Layout) => {
-    if (userResizing.current) return;
+    if (userResizing.current || applyingLayout.current) return;
     const group = groupRef.current;
     const ids = Object.keys(layout);
     // The library sizes panels against their summed width, separators excluded.
@@ -760,7 +764,12 @@ function TracePanelColumns({
       !!b && ids.every(id => Math.abs((a[id] ?? 0) - (b[id] ?? Infinity)) < tolerance);
     if (matches(layout, target) || matches(layout, settledLayout.current)) return;
     queueMicrotask(() => {
-      settledLayout.current = group.setLayout(target);
+      applyingLayout.current = true;
+      try {
+        settledLayout.current = group.setLayout(target);
+      } finally {
+        applyingLayout.current = false;
+      }
     });
   };
 

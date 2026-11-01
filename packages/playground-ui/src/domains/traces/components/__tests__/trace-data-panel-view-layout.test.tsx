@@ -165,3 +165,36 @@ describe('TraceDataPanelView — persisted widths', () => {
     });
   });
 });
+
+describe('TraceDataPanelView — pixel width correction', () => {
+  it('applies each correction once while the columns keep changing width', async () => {
+    // A drawer widening under the columns: every measurement comes back a little wider, so the
+    // pixel widths never land exactly on a measured layout.
+    let measured = 0;
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockImplementation(function (this: HTMLElement) {
+      if (this.hasAttribute('data-separator')) return 0;
+      if (!this.hasAttribute('data-panel')) return GROUP_WIDTH;
+      measured += 1;
+      return GROUP_WIDTH / (this.parentElement?.querySelectorAll(':scope > [data-panel]').length ?? 1) + measured;
+    });
+    // Microtasks never yield to the page: a correction that schedules another one freezes the tab.
+    // Past the bound the loop is cut so the test can fail instead of hanging.
+    const queueMicrotask = globalThis.queueMicrotask.bind(globalThis);
+    let queued = 0;
+    let runaway = false;
+    vi.stubGlobal('queueMicrotask', (callback: VoidFunction) => {
+      queued += 1;
+      if (queued > 500) {
+        runaway = true;
+        return;
+      }
+      queueMicrotask(callback);
+    });
+
+    render(<TraceDataPanelView {...props('workflow_run')} spanPanelSlot={<div>span details</div>} />);
+
+    await screen.findByText('span details');
+    await waitFor(() => expect(Number(sidePanelFlexGrow())).toBeGreaterThan(0));
+    expect(runaway).toBe(false);
+  });
+});
