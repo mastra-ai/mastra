@@ -1,4 +1,5 @@
 import type { AgentSignalAttributes, AgentSignalType } from '../../../agent/signals';
+import type { ActorSignal } from '../../../auth/ee';
 import type { ScheduleIfActive, ScheduleIfIdle } from '../../../schedules/types';
 import { StorageDomain } from '../base';
 
@@ -28,6 +29,18 @@ export type WorkflowScheduleTarget = {
    * schedule's identity and can be changed with a partial update.
    */
   resourceId?: string;
+  /**
+   * Trusted caller identity for the runs this schedule fires. Scheduled fires
+   * carry no end user, so when fine-grained authorization (FGA) is configured,
+   * nested workflows are denied unless the run carries a trusted actor. When
+   * set, the actor is passed to every run the schedule fires and is evaluated
+   * by `requireFGA`: `requestContext.organizationId` is required and the
+   * provider's `requireActor` (when implemented) decides access.
+   *
+   * Only settable from code (`createWorkflow({ schedule })` or
+   * `mastra.schedules.create/update`); the HTTP schedule API does not accept it.
+   */
+  actor?: ActorSignal;
   /**
    * Content hash of the target workflow's serialized step graph, written by
    * declarative schedule reconciliation on deploy. At claim time the

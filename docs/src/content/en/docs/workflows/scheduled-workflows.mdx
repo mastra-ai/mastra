@@ -82,6 +82,7 @@ Fields:
 - `inputData` (optional): payload passed as the workflow's input on every fire.
 - `initialState` (optional): initial state for the run.
 - `requestContext` (optional): request context attached to the run.
+- `actor` (optional): trusted system actor for every run the schedule fires. See [Fine-grained authorization](#fine-grained-authorization).
 - `metadata` (optional): arbitrary metadata persisted alongside the schedule row.
 
 ## Multiple schedules
@@ -102,6 +103,30 @@ const statusCheck = createWorkflow({
 ```
 
 Each entry creates an independent schedule row and fires on its own cron, plus shows up separately in the Studio Schedules view.
+
+## Fine-grained authorization
+
+Scheduled runs have no end user. When [fine-grained authorization (FGA)](/docs/auth/fga) is configured, a scheduled workflow that runs a nested workflow fails with `FGADeniedError`, because the nested workflow is authorized on its own and there's no user to check.
+
+Set `actor` on the schedule to run it as a [system actor](/docs/auth/fga#system-actors), and set the tenant in `requestContext.organizationId`:
+
+```typescript title="src/mastra/workflows/nightly-sync.ts"
+import { createWorkflow } from '@mastra/core/workflows'
+
+const nightlySync = createWorkflow({
+  id: 'nightly-sync',
+  schedule: {
+    cron: '0 2 * * *',
+    requestContext: { organizationId: 'org_123' },
+    actor: { actorKind: 'system', sourceWorkflow: 'nightly-sync' },
+  },
+  // ...
+})
+```
+
+The actor is passed to every fire, including manual runs. A schedule without `actor` keeps failing closed, and an actor without `organizationId` is denied. If your provider implements `requireActor`, it decides what the scheduled actor can access. Otherwise the trusted-actor bypass applies.
+
+`actor` can only be set from code, through `createWorkflow({ schedule })`, `mastra.schedules.create()`, or `mastra.schedules.update()`. The HTTP schedules API doesn't accept it.
 
 ## Viewing schedules in Studio
 
