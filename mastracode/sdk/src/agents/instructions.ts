@@ -11,12 +11,14 @@ export async function getDynamicInstructions({
   coAuthor,
   hasSubagents,
   disabledBuiltinTools,
+  plansDir,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
   coAuthor?: { name?: string; email?: string };
   hasSubagents?: boolean;
   disabledBuiltinTools?: readonly string[];
+  plansDir?: string;
 }): Promise<string> {
   return joinPromptSections(
     await getDynamicInstructionSections({
@@ -25,6 +27,7 @@ export async function getDynamicInstructions({
       coAuthor,
       hasSubagents,
       disabledBuiltinTools,
+      plansDir,
     }),
   );
 }
@@ -40,6 +43,7 @@ export async function getDynamicInstructionSections({
   coAuthor,
   hasSubagents,
   disabledBuiltinTools,
+  plansDir,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
@@ -47,6 +51,8 @@ export async function getDynamicInstructionSections({
   hasSubagents?: boolean;
   /** Controller built-in tools removed via `disableBuiltinTools`; their prompt guidance is omitted. */
   disabledBuiltinTools?: readonly string[];
+  /** Host-configured workspace-relative plans directory; overrides the per-session default. */
+  plansDir?: string;
 }): Promise<PromptSection[]> {
   const agentControllerContext = requestContext.get('controller') as
     | AgentControllerRequestContext<MastraCodeComposedState>
@@ -77,6 +83,7 @@ export async function getDynamicInstructionSections({
     hostInstructions,
     hasSubagents,
     disabledBuiltinTools,
+    plansDir,
   };
 
   const promptSections = buildFullPromptSections(promptCtx);

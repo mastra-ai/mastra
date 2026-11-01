@@ -341,6 +341,13 @@ export interface MastraCodeConfig {
    */
   disableBuiltinTools?: BuiltinToolId[];
   /**
+   * Workspace-relative directory agents write plan files into, overriding the
+   * per-session default (`.mastracode/plans`, or `.artifacts/plans` for Factory
+   * project sessions). Prompts and the plan-mode write guard of the default
+   * workspace use it; a custom `workspace` must apply its own guard.
+   */
+  plansDir?: string;
+  /**
    * Custom storage config instead of auto-detected default, or a pre-built
    * store instance. An instance is used as-is: no connection test and no
    * LibSQL fallback — if the injected store fails, that's a hard error.
@@ -1355,6 +1362,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         coAuthor: config?.coAuthor,
         hasSubagents: subagents.length > 0,
         disabledBuiltinTools: config?.disableBuiltinTools,
+        plansDir: config?.plansDir,
       });
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
@@ -1787,7 +1795,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         ? modelId
         : resolveModel(modelId, { requestContext }),
     gateways: [amazonBedrockGateway, githubCopilotGateway, mastraCodeGateway],
-    workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
+    workspace:
+      config?.workspace ??
+      (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled, plansDir: config?.plansDir })),
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,

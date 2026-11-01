@@ -167,7 +167,7 @@ import type { FactoryReporting } from './tools/reports.js';
 import { observeSessionRunReports } from './tools/run-watch.js';
 import { createFactorySandboxTools } from './tools/sandbox-tools.js';
 import { FactorySessionsStateProcessor } from './tools/sessions-state-processor.js';
-import { createWorkspaceFactory, FactoryWorkspaceRegistry } from './workspace.js';
+import { createWorkspaceFactory, FACTORY_PLANS_DIR, FactoryWorkspaceRegistry } from './workspace.js';
 import type { FactorySandboxStart } from './workspace.js';
 
 type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage'>;
@@ -1351,6 +1351,8 @@ export class MastraFactory {
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
+        // User sessions carry no `factoryProjectId` to select this per session.
+        plansDir: FACTORY_PLANS_DIR,
         // Subagents are disabled, matching the Mastra Code TUI default.
         subagents: [],
         resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
