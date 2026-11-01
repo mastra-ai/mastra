@@ -911,7 +911,12 @@ export class MemoryPG extends MemoryStorage {
         id: saved.id,
         resourceId: saved.resourceId,
         title: saved.title,
-        metadata: typeof saved.metadata === 'string' ? JSON.parse(saved.metadata) : saved.metadata,
+        metadata:
+          saved.metadata == null
+            ? undefined
+            : typeof saved.metadata === 'string'
+              ? JSON.parse(saved.metadata)
+              : saved.metadata,
         createdAt: saved.createdAtZ || saved.createdAt,
         updatedAt: saved.updatedAtZ || saved.updatedAt,
       };

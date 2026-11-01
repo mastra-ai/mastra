@@ -395,6 +395,23 @@ describe('MemoryPG.saveThread', () => {
     });
   });
 
+  it('returns undefined metadata when the thread has none', async () => {
+    const client = new RecordingDbClient();
+    const memory = new MemoryPG({ client });
+
+    const saved = await memory.saveThread({
+      thread: {
+        id: 'thread-1',
+        resourceId: 'resource-1',
+        title: 'No metadata',
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-01-01T00:00:00.000Z'),
+      },
+    });
+
+    expect(saved.metadata).toBeUndefined();
+  });
+
   it('refuses to move an existing thread to another resource', async () => {
     const client = new RecordingDbClient();
     client.saveThreadResult = null;
