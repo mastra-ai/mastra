@@ -157,6 +157,34 @@ describe('createSubagentTool requestContext forwarding', () => {
     expect(result.content).not.toContain('<subagent-meta');
   });
 
+  it('includes nested provider rejection details without serializing private response fields', async () => {
+    const providerError = Object.assign(new Error('Provider request failed'), {
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message: 'Model not enabled for this account' }, debug: 'private-body' }),
+      responseHeaders: { authorization: 'private-header' },
+    });
+    mockStream.mockRejectedValue(
+      new Error('An error occurred while processing your request', { cause: providerError }),
+    );
+    const tool = createSubagentTool({ subagents, resolveModel, fallbackModelId: 'test-model' });
+    const result = await (tool as any).execute({ agentType: 'explore', task: 'task' }, {});
+    expect(result.isError).toBe(true);
+    expect(result.content).toContain('Model not enabled for this account');
+    expect(result.content).toContain('HTTP 400');
+    expect(result.content).not.toContain('private-body');
+    expect(result.content).not.toContain('private-header');
+  });
+
+  it('bounds provider errors even when causes are cyclic and messages are long', async () => {
+    const error = Object.assign(new Error('failure '.repeat(2000)), { cause: undefined as unknown });
+    error.cause = error;
+    mockStream.mockRejectedValue(error);
+    const tool = createSubagentTool({ subagents, resolveModel, fallbackModelId: 'test-model' });
+    const result = await (tool as any).execute({ agentType: 'explore', task: 'task' }, {});
+    expect(result.isError).toBe(true);
+    expect(result.content.length).toBeLessThanOrEqual(8256);
+  });
+
   it('resolves the subagent model with the calling run request context', async () => {
     mockStream.mockResolvedValue(createMockStreamResponse('result text'));
     const tool = createSubagentTool({ subagents, resolveModel, fallbackModelId: 'test-model' });
