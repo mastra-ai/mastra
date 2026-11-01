@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Mastra } from '../mastra';
 import type { ScheduleTarget } from '../storage/domains/schedules/base';
-import { executeAgentSchedule } from './worker';
+import { AgentScheduleWorker, executeAgentSchedule } from './worker';
 
 type AgentTarget = Extract<ScheduleTarget, { type: 'agent' }>;
 
@@ -543,5 +543,53 @@ describe('AgentScheduleWorker — handler-mode file-based schedules', () => {
 
     const options = (sendSignal.mock.calls[0] as any[])[1];
     expect(options.ifIdle.streamOptions.requestContext.get('channel')).toBe('slack');
+  });
+});
+
+describe('AgentScheduleWorker — start/stop lifecycle', () => {
+  function makeDeps(supportedModes: Array<'push' | 'pull'>) {
+    const pubsub = {
+      supportedModes,
+      subscribe: vi.fn(() => new Promise<void>(r => setTimeout(r, 1))),
+      unsubscribe: vi.fn().mockResolvedValue(undefined),
+      flush: vi.fn().mockResolvedValue(undefined),
+    };
+    return {
+      pubsub: pubsub as any,
+      storage: {} as any,
+      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() } as any,
+      mastra: {} as Mastra,
+      _pubsub: pubsub,
+    };
+  }
+
+  it.each([[['push'] as Array<'push' | 'pull'>], [['pull'] as Array<'push' | 'pull'>]])(
+    'concurrent start() calls create a single subscription (%j)',
+    async modes => {
+      const deps = makeDeps(modes);
+      const worker = new AgentScheduleWorker();
+      await worker.init(deps);
+
+      await Promise.all([worker.start(), worker.start()]);
+      expect(worker.isRunning).toBe(true);
+      expect(deps._pubsub.subscribe).toHaveBeenCalledTimes(1);
+
+      await worker.stop();
+      expect(deps._pubsub.unsubscribe).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('stop() during an in-flight start leaves no subscription', async () => {
+    const deps = makeDeps(['push']);
+    const worker = new AgentScheduleWorker();
+    await worker.init(deps);
+
+    const starting = worker.start();
+    await worker.stop();
+    await starting;
+
+    expect(worker.isRunning).toBe(false);
+    expect(deps._pubsub.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(deps._pubsub.unsubscribe.mock.calls[0]![1]).toBe(deps._pubsub.subscribe.mock.calls[0]![1]);
   });
 });

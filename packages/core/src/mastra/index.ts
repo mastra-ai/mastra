@@ -998,6 +998,7 @@ export class Mastra<
   // Callback registered against the pubsub when running in push mode so we can
   // unsubscribe it cleanly during stopWorkers().
   #pushSubscription?: { topic: string; cb: EventCallback };
+  #pushSubscriptionPromise?: Promise<void>;
   // handleWorkflowEvent() calls started by the push subscription that have not
   // settled yet. stopWorkers() waits for these (bounded) after unsubscribing so
   // a step mid-execution is not abandoned by teardown.
@@ -7298,7 +7299,15 @@ export class Mastra<
       this.#ensureBackgroundTaskManager('full');
     }
 
+    // A lazy execution-worker start (__ensureExecutionWorkersStarted) may be in
+    // flight. Join it instead of racing it; its failure belongs to its own
+    // caller, and the loop below retries any worker that did not come up.
+    if (this.#executionWorkersStartPromise) {
+      await this.#executionWorkersStartPromise.catch(() => {});
+    }
+
     for (const worker of targets) {
+      if (worker.isRunning) continue;
       await worker.init(deps);
       await worker.start();
     }
@@ -7352,71 +7361,79 @@ export class Mastra<
   async #wirePushWorkflowSubscription(): Promise<void> {
     const modes = this.#pubsub.supportedModes ?? ['pull'];
     const pushOnly = modes.includes('push') && !modes.includes('pull');
-    if (pushOnly && !this.#pushSubscription) {
-      const cb: EventCallback = (event, ack, nack) => {
-        // In cross-process push environments (e.g. UnixSocketPubSub),
-        // every subscriber receives every event — including events for
-        // internal workflows registered on a different process. Skip
-        // events whose workflow exists in neither the internal nor the
-        // public registry so only the owning process handles them.
-        // Without this guard the WEP would publish workflow.fail,
-        // propagating through workflows-finish and erroneously
-        // terminating the correct process's run.
-        const data = event.data as Record<string, unknown> | undefined;
-        const wfId = data?.workflowId as string | undefined;
-        const rId = data?.runId as string | undefined;
-        if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
-          if (ack) {
-            void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
-          }
-          return;
-        }
+    if (!pushOnly || this.#pushSubscription) return;
+    // Concurrent callers share one in-flight subscribe; otherwise each would
+    // register its own callback and every workflow event would run twice.
+    if (!this.#pushSubscriptionPromise) {
+      this.#pushSubscriptionPromise = this.#subscribePushWorkflowEvents().finally(() => {
+        this.#pushSubscriptionPromise = undefined;
+      });
+    }
+    await this.#pushSubscriptionPromise;
+  }
 
-        const inFlight = this.handleWorkflowEvent(event)
-          .then(result => {
-            if (result.ok) {
-              if (ack) {
-                return ack().catch(err =>
-                  this.#logger?.error?.('Error acking workflow event in push subscription', err),
-                );
-              }
-              return;
-            }
-            // Non-ok result: ask the transport to redeliver (nack) when the
-            // handle layer says retry. The WEP tracks per-event delivery
-            // attempts and eventually returns `retry: false` to break the
-            // loop and surface a terminal workflow.fail. For terminal
-            // failures we ack so the event is dropped from the transport.
-            if (result.retry) {
-              if (nack) {
-                return nack().catch(err =>
-                  this.#logger?.error?.('Error nacking workflow event in push subscription', err),
-                );
-              }
-              // Transport does not support nack. Do NOT ack — acking a
-              // retryable failure would drop the event and silently lose
-              // the workflow run. Log and let the transport's own delivery
-              // semantics decide (most non-ack transports redeliver until
-              // explicitly acked).
-              this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
-                type: event.type,
-                runId: event.runId,
-              });
-              return;
-            }
+  async #subscribePushWorkflowEvents(): Promise<void> {
+    const cb: EventCallback = (event, ack, nack) => {
+      // In cross-process push environments (e.g. UnixSocketPubSub),
+      // every subscriber receives every event — including events for
+      // internal workflows registered on a different process. Skip
+      // events whose workflow exists in neither the internal nor the
+      // public registry so only the owning process handles them.
+      // Without this guard the WEP would publish workflow.fail,
+      // propagating through workflows-finish and erroneously
+      // terminating the correct process's run.
+      const data = event.data as Record<string, unknown> | undefined;
+      const wfId = data?.workflowId as string | undefined;
+      const rId = data?.runId as string | undefined;
+      if (wfId && rId && !this.#ownsWorkflow(wfId, rId, data?.parentWorkflow)) {
+        if (ack) {
+          void ack().catch(err => this.#logger?.error?.('Error acking skipped workflow event', err));
+        }
+        return;
+      }
+
+      const inFlight = this.handleWorkflowEvent(event)
+        .then(result => {
+          if (result.ok) {
             if (ack) {
-              return ack().catch(err =>
-                this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
+              return ack().catch(err => this.#logger?.error?.('Error acking workflow event in push subscription', err));
+            }
+            return;
+          }
+          // Non-ok result: ask the transport to redeliver (nack) when the
+          // handle layer says retry. The WEP tracks per-event delivery
+          // attempts and eventually returns `retry: false` to break the
+          // loop and surface a terminal workflow.fail. For terminal
+          // failures we ack so the event is dropped from the transport.
+          if (result.retry) {
+            if (nack) {
+              return nack().catch(err =>
+                this.#logger?.error?.('Error nacking workflow event in push subscription', err),
               );
             }
-          })
-          .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
-        this.#inFlightPushEvents.add(inFlight);
-        void inFlight.finally(() => this.#inFlightPushEvents.delete(inFlight));
-      };
-      await this.#pubsub.subscribe('workflows', cb);
-      this.#pushSubscription = { topic: 'workflows', cb };
-    }
+            // Transport does not support nack. Do NOT ack — acking a
+            // retryable failure would drop the event and silently lose
+            // the workflow run. Log and let the transport's own delivery
+            // semantics decide (most non-ack transports redeliver until
+            // explicitly acked).
+            this.#logger?.error?.('Retryable workflow event cannot be requeued because nack is unavailable', {
+              type: event.type,
+              runId: event.runId,
+            });
+            return;
+          }
+          if (ack) {
+            return ack().catch(err =>
+              this.#logger?.error?.('Error acking terminal workflow event in push subscription', err),
+            );
+          }
+        })
+        .catch(err => this.#logger?.error?.('Unhandled error in workflow event push subscription', err));
+      this.#inFlightPushEvents.add(inFlight);
+      void inFlight.finally(() => this.#inFlightPushEvents.delete(inFlight));
+    };
+    await this.#pubsub.subscribe('workflows', cb);
+    this.#pushSubscription = { topic: 'workflows', cb };
   }
 
   /**
@@ -7528,6 +7545,7 @@ export class Mastra<
     }
 
     // Tear down the in-process push subscription wired during startWorkers().
+    await this.#pushSubscriptionPromise?.catch(() => {});
     if (this.#pushSubscription) {
       await this.#pubsub.unsubscribe(this.#pushSubscription.topic, this.#pushSubscription.cb);
       this.#pushSubscription = undefined;

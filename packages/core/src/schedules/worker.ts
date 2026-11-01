@@ -53,6 +53,7 @@ export class AgentScheduleWorker extends MastraWorker {
   #transport?: WorkerTransport;
   #pushCb?: EventCallback;
   #running = false;
+  #startPromise?: Promise<void>;
 
   constructor(config: AgentScheduleWorkerConfig = {}) {
     super();
@@ -71,38 +72,51 @@ export class AgentScheduleWorker extends MastraWorker {
     if (this.#running) return;
     if (!this.deps) throw new Error('AgentScheduleWorker: call init() before start()');
 
+    // Concurrent callers share one in-flight start so only one subscription
+    // is created (#29085).
+    if (!this.#startPromise) {
+      this.#startPromise = this.#doStart(this.deps).finally(() => {
+        this.#startPromise = undefined;
+      });
+    }
+    await this.#startPromise;
+  }
+
+  async #doStart(deps: WorkerDeps): Promise<void> {
     // Push-only pubsubs (EventEmitter, UnixSocketPubSub) don't support the
     // grouped pull subscription a PullTransport requires. They deliver every
     // event to every in-process subscriber, so subscribe directly without a
     // group — mirroring how Mastra.startWorkers handles workflow events for
     // push-only transports instead of running the pull-based worker.
-    const modes = this.deps.pubsub.supportedModes ?? ['pull'];
+    const modes = deps.pubsub.supportedModes ?? ['pull'];
     if (!modes.includes('pull')) {
       const cb: EventCallback = (event, ack, nack) => {
         void this.#handleEvent(event, ack, nack);
       };
+      await deps.pubsub.subscribe(TOPIC_AGENT_SCHEDULES, cb);
       this.#pushCb = cb;
-      await this.deps.pubsub.subscribe(TOPIC_AGENT_SCHEDULES, cb);
       this.#running = true;
       return;
     }
 
     const group = this.#config.group ?? DEFAULT_GROUP;
-    this.#transport = new PullTransport({
-      pubsub: this.deps.pubsub,
+    const transport = new PullTransport({
+      pubsub: deps.pubsub,
       group,
       topic: TOPIC_AGENT_SCHEDULES,
-      logger: this.deps.logger,
+      logger: deps.logger,
     });
 
-    await this.#transport.start({
+    await transport.start({
       route: (event, ack, nack) => this.#handleEvent(event, ack, nack),
     });
 
+    this.#transport = transport;
     this.#running = true;
   }
 
   async stop(): Promise<void> {
+    await this.#startPromise?.catch(() => {});
     if (!this.#running) return;
     try {
       if (this.#transport) {

@@ -149,6 +149,47 @@ describe('OrchestrationWorker', () => {
 
     expect(deps._pubsub.subscribe).toHaveBeenCalledWith('workflows', expect.any(Function), { group: 'my-group' });
   });
+
+  it('concurrent start() calls create a single subscription', async () => {
+    deps._pubsub.subscribe.mockImplementation(() => new Promise(r => setTimeout(r, 1)));
+    worker = new OrchestrationWorker();
+    deps.mastra = { getWorkflow: vi.fn(), getLogger: vi.fn().mockReturnValue(deps._logger) } as any;
+    await worker.init(deps);
+
+    await Promise.all([worker.start(), worker.start()]);
+
+    expect(worker.isRunning).toBe(true);
+    expect(deps._pubsub.subscribe).toHaveBeenCalledTimes(1);
+  });
+
+  it('stop() during an in-flight start leaves no subscription', async () => {
+    deps._pubsub.subscribe.mockImplementation(() => new Promise(r => setTimeout(r, 1)));
+    worker = new OrchestrationWorker();
+    deps.mastra = { getWorkflow: vi.fn(), getLogger: vi.fn().mockReturnValue(deps._logger) } as any;
+    await worker.init(deps);
+
+    const starting = worker.start();
+    await worker.stop();
+    await starting;
+
+    expect(worker.isRunning).toBe(false);
+    expect(deps._pubsub.subscribe).toHaveBeenCalledTimes(1);
+    expect(deps._pubsub.unsubscribe).toHaveBeenCalledTimes(1);
+    expect(deps._pubsub.unsubscribe.mock.calls[0]![1]).toBe(deps._pubsub.subscribe.mock.calls[0]![1]);
+  });
+
+  it('a failed start can be retried', async () => {
+    deps._pubsub.subscribe.mockRejectedValueOnce(new Error('subscribe failed'));
+    worker = new OrchestrationWorker();
+    deps.mastra = { getWorkflow: vi.fn(), getLogger: vi.fn().mockReturnValue(deps._logger) } as any;
+    await worker.init(deps);
+
+    await expect(worker.start()).rejects.toThrow('subscribe failed');
+    expect(worker.isRunning).toBe(false);
+    await worker.start();
+    expect(worker.isRunning).toBe(true);
+    expect(deps._pubsub.subscribe).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('SchedulerWorker', () => {
@@ -223,6 +264,25 @@ describe('BackgroundTaskWorker', () => {
 
     expect(worker.isRunning).toBe(true);
     expect(worker.manager).not.toBe(firstManager);
+    await worker.stop();
+  });
+
+  it('concurrent start() calls initialize the owned manager once', async () => {
+    const worker = new BackgroundTaskWorker();
+    const deps = createMockDeps();
+    deps._storage.getStore.mockResolvedValue({});
+    deps.mastra = {
+      getLogger: vi.fn().mockReturnValue(deps._logger),
+      __hasInternalWorkflow: vi.fn().mockReturnValue(false),
+      __registerInternalWorkflow: vi.fn(),
+    } as any;
+
+    await worker.init(deps);
+    const initSpy = vi.spyOn(worker.manager!, 'init');
+    await Promise.all([worker.start(), worker.start()]);
+
+    expect(worker.isRunning).toBe(true);
+    expect(initSpy).toHaveBeenCalledTimes(1);
     await worker.stop();
   });
 });

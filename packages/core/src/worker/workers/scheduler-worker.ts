@@ -20,6 +20,7 @@ export class SchedulerWorker extends MastraWorker {
   #scheduler?: Scheduler;
   #config: SchedulerConfig;
   #running = false;
+  #startPromise?: Promise<void>;
 
   constructor(config: SchedulerConfig = {}) {
     super();
@@ -120,6 +121,16 @@ export class SchedulerWorker extends MastraWorker {
 
   async start(): Promise<void> {
     if (this.#running) return;
+    // Concurrent callers share one in-flight start (#29085).
+    if (!this.#startPromise) {
+      this.#startPromise = this.#doStart().finally(() => {
+        this.#startPromise = undefined;
+      });
+    }
+    await this.#startPromise;
+  }
+
+  async #doStart(): Promise<void> {
     if (this.#scheduler) {
       await this.#scheduler.start();
     }
@@ -127,6 +138,7 @@ export class SchedulerWorker extends MastraWorker {
   }
 
   async stop(): Promise<void> {
+    await this.#startPromise?.catch(() => {});
     if (!this.#running) return;
     if (this.#scheduler) {
       await this.#scheduler.stop();

@@ -37,6 +37,7 @@ export class OrchestrationWorker extends MastraWorker {
   #processor?: WorkflowEventProcessor;
   #strategy?: StepExecutionStrategy;
   #running = false;
+  #startPromise?: Promise<void>;
 
   constructor(config: OrchestrationWorkerConfig = {}) {
     super();
@@ -87,17 +88,33 @@ export class OrchestrationWorker extends MastraWorker {
     if (this.#running) return;
     if (!this.deps) throw new Error('OrchestrationWorker: call init() before start()');
 
-    const group = this.#config.group ?? DEFAULT_GROUP;
-    this.#transport = new PullTransport({ pubsub: this.deps.pubsub, group, logger: this.deps.logger });
+    // Concurrent callers (e.g. startWorkers() racing the lazy execution-worker
+    // start) share one in-flight start. Without this, each caller passes the
+    // #running guard and subscribes its own PullTransport, so every workflow
+    // event is handled twice (#29085).
+    if (!this.#startPromise) {
+      this.#startPromise = this.#doStart(this.deps).finally(() => {
+        this.#startPromise = undefined;
+      });
+    }
+    await this.#startPromise;
+  }
 
-    await this.#transport.start({
+  async #doStart(deps: WorkerDeps): Promise<void> {
+    const group = this.#config.group ?? DEFAULT_GROUP;
+    const transport = new PullTransport({ pubsub: deps.pubsub, group, logger: deps.logger });
+
+    await transport.start({
       route: (event, ack, nack, extend) => this.#processEvent(event, ack, nack, extend),
     });
 
+    this.#transport = transport;
     this.#running = true;
   }
 
   async stop(options?: WorkerStopOptions): Promise<void> {
+    // Let an in-flight start finish so its subscription is torn down too.
+    await this.#startPromise?.catch(() => {});
     if (!this.#running) return;
 
     try {
