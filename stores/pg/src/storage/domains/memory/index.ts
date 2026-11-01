@@ -934,20 +934,25 @@ export class MemoryPG extends MemoryStorage {
     { id, title, metadata }: { id: string; title?: string; metadata?: Record<string, unknown> },
   ): Promise<StorageThreadType | null> {
     const nowStr = toUtcISOString(new Date());
+    const params: unknown[] = [title ?? null, nowStr, nowStr, id];
+    // Leave the column out entirely when no patch is given, so a title-only
+    // update never re-reads or re-casts the stored metadata.
+    let metadataSet = '';
+    if (metadata !== undefined) {
+      params.push(toPgJson(metadata));
+      metadataSet = `metadata = (CASE WHEN jsonb_typeof(metadata::jsonb) = 'object' THEN metadata::jsonb ELSE '{}'::jsonb END)
+                    || $5::jsonb,`;
+    }
     const row = await q.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
       `UPDATE ${tableName}
        SET
          title = COALESCE($1, title),
-         metadata = CASE
-           WHEN $2::jsonb IS NULL THEN metadata::jsonb
-           ELSE (CASE WHEN jsonb_typeof(metadata::jsonb) = 'object' THEN metadata::jsonb ELSE '{}'::jsonb END)
-                || $2::jsonb
-         END,
-         "updatedAt" = $3,
-         "updatedAtZ" = $4
-       WHERE id = $5
+         ${metadataSet}
+         "updatedAt" = $2,
+         "updatedAtZ" = $3
+       WHERE id = $4
        RETURNING *`,
-      [title ?? null, metadata === undefined ? null : toPgJson(metadata), nowStr, nowStr, id],
+      params,
     );
     return row ? this.#toThread(row) : null;
   }

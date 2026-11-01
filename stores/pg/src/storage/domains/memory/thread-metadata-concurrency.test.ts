@@ -93,6 +93,24 @@ describe('PostgreSQL thread metadata writes across processes', () => {
     expect((await a.updateThread({ id, metadata: { k: 1 } })).metadata).toEqual({ k: 1 });
   });
 
+  it('updateThread title-only update does not cast legacy TEXT metadata', async () => {
+    const { id } = await createThread();
+    const table = `"${schemaName}".mastra_threads`;
+    const pool = new Pool({ connectionString });
+    try {
+      // Older deployments store metadata as TEXT, which can hold JSON that jsonb rejects.
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN metadata TYPE text`);
+      await pool.query(`UPDATE ${table} SET metadata = $1 WHERE id = $2`, ['{"v":"\\u0000"}', id]);
+      const updated = await a.updateThread({ id, title: 'renamed' });
+      expect(updated.title).toBe('renamed');
+      expect(updated.metadata).toEqual({ v: '\u0000' });
+    } finally {
+      await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
+      await pool.query(`ALTER TABLE ${table} ALTER COLUMN metadata TYPE jsonb USING metadata::jsonb`);
+      await pool.end();
+    }
+  });
+
   it('updateThreadMetadata respects resourceId, missing threads, and no-op updates', async () => {
     const thread = await createThread('owner');
     expect(await a.updateThreadMetadata({ id: thread.id, resourceId: 'other', update: () => ({ x: 1 }) })).toBeNull();
