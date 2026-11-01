@@ -3,6 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MastraError } from '../../../error';
 import { downloadFromUrl } from './download-assets';
 
+// Retries are driven through fetchWithRetry's backoff with fake timers, so these tests need the real waitDelay
+// rather than the instant one from @internal/test-utils/setup.
+vi.unmock('../../../utils/retry-after');
+
 describe('downloadFromUrl', () => {
   afterEach(() => {
     vi.restoreAllMocks();

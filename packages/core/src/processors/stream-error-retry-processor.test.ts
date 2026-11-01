@@ -10,6 +10,10 @@ import {
 } from './stream-error-retry-processor';
 import type { ProcessAPIErrorArgs } from './index';
 
+// These tests pin the backoff timing itself with fake timers, so they need the
+// real waitDelay rather than the instant one from @internal/test-utils/setup.
+vi.unmock('../utils/retry-after');
+
 function makeArgs(overrides: Partial<ProcessAPIErrorArgs> = {}): ProcessAPIErrorArgs {
   const messageList = new MessageList({ threadId: 'test-thread' });
   messageList.add({ role: 'user', content: 'hello' }, 'input');
