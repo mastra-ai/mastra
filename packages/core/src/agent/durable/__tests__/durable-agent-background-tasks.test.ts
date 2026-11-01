@@ -212,7 +212,10 @@ describe('DurableAgent background tasks via stream()', () => {
       onChunk: chunk => chunks.push(chunk),
     });
 
-    await new Promise(r => setTimeout(r, 500));
+    await vi.waitFor(() => expect(chunks.find(c => c.type === 'background-task-started')).toBeDefined(), {
+      timeout: 10_000,
+      interval: 10,
+    });
 
     const bgStarted = chunks.find(c => c.type === 'background-task-started');
     expect(bgStarted).toBeDefined();
@@ -252,7 +255,10 @@ describe('DurableAgent background tasks via stream()', () => {
       onChunk: chunk => chunks.push(chunk),
     });
 
-    await new Promise(r => setTimeout(r, 500));
+    await vi.waitFor(() => expect(chunks.find(c => c.type === 'tool-result')).toBeDefined(), {
+      timeout: 10_000,
+      interval: 10,
+    });
 
     const bgStarted = chunks.find(c => c.type === 'background-task-started');
     expect(bgStarted).toBeUndefined();
@@ -303,7 +309,16 @@ describe('DurableAgent background tasks via stream()', () => {
       onChunk: chunk => chunks.push(chunk),
     });
 
-    await new Promise(r => setTimeout(r, 1500));
+    const resultParts = () =>
+      ((globalRunRegistry.get(runId) as any)?.messageList?.get.all.db() ?? []).flatMap((m: any) =>
+        (m.content?.parts ?? (Array.isArray(m.content) ? m.content : [])).filter(
+          (p: any) => p.type === 'tool-invocation' && p.toolInvocation?.state === 'result',
+        ),
+      );
+    await vi.waitFor(() => expect(resultParts()[0]?.toolInvocation.result).toEqual({ summary: 'Research on AI' }), {
+      timeout: 10_000,
+      interval: 10,
+    });
 
     const bgStarted = chunks.find(c => c.type === 'background-task-started');
     expect(bgStarted).toBeDefined();
@@ -424,7 +439,14 @@ describe('DurableAgent background tasks via stream()', () => {
       onChunk: chunk => chunks.push(chunk),
     });
 
-    await new Promise(r => setTimeout(r, 1500));
+    await vi.waitFor(
+      async () => {
+        const started = chunks.find(c => c.type === 'background-task-started');
+        expect(started).toBeDefined();
+        expect((await localMastra.backgroundTaskManager!.getTask(started.payload.taskId))?.status).toBe('completed');
+      },
+      { timeout: 10_000, interval: 10 },
+    );
 
     const bgStarted = chunks.find(c => c.type === 'background-task-started');
     expect(bgStarted).toBeDefined();
@@ -494,7 +516,14 @@ describe('DurableAgent background tasks via stream()', () => {
     });
 
     // Wait for the bg task to dispatch and the tool to call suspend.
-    await new Promise(r => setTimeout(r, 1500));
+    await vi.waitFor(
+      async () => {
+        const started = chunks.find(c => c.type === 'background-task-started');
+        expect(started).toBeDefined();
+        expect((await localMastra.backgroundTaskManager!.getTask(started.payload.taskId))?.status).toBe('suspended');
+      },
+      { timeout: 10_000, interval: 10 },
+    );
 
     const bgStarted = chunks.find(c => c.type === 'background-task-started');
     expect(bgStarted).toBeDefined();
@@ -508,7 +537,10 @@ describe('DurableAgent background tasks via stream()', () => {
 
     await manager.resume(taskId, { approved: true, notes: 'looks good' });
 
-    await new Promise(r => setTimeout(r, 1500));
+    await vi.waitFor(async () => expect((await manager.getTask(taskId))?.status).toBe('completed'), {
+      timeout: 10_000,
+      interval: 10,
+    });
 
     const completed = await manager.getTask(taskId);
     expect(completed?.status).toBe('completed');
