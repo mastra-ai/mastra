@@ -5,7 +5,7 @@ import { cardRuleFacts } from './card-facts.js';
 import type { BoardRegistry } from './registry.js';
 import { boardForWorkItem } from './semantics.js';
 
-type PhaseCard = Pick<Card, 'board' | 'externalSource' | 'stages' | 'title' | 'metadata'>;
+type PhaseCard = Pick<Card, 'board' | 'externalSource' | 'stages' | 'title' | 'metadata' | 'workItem'>;
 
 /**
  * Whether the decision starts the run of a phase that starts on its own for this card

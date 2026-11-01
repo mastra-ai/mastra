@@ -12,12 +12,12 @@ import { retireMergeRequestSubscriptions } from './subscriptions.js';
 import type { ParsedGitLabWebhook } from './webhook.js';
 
 function stringMetadata(item: Card, key: string): string | undefined {
-  const value = item.metadata?.[key];
+  const value = item.workItem.metadata?.[key];
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
 function numberMetadata(item: Card, key: string): number | undefined {
-  const value = item.metadata?.[key];
+  const value = item.workItem.metadata?.[key];
   return typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : undefined;
 }
 
@@ -193,9 +193,8 @@ export function attachGitLabMergeRequestReconciler(
         // the provider's terminal outcome has been replayed and stamped. Done
         // means the review finished, not that the MR merged, so a later close
         // still gets exactly one replay before the card drops out of the sweep.
-        const metadata = item.metadata ?? {};
-        const outcome = reconciledOutcome(metadata);
-        return outcome === undefined || metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] !== outcome;
+        const outcome = reconciledOutcome(item.workItem.metadata ?? {});
+        return outcome === undefined || item.metadata?.[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] !== outcome;
       });
       if (items.length === 0) continue;
       summary.projects += 1;
@@ -222,7 +221,7 @@ export function attachGitLabMergeRequestReconciler(
             summary.missing += 1;
             continue;
           }
-          const current = item.metadata ?? {};
+          const current = { ...item.workItem.metadata, ...item.metadata };
           let authorTrusted: boolean | undefined;
           if (pullRequest.author) {
             try {
@@ -309,11 +308,11 @@ export function attachGitLabMergeRequestReconciler(
               ? {}
               : { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: pullRequest.merged ? 'merged' : 'closed' };
             if (metadataChanged({ ...desired, ...settled })) {
-              await context.runtime!.workItems.update({
+              await context.runtime!.workItems.syncCard({
                 orgId: project.orgId,
                 id: item.id,
                 userId: 'factory-rule-dispatcher',
-                patch: { metadata: { ...current, ...desired, ...settled } },
+                patch: { metadata: { ...desired, ...settled } },
               });
               summary.updated += 1;
             }
@@ -327,11 +326,11 @@ export function attachGitLabMergeRequestReconciler(
               ? {}
               : { [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: null };
           if (!metadataChanged({ ...desired, ...reopened })) continue;
-          await context.runtime!.workItems.update({
+          await context.runtime!.workItems.syncCard({
             orgId: project.orgId,
             id: item.id,
             userId: 'factory-rule-dispatcher',
-            patch: { metadata: { ...current, ...desired, ...reopened } },
+            patch: { metadata: { ...desired, ...reopened } },
           });
           summary.updated += 1;
         } catch (error) {

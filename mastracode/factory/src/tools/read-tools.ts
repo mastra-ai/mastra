@@ -58,8 +58,11 @@ function iso(value: Date | string | null | undefined): string | null {
 }
 
 /** The number a person sees on the card: the issue or PR number the item was filed from. */
-export function workItemNumber(item: Pick<Card, 'metadata'>): number | null {
-  const number = item.metadata?.number ?? item.metadata?.githubIssueNumber ?? item.metadata?.githubPullRequestNumber;
+export function workItemNumber(item: Pick<Card, 'workItem'>): number | null {
+  const number =
+    item.workItem.metadata?.number ??
+    item.workItem.metadata?.githubIssueNumber ??
+    item.workItem.metadata?.githubPullRequestNumber;
   return typeof number === 'number' ? number : null;
 }
 
@@ -243,8 +246,8 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           project,
           itemDecisions.filter(decision => decision.status === 'failed'),
         );
-        const labels = Array.isArray(item.metadata?.labels)
-          ? item.metadata.labels.filter((label): label is string => typeof label === 'string').slice(0, MAX_LIST)
+        const labels = Array.isArray(item.workItem.labels)
+          ? item.workItem.labels.filter((label): label is string => typeof label === 'string').slice(0, MAX_LIST)
           : [];
         const parent = item.parentWorkItemId
           ? all.find(candidate => candidate.id === item.parentWorkItemId)
@@ -276,7 +279,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           item: {
             ...summarizeItem(item, bindings),
             source: item.externalSource ? `${item.externalSource.integrationId}:${item.externalSource.type}` : 'manual',
-            sourceUrl: typeof item.metadata?.url === 'string' ? item.metadata.url : null,
+            sourceUrl: typeof item.workItem.url === 'string' ? item.workItem.url : null,
             triageType: item.triageType,
             revision: item.revision,
           },

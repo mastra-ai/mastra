@@ -1,7 +1,7 @@
 import { FACTORY_ROLE_STAGES, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
-import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
+import { itemSessionSpec, metadataLabels, pullRequestStatusForItem } from './boardItems';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
 import { isTerminalStage } from './stages';
 import type { BoardStageId } from './stages';
@@ -25,7 +25,9 @@ export interface CardMove {
 
 /** A persisted card or a candidate feed entry: both are moved by the same lane rules. */
 export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> &
-  Partial<Pick<WorkItem, 'board' | 'stages' | 'acceptedAt'>>;
+  Partial<Pick<WorkItem, 'board' | 'stages' | 'acceptedAt'>> & {
+    workItem?: { labels: string[] };
+  };
 
 const INVESTIGATE: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
 const BUILD: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
@@ -43,7 +45,11 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
   if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
-  if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
+  if (item.source === 'github-issue') {
+    return needsApproval({ ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } })
+      ? [PREPARE_APPROVAL]
+      : [INVESTIGATE, BUILD];
+  }
   if (
     item.source === 'gitlab-issue' ||
     item.source === 'linear-issue' ||

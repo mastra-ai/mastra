@@ -76,15 +76,12 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
 function toWireWorkItem(item: Card): Card {
-  if (
-    !item.metadata ||
-    (!(FACTORY_RULE_MATERIALIZATION_KEY in item.metadata) &&
-      !(FACTORY_PULL_REQUEST_RECONCILIATION_KEY in item.metadata) &&
-      !(EXTERNAL_SOURCE_MISSING_KEY in item.metadata))
-  ) {
-    return item;
-  }
-  return { ...item, metadata: publicWorkItemMetadata(item.metadata) ?? {} };
+  return {
+    ...item,
+    workItem: { ...item.workItem, metadata: publicWorkItemMetadata(item.workItem.metadata) },
+    // Keep the legacy wire metadata for one release; storage remains strictly split.
+    metadata: publicWorkItemMetadata({ ...item.workItem.metadata, ...item.metadata }) ?? {},
+  };
 }
 
 /** Session ids of the listed cards that the predicate picks, each once. */

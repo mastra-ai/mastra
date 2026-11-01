@@ -83,6 +83,6 @@ export async function moveCardToBoard({
 }
 
 export function cardLabels(item: Card): string[] {
-  const labels = item.metadata?.labels;
+  const labels = item.workItem.labels;
   return Array.isArray(labels) ? labels.filter((label): label is string => typeof label === 'string') : [];
 }

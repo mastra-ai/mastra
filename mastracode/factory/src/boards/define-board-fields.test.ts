@@ -2,6 +2,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { RuleGroup } from '../rules/rule-group.js';
 import type { FactoryStageRuleContext } from '../rules/types.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { cardRuleFacts } from './card-facts.js';
 import { BoardDefinitionError, defineBoard } from './define-board.js';
 import { reviewBoard } from './review.js';
@@ -142,8 +143,17 @@ describe('defineBoard phase fields', () => {
       lowEffort: { name: 'Low effort', kind: 'working', autoStart: true, autoStartWhen: LOW_EFFORT },
       manual: { name: 'Manual', kind: 'working' },
     });
-    const lowEffort = cardRuleFacts({ title: 'Fix', metadata: { labels: ['effort:low'] }, externalSource: null });
-    const highEffort = cardRuleFacts({ title: 'Fix', metadata: { labels: ['effort:high'] }, externalSource: null });
+    const facts = (label: string) =>
+      cardRuleFacts({
+        title: 'Fix',
+        externalSource: null,
+        workItem: {
+          ...createProviderWorkItemForTests({ id: 'item-1', title: 'Fix', source: null, metadata: null }),
+          labels: [label],
+        },
+      });
+    const lowEffort = facts('effort:low');
+    const highEffort = facts('effort:high');
 
     expect(board.startsAutomatically('always')).toBe(true);
     expect(board.startsAutomatically('lowEffort', lowEffort)).toBe(true);

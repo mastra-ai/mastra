@@ -296,7 +296,7 @@ export async function prepareFactoryRuleBinding(
         ? sourceControlProvider.sourceControlStorage
         : sourceControlProvider;
     const source = workItemBranchSource(input.item.externalSource);
-    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.metadata });
+    const branch = workItemBranch({ id: input.item.id, source, metadata: input.item.workItem.metadata });
     // Only leaving a resting phase derives a lane from the role: roles don't own lanes,
     // and the Done close-out running in the triage seat must not drag the card back.
     // Both the current phase and the role's lane come from the installed board; an
@@ -418,7 +418,7 @@ export async function prepareFactoryRuleBinding(
       sessionId: preparedSession.sessionId,
       modelScope,
       defaultModelId: modelScope === 'factory' ? (project.defaultModelId ?? undefined) : undefined,
-      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.metadata }),
+      threadTitle: workItemThreadTitle({ source, title: input.item.title, metadata: input.item.workItem.metadata }),
       kickoffKey: input.record.id,
       destinationStage,
       workItem: {
