@@ -87,68 +87,7 @@
     "databricks-kimi-k2-7-code"
   ],
   "reasoning": {
-    "databricks-gemini-3-5-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "databricks-gpt-5-nano": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "databricks-gpt-5-mini": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "databricks-claude-opus-4-6": [
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "databricks-gpt-5-4-nano": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "databricks-gemini-3-1-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "databricks-gemini-3-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "databricks-gemini-2-5-flash": [
-      {
-        "type": "budget_tokens",
-        "min": 0,
-        "max": 24576
-      }
-    ],
-    "databricks-claude-opus-4-7": [
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "databricks-glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "databricks-gemini-3-1-pro": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
@@ -160,16 +99,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "databricks-gpt-5-4-mini": [
+    "databricks-gemini-3-5-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "databricks-claude-sonnet-4-6": [
+    "databricks-glm-5-2": [
       {
-        "type": "budget_tokens",
-        "min": 1024
+        "type": "effort",
+        "values": ["none", "high", "max"]
       }
     ],
     "databricks-gpt-oss-20b": [
@@ -178,16 +117,28 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "databricks-gpt-5-4": [
+    "databricks-gpt-5-6-sol": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium", "high", "max"]
       }
     ],
-    "databricks-gpt-5-6-terra": [
+    "databricks-claude-opus-4-5": [
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "databricks-gemini-3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "databricks-claude-sonnet-4-6": [
+      {
+        "type": "budget_tokens",
+        "min": 1024
       }
     ],
     "databricks-gpt-oss-120b": [
@@ -196,10 +147,66 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "databricks-gpt-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "databricks-gpt-5-mini": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "databricks-gpt-5-4": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "databricks-gpt-5-nano": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "databricks-gemini-2-5-pro": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
     "databricks-claude-opus-4-1": [
       {
         "type": "budget_tokens",
         "min": 1024
+      }
+    ],
+    "databricks-gpt-5-4-nano": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "databricks-gemini-2-5-flash": [
+      {
+        "type": "budget_tokens",
+        "min": 0,
+        "max": 24576
+      }
+    ],
+    "databricks-gpt-5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "databricks-gpt-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "databricks-gemini-3-pro": [
@@ -208,7 +215,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "databricks-claude-opus-4-5": [
+    "databricks-claude-opus-4-7": [
       {
         "type": "budget_tokens",
         "min": 1024
@@ -220,35 +227,16 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "databricks-claude-sonnet-4": [
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "databricks-gpt-5": [
+    "databricks-gemini-3-1-pro": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "databricks-gpt-5-6-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "databricks-gemini-2-5-pro": [
+    "databricks-claude-opus-4-6": [
       {
         "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "databricks-gpt-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "min": 1024
       }
     ],
     "databricks-claude-sonnet-4-5": [
@@ -257,7 +245,19 @@
         "min": 1024
       }
     ],
-    "databricks-gpt-5-5": [
+    "databricks-claude-sonnet-4": [
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "databricks-gpt-5-6-terra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "databricks-gpt-5-4-mini": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
