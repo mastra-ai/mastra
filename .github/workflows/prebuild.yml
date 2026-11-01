@@ -149,12 +149,25 @@ jobs:
       - name: Install affected-test dependencies
         run: pnpm install --frozen-lockfile --ignore-scripts --filter mastra-turbo
 
+      # What detection extracts from each file is cached by content hash
+      # (scripts/affected-tests-cache.mjs); resolution still runs live, so a
+      # stale or missing cache only costs time. Seeded on every push to main by
+      # affected-graph-seed.yml. PRs only restore it, so per-PR runs don't fill
+      # the repo's cache quota.
+      - name: Restore affected-test extraction cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
+        with:
+          path: ${{ runner.temp }}/affected-graph.json
+          key: affected-graph-v1-${{ runner.os }}-${{ github.sha }}
+          restore-keys: affected-graph-v1-${{ runner.os }}-
+
       - name: Compute affected test files
         id: compute
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ needs.changes.outputs.head_sha }}
           FULL_SUITE: ${{ needs.changes.outputs.full_suite }}
+          AFFECTED_TESTS_CACHE: ${{ runner.temp }}/affected-graph.json
         run: |
           # The full suite ignores the diff, and a workflow_call has no PR base to diff against.
           if [ "$FULL_SUITE" = "true" ]; then
