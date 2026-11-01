@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { SERVER_ROUTES } from '../server-adapter/routes';
+import { ALL_SERVER_ROUTES } from '../server-adapter/routes';
+
+// Covers the opt-in routes too: they are served when an app registers them, so their
+// OpenAPI metadata and schemas have to hold the same contracts as the mounted ones.
+const ROUTES_UNDER_TEST = ALL_SERVER_ROUTES;
 
 /**
  * Extract path parameters from a path pattern
@@ -14,7 +18,7 @@ export function extractPathParams(path: string): string[] {
 describe('Schema Consistency Across All Routes', () => {
   describe('OpenAPI Specification', () => {
     it('all routes should have OpenAPI specs except ALL method routes', () => {
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         if (route.method !== 'ALL') {
           expect(route.openapi).toBeDefined();
           expect(route.openapi?.summary).toBeDefined();
@@ -26,7 +30,7 @@ describe('Schema Consistency Across All Routes', () => {
     });
 
     it('all routes should have tags for grouping', () => {
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         if (route.openapi) {
           expect(route.openapi.tags).toBeDefined();
           expect(Array.isArray(route.openapi.tags)).toBe(true);
@@ -38,7 +42,7 @@ describe('Schema Consistency Across All Routes', () => {
 
   describe('Path Parameter Schemas', () => {
     it('all routes with path params should have pathParamSchema', () => {
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         // Skip deprecated routes - they are placeholders for route parity
         if (route.deprecated) return;
 
@@ -50,7 +54,7 @@ describe('Schema Consistency Across All Routes', () => {
     });
 
     it('routes without path params should not have pathParamSchema', () => {
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         const pathParams = extractPathParams(route.path);
         if (pathParams.length === 0) {
           expect(route.pathParamSchema).toBeUndefined();
@@ -59,7 +63,7 @@ describe('Schema Consistency Across All Routes', () => {
     });
 
     it('pathParamSchema should validate with appropriate test data', () => {
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         if (route.pathParamSchema) {
           const pathParams = extractPathParams(route.path);
           const testData: Record<string, string> = {};
@@ -83,7 +87,7 @@ describe('Schema Consistency Across All Routes', () => {
 
   describe('Request Body Schemas', () => {
     it('most POST/PUT/PATCH routes should have bodySchema', () => {
-      const routesWithBody = SERVER_ROUTES.filter(
+      const routesWithBody = ROUTES_UNDER_TEST.filter(
         route => ['POST', 'PUT', 'PATCH'].includes(route.method) && route.responseType === 'json',
       );
 
@@ -95,7 +99,7 @@ describe('Schema Consistency Across All Routes', () => {
     });
 
     it('GET and DELETE routes typically should not have body schemas', () => {
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         if (['GET', 'DELETE'].includes(route.method)) {
           // Some DELETE routes may have body schemas for batch operations
           // So we don't enforce this strictly
@@ -106,7 +110,7 @@ describe('Schema Consistency Across All Routes', () => {
 
   describe('Response Schemas', () => {
     it('all JSON routes must have response schemas', () => {
-      const jsonRoutes = SERVER_ROUTES.filter(route => route.responseType === 'json');
+      const jsonRoutes = ROUTES_UNDER_TEST.filter(route => route.responseType === 'json');
       // Skip deprecated routes - they are placeholders for route parity
       const jsonRoutesWithoutResponse = jsonRoutes.filter(route => !route.responseSchema && !route.deprecated);
 
@@ -120,27 +124,27 @@ describe('Schema Consistency Across All Routes', () => {
   describe('Route Configuration', () => {
     it('all routes should have valid HTTP methods', () => {
       const validMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'ALL'];
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         expect(validMethods).toContain(route.method);
       });
     });
 
     it('all routes should have valid response types', () => {
       const validResponseTypes = ['json', 'stream', 'datastream-response', 'mcp-http', 'mcp-sse'];
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         expect(validResponseTypes).toContain(route.responseType);
       });
     });
 
     it('all routes should have handlers', () => {
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         expect(route.handler).toBeDefined();
         expect(typeof route.handler).toBe('function');
       });
     });
 
     it('all routes should have non-empty paths', () => {
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         expect(route.path).toBeDefined();
         expect(route.path.length).toBeGreaterThan(0);
         expect(route.path).toMatch(/^\//); // Should start with /
@@ -150,7 +154,7 @@ describe('Schema Consistency Across All Routes', () => {
 
   describe('Route Uniqueness', () => {
     it('should not have duplicate method+path combinations', () => {
-      const pathMethods = SERVER_ROUTES.map(r => `${r.method}:${r.path}`);
+      const pathMethods = ROUTES_UNDER_TEST.map(r => `${r.method}:${r.path}`);
       const uniquePathMethods = new Set(pathMethods);
       expect(pathMethods.length).toBe(uniquePathMethods.size);
     });
@@ -158,7 +162,7 @@ describe('Schema Consistency Across All Routes', () => {
     it('should have unique route paths within same method', () => {
       const methods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'];
       methods.forEach(method => {
-        const routesForMethod = SERVER_ROUTES.filter(r => r.method === method);
+        const routesForMethod = ROUTES_UNDER_TEST.filter(r => r.method === method);
         const paths = routesForMethod.map(r => r.path);
         const uniquePaths = new Set(paths);
         expect(paths.length).toBe(uniquePaths.size);
@@ -168,12 +172,12 @@ describe('Schema Consistency Across All Routes', () => {
 
   describe('Route Statistics', () => {
     it('should report total number of routes', () => {
-      expect(SERVER_ROUTES.length).toBeGreaterThan(0);
+      expect(ROUTES_UNDER_TEST.length).toBeGreaterThan(0);
     });
 
     it('should report routes by method', () => {
       const methodCounts: Record<string, number> = {};
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         methodCounts[route.method] = (methodCounts[route.method] || 0) + 1;
       });
       expect(Object.keys(methodCounts).length).toBeGreaterThan(0);
@@ -181,7 +185,7 @@ describe('Schema Consistency Across All Routes', () => {
 
     it('should report routes by response type', () => {
       const typeCounts: Record<string, number> = {};
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         typeCounts[route.responseType] = (typeCounts[route.responseType] || 0) + 1;
       });
       expect(typeCounts.json).toBeGreaterThan(0);
@@ -189,7 +193,7 @@ describe('Schema Consistency Across All Routes', () => {
 
     it('should report routes by tag', () => {
       const tagCounts: Record<string, number> = {};
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         if (route.openapi?.tags) {
           route.openapi.tags.forEach((tag: string) => {
             tagCounts[tag] = (tagCounts[tag] || 0) + 1;
@@ -201,11 +205,11 @@ describe('Schema Consistency Across All Routes', () => {
 
     it('should report schema coverage', () => {
       const stats = {
-        withPathParams: SERVER_ROUTES.filter(r => r.pathParamSchema).length,
-        withQueryParams: SERVER_ROUTES.filter(r => r.queryParamSchema).length,
-        withBody: SERVER_ROUTES.filter(r => r.bodySchema).length,
-        withResponse: SERVER_ROUTES.filter(r => r.responseSchema).length,
-        withOpenAPI: SERVER_ROUTES.filter(r => r.openapi).length,
+        withPathParams: ROUTES_UNDER_TEST.filter(r => r.pathParamSchema).length,
+        withQueryParams: ROUTES_UNDER_TEST.filter(r => r.queryParamSchema).length,
+        withBody: ROUTES_UNDER_TEST.filter(r => r.bodySchema).length,
+        withResponse: ROUTES_UNDER_TEST.filter(r => r.responseSchema).length,
+        withOpenAPI: ROUTES_UNDER_TEST.filter(r => r.openapi).length,
       };
       expect(stats.withOpenAPI).toBeGreaterThan(0);
     });
@@ -213,7 +217,7 @@ describe('Schema Consistency Across All Routes', () => {
 
   describe('Common Patterns', () => {
     it('paginated endpoints should use consistent query params', () => {
-      const paginatedRoutes = SERVER_ROUTES.filter(route => {
+      const paginatedRoutes = ROUTES_UNDER_TEST.filter(route => {
         return route.queryParamSchema && route.path.includes('/');
       });
 
@@ -233,7 +237,7 @@ describe('Schema Consistency Across All Routes', () => {
 
     it('ID path parameters should follow naming conventions', () => {
       const idParams = new Set<string>();
-      SERVER_ROUTES.forEach(route => {
+      ROUTES_UNDER_TEST.forEach(route => {
         const params = extractPathParams(route.path);
         params.forEach(param => {
           if (param.toLowerCase().includes('id')) {

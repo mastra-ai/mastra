@@ -1,84 +1,62 @@
-import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
-import { afterAll, describe, expect, it, vi } from 'vitest';
+import { createKnowledgeLegacyUpgradeTests, createKnowledgePageStoreTests } from '@internal/storage-test-utils';
+import { MongoClient } from 'mongodb';
+import { afterAll, vi } from 'vitest';
 
-import { resolveMongoDBConfig } from '../../db';
 import { KnowledgeMongoDB } from '.';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-const connector = resolveMongoDBConfig({
-  uri: process.env.MONGODB_URL || 'mongodb://localhost:27017',
-  dbName: process.env.MONGODB_DB_NAME || 'mastra-test-db',
-});
+const uri =
+  process.env.MONGODB_URL ||
+  process.env.MONGODB_RS_URL ||
+  'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
 
-const createStore = () => new KnowledgeMongoDB({ connector });
-createKnowledgeStorageTests(createStore);
+createKnowledgePageStoreTests(() => new KnowledgeMongoDB({ uri, dbName: 'knowledge_contract_test' }));
 
-describe('MongoDB knowledge legacy documents', () => {
-  it('reads documents written without the description field as undefined', async () => {
-    const store = createStore();
-    await store.init();
-    await store.dangerouslyClearAll();
-    const nodes = await connector.getCollection('mastra_knowledge_nodes');
-    const legacyId = `legacy-${Date.now()}`;
-    const now = new Date();
-    await nodes.insertOne({
-      id: legacyId,
-      type: 'node',
-      name: `Legacy ${legacyId}`,
-      canonicalName: `legacy ${legacyId}`,
-      kind: 'task',
-      content: 'legacy body',
-      scope: ['org:legacy-upgrade'],
-      scopeKey: 'org:legacy-upgrade',
-      version: 1,
-      mergedInto: null,
-      createdAt: now,
-      updatedAt: now,
-    });
+const LEGACY_DB = 'knowledge_legacy_test';
+const client = new MongoClient(uri);
+const db = client.db(LEGACY_DB);
+afterAll(() => client.close());
+const knowledgeCollections = async () =>
+  (await db.listCollections({}, { nameOnly: true }).toArray())
+    .map(collection => collection.name)
+    .filter(name => name.startsWith('mastra_knowledge_'));
 
-    const legacy = await store.getNode(legacyId);
-    expect(legacy?.description).toBeUndefined();
-    expect(legacy?.content).toBe('legacy body');
-  });
-});
-
-describe('MongoDB knowledge concurrency and indexes', () => {
-  it('creates required uniqueness and claim indexes idempotently', async () => {
-    const store = createStore();
-    await store.init();
-    await store.init();
-    const nodes = await connector.getCollection('mastra_knowledge_nodes');
-    const outbox = await connector.getCollection('mastra_knowledge_semantic_outbox');
-    expect(Object.keys(await nodes.indexInformation())).toContain('type_1_scopeKey_1_canonicalName_1');
-    expect(Object.keys(await outbox.indexInformation())).toContain('idempotencyKey_1');
-  });
-
-  it('rejects the deprecated curation cursor methods without touching storage', async () => {
-    const store = createStore();
-    await store.init();
-    await expect(store.getCurationCursor({ sourceThreadId: 'thread', agent: 'curate' })).rejects.toThrow(
-      'Knowledge curation cursors were removed',
-    );
-    await expect(
-      store.advanceCurationCursor({ sourceThreadId: 'thread', agent: 'curate', lastKnowledgeId: '01A' }),
-    ).rejects.toThrow('Knowledge curation cursors were removed');
-  });
-
-  it('allows only one concurrent CAS update', async () => {
-    const store = createStore();
-    await store.init();
-    await store.dangerouslyClearAll();
-    const node = await store.createNode({ name: 'CAS', kind: 'test', scope: ['org:acme'] });
-    const results = await Promise.allSettled([
-      store.updateNode({ id: node.id, version: 1, name: 'CAS one' }),
-      store.updateNode({ id: node.id, version: 1, name: 'CAS two' }),
-    ]);
-    expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter(result => result.status === 'rejected')).toHaveLength(1);
-  });
-});
-
-afterAll(async () => {
-  await connector.close();
+createKnowledgeLegacyUpgradeTests({
+  createStore: () => new KnowledgeMongoDB({ uri, dbName: LEGACY_DB }),
+  clear: async () => {
+    await db.dropDatabase();
+    await db.collection('existing_domain').insertOne({ id: 'preserved' });
+  },
+  // The collections @mastra/mongodb 1.24.1 created; documents only where rows are asked for.
+  createPublishedLayout: async ({ rows }) => {
+    for (const name of [
+      'mastra_knowledge_nodes',
+      'mastra_knowledge_records',
+      'mastra_knowledge_semantic_outbox',
+      'mastra_knowledge_mentions',
+      'mastra_knowledge_activity',
+      'mastra_knowledge_access_state',
+    ]) {
+      await db.createCollection(name);
+    }
+    await db
+      .collection('mastra_knowledge_nodes')
+      .createIndex({ type: 1, scopeKey: 1, canonicalName: 1 }, { unique: true });
+    if (!rows) return;
+    await db.collection('mastra_knowledge_access_state').insertOne({ id: 'knowledge', epoch: 1, schemaVersion: 2 });
+    await db.collection('mastra_knowledge_nodes').insertOne({ id: '01LEGACY', name: 'Legacy' });
+    await db.collection('mastra_knowledge_records').insertOne({ id: '01REC', node: '01LEGACY' });
+    await db
+      .collection('mastra_knowledge_mentions')
+      .insertOne({ sourceType: 'record', sourceId: '01REC', recordId: '01REC' });
+    await db.collection('mastra_knowledge_activity').insertOne({ id: '01ACT', action: 'create', recordType: 'node' });
+  },
+  recreateLegacyTables: async () => {
+    await db.collection('mastra_knowledge_records').createIndex({ node: 1 });
+    await db.collection('mastra_knowledge_semantic_outbox').createIndex({ id: 1 });
+    await db.collection('mastra_knowledge_nodes').insertOne({ id: '01OLD', name: 'Old' });
+  },
+  knowledgeTables: knowledgeCollections,
+  otherTableRows: () => db.collection('existing_domain').countDocuments(),
 });

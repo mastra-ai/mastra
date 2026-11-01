@@ -108,20 +108,16 @@ export const queryKeys = {
     [...queryKeys.workItemCommentsRoot(workItemId), 'list', aroundCommentId ?? null] as const,
   factoryMembers: (factoryProjectId: string | undefined) =>
     ['factory', 'mention-roster', factoryProjectId ?? null] as const,
-  knowledgeScopes: (factoryProjectId: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-scopes', factoryProjectId ?? null, threadId ?? null] as const,
-  knowledgeSearch: (factoryProjectId: string | undefined, query: string, threadId?: string) =>
-    ['factory', 'knowledge-search', factoryProjectId ?? null, query, threadId ?? null] as const,
-  knowledgeGraph: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-subgraph', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
-  knowledgeActivity: (factoryProjectId: string | undefined, scopeLevel: string | undefined, threadId?: string) =>
-    ['factory', 'knowledge-activity', factoryProjectId ?? null, scopeLevel ?? null, threadId ?? null] as const,
-  knowledgeNode: (
-    factoryProjectId: string | undefined,
-    nodeId: string | undefined,
-    scopeLevel: string | undefined,
-    threadId?: string,
-  ) => ['factory', 'knowledge-node', factoryProjectId ?? null, nodeId ?? null, scopeLevel, threadId ?? null] as const,
+  knowledgeGraph: (factoryProjectId: string | undefined) =>
+    ['factory', 'knowledge-graph', factoryProjectId ?? null] as const,
+  knowledgePage: (factoryProjectId: string | undefined, pageId: string | null, noteCursor?: string) =>
+    ['factory', 'knowledge-page', factoryProjectId ?? null, pageId, noteCursor ?? null] as const,
+  knowledgeTreeLevel: (factoryProjectId: string | undefined, parentId: string | null, cursor?: string) =>
+    ['factory', 'knowledge-tree', factoryProjectId ?? null, parentId, cursor ?? null] as const,
+  knowledgeActivity: (factoryProjectId: string | undefined, pageId: string) =>
+    ['factory', 'knowledge-activity', factoryProjectId ?? null, pageId] as const,
+  knowledgeSearch: (factoryProjectId: string | undefined, query: string) =>
+    ['factory', 'knowledge-search', factoryProjectId ?? null, query] as const,
   /** Every decision list for a project, whatever status filter it was fetched with. */
   factoryDecisionsRoot: (githubProjectId: string | undefined) =>
     ['factory', 'decisions', githubProjectId ?? null] as const,
@@ -138,7 +134,7 @@ export const queryKeys = {
   defaultModel: () => ['default-model'] as const,
   om: (sessionId: string | undefined, factoryId?: string, threadId?: string, resourceId?: string) =>
     ['om', sessionId ?? null, factoryId ?? null, threadId ?? null, resourceId ?? null] as const,
-  factorySkills: () => ['factory', 'skills'] as const,
+  factorySkills: (factoryProjectId?: string) => ['factory', 'skills', factoryProjectId ?? null] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>

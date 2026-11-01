@@ -1,5 +1,6 @@
 import { expectTypeOf } from 'vitest';
 
+import type { TripWireOptions } from '../../agent/trip-wire';
 import { Classifier } from '../../classifier';
 import type { BooleanAnswer, ChoiceAnswer, RefusalAnswer, ScoreAnswer } from '../../classifier';
 import { ClassifierProcessor } from './classifier';
@@ -27,9 +28,20 @@ new ClassifierProcessor({
       expectTypeOf(result.answers.route.choice).toEqualTypeOf<'support' | 'sales'>();
     }
     expectTypeOf(phase).toEqualTypeOf<'input' | 'output' | 'stream'>();
-    expectTypeOf(abort).toEqualTypeOf<(reason?: string) => never>();
+    expectTypeOf(abort).toEqualTypeOf<(reason?: string, options?: Pick<TripWireOptions, 'metadata'>) => never>();
     expectTypeOf(filter).toEqualTypeOf<() => void>();
     if (answers.unsafe.type === 'refusal' || answers.unsafe.probability > 0.8) abort('blocked');
+  },
+});
+
+// onDecision: answers are inferred from the classifier's questions once `result` is narrowed.
+new ClassifierProcessor({
+  classifier: configured,
+  onResult: () => {},
+  onDecision: decision => {
+    if (decision.result) {
+      expectTypeOf(decision.result.answers.unsafe).toEqualTypeOf<BooleanAnswer | RefusalAnswer>();
+    }
   },
 });
 

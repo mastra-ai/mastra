@@ -1,4 +1,4 @@
-export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
+export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
 export interface ApiResponseShape {
   kind: 'array' | 'record' | 'object-property' | 'single' | 'unknown';

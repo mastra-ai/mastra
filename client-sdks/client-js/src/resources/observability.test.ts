@@ -759,10 +759,35 @@ describe('Observability Methods', () => {
       expect(global.fetch).toHaveBeenCalledTimes(2);
     });
 
-    it('rejects model and provider as span groupBy dimensions at the type level', () => {
-      // @ts-expect-error model/provider are not span aggregate dimensions in v1 (OBS-693)
-      const invalid: AggregateSpansArgs = { ...request, groupBy: ['model'] };
-      expect(invalid.groupBy).toEqual(['model']);
+    it('should post model and provider span groupBy dimensions unchanged', async () => {
+      const modelRequest: AggregateSpansArgs = {
+        timeRange: request.timeRange,
+        where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+        groupBy: ['provider', 'model'],
+        measures: ['count', 'tokens.total.sum', 'countDistinct.model'],
+      };
+      const modelResponse: AggregateSpansResponse = {
+        rows: [
+          {
+            dimensions: { provider: 'openai', model: 'gpt-5.6' },
+            measures: { count: 3, 'tokens.total.sum': 1200, 'countDistinct.model': 1 },
+          },
+          {
+            dimensions: { provider: null, model: null },
+            measures: { count: 2, 'tokens.total.sum': 400, 'countDistinct.model': 0 },
+          },
+        ],
+        truncated: false,
+      };
+      mockSuccessfulResponse(modelResponse);
+
+      const result = await client.aggregateSpans(modelRequest);
+
+      expect(result).toEqual(modelResponse);
+      expect(global.fetch).toHaveBeenCalledWith(
+        `${clientOptions.baseUrl}/api/observability/spans/aggregate`,
+        expect.objectContaining({ method: 'POST', body: JSON.stringify(modelRequest) }),
+      );
     });
   });
 

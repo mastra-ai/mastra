@@ -1084,9 +1084,10 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'voice',
-    type: 'CompositeVoice',
+    type: 'IMastraVoice | ({ requestContext: RequestContext }) => IMastraVoice | Promise<IMastraVoice>',
     isOptional: true,
-    description: 'Voice settings for speech input and output.',
+    description:
+      'Voice provider for speech input and output, such as `OpenAIVoice` or `CompositeVoice`. Pass a function to create one per request.',
   },
   {
     name: 'inputProcessors',

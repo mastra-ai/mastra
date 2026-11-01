@@ -26,9 +26,20 @@ export interface ChatCommandsApi {
 
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
-/** `draftScope` names the chat whose unsent text is remembered; without it the composer starts empty. */
-export function ChatCommandsProvider({ children, draftScope }: { children: ReactNode; draftScope?: string }) {
-  const [composerDraft, setDraft] = useState(() => (draftScope ? readComposerText(draftScope) : ''));
+/**
+ * `draftScope` names the chat whose unsent text is remembered; without it the composer starts empty.
+ * `initialDraft` (a prompt handed back after a failed start) wins over the remembered text.
+ */
+export function ChatCommandsProvider({
+  children,
+  draftScope,
+  initialDraft,
+}: {
+  children: ReactNode;
+  draftScope?: string;
+  initialDraft?: string;
+}) {
+  const [composerDraft, setDraft] = useState(() => initialDraft ?? (draftScope ? readComposerText(draftScope) : ''));
   const setComposerDraft = (draft: string) => {
     setDraft(draft);
     if (draftScope) saveComposerText(draftScope, draft);

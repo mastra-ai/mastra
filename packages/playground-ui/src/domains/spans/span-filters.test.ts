@@ -6,6 +6,7 @@ import {
   buildSpanQueryWhere,
   createSpanFilterBarFields,
   SPAN_CONTEXT_FILTER_FIELD_IDS,
+  SPAN_MODEL_FILTER_FIELD_IDS,
   SPAN_OUTCOME_FILTER_FIELD_IDS,
   SPAN_CORE_FILTER_FIELD_IDS,
 } from './span-filters';
@@ -45,6 +46,7 @@ describe('span filter fields', () => {
         ...SPAN_CORE_FILTER_FIELD_IDS,
         ...SPAN_CONTEXT_FILTER_FIELD_IDS,
         ...SPAN_OUTCOME_FILTER_FIELD_IDS,
+        ...SPAN_MODEL_FILTER_FIELD_IDS,
       ]) {
         expect(registryPaths).toContain(id);
       }
@@ -97,6 +99,35 @@ describe('span filter fields', () => {
     it('adds Outcome and Stop reason to the core fields', () => {
       expect(fields.map(field => field.id)).toEqual(expect.arrayContaining(['outcome', 'stopReason']));
       expect(fields.find(field => field.id === 'outcome')?.operatorLabels).toEqual({ notExists: 'is not recorded' });
+    });
+  });
+
+  describe('when the store accepts model fields', () => {
+    const fields = createSpanFilterBarFields({
+      withContextFields: false,
+      withModelFields: true,
+      entityNames: [],
+      environments: [],
+      valueSuggestions: () => async () => [],
+    });
+
+    it('adds Model and Provider with discovered value suggestions', () => {
+      for (const [id, label] of [
+        ['model', 'Model'],
+        ['provider', 'Provider'],
+      ]) {
+        const field = fields.find(candidate => candidate.id === id);
+        expect(field).toMatchObject({ label });
+        expect(field?.operators).toContain('notExists');
+        expect(typeof field?.suggestions).toBe('function');
+      }
+    });
+  });
+
+  describe('when the store does not accept model fields', () => {
+    it('offers neither Model nor Provider', () => {
+      expect(fieldIds(true)).not.toContain('model');
+      expect(fieldIds(true)).not.toContain('provider');
     });
   });
 
@@ -183,6 +214,28 @@ describe('buildSpanQueryWhere — outcome fields', () => {
   describe('when the store does not accept outcome fields', () => {
     it('drops them', () => {
       expect(buildSpanQueryWhere(outcomeTokens, [], coreOnly)).toBeUndefined();
+    });
+  });
+});
+
+describe('buildSpanQueryWhere — model fields', () => {
+  const modelTokens: TraceFilterToken[] = [
+    { fieldId: 'model', value: 'gpt-5.6' },
+    { fieldId: 'provider', value: 'openai' },
+  ];
+
+  describe('when the store accepts model fields', () => {
+    it('filters on the model and provider', () => {
+      expect(buildSpanQueryWhere(modelTokens, [], { ...coreOnly, withModelFields: true })).toEqual({
+        op: 'and',
+        args: [eq('model', 'gpt-5.6'), eq('provider', 'openai')],
+      });
+    });
+  });
+
+  describe('when the store does not accept model fields', () => {
+    it('drops them', () => {
+      expect(buildSpanQueryWhere(modelTokens, [], withContext)).toBeUndefined();
     });
   });
 });

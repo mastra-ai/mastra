@@ -1,0 +1,5 @@
+---
+'@mastra/core': patch
+---
+
+Added read-only page-store readers to `@mastra/core/knowledge` for browsing UIs: `listKnowledgeTreeChildren` (one level of the page tree, child scopes first), `readKnowledgePage` (a page with its readable ancestors, notes, pin, referenced pages and notes that mention it), `readKnowledgePageGraph` (a bounded page graph with parent and mention edges, limits in `DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS`; mentions come from every note on a walked page until a graph-wide `maxNotes` budget runs out, which sets `truncated`), `searchKnowledgeExplorerPages` and `readKnowledgePageActivity`. Each takes a read scope (`'all'` for an owner view) and passes it to every store call, so pages and notes outside it never appear, mention edges included. They never write. Added `readKnowledgeScopeGrants`, which lists the declared grants onto the scope pages in a graph (principal scope, its page id when it has one, target and role), keeping only principals the read scope can read, and `knowledge.scopeGrants(scope)`, which gives each principal the declared rules name on one scope with its strongest role.

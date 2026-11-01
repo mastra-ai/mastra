@@ -1,5 +1,125 @@
 # @mastra/connect
 
+## 1.3.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`8bea966`](https://github.com/mastra-ai/mastra/commit/8bea9662c5d89c248c7311fc6cca6523d552af5d), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`eddb060`](https://github.com/mastra-ai/mastra/commit/eddb0605db3f0be107e5ea392c7a407675303185), [`eddb060`](https://github.com/mastra-ai/mastra/commit/eddb0605db3f0be107e5ea392c7a407675303185), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d)]:
+  - @mastra/core@1.82.0-alpha.0
+  - @mastra/mcp@2.8.0-alpha.0
+
+## 1.3.0
+
+### Minor Changes
+
+- Added a Microsoft Excel toolset with 27 tools for drive discovery, workbook files, worksheets, ranges, tables, names, charts, and search. ([#26283](https://github.com/mastra-ai/mastra/pull/26283))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const excelAgent = new Agent({
+    id: 'excel-agent',
+    name: 'Excel agent',
+    instructions: 'Use the connected Microsoft Excel tools to manage workbooks.',
+    model: 'openai/gpt-5-mini',
+    tools: tools({ providers: ['microsoft-excel'] }),
+  });
+  ```
+
+- Added a Microsoft Word toolset with 18 tools for drive discovery, document creation, copying, updating, deletion, moving, sharing, and export. ([#26282](https://github.com/mastra-ai/mastra/pull/26282))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const wordAgent = new Agent({
+    id: 'word-agent',
+    name: 'Word agent',
+    instructions: 'Use the connected Microsoft Word tools to manage documents.',
+    model: 'openai/gpt-5-mini',
+    tools: tools({ providers: ['microsoft-word'] }),
+  });
+  ```
+
+- Added a Microsoft Outlook toolset with 30 tools for messages, replies, drafts, attachments, mail folders, calendars, and events. ([#26281](https://github.com/mastra-ai/mastra/pull/26281))
+
+  ```ts
+  import { tools } from '@mastra/connect';
+
+  const outlookTools = await tools({ providers: ['outlook'] })();
+  const inbox = await outlookTools.outlook_list_messages.execute({ folderId: 'inbox', limit: 10 });
+  ```
+
+- Added a SharePoint Online toolset with 53 tools for sites, lists, list items, columns, content types, pages, permissions, drives, and drive items with binary content download. ([#26284](https://github.com/mastra-ai/mastra/pull/26284))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const sharepointAgent = new Agent({
+    id: 'sharepoint-agent',
+    name: 'SharePoint agent',
+    instructions: 'Use the connected SharePoint Online tools to manage sites and lists.',
+    model: 'openai/gpt-5-mini',
+    tools: tools({ providers: ['sharepoint-online'] }),
+  });
+  ```
+
+### Patch Changes
+
+- Fixed provider generation so aliased integration templates can be discovered and added with `add-provider`. ([#26282](https://github.com/mastra-ai/mastra/pull/26282))
+
+- Fixed delegated Microsoft Word, Excel, and PowerPoint drive discovery so `get-user-drive` defaults to the connected user's OneDrive, while regenerated tools retain supported request and UUID behavior. ([#26282](https://github.com/mastra-ai/mastra/pull/26282))
+
+- Fixed two problems in provider tool requests. Next-page links that already carry a query string are now merged with the tool's own parameters instead of getting a second `?` appended, which had broken page 2 of some paginated lists. Provider errors that send an empty message but a nested error code (for example Microsoft Graph's `UnknownError`) now include that code in the error message instead of only the HTTP status. See [#26283](https://github.com/mastra-ai/mastra/pull/26283). ([#26283](https://github.com/mastra-ai/mastra/pull/26283))
+
+- Updated dependencies [[`1b8b0ac`](https://github.com/mastra-ai/mastra/commit/1b8b0ac10e134e33b292f350f519c1d200288525), [`278ecce`](https://github.com/mastra-ai/mastra/commit/278ecceb2d4f0200fb9b8a8d6e9f6cfcd39ac3ff), [`1477aad`](https://github.com/mastra-ai/mastra/commit/1477aaddf9f0086aebf7c113cb6435353416aad3), [`9f03685`](https://github.com/mastra-ai/mastra/commit/9f0368570677b9c36285e4512d0fc3f136594f74), [`fcfb773`](https://github.com/mastra-ai/mastra/commit/fcfb773428c7ded1188414ba9faa01df3fa8ccc3), [`4c56da4`](https://github.com/mastra-ai/mastra/commit/4c56da456f13d104adfb5bb69ed0937a8c1ba59a), [`dfc1bc6`](https://github.com/mastra-ai/mastra/commit/dfc1bc68646d4948e28aef9faa2a3d3ccfa96de5), [`7b3f759`](https://github.com/mastra-ai/mastra/commit/7b3f759e080364820f785ed6c6b422db1a4a6366), [`cf4c4b6`](https://github.com/mastra-ai/mastra/commit/cf4c4b6e8b66b13696c9217f62aa42f38a9b873c), [`e57fc08`](https://github.com/mastra-ai/mastra/commit/e57fc08fd839a1683115a247fefb4bb40ff0e451), [`780ef82`](https://github.com/mastra-ai/mastra/commit/780ef82390d0d403af68810f19cdd4357c02265c), [`1497362`](https://github.com/mastra-ai/mastra/commit/14973622f25aea84ff2fa7186214ca1262f9f6b3), [`52265cb`](https://github.com/mastra-ai/mastra/commit/52265cba91aecebdcc45b2d95ef7b18b6d738d8b), [`280fb9d`](https://github.com/mastra-ai/mastra/commit/280fb9d75e09a408783230e45dc287ba389952d5), [`253aa55`](https://github.com/mastra-ai/mastra/commit/253aa55d8ef301a2ebae6ae83352d0f89c57d0bd), [`3ee0f7b`](https://github.com/mastra-ai/mastra/commit/3ee0f7bddde204dc87e0e2351a750d54428ef70c), [`f548c12`](https://github.com/mastra-ai/mastra/commit/f548c12cfbb69526a785ca69bd88bb0553a9f047), [`3d8cc6a`](https://github.com/mastra-ai/mastra/commit/3d8cc6a05bb2eec5f445a17758e829cc46758109), [`7691115`](https://github.com/mastra-ai/mastra/commit/7691115f9dbe3dae8909af435db8799c1efcae3d), [`b79e61a`](https://github.com/mastra-ai/mastra/commit/b79e61a92d0982ba2daa25629576656d211753f8), [`9e36f35`](https://github.com/mastra-ai/mastra/commit/9e36f359105f3563710fcb1ed3c0bd7ca6cc8d17), [`292dd6c`](https://github.com/mastra-ai/mastra/commit/292dd6cd973f5821f943eb01ad081eefcb1285af), [`e80dd64`](https://github.com/mastra-ai/mastra/commit/e80dd64c83b89fb4c320ce5584ad047a73ea6044), [`5ea837f`](https://github.com/mastra-ai/mastra/commit/5ea837f6abfe095e9d9ec57059bd331ec91325aa), [`ba8b955`](https://github.com/mastra-ai/mastra/commit/ba8b955b1ad6022089feec253c111035e9e7b9b6), [`db7306f`](https://github.com/mastra-ai/mastra/commit/db7306fc1710942cc421e651121569ac8be804fe), [`c5527a3`](https://github.com/mastra-ai/mastra/commit/c5527a38db8e91e4f6a3f01d8ad3c5183cc96606), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`5480e7b`](https://github.com/mastra-ai/mastra/commit/5480e7b7caa5d8f8018d22f79e36a9a19697af4b), [`d4cd4cd`](https://github.com/mastra-ai/mastra/commit/d4cd4cde06300a2ceb79b9e1d32c053e33bbfe50), [`744aaab`](https://github.com/mastra-ai/mastra/commit/744aaab6ceebe03829e8851d6ac95dca671edd2b), [`5b7f85e`](https://github.com/mastra-ai/mastra/commit/5b7f85e1ab2cfe72dd5aa820e8a61d7c9ab64041), [`91428b2`](https://github.com/mastra-ai/mastra/commit/91428b2f43199db6901d9dc3fa0a17e50f482507), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`f145b78`](https://github.com/mastra-ai/mastra/commit/f145b788c18849b0ca562d09a61e399fe93d146d), [`fbd5957`](https://github.com/mastra-ai/mastra/commit/fbd5957959481ffc030faa3ab2e3df35e085bc2d), [`1048bd6`](https://github.com/mastra-ai/mastra/commit/1048bd6ece52b07307e5835b85f211edc1dc2990), [`e30d29b`](https://github.com/mastra-ai/mastra/commit/e30d29bb8f88d94a3d513cbdd7a4f567e7a97254), [`1607791`](https://github.com/mastra-ai/mastra/commit/1607791e919cd48dcdb0702dd33ffd7d30c30441), [`d6a6568`](https://github.com/mastra-ai/mastra/commit/d6a65687c4662d20236534ad1b263b40e771e02f), [`f3e1356`](https://github.com/mastra-ai/mastra/commit/f3e1356e60230badc2c3288b60cd2cf6a0587db5), [`1a2ff7f`](https://github.com/mastra-ai/mastra/commit/1a2ff7ff01230ad398e136d395f20d437ff37560), [`39edcee`](https://github.com/mastra-ai/mastra/commit/39edceea4f109db8cc02897e6e8ff5350aa9aec5), [`ea26a4b`](https://github.com/mastra-ai/mastra/commit/ea26a4b1cc7cdd25f47dc3b798627194755616ac), [`0443fd5`](https://github.com/mastra-ai/mastra/commit/0443fd5137071cc64b0d2730d57bfb9398527410), [`6a2b35f`](https://github.com/mastra-ai/mastra/commit/6a2b35fd4bc81071b0b6be755a9e3ec0b317db18), [`1966af4`](https://github.com/mastra-ai/mastra/commit/1966af4a622641b9172141a988aff5922f7221b0), [`49080fa`](https://github.com/mastra-ai/mastra/commit/49080fabe7a86b7fac94cdab2596b2d2b320e189), [`76f4110`](https://github.com/mastra-ai/mastra/commit/76f4110887dd6d28f1bb07c4360992ef53303a01), [`14290e1`](https://github.com/mastra-ai/mastra/commit/14290e18078712a02270ac45e50f49806624c4ce), [`b89557e`](https://github.com/mastra-ai/mastra/commit/b89557e0cc0db19922e391eff817505e36684ff9), [`69c79cf`](https://github.com/mastra-ai/mastra/commit/69c79cf07b6fc1ffe6f2f547729f1cb05bd54eca), [`422910c`](https://github.com/mastra-ai/mastra/commit/422910cb67758776ebe7403a3b0680f4ae5378e2), [`2b05803`](https://github.com/mastra-ai/mastra/commit/2b05803437af081cc4fdea2d81e3980b5f52d897), [`8b781d0`](https://github.com/mastra-ai/mastra/commit/8b781d0308eec018e84b59809cc24b2953300300), [`299d4e3`](https://github.com/mastra-ai/mastra/commit/299d4e3d2887b1525abff64bad61a67425ae6a0d), [`c0918c0`](https://github.com/mastra-ai/mastra/commit/c0918c01b337947eeb54d5d1b3ab9ed0719bb4b7), [`690bd1b`](https://github.com/mastra-ai/mastra/commit/690bd1baee178d56a75994549c318e0089debdee), [`930f604`](https://github.com/mastra-ai/mastra/commit/930f604c30de2eb7fc94437e4208d0a2ec8dee58), [`f5136e5`](https://github.com/mastra-ai/mastra/commit/f5136e56c468be0b9ee623983f174366edb7573e), [`81cf36f`](https://github.com/mastra-ai/mastra/commit/81cf36f60d69a090bcd34e1eb53bad2786f193fa), [`6deb7c0`](https://github.com/mastra-ai/mastra/commit/6deb7c0a1e613d19a979e255a906c07b11f7338d), [`e77a7d9`](https://github.com/mastra-ai/mastra/commit/e77a7d910b7943368b4df6688e7645fffb6a8891), [`d102756`](https://github.com/mastra-ai/mastra/commit/d102756c708797722d95ee73ab11ba614f2f9ec8), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`e9fc83e`](https://github.com/mastra-ai/mastra/commit/e9fc83e5d4427f49af147aec86eb3f7fcb6fb8ee), [`7d3dd2b`](https://github.com/mastra-ai/mastra/commit/7d3dd2b07b47d8cc5c52ccb97054e85ebed1619a), [`d9e26f4`](https://github.com/mastra-ai/mastra/commit/d9e26f485d2658a9dc84c0f20804e9a89a57d3a0)]:
+  - @mastra/core@1.81.0
+  - @mastra/mcp@2.7.0
+
+## 1.3.0-alpha.1
+
+### Minor Changes
+
+- Added a Microsoft Excel toolset with 27 tools for drive discovery, workbook files, worksheets, ranges, tables, names, charts, and search. ([#26283](https://github.com/mastra-ai/mastra/pull/26283))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const excelAgent = new Agent({
+    id: 'excel-agent',
+    name: 'Excel agent',
+    instructions: 'Use the connected Microsoft Excel tools to manage workbooks.',
+    model: 'openai/gpt-5-mini',
+    tools: tools({ providers: ['microsoft-excel'] }),
+  });
+  ```
+
+- Added a SharePoint Online toolset with 53 tools for sites, lists, list items, columns, content types, pages, permissions, drives, and drive items with binary content download. ([#26284](https://github.com/mastra-ai/mastra/pull/26284))
+
+  ```ts
+  import { Agent } from '@mastra/core/agent';
+  import { tools } from '@mastra/connect';
+
+  const sharepointAgent = new Agent({
+    id: 'sharepoint-agent',
+    name: 'SharePoint agent',
+    instructions: 'Use the connected SharePoint Online tools to manage sites and lists.',
+    model: 'openai/gpt-5-mini',
+    tools: tools({ providers: ['sharepoint-online'] }),
+  });
+  ```
+
+### Patch Changes
+
+- Fixed two problems in provider tool requests. Next-page links that already carry a query string are now merged with the tool's own parameters instead of getting a second `?` appended, which had broken page 2 of some paginated lists. Provider errors that send an empty message but a nested error code (for example Microsoft Graph's `UnknownError`) now include that code in the error message instead of only the HTTP status. See [#26283](https://github.com/mastra-ai/mastra/pull/26283). ([#26283](https://github.com/mastra-ai/mastra/pull/26283))
+
+- Updated dependencies [[`278ecce`](https://github.com/mastra-ai/mastra/commit/278ecceb2d4f0200fb9b8a8d6e9f6cfcd39ac3ff), [`fcfb773`](https://github.com/mastra-ai/mastra/commit/fcfb773428c7ded1188414ba9faa01df3fa8ccc3), [`4c56da4`](https://github.com/mastra-ai/mastra/commit/4c56da456f13d104adfb5bb69ed0937a8c1ba59a), [`7b3f759`](https://github.com/mastra-ai/mastra/commit/7b3f759e080364820f785ed6c6b422db1a4a6366), [`cf4c4b6`](https://github.com/mastra-ai/mastra/commit/cf4c4b6e8b66b13696c9217f62aa42f38a9b873c), [`e57fc08`](https://github.com/mastra-ai/mastra/commit/e57fc08fd839a1683115a247fefb4bb40ff0e451), [`52265cb`](https://github.com/mastra-ai/mastra/commit/52265cba91aecebdcc45b2d95ef7b18b6d738d8b), [`3ee0f7b`](https://github.com/mastra-ai/mastra/commit/3ee0f7bddde204dc87e0e2351a750d54428ef70c), [`f548c12`](https://github.com/mastra-ai/mastra/commit/f548c12cfbb69526a785ca69bd88bb0553a9f047), [`b79e61a`](https://github.com/mastra-ai/mastra/commit/b79e61a92d0982ba2daa25629576656d211753f8), [`292dd6c`](https://github.com/mastra-ai/mastra/commit/292dd6cd973f5821f943eb01ad081eefcb1285af), [`e80dd64`](https://github.com/mastra-ai/mastra/commit/e80dd64c83b89fb4c320ce5584ad047a73ea6044), [`ba8b955`](https://github.com/mastra-ai/mastra/commit/ba8b955b1ad6022089feec253c111035e9e7b9b6), [`db7306f`](https://github.com/mastra-ai/mastra/commit/db7306fc1710942cc421e651121569ac8be804fe), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`5480e7b`](https://github.com/mastra-ai/mastra/commit/5480e7b7caa5d8f8018d22f79e36a9a19697af4b), [`d4cd4cd`](https://github.com/mastra-ai/mastra/commit/d4cd4cde06300a2ceb79b9e1d32c053e33bbfe50), [`744aaab`](https://github.com/mastra-ai/mastra/commit/744aaab6ceebe03829e8851d6ac95dca671edd2b), [`91428b2`](https://github.com/mastra-ai/mastra/commit/91428b2f43199db6901d9dc3fa0a17e50f482507), [`fbd5957`](https://github.com/mastra-ai/mastra/commit/fbd5957959481ffc030faa3ab2e3df35e085bc2d), [`e30d29b`](https://github.com/mastra-ai/mastra/commit/e30d29bb8f88d94a3d513cbdd7a4f567e7a97254), [`39edcee`](https://github.com/mastra-ai/mastra/commit/39edceea4f109db8cc02897e6e8ff5350aa9aec5), [`ea26a4b`](https://github.com/mastra-ai/mastra/commit/ea26a4b1cc7cdd25f47dc3b798627194755616ac), [`0443fd5`](https://github.com/mastra-ai/mastra/commit/0443fd5137071cc64b0d2730d57bfb9398527410), [`6a2b35f`](https://github.com/mastra-ai/mastra/commit/6a2b35fd4bc81071b0b6be755a9e3ec0b317db18), [`1966af4`](https://github.com/mastra-ai/mastra/commit/1966af4a622641b9172141a988aff5922f7221b0), [`49080fa`](https://github.com/mastra-ai/mastra/commit/49080fabe7a86b7fac94cdab2596b2d2b320e189), [`76f4110`](https://github.com/mastra-ai/mastra/commit/76f4110887dd6d28f1bb07c4360992ef53303a01), [`14290e1`](https://github.com/mastra-ai/mastra/commit/14290e18078712a02270ac45e50f49806624c4ce), [`b89557e`](https://github.com/mastra-ai/mastra/commit/b89557e0cc0db19922e391eff817505e36684ff9), [`69c79cf`](https://github.com/mastra-ai/mastra/commit/69c79cf07b6fc1ffe6f2f547729f1cb05bd54eca), [`2b05803`](https://github.com/mastra-ai/mastra/commit/2b05803437af081cc4fdea2d81e3980b5f52d897), [`8b781d0`](https://github.com/mastra-ai/mastra/commit/8b781d0308eec018e84b59809cc24b2953300300), [`c0918c0`](https://github.com/mastra-ai/mastra/commit/c0918c01b337947eeb54d5d1b3ab9ed0719bb4b7), [`690bd1b`](https://github.com/mastra-ai/mastra/commit/690bd1baee178d56a75994549c318e0089debdee), [`930f604`](https://github.com/mastra-ai/mastra/commit/930f604c30de2eb7fc94437e4208d0a2ec8dee58), [`e77a7d9`](https://github.com/mastra-ai/mastra/commit/e77a7d910b7943368b4df6688e7645fffb6a8891), [`d102756`](https://github.com/mastra-ai/mastra/commit/d102756c708797722d95ee73ab11ba614f2f9ec8), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`e9fc83e`](https://github.com/mastra-ai/mastra/commit/e9fc83e5d4427f49af147aec86eb3f7fcb6fb8ee), [`7d3dd2b`](https://github.com/mastra-ai/mastra/commit/7d3dd2b07b47d8cc5c52ccb97054e85ebed1619a), [`d9e26f4`](https://github.com/mastra-ai/mastra/commit/d9e26f485d2658a9dc84c0f20804e9a89a57d3a0)]:
+  - @mastra/core@1.81.0-alpha.2
+  - @mastra/mcp@2.7.0-alpha.0
+
 ## 1.3.0-alpha.0
 
 ### Minor Changes

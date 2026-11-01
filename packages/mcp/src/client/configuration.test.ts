@@ -262,7 +262,7 @@ describe('MCPClient tool discovery retries', () => {
         stock: 'Discovery timed out after 50ms',
       },
       errorDetails: {
-        stock: { message: 'Discovery timed out after 50ms' },
+        stock: { message: 'Discovery timed out after 50ms', code: 'MCP_DISCOVERY_TIMEOUT' },
       },
       durations: {
         weather: 0,

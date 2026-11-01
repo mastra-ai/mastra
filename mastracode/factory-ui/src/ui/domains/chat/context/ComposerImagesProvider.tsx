@@ -7,10 +7,21 @@ import type { PendingImage } from './ComposerImagesContext';
 
 /**
  * Owns composer attachments above the Composer so a failed first-prompt handoff can restore them.
- * `draftScope` names the chat whose unsent images are remembered across page changes.
+ * `draftScope` names the chat whose unsent images are remembered across page changes;
+ * `initialImages` (handed back after a failed start) win over the remembered ones.
  */
-export function ComposerImagesProvider({ children, draftScope }: { children: ReactNode; draftScope?: string }) {
-  const [images, setState] = useState<PendingImage[]>(() => (draftScope ? readComposerImages(draftScope) : []));
+export function ComposerImagesProvider({
+  children,
+  draftScope,
+  initialImages,
+}: {
+  children: ReactNode;
+  draftScope?: string;
+  initialImages?: PendingImage[];
+}) {
+  const [images, setState] = useState<PendingImage[]>(
+    () => initialImages ?? (draftScope ? readComposerImages(draftScope) : []),
+  );
   const setImages = (action: SetStateAction<PendingImage[]>) =>
     setState(current => {
       const next = typeof action === 'function' ? action(current) : action;

@@ -12,6 +12,7 @@ import { MessageAttachments } from '@mastra/playground-ui/domains/chat/attachmen
 import { splitMessageAttachments } from '@mastra/playground-ui/domains/chat/attachments/split-message-attachments';
 import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
+import { PinnedKnowledgeActivity } from '@mastra/playground-ui/domains/chat/knowledge';
 import { MessageFactory } from '@mastra/react/ui';
 import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
 
@@ -33,12 +34,20 @@ import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { RunErrorNotice } from './RunErrorNotice';
 import { ToolCard } from './tool/ToolCard';
 import { ToolFactory } from './ToolFactory';
-import { draws, hasVisibleText, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
+import {
+  draws,
+  hasVisibleText,
+  messageText,
+  reasoningWithState,
+  renderableParts,
+  toolFromInvocationPart,
+} from './transcript-parts';
 import type { MessagePart } from './transcript-parts';
 import { HostedStretch } from './activity/HostedStretch';
-import { activityPartKey, NO_ACTIVITY, reasoningWithState } from './activity/activity-plan';
+import { activityPartKey, NO_ACTIVITY } from './activity/activity-plan';
 import type { EntryActivity } from './activity/activity-plan';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
+import { useTurnLanded } from './TurnReveal';
 import { messageEntryView } from './message-entry-view';
 import type { StatusMetadata } from './message-entry-view';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
@@ -51,10 +60,18 @@ function steeringLabel(entry: MessageEntry): string | undefined {
   return 'Steered message';
 }
 
-function metaText(entry: MessageEntry, prose: string, reply?: string): string | undefined {
+function metaText(entry: MessageEntry, prose: string, settled: boolean, reply?: string): string | undefined {
   if (entry.message.role === 'user') return prose || undefined;
 
-  return entry.streaming ? undefined : reply;
+  return settled ? reply : undefined;
+}
+
+/** The tail line steps aside for a live stretch at once, so the reveal must not hold it back. */
+function withLiveHost(entryId: string, written: MessagePart[], paced: MessagePart[], activity: EntryActivity) {
+  const host = written.findIndex(
+    (part, index) => index >= paced.length && activity.hosts.get(activityPartKey(entryId, part, index))?.live,
+  );
+  return host === -1 ? paced : [...paced, written[host]];
 }
 
 export function MessageBubble({
@@ -78,26 +95,31 @@ export function MessageBubble({
   activity?: EntryActivity;
 }) {
   const written = renderableParts(entry);
-  const parts = useRevealedParts(written, Boolean(entry.streaming));
+  const paced = useRevealedParts(written, Boolean(entry.streaming));
+  const parts = withLiveHost(entry.id, written, paced, activity);
   const { attachments, content } =
     entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
   const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
-  const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
+  const hasRenderablePart = written.some(part => draws(part, entry, suspensions));
   const drawsOwnPart = written.some((part, index) => {
     const key = activityPartKey(entry.id, part, index);
     if (activity.hosts.has(key)) return true;
-    return draws(part, suspensions, entry.runtimeTools) && !activity.hidden.has(key);
+    return draws(part, entry, suspensions) && !activity.hidden.has(key);
   });
   const revealed = new Map<string, MessagePart>(
-    parts.map((part, index) => [activityPartKey(entry.id, part, index), part]),
+    paced.map((part, index) => [activityPartKey(entry.id, part, index), part]),
   );
-  const keyOfPart = new Map<object, string>(parts.map((part, index) => [part, activityPartKey(entry.id, part, index)]));
+  const keyed = (list: MessagePart[]) =>
+    list.map((part, index) => [part, activityPartKey(entry.id, part, index)] as const);
+  const keyOfPart = new Map<object, string>([...keyed(written), ...keyed(paced)]);
 
   const origin = channelOrigin(entry.message);
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
   const prose = messageText(entry.message.role === 'user' ? content : written);
-  const meta = metaText(entry, prose, reply);
+  const settled = !entry.streaming && paced === written;
+  const turnLanded = useTurnLanded(entry.id, !settled);
+  const meta = metaText(entry, prose, settled && turnLanded, reply);
   const showsReplyFooter = Boolean(meta);
   const drawsAnything = hasRenderablePart && (drawsOwnPart || showsReplyFooter);
   const steeringStatus = steeringLabel(entry);
@@ -187,7 +209,11 @@ export function MessageBubble({
       if (!hasVisibleText(part.text)) return null;
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
-        return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
+        return activation ? (
+          <SkillMessage activation={activation} appearance="inline" />
+        ) : (
+          <MarkdownRenderer>{part.text}</MarkdownRenderer>
+        );
       }
 
       return (
@@ -235,7 +261,7 @@ export function MessageBubble({
   const view = messageEntryView(entry, parts);
   switch (view.kind) {
     case 'skill':
-      return <SkillMessage activation={view.activation} />;
+      return <SkillMessage activation={view.activation} appearance="inline" />;
     case 'hidden':
       return null;
     case 'notifications':
@@ -255,12 +281,25 @@ export function MessageBubble({
       );
     case 'signal': {
       const { row } = view;
+      if (row.kind === 'pinned') return <PinnedKnowledgeActivity pinned={row.pinned} />;
       if (row.kind === 'state') {
-        return <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} />;
+        return (
+          <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} appearance="inline" />
+        );
       }
-      if (row.kind === 'divider') return <TranscriptDivider label={row.label} title={row.title} />;
-      if (row.kind === 'reminder') return <SignalActivity kind="reminder" label="System reminder" message={row.text} />;
-      return <SignalActivity kind="reactive" label={row.tagName} message={row.text} />;
+      if (row.kind === 'divider') return <TranscriptDivider label={row.label} />;
+      if (row.kind === 'reminder') {
+        return (
+          <SignalActivity
+            kind="reminder"
+            label={row.loadedFile ? 'Project instructions' : 'System reminder'}
+            detail={row.loadedFile}
+            message={row.text}
+            appearance="inline"
+          />
+        );
+      }
+      return <SignalActivity kind="reactive" label={row.tagName} message={row.text} appearance="inline" />;
     }
     case 'status':
       return <StatusMetadataCard status={view.status} />;

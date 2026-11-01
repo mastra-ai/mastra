@@ -36,7 +36,7 @@ function Page({ storageKey = STORAGE_KEY }: { storageKey?: string }) {
         defaultLabel="All"
         newViewSettings={{ layout: 'board' }}
       />
-      <SavedViewEditor views={views}>
+      <SavedViewEditor views={views} saveCaption="Saved in this browser">
         <button type="button" onClick={() => views.change({ filters: [ERRORS] })}>
           Filter errors
         </button>
@@ -134,6 +134,23 @@ describe('SavedViews', () => {
     expect(screen.queryByRole('button', { name: 'Save view' })).toBeNull();
   });
 
+  it('clears a failed save once the name is edited', () => {
+    render(<Page />);
+    fireEvent.click(screen.getByRole('button', { name: 'New view' }));
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage full', 'QuotaExceededError');
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+    expect(screen.getByRole('alert')).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Rename view' }));
+    const name = screen.getByRole('textbox', { name: 'View name' });
+    fireEvent.change(name, { target: { value: 'Errors' } });
+    fireEvent.blur(name);
+
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('does not carry a failed save into another board', () => {
     const page = render(<Page />);
     fireEvent.click(screen.getByRole('button', { name: 'New view' }));
@@ -175,6 +192,30 @@ describe('SavedViews', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
     expect(stored()).toMatchObject([{ name: 'Errors', filters: [], settings: { layout: 'list' } }]);
+  });
+
+  it('selects a tab on the first click without opening its menu', async () => {
+    render(<Page />);
+    await createView('Errors');
+    fireEvent.click(tab('All'));
+
+    const errors = tab('Errors');
+    const press = () => {
+      fireEvent.pointerDown(errors, { pointerType: 'mouse', button: 0 });
+      fireEvent.mouseDown(errors, { button: 0 });
+      fireEvent.pointerUp(errors, { pointerType: 'mouse', button: 0 });
+      fireEvent.mouseUp(errors, { button: 0 });
+      fireEvent.click(errors);
+    };
+    press();
+
+    expect(errors.getAttribute('aria-pressed')).toBe('true');
+    // The trigger asks to open on the next animation frame.
+    await new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 20)));
+    expect(screen.queryByRole('menu')).toBeNull();
+
+    press();
+    expect(await screen.findByRole('menuitem', { name: 'Edit view' })).toBeTruthy();
   });
 
   it('keeps the selected tab mounted while marking changes that can be saved or reset', async () => {
@@ -242,6 +283,45 @@ describe('SavedViews', () => {
 
     expect(errors.getAttribute('aria-pressed')).toBe('true');
     expect(document.activeElement).toBe(errors);
+  });
+
+  it('keeps a tab rename open with the typed name when storage fails, and saves it on retry', async () => {
+    render(<Page />);
+    await createView('Errors');
+    fireEvent.contextMenu(tab('Errors'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+    const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage full', 'QuotaExceededError');
+    });
+
+    let input = screen.getByRole<HTMLInputElement>('textbox', { name: 'View name' });
+    fireEvent.change(input, { target: { value: 'All errors' } });
+    fireEvent.blur(input);
+
+    expect(screen.getByRole('alert').textContent).toContain('Could not save changes');
+    input = screen.getByRole<HTMLInputElement>('textbox', { name: 'View name' });
+    expect(input.value).toBe('All errors');
+    expect(stored()[0]?.name).toBe('Errors');
+
+    write.mockRestore();
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    expect(stored()[0]?.name).toBe('All errors');
+    expect(screen.queryByRole('textbox', { name: 'View name' })).toBeNull();
+  });
+
+  it('closes a tab rename left blank and keeps the name', async () => {
+    render(<Page />);
+    await createView('Errors');
+    fireEvent.contextMenu(tab('Errors'));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+
+    const input = screen.getByRole('textbox', { name: 'View name' });
+    fireEvent.change(input, { target: { value: '  ' } });
+    fireEvent.blur(input);
+
+    expect(screen.queryByRole('textbox', { name: 'View name' })).toBeNull();
+    expect(stored()[0]?.name).toBe('Errors');
   });
 
   it('renames from the context menu and restores the name on Escape', async () => {

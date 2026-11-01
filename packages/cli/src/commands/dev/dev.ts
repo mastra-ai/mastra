@@ -23,6 +23,7 @@ import type { MastraPackageInfo } from '../../utils/mastra-packages.js';
 import { getMastraPackages } from '../../utils/mastra-packages.js';
 import { loadAndValidatePresets } from '../../utils/validate-presets.js';
 import { resolveFactoryUIDevDist } from '../build/factory-ui-build.js';
+import { getSourceMapNodeArgs } from '../utils.js';
 
 import { acquireDevLock, releaseDevLock, updateDevLock } from './dev-lock';
 import { DevBundler } from './DevBundler';
@@ -76,6 +77,7 @@ interface StartOptions {
   mastraPackages?: MastraPackageInfo[];
   peerDepMismatches?: PeerDepMismatch[];
   factory?: boolean;
+  sourcemap?: boolean;
 }
 
 type ProcessOptions = {
@@ -119,7 +121,10 @@ const startServer = async (
     serverStartTime = Date.now();
     devLogger.starting();
 
-    const commands = [];
+    // Built up front so the source map check sees the NODE_OPTIONS the child
+    // actually gets, including values from .env files that process.env lacks.
+    const childEnvironment = environmentState.getChildEnvironment(env);
+    const commands = getSourceMapNodeArgs(!!startOptions.sourcemap, childEnvironment.NODE_OPTIONS);
 
     const inspect = startOptions.inspect === '' ? true : startOptions.inspect;
     const inspectBrk = startOptions.inspectBrk === '' ? true : startOptions.inspectBrk;
@@ -160,7 +165,7 @@ const startServer = async (
     currentServerProcess = execa(process.execPath, commands, {
       cwd: publicDir,
       env: {
-        ...environmentState.getChildEnvironment(env),
+        ...childEnvironment,
         // A dotenv-provided NODE_ENV still wins, matching the behaviour before the
         // child environment was built from the layered dotenv state.
         NODE_ENV: env.get('NODE_ENV') ?? 'production',
@@ -467,6 +472,7 @@ export async function dev({
 
   const bundler = new DevBundler(env, factory);
   bundler.__setLogger(createLogger(debug)); // Keep Pino logger for internal bundler operations
+  bundler.setConfigEntryFile(userEntryFile);
 
   // Discover fs-routed agents under agents/* and, if any exist, wrap the entry so
   // they are registered onto the user's mastra instance. Falls back to the user
@@ -548,16 +554,6 @@ export async function dev({
   const peerDepMismatches = await checkMastraPeerDeps(mastraPackages);
   logPeerDepWarnings(peerDepMismatches);
 
-  const startOptions: StartOptions = {
-    inspect,
-    inspectBrk,
-    customArgs,
-    https: httpsOptions,
-    mastraPackages,
-    peerDepMismatches,
-    factory,
-  };
-
   // Write the generated fs-routed agents wrapper entry. Runs after `prepare()`
   // empties the output directory so the wrapper is not wiped before the watcher
   // reads it. No-op when there are no fs-routed agents.
@@ -576,6 +572,17 @@ export async function dev({
     outputDirectory: dotMastraPath,
     preparedEntry: fsAgents,
   });
+
+  const startOptions: StartOptions = {
+    inspect,
+    inspectBrk,
+    customArgs,
+    https: httpsOptions,
+    mastraPackages,
+    peerDepMismatches,
+    factory,
+    sourcemap: bundler.sourcemapEnabled,
+  };
 
   await startServer(
     join(dotMastraPath, 'output'),

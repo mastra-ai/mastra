@@ -12,6 +12,7 @@ import { ObservabilityListBody } from '@/domains/observability/components/observ
 import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
 import type { ObservabilityListUrlState } from '@/domains/observability/hooks/use-observability-list-filters';
 import { SPAN_LIST_SORT_FIELDS } from '@/domains/observability/observability-list-url-state';
+import { ObservabilitySavedViews } from '@/domains/observability/saved-views';
 import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
@@ -50,6 +51,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
   const withTimeToFirstChunk = capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false;
   const withTimeToFirstToken = capabilities?.capabilities.traceQueryTimeToFirstToken ?? false;
   const withOutcomeFields = capabilities?.capabilities.spanQueryOutcomeFields ?? false;
+  const withModelFields = capabilities?.capabilities.spanQueryModelFields ?? false;
 
   // Stored columns the store can't fill stay saved but aren't drawn, so they come back on a store that can.
   const displayedColumns = useMemo(
@@ -90,10 +92,11 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
       buildSpanQueryWhere(tokens, groups, {
         withContextFields,
         withOutcomeFields,
+        withModelFields,
         withTimeToFirstChunk,
         withTimeToFirstToken,
       }),
-    [tokens, groups, withContextFields, withOutcomeFields, withTimeToFirstChunk, withTimeToFirstToken],
+    [tokens, groups, withContextFields, withOutcomeFields, withModelFields, withTimeToFirstChunk, withTimeToFirstToken],
   );
   const query = useMemo<SpanQueryArgs>(
     () => ({ timeRange, orderBy: [{ field: sortField, direction: sortDirection }], ...(where ? { where } : {}) }),
@@ -128,25 +131,28 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel, u
       <h1 className="sr-only">Spans</h1>
       <ObservabilityListBody
         toolbar={
-          <ActionRow>
-            <ActionRow.Start>
-              <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
-              <SpansFilterBar
-                datePreset={filters.datePreset}
-                dateFrom={filters.dateFrom}
-                dateTo={filters.dateTo}
-                timeRange={timeRange}
-                tokens={tokens}
-                groups={groups}
-                onDatePresetChange={filters.onDatePresetChange}
-                onDateChange={filters.onDateChange}
-                onDateRangeChange={filters.onDateRangeChange}
-                onDateReset={filters.onDateReset}
-                onFiltersChange={filters.onFiltersChange}
-                disabled={isLoading}
-              />
-            </ActionRow.Start>
-          </ActionRow>
+          <>
+            {urlState && <ObservabilitySavedViews page="spans" {...urlState} columns={columns} />}
+            <ActionRow>
+              <ActionRow.Start>
+                <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
+                <SpansFilterBar
+                  datePreset={filters.datePreset}
+                  dateFrom={filters.dateFrom}
+                  dateTo={filters.dateTo}
+                  timeRange={timeRange}
+                  tokens={tokens}
+                  groups={groups}
+                  onDatePresetChange={filters.onDatePresetChange}
+                  onDateChange={filters.onDateChange}
+                  onDateRangeChange={filters.onDateRangeChange}
+                  onDateReset={filters.onDateReset}
+                  onFiltersChange={filters.onFiltersChange}
+                  disabled={isLoading}
+                />
+              </ActionRow.Start>
+            </ActionRow>
+          </>
         }
         chart={
           <SpansExplorerHistogram
