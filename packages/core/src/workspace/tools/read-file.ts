@@ -34,12 +34,19 @@ const TEXT_APPLICATION_TYPES = new Set([
   'application/ld+json',
   'application/sql',
   'application/jsonl',
+  'application/x-jsonl',
+  'application/ndjson',
+  'application/x-ndjson',
+  'application/jsonlines',
+  'application/json-lines',
+  'application/x-jsonlines',
   'application/x-php',
   'application/dart',
 ]);
 
 function isTextLikeMimeType(mimeType: string | undefined): boolean {
   if (!mimeType) return true;
+  mimeType = mimeType.split(';', 1)[0]!.trim().toLowerCase();
   // `application/octet-stream` is the catch-all for unknown extensions; we
   // optimistically treat it as text so files like `.log` or `.conf` (which
   // have no registered mime mapping) still get read as utf-8.
