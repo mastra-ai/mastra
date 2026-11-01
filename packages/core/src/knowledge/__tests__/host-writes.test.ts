@@ -125,11 +125,13 @@ describe('Knowledge host page writes', () => {
   });
 
   it('creates missing pages along the path named by their key, and later writes name them', async () => {
-    const { knowledge, storage } = setup();
+    const { knowledge, storage, vector } = setup();
     const { page } = await knowledge.upsertPage({ scope: 'docs:acme', path: 'guides/cli/login', name: 'Log in' });
     const store = (await storage.getStore('knowledge'))!;
     const guides = await store.getPageByPath({ scopeId: page.scopeId, path: ['guides'], read: 'all' });
     expect(guides).toMatchObject({ name: 'guides', key: 'guides' });
+    const cli = await store.getPageByPath({ scopeId: page.scopeId, path: ['guides', 'cli'], read: 'all' });
+    expect([guides!.id, cli!.id, page.id].map(id => vector.rows.has(`page:${id}`))).toEqual([true, true, true]);
 
     const named = await knowledge.upsertPage({
       scope: 'docs:acme',
@@ -279,6 +281,20 @@ describe('Knowledge host page writes', () => {
       expect(read.notes).toEqual([]);
       expect(await knowledge.removeNote({ id: note.id })).toBeNull();
       expect(await knowledge.removeNote({ id: 'nope' })).toBeNull();
+    });
+
+    it('leaves one note when two updates of the same note race', async () => {
+      const { knowledge, call } = setup();
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'install', name: 'Install' });
+      const old = await knowledge.addNote({ scope: 'docs:acme', path: 'install', text: 'Node 18' });
+      const results = await Promise.allSettled([
+        knowledge.updateNote({ id: old.id, text: 'Node 20' }),
+        knowledge.updateNote({ id: old.id, text: 'Node 22' }),
+      ]);
+      expect(results.map(result => result.status).sort()).toEqual(['fulfilled', 'rejected']);
+      const winner = results.find(result => result.status === 'fulfilled') as PromiseFulfilledResult<{ text: string }>;
+      const read = await call(['org:acme'], 'knowledge_read', { page: 'docs:acme#install' });
+      expect(read.notes.map((n: { text: string }) => n.text)).toEqual([winner.value.text]);
     });
   });
 });

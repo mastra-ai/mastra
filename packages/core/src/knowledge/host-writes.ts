@@ -152,7 +152,9 @@ export async function upsertKnowledgePage(
   let parentId = scope.id;
   for (let depth = 1; depth < keys.length; depth++) {
     const path = keys.slice(0, depth);
-    parentId = (await upsertAt(storage, scope.id, parentId, path, { name: path.at(-1)! }, provenance, false)).page.id;
+    const parent = await upsertAt(storage, scope.id, parentId, path, { name: path.at(-1)! }, provenance, false);
+    if (parent.status === 'created') await embed(host, index => index.indexPage(parent.page));
+    parentId = parent.page.id;
   }
   const result = await upsertAt(
     storage,
@@ -198,7 +200,7 @@ export async function removeKnowledgePage(
   return deleted;
 }
 
-const MENTION = /\[\[([^\]]+)\]\]/g;
+const MENTION = /\[\[([^[\]]+)\]\]/g;
 
 /** Resolves `[[scope#path]]` mentions to page ids; anything else stays plain text. */
 async function resolveMentions(storage: KnowledgeStorage, text: string): Promise<string[]> {
@@ -264,7 +266,15 @@ export async function updateKnowledgeNote(
     mentions: await resolveMentions(storage, input.text),
     provenance,
   });
-  await storage.removeNote({ id: old.id, deletedBy: provenance.author, provenance });
+  try {
+    await storage.removeNote({ id: old.id, deletedBy: provenance.author, provenance });
+  } catch (error) {
+    // Someone else removed or replaced the old note since the read: drop ours rather than leave a second copy.
+    if ((error as Error | undefined)?.name === 'KnowledgeNotFoundError') {
+      await storage.removeNote({ id: note.id, deletedBy: provenance.author, provenance });
+    }
+    throw error;
+  }
   await embed(host, async index => {
     await index.remove([`note:${old.id}`]);
     await index.indexNote(note);
