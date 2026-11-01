@@ -88,7 +88,8 @@ const WORKING_LANES: readonly FactoryRuleStage[] = [...Object.values(FACTORY_ROL
 export function resumeStage(
   columnStage: BoardStageId,
   item: {
-    board?: string | null;
+    /** The card's resolved board (`itemBoard`): a legacy pull request card with no board sits on Review. */
+    board: string;
     sessions: Record<string, WorkItemSessionRef>;
     stageHistory?: readonly { stage: string }[];
   },
@@ -98,8 +99,7 @@ export function resumeStage(
   const lane = WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
   // On Work, Intake leads to neither Building nor its self-review: a card that got that far
   // resumes in Planning. The Review board has no Planning, and its Intake leads back to Reviewing.
-  const work = item.board == null || item.board === 'work';
-  return work && (lane === 'execute' || lane === 'review') ? 'planning' : lane;
+  return item.board === 'work' && (lane === 'execute' || lane === 'review') ? 'planning' : lane;
 }
 
 /**
@@ -116,7 +116,7 @@ export function awaitsTriageDecision(
     (item.board == null || item.board === 'work') &&
     columnStage === 'intake' &&
     item.sessions.triage !== undefined &&
-    (resumeStage(columnStage, item) ?? 'triage') === 'triage'
+    (resumeStage(columnStage, { ...item, board: 'work' }) ?? 'triage') === 'triage'
   );
 }
 

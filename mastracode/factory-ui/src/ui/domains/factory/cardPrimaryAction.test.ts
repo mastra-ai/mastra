@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { boardCardState } from './boardCardState';
+import { itemBoard } from './boardStages';
 import { cardActions, cardMoves, cardPrimaryAction, resumeStage } from './cardPrimaryAction';
 import type { CardAction, CardMove } from './cardPrimaryAction';
 import type { WorkItem, WorkItemSessionRef } from './services/workItems';
@@ -125,12 +126,14 @@ describe('resumeStage', () => {
     // Planning and Building share the `work` session, so the lane comes from the stage history.
     expect(
       resumeStage('intake', {
+        board: 'work',
         sessions: { triage: sessionRef('triage'), work: sessionRef('work') },
         stageHistory: history('intake', 'triage', 'planning', 'intake'),
       }),
     ).toBe('planning');
     expect(
       resumeStage('intake', {
+        board: 'work',
         sessions: { work: sessionRef('work') },
         stageHistory: history('triage', 'planning', 'execute', 'intake'),
       }),
@@ -138,6 +141,7 @@ describe('resumeStage', () => {
     // Intake does not lead to Building: a card self-review parked resumes in Planning.
     expect(
       resumeStage('intake', {
+        board: 'work',
         sessions: { work: sessionRef('work'), review: sessionRef('review') },
         stageHistory: history('triage', 'planning', 'execute', 'review', 'intake'),
       }),
@@ -145,6 +149,7 @@ describe('resumeStage', () => {
     // A pull request card set aside from PR review resumes its review there.
     expect(
       resumeStage('intake', {
+        board: 'work',
         sessions: { review: sessionRef('review') },
         stageHistory: history('pr-review', 'intake'),
       }),
@@ -152,19 +157,27 @@ describe('resumeStage', () => {
   });
 
   it('resumes a Review-board card set aside in Intake back into Reviewing, which has no Planning', () => {
-    expect(
-      resumeStage('intake', {
-        board: 'review',
-        sessions: { review: sessionRef('review') },
-        stageHistory: history('review', 'intake'),
-      }),
-    ).toBe('review');
+    const resume = (card: WorkItem) =>
+      resumeStage('intake', { board: itemBoard(card), sessions: card.sessions, stageHistory: card.stageHistory });
+    const reviewed = {
+      ...item({ review: sessionRef('review') }),
+      stageHistory: [stageEntry('review'), stageEntry('intake')],
+    };
+    expect(resume({ ...reviewed, board: 'review' })).toBe('review');
+    // A pull request card with no board predates persisted boards and sits on Review too.
+    expect(resume({ ...reviewed, board: null })).toBe('review');
   });
 
   it('offers nothing for a fresh arrival or outside Intake', () => {
-    expect(resumeStage('intake', { sessions: {}, stageHistory: history('triage', 'intake') })).toBeUndefined();
     expect(
-      resumeStage('done', { sessions: { review: sessionRef('review') }, stageHistory: history('review', 'done') }),
+      resumeStage('intake', { board: 'work', sessions: {}, stageHistory: history('triage', 'intake') }),
+    ).toBeUndefined();
+    expect(
+      resumeStage('done', {
+        board: 'work',
+        sessions: { review: sessionRef('review') },
+        stageHistory: history('review', 'done'),
+      }),
     ).toBeUndefined();
   });
 });
