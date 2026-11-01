@@ -116,6 +116,7 @@ import type {
   RunRegistryEntry,
   SerializableModelListEntry,
 } from './types';
+import { DurableProcessorRebuildError } from './utils/resolve-runtime';
 import { restoreCompletionPolicy } from './utils/restore-completion';
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
@@ -1577,11 +1578,16 @@ export class DurableAgent<
     }
     executionFence.throwIfLost();
 
+    // Like step-level rehydration, fail recovery rather than run the recovered
+    // turn without memory (nothing it produces would be persisted).
     let memory;
     try {
       memory = await wrapped.getMemory({ requestContext });
     } catch (error) {
-      this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to resolve memory during recover(${runId}): ${error}`);
+      this.#mastra
+        ?.getLogger?.()
+        ?.error?.(`[DurableAgent] Failed to resolve memory during recover(${runId}): ${error}`);
+      throw new DurableProcessorRebuildError(this.id, error);
     }
     executionFence.throwIfLost();
 
@@ -1631,7 +1637,9 @@ export class DurableAgent<
       outputProcessors = (await (wrapped as any).listOutputProcessors?.(requestContext)) ?? [];
       errorProcessors = (await (wrapped as any).listErrorProcessors?.(requestContext)) ?? [];
     } catch (error) {
-      this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] recover(${runId}) processor resolution failed: ${error}`);
+      // Running the recovered turn without its processors would silently skip guardrails.
+      this.#mastra?.getLogger?.()?.error?.(`[DurableAgent] recover(${runId}) processor resolution failed: ${error}`);
+      throw new DurableProcessorRebuildError(this.id, error);
     }
     executionFence.throwIfLost();
 
