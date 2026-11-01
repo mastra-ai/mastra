@@ -294,6 +294,14 @@ function isRetryableRace(error: unknown): boolean {
   return false;
 }
 
+function isLiveKeyClash(error: unknown): boolean {
+  for (let current = error; current && typeof current === 'object'; current = (current as { cause?: unknown }).cause) {
+    const { code, errno, message } = current as { code?: unknown; errno?: unknown; message?: unknown };
+    if ((code === 'ER_DUP_ENTRY' || errno === 1062) && String(message).includes('idx_kpages_live_key')) return true;
+  }
+  return false;
+}
+
 function escapeLike(value: string): string {
   return value.replace(/[=%_]/g, match => `=${match}`);
 }
@@ -846,7 +854,16 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
 
   async createPage(input: CreateKnowledgePageInput): Promise<KnowledgePage> {
     await assertKnowledgePageDescriptionWithinBound(input.description);
-    return this.#transaction(tx => this.#insertPage(tx, input));
+    try {
+      return await this.#transaction(tx => this.#insertPage(tx, input));
+    } catch (error) {
+      // A concurrent create of the same key passes the clash check too; the live-key index stops it.
+      if (input.key !== undefined && isLiveKeyClash(error)) {
+        const core = await loadPagesCore();
+        throw new core.KnowledgePageKeyConflictError(input.key, input.parentId);
+      }
+      throw error;
+    }
   }
 
   async updatePage(input: UpdateKnowledgePageInput): Promise<KnowledgePage> {

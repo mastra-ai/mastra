@@ -295,6 +295,17 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         });
       });
 
+      it('lets one of several concurrent creates of a key win and refuses the rest as a key conflict', async () => {
+        const acme = await scope('org:acme', ORG);
+        const results = await Promise.allSettled(
+          Array.from({ length: 4 }, (_, i) => page(acme.id, `Install ${i}`, { key: 'install' })),
+        );
+        expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+        for (const result of results) {
+          if (result.status === 'rejected') expect(result.reason?.name).toBe('KnowledgePageKeyConflictError');
+        }
+      });
+
       it('refuses keys that are empty or contain "/", "#" or "%"', async () => {
         const acme = await scope('org:acme', ORG);
         for (const key of ['', 'a/b', 'a#b', 'a%2Fb']) {
