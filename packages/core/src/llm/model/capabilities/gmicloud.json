@@ -35,10 +35,30 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "zai-org/GLM-5.2-FP8": [
+    "anthropic/claude-opus-4.7": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-opus-4.6": [
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 127999
+      }
+    ],
+    "anthropic/claude-sonnet-4.6": [
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
+    "anthropic/claude-opus-4.8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "Qwen/Qwen3.8-Max": [
@@ -51,41 +71,21 @@
         "type": "toggle"
       }
     ],
-    "anthropic/claude-opus-4.7": [
+    "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["high", "max"]
       }
     ],
-    "anthropic/claude-sonnet-4.6": [
+    "MiniMaxAI/MiniMax-M3": [
       {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
-      }
-    ],
-    "anthropic/claude-opus-4.6": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 127999
-      }
-    ],
-    "anthropic/claude-opus-4.8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
     "openai/gpt-5.5": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "toggle"
       }
     ]
   }

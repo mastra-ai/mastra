@@ -29922,9 +29922,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.02,
-          "output": 0.061,
-          "cache_read": 0.01
+          "input": 0.015,
+          "output": 0.045,
+          "cache_read": 0.008
         }
       },
       "google/gemma-4-31b-it": {
@@ -31870,9 +31870,9 @@
       },
       "~deepseek/deepseek-flash-latest": {
         "cost": {
-          "input": 0.0141,
-          "output": 0.144,
-          "cache_read": 0.013
+          "input": 0.0129,
+          "output": 0.1,
+          "cache_read": 0.0119
         }
       },
       "~deepseek/deepseek-pro-latest": {
@@ -31884,9 +31884,9 @@
       },
       "~deepseek/deepseek-v4-flash-latest": {
         "cost": {
-          "input": 0.05764,
-          "output": 0.17292,
-          "cache_read": 0.001834
+          "input": 0.0434,
+          "output": 0.3,
+          "cache_read": 0.035
         }
       },
       "~google/gemini-flash-latest": {
@@ -31969,9 +31969,9 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.0163,
-          "output": 0.1479,
-          "cache_read": 0.0163
+          "input": 0.0149,
+          "output": 0.1543,
+          "cache_read": 0.0149
         }
       },
       "~z-ai/glm-latest": {
@@ -36150,7 +36150,7 @@
         "cost": {
           "input": 0.15,
           "output": 0.6,
-          "cache_read": 0.003
+          "cache_read": 0.0054
         }
       },
       "reka-ai/glm-5.3": {
@@ -36162,9 +36162,9 @@
       },
       "reka-ai/glm-5.3-flash": {
         "cost": {
-          "input": 0.09,
-          "output": 0.28,
-          "cache_read": 0.027
+          "input": 0.18,
+          "output": 0.6,
+          "cache_read": 0.028
         }
       },
       "reka-ai/reka-edge-2603": {
@@ -42122,16 +42122,16 @@
       },
       "deepseek/deepseek-v4-flash-0731": {
         "cost": {
-          "input": 0.05,
-          "output": 0.16,
-          "cache_read": 0.013
+          "input": 0.04444,
+          "output": 0.13332,
+          "cache_read": 0.001414
         }
       },
       "deepseek/deepseek-v4-flash-0731:thinking": {
         "cost": {
-          "input": 0.05,
-          "output": 0.16,
-          "cache_read": 0.013
+          "input": 0.04444,
+          "output": 0.13332,
+          "cache_read": 0.001414
         }
       },
       "deepseek/deepseek-v4-flash-latest": {
@@ -42185,9 +42185,9 @@
       },
       "deepseek/deepseek-v4.1-flash": {
         "cost": {
-          "input": 0.022,
-          "output": 0.192,
-          "cache_read": 0.004
+          "input": 0.0447,
+          "output": 0.1788,
+          "cache_read": 0.000894
         }
       },
       "deepseek/deepseek-v4.1-flash-0910-uncensored": {
@@ -42248,9 +42248,9 @@
       },
       "deepseek/deepseek-v4.1-flash:thinking": {
         "cost": {
-          "input": 0.022,
-          "output": 0.192,
-          "cache_read": 0.004
+          "input": 0.0447,
+          "output": 0.1788,
+          "cache_read": 0.000894
         }
       },
       "doubao-seed-2-0-code-preview-260215": {
@@ -42774,9 +42774,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.02,
-          "output": 0.061,
-          "cache_read": 0.01
+          "input": 0.015,
+          "output": 0.046,
+          "cache_read": 0.008
         }
       },
       "google/gemma-4-26b-a4b-it-cybersecurity": {
@@ -42788,9 +42788,9 @@
       },
       "google/gemma-4-26b-a4b-it:thinking": {
         "cost": {
-          "input": 0.02,
-          "output": 0.061,
-          "cache_read": 0.01
+          "input": 0.015,
+          "output": 0.046,
+          "cache_read": 0.008
         }
       },
       "google/gemma-4-31b-it": {
@@ -52129,9 +52129,9 @@
       },
       "deepseek/deepseek-v4-pro-0813": {
         "cost": {
-          "input": 0.66,
-          "output": 1.98,
-          "cache_read": 0.022
+          "input": 0.115,
+          "output": 4,
+          "cache_read": 0.11
         }
       },
       "deepseek/deepseek-v4.1-flash": {
@@ -54889,9 +54889,9 @@
       },
       "z-ai/glm-5.3-flash": {
         "cost": {
-          "input": 0.0163,
-          "output": 0.1479,
-          "cache_read": 0.0163
+          "input": 0.0149,
+          "output": 0.1543,
+          "cache_read": 0.0149
         }
       },
       "z-ai/glm-5.3-flashx": {
@@ -54961,9 +54961,9 @@
       },
       "~deepseek/deepseek-flash-latest": {
         "cost": {
-          "input": 0.0141,
-          "output": 0.144,
-          "cache_read": 0.013
+          "input": 0.0129,
+          "output": 0.1,
+          "cache_read": 0.0119
         }
       },
       "~deepseek/deepseek-pro-latest": {
@@ -54975,9 +54975,9 @@
       },
       "~deepseek/deepseek-v4-flash-latest": {
         "cost": {
-          "input": 0.05764,
-          "output": 0.17292,
-          "cache_read": 0.001834
+          "input": 0.0434,
+          "output": 0.3,
+          "cache_read": 0.035
         }
       },
       "~google/gemini-flash-latest": {
@@ -55166,9 +55166,9 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.0163,
-          "output": 0.1479,
-          "cache_read": 0.0163
+          "input": 0.0149,
+          "output": 0.1543,
+          "cache_read": 0.0149
         }
       },
       "~z-ai/glm-latest": {

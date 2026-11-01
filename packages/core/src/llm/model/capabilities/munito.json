@@ -21,12 +21,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "aleph-alpha/kolibri-1": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "deepseek-ai/deepseek-v4-flash": [
       {
         "type": "effort",
@@ -37,6 +31,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "aleph-alpha/kolibri-1": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "qwen/qwen3.8-27b": [
