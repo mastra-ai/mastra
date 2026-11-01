@@ -118,6 +118,7 @@ jobs:
     outputs:
       run_full: ${{ steps.compute.outputs.run_full }}
       has_unit_tests: ${{ steps.compute.outputs.has_unit_tests }}
+      unit_shards: ${{ steps.compute.outputs.unit_shards }}
       e2e_test_files: ${{ steps.compute.outputs.e2e_test_files }}
       e2e_changed: ${{ steps.compute.outputs.e2e_changed }}
       experiment_worker_e2e_changed: ${{ steps.compute.outputs.experiment_worker_e2e_changed }}
@@ -319,6 +320,7 @@ jobs:
             console.error('Full suite requested — running full suite.');
             output('run_full=true\n');
             output('has_unit_tests=false\n');
+            output('unit_shards=[1]\n');
             output('e2e_test_files=\n');
           } else {
             console.error(`Running ${count} affected tests.`);
@@ -326,6 +328,9 @@ jobs:
             // The unit list can reach hundreds of KB, so it travels as an artifact; the job
             // output only says whether there is one.
             output(`has_unit_tests=${unitTestFiles.length > 0}\n`);
+            // Core-touching PRs select 2,000+ unit files, which runs past the job's cap on one
+            // machine. Lists that large run on three; narrow PRs stay one job.
+            output(`unit_shards=${JSON.stringify(unitTestFiles.length >= 500 ? [1, 2, 3] : [1])}\n`);
             outputList('e2e_test_files', e2eTestFiles);
           }
           NODE
@@ -380,6 +385,7 @@ jobs:
       head_sha: ${{ needs.changes.outputs.head_sha }}
       has_code: ${{ needs.changes.outputs.has_code }}
       has_unit_tests: ${{ needs.affected-tests.outputs.has_unit_tests }}
+      unit_shards: ${{ needs.affected-tests.outputs.unit_shards || '[1]' }}
       e2e_test_files: ${{ needs.affected-tests.outputs.e2e_test_files }}
       run_full: ${{ needs.affected-tests.outputs.run_full }}
     secrets:
