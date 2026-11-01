@@ -1,6 +1,5 @@
 import { posix } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { slash } from './utils';
 import { getInputOptions } from './watcher';
 
 // Mock bundler module at the top level
@@ -79,7 +78,7 @@ describe('watcher', () => {
       expect(analyzeBundle).toHaveBeenCalledWith(
         ['test-entry.js'],
         'test-entry.js',
-        expect.objectContaining({ outputDir: posix.join(slash(process.cwd()), '.mastra', '.build') }),
+        expect.objectContaining({ outputDir: posix.join(process.cwd(), '.mastra', '.build') }),
         expect.anything(),
       );
     });
