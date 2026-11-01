@@ -173,8 +173,9 @@ const WHEN_DONE =
 
 /** Self-review sent the card back: it recorded request changes and the card left Review for Building. */
 function returnedFromSelfReview(context: FactoryStageRuleContext): boolean {
-  // From Intake: a person resumed a card that self-review parked at the round limit.
-  const parked = context.fromStage === 'intake' && context.item.metadata?.selfReviewNeedsHuman === true;
+  // A card self-review parked at the round limit resumes through Planning, so it reaches
+  // Building from there once a person approves the new plan.
+  const parked = context.fromStage === 'planning' && context.item.metadata?.selfReviewNeedsHuman === true;
   return (
     (context.fromStage === 'review' || parked) &&
     context.item.metadata?.selfReviewVerdict === 'request changes' &&
@@ -194,6 +195,7 @@ function buildWorkItem(context: FactoryStageRuleContext) {
     const head = metadataString(context.item, 'selfReviewedHeadSha');
     const findings = metadataString(context.item, 'selfReviewFindings');
     task =
+      (context.fromStage === 'planning' ? 'Implement the approved plan for the work item. ' : '') +
       `Self-review requested changes${head ? ` on branch head ${head}` : ''}. Address every finding, run the tests again, ` +
       'and push.' +
       (findings
