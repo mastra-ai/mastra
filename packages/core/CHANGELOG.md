@@ -1,5 +1,117 @@
 # @mastra/core
 
+## 1.82.0-alpha.0
+
+### Minor Changes
+
+- An agent's `scopes` function can now narrow or replace a run's scopes. It receives the run's incoming scopes (from the call, `defaultOptions` and request context) and returns the run's final set. A static `scopes` list is still added to the incoming scopes. The function must keep any `resource:` or `thread:` scope it was given; dropping one throws. ([#28353](https://github.com/mastra-ai/mastra/pull/28353))
+
+  ```ts
+  const agent = new Agent({
+    id: 'support',
+    name: 'Support',
+    instructions: 'Answer support questions.',
+    model,
+    // Keep identity scopes, drop anything else the caller sent, and add the tenant's org.
+    scopes: ({ scopes, requestContext }) => [
+      ...scopes.filter(scope => typeof scope === 'string' && /^(resource|thread):/.test(scope)),
+      `org:${requestContext.get('orgId')}`,
+    ],
+  });
+  ```
+
+- Added `onDecision` to `ClassifierProcessor` for writing guardrail decisions to your own audit log (#28985). It runs after each classification, including failed classifier calls, and receives the outcome (`allowed`, `filtered` or `aborted`), the answers or the error, the call duration, and the ids of the message, thread, resource or run. ([#29070](https://github.com/mastra-ai/mastra/pull/29070))
+
+  ```ts
+  new ClassifierProcessor({
+    classifier: safety,
+    onResult,
+    onDecision: async decision => {
+      await auditLog.insert({
+        threadId: decision.ids.threadId,
+        outcome: decision.outcome,
+        answers: decision.result ? decision.result.answers : null,
+        error: decision.result ? null : String(decision.error),
+      });
+    },
+  });
+  ```
+
+  `abort` in `onResult` now accepts tripwire metadata, so the caller can tell which policy blocked the request:
+
+  ```ts
+  onResult: (answers, { abort }) => {
+    if ((answers.unsafe.probability ?? 1) > 0.8) {
+      abort('Blocked', { metadata: { policy: 'unsafe' } });
+    }
+  };
+  ```
+
+  A failed classifier call under `errorStrategy: 'strict'` now sets tripwire metadata `{ processorId, classifierId, code: 'CLASSIFIER_FAILED' }`. On agents that aren't durable, stopping a streaming reply now cancels a classifier call that is still running.
+
+- Changes to an experimental, upcoming memory feature. ([#28353](https://github.com/mastra-ai/mastra/pull/28353))
+
+  `experimental_subconscious` and the Memory `knowledge` option are removed: setting either now throws, saying to attach Knowledge to the agent instead (`knowledge: false` is still accepted). `Subconscious` and `KnowledgeSemanticIndexCoordinator` stay exported from `@mastra/memory` so older code still loads, and throw when constructed. `@mastra/core/knowledge` exports `Knowledge` with its option and result types and the Knowledge storage domain; the tool, pin and semantic-index helpers are internal.
+
+  Agent `scopes` are plain `"<type>:<value>"` strings that say who the run is; what the run may read or write comes from whoever consumes them, such as Knowledge's scope declarations.
+
+  A message can carry its own scopes: `session.sendMessage({ content, scopes })`. A run's scopes are fixed when it starts, so a message whose scopes differ from the running run's waits for it to end, then starts its own run in the same conversation. `sendSignal` reports this as `{ action: 'blocked', reason: 'scope-mismatch', runId }`. `queueMessage`, `queueSignal`, `sendNotificationSignal` and `steer` take `scopes` the same way: a queued or steering message, or a notification, whose scopes differ from the running run's starts its own run with its scopes after that run instead of joining it. A deferred notification keeps the scopes it was sent with. Scopes are set in process only: remote callers (the agent controller HTTP routes and `@mastra/client-js`) can't send them. To derive scopes from a request, give the agent a `scopes` function that reads trusted request context. When the thread's claimed owner runs in another process, a message with scopes isn't queued: `sendMessage` rejects with an error saying scopes don't cross processes. Messages without scopes still join that owner's run.
+
+  Attach Knowledge with `new Agent({ knowledge, scopes })`. Knowledge needs `scopes`, the scope types its runs may hold and who gets which role on them: `new Knowledge({ storage, scopes: { ...knowledgeMemoryScopes() } })` declares Memory's `thread:`/`resource:` scopes and an `org:` scope; `{}` declares none. A run holding a scope that isn't declared fails. Tools are off by default: `tools: true` gives the read and write tools, `tools: { read: true }` the read tools only, and `pinnedContext: true` (or `{ maxPins, maxTokens }`) delivers pinned pages every turn and adds `knowledge_pin`. `knowledge.readScopeFor(principals)` returns what holders of those scopes can read, for host code reading the store directly. `knowledge.explainAccess(runScopes, { scope } | { page })` says why a run can or can't reach a scope or page; it's host-only, so never expose it through an agent tool or an unauthenticated route. `knowledge.onChange(listener)` reports each committed write made through `knowledge.getStorage()` (tools included) by id, for live UIs; re-read each page under the viewer's read scope before showing it. A scope declaration can carry a `displayLabel` for UIs, and `knowledge.scopeDeclaration(key)` returns a declaration's display fields.
+
+  Knowledge is a tree of pages. The tools are five: `knowledge_search`, `knowledge_read` (a page with its notes, or a scope's pages), `knowledge_page` (`op: 'write' | 'move' | 'merge'`), `knowledge_note` (`op: 'add' | 'restamp' | 'remove'`) and `knowledge_pin` (`op: 'pin' | 'unpin'`). Notes are at most about 250 tokens and page descriptions about 100; long text goes in a page body.
+
+  Search is keyword search by default. Give Knowledge a `vector` store and an `embedder` and `knowledge_search` blends keyword and semantic results; pages and notes written through the tools are embedded as they're written. Every semantic hit is re-checked against what the run can read before it's ranked, so hidden content never fills result slots. `knowledge.reindex()` re-embeds everything, for content written straight to the store or after an embedding failure.
+
+- Fixed a recovered thread run losing its thread lease when the execution it replaced finished. Previously, when a run was recovered in another process, the original execution's exit released the shared lease while the recovered execution was still running, so the thread looked free and a new run could start on it. Each execution now holds the lease under its own generation, so only the live execution can renew or release it. ([#28947](https://github.com/mastra-ai/mastra/pull/28947))
+
+  Also fixed run IDs that contain the internal handover marker, or look like an encoded lease owner, being misread as a different run. Any caller-provided run ID now round-trips unchanged.
+
+  **Upgrading shared deployments**
+
+  Drain active thread runs and restart API and worker processes together. Older processes do not recognize the new lease owner format: they cannot see a run as live, even while it is renewing its lease. Follow-ups that an older process forwards to a run on this release are still delivered.
+
+### Patch Changes
+
+- Fixed resuming suspended agent runs across server instances when a process retains an earlier run segment. ([#29065](https://github.com/mastra-ai/mastra/pull/29065))
+
+- Update provider registry and model documentation with latest models and providers ([`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715))
+
+- Improved `validateStepRequestContext` typing. It now accepts any object with `id` and `requestContextSchema`, not only a full `Step`. ([#29080](https://github.com/mastra-ai/mastra/pull/29080))
+
+- Fixed skills not loading on Windows when the workspace `basePath` uses a short folder name such as `C:\Users\ABCDEF~1\...`, which `os.tmpdir()` can return. Optional skill folders that don't exist, like `references`, no longer fail with `Permission denied`. Fixes [#28957](https://github.com/mastra-ai/mastra/issues/28957). ([#29078](https://github.com/mastra-ai/mastra/pull/29078))
+
+- Fixed a signal sent to a thread while an `agent.generate()` turn was running starting a second run that could not see that turn. `generate()` now registers its run with the thread like `stream()` does, so `sendSignal`, `sendMessage` and notifications with the default `ifActive: 'deliver'` join the running turn. ([#28953](https://github.com/mastra-ai/mastra/pull/28953))
+
+  As with `stream()`, a thread-bound `generate()` now waits for a run already going on the same thread, so concurrent `generate()` calls on one thread run one after another instead of in parallel. A tool that calls `generate()` or `stream()` on its own thread waits for the run it is part of, so it deadlocks; a tool should use `sendSignal` to send a message to its own thread.
+
+- Knowledge notes returned by `knowledge_note`, `knowledge_read` and `knowledge_search` now carry `mentions`, mapping each `[[ref]]` in the note to the page id it resolves to, so a chat can link them. Refs are resolved the way the note's write resolved them; a name that no longer resolves is left out. ([#28942](https://github.com/mastra-ai/mastra/pull/28942))
+
+  ```json
+  { "id": "n1", "text": "Escalate per [[Escalation Process]].", "mentions": { "Escalation Process": "page-esc" } }
+  ```
+
+- Added read-only page-store readers to `@mastra/core/knowledge` for browsing UIs: `listKnowledgeTreeChildren` (one level of the page tree, child scopes first), `readKnowledgePage` (a page with its readable ancestors, notes, pin, referenced pages and notes that mention it), `readKnowledgePageGraph` (a bounded page graph with parent and mention edges, limits in `DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS`; mentions come from every note on a walked page until a graph-wide `maxNotes` budget runs out, which sets `truncated`), `searchKnowledgeExplorerPages` and `readKnowledgePageActivity`. Each takes a read scope (`'all'` for an owner view) and passes it to every store call, so pages and notes outside it never appear, mention edges included. They never write. Added `readKnowledgeScopeGrants`, which lists the declared grants onto the scope pages in a graph (principal scope, its page id when it has one, target and role), keeping only principals the read scope can read, and `knowledge.scopeGrants(scope)`, which gives each principal the declared rules name on one scope with its strongest role. ([#28362](https://github.com/mastra-ai/mastra/pull/28362))
+
+- Fixed `Property '#private' is missing` when passing a voice provider such as `new OpenAIRealtimeVoice()` to an agent's `voice` option or to `CompositeVoice` ([#29016](https://github.com/mastra-ai/mastra/issues/29016)). ([#29074](https://github.com/mastra-ai/mastra/pull/29074))
+
+  These options now accept the `IMastraVoice` interface, exported from `@mastra/core/voice`. `agent.voice` and `agent.getVoice()` return `IMastraVoice`. If you annotate a variable with a voice type, use `IMastraVoice` instead of `MastraVoice`.
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+
+  export const voiceAgent = new Agent({
+    id: 'voice-agent',
+    name: 'Voice Agent',
+    instructions: 'You are a voice assistant.',
+    model: 'openai/gpt-6.1-sol',
+    voice: new OpenAIRealtimeVoice(), // failed with TS2322 before this fix
+  });
+  ```
+
+- Fixed retained workflow handles and abort listeners after durable agent runs settle (#29009) ([#29065](https://github.com/mastra-ai/mastra/pull/29065))
+
 ## 1.81.0
 
 ### Minor Changes

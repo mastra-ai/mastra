@@ -1,5 +1,40 @@
 # @mastra/temporal
 
+## 0.5.0-alpha.0
+
+### Minor Changes
+
+- **Breaking:** Steps now validate their input against `inputSchema` and their request context against `requestContextSchema` before they run, as they do on Mastra's default workflow engine. Before, a step ran on any input, so a run could return `success` with a wrong value. A mismatch now fails the step without retries, and the run returns `status: 'failed'`. Steps also get the parsed input, with schema defaults and transforms applied. Only the steps inside a nested workflow are checked, not its own `inputSchema`. Fixes [#28308](https://github.com/mastra-ai/mastra/issues/28308). ([#29080](https://github.com/mastra-ai/mastra/pull/29080))
+
+  Setting `validateInputs: false` on a workflow skips these checks, along with the workflow input checks in `run.start()`:
+
+  ```ts
+  createWorkflow({ id: 'my-workflow', options: { validateInputs: false } });
+  ```
+
+  The Worker build reads `validateInputs` from the `createWorkflow()` call. When it can't, for example with `options: sharedOptions`, it prints a warning. Runs started with `run.start()` or `run.startAsync()` still use the workflow's setting. Runs started another way, such as from a Temporal Schedule, check step input.
+
+  Check these before upgrading:
+
+  - Step input and request context pass through Temporal's data converter, which turns a `Date` into a string. Use `z.coerce.date()` instead of `z.date()` in a step's `inputSchema` and `requestContextSchema`:
+
+    ```ts
+    // Before
+    inputSchema: z.object({ when: z.date() }),
+    // After
+    inputSchema: z.object({ when: z.coerce.date() }),
+    ```
+
+  - Zod `z.object()` schemas drop keys they don't declare. A step that reads an undeclared key from `inputData` now gets `undefined`. Add the key to its `inputSchema`.
+  - After a `.parallel()` that contains a nested workflow, the next step receives the nested workflow's output under its Temporal workflow type, for example `innerWorkflow` for id `inner`. The default engine uses the id, so a schema written for it can fail on Temporal.
+  - Steps scheduled after the Worker upgrade are checked, including steps of runs that started before the upgrade.
+
+### Patch Changes
+
+- Updated dependencies [[`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`0b5c4e9`](https://github.com/mastra-ai/mastra/commit/0b5c4e919e34dd9e4ac6975b068cf4688c59ccab), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d)]:
+  - @mastra/core@1.82.0-alpha.0
+  - @mastra/deployer@1.82.0-alpha.0
+
 ## 0.4.19
 
 ### Patch Changes

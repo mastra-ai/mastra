@@ -1,5 +1,28 @@
 # @mastra/memory
 
+## 1.41.0-alpha.0
+
+### Minor Changes
+
+- Changes to an experimental, upcoming memory feature. ([#28353](https://github.com/mastra-ai/mastra/pull/28353))
+
+  `experimental_subconscious` and the Memory `knowledge` option are removed: setting either now throws, saying to attach Knowledge to the agent instead (`knowledge: false` is still accepted). `Subconscious` and `KnowledgeSemanticIndexCoordinator` stay exported from `@mastra/memory` so older code still loads, and throw when constructed. `@mastra/core/knowledge` exports `Knowledge` with its option and result types and the Knowledge storage domain; the tool, pin and semantic-index helpers are internal.
+
+  Agent `scopes` are plain `"<type>:<value>"` strings that say who the run is; what the run may read or write comes from whoever consumes them, such as Knowledge's scope declarations.
+
+  A message can carry its own scopes: `session.sendMessage({ content, scopes })`. A run's scopes are fixed when it starts, so a message whose scopes differ from the running run's waits for it to end, then starts its own run in the same conversation. `sendSignal` reports this as `{ action: 'blocked', reason: 'scope-mismatch', runId }`. `queueMessage`, `queueSignal`, `sendNotificationSignal` and `steer` take `scopes` the same way: a queued or steering message, or a notification, whose scopes differ from the running run's starts its own run with its scopes after that run instead of joining it. A deferred notification keeps the scopes it was sent with. Scopes are set in process only: remote callers (the agent controller HTTP routes and `@mastra/client-js`) can't send them. To derive scopes from a request, give the agent a `scopes` function that reads trusted request context. When the thread's claimed owner runs in another process, a message with scopes isn't queued: `sendMessage` rejects with an error saying scopes don't cross processes. Messages without scopes still join that owner's run.
+
+  Attach Knowledge with `new Agent({ knowledge, scopes })`. Knowledge needs `scopes`, the scope types its runs may hold and who gets which role on them: `new Knowledge({ storage, scopes: { ...knowledgeMemoryScopes() } })` declares Memory's `thread:`/`resource:` scopes and an `org:` scope; `{}` declares none. A run holding a scope that isn't declared fails. Tools are off by default: `tools: true` gives the read and write tools, `tools: { read: true }` the read tools only, and `pinnedContext: true` (or `{ maxPins, maxTokens }`) delivers pinned pages every turn and adds `knowledge_pin`. `knowledge.readScopeFor(principals)` returns what holders of those scopes can read, for host code reading the store directly. `knowledge.explainAccess(runScopes, { scope } | { page })` says why a run can or can't reach a scope or page; it's host-only, so never expose it through an agent tool or an unauthenticated route. `knowledge.onChange(listener)` reports each committed write made through `knowledge.getStorage()` (tools included) by id, for live UIs; re-read each page under the viewer's read scope before showing it. A scope declaration can carry a `displayLabel` for UIs, and `knowledge.scopeDeclaration(key)` returns a declaration's display fields.
+
+  Knowledge is a tree of pages. The tools are five: `knowledge_search`, `knowledge_read` (a page with its notes, or a scope's pages), `knowledge_page` (`op: 'write' | 'move' | 'merge'`), `knowledge_note` (`op: 'add' | 'restamp' | 'remove'`) and `knowledge_pin` (`op: 'pin' | 'unpin'`). Notes are at most about 250 tokens and page descriptions about 100; long text goes in a page body.
+
+  Search is keyword search by default. Give Knowledge a `vector` store and an `embedder` and `knowledge_search` blends keyword and semantic results; pages and notes written through the tools are embedded as they're written. Every semantic hit is re-checked against what the run can read before it's ranked, so hidden content never fills result slots. `knowledge.reindex()` re-embeds everything, for content written straight to the store or after an embedding failure.
+
+### Patch Changes
+
+- Updated dependencies [[`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d)]:
+  - @mastra/core@1.82.0-alpha.0
+
 ## 1.40.0
 
 ### Minor Changes
