@@ -270,9 +270,7 @@ export class MessageHistory implements Processor {
     // input copy onto the stored message so memory remains the authoritative base.
     const chronologicalMessages = filteredMessages.reverse();
 
-    for (const msg of chronologicalMessages) {
-      messageList.add(msg, 'memory');
-    }
+    messageList.add(chronologicalMessages, 'memory');
 
     span?.update({ attributes: { messageCount: chronologicalMessages.length } });
 

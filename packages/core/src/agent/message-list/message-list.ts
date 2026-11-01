@@ -2820,7 +2820,8 @@ export class MessageList {
   // A run's input can be stamped in the same millisecond as the stored message it follows
   // (the previous turn's answer, saved just before this turn was queued). Sorting on equal
   // timestamps would then put the stored answer last, and this turn's response would merge
-  // into it. Stored history sits underneath the live turn, so tied live messages move 1 ms later.
+  // into it. Stored history sits underneath the live turn, so a live message tied with a stored
+  // one moves 1 ms later. Live messages that tie only with each other keep their timestamps.
   private moveLiveMessagesPastStoredTies(): void {
     const memory = this.memoryMessages;
     const live = this.messages.filter(message => !memory.has(message));
@@ -2831,13 +2832,12 @@ export class MessageList {
       if (memory.has(message)) storedTimes.add(message.createdAt.getTime());
     }
 
-    let floor = -Infinity;
     let moved = false;
-    for (const message of live.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())) {
-      let time = Math.max(message.createdAt.getTime(), floor + 1);
+    for (const message of live) {
+      const original = message.createdAt.getTime();
+      if (!storedTimes.has(original)) continue;
+      let time = original + 1;
       while (storedTimes.has(time)) time++;
-      floor = time;
-      if (time === message.createdAt.getTime()) continue;
 
       const previous = message.createdAt.toISOString();
       message.createdAt = new Date(time);
