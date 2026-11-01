@@ -13,6 +13,11 @@ on:
         required: false
         type: string
         default: 'false'
+      unit_shards:
+        description: JSON list of shard numbers for the affected unit job, e.g. [1] or [1, 2, 3]
+        required: false
+        type: string
+        default: '[1]'
       e2e_test_files:
         required: false
         type: string
@@ -91,10 +96,14 @@ jobs:
           retention-days: 1
 
   affected-unit-test:
-    name: Affected UNIT Test
+    name: Affected UNIT Test${{ strategy.job-total > 1 && format(' ({0}/{1})', matrix.shard, strategy.job-total) || '' }}
     if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(inputs.unit_shards) }}
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -142,7 +151,8 @@ jobs:
             --reporter=blob \
             --reporter=verbose \
             --reporter=github-actions \
-            --outputFile.blob=.vitest-reports/blob-unit-affected.json \
+            --outputFile.blob=.vitest-reports/blob-unit-affected-${{ matrix.shard }}.json \
+            --shard=${{ matrix.shard }}/${{ strategy.job-total }} \
             --passWithNoTests \
             "${test_files[@]}"
 
@@ -150,7 +160,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
-          name: vitest-blob-unit-affected
+          name: vitest-blob-unit-affected-${{ matrix.shard }}
           path: .vitest-reports/
           include-hidden-files: true
           retention-days: 1
