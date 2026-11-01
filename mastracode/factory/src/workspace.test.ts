@@ -1085,11 +1085,20 @@ describe('GitHub session workspace preparation', () => {
       },
     });
 
-    for (const resolved of [await workspace({ requestContext }), await workspace({ requestContext })]) {
+    const expectFactoryPlansGuard = (resolved: Awaited<ReturnType<typeof workspace>>) => {
       const guard = resolved.getToolsConfig()!.hooks!.beforeToolCall!;
       expect(guard(planWrite('.artifacts/plans/ratecard.md') as never)).toBeUndefined();
       expect(guard(planWrite('.mastracode/plans/ratecard.md') as never)).toMatchObject({ proceed: false });
-    }
+    };
+
+    const created = await workspace({ requestContext });
+    expectFactoryPlansGuard(created);
+
+    // Clear it so only the reuse path can put the guard back.
+    created.setToolsConfig(undefined);
+    const reused = await workspace({ requestContext });
+    expect(reused).toBe(created);
+    expectFactoryPlansGuard(reused);
   });
 
   it('prepares distinct local session checkouts and branches through the factory', async () => {
