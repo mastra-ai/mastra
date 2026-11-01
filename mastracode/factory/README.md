@@ -64,7 +64,7 @@ Each project has two kinds of boards:
 
 A project's boards are its code boards followed by its stored boards. The catalog, card creation through the API and Factory tools, transitions, the dispatcher, phase runs and the attention views all read that list. When a stored board has the same key as a code board, the code board wins: the stored board is hidden and the catalog reports `Stored board "<key>" is hidden by the code board with the same key.` Existing apps need no change, and Factory writes nothing to the database at startup.
 
-**Data model.** A stored board has a `key` (the ID cards reference as `board`), `name`, optional `description`, and ordered phases. A phase has a `key` (the stage ID), `name`, optional `description`, `kind`, and for working phases `runner` (`{ skill?, context?, instructions? }`), `autoStart`, `autoStartWhen` and `exitTool`, plus `nextPhases`. The first phase is the initial phase and must be `resting`. Saved boards pass the same checks `defineBoard()` applies, with the same messages. A stored board has no code behaviors: no handlers, transition policy, `sourceClosed`, or tool and event rules. Its working phases start their `runner` on entry.
+**Data model.** A stored board has a `key` (the ID cards reference as `board`), `name`, optional `description`, and ordered phases. A phase has a `key` (the stage ID), `name`, optional `description`, `kind`, and for working phases `runner` (`{ skill?, context?, instructions? }`), `autoStart`, `autoStartWhen` and `exitTool`, plus `nextPhases` on any phase. The first phase is the initial phase and must be `resting`. Saved boards pass the same checks `defineBoard()` applies, with the same messages. A stored board has no code behaviors: no handlers, transition policy, `sourceClosed`, or tool and event rules. Its working phases start their `runner` on entry.
 
 `nextPhases` on a stored board: leaving it out (or `null`) on a resting or working phase allows moves to every other phase, `[]` allows none, and a terminal phase allows none unless it lists some.
 
@@ -184,7 +184,7 @@ const intakeRule = context =>
 
 **Migration:** Remove former global `rules.work` and `rules.review` configuration. To customize Work or Review, set `includeDefaultBoards: false` and install a same-ID replacement, following the compatibility guidance above. Define lifecycle handlers on the replacement board's phases. Deployments that relied on automatic issue triage or review proposals on arrival should add an appropriate handler to the installed board.
 
-There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, tool-result rules, and how their cards react to integration events; integrations own their default event handlers. The runtime only executes rules.
+There is no global rules object. Every rule has one owner: boards own lifecycle handlers, topology (`nextPhases`), phase semantics, tool-result rules, and how their cards react to integration events; integrations own their default event handlers. The runtime only executes rules.
 
 ### Closing cards when their source closes
 
@@ -305,42 +305,43 @@ new MastraFactory({ storage, configVersion: 'v2', boards: [defineBoard({ ..., to
 
 Contexts that carried `ruleSetVersion` now carry `configVersion`. To add a tool-result rule to Work, declare it under `tools` on the installed replacement `work` board.
 
-### Board transition policy
+### Where cards can move
 
-Boards own three separate concerns: topology declares which moves exist, `transitionPolicy` restricts those moves, and lifecycle handlers return entry/exit effects. The transition service uses the policy on the item's persisted, installed board, with no fallback to Work policy.
+Boards own two separate concerns: topology (`nextPhases`) declares which moves exist, and lifecycle handlers return entry/exit effects. `nextPhases` binds everyone: people dragging cards on the Factory board, agents calling `factory_transition_work_item`, and board rules. A move it does not list is rejected with `invalid_transition`. Staying in the same phase is always allowed.
 
-Work automatically supplies its classification requirement, non-bug human-approval gate, and acceptance decision. Classified non-bug items without recorded acceptance require a human transition into Planning or Execute, regardless of their previous phase. Passing through Review does not grant approval. Historical items without an acceptance stamp also require this human transition; once acceptance is recorded, agents can continue the work. Review has no additional transition policy. Custom boards without a policy do not inherit Work's classification requirements or acceptance stamping, even if they use Work phase names or an agent role named `triage`.
+The built-in Work board lists these moves:
+
+| From      | To                                          | Why                                                                                                                                                                                    |
+| --------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Intake    | Triage, Planning, PR review, Done, Canceled | Never straight to Building or Review: a plan comes first, and Review is self-review of a build. PR review takes a pull request's own card; Done is where a completed source closes it. |
+| Triage    | Intake, Planning, Done, Canceled            | A confirmed bug goes to Planning; any other open issue waits in Intake for a person.                                                                                                   |
+| Planning  | Building, Intake, Done, Canceled            | Into Building only through the approved plan (see `exitTool` below).                                                                                                                   |
+| Building  | Review, Planning, Done, Canceled            | Planning again when the build shows the plan was wrong.                                                                                                                                |
+| Review    | Building, Intake, Done, Canceled            | Self-review of the build: only Building leads here. It sends the card back to Building, or parks it in Intake at its round limit; a parked card resumes through Planning.              |
+| PR review | Intake, Done, Canceled                      | A pull request's own card: merged, closed, or set aside in Intake. It never reaches the builder's lanes.                                                                               |
+| Done      | PR review                                   | A review request on a finished pull request reopens its review.                                                                                                                        |
+| Canceled  | Intake, PR review                           | A canceled card is reopened in Intake; a reopened pull request goes back to PR review.                                                                                                 |
+
+A pull request card only enters Intake, PR review, Done and Canceled, and only a pull request card enters PR review, for people too; Intake leads to both Triage and PR review and which one fits depends on the card, so this one rule stays in code (`workPullRequestCardRejection`). Planning ends with `submit_plan`, its exit tool: a plan waits for a person to approve it, and the approved plan moves the card to Building. Whether work is finished (no open pull request, no review asking for changes, an approving self-review) is not checked by the board: the build and self-review instructions tell the agent when to move a card to Done. Intake is resting, so nothing runs on a card parked there; an agent in another session could still move it.
+
+The Review board's `done` follows the same topology. Its review instructions keep Done for the merge: a reviewer records its verdict and leaves the card in Reviewing, and the merge event moves it to Done.
+
+**Triage.** The triage agent sends a confirmed bug to Planning, an open non-bug back to Intake, and closures to Done or Canceled. A person moving the card on from Intake is the approval; Factory records no classification or acceptance, and that move removes the `status: needs approval` label from the GitHub issue. On boot, Factory moves any card left in Triage by the old classify-and-accept rule back to Intake, once.
+
+**Migration:** `transitionPolicy` on `defineBoard()` is deprecated. It still runs for boards that set it, and `defineBoard()` logs one warning per board. Its context no longer carries a requested classification, and `triageType` and `accept` on an `allow` are ignored. Express the flow with each phase's `nextPhases` and `exitTool` instead:
 
 ```typescript
-import { defineBoard } from '@mastra/factory/boards';
-import type { BoardTransitionPolicy } from '@mastra/factory/boards';
-
-const releasePolicy: BoardTransitionPolicy = context => {
-  if (context.toStage === 'build' && !context.isHumanTransition) {
-    return { type: 'reject', code: 'approval_required', reason: 'A person must approve this release.' };
+// before
+transitionPolicy: context => {
+  if (context.fromStage === 'backlog' && context.toStage === 'done') {
+    return { type: 'reject', code: 'invalid_transition', reason: 'Build before closing.' };
   }
-};
-
-const releaseBoard = defineBoard({
-  id: 'release',
-  name: 'Release',
-  initialPhase: 'approval',
-  transitionPolicy: releasePolicy,
-  phases: {
-    approval: { name: 'Approval', kind: 'resting', nextPhases: ['build'] },
-    build: { name: 'Build', kind: 'working', runner: { context: 'release' } },
-  },
-});
-// Install through new MastraFactory({ storage, boards: [releaseBoard] }).
+},
+// after, on the backlog phase
+nextPhases: ['build'],
 ```
 
-A policy receives a deeply readonly snapshot of the item and transition, including actor, ingress, source, revision, persisted classification and acceptance, requested classification, and initial-entry/reentry flags. Dates are ISO strings. `isHumanTransition` requires both a human actor and human ingress; a deferred rule with a human actor is not a human transition.
-
-Return `undefined` for no additional restriction, `{ type: 'allow' }` with optional `triageType` and `accept: true` intents, or `{ type: 'reject', code, reason }`. Policies cannot return lifecycle effects or arbitrary patches. Classification intents must come from the existing triage-agent path and match its requested verdict; acceptance intents require a human transition. Runtime validates these intents and applies them only in the revision-checked transaction after all lifecycle handlers allow the move.
-
-Policies must be side-effect-free. They run on initial entry, reentry, and same-stage requests, but completed replays use the stored result. Concurrent attempts can evaluate more than once. Policy and lifecycle evaluation share one timeout budget; a timeout does not cancel arbitrary work started by a callback.
-
-A policy cannot bypass topology, ingress authorization, board ownership, external-author safety, revision checks, decision validation, replay handling, or atomic persistence. Returning `allow` is not an authorization override.
+Rule contexts still carry `acceptedAt`, deprecated: it is the stamp on older cards and `null` for cards since.
 
 ### Board phase semantics
 
@@ -365,7 +366,7 @@ const releaseBoard = defineBoard({
 
 Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with contexts `triage`, `work`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with context `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 
-New pull requests and merge requests get their own card in Work Intake. The card's Review action moves it into Work's PR review phase (`pr-review`), where an independent reviewer runs `factory-review` (`factory-gitlab-review` for GitLab) in the card's own `review` session, or the re-review skill once a verdict is recorded. Work's Review phase is the builder's self-review of its own work, so a pull request card never enters it, and only pull request cards enter PR review. A pull request card only enters Intake, PR review, Done, and Canceled; merging moves it to Done and closing it unmerged to Canceled, and an agent cannot move it to Done. Cards filed on the Review board before pull requests moved to Work stay there and keep working as before.
+New pull requests and merge requests get their own card in Work Intake. The card's Review action moves it into Work's PR review phase (`pr-review`), where an independent reviewer runs `factory-review` (`factory-gitlab-review` for GitLab) in the card's own `review` session, or the re-review skill once a verdict is recorded. Work's Review phase is the builder's self-review of its own work, so a pull request card never enters it, and only pull request cards enter PR review. A pull request card only enters Intake, PR review, Done, and Canceled; merging moves it to Done and closing it unmerged to Canceled. Cards filed on the Review board before pull requests moved to Work stay there and keep working as before.
 
 Planning and Building on Work share the `work` session, so the builder keeps the planner's reasoning, branch and sandbox. Self-review still runs in its own `review` session. When the planner moves the card to Building, the build prompt is queued onto its own run, and the planner's run binding ends at that point: Factory tools it calls later in the same turn are rejected. When the builder moves a card back from Building to Planning, no new planning run starts; the builder keeps working in its run. When a person moves it back, Planning starts again, in the same `work` session. The old `plan` role still names Planning: a run requested or queued for `plan` starts Planning in a `plan` session, and the build then continues in that session. Cards planned before this change do the same.
 
@@ -393,9 +394,11 @@ Boards and phases take `name` and an optional `description`. A phase lists the p
 
 - `runner` — `{ agentId?, skill?, context?, instructions? }`. `context` names the session the phase runs in (defaults to `work`); phases that share a context share a session. When the agent moves its own card into another phase of its context, that phase's `skill` still starts: its prompt is queued onto the agent's run. `skill` starts that skill when a card enters the phase from a source the phase has no `onEnter` handler for. It names a built-in Factory skill or one of your app's skills (see [Skills for custom boards](#skills-for-custom-boards)). `instructions` (up to 1,000 characters) are added to every run the phase starts. `agentId` defaults to `code-agent`, the only agent Factory runs today.
 - `autoStart` and `autoStartWhen` — the phase's runs start without a person's approval, for every card or only for cards matching the rule. Cards from outside the write-access circle still wait for a person.
-- `exitTool` — a tool name, or `{ id, autoApprove, autoApproveWhen }`, that ends the phase. The factory-phase signal tells the agent the phase ends when that tool succeeds and lists `nextPhases`; the agent then moves the card itself with `factory_transition_work_item`, so it picks where the card goes. The phase needs at least one next phase. `autoApprove` answers the person's approval the tool waits for, for every card or only cards matching `autoApproveWhen`. Factory sessions already run tools without asking, so today this matters for `submit_plan`: an auto-approved plan is accepted without a person. `defineBoard()` accepts `autoApprove` on any exit tool, and the catalog reports it, but on other tools it has no effect yet.
+- `exitTool` — a tool name, or `{ id, autoApprove, autoApproveWhen }`, that ends the phase. The factory-phase signal tells the agent the phase ends when that tool succeeds and lists `nextPhases`; the agent then moves the card itself with `factory_transition_work_item`, so it picks where the card goes. When the board also has a tool rule for the exit tool (`tools`), the tool's success moves the card instead, and only a person can otherwise move it on to another working phase: an agent or board rule asking for that is rejected with `approval_required` unless the tool is auto-approved for the card. The phase needs at least one next phase. `autoApprove` answers the person's approval the tool waits for, for every card or only cards matching `autoApproveWhen`; it is the only way plans are approved without a person. Factory sessions already run tools without asking, so for `submit_plan` this means an auto-approved plan is accepted without a person. On other exit tools with a tool rule, `autoApprove` decides whether an agent may move the card on to another working phase without the tool. Work's Planning declares `{ id: 'submit_plan', autoApprove: false }`: every plan waits for a person, who moves the card or approves `submit_plan` in a signed-in chat.
 
 Rules test a card's facts: `item.labels`, `item.title`, `item.author`, `source.kind` and `source.integration`.
+
+The example below is a custom board, not Work's behavior: it auto-starts and auto-approves planning only for cards labelled `effort:low`.
 
 ```typescript
 const LOW_EFFORT = {
@@ -415,7 +418,7 @@ const releaseBoard = defineBoard({
       runner: { context: 'build', skill: 'factory-plan' },
       autoStart: true,
       autoStartWhen: LOW_EFFORT,
-      exitTool: { id: 'submit_plan', autoApprove: true },
+      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
       nextPhases: ['build', 'canceled'],
     },
     build: { name: 'Build', kind: 'working', runner: { context: 'build' }, nextPhases: ['done'] },
@@ -514,15 +517,6 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
   id: 'release',
   name: 'Release',
   initialPhase: 'backlog',
-  transitionPolicy: context => {
-    if (context.fromStage === 'backlog' && context.toStage === 'preparing' && !context.isHumanTransition) {
-      return {
-        type: 'reject',
-        code: 'approval_required',
-        reason: 'A person must start the release rehearsal.',
-      };
-    }
-  },
   phases: {
     backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['preparing'] },
     preparing: {
@@ -586,7 +580,7 @@ export function createFactory(config: Omit<MastraFactoryConfig, 'boards' | 'incl
 
 Use the host's normal `prepare()`, `new Mastra(...)`, and `finalize()` sequence. Change the hardcoded `includeDefaultBoards: true` in `createFactory` to `false` to run without Work or Review. Working roles name bindings on the shared Code Agent; they do not register separate agents. Factory has no per-role agent configuration option. The board's kickoff prompts supply the role-specific instructions.
 
-Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `backlog`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The human transition satisfies this board's policy and starts the preparer. Its bound tool advances to `build`; the publisher's completed check produces a deferred transition to `done`. Terminal entry revokes the binding and releases the sandbox. The Factory UI performs the same operations against installed boards (see below); verify the persisted card's board, phase, and deferred decision status either way.
+Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `backlog`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The move starts the preparer. Its bound tool advances to `build`; the publisher's completed check produces a deferred transition to `done`. Terminal entry revokes the binding and releases the sandbox. The Factory UI performs the same operations against installed boards (see below); verify the persisted card's board, phase, and deferred decision status either way.
 
 Lifecycle, tool-result, and integration handlers may return `upsertLinkedWorkItem` targeting a different installed board. Linked cards enter that board's declared initial phase before moving to the requested phase. Existing cards cannot be reassigned to another board through either decision type. Targets are validated against their own installed board before acceptance and again before uncommitted deferred effects execute; a phase declared only on another board is not valid. Committed replay retains its recorded result and original `configVersion`.
 
@@ -677,7 +671,7 @@ const overrides = { github: { issueCommentCreated: { onEvent: null } } };
 const github = new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 ```
 
-Board definitions own lifecycle, transition-policy, phase-semantics, and tool-result rules; nothing is configured globally. `MastraFactory({ configVersion })` supplies the deployment-owned label stamped on audit records and GitHub evaluations; it is not a hash of custom handler code, not ingress identity, and does not change delivery replay semantics. Update `configVersion` when changing handler behavior.
+Board definitions own lifecycle, topology, phase-semantics, and tool-result rules; nothing is configured globally. `MastraFactory({ configVersion })` supplies the deployment-owned label stamped on audit records and GitHub evaluations; it is not a hash of custom handler code, not ingress identity, and does not change delivery replay semantics. Update `configVersion` when changing handler behavior.
 
 Handlers receive the existing typed GitHub context and return one decision or `undefined`. External titles, bodies, and comments remain untrusted data after webhook authentication. Custom handlers must preserve any required actor-permission checks explicitly.
 
@@ -838,7 +832,7 @@ A person's own Factory session (a user session) gets tools to find, file and man
 | `factory_inspect_work_item`     | `workItem` (id or `#number`)                                                                                                                    |
 | `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                       |
 | `factory_create_work_item`      | `title`, `brief`, optional `repository` (`owner/name`, one this Factory links)                                                                  |
-| `factory_update_work_item`      | `workItem` plus any of `title`, `repository`, `parentWorkItem` (or `null` to detach), `plansPreapproved: true`                                  |
+| `factory_update_work_item`      | `workItem` plus any of `title`, `repository`, `parentWorkItem` (or `null` to detach)                                                            |
 | `factory_subscribe_work_item`   | `workItem`                                                                                                                                      |
 | `factory_unsubscribe_work_item` | `workItem`                                                                                                                                      |
 | `factory_transition_work_item`  | `workItem`, `stage`                                                                                                                             |

@@ -235,6 +235,7 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly tools: BoardToolRules;
   /** Integration event handlers for cards on this board; empty when the board declares none. */
   readonly events: BoardEventRules;
+  /** @deprecated Express the flow with each phase's `nextPhases` and `exitTool`; still enforced when set. */
   readonly transitionPolicy?: BoardTransitionPolicy;
   /** Where source-closed rules move a card; absent when the board opts out of auto-closing. */
   readonly sourceClosed?: BoardSourceClosed<PhaseId>;
@@ -264,6 +265,7 @@ type BoardConfig<BoardId extends string, Phases extends Record<string, BoardPhas
   phases: Phases;
   tools?: Record<string, BoardToolRule>;
   events?: BoardEventRules;
+  /** @deprecated Express the flow with each phase's `nextPhases` and `exitTool`; still enforced when set. */
   transitionPolicy?: BoardTransitionPolicy;
   sourceClosed?: { completed: keyof Phases & string; canceled: keyof Phases & string };
 };
@@ -496,6 +498,7 @@ type DeclaredBoard = {
   readonly id: string;
   readonly name?: string;
   readonly title?: string;
+  readonly transitionPolicy?: BoardTransitionPolicy;
   readonly phases: Readonly<Record<string, BoardPhaseDefinition<string>>>;
 };
 
@@ -507,6 +510,7 @@ type DeclaredBoard = {
 function deprecatedFields(config: DeclaredBoard): string[] {
   const found: string[] = [];
   if (config.title !== undefined && config.name === undefined) found.push('title → name');
+  if (config.transitionPolicy !== undefined) found.push('transitionPolicy → phases.*.nextPhases and exitTool');
   for (const [phaseId, phase] of Object.entries(config.phases)) {
     if (phase.title !== undefined && phase.name === undefined) found.push(`phases.${phaseId}.title → name`);
     if (phase.next !== undefined && !phase.nextPhases?.includes(phase.next)) {

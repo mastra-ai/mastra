@@ -1,11 +1,10 @@
 import { compileBoardDefinition } from './define-board.js';
-import { reviewPullRequest, reviewTransitionPolicy } from './pull-request-review.js';
+import { reviewPullRequest } from './pull-request-review.js';
 
 export const reviewBoard = compileBoardDefinition({
   id: 'review',
   name: 'Review',
   initialPhase: 'intake',
-  transitionPolicy: reviewTransitionPolicy,
   phases: {
     intake: {
       name: 'Intake',

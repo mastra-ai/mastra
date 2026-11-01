@@ -39,6 +39,13 @@ function card(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
+const TRIAGE_RUN = { sessionId: 's-triage', branch: 'b', threadId: 't', startedBy: 'user-1' };
+
+/** Triage ran and left the card in Intake for a person. */
+function triaged(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
+  return card(id, { sessions: { triage: TRIAGE_RUN }, ...overrides });
+}
+
 function pullRequest(number: number, stages: string[], metadata: Record<string, unknown> = {}): WorkItem {
   return card(`pr-${number}`, {
     board: 'review',
@@ -100,12 +107,12 @@ describe('starterPrompts', () => {
   });
 
   const memoryCards = ['leak', 'recall', 'threads'].map(id =>
-    card(`memory-${id}`, { stages: ['triage'], triageType: 'feature request', metadata: { labels: ['Memory'] } }),
+    triaged(`memory-${id}`, { metadata: { labels: ['Memory'] } }),
   );
 
   const quietBoard = [
     done('shipped', 2),
-    card('bug', { stages: ['triage'], triageType: 'bug' }),
+    card('bug', { stages: ['triage'], metadata: { labels: ['bug'] } }),
     card('new', { stages: ['intake'] }),
     pullRequest(1, ['intake'], { sourceCreatedAt: daysAgo(2) }),
     pullRequest(3, ['intake'], { sourceCreatedAt: daysAgo(45) }),
@@ -159,17 +166,24 @@ describe('starterPrompts', () => {
     expect(promptFor('review', cards)).toMatchObject({ value: 29, unit: 'days', action: 'Review it' });
   });
 
-  it('asks for a decision on the cards triage classified that nobody accepted, leaving bugs and started work out', () => {
+  it('asks for a decision on the cards triage left in Intake, leaving work still triaging or started out', () => {
     const decide = promptFor('decide', [
-      card('question', { stages: ['triage'], triageType: 'question/support' }),
-      card('feature', { stages: ['intake'], triageType: 'feature request' }),
-      card('accepted', { stages: ['triage'], triageType: 'feature request', acceptedAt: daysAgo(1) }),
-      card('bug', { stages: ['triage'], triageType: 'bug' }),
-      card('unclassified', { stages: ['intake'] }),
-      card('building', { stages: ['execute'], triageType: 'feature request' }),
+      triaged('question'),
+      triaged('feature'),
+      triaged('triaging', { stages: ['triage'] }),
+      card('untriaged', { stages: ['intake'] }),
+      triaged('building', { stages: ['execute'] }),
+      triaged('parked', {
+        sessions: { triage: TRIAGE_RUN, work: TRIAGE_RUN },
+        stageHistory: [
+          { stage: 'triage', enteredAt: daysAgo(3), by: 'user-1' },
+          { stage: 'execute', enteredAt: daysAgo(2), by: 'user-1' },
+          { stage: 'intake', enteredAt: daysAgo(1), by: 'user-1' },
+        ],
+      }),
     ]);
 
-    expect(decide).toMatchObject({ label: 'Not yet accepted', value: 2, action: 'Help me decide' });
+    expect(decide).toMatchObject({ label: 'Triaged, waiting for you', value: 2, action: 'Help me decide' });
   });
 
   it('sweeps the area label with the most open cards, ignoring process labels and GitHub type labels', () => {
@@ -190,11 +204,8 @@ describe('starterPrompts', () => {
     expect(kinds).not.toContain('sweep');
   });
 
-  it('leaves cards triage already classified out of the triage count', () => {
-    const triage = promptFor('triage', [
-      card('unclassified'),
-      card('held-question', { triageType: 'question/support' }),
-    ]);
+  it('leaves cards triage already looked at out of the triage count', () => {
+    const triage = promptFor('triage', [card('untriaged'), triaged('held-question')]);
 
     expect(triage).toMatchObject({ label: 'Untriaged in Intake', value: 1, action: 'Triage it' });
   });
@@ -210,15 +221,15 @@ describe('starterPrompts', () => {
 
   it('plans only the bugs nobody has planned or started', () => {
     const plan = promptFor('bug', [
-      card('triaged-bug', { stages: ['triage'], triageType: 'bug' }),
+      card('triaging-bug', { stages: ['triage'], metadata: { labels: ['bug'] } }),
       card('labelled-bug', { stages: ['intake'], metadata: { labels: ['Bug'] } }),
       card('planned-bug', {
         stages: ['triage'],
-        triageType: 'bug',
+        metadata: { labels: ['bug'] },
         sessions: { plan: { sessionId: 's-1', branch: 'b', threadId: 't', startedBy: 'user-1' } },
       }),
-      card('building-bug', { stages: ['execute'], triageType: 'bug' }),
-      card('feature', { stages: ['triage'], triageType: 'feature request' }),
+      card('building-bug', { stages: ['execute'], metadata: { labels: ['bug'] } }),
+      triaged('feature'),
     ]);
 
     expect(plan).toMatchObject({ label: 'Bugs with no plan', value: 2, action: 'Plan a fix for one' });

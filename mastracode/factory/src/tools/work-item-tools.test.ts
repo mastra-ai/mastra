@@ -289,8 +289,8 @@ describe('factory_update_work_item', () => {
       updated: ['title', 'repository', 'parentWorkItemId'],
       repository: 'mastra-ai/mastra',
       parentWorkItemId: parent.id,
-      plansPreapproved: false,
     });
+    expect(result).not.toHaveProperty('plansPreapproved');
     const stored = await workItems.getForProject('org-1', 'project-1', item.id);
     expect(stored).toMatchObject({ title: 'New title', parentWorkItemId: parent.id, stages: item.stages });
     expect(stored!.metadata).toMatchObject({ repository: 'mastra-ai/mastra' });
@@ -341,19 +341,21 @@ describe('factory_update_work_item', () => {
     ).rejects.toThrow("This card runs in mastra-ai/mastra, which comes from its linked issue and can't be changed.");
   });
 
-  it('detaches a card from its parent and pre-approves its plans', async () => {
+  it('detaches a card from its parent, and refuses the retired plan pre-approval', async () => {
     const { run, workItems, fileItem } = await setup();
     const { item: parent } = await fileItem('project-1', 'Epic');
     const { item } = await fileItem('project-1', 'Child');
     await workItems.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { parentWorkItemId: parent.id } });
 
-    const result = await run('factory_update_work_item', {
-      workItem: item.id,
-      parentWorkItem: null,
-      plansPreapproved: true,
-    });
+    // Plans always wait for a person (or the board's exit tool), so there is nothing to pre-approve.
+    await expect(
+      run('factory_update_work_item', { workItem: item.id, parentWorkItem: null, plansPreapproved: true }),
+    ).resolves.toMatchObject({ error: true });
+    expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.parentWorkItemId).toBe(parent.id);
 
-    expect(result).toMatchObject({ parentWorkItemId: null, plansPreapproved: true });
+    const result = await run('factory_update_work_item', { workItem: item.id, parentWorkItem: null });
+
+    expect(result).toMatchObject({ parentWorkItemId: null });
   });
 
   it('refuses a parent from another Factory and a card that would be its own ancestor', async () => {
@@ -623,15 +625,12 @@ describe('on a turn nobody signed in started', () => {
     );
   });
 
-  it('refuses to pre-approve plans, approve or dismiss proposals, and changes nothing', async () => {
+  it('refuses to approve or dismiss proposals, and changes nothing', async () => {
     const { run, workItems, fileItem, auditRecorder } = await setup({ interactive: false });
     const { item } = await fileItem('project-1', 'Keep my gate');
     const approve = vi.spyOn(workItems, 'approveDeferredDecision');
     const dismiss = vi.spyOn(workItems, 'dismissDeferredDecision');
 
-    await expect(run('factory_update_work_item', { workItem: item.id, plansPreapproved: true })).rejects.toThrow(
-      'Only a person can pre-approve plans',
-    );
     await expect(run('factory_resolve_proposal', { decisionId: DECISION_ID, action: 'approve' })).rejects.toThrow(
       'Only a person can approve or dismiss a proposed run',
     );
@@ -642,7 +641,6 @@ describe('on a turn nobody signed in started', () => {
     expect(approve).not.toHaveBeenCalled();
     expect(dismiss).not.toHaveBeenCalled();
     expect(auditRecorder.record).not.toHaveBeenCalled();
-    const stored = await workItems.get({ orgId: 'org-1', id: item.id });
-    expect(stored?.plansPreapprovedAt).toBeNull();
+    expect((await workItems.get({ orgId: 'org-1', id: item.id }))?.revision).toBe(item.revision);
   });
 });

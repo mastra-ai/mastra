@@ -41,6 +41,6 @@ Write the findings argument of the verdict call as Markdown the builder (on requ
 
 ## Verdict
 
-Call `factory_record_review_verdict` with `verdict` (`approve` or `request changes`), `reviewedHeadSha` (the head you tested), and `findings` (the report). Approve keeps the card in Review and wakes the builder to open the change request from that exact head. Request changes sends it back to Building with your report. After the round limit in the factory-phase arguments, a further request changes parks the card for a human, so make each round's requests complete.
+Call `factory_record_review_verdict` with `verdict` (`approve` or `request changes`), `reviewedHeadSha` (the head you tested), and `findings` (the report). Approve keeps the card in Review and wakes the builder to open the change request from that exact head. Request changes sends it back to Building with your report. After the round limit in the factory-phase arguments, a further request changes parks the card for a human, so make each round's requests complete. Never move the card to Done yourself: an approving verdict hands it back to the builder, which opens the change request, and the merge finishes it.
 
 Then post the report as your final conversation message and stop.

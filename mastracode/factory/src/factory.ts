@@ -776,6 +776,25 @@ export class MastraFactory {
     }
     const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
 
+    // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
+    // back to Intake. Move the cards the old rule left there, once.
+    if (storage.isDomainReady('work-items')) {
+      await timedPhase('prepare.workItems.heldTriageCards', () =>
+        workItemsStorage
+          .returnHeldTriageCards()
+          .then(moved => {
+            if (moved.length > 0) {
+              console.info(`[factory] moved ${moved.length} card(s) held for triage acceptance back to Intake`);
+            }
+          })
+          .catch(error =>
+            console.warn(
+              `[factory] moving cards held for triage acceptance back to Intake failed: ${error instanceof Error ? error.message : error}`,
+            ),
+          ),
+      );
+    }
+
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
     // mirroring stored API keys into process.env.
@@ -1041,11 +1060,6 @@ export class MastraFactory {
           boards: boards,
           storage: workItemsStorage,
           audit: auditDomain,
-          autoApprovePlans: async ({ orgId, factoryProjectId }) => {
-            await factoryProjectsStorage.ensureReady();
-            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-            return project?.autoApprovePlans ?? false;
-          },
           selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
             await factoryProjectsStorage.ensureReady();
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
@@ -1796,11 +1810,6 @@ export class MastraFactory {
                   await factoryProjectsStorage.ensureReady();
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                   return project?.autoRunEnabled ?? false;
-                },
-                autoApprovePlans: async ({ orgId, factoryProjectId }) => {
-                  await factoryProjectsStorage.ensureReady();
-                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                  return project?.autoApprovePlans ?? false;
                 },
                 factoryProjectExists: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
