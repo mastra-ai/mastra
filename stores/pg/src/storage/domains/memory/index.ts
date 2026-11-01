@@ -213,6 +213,11 @@ function dedupeMessagesForSave(messages: MastraDBMessage[]): MastraDBMessage[] {
   return Array.from(deduped.values());
 }
 
+/** Shallow merge; keys patched to `undefined` are dropped when serialized. Non-object metadata is replaced. */
+function mergeMetadata(existing: unknown, patch: Record<string, unknown>): Record<string, unknown> {
+  const base = existing && typeof existing === 'object' && !Array.isArray(existing) ? existing : {};
+  return { ...base, ...patch };
+}
 export class MemoryPG extends MemoryStorage {
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
@@ -912,11 +917,116 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  #toThread(row: StorageThreadType & { createdAtZ?: Date; updatedAtZ?: Date }): StorageThreadType {
+    return {
+      id: row.id,
+      resourceId: row.resourceId,
+      title: row.title,
+      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+      createdAt: row.createdAtZ || row.createdAt,
+      updatedAt: row.updatedAtZ || row.updatedAt,
+    };
+  }
+
+  async #lockThread(
+    t: Queryable,
+    tableName: string,
+    { id, resourceId }: { id: string; resourceId?: string },
+  ): Promise<StorageThreadType | null> {
+    const params: unknown[] = [id];
+    let query = `SELECT * FROM ${tableName} WHERE id = $1`;
+    if (resourceId !== undefined) {
+      query += ` AND "resourceId" = $2`;
+      params.push(resourceId);
+    }
+    const row = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+      `${query} FOR UPDATE`,
+      params,
+    );
+    return row ? this.#toThread(row) : null;
+  }
+
+  /**
+   * Writes `title` (when given) and the full `metadata` value (when given).
+   * Callers that merge metadata must hold the row lock from `#lockThread`.
+   */
+  async #writeThread(
+    q: Queryable,
+    tableName: string,
+    { id, title, metadata }: { id: string; title?: string; metadata?: Record<string, unknown> },
+  ): Promise<StorageThreadType | null> {
+    const nowStr = toUtcISOString(new Date());
+    const params: unknown[] = [title ?? null, nowStr, nowStr, id];
+    // Leave the column out when no metadata is given, so a title-only update
+    // never touches the stored value.
+    let metadataSet = '';
+    if (metadata !== undefined) {
+      params.push(toPgJson(metadata));
+      metadataSet = 'metadata = $5,';
+    }
+    const row = await q.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+      `UPDATE ${tableName}
+       SET
+         title = COALESCE($1, title),
+         ${metadataSet}
+         "updatedAt" = $2,
+         "updatedAtZ" = $3
+       WHERE id = $4
+       RETURNING *`,
+      params,
+    );
+    return row ? this.#toThread(row) : null;
+  }
+
+  /**
+   * Cross-process atomic metadata read-modify-write: the thread row stays locked
+   * (`SELECT ... FOR UPDATE`) from the read through the write, so concurrent
+   * writers from any process serialize instead of overwriting each other.
+   */
+  override async updateThreadMetadata({
+    id,
+    resourceId,
+    update,
+    fence: explicitFence,
+  }: {
+    id: string;
+    resourceId?: string;
+    update: (thread: StorageThreadType) => Record<string, unknown> | undefined;
+    fence?: RunFence;
+  }): Promise<StorageThreadType | null> {
+    const fence = resolveRunFence(this, explicitFence);
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    try {
+      return await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'updateThreadMetadata');
+
+        const thread = await this.#lockThread(t, threadsTable, { id, resourceId });
+        if (!thread) return null;
+
+        const metadata = update(thread);
+        if (!metadata) return thread;
+
+        return this.#writeThread(t, threadsTable, { id, metadata: mergeMetadata(thread.metadata, metadata) });
+      });
+    } catch (error) {
+      if (error instanceof MastraError || isRunFenceConflictError(error)) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_THREAD_METADATA', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: id },
+        },
+        error,
+      );
+    }
+  }
+
   async updateThread({
     id,
     title,
     metadata,
-    fence,
+    fence: explicitFence,
   }: {
     id: string;
     title?: string;
@@ -924,49 +1034,40 @@ export class MemoryPG extends MemoryStorage {
     fence?: RunFence;
   }): Promise<StorageThreadType> {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    const notFound = () =>
+      new MastraError({
+        id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        text: `Thread ${id} not found`,
+        details: {
+          threadId: id,
+          title: title ?? null,
+        },
+      });
     try {
-      return await this.#fenced(fence, 'updateThread', async q => {
-        const existingThread = await this.#getThreadById(q, { threadId: id });
-        if (!existingThread) {
-          throw new MastraError({
-            id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
-            domain: ErrorDomain.STORAGE,
-            category: ErrorCategory.USER,
-            text: `Thread ${id} not found`,
-            details: {
-              threadId: id,
-              title: title ?? null,
-            },
-          });
-        }
+      if (metadata === undefined) {
+        return await this.#fenced(explicitFence, 'updateThread', async q => {
+          const thread = await this.#writeThread(q, threadTableName, { id, title });
+          if (!thread) throw notFound();
+          return thread;
+        });
+      }
 
-        const mergedMetadata = {
-          ...existingThread.metadata,
-          ...metadata,
-        };
-
-        const nowStr = toUtcISOString(new Date());
-        const thread = await q.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-          `UPDATE ${threadTableName}
-                    SET
-                        title = COALESCE($1, title),
-                        metadata = $2,
-                        "updatedAt" = $3,
-                        "updatedAtZ" = $4
-                    WHERE id = $5
-                    RETURNING *
-                `,
-          [title ?? null, mergedMetadata, nowStr, nowStr, id],
-        );
-
-        return {
-          id: thread.id,
-          resourceId: thread.resourceId,
-          title: thread.title,
-          metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-          createdAt: thread.createdAtZ || thread.createdAt,
-          updatedAt: thread.updatedAtZ || thread.updatedAt,
-        };
+      // Merging metadata is a read-modify-write, so hold the row lock for the
+      // whole merge; otherwise writers in other processes drop each other's keys.
+      const fence = resolveRunFence(this, explicitFence);
+      return await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'updateThread');
+        const existing = await this.#lockThread(t, threadTableName, { id });
+        if (!existing) throw notFound();
+        const thread = await this.#writeThread(t, threadTableName, {
+          id,
+          title,
+          metadata: mergeMetadata(existing.metadata, metadata),
+        });
+        if (!thread) throw notFound();
+        return thread;
       });
     } catch (error) {
       if (error instanceof MastraError || isRunFenceConflictError(error)) throw error;
