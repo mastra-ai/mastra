@@ -24,7 +24,19 @@ async function startWorker(dbUrl: string, agentId: string, observationalMemory: 
         env: { ...process.env, INNGEST_DEV: '1', INNGEST_BASE_URL: `http://localhost:${INNGEST_PORT}` },
       },
     );
-    const timer = setTimeout(() => reject(new Error('Inngest worker did not become ready')), 90_000);
+    const timer = setTimeout(() => {
+      if (worker.exitCode === null && worker.signalCode === null) {
+        try {
+          process.kill(-worker.pid!, 'SIGTERM');
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ESRCH') {
+            reject(error);
+            return;
+          }
+        }
+      }
+      reject(new Error('Inngest worker did not become ready'));
+    }, 90_000);
     const onData = (buffer: Buffer) => {
       const text = buffer.toString();
       if (text.includes('[worker] ready')) {
@@ -43,9 +55,19 @@ async function startWorker(dbUrl: string, agentId: string, observationalMemory: 
 
 async function stopWorker(worker: ChildProcess | undefined) {
   if (!worker) return;
-  process.kill(-worker.pid!, 'SIGTERM');
+  try {
+    process.kill(-worker.pid!, 'SIGTERM');
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error;
+  }
   await new Promise(resolve => setTimeout(resolve, 500));
 }
+
+it('does not mask a failed run when its detached worker has already exited', async () => {
+  const worker = spawn(process.execPath, ['-e', ''], { detached: true, stdio: 'ignore' });
+  await new Promise<void>(resolve => worker.once('exit', () => resolve()));
+  await expect(stopWorker(worker)).resolves.toBeUndefined();
+});
 
 describe('Inngest: replacement worker resumes an OM delegation (#27971)', () => {
   beforeAll(async () => {
