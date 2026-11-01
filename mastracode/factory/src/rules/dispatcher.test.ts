@@ -6996,6 +6996,38 @@ describe('board phase automation', () => {
     }
   });
 
+  it("starts a phase whose rule asks for a trusted author only for a trusted author's card", async () => {
+    const trusted = {
+      operator: 'AND' as const,
+      conditions: [{ field: 'author.trusted', operator: 'equals' as const, value: true }],
+    };
+    const boards = boardsWithBuilding({ autoStart: true, autoStartWhen: trusted });
+    for (const [metadata, expected] of [
+      [{ authorTrusted: true, factoryAuthored: false }, 'succeeded'],
+      [{ authorTrusted: false, factoryAuthored: true }, 'succeeded'],
+      [{ authorTrusted: false, factoryAuthored: false }, 'proposed'],
+    ] as const) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { item, transitionService } = await queueBuild(
+        storage,
+        [],
+        `auto-start-trusted-${JSON.stringify(metadata)}`,
+      );
+      await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { metadata } });
+      const { controller } = createSession();
+      await new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => false,
+      }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe(expected);
+    }
+  });
+
   it('never auto-starts a phase for a card from outside the write-access circle', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueBuild(storage, ['effort:low'], 'auto-start-outsider');

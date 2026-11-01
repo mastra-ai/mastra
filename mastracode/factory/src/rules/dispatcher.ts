@@ -4,8 +4,15 @@ import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/er
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { boardForWorkItem, resolvePhaseSemantics, workItemPhaseSemantics } from '../boards/index.js';
+import { boardForWorkItem, cardRuleFacts, resolvePhaseSemantics, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import {
+  heldForPerson,
+  INTAKE_ROUTE_METADATA_KEY,
+  placedByIntakeRoute,
+  resolveIntakePlacement,
+} from '../boards/intake-routing.js';
+import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -39,7 +46,7 @@ import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
+import { externalSourceForWorkItem, FACTORY_RULE_STAGES } from './types.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -385,6 +392,8 @@ export interface FactoryDecisionDispatcherOptions {
   storage: WorkItemsStorage;
   /** Installed boards; defaults to the built-in Work and Review boards. */
   boards?: BoardRegistry | ProjectBoardSource;
+  /** The project's intake routes, which place newly filed linked cards. Without it, decisions place cards as they say. */
+  intakeRoutes?: IntakeRoutesReader;
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
@@ -586,6 +595,7 @@ export class FactoryDecisionDispatcher {
   readonly #controller: FactoryController;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   readonly #boards: ProjectBoardSource;
+  readonly #intakeRoutes?: IntakeRoutesReader;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
@@ -621,6 +631,7 @@ export class FactoryDecisionDispatcher {
     this.#controller = options.controller;
     this.#transitionService = options.transitionService;
     this.#boards = toBoardSource(options.boards);
+    this.#intakeRoutes = options.intakeRoutes;
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
@@ -901,9 +912,10 @@ export class FactoryDecisionDispatcher {
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    // Neither arming nor auto-run is standing consent for code from outside the write-access
-    // circle: only a run pre-approved by a person's gesture or its own agent's governed move passes.
-    if (item && externallyAuthoredWorkItem(item)) return true;
+    // Neither arming nor auto-run is standing consent for a card the project's intake routes
+    // hold (by default, code from outside the write-access circle): only a run pre-approved by a
+    // person's gesture or its own agent's governed move passes.
+    if (item && (await heldForPerson(this.#intakeRoutes, record, item))) return true;
     if (item?.autonomyArmedAt != null) return false;
     if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
     if (item && startsInAutoPhase(boards, item, decision)) return false;
@@ -1298,7 +1310,7 @@ export class FactoryDecisionDispatcher {
 
   async #upsertLinkedItem(
     record: FactoryDeferredDecisionRecord,
-    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    requested: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
     if (
@@ -1312,13 +1324,21 @@ export class FactoryDecisionDispatcher {
     const existing = await this.#storage.getByProjectSource({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
-      source: externalSourceForDecision(decision),
+      source: externalSourceForDecision(requested),
     });
-    if (existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey) {
-      // Filing the card *was* the placement, so a retry of the same decision has
-      // nothing left to apply — and must not drag a card that has since moved
-      // back down to the stage this decision filed it at.
-      if (decision.skipRules === true) return;
+    const materializedHere = existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
+    // Filing the card *was* the placement, so a retry of the same decision has
+    // nothing left to apply — and must not drag a card that has since moved
+    // back down to the stage this decision filed it at.
+    if (materializedHere && requested.skipRules === true) return;
+    const boards = await this.#boards.load(record);
+    // Intake routes place only a card this decision files (or is still filing,
+    // on a retry); a card already on the board stays where it is.
+    const decision =
+      !existing || materializedHere
+        ? await this.#routeArrival(record, requested, boards)
+        : this.#keepRoutedCard(existing, requested, boards);
+    if (materializedHere) {
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
           record.orgId,
@@ -1328,7 +1348,6 @@ export class FactoryDecisionDispatcher {
         if (replay?.status === 'accepted' && replay.stage === decision.stage) return;
       }
     }
-    const boards = await this.#boards.load(record);
     assertFactoryDecisionTarget(decision, boards);
     const definition = boards.get(decision.board);
     if (!definition) throw new Error('Factory decision target board is not installed.');
@@ -1490,6 +1509,55 @@ export class FactoryDecisionDispatcher {
       causalChain,
     });
     if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
+  }
+
+  /**
+   * Applies the project's intake routes to an arrival: a decision filing the card at its
+   * board's initial phase. A decision naming a later phase (a maintainer's review request)
+   * or placing the card outright (`skipRules`) already chose where the card goes.
+   */
+  async #routeArrival(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    boards: BoardRegistry,
+  ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
+    if (!this.#intakeRoutes || decision.skipRules === true) return decision;
+    if (decision.stage !== boards.get(decision.board)?.initialPhase) return decision;
+    const routes = await this.#intakeRoutes.listIntakeRoutes({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+    });
+    if (routes.length === 0) return decision;
+    const facts = cardRuleFacts({
+      title: decision.title,
+      metadata: decision.metadata ?? {},
+      externalSource: externalSourceForDecision(decision),
+    });
+    const placement = resolveIntakePlacement(routes, facts, boards);
+    if (!placement) return decision;
+    return {
+      ...decision,
+      board: placement.board,
+      stage: placement.phase,
+      metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: placement.routeId },
+    };
+  }
+
+  /**
+   * A card an intake route placed stays on the route's board when its source is filed again
+   * (a reconcile replaying "opened" with today's label route or binding): the decision lands
+   * on the card's board at its first phase, so it only backfills facts and moves nothing.
+   * An explicit placement (`skipRules`) still wins.
+   */
+  #keepRoutedCard(
+    existing: WorkItemRow,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    boards: BoardRegistry,
+  ): Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }> {
+    if (decision.skipRules === true || !placedByIntakeRoute(existing)) return decision;
+    const board = boards.get(boardForWorkItem(existing));
+    if (!board || board.id === decision.board) return decision;
+    return { ...decision, board: board.id, stage: board.initialPhase };
   }
 
   /** Drops `claimKey` when the card holding it belongs to a deleted Factory project; true when it is free again. */

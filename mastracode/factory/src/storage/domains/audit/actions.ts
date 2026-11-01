@@ -22,6 +22,7 @@ export const AUDIT_ACTIONS = {
   session: ['owner_transferred'],
   board: ['created', 'updated', 'deleted'],
   skill: ['updated', 'reverted'],
+  intake_route: ['created', 'updated', 'deleted', 'reordered'],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;

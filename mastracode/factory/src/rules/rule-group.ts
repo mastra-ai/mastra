@@ -31,6 +31,7 @@ export const CARD_RULE_FIELDS = [
   'item.labels',
   'item.title',
   'item.author',
+  'author.trusted',
   'source.kind',
   'source.integration',
 ] as const;

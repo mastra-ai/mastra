@@ -65,6 +65,7 @@ import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
+import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
@@ -712,6 +713,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
         boards: deps.boardRegistry,
         storage: deps.domains.workItems,
         audit: deps.audit,
+        ...(deps.storedBoards ? { intakeRoutes: deps.storedBoards.storage } : {}),
       }))
     : undefined;
   const startCoordinator = transitionService
@@ -836,6 +838,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
+          intakeRoutes: deps.storedBoards?.storage,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
@@ -849,6 +852,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          storage: deps.storedBoards.storage,
+          boards: deps.storedBoards.cache,
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.storedBoards
+      ? new IntakeRouteRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
         }).routes()
