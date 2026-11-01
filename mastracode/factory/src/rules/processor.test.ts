@@ -647,6 +647,76 @@ describe('FactoryPhaseStateProcessor', () => {
     expect(signal?.contents).toContain('Factory release phase: Release Queue (queued)');
   });
 
+  it('runs onEnter once when a tool rule re-enters the current stage', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const onEnter = vi.fn(() => ({
+      type: 'invokeSkill' as const,
+      idempotencyKey: 'restart-build',
+      role: 'builder',
+      prompt: 'Start the build over.',
+    }));
+    const board = defineBoard({
+      id: 'custom',
+      title: 'Custom',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { title: 'Backlog', kind: 'resting', next: 'building' },
+        building: { title: 'Building', kind: 'working', role: 'builder', next: 'done', onEnter: { issue: onEnter } },
+        done: { title: 'Done', kind: 'terminal' },
+      },
+      tools: {
+        request_restart: {
+          onResult: () => ({
+            type: 'transition' as const,
+            idempotencyKey: 'restart',
+            board: 'custom',
+            stage: 'building',
+            reenter: true,
+          }),
+        },
+      },
+    });
+    const boards = createBoardRegistry({ boards: [board], includeDefaultBoards: false });
+    const prepared = await prepare(storage, 'builder', 'issue', { id: 'custom', stage: 'building' });
+    const reader = {
+      listMessages: vi.fn(async () => ({ messages: [toolMessage({ toolName: 'request_restart' })], hasMore: false })),
+    };
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      storage,
+      boards,
+      transitionService,
+      messageReader: reader as never,
+    });
+
+    await processor.reconcileBinding(prepared.binding);
+    await processor.reconcileBinding(prepared.binding);
+    // The deferred dispatcher later replays the stored decision with the same ingress identity.
+    const item = await storage.get({ orgId: 'org-1', id: prepared.item.id });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: prepared.item.id,
+      board: 'custom',
+      stage: 'building',
+      reenter: true,
+      expectedRevision: item!.revision,
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      ingress: { type: 'rule', identity: 'decision:restart' },
+      cause: 'tool_result_rule',
+      causalChain: [],
+    });
+
+    expect(onEnter).toHaveBeenCalledOnce();
+    const queued = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
+      entry => entry.decision.type === 'invokeSkill',
+    );
+    expect(queued).toEqual([
+      expect.objectContaining({ decision: expect.objectContaining({ idempotencyKey: 'restart-build' }) }),
+    ]);
+  });
+
   it('ingests custom-phase persisted results once and retains their cursor and provenance', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const onResult = vi.fn(() => ({
