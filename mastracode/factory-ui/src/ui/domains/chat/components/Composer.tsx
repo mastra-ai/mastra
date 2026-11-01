@@ -81,7 +81,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const planFeedback = usePendingPlanFeedback();
 
   const preparingThreadId = usePreparingThreadId();
-  const liveRun = phase === 'working' && !preparingThreadId;
+  const liveRun = phase === 'working' && !preparingThreadId && sessionEnabled;
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   // A draft send waits for a model still loading, so only a model that failed to load holds it back.

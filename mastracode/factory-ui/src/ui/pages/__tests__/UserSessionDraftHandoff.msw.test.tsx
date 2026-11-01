@@ -203,6 +203,7 @@ describe('a user session draft on the real thread route', () => {
     expect(await screen.findByText('fix the login bug', { selector: 'main p' }, { timeout: 5000 })).toBeInTheDocument();
     const thread = within(screen.getByRole('main'));
     expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Abort' })).not.toBeInTheDocument();
     expect(route.posted).toEqual([]);
 
     finishCreate();
