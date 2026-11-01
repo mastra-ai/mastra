@@ -31,12 +31,9 @@ function getMessageParts(msg: MastraDBMessage): any[] {
   return Array.isArray(parts) ? parts : [];
 }
 
-/** Returns true if a message has at least one non-data part with visible content. */
+/** Returns true if recall can render at least one visible part of a message. */
 function hasVisibleParts(msg: MastraDBMessage): boolean {
-  if (typeof msg.content === 'string') return (msg.content as string).length > 0;
-  const parts = getMessageParts(msg);
-  if (parts.length === 0) return Boolean(msg.content?.content);
-  return parts.some((p: { type?: string }) => !p.type?.startsWith('data-'));
+  return formatMessageParts(msg, 'low').length > 0;
 }
 
 type RecallThread = {
@@ -999,15 +996,12 @@ function formatMessageParts(msg: MastraDBMessage, detail: RecallDetail): Formatt
           const fullText = `[Tool Result: ${toolName}]\n${resultStr}`;
           parts.push(makePart(msg, i, 'tool-result', fullText, detail, toolName));
         }
-      } else if (partType === 'reasoning') {
-        const reasoning = (part as { reasoning?: string; text?: string }).reasoning ?? (part as { text?: string }).text;
-        if (reasoning) {
-          parts.push(makePart(msg, i, 'reasoning', reasoning, detail));
-        }
+      } else if (partType === 'reasoning' || partType === 'redacted-reasoning') {
+        // Stored provider reasoning must never become ordinary text in a recall result.
       } else if (partType === 'image' || partType === 'file') {
         parts.push(makePart(msg, i, partType, formatAttachmentPart(partType, part), detail));
-      } else if (partType?.startsWith('data-')) {
-        // skip data parts — these are internal OM markers (buffering, observation, etc.)
+      } else if (partType === 'step-start' || partType?.startsWith('data-')) {
+        // Skip internal step boundaries and OM markers (buffering, observation, etc.).
       } else if (partType) {
         const fullText = `[${partType}]`;
         parts.push({ messageId: msg.id, partIndex: i, role: msg.role, type: partType, text: fullText, fullText });
@@ -1079,7 +1073,7 @@ function expandLimit(part: FormattedPart): number {
 function expandPriority(part: FormattedPart): number {
   // Lower number = higher priority for expansion
   if (part.role === 'user' && part.type === 'text') return 0;
-  if (part.type === 'text' || part.type === 'reasoning') return 1;
+  if (part.type === 'text') return 1;
   if (part.type === 'tool-result') return 2;
   if (part.type === 'tool-call') return 3;
   return 4;
@@ -1469,7 +1463,7 @@ export async function recallMessages({
     },
   });
 
-  // Filter out messages with only internal data-* parts so they don't consume page slots.
+  // Filter out messages without visible content so they don't consume page slots.
   const visibleMessages = result.messages.filter(hasVisibleParts);
 
   // Memory.recall() always returns messages sorted chronologically (ASC) via MessageList.
@@ -1802,7 +1796,7 @@ export const recallTool = (
         },
         partType: {
           type: 'string',
-          enum: ['text', 'tool-call', 'tool-result', 'reasoning', 'image', 'file'],
+          enum: ['text', 'tool-call', 'tool-result', 'image', 'file'],
           description: 'Filter results to only include parts of this type. Only applies to mode="messages".',
         },
         toolName: {
