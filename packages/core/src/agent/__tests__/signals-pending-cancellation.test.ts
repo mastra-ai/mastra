@@ -1712,6 +1712,76 @@ describe('Agent signals: pending cancellation', () => {
     },
   );
 
+  describe('follower idle message forwarded to a run that has already ended', () => {
+    const isIdleBForward = (data: any) =>
+      data?.type === 'signal-enqueued' && JSON.stringify(data.signal).includes('idle B');
+
+    it('drains the message again when the run it was forwarded to ends without admitting it', async () => {
+      const scope = { resourceId: 'ended-owner-user', threadId: 'ended-owner-after-forward' };
+      let forwarded!: () => void;
+      const forwardSent = new Promise<void>(resolve => {
+        forwarded = resolve;
+      });
+      let followUpCompleted!: () => void;
+      const completed = new Promise<void>(resolve => {
+        followUpCompleted = resolve;
+      });
+      let firstRunId: string | undefined;
+      // The follow-up run stays live until the follower forwards to it, and the forward is delivered only
+      // after that run has finished, which is when the owner no longer admits it.
+      class LateForwardPubSub extends ControlledLeasePubSub {
+        override async publish(topic: string, event: any): Promise<void> {
+          if (isIdleBForward(event.data)) {
+            forwarded();
+            await completed;
+          }
+          await super.publish(topic, event);
+          if (event.data?.type === 'run-completed' && firstRunId && event.data.runId !== firstRunId) {
+            followUpCompleted();
+          }
+        }
+      }
+      const pubsub = new LateForwardPubSub();
+      const memory = new MockMemory();
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+        'first response',
+        'later response',
+      );
+      const doStream = model.doStream.bind(model);
+      model.doStream = async options => {
+        if (getStreamCount() === 1) await forwardSent;
+        return doStream(options);
+      };
+      const agent = new Agent({ id: 'ended-owner', name: 'Ended owner', instructions: 'Test', model, memory, pubsub });
+      const subscription = await agent.subscribeToThread(scope);
+      const follower = new AgentThreadStreamRuntime();
+      const remoteSubscription = await follower.subscribeToThread(agent, scope, pubsub);
+      const stream = await agent.stream('first', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+      firstRunId = stream.runId;
+      try {
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        await agent.sendSignal({ type: 'user-message', contents: 'pending A' }, scope).accepted;
+        await vi.waitFor(() => expect(remoteSubscription.activeRunId()).toBe(stream.runId));
+        await follower.queueMessage(agent, 'idle B', scope, pubsub).accepted;
+        // Cancelling the first run hands "pending A" to a follow-up run that holds the lease when the
+        // follower forwards "idle B".
+        expect(subscription.abort()).toBe(true);
+        releaseFirst();
+        await stream.text;
+        await vi.waitFor(() => expect(getStreamCount()).toBe(3));
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('pending A');
+        expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).not.toContain('idle B');
+        expect(JSON.stringify(model.doStreamCalls[2]?.prompt)).toContain('idle B');
+      } finally {
+        forwarded();
+        followUpCompleted();
+        releaseFirst();
+        subscription.unsubscribe();
+        remoteSubscription.unsubscribe();
+      }
+    });
+  });
+
   it('does not recursively retry a cancelled follow-up whose preparation also fails', async () => {
     const scope = { resourceId: 'failed-recovery-user', threadId: 'failed-recovery-thread' };
     const pubsub = new ControlledLeasePubSub();
