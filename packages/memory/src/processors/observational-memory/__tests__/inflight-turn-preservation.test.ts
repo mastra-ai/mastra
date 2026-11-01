@@ -63,6 +63,10 @@ afterAll(async () => {
 type ChatMessage = { role: string; content?: unknown; tool_call_id?: string };
 
 const lastMessage = (req: { messages: ChatMessage[] }) => req.messages.at(-1);
+// A notification that a background task finished, rather than the user's request.
+const isTaskNotice = (req: { messages: ChatMessage[] }) =>
+  JSON.stringify(lastMessage(req)?.content ?? '').includes('<background-task');
+
 const lastToolResultFor = (req: { messages: ChatMessage[] }, toolCallId: string) => {
   const last = lastMessage(req);
   return last?.role === 'tool' && last.tool_call_id === toolCallId;
@@ -320,6 +324,8 @@ describe('OM preserves the in-flight turn across mid-turn observation (#25372)',
     });
 
     mock.on({ endpoint: 'chat', model: OBSERVER }, { content: OBSERVATIONS });
+    // The run reads the finished task's notice and answers.
+    mock.on({ endpoint: 'chat', model: ACTOR, predicate: isTaskNotice }, { content: FINAL_ANSWER });
     mock.on(
       { endpoint: 'chat', model: ACTOR, predicate: req => lastMessage(req)?.role === 'user' },
       {
@@ -408,6 +414,8 @@ describe('OM preserves the in-flight turn across mid-turn observation (#25372)',
     });
 
     mock.on({ endpoint: 'chat', model: OBSERVER }, { content: OBSERVATIONS });
+    // The run reads the finished task's notice and answers.
+    mock.on({ endpoint: 'chat', model: ACTOR, predicate: isTaskNotice }, { content: FINAL_ANSWER });
     mock.on(
       { endpoint: 'chat', model: ACTOR, predicate: req => lastMessage(req)?.role === 'user' },
       {

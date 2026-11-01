@@ -1,6 +1,7 @@
 import type { MessageList } from '../../../agent/message-list';
 import type { IMastraLogger } from '../../../logger';
 import type { ProviderMetadata } from '../../../stream/types';
+import { getTransformedToolPayload, hasTransformedToolPayload } from '../../../tools/payload-transform';
 import { normalizeModelOutput } from '../normalize-model-output';
 
 /** Completion payload delivered by the background-task manager's onResult hook. */
@@ -221,4 +222,131 @@ export async function applyBackgroundToolResult(deps: {
   }
 
   await deps.flush();
+}
+
+/** Lifecycle payload delivered by the background-task manager's onExecution hook. */
+export interface BackgroundToolExecutionParams {
+  toolCallId: string;
+  toolName: string;
+  runId: string;
+  taskId: string;
+  startedAt: Date;
+  suspendedAt?: Date;
+  suspendPayload?: unknown;
+}
+
+/** A `tool-call-suspended` chunk, as handed to the run's tool payload transform. */
+export interface BackgroundSuspensionChunk {
+  type: 'tool-call-suspended';
+  runId: string;
+  payload: { toolCallId: string; toolName: string; args: unknown; suspendPayload: unknown };
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Shared background-task execution injector: records the task's lifecycle on
+ * the assistant message that holds the tool call. While the task is suspended
+ * the tool call carries a `suspendedTools[toolCallId]` entry (the same shape
+ * as a foreground suspension, plus `taskId` and `suspendedAt`), so a client
+ * that reloads the thread can still see and answer the open request. The
+ * entry's args and payload go through the run's transcript transform, as a
+ * foreground suspension's do. When the manager reports the task running again
+ * (resume) or cancels it, the entry this task wrote is removed. Returns
+ * whether that entry changed, so an engine that doesn't flush every lifecycle
+ * update knows it must flush now.
+ */
+export async function applyBackgroundToolExecution(deps: {
+  params: BackgroundToolExecutionParams;
+  /** Tool args with `_background` removed. */
+  args: unknown;
+  messageList: MessageList;
+  /** Applies the run's tool payload transform to a chunk. */
+  transformChunk: (chunk: BackgroundSuspensionChunk) => Promise<BackgroundSuspensionChunk>;
+}): Promise<boolean> {
+  const { params, messageList } = deps;
+  messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
+    mode: 'stream',
+    backgroundTasks: {
+      [params.toolCallId]: {
+        startedAt: params.startedAt,
+        suspendedAt: params.suspendedAt,
+        taskId: params.taskId,
+      },
+    },
+  });
+
+  if (!params.suspendedAt) {
+    return writeSuspendedToolEntry(messageList, params.toolCallId, params.taskId, undefined);
+  }
+
+  const { metadata } = await deps.transformChunk({
+    type: 'tool-call-suspended',
+    runId: params.runId,
+    payload: {
+      toolCallId: params.toolCallId,
+      toolName: params.toolName,
+      args: deps.args,
+      suspendPayload: params.suspendPayload,
+    },
+  });
+  const inputTransform = getTransformedToolPayload(metadata, 'transcript', 'input-available');
+  const suspendTransform = getTransformedToolPayload(metadata, 'transcript', 'suspend');
+  return writeSuspendedToolEntry(messageList, params.toolCallId, params.taskId, {
+    toolCallId: params.toolCallId,
+    toolName: params.toolName,
+    args: hasTransformedToolPayload(inputTransform)
+      ? inputTransform.transformed
+      : hasTransformedToolPayload(suspendTransform)
+        ? suspendTransform.transformed
+        : deps.args,
+    type: 'suspension',
+    suspendPayload: hasTransformedToolPayload(suspendTransform) ? suspendTransform.transformed : params.suspendPayload,
+    ...(metadata ? { metadata } : {}),
+    runId: params.runId,
+    taskId: params.taskId,
+    suspendedAt: params.suspendedAt,
+  });
+}
+
+/**
+ * Sets (entry given) or removes (entry undefined) this task's
+ * `suspendedTools[toolCallId]` entry on the newest assistant message holding
+ * the tool call. A set merges over an existing entry so fields written by the
+ * foreground suspension (e.g. `resumeSchema`) survive. A removal only drops an
+ * entry owned by `taskId`: providers reuse tool-call ids across turns, so an
+ * entry for another dispatch is left alone. Returns whether anything changed.
+ */
+function writeSuspendedToolEntry(
+  messageList: MessageList,
+  toolCallId: string,
+  taskId: string | undefined,
+  entry: Record<string, unknown> | undefined,
+): boolean {
+  const message = [...messageList.get.all.db()]
+    .reverse()
+    .find(
+      m =>
+        m.role === 'assistant' &&
+        m.content?.parts?.some(p => p.type === 'tool-invocation' && p.toolInvocation?.toolCallId === toolCallId),
+    );
+  if (!message) return false;
+  const existing = ((message.content.metadata as Record<string, any> | undefined)?.suspendedTools ?? {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const current = existing[toolCallId];
+
+  if (entry) {
+    messageList.updateMessageMetadataByToolCallId(toolCallId, {
+      suspendedTools: { ...existing, [toolCallId]: { ...current, ...entry } },
+    });
+    return true;
+  }
+
+  if (!current || current.taskId !== taskId) return false;
+  const { [toolCallId]: _removed, ...rest } = existing;
+  messageList.updateMessageMetadataByToolCallId(toolCallId, {
+    suspendedTools: Object.keys(rest).length > 0 ? rest : undefined,
+  });
+  return true;
 }
