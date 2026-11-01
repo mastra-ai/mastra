@@ -6,7 +6,7 @@ import type { WorkItemCommentRow } from '../storage/domains/comments/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryRunBindingRecord,
-  WorkItemRow,
+  Card,
   WorkItemSubscription,
 } from '../storage/domains/work-items/base.js';
 import { MAX_ERROR, MAX_TEXT, createFactoryReadTools } from './read-tools.js';
@@ -26,7 +26,7 @@ const scope: FactoryToolScope = {
 
 let clock = Date.parse('2026-10-01T00:00:00Z');
 
-function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
+function item(overrides: Partial<Card> & { id: string }): Card {
   clock += 60_000;
   return {
     orgId: 'org-1',
@@ -51,7 +51,7 @@ function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
     createdAt: new Date(clock),
     updatedAt: new Date(clock),
     ...overrides,
-  } as WorkItemRow;
+  } as Card;
 }
 
 function binding(workItemId: string, role: string, status: 'active' | 'revoked' = 'active'): FactoryRunBindingRecord {
@@ -109,7 +109,7 @@ function setup({
   comments = [],
   subscriptions = [],
 }: {
-  items?: WorkItemRow[];
+  items?: Card[];
   bindings?: FactoryRunBindingRecord[];
   decisions?: FactoryDeferredDecisionRecord[];
   audit?: AuditEventRow[];

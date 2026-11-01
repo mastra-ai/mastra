@@ -1,12 +1,12 @@
+import { randomUUID } from 'node:crypto';
+
 import type { FactoryStorage } from '@mastra/core/storage';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { PgFactoryStorage } from '@mastra/pg';
-import { describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
-import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
-import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import type { CreateWorkItemInput } from '../storage/domains/work-items/base.js';
+import type { WorkItemsStorage, CreateWorkItemInput } from '../storage/domains/work-items/base.js';
 import { readBoardVersion } from '../storage/domains/work-items/board-version.js';
+import { Cards } from '../storage/domains/work-items/cards.js';
 import {
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
@@ -17,6 +17,7 @@ import type {
   WorkItemDbRecord,
   WorkItemSourceDbRecord,
 } from '../storage/domains/work-items/work-item-schema.js';
+import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../storage/test-utils.js';
 import { migrateWorkItemSplit } from './split-migration.js';
 
 const ORG = 'org-split';
@@ -281,18 +282,15 @@ const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 async function createStorage(backend: string): Promise<{ storage: FactoryStorage; workItems: WorkItemsStorage }> {
   const storage =
     backend === 'postgres'
-      ? new PgFactoryStorage({ id: 'split-test', connectionString: postgresUrl! })
+      ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
       : new LibSQLFactoryStorage({ id: 'split-test', url: ':memory:' });
-  const workItems = storage.registerDomain(new WorkItemsStorage());
-  const boards = createBoardRegistry();
-  workItems.useTerminalPhasePredicate(item => workItemPhaseSemantics(boards, item)?.kind === 'terminal');
-  await storage.init();
+  const { workItems } = await createFactoryStorageForTests(storage);
   // The Postgres database is shared between runs; start every test from empty tables.
+  await storage.ops.deleteMany('work_items', {});
   await workItems.dangerouslyClearAll();
   await storage.ops.deleteMany(FACTORY_BOARD_ITEMS_SCHEMA.name, {});
   await storage.ops.deleteMany(FACTORY_WORK_ITEMS_SCHEMA.name, {});
   await storage.ops.deleteMany(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {});
-  onTestFinished(() => storage.close());
   return { storage, workItems };
 }
 
@@ -308,6 +306,19 @@ async function seed(workItems: WorkItemsStorage) {
     cards.set(fixture.name, item.id);
   }
   return cards;
+}
+
+// Capture the actual ingest output as the table an older Factory would have written.
+async function seedLegacy(storage: FactoryStorage) {
+  const cards = await new Cards(storage.ops).findMany({});
+  for (const card of cards) {
+    delete card.work_item;
+    delete card.work_item_sources;
+    await storage.ops.upsertOne('work_items', ['id'], card);
+  }
+  await storage.ops.deleteMany(FACTORY_BOARD_ITEMS_SCHEMA.name, {});
+  await storage.ops.deleteMany(FACTORY_WORK_ITEMS_SCHEMA.name, {});
+  await storage.ops.deleteMany(FACTORY_WORK_ITEM_SOURCES_SCHEMA.name, {});
 }
 
 async function readSplit(storage: FactoryStorage) {
@@ -337,6 +348,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
       (await workItems.list({ orgId: ORG, factoryProjectId: PROJECT })).map(item => [item.id, item]),
     );
 
+    await seedLegacy(storage);
     const report = await migrateWorkItemSplit(storage);
 
     expect(report).toMatchObject({
@@ -398,6 +410,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('preserves classification, acceptance, autonomy and plan grants on the board placement', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     const id = cards.get('github issue')!;
     const process = {
       triage_type: 'feature request',
@@ -423,6 +436,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('writes nothing on later boots once every card is copied', async () => {
     const { storage, workItems } = await createStorage(backend);
     await seed(workItems);
+    await seedLegacy(storage);
     await migrateWorkItemSplit(storage);
     const before = await readSplit(storage);
 
@@ -435,12 +449,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('picks up a card an older replica moved after the first pass, without reusing a revision', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     await migrateWorkItemSplit(storage);
     const id = cards.get('jira issue')!;
     const copied = (await readSplit(storage)).boardItems.get(id)!;
 
     // An old replica still serving the legacy table moves the card.
-    const moved = await workItems.update({ orgId: ORG, id, userId: USER, patch: { stages: ['planning'] } });
+    const moved = await storage.ops.updateAtomic<Record<string, unknown>>('work_items', { id }, row => ({
+      stages: ['planning'],
+      revision: Number(row.revision) + 1,
+      updated_at: new Date(Date.now() + 1000),
+    }));
     const created = await workItems.upsert({
       orgId: ORG,
       userId: USER,
@@ -448,6 +467,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
       input: { title: 'Filed during the deploy' },
     });
 
+    const createdRow = await new Cards(storage.ops).findOne({ id: created.item.id });
+    delete createdRow!.work_item;
+    delete createdRow!.work_item_sources;
+    await storage.ops.insertOne('work_items', createdRow!);
+    const createdBoard = (await readSplit(storage)).boardItems.get(created.item.id)!;
+    await storage.ops.deleteMany(FACTORY_BOARD_ITEMS_SCHEMA.name, { id: created.item.id });
+    await storage.ops.deleteMany(FACTORY_WORK_ITEMS_SCHEMA.name, { id: createdBoard.work_item_id });
     const report = await migrateWorkItemSplit(storage);
 
     expect(report).toMatchObject({ workItems: 2, recopied: 1, unchanged: FIXTURES.length - 1 });
@@ -455,7 +481,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     const recopied = split.boardItems.get(id)!;
     expect(recopied.stages).toEqual(['planning']);
     expect(recopied.work_item_id).toBe(copied.work_item_id);
-    expect(recopied.revision).toBeGreaterThan(Math.max(copied.revision, moved!.item.revision));
+    expect(recopied.revision).toBeGreaterThan(Math.max(copied.revision, Number(moved!.revision)));
     expect(split.boardItems.get(created.item.id)).toMatchObject({ stages: created.item.stages });
     expect(split.workItems.size).toBe(FIXTURES.length + 1);
   });
@@ -463,15 +489,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('copies an old replica claim handoff even when the new owner is migrated first', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     await migrateWorkItemSplit(storage);
     const oldId = cards.get('github issue')!;
-    await workItems.update({ orgId: ORG, id: oldId, userId: USER, patch: { stages: ['done'] } });
-    const { item: newOwner } = await workItems.upsert({
-      orgId: ORG,
-      userId: USER,
-      factoryProjectId: 'aaa-project',
-      input: { title: 'New owner', claimKey: 'github:issue:10:42' },
-    });
+    const legacy = await storage.ops.findOne('work_items', { id: oldId });
+    await storage.ops.updateMany('work_items', { id: oldId }, { claim_key: null, stages: ['done'] });
+    const newOwner = {
+      ...legacy!,
+      id: randomUUID(),
+      factory_project_id: 'aaa-project',
+      title: 'New owner',
+      source_key: null,
+      external_source: null,
+      stages: ['triage'],
+    };
+    await storage.ops.insertOne('work_items', newOwner);
 
     expect(await migrateWorkItemSplit(storage)).toMatchObject({ workItems: 2, recopied: 1, skipped: [] });
     const split = await readSplit(storage);
@@ -483,6 +515,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('copies each card once when two replicas boot at the same time', async () => {
     const { storage, workItems } = await createStorage(backend);
     await seed(workItems);
+    await seedLegacy(storage);
 
     const reports = await Promise.all([migrateWorkItemSplit(storage), migrateWorkItemSplit(storage)]);
 
@@ -495,6 +528,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('invalidates cached card lists for the boards it wrote', async () => {
     const { storage, workItems } = await createStorage(backend);
     await seed(workItems);
+    await seedLegacy(storage);
     const before = await readBoardVersion(storage.ops, ORG, PROJECT);
 
     await migrateWorkItemSplit(storage);
@@ -505,6 +539,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('detects copied changes that an old replica writes without touching updated_at', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     await migrateWorkItemSplit(storage);
     const id = cards.get('github issue')!;
     const armed = new Date('2031-01-01T00:00:00Z');
@@ -523,6 +558,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('reports conflicting legacy recopies without reverting newer board state', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     await migrateWorkItemSplit(storage);
     const id = cards.get('github issue')!;
     const copied = (await readSplit(storage)).boardItems.get(id)!;
@@ -566,6 +602,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
         userId: USER,
         input: FIXTURES[0]!.input,
       });
+      await seedLegacy(storage);
       await migrateWorkItemSplit(storage);
       await storage.ops.updateMany(
         'work_items',
@@ -656,6 +693,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('reports without writing on a dry run', async () => {
     const { storage, workItems } = await createStorage(backend);
     await seed(workItems);
+    await seedLegacy(storage);
 
     const report = await migrateWorkItemSplit(storage, { dryRun: true });
 

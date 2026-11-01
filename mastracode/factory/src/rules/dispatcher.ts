@@ -30,7 +30,7 @@ import type {
   FactoryDispatchFailureCode,
   FactoryPendingStartRecord,
   FactoryRunBindingRecord,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
   UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
@@ -374,7 +374,7 @@ function factoryRequestContext(input: {
 
 export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
-  item: WorkItemRow;
+  item: Card;
   role: string;
 }
 

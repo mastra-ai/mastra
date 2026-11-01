@@ -151,8 +151,8 @@ import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
-import { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
+import { WorkItemSplitModeError, WorkItemsStorage } from './storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, Card } from './storage/domains/work-items/base.js';
 import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from './timing.js';
 import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
@@ -753,6 +753,8 @@ export class MastraFactory {
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
     await timedPhase('prepare.storage.init', () => storage.init());
+    const workItemsInitError = storage.domainInitError('work-items');
+    if (workItemsInitError instanceof WorkItemSplitModeError) throw workItemsInitError;
 
     // Each project's boards are the code boards plus the boards it stored. Load every project
     // before anything reads its boards; without the boards domain the code boards serve directly.
@@ -1058,7 +1060,7 @@ export class MastraFactory {
           }),
           ...(githubIntegration
             ? {
-                onAccepted: (args: { orgId: string; factoryProjectId: string; item: WorkItemRow }) =>
+                onAccepted: (args: { orgId: string; factoryProjectId: string; item: Card }) =>
                   reconcileGithubAcceptanceLabels(
                     githubIntegration,
                     sourceControlStorage.forIntegration(githubIntegration.id),

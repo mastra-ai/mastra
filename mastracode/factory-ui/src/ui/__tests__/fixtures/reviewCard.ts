@@ -1,4 +1,4 @@
-import type { WorkItemRow } from '@mastra/factory/storage/domains/work-items/base';
+import type { Card } from '@mastra/factory/storage/domains/work-items/base';
 import type { FactoryDecisionSummary } from '../../domains/factory/services/decisions';
 import type { GithubPullRequest } from '../../domains/factory/services/factory';
 
@@ -13,7 +13,29 @@ export const reviewCandidate: GithubPullRequest = {
   updatedAt: '2026-10-01T12:00:00Z',
 };
 
-export const reviewItem: WorkItemRow = {
+export const reviewItem: Card = {
+  workItemId: 'work-review-item',
+  parentBoardItemId: null,
+  workItem: {
+    id: 'work-review-item',
+    orgId: 'org-1',
+    factoryProjectId: 'fp-1',
+    provider: 'github',
+    kind: 'pull_request',
+    externalId: 'pull-request:github-pr:42',
+    key: 'acme/app#42',
+    url: reviewCandidate.url,
+    title: reviewCandidate.title,
+    state: 'open',
+    labels: [],
+    author: reviewCandidate.author,
+    parentWorkItemId: null,
+    metadata: { number: 42, state: 'open' },
+    revision: 1,
+    syncedAt: null,
+    createdAt: new Date(reviewCandidate.createdAt),
+    updatedAt: new Date(reviewCandidate.updatedAt),
+  },
   id: 'review-item',
   orgId: 'org-1',
   factoryProjectId: 'fp-1',
