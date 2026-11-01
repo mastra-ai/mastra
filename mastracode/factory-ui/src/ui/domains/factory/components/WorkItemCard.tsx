@@ -138,7 +138,9 @@ export function WorkItemCard({
     item,
     columnStage,
     move: primaryMove,
-    resumeStage: custom ? undefined : resumeStage(columnStage, { sessions, stageHistory: item.stageHistory }),
+    resumeStage: custom
+      ? undefined
+      : resumeStage(columnStage, { board: item.board, sessions, stageHistory: item.stageHistory }),
     nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,

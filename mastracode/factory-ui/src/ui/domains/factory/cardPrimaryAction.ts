@@ -87,13 +87,19 @@ const WORKING_LANES: readonly FactoryRuleStage[] = [...Object.values(FACTORY_ROL
  */
 export function resumeStage(
   columnStage: BoardStageId,
-  item: { sessions: Record<string, WorkItemSessionRef>; stageHistory?: readonly { stage: string }[] },
+  item: {
+    board?: string | null;
+    sessions: Record<string, WorkItemSessionRef>;
+    stageHistory?: readonly { stage: string }[];
+  },
 ): FactoryRuleStage | undefined {
   if (columnStage !== 'intake' || Object.keys(item.sessions).length === 0) return undefined;
   const visited = new Set((item.stageHistory ?? []).map(entry => entry.stage));
   const lane = WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
-  // Intake leads to neither Building nor its self-review: a card that got that far resumes in Planning.
-  return lane === 'execute' || lane === 'review' ? 'planning' : lane;
+  // On Work, Intake leads to neither Building nor its self-review: a card that got that far
+  // resumes in Planning. The Review board has no Planning, and its Intake leads back to Reviewing.
+  const work = item.board == null || item.board === 'work';
+  return work && (lane === 'execute' || lane === 'review') ? 'planning' : lane;
 }
 
 /**
