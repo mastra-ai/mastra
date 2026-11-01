@@ -135,7 +135,7 @@ describe('resumeStage', () => {
         stageHistory: history('triage', 'planning', 'execute', 'intake'),
       }),
     ).toBe('planning');
-    // Intake does not lead to Building: a card self-review parked resumes in Review.
+    // Intake does not lead to Building: a card self-review parked resumes in Planning.
     expect(
       resumeStage('intake', {
         sessions: { work: sessionRef('work'), review: sessionRef('review') },
@@ -149,6 +149,16 @@ describe('resumeStage', () => {
         stageHistory: history('pr-review', 'intake'),
       }),
     ).toBe('pr-review');
+  });
+
+  it('resumes a Review-board card set aside in Intake back into Reviewing, which has no Planning', () => {
+    expect(
+      resumeStage('intake', {
+        board: 'review',
+        sessions: { review: sessionRef('review') },
+        stageHistory: history('review', 'intake'),
+      }),
+    ).toBe('review');
   });
 
   it('offers nothing for a fresh arrival or outside Intake', () => {
