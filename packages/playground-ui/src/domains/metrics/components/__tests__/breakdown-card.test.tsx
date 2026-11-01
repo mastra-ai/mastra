@@ -3,6 +3,7 @@ import type { AggregateTracesResponse } from '@mastra/client-js';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { MetricsProvider } from '../../hooks/use-metrics';
 import { BreakdownCard } from '../breakdown-card';
 import {
   agentRunsByName,
@@ -36,7 +37,7 @@ import {
 } from './metrics-msw';
 import type { SpanAggregateRequest, TraceAggregateRequest } from './metrics-msw';
 import { server } from '@/test/msw-server';
-import { TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const BREAKDOWN_API = `${TEST_BASE_URL}/api/observability/metrics/breakdown`;
 
@@ -83,6 +84,15 @@ function serveSpans(previous: AggregateTracesResponse = previousAgentRunsByName)
     return endsNow(request.timeRange.to) ? agentRunsByName : previous;
   });
   return requests;
+}
+
+/** The card inside a dashboard pinned to `preset`, for re-rendering it onto another scope. */
+function atPreset(preset: '24h' | '7d') {
+  return (
+    <MetricsProvider preset={preset} filterTokens={[]} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
+      <BreakdownCard />
+    </MetricsProvider>
+  );
 }
 
 /** Body rows' names; the first row is the header. */
@@ -467,6 +477,73 @@ describe('BreakdownCard', () => {
       renderInMetrics(<BreakdownCard />);
       expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
       expect(await openViewMenu('Breakdown by agent')).toContain('Breakdown by tool');
+    });
+
+    it('waits for the other requests rather than failing while one is still loading', async () => {
+      serveCapabilities(aggregateCapabilities);
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      // The spans answer last; the usage totals fail first. Retry re-sends only the failed
+      // request, so reporting the failure now would leave the card broken once the spans answer.
+      serveSpanAggregate(async () => {
+        await held;
+        return agentRunsByName;
+      });
+      server.use(http.post(BREAKDOWN_API, () => HttpResponse.json({ error: 'boom' }, { status: 400 })));
+      const { queryClient } = renderInMetrics(<BreakdownCard />);
+
+      await waitFor(() =>
+        expect(
+          queryClient
+            .getQueryCache()
+            .findAll({ queryKey: ['metrics', 'cost-breakdown'] })
+            .some(q => q.state.status === 'error'),
+        ).toBe(true),
+      );
+      expect(screen.queryByText(/Couldn't load this data/)).toBeNull();
+
+      release();
+      expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
+    });
+
+    it('keeps a loaded card on a new scope until that scope’s requests settle', async () => {
+      serveCapabilities(aggregateCapabilities);
+      let next = false;
+      let release = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      // A new scope keeps the previous answer on screen while it fetches, so the card is not
+      // loading when the breakdown requests of the new scope fail: the spans are still running,
+      // and reporting the failure now would leave Retry unable to recover the card.
+      serveSpanAggregate(async () => {
+        if (next) await held;
+        return agentRunsByName;
+      });
+      server.use(
+        http.post(BREAKDOWN_API, () =>
+          next ? HttpResponse.json({ error: 'boom' }, { status: 400 }) : HttpResponse.json(agentTokensByName),
+        ),
+      );
+      const { rerender, queryClient } = renderWithProviders(atPreset('24h'));
+      const breakdownQueries = () => queryClient.getQueryCache().findAll({ queryKey: ['metrics', 'cost-breakdown'] });
+      // `every` is true on an empty list, so wait for the queries to exist before trusting it.
+      await waitFor(() => expect(breakdownQueries().length).toBeGreaterThan(0));
+      await waitFor(() => expect(breakdownQueries().every(q => q.state.status === 'success')).toBe(true));
+      await waitFor(() => expect(breakdownQueries().every(q => q.state.fetchStatus !== 'fetching')).toBe(true));
+      // The retained answer has to be on screen for the scope change to keep it there.
+      expect(await screen.findByText('Code Agent')).toBeDefined();
+
+      next = true;
+      rerender(atPreset('7d'));
+
+      await waitFor(() => expect(breakdownQueries().some(q => q.state.status === 'error')).toBe(true));
+      expect(screen.queryByText(/Couldn't load this data/)).toBeNull();
+
+      release();
+      expect(await screen.findByText(/Couldn't load this data/)).toBeDefined();
     });
   });
 });
