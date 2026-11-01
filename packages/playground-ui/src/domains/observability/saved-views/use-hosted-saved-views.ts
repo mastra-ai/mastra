@@ -102,6 +102,7 @@ export function useHostedSavedViews({
   columns,
   defaultDatePreset,
   canEdit = () => true,
+  canCreate = true,
 }: UseHostedSavedViewsArgs): SavedViewsController<HostedSavedViewSettings> {
   const queryClient = useQueryClient();
   const queryKey = savedViewsQueryKey(queryKeyScope, page);
@@ -211,6 +212,7 @@ export function useHostedSavedViews({
     applied: draft ?? activeView,
     select,
     create: () => {
+      if (!canCreate) return;
       setError(undefined);
       setCreatingName(NEW_VIEW_NAME);
     },
@@ -267,7 +269,7 @@ export function useHostedSavedViews({
     },
     duplicate: async viewId => {
       const original = records.find(item => item.id === viewId);
-      if (!original || pending || !fitsSizeLimit(original.state)) return;
+      if (!canCreate || !original || pending || !fitsSizeLimit(original.state)) return;
       const name = validName(`${original.name} copy`) ?? original.name;
       const choice = choiceRef.current;
       const copy = await run(

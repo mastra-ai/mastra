@@ -73,6 +73,7 @@ export async function build({
     if (!platformDeployer) {
       const deployer = new BuildBundler({ studio });
       deployer.__setLogger(logger);
+      deployer.setConfigEntryFile(mastraEntryFile);
 
       // Use the bundler's getAllToolPaths method to prepare tools paths, plus
       // any tools defined under agents/*/tools for fs-routed agents.
@@ -110,6 +111,7 @@ export async function build({
     logger.info('Deployer found, preparing deployer build...');
 
     platformDeployer.__setLogger(logger);
+    platformDeployer.setConfigEntryFile?.(mastraEntryFile);
 
     const discoveredTools = platformDeployer.getAllToolPaths(mastraDir, [...(tools ?? []), ...fsAgents.toolPaths]);
 

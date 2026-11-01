@@ -14,6 +14,8 @@ vi.mock('node:fs', () => ({
   default: {},
 }));
 
+vi.mock('../utils/experimental-features.js', () => ({ isKnowledgeEnabled: () => false }));
+
 vi.mock('@earendil-works/pi-tui', () => ({
   Box: class {},
   CombinedAutocompleteProvider: class {},

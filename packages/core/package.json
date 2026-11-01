@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.81.0-alpha.1",
+  "version": "1.82.0-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -982,7 +982,7 @@
     "rollup": "^4.65.0",
     "tinyglobby": "^0.2.17",
     "tokenx": "^1.6.0",
-    "ts-morph": "^27.0.2",
+    "ts-morph": "^28.0.0",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",

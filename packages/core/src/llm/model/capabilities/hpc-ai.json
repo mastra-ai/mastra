@@ -22,13 +22,13 @@
     "zai-org/glm-5.2"
   ],
   "reasoning": {
-    "anthropic/claude-opus-4.7": [
+    "zai-org/glm-5.2": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["high", "max"]
       }
     ],
-    "moonshotai/kimi-k2.5": [
+    "zai-org/glm-5.1": [
       {
         "type": "toggle"
       }
@@ -51,15 +51,15 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/glm-5.1": [
+    "moonshotai/kimi-k2.5": [
       {
         "type": "toggle"
       }
     ],
-    "zai-org/glm-5.2": [
+    "anthropic/claude-opus-4.7": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ]
   }

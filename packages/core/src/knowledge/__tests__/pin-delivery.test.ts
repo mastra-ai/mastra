@@ -1,0 +1,215 @@
+import { estimateTokenCount } from 'tokenx';
+import { describe, expect, it, vi } from 'vitest';
+import { setRunAgentScopes } from '../../agent/scopes';
+import { RequestContext } from '../../request-context';
+import { InMemoryStore } from '../../storage';
+import { KnowledgeUnsupportedCapabilityError } from '../../storage/domains/knowledge';
+import type { KnowledgeStorage } from '../../storage/domains/knowledge';
+import { knowledgeMemoryScopes } from '../declarations';
+import { Knowledge } from '../index';
+import { OVERFLOW_NAMES, PIN_OVERFLOW_ID } from '../pinned';
+
+const scopes = {
+  ...knowledgeMemoryScopes(),
+  'role:$orgId:$role': { pinnedContextPriority: 5 },
+  'policy:$orgId': { access: [{ principal: 'org:$orgId', role: 'viewer' as const }] },
+};
+const host = { author: 'host' };
+
+async function seed(stored: number, maxPins = 20, maxTokens = 2_000) {
+  const store = new InMemoryStore();
+  const knowledge = new Knowledge({ storage: store, scopes, tools: true, pinnedContext: { maxPins, maxTokens } });
+  const storage = (await store.getStore('knowledge')) as KnowledgeStorage;
+  const scope = async (address: string, declaration: string) =>
+    (await storage.materializeScope({ address, declaration, name: address, provenance: host })).scope;
+  const org = await scope('org:acme', 'org:$orgId');
+  await scope('org:globex', 'org:$orgId');
+  await scope('role:acme:vip', 'role:$orgId:$role');
+  const names: { name: string; vip: boolean }[] = [];
+  for (let i = 0; i < stored; i++) {
+    const vip = i % 10 === 0;
+    const name = `Pin ${String(i).padStart(3, '0')}`;
+    const page = await storage.createPage({ parentId: org.id, name, body: `Body of ${name}.`, provenance: host });
+    await storage.addPinAudience({
+      pageId: page.id,
+      audience: [vip ? 'role:acme:vip' : 'org:acme'],
+      createdBy: 'host',
+    });
+    // Pins created in order, so later pins are newer.
+    names.push({ name, vip });
+    await new Promise(resolve => setTimeout(resolve, 1));
+  }
+  const requestContext = new RequestContext();
+  setRunAgentScopes(requestContext, ['org:acme', 'role:acme:vip']);
+  const context = { requestContext, agent: { agentId: 'a', resourceId: 'u-1', threadId: 't-1' } };
+  return { knowledge, storage, context, names };
+}
+
+const countCalls = (storage: KnowledgeStorage) => {
+  const calls: string[] = [];
+  for (const method of [
+    'getPage',
+    'getPages',
+    'getPageByPath',
+    'getScopesByAddress',
+    'listPins',
+    'countNotes',
+  ] as const) {
+    const original = storage[method].bind(storage) as (...args: unknown[]) => unknown;
+    vi.spyOn(storage, method).mockImplementation(((...args: unknown[]) => {
+      calls.push(method);
+      return original(...args);
+    }) as never);
+  }
+  return calls;
+};
+
+describe('Knowledge pin delivery cost', () => {
+  it('delivers 200 stored pins with a fixed handful of store calls, in priority then recency order', async () => {
+    const { knowledge, storage, context, names } = await seed(200);
+    const calls = countCalls(storage);
+    const pins = await knowledge.__deliveredPins(context as never);
+
+    // One listing per pinnedContextPriority tier the run holds (role, thread, resource, org), one count, one
+    // batched page fetch, one batched note count, and one batched fetch per tree level above the pins (here
+    // only their scope pages); never a page read per pin (run start may read scope pages; that is checked
+    // below by comparing with a run that has few pins).
+    expect(calls.filter(call => ['listPins', 'getPages', 'countNotes'].includes(call))).toEqual([
+      'listPins',
+      'listPins',
+      'listPins',
+      'listPins',
+      'listPins',
+      'getPages',
+      'countNotes',
+      'getPages',
+    ]);
+    // And the same store calls as a run with a handful of pins.
+    const few = await seed(25);
+    const fewCalls = countCalls(few.storage);
+    await few.knowledge.__deliveredPins(few.context as never);
+    expect(calls).toEqual(fewCalls);
+
+    const expected = [...names.filter(n => n.vip).reverse(), ...names.filter(n => !n.vip).reverse()].map(n => n.name);
+    const delivered = pins.filter(pin => pin.id !== PIN_OVERFLOW_ID);
+    expect(delivered.map(pin => pin.text.split(' (')[0])).toEqual(expected.slice(0, 20));
+    // Display fields for UIs; the overflow entry has neither.
+    expect(delivered.map(pin => [pin.name, pin.scope])).toEqual(expected.slice(0, 20).map(name => [name, 'org:acme']));
+
+    const overflow = pins.find(pin => pin.id === PIN_OVERFLOW_ID)!;
+    expect(overflow).not.toHaveProperty('name');
+    expect(overflow).not.toHaveProperty('scope');
+    expect(overflow.text).toBe(
+      `Also pinned (open with knowledge_read): ${expected.slice(20, 20 + OVERFLOW_NAMES).join(', ')}, …and ${
+        200 - 20 - OVERFLOW_NAMES
+      } more`,
+    );
+  });
+
+  it('keeps the overflow line inside the token budget', async () => {
+    const { knowledge, context } = await seed(60, 20, 120);
+    const pins = await knowledge.__deliveredPins(context as never);
+    expect(estimateTokenCount(pins.map(pin => pin.text).join(''))).toBeLessThanOrEqual(120);
+    const overflow = pins.find(pin => pin.id === PIN_OVERFLOW_ID)!;
+    expect(overflow.text).toMatch(/…and \d+ more$/);
+    const listed = overflow.text.replace(/^.*?: /, '').split(', ').length - 1;
+    expect(listed).toBeLessThanOrEqual(OVERFLOW_NAMES);
+  });
+
+  it('says nothing about overflow when every stored pin fits', async () => {
+    const { knowledge, context } = await seed(5);
+    const pins = await knowledge.__deliveredPins(context as never);
+    expect(pins).toHaveLength(5);
+    expect(pins.some(pin => pin.id === PIN_OVERFLOW_ID)).toBe(false);
+  });
+
+  // r92: a pinned entry gave the model no way to tell the page had notes, or where to read them.
+  it('names each pinned page by its key path and counts the notes the run can see', async () => {
+    const { knowledge, storage, context } = await seed(0);
+    const org = (await storage.getScopesByAddress(['org:acme']))[0]!;
+    const globex = (await storage.getScopesByAddress(['org:globex']))[0]!;
+    const policies = await storage.createPage({
+      parentId: org.id,
+      key: 'policies',
+      name: 'Policies',
+      provenance: host,
+    });
+    const refund = await storage.createPage({
+      parentId: policies.id,
+      key: 'refund',
+      name: 'Refund Policy',
+      body: 'Full refund within 30 days.',
+      provenance: host,
+    });
+    const loose = await storage.createPage({ parentId: org.id, name: 'Loose', body: 'No key here.', provenance: host });
+    const note = (text: string, stamp: string) =>
+      storage.addNote({ pageId: refund.id, text, stampScopeIds: [stamp], mentions: [], provenance: host });
+    await note('Holiday exception: refundable until January 31.', org.id);
+    await note('Retired tier 2 queue.', org.id);
+    await note('Globex only.', globex.id);
+    for (const page of [refund, loose]) {
+      await storage.addPinAudience({ pageId: page.id, audience: ['org:acme'], createdBy: 'host' });
+    }
+
+    const pins = await knowledge.__deliveredPins(context as never);
+    expect(pins.map(pin => pin.text).sort()).toEqual([
+      `Loose (${loose.id}, v${loose.version}, no notes): No key here.`,
+      `Refund Policy (org:acme#policies/refund, v${refund.version}, 2 notes): Full refund within 30 days.`,
+    ]);
+
+    // r92: the version lets an agent edit a pinned page without reading it first; an edit changes the entry.
+    const edited = await storage.updatePage({
+      id: refund.id,
+      expectedVersion: refund.version,
+      body: 'Full refund within 45 days.',
+      provenance: host,
+    });
+    expect(edited.version).toBe(refund.version + 1);
+    const after = await knowledge.__deliveredPins(context as never);
+    expect(after.find(pin => pin.id === refund.id)!.text).toBe(
+      `Refund Policy (org:acme#policies/refund, v${edited.version}, 2 notes): Full refund within 45 days.`,
+    );
+  });
+  // An adapter older than countNotes must not cost the pins; nor may a failed count while the tree walk
+  // is still waiting on the store (that rejection used to go unhandled).
+  it.each([
+    ['is not supported by the adapter', () => new KnowledgeUnsupportedCapabilityError('countNotes')],
+    ['fails', () => new Error('count failed')],
+  ])('delivers pins without a note count when counting notes %s', async (_, error) => {
+    const { knowledge, storage, context } = await seed(0);
+    const org = (await storage.getScopesByAddress(['org:acme']))[0]!;
+    const policies = await storage.createPage({
+      parentId: org.id,
+      key: 'policies',
+      name: 'Policies',
+      provenance: host,
+    });
+    const refund = await storage.createPage({
+      parentId: policies.id,
+      key: 'refund',
+      name: 'Refund Policy',
+      body: 'Full refund within 30 days.',
+      provenance: host,
+    });
+    await storage.addPinAudience({ pageId: refund.id, audience: ['org:acme'], createdBy: 'host' });
+    vi.spyOn(storage, 'countNotes').mockImplementation(() => Promise.reject(error()));
+    const getPages = storage.getPages.bind(storage);
+    vi.spyOn(storage, 'getPages').mockImplementation(async args => {
+      await new Promise(resolve => setTimeout(resolve, 20));
+      return getPages(args);
+    });
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      const pins = await knowledge.__deliveredPins(context as never);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(pins.map(pin => pin.text)).toEqual([
+        `Refund Policy (org:acme#policies/refund, v${refund.version}): Full refund within 30 days.`,
+      ]);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+});

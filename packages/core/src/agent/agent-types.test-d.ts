@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { ProviderDefinedTool } from '@internal/external-types';
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { assertType, describe, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { RequestContext } from '../request-context';

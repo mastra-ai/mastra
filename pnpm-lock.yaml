@@ -99,8 +99,8 @@ overrides:
   immer@>=11.0.0 <11.1.9: 11.1.9
   '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
-  path-to-regexp@<0.1.13: 0.1.13
-  joi@>=17.0.0 <17.13.8: 17.13.8
+  path-to-regexp@<0.1.13: 9.0.0
+  joi@>=17.0.0 <17.13.8: 17.13.9
   svgo@>=3.0.0 <3.3.5: 3.3.5
   e2b>undici8: npm:undici@8.12.2
   multer@<2.5.0: 2.5.0
@@ -187,89 +187,89 @@ overrides:
   '@opentelemetry/auto-instrumentations-node@<0.80.0': 0.82.0
   onnxruntime-node@<1.24.2: 1.24.3
   '@codemirror/lang-jinja': ^6.0.1
-  aggregate-error: npm:@socketregistry/aggregate-error@^1
-  array-buffer-byte-length: npm:@socketregistry/array-buffer-byte-length@^1
-  array-flatten: npm:@socketregistry/array-flatten@^1
-  array-includes: npm:@socketregistry/array-includes@^1
-  array.prototype.findlast: npm:@socketregistry/array.prototype.findlast@^1
-  array.prototype.flat: npm:@socketregistry/array.prototype.flat@^1
-  array.prototype.flatmap: npm:@socketregistry/array.prototype.flatmap@^1
-  array.prototype.tosorted: npm:@socketregistry/array.prototype.tosorted@^1
-  arraybuffer.prototype.slice: npm:@socketregistry/arraybuffer.prototype.slice@^1
-  available-typed-arrays: npm:@socketregistry/available-typed-arrays@^1
-  deep-equal: npm:@socketregistry/deep-equal@^1
-  define-properties: npm:@socketregistry/define-properties@^1
-  es-define-property: npm:@socketregistry/es-define-property@^1
-  es-iterator-helpers: npm:@socketregistry/es-iterator-helpers@^1
-  es-set-tostringtag: npm:@socketregistry/es-set-tostringtag@^1
-  for-each: npm:@socketregistry/for-each@^1
-  function-bind: npm:@socketregistry/function-bind@^1
-  function.prototype.name: npm:@socketregistry/function.prototype.name@^1
-  functions-have-names: npm:@socketregistry/functions-have-names@^1
-  get-symbol-description: npm:@socketregistry/get-symbol-description@^1
-  globalthis: npm:@socketregistry/globalthis@^1
-  gopd: npm:@socketregistry/gopd@^1
-  has-property-descriptors: npm:@socketregistry/has-property-descriptors@^1
-  has-proto: npm:@socketregistry/has-proto@^1
-  has-symbols: npm:@socketregistry/has-symbols@^1
-  has-tostringtag: npm:@socketregistry/has-tostringtag@^1
-  hasown: npm:@socketregistry/hasown@^1
-  indent-string: npm:@socketregistry/indent-string@^1
-  internal-slot: npm:@socketregistry/internal-slot@^1
-  is-array-buffer: npm:@socketregistry/is-array-buffer@^1
-  is-bigint: npm:@socketregistry/is-bigint@^1
-  is-boolean-object: npm:@socketregistry/is-boolean-object@^1
-  is-core-module: npm:@socketregistry/is-core-module@^1
-  is-date-object: npm:@socketregistry/is-date-object@^1
-  is-generator-function: npm:@socketregistry/is-generator-function@^1
-  is-interactive: npm:@socketregistry/is-interactive@^1
-  is-map: npm:@socketregistry/is-map@^1
-  is-negative-zero: npm:@socketregistry/is-negative-zero@^1
-  is-number-object: npm:@socketregistry/is-number-object@^1
-  is-regex: npm:@socketregistry/is-regex@^1
-  is-set: npm:@socketregistry/is-set@^1
-  is-shared-array-buffer: npm:@socketregistry/is-shared-array-buffer@^1
-  is-string: npm:@socketregistry/is-string@^1
-  is-symbol: npm:@socketregistry/is-symbol@^1
-  is-typed-array: npm:@socketregistry/is-typed-array@^1
-  is-unicode-supported: npm:@socketregistry/is-unicode-supported@^1
-  is-weakmap: npm:@socketregistry/is-weakmap@^1
-  is-weakref: npm:@socketregistry/is-weakref@^1
-  is-weakset: npm:@socketregistry/is-weakset@^1
-  isarray: npm:@socketregistry/isarray@^1
-  iterator.prototype: npm:@socketregistry/iterator.prototype@^1
-  object-assign: npm:@socketregistry/object-assign@^1
-  object-keys: npm:@socketregistry/object-keys@^1
-  object.assign: npm:@socketregistry/object.assign@^1
-  object.entries: npm:@socketregistry/object.entries@^1
-  object.fromentries: npm:@socketregistry/object.fromentries@^1
-  object.values: npm:@socketregistry/object.values@^1
-  path-parse: npm:@socketregistry/path-parse@^1
-  querystringify: npm:@socketregistry/querystringify@^1
-  reflect.getprototypeof: npm:@socketregistry/reflect.getprototypeof@^1
-  regexp.prototype.flags: npm:@socketregistry/regexp.prototype.flags@^1
-  safe-array-concat: npm:@socketregistry/safe-array-concat@^1
-  safe-buffer: npm:@socketregistry/safe-buffer@^1
-  safe-regex-test: npm:@socketregistry/safe-regex-test@^1
-  safer-buffer: npm:@socketregistry/safer-buffer@^1
-  set-function-length: npm:@socketregistry/set-function-length@^1
+  aggregate-error: npm:@socketregistry/aggregate-error@^1.0.15
+  array-buffer-byte-length: npm:@socketregistry/array-buffer-byte-length@^1.0.7
+  array-flatten: npm:@socketregistry/array-flatten@^1.0.11
+  array-includes: npm:@socketregistry/array-includes@^1.0.9
+  array.prototype.findlast: npm:@socketregistry/array.prototype.findlast@^1.0.9
+  array.prototype.flat: npm:@socketregistry/array.prototype.flat@^1.0.9
+  array.prototype.flatmap: npm:@socketregistry/array.prototype.flatmap@^1.0.9
+  array.prototype.tosorted: npm:@socketregistry/array.prototype.tosorted@^1.0.10
+  arraybuffer.prototype.slice: npm:@socketregistry/arraybuffer.prototype.slice@^1.0.8
+  available-typed-arrays: npm:@socketregistry/available-typed-arrays@^1.0.8
+  deep-equal: npm:@socketregistry/deep-equal@^1.0.22
+  define-properties: npm:@socketregistry/define-properties@^1.0.8
+  es-define-property: npm:@socketregistry/es-define-property@^1.0.7
+  es-iterator-helpers: npm:@socketregistry/es-iterator-helpers@^1.0.14
+  es-set-tostringtag: npm:@socketregistry/es-set-tostringtag@^1.0.10
+  for-each: npm:@socketregistry/for-each@^1.0.8
+  function-bind: npm:@socketregistry/function-bind@^1.0.7
+  function.prototype.name: npm:@socketregistry/function.prototype.name@^1.0.8
+  functions-have-names: npm:@socketregistry/functions-have-names@^1.0.7
+  get-symbol-description: npm:@socketregistry/get-symbol-description@^1.0.7
+  globalthis: npm:@socketregistry/globalthis@^1.0.8
+  gopd: npm:@socketregistry/gopd@^1.0.7
+  has-property-descriptors: npm:@socketregistry/has-property-descriptors@^1.0.7
+  has-proto: npm:@socketregistry/has-proto@^1.0.7
+  has-symbols: npm:@socketregistry/has-symbols@^1.0.7
+  has-tostringtag: npm:@socketregistry/has-tostringtag@^1.0.7
+  hasown: npm:@socketregistry/hasown@^1.0.7
+  indent-string: npm:@socketregistry/indent-string@^1.0.14
+  internal-slot: npm:@socketregistry/internal-slot@^1.0.8
+  is-array-buffer: npm:@socketregistry/is-array-buffer@^1.0.10
+  is-bigint: npm:@socketregistry/is-bigint@^1.0.12
+  is-boolean-object: npm:@socketregistry/is-boolean-object@^1.0.12
+  is-core-module: npm:@socketregistry/is-core-module@^1.0.11
+  is-date-object: npm:@socketregistry/is-date-object@^1.0.10
+  is-generator-function: npm:@socketregistry/is-generator-function@^1.0.10
+  is-interactive: npm:@socketregistry/is-interactive@^1.0.6
+  is-map: npm:@socketregistry/is-map@^1.0.10
+  is-negative-zero: npm:@socketregistry/is-negative-zero@^1.0.7
+  is-number-object: npm:@socketregistry/is-number-object@^1.0.11
+  is-regex: npm:@socketregistry/is-regex@^1.0.10
+  is-set: npm:@socketregistry/is-set@^1.0.10
+  is-shared-array-buffer: npm:@socketregistry/is-shared-array-buffer@^1.0.10
+  is-string: npm:@socketregistry/is-string@^1.0.12
+  is-symbol: npm:@socketregistry/is-symbol@^1.0.12
+  is-typed-array: npm:@socketregistry/is-typed-array@^1.0.12
+  is-unicode-supported: npm:@socketregistry/is-unicode-supported@^1.0.5
+  is-weakmap: npm:@socketregistry/is-weakmap@^1.0.10
+  is-weakref: npm:@socketregistry/is-weakref@^1.0.8
+  is-weakset: npm:@socketregistry/is-weakset@^1.0.10
+  isarray: npm:@socketregistry/isarray@^1.0.8
+  iterator.prototype: npm:@socketregistry/iterator.prototype@^1.0.7
+  object-assign: npm:@socketregistry/object-assign@^1.0.5
+  object-keys: npm:@socketregistry/object-keys@^1.0.8
+  object.assign: npm:@socketregistry/object.assign@^1.0.8
+  object.entries: npm:@socketregistry/object.entries@^1.0.8
+  object.fromentries: npm:@socketregistry/object.fromentries@^1.0.8
+  object.values: npm:@socketregistry/object.values@^1.0.8
+  path-parse: npm:@socketregistry/path-parse@^1.0.8
+  querystringify: npm:@socketregistry/querystringify@^1.0.10
+  reflect.getprototypeof: npm:@socketregistry/reflect.getprototypeof@^1.0.8
+  regexp.prototype.flags: npm:@socketregistry/regexp.prototype.flags@^1.0.8
+  safe-array-concat: npm:@socketregistry/safe-array-concat@^1.0.8
+  safe-buffer: npm:@socketregistry/safe-buffer@^1.0.9
+  safe-regex-test: npm:@socketregistry/safe-regex-test@^1.0.8
+  safer-buffer: npm:@socketregistry/safer-buffer@^1.0.10
+  set-function-length: npm:@socketregistry/set-function-length@^1.0.10
   shell-quote: npm:shell-quote@^1.12.0
-  side-channel: npm:@socketregistry/side-channel@^1
-  string.prototype.matchall: npm:@socketregistry/string.prototype.matchall@^1
-  string.prototype.repeat: npm:@socketregistry/string.prototype.repeat@^1
-  string.prototype.trim: npm:@socketregistry/string.prototype.trim@^1
-  string.prototype.trimend: npm:@socketregistry/string.prototype.trimend@^1
-  string.prototype.trimstart: npm:@socketregistry/string.prototype.trimstart@^1
-  typed-array-buffer: npm:@socketregistry/typed-array-buffer@^1
-  typed-array-byte-length: npm:@socketregistry/typed-array-byte-length@^1
-  typed-array-byte-offset: npm:@socketregistry/typed-array-byte-offset@^1
-  typed-array-length: npm:@socketregistry/typed-array-length@^1
-  typedarray: npm:@socketregistry/typedarray@^1
-  unbox-primitive: npm:@socketregistry/unbox-primitive@^1
-  which-boxed-primitive: npm:@socketregistry/which-boxed-primitive@^1
-  which-collection: npm:@socketregistry/which-collection@^1
-  which-typed-array: npm:@socketregistry/which-typed-array@^1
-  yocto-spinner: npm:@socketregistry/yocto-spinner@^1
+  side-channel: npm:@socketregistry/side-channel@^1.0.10
+  string.prototype.matchall: npm:@socketregistry/string.prototype.matchall@^1.0.8
+  string.prototype.repeat: npm:@socketregistry/string.prototype.repeat@^1.0.8
+  string.prototype.trim: npm:@socketregistry/string.prototype.trim@^1.0.8
+  string.prototype.trimend: npm:@socketregistry/string.prototype.trimend@^1.0.8
+  string.prototype.trimstart: npm:@socketregistry/string.prototype.trimstart@^1.0.8
+  typed-array-buffer: npm:@socketregistry/typed-array-buffer@^1.0.7
+  typed-array-byte-length: npm:@socketregistry/typed-array-byte-length@^1.0.7
+  typed-array-byte-offset: npm:@socketregistry/typed-array-byte-offset@^1.0.7
+  typed-array-length: npm:@socketregistry/typed-array-length@^1.0.8
+  typedarray: npm:@socketregistry/typedarray@^1.0.8
+  unbox-primitive: npm:@socketregistry/unbox-primitive@^1.0.9
+  which-boxed-primitive: npm:@socketregistry/which-boxed-primitive@^1.0.9
+  which-collection: npm:@socketregistry/which-collection@^1.0.8
+  which-typed-array: npm:@socketregistry/which-typed-array@^1.0.9
+  yocto-spinner: npm:@socketregistry/yocto-spinner@^1.0.25
   undici@<8.12.2: 8.12.2
   '@qdrant/js-client-rest>undici': 6.29.1
   yargs@<18.1.0: 18.2.0
@@ -284,7 +284,7 @@ overrides:
   inline-style-parser@<0.2.9: 0.2.9
   http-cache-semantics@<4.3.0: 4.3.0
   handlebars@<4.7.10: 4.7.10
-  follow-redirects@<1.16.1: 1.16.1
+  follow-redirects@<1.16.1: 1.16.2
 
 packageExtensionsChecksum: sha256-IFhmGZaTD1buXR2dDMWhrpnY6jCugGyqCVaA9lyLgtg=
 
@@ -1271,8 +1271,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/memory
       '@rspack/core':
-        specifier: ^1.7.12
-        version: 1.7.12(@swc/helpers@0.5.23)
+        specifier: ^2.3.0
+        version: 2.3.0(@swc/helpers@0.5.23)
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
@@ -1806,7 +1806,7 @@ importers:
         version: 2.2.10(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       '@hookform/resolvers':
         specifier: ^5.9.2
-        version: 5.9.2(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(ajv@6.15.0)(arktype@2.2.9)(joi@17.13.8)(react-hook-form@7.91.0(@types/react@19.3.0)(react@19.3.1))(typanion@3.14.0)(valibot@1.4.2(typescript@5.9.3))(zod@4.6.7)
+        version: 5.9.2(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(ajv@6.15.0)(arktype@2.2.9)(joi@17.13.9)(react-hook-form@7.91.0(@types/react@19.3.0)(react@19.3.1))(typanion@3.14.0)(valibot@1.4.2(typescript@5.9.3))(zod@4.6.7)
       '@kapaai/react-sdk':
         specifier: ^0.9.10
         version: 0.9.10(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -2517,12 +2517,6 @@ importers:
       '@tanstack/react-virtual':
         specifier: ^3.14.22
         version: 3.14.23(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      '@xyflow/react':
-        specifier: ^12.12.0
-        version: 12.12.0(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(immer@11.1.9)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
-      d3-force:
-        specifier: ^3.0.0
-        version: 3.0.0
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
@@ -2560,9 +2554,6 @@ importers:
       '@testing-library/user-event':
         specifier: ^14.6.8
         version: 14.6.8(@testing-library/dom@10.4.2)
-      '@types/d3-force':
-        specifier: ^3.0.10
-        version: 3.0.10
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -3917,8 +3908,8 @@ importers:
   packages/_llm-recorder:
     dependencies:
       diff:
-        specifier: ^8.0.4
-        version: 8.0.4
+        specifier: ^9.0.0
+        version: 9.0.0
       msw:
         specifier: ^2.15.0
         version: 2.15.0(@types/node@22.19.15)(typescript@7.0.2)
@@ -3997,8 +3988,8 @@ importers:
         specifier: ^0.2.17
         version: 0.2.17
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -4065,8 +4056,8 @@ importers:
         specifier: ^2.0.4
         version: 2.0.4
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4122,8 +4113,8 @@ importers:
         specifier: ^2.0.4
         version: 2.0.4
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4183,8 +4174,8 @@ importers:
         specifier: ^2.0.4
         version: 2.0.4
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4241,8 +4232,8 @@ importers:
         specifier: ^2.0.4
         version: 2.0.4
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4438,7 +4429,7 @@ importers:
         specifier: ^0.2.17
         version: 0.2.17
       yocto-spinner:
-        specifier: npm:@socketregistry/yocto-spinner@^1
+        specifier: npm:@socketregistry/yocto-spinner@^1.0.25
         version: '@socketregistry/yocto-spinner@1.0.25'
     devDependencies:
       '@commander-js/extra-typings':
@@ -4585,8 +4576,8 @@ importers:
         specifier: 3.9.10
         version: 3.9.10
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -4865,8 +4856,8 @@ importers:
         specifier: ^1.6.0
         version: 1.6.0
       ts-morph:
-        specifier: ^27.0.2
-        version: 27.0.2
+        specifier: ^28.0.0
+        version: 28.0.0
       tsdown:
         specifier: 0.23.1
         version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
@@ -5536,8 +5527,8 @@ importers:
         specifier: ^0.5.0
         version: 0.5.0
       diff:
-        specifier: ^8.0.4
-        version: 8.0.4
+        specifier: ^9.0.0
+        version: 9.0.0
       json-schema:
         specifier: ^0.4.0
         version: 0.4.0
@@ -5921,6 +5912,9 @@ importers:
       cmdk:
         specifier: ^1.1.1
         version: 1.1.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      d3-force:
+        specifier: ^3.0.0
+        version: 3.0.0
       date-fns:
         specifier: 'catalog:'
         version: 4.4.0
@@ -6033,6 +6027,9 @@ importers:
       '@testing-library/user-event':
         specifier: ^14.6.8
         version: 14.6.8(@testing-library/dom@10.4.2)
+      '@types/d3-force':
+        specifier: ^3.0.10
+        version: 3.0.10
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15
@@ -6085,8 +6082,8 @@ importers:
         specifier: ^8.5.0
         version: 8.5.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       rollup-plugin-node-externals:
-        specifier: ^8.1.2
-        version: 8.1.2(rollup@4.65.1)
+        specifier: ^9.0.1
+        version: 9.0.1(rollup@4.65.1)(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       storybook:
         specifier: ^10.6.2
         version: 10.6.5(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.10)(react@19.3.1)
@@ -6940,16 +6937,16 @@ importers:
         specifier: workspace:*
         version: link:../server-adapters-test-suite
       '@nestjs/common':
-        specifier: ^12.2.0
+        specifier: ^12.3.2
         version: 12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2)
       '@nestjs/core':
-        specifier: ^12.2.0
+        specifier: ^12.3.2
         version: 12.3.2(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/platform-express@12.3.2)(reflect-metadata@0.2.2)(rxjs@7.8.2)
       '@nestjs/platform-express':
-        specifier: ^12.2.0
+        specifier: ^12.3.2
         version: 12.3.2(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/core@12.3.2)(rxjs@7.8.2)(supports-color@10.2.2)
       '@nestjs/testing':
-        specifier: ^12.2.0
+        specifier: ^12.3.2
         version: 12.3.2(@nestjs/common@12.3.2(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@10.2.2))(@nestjs/core@12.3.2)(@nestjs/platform-express@12.3.2)
       '@types/cors':
         specifier: ^2.8.19
@@ -9317,8 +9314,8 @@ importers:
         specifier: workspace:*
         version: link:../_test-utils
       '@koa/router':
-        specifier: ^13.1.1
-        version: 13.1.1(supports-color@10.2.2)
+        specifier: ^15.7.0
+        version: 15.7.0(koa@3.2.1)(supports-color@10.2.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -9853,8 +9850,8 @@ importers:
   workspaces/e2b:
     dependencies:
       e2b:
-        specifier: ^2.61.0
-        version: 2.61.0
+        specifier: ^2.62.0
+        version: 2.62.0
       esbuild:
         specifier: ^0.28.2
         version: 0.28.2
@@ -9911,8 +9908,8 @@ importers:
         specifier: workspace:^
         version: link:../e2b
       e2b:
-        specifier: ^2.61.0
-        version: 2.61.0
+        specifier: ^2.62.0
+        version: 2.62.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10126,8 +10123,8 @@ importers:
   workspaces/platform-workspace:
     dependencies:
       e2b:
-        specifier: ^2.61.0
-        version: 2.61.0
+        specifier: ^2.62.0
+        version: 2.62.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -14645,7 +14642,7 @@ packages:
       fluentvalidation-ts: ^3.0.0
       fp-ts: ^2.7.0
       io-ts: ^2.0.0
-      joi: 17.13.8
+      joi: 17.13.9
       nope-validator: '>=0.12.0'
       react-hook-form: ^7.55.0
       superstruct: '>=0.12.0'
@@ -15373,10 +15370,11 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@koa/router@13.1.1':
-    resolution: {integrity: sha512-JQEuMANYRVHs7lm7KY9PCIjkgJk73h4m4J+g2mkw2Vo1ugPZ17UJVqEH8F+HeAdjKz5do1OaLe7ArDz+z308gw==}
-    engines: {node: '>= 18'}
-    deprecated: Please upgrade to v15 or higher. All reported bugs in this version are fixed in newer releases, dependencies have been updated, and security has been improved.
+  '@koa/router@15.7.0':
+    resolution: {integrity: sha512-WaAlk4TOl/O0rhTpOR0l052gz03syPMmI6Pe2gd7v3ubjfv5UcSGcnb0Y/J5NNC/ln+5FiUqPJTc/a15I+XqAA==}
+    engines: {node: '>= 20'}
+    peerDependencies:
+      koa: ^2.0.0 || ^3.0.0
 
   '@lancedb/lancedb-darwin-arm64@0.31.0':
     resolution: {integrity: sha512-6n3VxAenwcNWQpk9Ta4NL/KhpSywskafarBakzFPGe/OXzdKXbmbXdrhGdl8oMacbfgql6wmW3DcAJAbsiThvw==}
@@ -16265,6 +16263,12 @@ packages:
 
   '@napi-rs/wasm-runtime@1.0.7':
     resolution: {integrity: sha512-SeDnOO0Tk7Okiq6DbXmmBODgOAb9dp9gjlphokTUxmt8U3liIP1ZsozBahH69j/RJv+Rfs6IwUKHTgQYJ/HBAw==}
+
+  '@napi-rs/wasm-runtime@1.1.6':
+    resolution: {integrity: sha512-ZLv/JdUfkvOy9eCnnBaGfiO+XimbjebAeO+MRQqD/B+FR1tnRN0tpKSJHRbE8sFfS6aqsXZ67TQjfwfsxULVbg==}
+    peerDependencies:
+      '@emnapi/core': ^1.7.1
+      '@emnapi/runtime': ^1.7.1
 
   '@napi-rs/wasm-runtime@1.2.6':
     resolution: {integrity: sha512-mRyDmEw9/fCDXCGfL1sbgIw/GUK0PVxRW4YwgPN61F3LQ+fSyoBFarJVzgGyhF6kRzEQZ0FejDqm4WLXSeqQmw==}
@@ -19141,13 +19145,29 @@ packages:
     cpu: [arm64]
     os: [darwin]
 
+  '@rspack/binding-darwin-arm64@2.3.0':
+    resolution: {integrity: sha512-raUm1V29xRm1fPaS2R2qK4Yw5PGo3xooK6Fz2rt74pjJ+UhEUT4ED/8A9Qyf/YW16aMUl58eS5prtth8+UaJSQ==}
+    cpu: [arm64]
+    os: [darwin]
+
   '@rspack/binding-darwin-x64@1.7.12':
     resolution: {integrity: sha512-jnOp+/UXOJa9xqUb8KXH03sysoO2e4Ij6tw6MqDdmdj8n/A8PQENRPUbW9AwXpPtVDJPus9r4fi7b3+6e4B8Hg==}
     cpu: [x64]
     os: [darwin]
 
+  '@rspack/binding-darwin-x64@2.3.0':
+    resolution: {integrity: sha512-Mi7WUDMvYL14607lzOMkFYiu/NmXIeazVKJd/HmCsPu9H8aUpyf71RcbIY0otCfmpvjX2ZFJ5GrXM1VbYCAxKg==}
+    cpu: [x64]
+    os: [darwin]
+
   '@rspack/binding-linux-arm64-gnu@1.7.12':
     resolution: {integrity: sha512-C8owWG+yvo7X0oVLIXetkoJhIFBP1LYNcAQqtgLmJnQLQDklGuP83dKC+zISGQWpjawHfZ1ER96vLgoTrxKZdw==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [glibc]
+
+  '@rspack/binding-linux-arm64-gnu@2.3.0':
+    resolution: {integrity: sha512-4qHSxhLkjz6Y2r8nW72IyW0sVC1TglNz5198YFEvokQ/O356mwVk3bCS/yz3IdwPu6v4sXylLDB8cEudRoeKwg==}
     cpu: [arm64]
     os: [linux]
     libc: [glibc]
@@ -19158,8 +19178,44 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@rspack/binding-linux-arm64-musl@2.3.0':
+    resolution: {integrity: sha512-YKbmMCK7RS9YOUKYx2j6hretwv0mPHOQnD2UStDITMAnhsidn63teEyUt5404U53u+tEvyK8toQqqHFbtA/aZQ==}
+    cpu: [arm64]
+    os: [linux]
+    libc: [musl]
+
+  '@rspack/binding-linux-ppc64-gnu@2.3.0':
+    resolution: {integrity: sha512-8hI1CiQTQiBxfFevf1jsFoP2PL4jv9Vc4oUG9Q4ryF+xBwqmKSOLgb0MTgiHz0lQ0jg4hbVcb5fR3ZgK0f3lDg==}
+    cpu: [ppc64]
+    os: [linux]
+    libc: [glibc]
+
+  '@rspack/binding-linux-riscv64-gnu@2.3.0':
+    resolution: {integrity: sha512-kzXFRjvfQkFd14/zyVG+xNnEurVZPQA1aKL/OcKeIW4niqU13RdIGMbGQ2M8SBfPBbL92ze//CZIiBlz8kZIbg==}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [glibc]
+
+  '@rspack/binding-linux-riscv64-musl@2.3.0':
+    resolution: {integrity: sha512-ATJC0MwQmkC+wFyoUtpklemROUaW1IRpf7M6depLaiZXuVN8bx0IMFr/iCL1YBLf5+38NBAXsGwO3/bqYxmdQQ==}
+    cpu: [riscv64]
+    os: [linux]
+    libc: [musl]
+
+  '@rspack/binding-linux-s390x-gnu@2.3.0':
+    resolution: {integrity: sha512-MWGDa/JKwXNwJiZM/A7Iy4Js7IrEmWExjPefGDFhWmozGJ5BsKdnvD4q3Kb/YfQ+X++LJR5q1o9MkACpdOu/Bw==}
+    cpu: [s390x]
+    os: [linux]
+    libc: [glibc]
+
   '@rspack/binding-linux-x64-gnu@1.7.12':
     resolution: {integrity: sha512-MSos0FuPEefqo9V92ULd5hggKG29EkSNg1zDcypy0OkpsKh5pfjVxTLYFXgTcVyFoUQQbdG8zFBzYbwmJ8V4ew==}
+    cpu: [x64]
+    os: [linux]
+    libc: [glibc]
+
+  '@rspack/binding-linux-x64-gnu@2.3.0':
+    resolution: {integrity: sha512-XxyrjQXvIjxWIct9ceKUBZdeBbNfZ6OkyAKU62xKuyLCyKiwg7M9LhXvKKfvVyFkK7n10a6t/KeIV8+k+kREoQ==}
     cpu: [x64]
     os: [linux]
     libc: [glibc]
@@ -19170,12 +19226,27 @@ packages:
     os: [linux]
     libc: [musl]
 
+  '@rspack/binding-linux-x64-musl@2.3.0':
+    resolution: {integrity: sha512-XFY3Ayqpb/j9J9npTtOOa8woswCBDZxWfVUkirxxkvHTEk9eAP3/ABd4wxwRuGQuBFf91Emew/g0K/KpFbyH3Q==}
+    cpu: [x64]
+    os: [linux]
+    libc: [musl]
+
   '@rspack/binding-wasm32-wasi@1.7.12':
     resolution: {integrity: sha512-n+ZqP6ZMc0nhOgvadg5VhEs9ojtbES80AcWeFnmGkbzIszvGSO63GKNiRkXtjJ9KFuRzytbbmsCqkUVH+Tywxg==}
     cpu: [wasm32]
 
+  '@rspack/binding-wasm32-wasi@2.3.0':
+    resolution: {integrity: sha512-d24u2ShgaRE2DipdiuVvZMZKjSse1LpLeHqs5wqm1q8S9MW6sjE2GwlIErXSKuNymSqf0YlaN/11jjxLb2x2qA==}
+    cpu: [wasm32]
+
   '@rspack/binding-win32-arm64-msvc@1.7.12':
     resolution: {integrity: sha512-8+h5fYDXYdmugbdfZ+D1y8IQ3rv2EhSfyGP7vBe+bjNyaMa4jWrpucmZbtxojUL1AzaeuHbvMdj9UO/gelk/+g==}
+    cpu: [arm64]
+    os: [win32]
+
+  '@rspack/binding-win32-arm64-msvc@2.3.0':
+    resolution: {integrity: sha512-foalqSBgpsAPCOLd4zxALB7s06uu1YEa7p74rknv2OciF/kd9bGN4tPIpkTTgYPd2Q6KFpae/Vq8zxPSQFDHRA==}
     cpu: [arm64]
     os: [win32]
 
@@ -19184,13 +19255,26 @@ packages:
     cpu: [ia32]
     os: [win32]
 
+  '@rspack/binding-win32-ia32-msvc@2.3.0':
+    resolution: {integrity: sha512-RVoGgdW0GsWa0fsrqRYQ4JkCLViS/RGqd8gzqgMDmtdyrhHV/bvGiTPYIRYMJPWk9zBhaxA6RAAip3fjKdga8g==}
+    cpu: [ia32]
+    os: [win32]
+
   '@rspack/binding-win32-x64-msvc@1.7.12':
     resolution: {integrity: sha512-wIqFvlgFqrgUyj/6S/FJcvShnkZOmIeXTfqvheLY67MGq8qd8jb1YimQVKAIrmWB3yuJKUFACI3Ag1UBtEedEA==}
     cpu: [x64]
     os: [win32]
 
+  '@rspack/binding-win32-x64-msvc@2.3.0':
+    resolution: {integrity: sha512-gZyb4zPz8WfGbPLMscY7TX8Y1SDBvQdhHF/Gq1nzt3JEHqYFeZJrQHl0C8atH+PrDK5l7d+lY/qRwfuE+qeJ5A==}
+    cpu: [x64]
+    os: [win32]
+
   '@rspack/binding@1.7.12':
     resolution: {integrity: sha512-f4HHuLbvuld8Ba4iB/4ibse5XrKxFrgmM3S4P2AOKnPlekAFlBjmltCuaTL/W2ggYvILaVY+YcFXrEH1rrKeQA==}
+
+  '@rspack/binding@2.3.0':
+    resolution: {integrity: sha512-rh9S5xvGVs73gdqMDMYXi3SHUfCWIChlL7a8zaYF8+1HLtIgdMyxa100f1ifAKlr8VoyFUv3xrfGLBaoxwjU5g==}
 
   '@rspack/core@1.7.12':
     resolution: {integrity: sha512-6CwFIHlhRmXfZoMj3v9MZ1SMTPBn+cHVXeMIeaGp5sufqinKsISbsqHu6ZMJu2wDSmZLdmQJX6zLxkhcAUlhkQ==}
@@ -19198,6 +19282,18 @@ packages:
     peerDependencies:
       '@swc/helpers': '>=0.5.1'
     peerDependenciesMeta:
+      '@swc/helpers':
+        optional: true
+
+  '@rspack/core@2.3.0':
+    resolution: {integrity: sha512-1zylQSMl3xo1f57ZqJMHAoVddRv1BSvpQQVIgWjP51AGhLyeHTAfEf0mphb0wb0bOUf5EujpvvO592X9GMf2qQ==}
+    engines: {node: ^20.19.0 || >=22.12.0}
+    peerDependencies:
+      '@module-federation/runtime-tools': ^0.24.1 || ^2.0.0
+      '@swc/helpers': ^0.5.23
+    peerDependenciesMeta:
+      '@module-federation/runtime-tools':
+        optional: true
       '@swc/helpers':
         optional: true
 
@@ -19443,6 +19539,7 @@ packages:
   '@smithy/core@3.37.0':
     resolution: {integrity: sha512-97imTcCyiPd8k0e9+ts/Sp0W65Dn9Ti357J7M09Ov4tI8Q1JDJVFSoAJtjEVKqfHEr3Pdo2jfolqKCaaiszH0g==}
     engines: {node: '>=18.0.0'}
+    deprecated: Deprecated due to a bug in custom logger data redaction. See https://github.com/aws/aws-sdk-js-v3/issues/8393.
 
   '@smithy/credential-provider-imds@4.5.2':
     resolution: {integrity: sha512-A9uSdn72ozbRUSit0eib0TW7nXuNPlaeM0zcGkJ+nE6tFcSDbnmtwoxbTCFBukVQcszDAyvsd7+rTduPTXpygg==}
@@ -20431,8 +20528,8 @@ packages:
     resolution: {integrity: sha512-w071DSzP94YfN6XiWhOxnLpYT3uqtxJBDYdh6Jdjzt+Ce6DNspJsPQgpC7rbts/B8tEkq0LHoYuIF/O5Jh5rPg==}
     engines: {node: '>=18'}
 
-  '@ts-morph/common@0.28.1':
-    resolution: {integrity: sha512-W74iWf7ILp1ZKNYXY5qbddNaml7e9Sedv5lvU1V8lftlitkc9Pq1A+jlH23ltDgWYeZFFEqGCD1Ies9hqu3O+g==}
+  '@ts-morph/common@0.29.0':
+    resolution: {integrity: sha512-35oUmphHbJvQ/+UTwFNme/t2p3FoKiGJ5auTjjpNTop2dyREspirjMy82PLSC1pnDJ8ah1GU98hwpVt64YXQsg==}
 
   '@turbo/darwin-64@2.11.10':
     resolution: {integrity: sha512-By4idRap5+nLnMuRzLB4qkOPRlvNdyY1ne4VJYDyUoUB11H94k7uif9mbe3JT8JSNXs1D68uMcBj6hJ/jMQRvA==}
@@ -23842,8 +23939,8 @@ packages:
   duplexify@4.1.3:
     resolution: {integrity: sha512-M3BmBhwJRZsSx38lZyhE53Csddgzl5R7xGJNk7CVddZD6CcmwMCH8J+7AprIrQKH7TonKxaCjcv27Qmf+sQ+oA==}
 
-  e2b@2.61.0:
-    resolution: {integrity: sha512-oTRYKs+3RQmZIWCzGKMPFGJeT4gYJgaAoBKSJdu6PyXx4I1zfUKoKG8jh4GtMyREW88dsie0+hAu/c/Xlv9/PQ==}
+  e2b@2.62.0:
+    resolution: {integrity: sha512-RKYzGLgFLJa9xCct6Bh255UbERo/yaYqG/3sUqau60sZ38TFZSAt2M+eXGfKWo3yD31iu9iNVC44H0x9ppaoJw==}
     engines: {node: '>=22.19.0'}
 
   eastasianwidth@0.2.0:
@@ -24628,8 +24725,8 @@ packages:
     engines: {node: '>=18'}
     deprecated: Package no longer supported. Contact Support at https://www.npmjs.com/support for more info.
 
-  follow-redirects@1.16.1:
-    resolution: {integrity: sha512-FNvFGzoMLWmE6Yj9spb/zjd7yiNCHiAW9/Tg9CXrQ8wuu32HtlJOwWO11OJafl5FfY3DxTdQ0vj42zU1kvv5jg==}
+  follow-redirects@1.16.2:
+    resolution: {integrity: sha512-/kVP2U8z596Ia0gwFrwyIeo74ta5aVmSeU1FfAUMAmcEP5EP7zydmag3SLiN64NaRKef3lxsq7i/g7ltJQDGow==}
     engines: {node: '>=4.0'}
     peerDependencies:
       debug: '*'
@@ -25760,8 +25857,8 @@ packages:
   jju@1.4.0:
     resolution: {integrity: sha512-8wb9Yw966OSxApiCt0K3yNJL8pnNeIv+OEq2YMidz4FKP6nonSRoOXc80iXY4JaN2FC11B9qsNmDsm+ZOfMROA==}
 
-  joi@17.13.8:
-    resolution: {integrity: sha512-iPKOGmiRw1jxf/JOPwxmCcUQAOdF359mdzYiP2DJ+TMX0YK2zjK3D+zYOaGjpumWxOFF/l2xVWjRVK5bGSLdEw==}
+  joi@17.13.9:
+    resolution: {integrity: sha512-llFCT2rVtfwgBCaIqxtjim+iHqrgss4ONiGSYiiGH9jnjWq90ppSRffqmqKvwpa8W+YfILyQV6XyGcegXX2T4g==}
 
   jose@6.2.12:
     resolution: {integrity: sha512-9NiFmJEex0sy2Dk58j2UGBSHgUs2ypF9eZSu4L6vjOX3Dp96Sw1F3uL+H+D1sx02jZZdzUT0HgvCy59CuvXcWw==}
@@ -29436,11 +29533,17 @@ packages:
       esbuild: '>=0.18.0'
       rollup: ^1.20.0 || ^2.0.0 || ^3.0.0 || ^4.0.0
 
-  rollup-plugin-node-externals@8.1.2:
-    resolution: {integrity: sha512-EuB6/lolkMLK16gvibUjikERq5fCRVIGwD2xue/CrM8D0pz5GXD2V6N8IrgxegwbcUoKkUFI8VYCEEv8MMvgpA==}
-    engines: {node: '>= 21 || ^20.6.0 || ^18.19.0'}
+  rollup-plugin-node-externals@9.0.1:
+    resolution: {integrity: sha512-Yp91CX1ebDA8s4+BY7bOOdhF8VRR1XAKnSsHeVhYg4DW4MRXPsF4F2FnSsN9ghJgFhHl3L1uyK7A9NA/SF4Zgw==}
+    engines: {node: '>= 24'}
     peerDependencies:
       rollup: ^4.0.0
+      vite: '>=5.0.0'
+    peerDependenciesMeta:
+      rollup:
+        optional: true
+      vite:
+        optional: true
 
   rollup@4.65.1:
     resolution: {integrity: sha512-HzD4IdphaPMvuAacnL/vtoq5B8FwqewKvxTtqYibWvP6VDyZ+UsTtlw5F8HIOIIpLQAkN2NOP/0sM3puo9xN/A==}
@@ -30521,8 +30624,8 @@ packages:
   ts-mixer@6.0.4:
     resolution: {integrity: sha512-ufKpbmrugz5Aou4wcr5Wc1UUFWOLhq+Fm6qa6P0w0K5Qw2yhaUoiWszhCVuNQyNwrlGiscHOmqYoAox1PtvgjA==}
 
-  ts-morph@27.0.2:
-    resolution: {integrity: sha512-fhUhgeljcrdZ+9DZND1De1029PrE+cMkIP7ooqkLRTrRLTqcki2AstsyJm0vRNbTbVCNJ0idGlbBrfqc7/nA8w==}
+  ts-morph@28.0.0:
+    resolution: {integrity: sha512-Wp3tnZ2bzwxyTZMtgWVzXDfm7lB1Drz+y9DmmYH/L702PQhPyVrp3pkou3yIz4qjS14GY9kcpmLiOOMvl8oG1g==}
 
   tsc-files@1.1.4:
     resolution: {integrity: sha512-RePsRsOLru3BPpnf237y1Xe1oCGta8rmSYzM76kYo5tLGsv5R2r3s64yapYorGTPuuLyfS9NVbh9ydzmvNie2w==}
@@ -36398,7 +36501,7 @@ snapshots:
       '@types/mdast': 4.0.4
       '@types/react': 19.3.0
       commander: 5.1.0
-      joi: 17.13.8
+      joi: 17.13.9
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       react-helmet-async: '@slorber/react-helmet-async@1.3.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)'
@@ -36457,7 +36560,7 @@ snapshots:
       '@docusaurus/utils': 3.10.2(@swc/core@1.16.20(@swc/helpers@0.5.23))(@swc/html@1.16.20)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(uglify-js@3.19.3)
       '@docusaurus/utils-common': 3.10.2(@swc/core@1.16.20(@swc/helpers@0.5.23))(@swc/html@1.16.20)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.23))(csso@5.0.5)(esbuild@0.28.2)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.23)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)(uglify-js@3.19.3)
       fs-extra: 11.4.1
-      joi: 17.13.8
+      joi: 17.13.9
       js-yaml: 4.3.2
       lodash: 4.18.1
       tslib: 2.8.1
@@ -36580,7 +36683,7 @@ snapshots:
 
   '@e2b/desktop@2.5.0':
     dependencies:
-      e2b: 2.61.0
+      e2b: 2.62.0
 
   '@e2b/dockerfile-utils@0.1.1': {}
 
@@ -37567,7 +37670,7 @@ snapshots:
     dependencies:
       react-hook-form: 7.91.0(@types/react@19.3.0)(react@19.3.1)
 
-  '@hookform/resolvers@5.9.2(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(ajv@6.15.0)(arktype@2.2.9)(joi@17.13.8)(react-hook-form@7.91.0(@types/react@19.3.0)(react@19.3.1))(typanion@3.14.0)(valibot@1.4.2(typescript@5.9.3))(zod@4.6.7)':
+  '@hookform/resolvers@5.9.2(@sinclair/typebox@0.34.52)(@standard-schema/spec@1.1.0)(ajv@6.15.0)(arktype@2.2.9)(joi@17.13.9)(react-hook-form@7.91.0(@types/react@19.3.0)(react@19.3.1))(typanion@3.14.0)(valibot@1.4.2(typescript@5.9.3))(zod@4.6.7)':
     dependencies:
       '@standard-schema/utils': 0.3.0
       react-hook-form: 7.91.0(@types/react@19.3.0)(react@19.3.1)
@@ -37576,7 +37679,7 @@ snapshots:
       '@standard-schema/spec': 1.1.0
       ajv: 6.15.0
       arktype: 2.2.9
-      joi: 17.13.8
+      joi: 17.13.9
       typanion: 3.14.0
       valibot: 1.4.2(typescript@5.9.3)
       zod: 4.6.7
@@ -38203,12 +38306,13 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@koa/router@13.1.1(supports-color@10.2.2)':
+  '@koa/router@15.7.0(koa@3.2.1)(supports-color@10.2.2)':
     dependencies:
       debug: 4.4.3(supports-color@10.2.2)
       http-errors: 2.0.1
+      koa: 3.2.1
       koa-compose: 4.1.0
-      path-to-regexp: 6.3.0
+      path-to-regexp: 8.4.2
     transitivePeerDependencies:
       - supports-color
 
@@ -39298,6 +39402,13 @@ snapshots:
       '@napi-rs/simple-git-win32-x64-msvc': 0.1.22
 
   '@napi-rs/wasm-runtime@1.0.7':
+    dependencies:
+      '@emnapi/core': 1.11.3
+      '@emnapi/runtime': 1.11.3
+      '@tybys/wasm-util': 0.10.4
+    optional: true
+
+  '@napi-rs/wasm-runtime@1.1.6(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)':
     dependencies:
       '@emnapi/core': 1.11.3
       '@emnapi/runtime': 1.11.3
@@ -42195,19 +42306,49 @@ snapshots:
   '@rspack/binding-darwin-arm64@1.7.12':
     optional: true
 
+  '@rspack/binding-darwin-arm64@2.3.0':
+    optional: true
+
   '@rspack/binding-darwin-x64@1.7.12':
+    optional: true
+
+  '@rspack/binding-darwin-x64@2.3.0':
     optional: true
 
   '@rspack/binding-linux-arm64-gnu@1.7.12':
     optional: true
 
+  '@rspack/binding-linux-arm64-gnu@2.3.0':
+    optional: true
+
   '@rspack/binding-linux-arm64-musl@1.7.12':
+    optional: true
+
+  '@rspack/binding-linux-arm64-musl@2.3.0':
+    optional: true
+
+  '@rspack/binding-linux-ppc64-gnu@2.3.0':
+    optional: true
+
+  '@rspack/binding-linux-riscv64-gnu@2.3.0':
+    optional: true
+
+  '@rspack/binding-linux-riscv64-musl@2.3.0':
+    optional: true
+
+  '@rspack/binding-linux-s390x-gnu@2.3.0':
     optional: true
 
   '@rspack/binding-linux-x64-gnu@1.7.12':
     optional: true
 
+  '@rspack/binding-linux-x64-gnu@2.3.0':
+    optional: true
+
   '@rspack/binding-linux-x64-musl@1.7.12':
+    optional: true
+
+  '@rspack/binding-linux-x64-musl@2.3.0':
     optional: true
 
   '@rspack/binding-wasm32-wasi@1.7.12':
@@ -42215,13 +42356,29 @@ snapshots:
       '@napi-rs/wasm-runtime': 1.0.7
     optional: true
 
+  '@rspack/binding-wasm32-wasi@2.3.0':
+    dependencies:
+      '@emnapi/core': 1.11.3
+      '@emnapi/runtime': 1.11.3
+      '@napi-rs/wasm-runtime': 1.1.6(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)
+    optional: true
+
   '@rspack/binding-win32-arm64-msvc@1.7.12':
+    optional: true
+
+  '@rspack/binding-win32-arm64-msvc@2.3.0':
     optional: true
 
   '@rspack/binding-win32-ia32-msvc@1.7.12':
     optional: true
 
+  '@rspack/binding-win32-ia32-msvc@2.3.0':
+    optional: true
+
   '@rspack/binding-win32-x64-msvc@1.7.12':
+    optional: true
+
+  '@rspack/binding-win32-x64-msvc@2.3.0':
     optional: true
 
   '@rspack/binding@1.7.12':
@@ -42237,11 +42394,34 @@ snapshots:
       '@rspack/binding-win32-ia32-msvc': 1.7.12
       '@rspack/binding-win32-x64-msvc': 1.7.12
 
+  '@rspack/binding@2.3.0':
+    optionalDependencies:
+      '@rspack/binding-darwin-arm64': 2.3.0
+      '@rspack/binding-darwin-x64': 2.3.0
+      '@rspack/binding-linux-arm64-gnu': 2.3.0
+      '@rspack/binding-linux-arm64-musl': 2.3.0
+      '@rspack/binding-linux-ppc64-gnu': 2.3.0
+      '@rspack/binding-linux-riscv64-gnu': 2.3.0
+      '@rspack/binding-linux-riscv64-musl': 2.3.0
+      '@rspack/binding-linux-s390x-gnu': 2.3.0
+      '@rspack/binding-linux-x64-gnu': 2.3.0
+      '@rspack/binding-linux-x64-musl': 2.3.0
+      '@rspack/binding-wasm32-wasi': 2.3.0
+      '@rspack/binding-win32-arm64-msvc': 2.3.0
+      '@rspack/binding-win32-ia32-msvc': 2.3.0
+      '@rspack/binding-win32-x64-msvc': 2.3.0
+
   '@rspack/core@1.7.12(@swc/helpers@0.5.23)':
     dependencies:
       '@module-federation/runtime-tools': 0.22.0
       '@rspack/binding': 1.7.12
       '@rspack/lite-tapable': 1.1.0
+    optionalDependencies:
+      '@swc/helpers': 0.5.23
+
+  '@rspack/core@2.3.0(@swc/helpers@0.5.23)':
+    dependencies:
+      '@rspack/binding': 2.3.0
     optionalDependencies:
       '@swc/helpers': 0.5.23
 
@@ -43535,7 +43715,7 @@ snapshots:
       '@ts-graphviz/ast': 2.0.7
       '@ts-graphviz/common': 2.1.5
 
-  '@ts-morph/common@0.28.1':
+  '@ts-morph/common@0.29.0':
     dependencies:
       minimatch: 10.2.6
       path-browserify: 1.0.1
@@ -45460,7 +45640,7 @@ snapshots:
 
   axios@1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2):
     dependencies:
-      follow-redirects: 1.16.1(debug@4.4.3(supports-color@10.2.2))
+      follow-redirects: 1.16.2(debug@4.4.3(supports-color@10.2.2))
       form-data: 4.0.6
       https-proxy-agent: 5.0.1(supports-color@10.2.2)
       proxy-from-env: 2.1.0
@@ -47404,7 +47584,7 @@ snapshots:
       readable-stream: 3.6.2
       stream-shift: 1.0.3
 
-  e2b@2.61.0:
+  e2b@2.62.0:
     dependencies:
       '@bufbuild/protobuf': 2.16.0
       '@connectrpc/connect': 2.3.0(@bufbuild/protobuf@2.16.0)
@@ -48413,7 +48593,7 @@ snapshots:
       async: 0.2.10
       which: 1.3.1
 
-  follow-redirects@1.16.1(debug@4.4.3(supports-color@10.2.2)):
+  follow-redirects@1.16.2(debug@4.4.3(supports-color@10.2.2)):
     optionalDependencies:
       debug: 4.4.3(supports-color@10.2.2)
 
@@ -49376,7 +49556,7 @@ snapshots:
   http-proxy@1.18.1(debug@4.4.3(supports-color@10.2.2)):
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.16.1(debug@4.4.3(supports-color@10.2.2))
+      follow-redirects: 1.16.2(debug@4.4.3(supports-color@10.2.2))
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug
@@ -49796,7 +49976,7 @@ snapshots:
 
   jju@1.4.0: {}
 
-  joi@17.13.8:
+  joi@17.13.9:
     dependencies:
       '@hapi/hoek': 9.3.0
       '@hapi/topo': 5.1.0
@@ -54602,9 +54782,10 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  rollup-plugin-node-externals@8.1.2(rollup@4.65.1):
-    dependencies:
+  rollup-plugin-node-externals@9.0.1(rollup@4.65.1)(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)):
+    optionalDependencies:
       rollup: 4.65.1
+      vite: 8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
 
   rollup@4.65.1:
     dependencies:
@@ -55884,9 +56065,9 @@ snapshots:
 
   ts-mixer@6.0.4: {}
 
-  ts-morph@27.0.2:
+  ts-morph@28.0.0:
     dependencies:
-      '@ts-morph/common': 0.28.1
+      '@ts-morph/common': 0.29.0
       code-block-writer: 13.0.3
 
   tsc-files@1.1.4(typescript@7.0.2):

@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-v6",
-  "version": "0.0.93",
+  "version": "0.0.94",
   "description": "",
   "type": "module",
   "private": true,
@@ -52,7 +52,7 @@
     "json-schema": "^0.4.0",
     "msw": "^2.15.0",
     "resolve.exports": "^2.0.4",
-    "ts-morph": "^27.0.2",
+    "ts-morph": "^28.0.0",
     "tsdown": "0.23.1",
     "typescript": "catalog:"
   },
