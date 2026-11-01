@@ -49,7 +49,6 @@ describe('Composer on a lazy user-session draft', () => {
     await waitFor(() =>
       expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'fix the login bug', visibility: 'private' }]),
     );
-    // The thread opens while the session is still being created; it waits on that create.
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
     );
@@ -229,7 +228,6 @@ describe('Composer on a lazy user-session draft', () => {
     await user.type(message, '  retry this prompt  ');
     await user.keyboard('{Enter}');
 
-    // The draft opens its thread at once, then comes back with the prompt when the create fails.
     expect(await screen.findByText(/Could not create the session: Database unavailable/)).toBeInTheDocument();
     expect(screen.getByTestId('pathname')).toHaveTextContent(draftUrl);
     const restored = screen.getByRole('textbox', { name: 'Message' });

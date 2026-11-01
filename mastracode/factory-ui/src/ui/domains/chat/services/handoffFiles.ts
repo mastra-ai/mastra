@@ -24,7 +24,6 @@ export function takeHandoffFiles(resourceId: string): PendingImage[] {
   return files;
 }
 
-/** What a draft whose session failed to start goes back to: its prompt and the model and thinking level picked for it. */
 export interface FailedDraft {
   prompt: string;
   modelId?: string;

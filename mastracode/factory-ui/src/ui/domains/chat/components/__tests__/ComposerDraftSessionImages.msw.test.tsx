@@ -198,7 +198,6 @@ describe('Starting a user session with images attached', () => {
       await user.type(message, 'what is wrong here');
       await user.keyboard('{Enter}');
 
-      // Nothing is dropped and nothing can change while the session waits on the model.
       expect(await screen.findByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'Starting session…');
       expect(message).toBeDisabled();
       expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled();
@@ -259,7 +258,6 @@ describe('Starting a user session with images attached', () => {
       await user.type(message, 'look at this');
       await user.keyboard('{Enter}');
 
-      // The draft opens its thread at once, then comes back when the create fails.
       expect(await screen.findByText(/Could not create the session: Database unavailable/)).toBeInTheDocument();
       expect(screen.getByTestId('pathname')).toHaveTextContent(DRAFT_URL);
       expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('look at this');

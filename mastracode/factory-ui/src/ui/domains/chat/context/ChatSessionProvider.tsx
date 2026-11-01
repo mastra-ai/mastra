@@ -181,7 +181,6 @@ export function ChatSessionBoundary({
   deferUntilMessagesReady?: boolean;
 }) {
   const { sessionId, resourceReady, baseUrl, sessionThreadId, draftSessionId } = useChatSessionContext();
-  // A draft whose session failed to start reopens with its prompt and images.
   const location = useLocation();
   const failedDraft = readFailedDraft(location.state, draftSessionId);
   const messagesQuery = useAgentControllerThreadMessages({

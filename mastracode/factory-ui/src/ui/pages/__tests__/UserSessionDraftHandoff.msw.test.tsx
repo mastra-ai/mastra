@@ -163,7 +163,6 @@ describe('a user session draft on the real thread route', () => {
     await user.type(message, 'fix the login bug');
     await user.keyboard('{Enter}');
 
-    // The send is held, not dropped: the prompt is taken and the composer stays locked until the model is known.
     expect(await screen.findByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'Starting session…');
     expect(message).toBeDisabled();
     expect(route.createBodies).toEqual([]);
@@ -201,8 +200,6 @@ describe('a user session draft on the real thread route', () => {
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
     );
-    // The create has not answered, yet the thread shows the prompt instead of a loader.
-    // Look it up under the thread's main: the draft page's main is replaced on the way.
     expect(await screen.findByText('fix the login bug', { selector: 'main p' }, { timeout: 5000 })).toBeInTheDocument();
     const thread = within(screen.getByRole('main'));
     expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument();
