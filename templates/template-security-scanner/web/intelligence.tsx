@@ -16,6 +16,11 @@ import {
 import { Dialog, Empty, Loading, Notice, Pager, Section, Status, Time, errorCode, useData } from './ui';
 
 const limit = 25;
+const availabilityOutcome = {
+  available: 'CONFIRMED',
+  expired: 'EVIDENCE_EXPIRED',
+  unknown: 'EVIDENCE_UNKNOWN',
+} as const;
 
 function approvalLatency({ createdAt, decidedAt }: Approval): string {
   if (!decidedAt) return '—';
@@ -310,7 +315,9 @@ function FindingDetail({ finding }: { finding: Finding }) {
       ) : hypothesis.data && evaluation.data && job.data ? (
         <div className="detail-grid">
           <div>
-            <span className="eyebrow">Outcome</span>
+            <span className="eyebrow">
+              {evaluation.data.availability?.state === 'available' ? 'Outcome' : 'Historical outcome'}
+            </span>
             <p>
               <Status value={job.data?.result?.outcome ?? 'Unavailable'} /> · {job.data?.result?.reason}
             </p>
@@ -352,6 +359,12 @@ function FindingDetail({ finding }: { finding: Finding }) {
             <p>
               {evaluation.data?.source} · {evaluation.data?.requestCount} requests ·{' '}
               {evaluation.data?.withheld ? 'withheld evidence' : 'recorded evidence'}
+            </p>
+            <p className="hint">
+              Evidence availability: {evaluation.data.availability?.state ?? 'unknown'}.
+              {evaluation.data.availability?.state === 'expired'
+                ? ' This historical outcome has no retained supporting proof.'
+                : ''}
             </p>
           </div>
           <div>
@@ -453,9 +466,11 @@ export function FindingsView() {
                     </td>
                     <td className="mono">{item.investigationId.slice(0, 8)}</td>
                     <td>
-                      <Status value="CONFIRMED" />
+                      <Status value={availabilityOutcome[item.availability?.state ?? 'unknown']} />
                     </td>
-                    <td>{item.evidenceIds.length} IDs</td>
+                    <td>
+                      {item.evidenceIds.length} IDs · {item.availability?.state ?? 'availability unknown'}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -473,7 +488,7 @@ export function FindingsView() {
           title={`Finding ${finding.id.slice(0, 8)}`}
           action={<button onClick={() => setSelected(undefined)}>Close</button>}
         >
-          <FindingDetail key={finding.id} finding={finding} />
+          <FindingDetail key={`${finding.id}:${finding.availability?.state ?? 'unknown'}`} finding={finding} />
         </Section>
       )}
     </>
@@ -519,6 +534,8 @@ export function EvaluationsView() {
                     <td>{item.requestCount}</td>
                     <td>
                       {item.evidence.length} IDs{item.withheld ? ' · withheld' : ''}
+                      {' · '}
+                      {item.availability?.state ?? 'availability unknown'}
                     </td>
                     <td>
                       <button onClick={() => setSelected(item.id)}>Inspect</button>
@@ -572,6 +589,8 @@ export function EvaluationsView() {
               <p>
                 {evaluation.completed ? 'Completed' : 'Partial'} ·{' '}
                 {evaluation.withheld ? 'Evidence withheld' : `${evaluation.evidence.length} evidence IDs`}
+                {' · '}
+                {evaluation.availability?.state ?? 'availability unknown'}
               </p>
             </div>
             <div>

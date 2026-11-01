@@ -137,7 +137,7 @@ async function modelWire() {
       .parse(await response.json());
   }
   const models: InvestigationModels = {
-    propose: (scanId, evidence, playbooks, advisories, _limit, _timeout, budget, signal) =>
+    propose: (scanId, evidence, playbooks, advisories, _planningLimits, _limit, _timeout, budget, signal) =>
       call(
         'sherlock',
         { kind: 'propose', scanId, evidence, playbooks, advisories },

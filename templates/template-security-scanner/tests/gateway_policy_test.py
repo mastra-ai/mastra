@@ -70,6 +70,69 @@ class GatewayPolicyTests(unittest.TestCase):
         self.assertFalse(auth.secret_in("/catalog?category=books"))
         self.assertTrue(auth.secret_in("/reflected?value=" + self.token))
 
+    def test_invalid_session_comparison_is_exact_owned_public_scope(self) -> None:
+        comparison: dict[str, object] = {
+            "role": "public",
+            "origin": ["http", "allowed.lab", 18080],
+            "path": "/owned/auth/vulnerable",
+        }
+        config: dict[str, object] = {
+            **self.config,
+            "lab_ips": ["192.0.2.10"],
+            "invalid_session_comparison": comparison,
+        }
+        policy = Policy(config, {"reader": self.token, "public": ""})
+        request = http.Request.make(
+            "GET",
+            "http://allowed.lab:18080/owned/auth/vulnerable",
+            headers=http.Headers(
+                [
+                    (b"host", b"allowed.lab:18080"),
+                    (b"authorization", b"Bearer invalid-scanner-session"),
+                ]
+            ),
+        )
+        policy.request(request, "public")
+        for changed in (
+            {**config, "lab_ips": []},
+            {**config, "invalid_session_comparison": None},
+            {
+                **config,
+                "invalid_session_comparison": {
+                    **comparison,
+                    "path": "/owned/auth/patched",
+                },
+            },
+            {
+                **config,
+                "invalid_session_comparison": {
+                    **comparison,
+                    "origin": ["http", "second.lab", 18080],
+                },
+            },
+            {**config, "invalid_session_comparison": {**comparison, "role": "reader"}},
+        ):
+            with self.subTest(config=changed), self.assertRaises(PolicyError):
+                Policy(changed, {"reader": self.token, "public": ""}).request(
+                    request, "public"
+                )
+        with self.assertRaises(PolicyError):
+            policy.request(request, "reader")
+        for path in ("/owned/auth/patched", "/owned/auth/vulnerable?next=1"):
+            changed_request = request.copy()
+            changed_request.path = path
+            with self.assertRaises(PolicyError):
+                policy.request(changed_request, "public")
+        for name, value in (
+            ("authorization", "Bearer another-session"),
+            ("cookie", "session=invalid"),
+            ("x-api-key", "invalid"),
+        ):
+            changed_request = request.copy()
+            changed_request.headers[name] = value
+            with self.assertRaises(PolicyError):
+                policy.request(changed_request, "public")
+
     def test_cookie_and_unselected_role_credentials_remain_forbidden(self) -> None:
         cookie = Policy(
             {**self.config, "headers": {"reader": "cookie"}},

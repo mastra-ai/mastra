@@ -1,3 +1,4 @@
+import { RuntimeState } from './runtime-state';
 import { createRoot } from 'react-dom/client';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { ApiError, login, logout, readSession, type Session } from './api';
@@ -201,6 +202,7 @@ export function SettingsView() {
               Runtime data is stale; availability reflects the last successful read.
             </p>
           )}
+          <RuntimeState />
           <div className="settings-grid">
             <Section title="Execution">
               <div className="settings-list">

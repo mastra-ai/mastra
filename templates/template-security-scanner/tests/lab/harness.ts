@@ -228,10 +228,11 @@ except Exception as e:
       },
     };
   };
+  let activeSettings = settings;
   const start = () =>
     options.processMode
       ? startProcess()
-      : startControlPlane(settings, 0, undefined, boundary, options.advisorySource, options.investigationModels);
+      : startControlPlane(activeSettings, 0, undefined, boundary, options.advisorySource, options.investigationModels);
   let running = await start();
   cleanup.push(() => running.close());
   let cookie = '',
@@ -310,6 +311,14 @@ except Exception as e:
     stats,
     wait,
     restart,
+    stop: () => running.close(),
+    async restartWithKey(key?: string) {
+      if (options.processMode) throw new Error('IN_PROCESS_KEY_RECOVERY_REQUIRED');
+      await running.close();
+      activeSettings = { ...settings, SCANNER_ENCRYPTION_KEY: key };
+      running = await start();
+      await login();
+    },
     crashRestart,
     privateValues,
     exported,

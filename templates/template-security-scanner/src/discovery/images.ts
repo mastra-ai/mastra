@@ -115,6 +115,7 @@ export async function buildDiscoveryImages(
   settings: Settings,
   signal?: AbortSignal,
   acquired?: (imageId: string, inputHash: string) => Promise<void>,
+  acquiring?: (tag: string, inputHash: string) => Promise<void>,
 ): Promise<DiscoveryImages> {
   signal?.throwIfAborted();
   const inputs = await prepareDiscoveryInputs(settings, signal);
@@ -154,6 +155,7 @@ export async function buildDiscoveryImages(
       const hash = digest(dockerfile + source + inputHash),
         tag = `security-scanner/${kind}:${owner.slice(-16)}-${hash.slice(0, 16)}`;
       attempted.push({ tag, hash });
+      await acquiring?.(tag, hash);
       signal?.throwIfAborted();
       await new Promise<void>((resolve, reject) => {
         const child = spawn(

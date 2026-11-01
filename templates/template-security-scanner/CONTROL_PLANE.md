@@ -129,6 +129,14 @@ The metadata-only loopback example above does not grant network access. Discover
 
 Authenticated GET requests can read `/native/agents`, `/native/workflows`, `/native/openapi.json`, and `/native/auth/capabilities` through the official Mastra adapter. Client `requestContext` query values are rejected there. Domain ownership comes from the verified local session and is never taken from request bodies or Mastra request context. All other native routes are denied, including execution with an authenticated session.
 
+## Investigation budgets and results
+
+Choose `maxTokens` explicitly when admitting an investigation through `POST /api/investigations`: 1–24576 is supported. Existing investigations retain their recorded limits, and the console's **Investigate** action continues to select 16384. Per-hypothesis limits remain capped at 4096. A larger configured allowance does not relax request, duration, input, output, identity or approval boundaries.
+
+Read the investigation's `usedTokens` against `limits.maxTokens` when diagnosing a blocked run. This counter conservatively reserves input bytes, the output allowance and a fixed safety margin before each model call. It is shared across planning, interpretation and review, is never refunded after dispatch, and differs from reported provider token usage. A permitted input can still leave too little shared capacity for a later stage. `TOKEN_BUDGET_EXCEEDED` stops that stage without raising the limit or skipping review. Inspect the terminal job's `result.reason` as well as the investigation's state; a completed job can contain a blocked outcome.
+
+An owned resource snapshot helps planning relate capability roles to the supplied scan evidence. It describes the current revision bindings and does not authorize execution or prove a vulnerability. Missing or stale resources still prevent the corresponding verification. Every confirmed finding requires complete admissible evidence and Watson's independent agreement. Disagreement or uncertainty leaves the evidence unconfirmed; a category-specific condition also does not establish a further exploit or real-world impact. Empty findings are a valid result and do not trigger automatic retries toward agreement.
+
 ## Error responses
 
 Errors return only a sanitized `{ code }`. Invalid shapes/JSON return 400; Host/Origin/session/CSRF/scope denials return 403; absent or inaccessible IDs return 404; stale revisions and conflicting transitions return 409; unavailable keys, transport prerequisites, or disabled scan execution return 503. Request bodies are limited to 16384 bytes before domain or official adapter JSON parsing, including chunked requests. Oversized bodies return 413. Responses use `Cache-Control: no-store`.

@@ -12,5 +12,21 @@ Read `GET /api/advisories/status` for `lastSuccessAt`, `lastAttemptAt`, `stale`,
 
 Use `GET /api/advisories` and `GET /api/advisories/:id` to inspect stored entries, and `GET /api/advisories/:id/events` to inspect material revision events. Each entry has a material `revision` and a separate `recordRevision` for optimistic concurrency. `GET /api/advisories/:id` returns a quoted `ETag` matching `recordRevision`. Change local triage with `PUT /api/advisories/:id/triage`, a body such as `{"status":"triaged"}`, and an `If-Match` header containing that ETag. A successful change returns the next `recordRevision` and ETag; a stale value returns `REVISION_CONFLICT` (409). Material imports also advance `recordRevision`, while identical imports preserve it, preserve triage, and emit no event. A changed material revision emits one event. Upstream published, withdrawn, or superseded state remains separate from local triage.
 
-The advisory feed is an external dependency and is contacted only when the operator starts synchronization. The local database stores imported text as untrusted content. No lockfile, source tree, or SBOM is sent to the feed.
+The advisory feed is an external dependency and is contacted only by an explicit manual sync or an explicitly enabled periodic workflow. The local database stores imported text as untrusted content. No lockfile, source tree, or SBOM is sent to the feed.
 When investigation is enabled, a newly published or materially revised local advisory creates one durable reassessment event per eligible authorized target with a completed scan and investigation precedent. Sync starts planning without a manual recurrence tick or `/plan` call; a saved cursor fans out to at most 100 targets per transaction and resumes after restart. Unchanged imports do not create another event. Sherlock receives bounded structured IDs, revisions and conservatively filtered affected metadata; unknown product versions remain `APPLICABILITY_UNKNOWN`, and the advisory alone cannot confirm a finding. With investigation disabled, imports remain in the local inbox and do not admit automatic investigations. An enabled sync can make paid Morph model requests for eligible targets.
+
+## Periodic advisory sync
+
+Set all three settings explicitly to opt in, then restart the server:
+
+```dotenv
+SCANNER_ADVISORY_SYNC_ENABLED=true
+SCANNER_ADVISORY_SYNC_CRON=0 6 * * *
+SCANNER_ADVISORY_SYNC_TIMEZONE=America/Sao_Paulo
+```
+
+The supported five-field cron syntax accepts `*` or one integer per field. Cadence and an IANA timezone are required; there is no enabled default schedule. The separate Mastra `local-advisory-sync` workflow uses the same finite source allowlist, rotation, old-ID refresh and persisted backoff as manual sync. Startup does not fetch before the saved next tick is due. Missed ticks coalesce into one persisted event and the next future occurrence. An interrupted admitted event is recorded rather than replayed without a bound.
+
+Read `GET /api/advisory-schedule` for the saved revision, next occurrence, pause state and recent event identities. To pause, send `POST /api/advisory-schedule/pause` with `{ "paused": true, "revision": <current revision> }` and the normal session/Origin/CSRF headers. Resume deliberately with the new revision and `paused: false`. Disabling the setting and restarting removes the native registration and prevents new scheduled admission, including old due ticks. A disabled schedule emits no feed requests.
+
+Failures preserve last-good inbox records and expose staleness, coverage limitations and retry timing. Identical imports preserve triage; a material revision uses the existing revision/reassessment path. An empty finding set never causes retries toward a positive result. Synchronization does not send source code, lockfiles or target credentials. If investigation planning is also enabled, eligible imported revisions can make paid Morph requests under the existing investigation budgets.

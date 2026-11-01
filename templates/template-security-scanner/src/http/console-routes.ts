@@ -46,6 +46,7 @@ function findingView(item: Finding) {
     proofId: item.proofId,
     evidenceIds: item.evidenceIds,
     createdAt: item.createdAt,
+    availability: item.availability ?? { state: 'unknown', at: null },
   };
 }
 
@@ -66,6 +67,8 @@ function proofView(item: StoredProof) {
     requestCount: item.proof.requestCount,
     evidence: item.proof.evidence,
     withheld: item.proof.withheld,
+    availability: item.availability ?? { state: 'unknown', at: null },
+    expiresAt: item.expiresAt ?? null,
   };
 }
 

@@ -6,6 +6,7 @@ import { parseBrowserSandboxStatus } from '../runtime/browser.js';
 import { RuntimeDiagnostic } from '../config/settings.js';
 import type { PrivateSandbox } from './native.js';
 import type { SecretGuard } from './parser.js';
+import { corsReadObservation } from './cors-observation.js';
 
 const unsafeFlags = [
   '--no-sandbox',
@@ -73,9 +74,19 @@ const record = (value: unknown): Record<string, unknown> => z.record(z.string(),
 // Fixed CDP operations against the current owned browser only. nc transports
 // the loopback socket over public Docker exec stdin/stdout; no port publication,
 // host namespace, target-page evaluation, or generic CDP API is exposed.
-export async function browserSandboxStatus(
+type BrowserObserver = (message: Record<string, unknown>) => void;
+type BrowserDrain = (observe: BrowserObserver, done: () => boolean) => Promise<void>;
+type BrowserCall = (
+  method: string,
+  params: Record<string, unknown>,
+  sessionId?: string,
+  observe?: BrowserObserver,
+) => Promise<Record<string, unknown>>;
+async function withBrowserPage<T>(
   sandbox: PrivateSandbox,
   signal: AbortSignal,
+  url: string,
+  inspect: (call: BrowserCall, session: string, drain: BrowserDrain) => Promise<T>,
   setStage: (stage: 'BROWSER_VERSION' | 'BROWSER_WEBSOCKET' | 'BROWSER_TARGET' | 'BROWSER_STATUS') => void = () => {},
 ) {
   setStage('BROWSER_VERSION');
@@ -174,29 +185,40 @@ export async function browserSandboxStatus(
     for (let index = 0; index < masked.length; index++) masked[index] = masked[index]! ^ mask[index % 4]!;
     await write(Buffer.concat([header, mask, masked]));
   };
+  const readMessage = async () => {
+    const header = await read(2);
+    if (header[0] !== 0x81 || header[1] === undefined || header[1] & 0x80) throw new Error('BROWSER_CONTROL_WEBSOCKET');
+    let size = header[1] & 127;
+    if (size === 126) size = (await read(2)).readUInt16BE();
+    else if (size === 127) {
+      const large = (await read(8)).readBigUInt64BE();
+      if (large > 131072n) throw new Error('BROWSER_CONTROL_BOUND');
+      size = Number(large);
+    }
+    if (size > 131072) throw new Error('BROWSER_CONTROL_BOUND');
+    return record(JSON.parse((await read(size)).toString()));
+  };
   let id = 0;
-  const call = async (method: string, params: Record<string, unknown>, sessionId?: string) => {
+  const call: BrowserCall = async (method, params, sessionId, observe) => {
     const current = ++id;
     await send({ id: current, method, params, ...(sessionId ? { sessionId } : {}) });
     for (let count = 0; count < 100; count++) {
-      const header = await read(2);
-      if (header[0] !== 0x81 || header[1] === undefined || header[1] & 0x80)
-        throw new Error('BROWSER_CONTROL_WEBSOCKET');
-      let size = header[1] & 127;
-      if (size === 126) size = (await read(2)).readUInt16BE();
-      else if (size === 127) {
-        const large = (await read(8)).readBigUInt64BE();
-        if (large > 131072n) throw new Error('BROWSER_CONTROL_BOUND');
-        size = Number(large);
-      }
-      if (size > 131072) throw new Error('BROWSER_CONTROL_BOUND');
-      const message = record(JSON.parse((await read(size)).toString()));
+      const message = await readMessage();
+      observe?.(message);
       if (message.id === current) {
         if (message.error) throw new Error('BROWSER_CONTROL_COMMAND');
         return record(message.result);
       }
     }
     throw new Error('BROWSER_CONTROL_EVENTS');
+  };
+  const drain: BrowserDrain = async (observe, done) => {
+    // Runtime's promise result can precede native network notifications. Read
+    // only this existing channel within its original byte/time/message bounds.
+    for (let count = 0; !done(); count++) {
+      if (count >= 100) throw new Error('BROWSER_CONTROL_EVENTS');
+      observe(await readMessage());
+    }
   };
   let targetId: string | undefined;
   try {
@@ -227,37 +249,125 @@ export async function browserSandboxStatus(
       .string()
       .min(1)
       .max(128)
-      .parse((await call('Target.createTarget', { url: 'chrome://sandbox' })).targetId);
+      .parse((await call('Target.createTarget', { url })).targetId);
     const session = z
       .string()
       .min(1)
       .max(128)
       .parse((await call('Target.attachToTarget', { targetId, flatten: true })).sessionId);
     setStage('BROWSER_STATUS');
-    for (let attempt = 0; attempt < 15; attempt++) {
-      const result = record(
-        (
-          await call(
-            'Runtime.evaluate',
-            { expression: 'document.documentElement.outerHTML', returnByValue: true },
-            session,
-          )
-        ).result,
-      );
-      if (typeof result.value === 'string' && result.value.includes('sandbox-status')) {
-        try {
-          return { ...parseBrowserSandboxStatus(result.value), readinessAttempts: attempt + 1 };
-        } catch (error) {
-          if (!(error instanceof RuntimeDiagnostic) || error.code !== 'BROWSER_SANDBOX_UNAVAILABLE') throw error;
-          // The built-in page populates rows asynchronously. A partial table
-          // is never positive evidence; retry within this existing finite loop.
-        }
-      }
-      await pause(50, undefined, { signal });
-    }
-    throw new Error('BROWSER_SANDBOX_UNAVAILABLE');
+    return await inspect(call, session, drain);
   } finally {
     if (targetId) await call('Target.closeTarget', { targetId }).catch(() => undefined);
     stream.destroy();
+  }
+}
+
+export async function browserSandboxStatus(
+  sandbox: PrivateSandbox,
+  signal: AbortSignal,
+  setStage: (stage: 'BROWSER_VERSION' | 'BROWSER_WEBSOCKET' | 'BROWSER_TARGET' | 'BROWSER_STATUS') => void = () => {},
+) {
+  return withBrowserPage(
+    sandbox,
+    signal,
+    'chrome://sandbox',
+    async (call, session) => {
+      for (let attempt = 0; attempt < 15; attempt++) {
+        const result = record(
+          (
+            await call(
+              'Runtime.evaluate',
+              { expression: 'document.documentElement.outerHTML', returnByValue: true },
+              session,
+            )
+          ).result,
+        );
+        if (typeof result.value === 'string' && result.value.includes('sandbox-status')) {
+          try {
+            return { ...parseBrowserSandboxStatus(result.value), readinessAttempts: attempt + 1 };
+          } catch (error) {
+            if (!(error instanceof RuntimeDiagnostic) || error.code !== 'BROWSER_SANDBOX_UNAVAILABLE') throw error;
+            // The built-in page populates rows asynchronously. A partial table
+            // is never positive evidence; retry within this existing finite loop.
+          }
+        }
+        await pause(50, undefined, { signal });
+      }
+      throw new Error('BROWSER_SANDBOX_UNAVAILABLE');
+    },
+    setStage,
+  );
+}
+
+// The source document is owned, inert and opaque-origin. Only this fixed fetch
+// expression executes; no target HTML or model-supplied program is evaluated.
+export async function browserCrossOriginRead(
+  sandbox: PrivateSandbox,
+  signal: AbortSignal,
+  url: string,
+  marker: string,
+) {
+  const destination = z.url().max(2048).parse(url);
+  const expected = z
+    .string()
+    .regex(/^LAB_MARKER_[A-Z0-9]{8,64}$/)
+    .parse(marker);
+  try {
+    return await withBrowserPage(
+      sandbox,
+      signal,
+      'data:text/html,<title>Owned%20CORS%20probe</title>',
+      async (call, session, drain) => {
+        const observed = corsReadObservation(session, destination);
+        await call(
+          'Network.enable',
+          { maxTotalBufferSize: 8192, maxResourceBufferSize: 8192, maxPostDataSize: 0, enableDurableMessages: false },
+          session,
+          observed.observe,
+        );
+        const expression = `(async () => {
+      try {
+        const response = await fetch(${JSON.stringify(destination)}, {mode:'cors',credentials:'omit',redirect:'error',signal:AbortSignal.timeout(4000)});
+        if (!response.body || response.status !== 200) return {completed:false,readable:false};
+        const reader = response.body.getReader();
+        let total = 0, text = '', decoder = new TextDecoder();
+        try {
+          for (;;) {
+            const chunk = await reader.read();
+            if (chunk.done) break;
+            total += chunk.value.length;
+            if (total > 8192) {await reader.cancel();return {completed:false,readable:false};}
+            text += decoder.decode(chunk.value,{stream:true});
+          }
+          text += decoder.decode();
+          return {completed:true,readable:text.includes(${JSON.stringify(expected)})};
+        } finally { reader.releaseLock(); }
+      } catch { return {completed:false,readable:false}; }
+    })()`;
+        try {
+          const result = record(
+            (
+              await call(
+                'Runtime.evaluate',
+                { expression, awaitPromise: true, returnByValue: true },
+                session,
+                observed.observe,
+              )
+            ).result,
+          );
+          await drain(observed.observe, observed.ready);
+          const outcome = observed.result(result.value);
+          return outcome.state === 'COMPLETED_READ'
+            ? { completed: true, readable: outcome.markerMatched }
+            : { completed: outcome.state === 'CORS_DENIED', readable: false };
+        } finally {
+          await call('Network.disable', {}, session).catch(() => undefined);
+        }
+      },
+    );
+  } catch {
+    signal.throwIfAborted();
+    return { completed: false, readable: false };
   }
 }

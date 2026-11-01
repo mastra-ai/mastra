@@ -2,6 +2,7 @@ import { createClient, type Transaction } from '@libsql/client';
 import { createHash, randomUUID } from 'node:crypto';
 import { ControlPlaneError } from '../core/contracts.js';
 import { evidenceSchema, scanSchema, terminal, type Evidence, type Observation, type Scan } from './contracts.js';
+import { initializeRetention, purgeExpiredBatch, RETENTION_BATCH_SIZE } from './retention.js';
 
 export type OwnedResource = {
   id: string;
@@ -9,10 +10,12 @@ export type OwnedResource = {
   scanId: string;
   token: string;
   imageId?: string;
+  sharedBase?: boolean;
 };
 export class DiscoveryStore {
   private readonly client;
   private writes: Promise<unknown> = Promise.resolve();
+  private retentionFailure = false;
   constructor(url: string) {
     this.client = createClient({ url });
   }
@@ -57,8 +60,9 @@ export class DiscoveryStore {
         `CREATE TABLE IF NOT EXISTS scanner_discovery_resources (id TEXT PRIMARY KEY,scan_id TEXT NOT NULL,data TEXT NOT NULL)`,
       );
       await transaction.execute('INSERT OR IGNORE INTO scanner_migrations(version) VALUES (2)');
+      await initializeRetention(transaction);
     });
-    await this.purgeExpired();
+    await this.purgeExpired().catch(() => undefined);
   }
   async get(id: string, owner: string, transaction?: Transaction): Promise<Scan> {
     const result = await (transaction ?? this.client).execute({
@@ -170,34 +174,39 @@ export class DiscoveryStore {
     await this.get(scanId, owner);
     await this.purgeExpired();
     const result = await this.client.execute({
-      sql: 'SELECT data FROM scanner_discovery_evidence WHERE scan_id=? AND owner=? ORDER BY rowid LIMIT ? OFFSET ?',
-      args: [scanId, owner, limit, offset],
+      sql: 'SELECT data FROM scanner_discovery_evidence WHERE scan_id=? AND owner=? AND (expires_at IS NULL OR expires_at>?) ORDER BY rowid LIMIT ? OFFSET ?',
+      args: [scanId, owner, new Date().toISOString(), limit, offset],
     });
     return result.rows.map(row => evidenceSchema.parse(JSON.parse(String(row.data))));
   }
   async purgeExpired() {
-    await this.write(async transaction => {
-      const at = new Date().toISOString();
-      const expired = await transaction.execute({
-        sql: 'SELECT scan_id,owner,COUNT(*) AS total FROM scanner_discovery_evidence WHERE expires_at IS NOT NULL AND expires_at<=? GROUP BY scan_id,owner',
-        args: [at],
-      });
-      for (const row of expired.rows) {
-        const scan = await this.get(String(row.scan_id), String(row.owner), transaction);
-        scan.evidenceRetention = {
-          expiredCount: scan.evidenceRetention.expiredCount + Number(row.total),
-          lastExpiredAt: at,
-        };
-        await transaction.execute({
-          sql: 'UPDATE scanner_discovery_scans SET data=? WHERE id=? AND owner=?',
-          args: [JSON.stringify(scanSchema.parse(scan)), scan.id, scan.owner],
-        });
-      }
-      await transaction.execute({
-        sql: 'DELETE FROM scanner_discovery_evidence WHERE expires_at IS NOT NULL AND expires_at<=?',
-        args: [at],
-      });
+    try {
+      const result = await this.write(tx => purgeExpiredBatch(tx, new Date().toISOString()));
+      this.retentionFailure = false;
+      return result;
+    } catch {
+      this.retentionFailure = true;
+      await this.write(tx =>
+        tx.execute({
+          sql: 'INSERT INTO scanner_retention_runs(id,occurred_at,state,deleted_evidence,expired_proofs,failure_code) VALUES (?,?,?,?,?,?)',
+          args: [randomUUID(), new Date().toISOString(), 'DEBT', 0, 0, 'RETENTION_STORAGE_FAILURE'],
+        }),
+      ).catch(() => undefined);
+      throw new ControlPlaneError('RETENTION_CLEANUP_FAILED', 503);
+    }
+  }
+  async retentionStatus() {
+    const runs = await this.client.execute('SELECT * FROM scanner_retention_runs ORDER BY rowid DESC LIMIT 10');
+    const pending = await this.client.execute({
+      sql: 'SELECT 1 FROM scanner_discovery_evidence WHERE expires_at IS NOT NULL AND expires_at<=? LIMIT 1',
+      args: [new Date().toISOString()],
     });
+    return {
+      state: this.retentionFailure || runs.rows[0]?.state === 'DEBT' ? 'DEBT' : 'READY',
+      batchLimit: RETENTION_BATCH_SIZE,
+      pending: pending.rows.length > 0,
+      runs: runs.rows,
+    };
   }
   async remember(resource: OwnedResource) {
     await this.write(transaction =>
@@ -218,6 +227,12 @@ export class DiscoveryStore {
       args: scanId ? [scanId] : [],
     });
     return result.rows.map(row => JSON.parse(String(row.data)) as OwnedResource);
+  }
+  async resourceSummary() {
+    const rows = await this.client.execute(
+      "SELECT json_extract(data,'$.kind') AS kind,COUNT(*) AS total FROM scanner_discovery_resources GROUP BY json_extract(data,'$.kind')",
+    );
+    return Object.fromEntries(rows.rows.map(row => [String(row.kind), Number(row.total)]));
   }
   async close() {
     await this.writes;

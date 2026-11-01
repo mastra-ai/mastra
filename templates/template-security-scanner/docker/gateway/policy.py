@@ -191,6 +191,18 @@ class Policy:
         if len(host_headers) != 1 or host_headers[0].lower() != expected:
             raise PolicyError("authority")
         expected_name = self.headers[role]
+        comparison = self.config.get("invalid_session_comparison")
+        invalid_comparison = bool(
+            comparison
+            and self.allowed_ips
+            and not expected_name
+            and not self.secrets[role]
+            and comparison["role"] == role
+            and tuple(comparison["origin"])
+            == (request.scheme, request.host, request.port)
+            and comparison["path"] == request.path
+            and request.headers.get("authorization") == "Bearer invalid-scanner-session"
+        )
         if expected_name and not hmac.compare_digest(
             request.headers.get(expected_name, ""), self.secrets[role]
         ):
@@ -203,6 +215,8 @@ class Policy:
             "x-test-identity",
         } | {name for name in self.headers.values() if name}
         for name in credential_names:
+            if invalid_comparison and name == "authorization":
+                continue
             if name != expected_name and name in request.headers:
                 raise PolicyError("identity")
         if request.path.startswith("//"):

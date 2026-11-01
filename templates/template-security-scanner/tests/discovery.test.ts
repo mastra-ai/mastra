@@ -1,3 +1,4 @@
+import { corsReadObservation } from '../src/discovery/cors-observation.js';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
@@ -339,3 +340,124 @@ describe('Discovery contracts and minimized JSONL', () => {
 function parserForPublic() {
   return parser();
 }
+
+describe('Bounded native CORS response correlation', () => {
+  const session = 'owned-browser-session',
+    url = 'http://allowed.lab:18080/owned/cors/fixture',
+    id = '123.1';
+  const request = (requestId = id, destination = url, sessionId = session) => ({
+    method: 'Network.requestWillBeSent',
+    sessionId,
+    params: { requestId, type: 'Fetch', request: { url: destination, method: 'GET' } },
+  });
+  const response = (
+    requestId = id,
+    headers: Record<string, unknown> = { 'X-Scanner-Upstream-Observed': '1' },
+    statusCode = 200,
+  ) => ({
+    method: 'Network.responseReceivedExtraInfo',
+    sessionId: session,
+    params: { requestId, statusCode, headers },
+  });
+  const failed = (requestId = id, corsError = 'MissingAllowOriginHeader', canceled = false) => ({
+    method: 'Network.loadingFailed',
+    sessionId: session,
+    params: {
+      requestId,
+      type: 'Fetch',
+      canceled,
+      corsErrorStatus: { corsError, failedParameter: 'PRIVATE_FIELD_SENTINEL' },
+      errorText: 'PRIVATE_FIELD_SENTINEL',
+    },
+  });
+  const finished = (requestId = id) => ({
+    method: 'Network.loadingFinished',
+    sessionId: session,
+    params: { requestId, encodedDataLength: 64 },
+  });
+  it.each([true, false])('complete native200read preserves marker match %s', markerMatched => {
+    const state = corsReadObservation(session, url);
+    state.observe(response());
+    state.observe(finished());
+    expect(state.ready()).toBe(false);
+    state.observe(request());
+    expect(state.ready()).toBe(true);
+    expect(state.result({ completed: true, readable: markerMatched })).toEqual({
+      state: 'COMPLETED_READ',
+      markerMatched,
+    });
+    expect(state.result({ completed: false, readable: false })).toEqual({ state: 'INCOMPLETE' });
+  });
+  it('late request and response notifications reconcile only by exact session and request ID', () => {
+    const state = corsReadObservation(session, url);
+    state.observe(failed());
+    expect(state.ready()).toBe(false);
+    state.observe(request());
+    expect(state.ready()).toBe(false);
+    state.observe(response());
+    expect(state.ready()).toBe(true);
+    expect(state.result({ completed: false, readable: false })).toEqual({ state: 'CORS_DENIED' });
+    expect(JSON.stringify(state.result({ completed: false, readable: false }))).not.toContain('PRIVATE_FIELD_SENTINEL');
+    for (const unrelated of [
+      request('foreign-id'),
+      request(id, 'http://other.lab/'),
+      request(id, url, 'other-session'),
+    ]) {
+      const isolated = corsReadObservation(session, url);
+      isolated.observe(unrelated);
+      isolated.observe(failed());
+      isolated.observe(response());
+      expect(isolated.result({ completed: false, readable: false })).toEqual({ state: 'INCOMPLETE' });
+    }
+  });
+  it.each(['InvalidResponse', 'PreflightInvalidStatus', 'LocalNetworkAccessPermissionDenied'])(
+    'native %s is incomplete rather than a CORS policy negative',
+    reason => {
+      const state = corsReadObservation(session, url);
+      state.observe(request());
+      state.observe(response());
+      state.observe(failed(id, reason));
+      expect(state.result({ completed: false, readable: false })).toEqual({ state: 'INCOMPLETE' });
+    },
+  );
+  it('cancellation, uncorrelated failures, synthetic responses and redirects never become negatives', () => {
+    const cases = [
+      [request(), response(), failed(id, 'MissingAllowOriginHeader', true)],
+      [
+        request(),
+        response(),
+        {
+          method: 'Network.loadingFailed',
+          sessionId: session,
+          params: { requestId: id, type: 'Fetch', errorText: 'CORS_ERROR_TEXT_IS_NOT_NATIVE_PROOF' },
+        },
+      ],
+      [request(), response(id, {}, 200), failed()],
+      [request(), response(id, { 'X-Scanner-Upstream-Observed': '1', 'X-Scanner-Policy-Denied': '1' }), failed()],
+      [request(), response(id, { 'X-Scanner-Upstream-Observed': '1' }, 502), failed()],
+      [request(), { ...request(), params: { ...request().params, redirectResponse: {} } }, response(), failed()],
+      [request(), request('another-matching-id'), response(), failed()],
+    ];
+    for (const events of cases) {
+      const state = corsReadObservation(session, url);
+      for (const event of events) state.observe(event);
+      expect(state.result({ completed: false, readable: false })).toEqual({ state: 'INCOMPLETE' });
+    }
+  });
+  it('pending flags are bounded and malformed renderer results remain incomplete', () => {
+    const state = corsReadObservation(session, url);
+    for (let index = 0; index < 9; index++) state.observe(response(`pending-${index}`));
+    state.observe(request());
+    state.observe(response());
+    state.observe(failed());
+    expect(state.result({ completed: false, readable: false })).toEqual({ state: 'INCOMPLETE' });
+    const valid = corsReadObservation(session, url);
+    valid.observe(request());
+    valid.observe(response());
+    valid.observe(finished());
+    expect(valid.result({ completed: false, readable: true })).toEqual({ state: 'INCOMPLETE' });
+    expect(valid.result({ completed: true, readable: true, errorText: 'PRIVATE_FIELD_SENTINEL' })).toEqual({
+      state: 'INCOMPLETE',
+    });
+  });
+});

@@ -39,19 +39,14 @@ export class ScanService {
   async initialize() {
     await this.store.initialize();
     await reconcileScans(this.settings, this.store);
-    this.retentionTimer = setInterval(
-      () =>
-        void this.store.purgeExpired().catch(() => {
-          this.closed = true;
-        }),
-      60000,
-    );
+    this.retentionTimer = setInterval(() => void this.store.purgeExpired().catch(() => undefined), 60000);
     this.retentionTimer.unref();
   }
   async admit(owner: string, targetId: string, input: unknown) {
     const request = parse(scanAdmissionSchema, input);
     const operation = this.admissions.then(async () => {
       if (this.closed) throw new ControlPlaneError('DISCOVERY_UNAVAILABLE', 503);
+      await this.store.purgeExpired();
       await requireDiscoveryCapability(this.settings, request.mode);
       const now = new Date().toISOString();
       const scan: Scan = {

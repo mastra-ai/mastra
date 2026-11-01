@@ -10,16 +10,19 @@ export async function sourceDigest(root: string) {
     'README.md',
     'CONTROL_PLANE.md',
     'SCANNING.md',
+    'INTELLIGENCE.md',
+    'OPERATIONS.md',
     '.env.example',
     '.gitignore',
     '.nvmrc',
+    '.oxfmtrc.json',
   ];
-  for (const directory of ['src', 'scripts', 'tests', 'docker']) {
+  for (const directory of ['src', 'scripts', 'tests', 'docker', 'web', 'references']) {
     for (const entry of await readdir(join(root, directory), { recursive: true })) {
       const path = `${directory}/${entry}`,
         stat = await lstat(join(root, path));
       if (stat.isSymbolicLink()) throw new Error('SOURCE_SYMLINK_UNSUPPORTED');
-      if (stat.isFile() && !path.includes('/__pycache__/')) files.push(path);
+      if (stat.isFile() && !path.includes('/__pycache__/') && !path.startsWith('web/dist/')) files.push(path);
     }
   }
   const hash = createHash('sha256');

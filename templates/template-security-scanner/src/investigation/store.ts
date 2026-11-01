@@ -11,6 +11,7 @@ import type {
 import { nextOccurrence, scheduledEventId } from './schedule.js';
 import type { VerificationProof } from './verification.js';
 import type { PlaybookBinding } from '../knowledge/playbooks.js';
+import type { EvidenceAvailability } from '../discovery/retention.js';
 
 export type Lineage = {
   targetId: string;
@@ -71,6 +72,7 @@ export type Job = {
     reason: string;
     modelId: string | null;
     usageTokens: number | null;
+    evidenceAvailability?: 'available' | 'expired' | 'unknown';
   } | null;
   createdAt: string;
   updatedAt: string;
@@ -101,6 +103,7 @@ export type Finding = {
   evidenceIds: string[];
   proofId: string;
   createdAt: string;
+  availability?: EvidenceAvailability;
 };
 export type StoredProof = {
   id: string;
@@ -110,6 +113,8 @@ export type StoredProof = {
   hypothesisId: string;
   proof: VerificationProof;
   createdAt: string;
+  expiresAt?: string | null;
+  availability?: EvidenceAvailability;
 };
 
 const read = <T>(row: object | undefined): T => {
@@ -169,6 +174,12 @@ export class InvestigationStore {
         id TEXT PRIMARY KEY,job_id TEXT NOT NULL UNIQUE,investigation_id TEXT NOT NULL,owner TEXT NOT NULL,data TEXT NOT NULL)`);
       await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_verification_proofs (
         id TEXT PRIMARY KEY,job_id TEXT NOT NULL UNIQUE,investigation_id TEXT NOT NULL,owner TEXT NOT NULL,data TEXT NOT NULL)`);
+      await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_proof_sources (
+        evidence_id TEXT NOT NULL,proof_id TEXT NOT NULL,owner TEXT NOT NULL,PRIMARY KEY(evidence_id,proof_id))`);
+      await tx.execute('CREATE INDEX IF NOT EXISTS scanner_proof_source_proof ON scanner_proof_sources(proof_id)');
+      await tx.execute(
+        "CREATE INDEX IF NOT EXISTS scanner_proof_expiry ON scanner_verification_proofs(json_extract(data,'$.expiresAt'))",
+      );
       await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_model_events (
         id TEXT PRIMARY KEY,investigation_id TEXT NOT NULL,owner TEXT NOT NULL,role TEXT NOT NULL,
         model_id TEXT NOT NULL,usage_tokens INTEGER,occurred_at TEXT NOT NULL)`);
@@ -234,11 +245,39 @@ export class InvestigationStore {
   getApproval(id: string, owner: string, tx?: Transaction) {
     return this.record<Approval>('scanner_approvals', id, owner, tx);
   }
-  getFinding(id: string, owner: string) {
-    return this.record<Finding>('scanner_findings', id, owner);
+  private async availableProof(record: StoredProof, transaction?: Transaction): Promise<StoredProof> {
+    const db = transaction ?? this.client;
+    const expiredSource = await db.execute({
+      sql: `SELECT CASE WHEN e.id IS NOT NULL OR d.expires_at<=? THEN 'expired' ELSE 'unknown' END AS availability FROM scanner_proof_sources s LEFT JOIN scanner_expired_evidence e ON e.id=s.evidence_id AND e.owner=s.owner LEFT JOIN scanner_discovery_evidence d ON d.id=s.evidence_id AND d.owner=s.owner WHERE s.proof_id=? AND s.owner=? AND (e.id IS NOT NULL OR d.id IS NULL OR d.expires_at<=?) LIMIT 8`,
+      args: [now(), record.id, record.owner, now()],
+    });
+    const expired =
+      record.availability?.state === 'expired' ||
+      Boolean(record.expiresAt && record.expiresAt <= now()) ||
+      expiredSource.rows.some(row => row.availability === 'expired');
+    const unknown =
+      !record.availability ||
+      record.availability.state === 'unknown' ||
+      expiredSource.rows.some(row => row.availability === 'unknown');
+    if (!expired && !unknown) return record;
+    const { observation: _removed, ...summary } = record.proof;
+    return {
+      ...record,
+      proof: { ...summary, completed: false, evidence: [], withheld: true },
+      availability: { state: expired ? 'expired' : 'unknown', at: record.availability?.at ?? null },
+    };
   }
-  getProof(id: string, owner: string) {
-    return this.record<StoredProof>('scanner_verification_proofs', id, owner);
+  async getFinding(id: string, owner: string) {
+    const record = await this.record<Finding>('scanner_findings', id, owner);
+    const proof = await this.getProof(record.proofId, owner);
+    return {
+      ...record,
+      availability: proof.availability,
+      evidenceIds: proof.availability?.state === 'available' ? record.evidenceIds : [],
+    };
+  }
+  async getProof(id: string, owner: string) {
+    return this.availableProof(await this.record<StoredProof>('scanner_verification_proofs', id, owner));
   }
   async getRecurrence(targetId: string, owner: string) {
     const result = await this.client.execute({
@@ -303,7 +342,15 @@ export class InvestigationStore {
       sql: `SELECT data FROM ${table} WHERE owner=?${where} ORDER BY rowid DESC LIMIT ? OFFSET ?`,
       args: where ? [owner, investigationId!, limit, offset] : [owner, limit, offset],
     });
-    return result.rows.map(row => read<T>(row));
+    const records: T[] = [];
+    for (const row of result.rows) {
+      if (table === 'scanner_verification_proofs')
+        records.push(read<T>({ data: JSON.stringify(await this.availableProof(read<StoredProof>(row))) }));
+      else if (table === 'scanner_findings')
+        records.push(read<T>({ data: JSON.stringify(await this.getFinding(read<Finding>(row).id, owner)) }));
+      else records.push(read<T>(row));
+    }
+    return records;
   }
   async latestInvestigationForTarget(owner: string, targetId: string) {
     const result = await this.client.execute({
@@ -1073,6 +1120,17 @@ export class InvestigationStore {
       let proofId: string | null = null;
       if (proof) {
         proofId = randomUUID();
+        const hypothesis = await this.getHypothesis(job.hypothesisId, owner, tx);
+        const expirations: string[] = [];
+        for (const evidenceId of hypothesis.evidenceIds) {
+          const supporting = await tx.execute({
+            sql: 'SELECT expires_at FROM scanner_discovery_evidence WHERE id=? AND owner=? AND scan_id=?',
+            args: [evidenceId, owner, hypothesis.scanId],
+          });
+          if (!supporting.rows[0] || (supporting.rows[0].expires_at && String(supporting.rows[0].expires_at) <= now()))
+            throw new ControlPlaneError('EVIDENCE_UNAVAILABLE', 409);
+          if (supporting.rows[0].expires_at) expirations.push(String(supporting.rows[0].expires_at));
+        }
         const record = {
           id: proofId,
           jobId: id,
@@ -1081,11 +1139,18 @@ export class InvestigationStore {
           hypothesisId: job.hypothesisId,
           proof,
           createdAt: now(),
+          expiresAt: expirations.sort()[0] ?? null,
+          availability: { state: 'available', at: null },
         };
         await tx.execute({
           sql: 'INSERT INTO scanner_verification_proofs(id,job_id,investigation_id,owner,data) VALUES (?,?,?,?,?)',
           args: [proofId, id, job.investigationId, owner, JSON.stringify(record)],
         });
+        for (const evidenceId of hypothesis.evidenceIds)
+          await tx.execute({
+            sql: 'INSERT INTO scanner_proof_sources(evidence_id,proof_id,owner) VALUES (?,?,?)',
+            args: [evidenceId, proofId, owner],
+          });
       }
       if (confirmed) {
         if (!proofId) throw new ControlPlaneError('PROOF_REQUIRED', 409);
@@ -1098,6 +1163,7 @@ export class InvestigationStore {
           evidenceIds: result.evidenceIds,
           proofId,
           createdAt: now(),
+          availability: { state: 'available', at: null },
         };
         await tx.execute({
           sql: 'INSERT OR IGNORE INTO scanner_findings(id,job_id,investigation_id,owner,data) VALUES (?,?,?,?,?)',

@@ -72,7 +72,7 @@ Shared budgets are reserved atomically before upstream contact. Concurrency rele
 
 Target, policy or profile mutations quiesce affected work before committing a new revision. Cancellation and shutdown await owned cleanup. Restart reconciles interrupted work as failed, removes only its recorded resources and preserves unrelated containers/networks and shared-image consumers. `cleanup: DEBT` or an unfinished cancellation remains visible and blocks conflicting admission until reconciliation succeeds. No global Docker pruning is used.
 
-Evidence expiration uses the operator's selected retention period. Deletion atomically increments persisted `evidenceRetention.expiredCount` and records `lastExpiredAt`, so empty inventory after expiry is distinguishable from a scan that found no retained evidence. These counts survive restart. Expiration does not invent a new discovery outcome or restore deleted raw evidence.
+Evidence expiration uses the operator's selected retention period. Deletion atomically increments persisted `evidenceRetention.expiredCount` and records `lastExpiredAt`, so empty inventory after expiry is distinguishable from a scan that found no retained evidence. These counts survive restart. Cleanup is finite and auditable, retries storage failure, and propagates source expiry to proof/finding availability. Expiration does not invent a new discovery outcome or restore deleted raw evidence. See [retention and recovery](OPERATIONS.md) for debt, key loss, drain and two-file rollback.
 
 ## Local verification
 

@@ -127,6 +127,12 @@ export function registerDomainRoutes(app: Hono, service: ControlPlane, scans?: S
     return context.body(null, 503);
   });
   if (scans) {
+    app.get('/api/retention', async context => context.json(await scans.store.retentionStatus()));
+    app.post('/api/retention/cleanup', async context => {
+      parse(z.object({}).strict(), await readJson(context.req));
+      const result = await scans.store.purgeExpired();
+      return context.json({ ...result, status: await scans.store.retentionStatus() });
+    });
     app.get('/api/scans', async context => {
       const { limit, offset } = page(context);
       return context.json({ items: await scans.store.list(OPERATOR_ID, limit, offset), limit, offset });

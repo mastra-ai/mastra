@@ -112,6 +112,7 @@ export type Finding = {
   proofId: string;
   evidenceIds: string[];
   createdAt: string;
+  availability?: { state: 'available' | 'expired' | 'unknown'; at: string | null };
 };
 export type Evaluation = {
   id: string;
@@ -129,6 +130,8 @@ export type Evaluation = {
   requestCount: number;
   evidence: { id: string; kind: string }[];
   withheld: boolean;
+  availability?: { state: 'available' | 'expired' | 'unknown'; at: string | null };
+  expiresAt?: string | null;
 };
 export type Advisory = {
   id: string;

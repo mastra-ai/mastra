@@ -1,8 +1,9 @@
+import { classifyModelFailure } from './model-failure.js';
 import { randomUUID } from 'node:crypto';
 import { ControlPlaneError, parse, pathAllowed, type Profile, type Target } from '../core/contracts.js';
 import type { ControlPlane, MutationScope } from '../core/control-plane.js';
 import type { ScanService } from '../discovery/service.js';
-import { terminal, type Scan } from '../discovery/contracts.js';
+import { terminal, type Evidence, type Scan } from '../discovery/contracts.js';
 import type { PlaybookRegistry } from '../knowledge/playbooks.js';
 import type { Playbook } from '../knowledge/playbooks.js';
 import type { AdvisoryStore } from '../advisory/store.js';
@@ -24,8 +25,9 @@ import {
   type Lineage,
   type OwnedResource,
 } from './store.js';
-import type { InvestigationModels, ModelBudget } from './models.js';
+import type { InvestigationModels, ModelBudget, PlanningResources } from './models.js';
 import { deterministicOutcome, verificationProofSchema, type VerificationProof } from './verification.js';
+import { forbiddenCredentialValues, SecretGuard } from '../discovery/parser.js';
 
 export interface VerificationDriver {
   verify(input: {
@@ -211,7 +213,9 @@ export class InvestigationService {
         ? [request.ownerProfileId, request.alternateProfileId]
         : request.category === 'authentication_bypass'
           ? [request.authenticatedProfileId, request.publicProfileId]
-          : [request.adminProfileId, request.lowProfileId];
+          : request.category === 'bfla'
+            ? [request.adminProfileId, request.lowProfileId]
+            : [request.publicProfileId];
     if (new Set(selectedIds).size !== selectedIds.length) throw new ControlPlaneError('RESOURCE_PROFILES_INVALID', 400);
     const profiles = await Promise.all(selectedIds.map(id => this.control.store.get<Profile>('profile', id, owner)));
     if (profiles.some(profile => profile.targetId !== targetId))
@@ -221,8 +225,42 @@ export class InvestigationService {
       (profiles[0]!.kind === 'public' || profiles[1]!.kind !== 'public')
     )
       throw new ControlPlaneError('RESOURCE_PROFILES_INVALID', 403);
-    if (request.category !== 'authentication_bypass' && profiles.some(profile => profile.kind === 'public'))
+    if (
+      (request.category === 'idor' || request.category === 'bfla') &&
+      profiles.some(profile => profile.kind === 'public')
+    )
       throw new ControlPlaneError('RESOURCE_PROFILES_INVALID', 403);
+    if (
+      !['idor', 'authentication_bypass', 'bfla'].includes(request.category) &&
+      profiles.some(profile => profile.kind !== 'public')
+    )
+      throw new ControlPlaneError('RESOURCE_PROFILES_INVALID', 403);
+    const safeContext = await this.control.store.write(tx =>
+      this.control.scanContext(
+        owner,
+        targetId,
+        {
+          targetRevision: target.revision,
+          policyRevision: target.policyRevision,
+          operation: 'identity',
+          profiles: profiles.map(profile => ({
+            targetRevision: target.revision,
+            policyRevision: target.policyRevision,
+            profileId: profile.id,
+            profileRevision: profile.revision,
+            credentialRevision: profile.credentialRevision,
+          })),
+        },
+        tx,
+      ),
+    );
+    try {
+      const guard = new SecretGuard(forbiddenCredentialValues(safeContext.guardHeaders.map(item => item.headers)));
+      if (guard.unsafe(JSON.stringify(request))) throw new ControlPlaneError('CREDENTIAL_METADATA_CONFLICT', 403);
+    } finally {
+      for (const header of [...safeContext.headers, ...safeContext.guardHeaders.map(item => item.headers)])
+        for (const name of Object.keys(header)) delete header[name];
+    }
     const binding: OwnedResource = {
       ...request,
       id: randomUUID(),
@@ -273,20 +311,7 @@ export class InvestigationService {
     const resource = surface
       ? await this.store.ownedResource(owner, scan.targetId, proposal.category, surface.observation.path)
       : null;
-    if (
-      resource &&
-      (resource.targetRevision !== investigation.lineage.targetRevision ||
-        resource.policyRevision !== investigation.lineage.policyRevision ||
-        resource.profileRevisions.some(
-          binding =>
-            !investigation.lineage.profiles.some(
-              profile =>
-                profile.profileId === binding.profileId &&
-                profile.profileRevision === binding.profileRevision &&
-                profile.credentialRevision === binding.credentialRevision,
-            ),
-        ))
-    )
+    if (resource && !this.resourceCurrent(resource, investigation.lineage))
       throw new ControlPlaneError('RESOURCE_BINDING_STALE', 409);
     const hypothesis: Hypothesis = {
       ...proposal,
@@ -301,6 +326,62 @@ export class InvestigationService {
       createdAt: new Date().toISOString(),
     };
     return this.store.enqueue(hypothesis, 'dupin');
+  }
+  private resourceCurrent(resource: OwnedResource, lineage: Lineage) {
+    return (
+      resource.targetRevision === lineage.targetRevision &&
+      resource.policyRevision === lineage.policyRevision &&
+      resource.profileRevisions.every(binding =>
+        lineage.profiles.some(
+          profile =>
+            profile.profileId === binding.profileId &&
+            profile.profileRevision === binding.profileRevision &&
+            profile.credentialRevision === binding.credentialRevision,
+        ),
+      )
+    );
+  }
+  private async planningResources(
+    owner: string,
+    investigation: Investigation,
+    scan: Scan,
+    evidence: Evidence[],
+    playbooks: Playbook[],
+  ): Promise<PlanningResources> {
+    const supplied = evidence.slice(0, 32).filter(item => item.observation.kind === 'endpoint');
+    const paths = [...new Set(supplied.map(item => item.observation.path))];
+    const bindings: PlanningResources['bindings'] = [];
+    for (const path of paths)
+      for (const book of playbooks) {
+        const resource = await this.store.ownedResource(owner, scan.targetId, book.category, path);
+        if (!resource) continue;
+        const role = (id: string) => supplied.find(item => item.observation.profileId === id)?.observation.role ?? null;
+        const roles: Record<string, string | null> =
+          resource.category === 'idor'
+            ? { owner: role(resource.ownerProfileId), alternate: role(resource.alternateProfileId) }
+            : resource.category === 'authentication_bypass'
+              ? { authenticated: role(resource.authenticatedProfileId), public: role(resource.publicProfileId) }
+              : resource.category === 'bfla'
+                ? { admin: role(resource.adminProfileId), low: role(resource.lowProfileId) }
+                : { public: role(resource.publicProfileId) };
+        bindings.push({
+          category: resource.category,
+          evidenceIndexes: evidence
+            .slice(0, 32)
+            .flatMap((item, index) =>
+              item.observation.kind === 'endpoint' && item.observation.path === path ? [index] : [],
+            ),
+          state: this.resourceCurrent(resource, investigation.lineage) ? 'CURRENT' : 'STALE',
+          roles,
+        });
+      }
+    return {
+      targetRevision: investigation.lineage.targetRevision,
+      policyRevision: investigation.lineage.policyRevision,
+      coverage: 'SUPPLIED_FIRST_32_EVIDENCE',
+      complete: true,
+      bindings,
+    };
   }
   async proposeWithModels(owner: string, investigationId: string) {
     if (!this.models) throw new ControlPlaneError('MODEL_UNAVAILABLE', 503);
@@ -329,15 +410,19 @@ export class InvestigationService {
           ].slice(0, 8)
         : await this.advisories.planningCandidates(8);
       signal.throwIfAborted();
+      const playbooks = await this.playbooks.list();
+      const availableResources = await this.planningResources(owner, investigation, scan, evidence, playbooks);
       const generated = await this.models.propose(
         scan.id,
         evidence,
-        await this.playbooks.list(),
+        playbooks,
         advisoryCandidates,
+        investigation.limits,
         4,
         Math.min(15000, Math.max(1, deadlineAt - Date.now())),
         this.modelBudget(investigationId, owner, signal),
         signal,
+        availableResources,
       );
       signal.throwIfAborted();
       await this.store.recordModelUse(investigationId, owner, 'sherlock', generated.modelId, generated.usageTokens);
@@ -363,10 +448,11 @@ export class InvestigationService {
           ? 'INVESTIGATION_DURATION_EXCEEDED'
           : error instanceof ControlPlaneError
             ? error.code
-            : 'MODEL_OUTPUT_INVALID';
+            : classifyModelFailure(error).code;
       if (reason !== 'INVESTIGATION_ALREADY_PLANNED' && reason !== 'NOT_FOUND')
         await this.store.blockInvestigation(investigationId, owner, reason);
       if (reason === 'INVESTIGATION_DURATION_EXCEEDED') throw new ControlPlaneError(reason, 409);
+      if (!(error instanceof ControlPlaneError)) throw new ControlPlaneError(classifyModelFailure(error).code, 503);
       throw error;
     } finally {
       controllers.delete(controller);
@@ -459,9 +545,16 @@ export class InvestigationService {
       );
       joined.throwIfAborted();
       const budget = this.modelBudget(investigation.id, owner, joined);
+      const requireSources = async () => {
+        const available = new Set((await this.scans.store.evidence(scan.id, owner, 512, 0)).map(item => item.id));
+        if (hypothesis.evidenceIds.some(id => !available.has(id)))
+          throw new ControlPlaneError('EVIDENCE_UNAVAILABLE', 409);
+      };
+      await requireSources();
       const interpreted = await this.models.interpret(proof, playbook, 10000, budget, joined);
       await this.store.recordModelUse(investigation.id, owner, 'dupin', interpreted.modelId, interpreted.usageTokens);
       joined.throwIfAborted();
+      await requireSources();
       const reviewed =
         assessed.outcome === 'CONFIRMED' ? await this.models.review(proof, playbook, 10000, budget, joined) : null;
       if (reviewed)
@@ -501,6 +594,7 @@ export class InvestigationService {
           'PLAYBOOK_BINDING_STALE',
           'TOKEN_BUDGET_EXCEEDED',
           'MODEL_INPUT_BOUND_EXCEEDED',
+          'EVIDENCE_UNAVAILABLE',
         ].includes(error.code)
       )
         return this.store.publish(

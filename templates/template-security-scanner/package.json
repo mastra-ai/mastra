@@ -30,7 +30,10 @@
     "test:intelligence": "vitest run tests/intelligence.integration.test.ts --reporter=verbose",
     "test:investigation": "vitest run tests/storage.test.ts tests/investigation.integration.test.ts --reporter=verbose --maxWorkers=1 --no-file-parallelism",
     "test:console:browser": "npm run build:console && vitest run tests/console.browser.test.ts --reporter=verbose --maxWorkers=1 --no-file-parallelism",
-    "check:gateway": "node --import tsx scripts/check-gateway.ts"
+    "check:gateway": "node --import tsx scripts/check-gateway.ts",
+    "operate": "node --env-file-if-exists=.env --import tsx scripts/operate.ts",
+    "lab": "node --env-file-if-exists=.env --import tsx scripts/lab.ts",
+    "test:operations": "node --import tsx scripts/test-operations.ts"
   },
   "dependencies": {
     "@hono/node-server": "^1.19.11",

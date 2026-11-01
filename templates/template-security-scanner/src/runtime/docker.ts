@@ -49,17 +49,87 @@ export async function preflight(settings: Settings) {
   };
 }
 
-export const imageReceiptSchema = z.object({
-  schemaVersion: z.literal(1),
-  imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
-  source: z.literal(KATANA_BASE),
-  sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
-  platform: z.enum(['linux/arm64', 'linux/amd64']),
-  owner: z.string(),
-  sizeBytes: z.number().positive(),
-});
+const cleanupImageIdsSchema = z
+  .array(z.string().regex(/^sha256:[a-f0-9]{64}$/))
+  .min(1)
+  .max(16)
+  .refine(ids => new Set(ids).size === ids.length);
+
+export const imageReceiptSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    source: z.literal(KATANA_BASE),
+    sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    platform: z.enum(['linux/arm64', 'linux/amd64']),
+    owner: z.string(),
+    sizeBytes: z.number().positive(),
+    cleanupImageIds: cleanupImageIdsSchema.optional(),
+  })
+  .refine(receipt => !receipt.cleanupImageIds || receipt.cleanupImageIds[0] === receipt.imageId);
 
 export type ImageReceipt = z.infer<typeof imageReceiptSchema>;
+
+// Classic Docker builds can retain a labeled parent below the final run-label
+// layer. Follow only the actual immutable parent chain with matching provenance.
+export async function ownedImageChain(settings: Settings, imageId: string, sourceHash: string) {
+  const client = dockerClient(settings),
+    ids: string[] = [];
+  let next = imageId;
+  while (next) {
+    if (ids.length >= 16 || ids.includes(next))
+      throw new RuntimeDiagnostic('IMAGE_ANCESTRY_BOUND', 'The owned image ancestry exceeded its cleanup bound.');
+    const image = await client.getImage(next).inspect();
+    if (
+      image.Config.Labels?.[OWNER_LABEL] !== ownerIdentity(settings) ||
+      image.Config.Labels?.[INPUT_LABEL] !== sourceHash
+    ) {
+      if (!ids.length) throw new RuntimeDiagnostic('IMAGE_MISMATCH', 'The image cleanup provenance changed.');
+      break;
+    }
+    ids.push(image.Id);
+    next = image.Parent ?? '';
+  }
+  return ids;
+}
+
+export async function releaseOwnedImageIds(settings: Settings, ids: string[], sourceHash: string) {
+  if (!cleanupImageIdsSchema.safeParse(ids).success)
+    throw new RuntimeDiagnostic('IMAGE_ANCESTRY_BOUND', 'The owned image cleanup exceeded its bound.');
+  const client = dockerClient(settings);
+  let inUse = false;
+  for (const id of ids) {
+    let image;
+    try {
+      image = await client.getImage(id).inspect();
+    } catch (error) {
+      if ((error as { statusCode?: number }).statusCode === 404) continue;
+      throw error;
+    }
+    if (
+      image.Id !== id ||
+      image.Config.Labels?.[OWNER_LABEL] !== ownerIdentity(settings) ||
+      image.Config.Labels?.[INPUT_LABEL] !== sourceHash
+    )
+      throw new RuntimeDiagnostic('IMAGE_MISMATCH', 'The image cleanup provenance changed.');
+    if ((await client.listContainers({ all: true, filters: { ancestor: [id] } })).length) {
+      inUse = true;
+      continue;
+    }
+    try {
+      await client.getImage(id).remove({ force: false, noprune: true });
+    } catch (error) {
+      // Docker also rejects removal while any child image still needs this
+      // parent. Preserve it; never force deletion or prune through the boundary.
+      if ((error as { statusCode?: number }).statusCode === 409) {
+        inUse = true;
+        continue;
+      }
+      throw new RuntimeDiagnostic('IMAGE_CLEANUP_FAILED', 'An owned image still needs cleanup.');
+    }
+  }
+  return inUse ? ('in-use' as const) : ('removed' as const);
+}
 
 export async function inspectOwnedImage(settings: Settings, imageId: string, sourceHash?: string) {
   let image;
@@ -181,6 +251,7 @@ export async function buildLocalImage(settings: Settings, signal?: AbortSignal):
       platform: settings.DOCKER_PLATFORM,
       owner: ownerIdentity(settings),
       sizeBytes: image.Size,
+      cleanupImageIds: await ownedImageChain(settings, image.Id, sourceHash),
     });
   } catch (error) {
     if (error instanceof RuntimeDiagnostic) throw error;
@@ -198,7 +269,7 @@ export async function buildLocalImage(settings: Settings, signal?: AbortSignal):
         partial.Config.Labels?.[OWNER_LABEL] === ownerIdentity(settings) &&
         partial.Config.Labels?.[RUN_LABEL] === runId
       ) {
-        await client.getImage(partial.Id).remove({ force: false, noprune: true });
+        await releaseOwnedImageIds(settings, await ownedImageChain(settings, partial.Id, sourceHash), sourceHash);
       }
     } catch (cleanupError) {
       if ((cleanupError as { statusCode?: number }).statusCode !== 404)
@@ -218,6 +289,7 @@ export async function buildLocalImage(settings: Settings, signal?: AbortSignal):
     platform: settings.DOCKER_PLATFORM,
     owner: ownerIdentity(settings),
     sizeBytes: image.Size,
+    cleanupImageIds: await ownedImageChain(settings, image.Id, sourceHash),
   });
 }
 
@@ -242,17 +314,6 @@ export async function reconcileOwnedSandboxes(settings: Settings) {
 
 export async function releaseImage(settings: Settings, receipt: ImageReceipt) {
   if (settings.DOCKER_RETAIN_SHARED_BASE_IMAGE) return 'retained' as const;
-  const client = dockerClient(settings);
-  const image = await inspectOwnedImage(settings, receipt.imageId, receipt.sourceHash);
-  const users = await client.listContainers({ all: true, filters: { ancestor: [image.Id] } });
-  if (users.length > 0) return 'in-use' as const;
-  try {
-    await client.getImage(image.Id).remove({ force: false, noprune: true });
-  } catch {
-    throw new RuntimeDiagnostic(
-      'IMAGE_CLEANUP_FAILED',
-      'The owned image remains. Stop its consumers and retry setup; no global prune is needed.',
-    );
-  }
-  return 'removed' as const;
+  const ids = receipt.cleanupImageIds ?? (await ownedImageChain(settings, receipt.imageId, receipt.sourceHash));
+  return releaseOwnedImageIds(settings, ids, receipt.sourceHash);
 }

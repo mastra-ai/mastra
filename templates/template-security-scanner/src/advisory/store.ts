@@ -1,6 +1,18 @@
 import { createClient, type Transaction } from '@libsql/client';
 import { ControlPlaneError } from '../core/contracts.js';
 import { advisoryId, detailSchema, materialHash, type AdvisoryDetail } from './contracts.js';
+import type { Settings } from '../config/settings.js';
+import { nextOccurrence, scheduledEventId } from '../investigation/schedule.js';
+
+export type AdvisoryScheduleState = {
+  revision: number;
+  enabled: boolean;
+  paused: boolean;
+  cron: string | null;
+  timezone: string | null;
+  nextAt: string | null;
+  lastEventId: string | null;
+};
 
 export type PlanningAdvisory = {
   id: string;
@@ -82,7 +94,106 @@ export class AdvisoryStore {
       if (!checkpointNames.has('failure_count'))
         await tx.execute('ALTER TABLE scanner_advisory_checkpoint ADD COLUMN failure_count INTEGER NOT NULL DEFAULT 0');
       await tx.execute('INSERT OR IGNORE INTO scanner_advisory_checkpoint(singleton) VALUES (1)');
+      await tx.execute(
+        'CREATE TABLE IF NOT EXISTS scanner_advisory_schedule (singleton INTEGER PRIMARY KEY CHECK(singleton=1),data TEXT NOT NULL)',
+      );
+      await tx.execute(
+        'CREATE TABLE IF NOT EXISTS scanner_advisory_schedule_events (id TEXT PRIMARY KEY,state TEXT NOT NULL,occurred_at TEXT NOT NULL,reason TEXT)',
+      );
     });
+  }
+  async configureSchedule(settings: Settings) {
+    return this.write(async tx => {
+      const rows = await tx.execute('SELECT data FROM scanner_advisory_schedule WHERE singleton=1');
+      const previous = rows.rows[0] ? (JSON.parse(String(rows.rows[0].data)) as AdvisoryScheduleState) : null;
+      const enabled = settings.SCANNER_ADVISORY_SYNC_ENABLED,
+        cron = settings.SCANNER_ADVISORY_SYNC_CRON ?? null,
+        timezone = settings.SCANNER_ADVISORY_SYNC_TIMEZONE ?? null;
+      const changed =
+        !previous || previous.enabled !== enabled || previous.cron !== cron || previous.timezone !== timezone;
+      const next: AdvisoryScheduleState = changed
+        ? {
+            revision: (previous?.revision ?? 0) + 1,
+            enabled,
+            paused: previous?.paused ?? false,
+            cron,
+            timezone,
+            nextAt: enabled ? nextOccurrence(cron!, timezone!, new Date()).toISOString() : null,
+            lastEventId: previous?.lastEventId ?? null,
+          }
+        : previous;
+      await tx.execute({
+        sql: 'INSERT INTO scanner_advisory_schedule(singleton,data) VALUES (1,?) ON CONFLICT(singleton) DO UPDATE SET data=excluded.data',
+        args: [JSON.stringify(next)],
+      });
+      // A process interruption cannot replay an already admitted external tick.
+      await tx.execute(
+        "UPDATE scanner_advisory_schedule_events SET state='INTERRUPTED',reason='PROCESS_INTERRUPTED' WHERE state='RUNNING'",
+      );
+      return next;
+    });
+  }
+  async scheduleStatus() {
+    const row = await this.client.execute('SELECT data FROM scanner_advisory_schedule WHERE singleton=1');
+    const events = await this.client.execute(
+      'SELECT id,state,occurred_at,reason FROM scanner_advisory_schedule_events ORDER BY rowid DESC LIMIT 10',
+    );
+    return {
+      schedule: row.rows[0] ? (JSON.parse(String(row.rows[0].data)) as AdvisoryScheduleState) : null,
+      events: events.rows,
+    };
+  }
+  async pauseSchedule(paused: boolean, revision: number) {
+    return this.write(async tx => {
+      const rows = await tx.execute('SELECT data FROM scanner_advisory_schedule WHERE singleton=1');
+      if (!rows.rows[0]) throw new ControlPlaneError('ADVISORY_SCHEDULE_UNAVAILABLE', 409);
+      const current = JSON.parse(String(rows.rows[0].data)) as AdvisoryScheduleState;
+      if (current.revision !== revision) throw new ControlPlaneError('REVISION_CONFLICT', 409);
+      if (!paused && !current.enabled) throw new ControlPlaneError('ADVISORY_SCHEDULE_DISABLED', 403);
+      const next = {
+        ...current,
+        revision: revision + 1,
+        paused,
+        nextAt: current.enabled ? nextOccurrence(current.cron!, current.timezone!, new Date()).toISOString() : null,
+      };
+      await tx.execute({
+        sql: 'UPDATE scanner_advisory_schedule SET data=? WHERE singleton=1',
+        args: [JSON.stringify(next)],
+      });
+      return next;
+    });
+  }
+  async claimSchedule(at = new Date()) {
+    return this.write(async tx => {
+      const rows = await tx.execute('SELECT data FROM scanner_advisory_schedule WHERE singleton=1');
+      if (!rows.rows[0]) return null;
+      const current = JSON.parse(String(rows.rows[0].data)) as AdvisoryScheduleState;
+      if (!current.enabled || current.paused || !current.nextAt || current.nextAt > at.toISOString()) return null;
+      const id = scheduledEventId('advisory-sync', current.revision, current.nextAt);
+      const created = await tx.execute({
+        sql: "INSERT OR IGNORE INTO scanner_advisory_schedule_events(id,state,occurred_at) VALUES (?,'RUNNING',?)",
+        args: [id, at.toISOString()],
+      });
+      // Coalesce any missed ticks into this one event and the next future tick.
+      const next = {
+        ...current,
+        nextAt: nextOccurrence(current.cron!, current.timezone!, at).toISOString(),
+        lastEventId: id,
+      };
+      await tx.execute({
+        sql: 'UPDATE scanner_advisory_schedule SET data=? WHERE singleton=1',
+        args: [JSON.stringify(next)],
+      });
+      return created.rowsAffected === 1 ? id : null;
+    });
+  }
+  async finishScheduledEvent(id: string, state: 'COMPLETE' | 'FAILED', reason: string | null) {
+    await this.write(tx =>
+      tx.execute({
+        sql: "UPDATE scanner_advisory_schedule_events SET state=?,reason=? WHERE id=? AND state='RUNNING'",
+        args: [state, reason, id],
+      }),
+    );
   }
   async checkpoint() {
     const result = await this.client.execute('SELECT * FROM scanner_advisory_checkpoint WHERE singleton = 1');

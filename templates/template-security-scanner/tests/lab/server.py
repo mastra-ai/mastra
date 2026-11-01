@@ -325,6 +325,18 @@ class Handler(BaseHTTPRequestHandler):
             )
             else None,
         )
+        # This endpoint intentionally compares an invalid session against its
+        # protected baseline. All other endpoints retain normal identity checks.
+        invalid_comparison = (
+            path in {"/owned/auth/vulnerable", "/owned/auth/patched"}
+            and self.headers.get("authorization") == "Bearer invalid-scanner-session"
+            and not any(
+                self.headers.get(name)
+                for name in ("cookie", "x-test-identity", "x-api-key")
+            )
+        )
+        if invalid_comparison:
+            role = "public"
         if role is None or role in expired_roles:
             with lock:
                 counts["unauthorized"] += 1
@@ -352,6 +364,8 @@ class Handler(BaseHTTPRequestHandler):
                 counts["owned-callback-received"] += 1
                 counts[f"owned-callback-received:{approval_id}"] += 1
             self.respond(200, b"callback-received")
+        elif path.startswith("/owned/") and path.endswith("/absent"):
+            self.respond(404, b"Owned surface absent")
         elif path in {"/owned/resource/vulnerable", "/owned/resource/patched"}:
             if role == "viewer" or (role == "member" and path.endswith("vulnerable")):
                 self.respond(
@@ -370,6 +384,113 @@ class Handler(BaseHTTPRequestHandler):
                 self.respond(200, b"LAB_MARKER_AUTHRESOURCE01")
             else:
                 self.respond(401, b"authentication-required")
+        elif path in {
+            "/owned/configuration/vulnerable",
+            "/owned/configuration/patched",
+        }:
+            self.respond(
+                200,
+                b"Owned configuration",
+                {}
+                if path.endswith("vulnerable")
+                else {"X-Content-Type-Options": "nosniff"},
+            )
+        elif path in {"/owned/redirect/vulnerable", "/owned/redirect/patched"}:
+            destination = parse_qs(urlsplit(self.path).query).get("next", [""])[0]
+            self.respond(
+                302,
+                b"Owned redirect",
+                {
+                    "Location": destination
+                    if path.endswith("vulnerable")
+                    and destination
+                    == "https://redirect.example.invalid/owned-destination"
+                    else "/owned/redirect/local"
+                },
+            )
+        elif path in {"/owned/exposure/vulnerable", "/owned/exposure/patched"}:
+            self.respond(
+                200,
+                b"LAB_MARKER_EXPOSURERESOURCE01"
+                if path.endswith("vulnerable")
+                else b"Owned public content",
+            )
+        elif path == "/owned/cors/catalog":
+            links = "".join(
+                f'<a href="/owned/cors/{variant}">{variant}</a>'
+                for variant in (
+                    "vulnerable",
+                    "patched",
+                    "timeout",
+                    "truncated",
+                    "changed",
+                )
+            )
+            self.respond(
+                200,
+                ("<html><body>Owned CORS cases" + links + "</body></html>").encode(),
+            )
+        elif path in {
+            "/owned/cors/vulnerable",
+            "/owned/cors/patched",
+            "/owned/cors/timeout",
+            "/owned/cors/truncated",
+            "/owned/cors/changed",
+        }:
+            marker = b"LAB_MARKER_CORSRESOURCE01"
+            browser = self.headers.get("Origin") == "null"
+            headers = {
+                "Access-Control-Allow-Origin": "null",
+                "Access-Control-Allow-Credentials": "true",
+            }
+            if browser and path.endswith(("timeout", "truncated")):
+                with lock:
+                    counts[f"cors-browser-{path.rsplit('/', 1)[-1]}"] += 1
+                self.send_response(200)
+                for name, value in headers.items():
+                    self.send_header(name, value)
+                self.send_header("Content-Type", "text/plain")
+                self.send_header("Content-Length", str(len(marker) + 64))
+                self.end_headers()
+                self.wfile.write(marker)
+                self.wfile.flush()
+                if path.endswith("timeout"):
+                    time.sleep(6)
+                self.close_connection = True
+                try:
+                    self.connection.shutdown(socket.SHUT_WR)
+                except OSError:
+                    pass
+            else:
+                self.respond(
+                    200,
+                    b"Owned non-sensitive response"
+                    if browser and path.endswith("changed")
+                    else marker,
+                    {} if path.endswith("patched") else headers,
+                )
+        elif path == "/owned/catalog":
+            categories = (
+                "resource",
+                "auth",
+                "admin",
+                "ssrf",
+                "configuration",
+                "cors",
+                "redirect",
+                "exposure",
+            )
+            links = "".join(
+                f'<a href="/owned/{category}/{variant}">{category} {variant}</a>'
+                for category in categories
+                for variant in ("vulnerable", "patched")
+            )
+            self.respond(
+                200,
+                (
+                    "<html><body>Owned authorized laboratory" + links + "</body></html>"
+                ).encode(),
+            )
         elif path == "/owned/entry":
             self.respond(
                 200,
@@ -448,8 +569,8 @@ class Handler(BaseHTTPRequestHandler):
                 ).encode(),
                 {"X-Bounded-Metadata": "z" * 16000},
             )
-        elif path in {"/slow", "/stream", "/hold"}:
-            if path == "/stream":
+        elif path in {"/slow", "/stream", "/hold", "/owned/stream"}:
+            if path in {"/stream", "/owned/stream"}:
                 with lock:
                     counts["stream-contacts"] += 1
             self.send_response(200)
@@ -457,7 +578,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(b"partial-")
             self.wfile.flush()
-            time.sleep(8 if path in {"/slow", "/stream"} else 1)
+            time.sleep(8 if path in {"/slow", "/stream", "/owned/stream"} else 1)
             try:
                 self.wfile.write(b"completed-stream")
                 self.wfile.flush()

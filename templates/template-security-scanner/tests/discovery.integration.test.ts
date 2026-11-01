@@ -1,3 +1,4 @@
+import { ownerIdentity } from '../src/runtime/docker.js';
 import { createClient } from '@libsql/client';
 import { randomUUID } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -208,7 +209,38 @@ describe('Confined discovery through the protected API', () => {
     guard.clear();
     const raw = createClient({ url: lab.settings.databaseUrl });
     try {
-      expect((await raw.execute('SELECT COUNT(*) AS total FROM scanner_discovery_resources')).rows[0]?.total).toBe(0);
+      const resources = (await raw.execute('SELECT data FROM scanner_discovery_resources')).rows;
+      // A live lab fixture is a real shared-image consumer. Its deletion
+      // receipts must remain until the final consumer is removed.
+      for (const row of resources) {
+        const resource = JSON.parse(String(row.data)) as { id: string; imageId?: string; kind: string };
+        expect(resource.kind).toBe('image');
+        const image = await lab.client.getImage(resource.imageId ?? resource.id).inspect();
+        expect(
+          (await lab.client.listContainers({ all: true, filters: { ancestor: [image.Id] } })).length,
+        ).toBeGreaterThan(0);
+      }
+      expect(
+        await lab.client.listContainers({
+          all: true,
+          filters: {
+            label: [
+              'dev.mastra.security-scanner.scan',
+              `dev.mastra.security-scanner.owner=${ownerIdentity(lab.settings)}`,
+            ],
+          },
+        }),
+      ).toEqual([]);
+      expect(
+        await lab.client.listNetworks({
+          filters: {
+            label: [
+              'dev.mastra.security-scanner.scan',
+              `dev.mastra.security-scanner.owner=${ownerIdentity(lab.settings)}`,
+            ],
+          },
+        }),
+      ).toEqual([]);
     } finally {
       raw.close();
     }

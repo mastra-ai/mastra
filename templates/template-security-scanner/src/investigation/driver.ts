@@ -6,7 +6,7 @@ import { ControlPlaneError, pathAllowed, type Profile } from '../core/contracts.
 import type { ControlPlane } from '../core/control-plane.js';
 import { ScanResources } from '../discovery/resources.js';
 import type { DiscoveryStore } from '../discovery/store.js';
-import { buildDiscoveryImages, releaseDiscoveryImages, type DiscoveryImages } from '../discovery/images.js';
+import { buildDiscoveryImages, type DiscoveryImages } from '../discovery/images.js';
 import { openGateway, gatewayState } from '../discovery/gateway.js';
 import { forbiddenCredentialValues, SecretGuard } from '../discovery/parser.js';
 import { control, stageFiles } from '../discovery/io.js';
@@ -16,6 +16,8 @@ import type { Approval, Hypothesis, OwnedResource } from './store.js';
 import type { VerificationDriver } from './service.js';
 import { verificationProofSchema, type VerificationProof } from './verification.js';
 import { z } from 'zod';
+import { buildLocalImage, type ImageReceipt } from '../runtime/docker.js';
+import { verifyBrowserRead } from './browser.js';
 
 const responseSchema = z
   .object({
@@ -25,6 +27,9 @@ const responseSchema = z
           .object({
             code: z.enum(['COMPLETE', 'INVALID_REQUEST', 'INVALID_HEADERS', 'RESPONSE_BOUND', 'NETWORK_FAILURE']),
             status: z.number().int().min(100).max(599).optional(),
+            upstreamObserved: z.boolean().optional(),
+            observedHeader: z.string().max(300).nullable().optional(),
+            location: z.url().max(2048).nullable().optional(),
             marker: z
               .string()
               .regex(/^LAB_MARKER_[A-Z0-9]{8,64}$/)
@@ -38,7 +43,15 @@ const responseSchema = z
   })
   .strict();
 
-type Request = { name: string; url: string; proxy: string; headersFile: string; method: 'GET'; invalidSession?: true };
+type Request = {
+  name: string;
+  url: string;
+  proxy: string;
+  headersFile: string;
+  method: 'GET';
+  invalidSession?: true;
+  headerName?: string;
+};
 const empty = (
   category: Hypothesis['category'],
   surfacePresent: boolean,
@@ -59,7 +72,11 @@ const empty = (
 export class OwnedGatewayVerifier implements VerificationDriver {
   private activeImageUsers = 0;
   private imageRelease: Promise<void> = Promise.resolve();
-  private readonly pendingImageReleases: Array<{ jobId: string; images: DiscoveryImages }> = [];
+  private readonly pendingImageReleases: Array<{
+    jobId: string;
+    images: DiscoveryImages;
+    browserImage?: ImageReceipt;
+  }> = [];
   private imageCleanupDebt = false;
   constructor(
     private readonly settings: Settings,
@@ -81,7 +98,8 @@ export class OwnedGatewayVerifier implements VerificationDriver {
     resource: OwnedResource | null;
     signal: AbortSignal;
   }) {
-    const { jobId, scan, hypothesis, approval, resource, signal } = input;
+    const { jobId, scan, hypothesis, approval, resource } = input;
+    const signal = AbortSignal.any([input.signal, AbortSignal.timeout(hypothesis.maxDurationSeconds * 1000)]);
     signal.throwIfAborted();
     if (!this.lab) throw new ControlPlaneError('OWNED_LAB_REQUIRED', 403);
     const context = await this.controlPlane.store.write(tx =>
@@ -102,6 +120,7 @@ export class OwnedGatewayVerifier implements VerificationDriver {
     );
     const resources = new ScanResources(this.settings, this.discoveryStore, jobId);
     let images: DiscoveryImages | undefined;
+    let browserImage: ImageReceipt | undefined;
     this.activeImageUsers++;
     try {
       await this.imageRelease;
@@ -120,8 +139,7 @@ export class OwnedGatewayVerifier implements VerificationDriver {
       const surface = selected.find(
         item =>
           item.observation.method === 'GET' &&
-          (item.observation.kind === 'endpoint' ||
-            (hypothesis.category === 'ssrf' && item.observation.kind === 'form')),
+          item.observation.kind === (hypothesis.category === 'ssrf' ? 'form' : 'endpoint'),
       );
       if (!surface) return empty(hypothesis.category, false, false);
       const url = surface.observation.origin + surface.observation.path;
@@ -163,10 +181,18 @@ export class OwnedGatewayVerifier implements VerificationDriver {
         } else if (resource.category === 'authentication_bypass') {
           add('authenticated', resource.authenticatedProfileId);
           add('public', resource.publicProfileId);
-          add('invalid-session', resource.authenticatedProfileId, true);
-        } else {
+          add('invalid-session', resource.publicProfileId, true);
+        } else if (resource.category === 'bfla') {
           add('admin', resource.adminProfileId);
           add('low', resource.lowProfileId);
+        } else {
+          add(resource.category, resource.publicProfileId);
+          if (resource.category === 'misconfiguration') requests[0]!.headerName = resource.headerName;
+          if (resource.category === 'open_redirect') {
+            const redirectUrl = new URL(url);
+            redirectUrl.searchParams.set(resource.parameter, resource.destination);
+            requests[0]!.url = redirectUrl.href;
+          }
         }
       } else if (
         !approval ||
@@ -209,6 +235,7 @@ export class OwnedGatewayVerifier implements VerificationDriver {
         signal,
         guard,
         () => undefined,
+        resource?.category === 'authentication_bypass' ? { publicProfileId: resource.publicProfileId, url } : undefined,
       );
       const before = await gatewayState(gateway.container, guard);
       const callbackBefore = hypothesis.category === 'ssrf' ? await this.callbackCount(resources, approval!.id) : 0;
@@ -275,11 +302,48 @@ export class OwnedGatewayVerifier implements VerificationDriver {
       if (!output.success || output.stderr || guard.unsafe(output.stdout))
         throw new ControlPlaneError('VERIFIER_OUTPUT_REJECTED', 503);
       const parsed = responseSchema.parse(JSON.parse(output.stdout));
+      let browserRead: Awaited<ReturnType<typeof verifyBrowserRead>> | undefined;
+      if (
+        resource?.category === 'cors' &&
+        parsed.results[0]?.code === 'COMPLETE' &&
+        parsed.results[0].status === 200 &&
+        parsed.results[0].upstreamObserved &&
+        parsed.results[0].marker === resource.marker
+      ) {
+        browserImage = await buildLocalImage(this.settings, signal);
+        for (const imageId of (browserImage.cleanupImageIds ?? [browserImage.imageId]).toReversed())
+          await this.discoveryStore.remember({
+            id: `${jobId}:${imageId}`,
+            imageId,
+            kind: 'image',
+            scanId: jobId,
+            token: browserImage.sourceHash,
+            sharedBase: true,
+          });
+        const entry = byId.get(resource.publicProfileId)!;
+        browserRead = await verifyBrowserRead({
+          settings: this.settings,
+          resources,
+          images,
+          image: browserImage,
+          networkId: gateway.ingress.network.id,
+          gatewayIp: gateway.ip,
+          port: 8080 + entry.index,
+          url,
+          marker: resource.marker,
+          guard,
+          signal,
+        });
+      }
       const after = await gatewayState(gateway.container, guard);
       const requestCount = before.remainingRequests - after.remainingRequests;
-      if (requestCount < 0 || requestCount > hypothesis.maxRequests || requestCount !== requests.length)
+      if (
+        requestCount < 0 ||
+        requestCount > hypothesis.maxRequests ||
+        requestCount !== requests.length + (browserRead ? 1 : 0)
+      )
         throw new ControlPlaneError('VERIFICATION_BOUNDARY_FAILED', 409);
-      if (parsed.results.some(item => item.code !== 'COMPLETE' || item.status === undefined))
+      if (parsed.results.some(item => item.code !== 'COMPLETE' || item.status === undefined || !item.upstreamObserved))
         return { ...empty(hypothesis.category, true, true), source: 'owned-gateway' as const, requestCount };
       const base = {
         source: 'owned-gateway' as const,
@@ -293,7 +357,19 @@ export class OwnedGatewayVerifier implements VerificationDriver {
       };
       const marker = (index: number) => parsed.results[index]?.marker ?? null;
       const status = (index: number) => parsed.results[index]!.status!;
-      if (resource && (marker(0) !== resource.marker || status(0) !== 200))
+      if (status(0) === 404)
+        return { ...empty(hypothesis.category, false, true), source: 'owned-gateway' as const, requestCount };
+      if (
+        resource &&
+        ['misconfiguration', 'information_exposure', 'cors'].includes(resource.category) &&
+        status(0) !== 200
+      )
+        return { ...empty(hypothesis.category, true, true), source: 'owned-gateway' as const, requestCount };
+      if (
+        resource &&
+        ['idor', 'authentication_bypass', 'bfla'].includes(resource.category) &&
+        (!('marker' in resource) || marker(0) !== resource.marker || status(0) !== 200)
+      )
         return { ...empty(hypothesis.category, true, false), source: 'owned-gateway' as const, requestCount };
       if (resource?.category === 'idor')
         return verificationProofSchema.parse({
@@ -344,6 +420,60 @@ export class OwnedGatewayVerifier implements VerificationDriver {
             lowMarker: marker(1),
           },
         });
+      if (resource?.category === 'misconfiguration')
+        return verificationProofSchema.parse({
+          ...base,
+          category: resource.category,
+          evidence: [{ id: randomUUID(), kind: 'observed header' }],
+          observation: {
+            category: resource.category,
+            headerName: resource.headerName,
+            expectedValue: resource.expectedValue,
+            observedValue: parsed.results[0]!.observedHeader ?? null,
+          },
+        });
+      if (resource?.category === 'open_redirect')
+        return verificationProofSchema.parse({
+          ...base,
+          category: resource.category,
+          evidence: [{ id: randomUUID(), kind: 'Location header' }],
+          observation: {
+            category: resource.category,
+            approvedOrigin: surface.observation.origin,
+            submittedDestination: resource.destination,
+            location: parsed.results[0]!.location ?? null,
+            followed: false,
+          },
+        });
+      if (resource?.category === 'information_exposure')
+        return verificationProofSchema.parse({
+          ...base,
+          category: resource.category,
+          evidence: [{ id: randomUUID(), kind: 'response marker' }],
+          observation: {
+            category: resource.category,
+            marker: resource.marker,
+            observedMarker: marker(0),
+            publicResponse: true,
+          },
+        });
+      if (resource?.category === 'cors') {
+        if (marker(0) !== resource.marker)
+          return { ...empty('cors', true, false), source: 'owned-gateway' as const, requestCount };
+        if (!browserRead?.completed)
+          return { ...empty('cors', true, true), source: 'owned-gateway' as const, requestCount };
+        return verificationProofSchema.parse({
+          ...base,
+          category: 'cors',
+          evidence: [{ id: randomUUID(), kind: 'browser cross-origin read' }],
+          observation: {
+            category: 'cors',
+            browserCrossOrigin: true,
+            sensitiveFixture: true,
+            responseReadable: browserRead.readable,
+          },
+        });
+      }
       const callbackAfter = await this.callbackCount(resources, approval!.id);
       return verificationProofSchema.parse({
         ...base,
@@ -363,15 +493,17 @@ export class OwnedGatewayVerifier implements VerificationDriver {
       for (const item of context.guardHeaders) for (const name of Object.keys(item.headers)) delete item.headers[name];
       const complete = await resources.cleanup(Boolean(images)).catch(() => false);
       if (!complete) this.imageCleanupDebt = true;
-      if (images) this.pendingImageReleases.push({ jobId, images });
+      if (images) this.pendingImageReleases.push({ jobId, images, ...(browserImage ? { browserImage } : {}) });
       this.activeImageUsers--;
       if (this.activeImageUsers === 0 && !this.imageCleanupDebt && this.pendingImageReleases.length) {
         const releases = this.pendingImageReleases.splice(0);
         this.imageRelease = (async () => {
           for (const release of releases) {
-            await releaseDiscoveryImages(resources.client, this.settings, release.images);
-            for (const imageId of [release.images.gateway, release.images.firewall])
-              await this.discoveryStore.forget(`${release.jobId}:${imageId}`);
+            release.images.certutil.fill(0);
+            if (!(await new ScanResources(this.settings, this.discoveryStore, release.jobId).cleanup())) {
+              this.imageCleanupDebt = true;
+              throw new ControlPlaneError('VERIFICATION_CLEANUP_DEBT', 503);
+            }
           }
         })();
       }

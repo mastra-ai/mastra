@@ -1,6 +1,8 @@
 import { serve } from '@hono/node-server';
 import { MastraServer } from '@mastra/hono';
 import { Hono } from 'hono';
+import { z } from 'zod';
+import { parse } from '../core/contracts.js';
 import type { Server } from 'node:http';
 import { hasMorphApiKey, RuntimeDiagnostic, type Settings } from '../config/settings.js';
 import { createMastra } from '../mastra/index.js';
@@ -8,7 +10,7 @@ import { DomainStore } from '../core/store.js';
 import { CredentialVault } from '../core/credentials.js';
 import { ControlPlane } from '../core/control-plane.js';
 import type { IdentityTransport } from '../core/identity.js';
-import { OPERATOR_ID, protectControlPlane } from './security.js';
+import { OPERATOR_ID, protectControlPlane, readJson } from './security.js';
 import { registerDomainRoutes } from './routes.js';
 import { preflight } from '../runtime/docker.js';
 import { prepareStorageFiles } from '../runtime/storage-files.js';
@@ -27,10 +29,17 @@ import { registerInvestigationRoutes } from './investigation-routes.js';
 import { registerConsoleRoutes } from './console-routes.js';
 import { MastraInvestigationModels, type InvestigationModels } from '../investigation/models.js';
 import { OwnedGatewayVerifier } from '../investigation/driver.js';
+import { AdvisoryScheduler } from '../advisory/schedule.js';
+import { prepareDataDirectory } from '../runtime/files.js';
+import { operationStatus, recoverInterruptedRestore } from '../runtime/operations.js';
 
-export async function initializeStorage(settings: Settings, processDue?: () => Promise<void>) {
+export async function initializeStorage(
+  settings: Settings,
+  processDue?: () => Promise<void>,
+  processAdvisoryDue?: () => Promise<void>,
+) {
   await prepareStorageFiles(settings);
-  const runtime = createMastra(settings, processDue);
+  const runtime = createMastra(settings, processDue, processAdvisoryDue);
   try {
     await runtime.storage.init();
   } catch (error) {
@@ -64,14 +73,35 @@ export async function startControlPlane(
   if (settings.SCANNER_INVESTIGATION_ENABLED && !investigationModels && !hasMorphApiKey())
     throw new RuntimeDiagnostic('MORPH_API_KEY_REQUIRED', 'Set MORPH_API_KEY before enabling investigation models.');
   let investigations: InvestigationService | undefined;
-  const { mastra, storage, agents } = await initializeStorage(settings, async () => {
-    if (settings.SCANNER_INVESTIGATION_ENABLED && investigations) await investigations.processSchedules(OPERATOR_ID);
-  });
+  let advisoryScheduler: AdvisoryScheduler | undefined;
+  await prepareDataDirectory(settings);
+  const releaseInstance = await acquireInstance(settings);
+  let runtime: Awaited<ReturnType<typeof initializeStorage>>;
+  try {
+    await recoverInterruptedRestore(settings);
+    runtime = await initializeStorage(
+      settings,
+      async () => {
+        if (settings.SCANNER_INVESTIGATION_ENABLED && investigations)
+          await investigations.processSchedules(OPERATOR_ID);
+      },
+      async () => {
+        await advisoryScheduler?.runDue();
+      },
+    );
+  } catch (error) {
+    await releaseInstance();
+    throw error;
+  }
+  const { mastra, storage, agents } = runtime;
   const domainStore = new DomainStore(settings.databaseUrl);
   const catalog = new ReferenceCatalog(settings.databaseUrl);
   const playbooks = new PlaybookRegistry(catalog);
   const advisoryStore = new AdvisoryStore(settings.databaseUrl);
   const advisory = new AdvisorySync(advisoryStore, advisorySource ?? new AdvisorySource());
+  advisoryScheduler = new AdvisoryScheduler(settings, advisory, async () => {
+    if (settings.SCANNER_INVESTIGATION_ENABLED) await investigations?.processSchedules(OPERATOR_ID);
+  });
   const app = new Hono();
   let boundPort = port;
   const protection = protectControlPlane(
@@ -81,7 +111,6 @@ export async function startControlPlane(
     settings.CONTROL_SESSION_TTL_SECONDS,
   );
   let scans: ScanService | undefined;
-  let releaseInstance: (() => Promise<void>) | undefined;
   const service = new ControlPlane(
     domainStore,
     new CredentialVault(settings.SCANNER_ENCRYPTION_KEY),
@@ -112,6 +141,14 @@ export async function startControlPlane(
   registerDomainRoutes(app, service, scans);
   registerIntelligenceRoutes(app, catalog, playbooks, advisory, () => investigations!.processSchedules(OPERATOR_ID));
   registerInvestigationRoutes(app, investigations, settings.SCANNER_INVESTIGATION_ENABLED);
+  app.get('/api/advisory-schedule', async context => context.json(await advisoryStore.scheduleStatus()));
+  app.post('/api/advisory-schedule/pause', async context => {
+    const { paused, revision } = parse(
+      z.object({ paused: z.boolean(), revision: z.number().int().positive().safe() }).strict(),
+      await readJson(context.req),
+    );
+    return context.json(await advisoryStore.pauseSchedule(paused, revision));
+  });
   await registerConsoleRoutes(app, settings, investigations, service);
   app.get('/api/runtime', async context => {
     let scanningEnabled = false;
@@ -127,6 +164,13 @@ export async function startControlPlane(
       nativeExecutionEnabled: false,
     });
   });
+  app.get('/api/operations', async context =>
+    context.json({
+      operation: await operationStatus(settings),
+      retention: await scans!.store.retentionStatus(),
+      imageRecordsPending: (await scans!.store.resourceSummary()).image ?? 0,
+    }),
+  );
   let listener: Server | undefined;
   let shutdownPromise: Promise<void> | undefined;
   const shutdown = () =>
@@ -136,10 +180,12 @@ export async function startControlPlane(
         listener?.listening ? closeListener(listener) : Promise.resolve(),
       ]);
       const stoppedInvestigations = await Promise.allSettled([investigations.close()]);
+      const stoppedAdvisory = await Promise.allSettled([advisoryScheduler!.close(), advisory.close()]);
       const critical = [
         ...stoppedListener,
         ...stoppedInvestigations,
-        ...(await Promise.allSettled([scans!.close(), advisory.close(), mastra.shutdown()])),
+        ...stoppedAdvisory,
+        ...(await Promise.allSettled([scans!.close(), mastra.shutdown()])),
       ];
       const stores = await Promise.allSettled([
         Promise.resolve().then(() => domainStore.close()),
@@ -159,11 +205,11 @@ export async function startControlPlane(
         );
     })());
   try {
-    releaseInstance = await acquireInstance(settings);
     await domainStore.initialize();
     await catalog.initialize();
     await playbooks.initialize();
     await advisoryStore.initialize();
+    await advisoryScheduler.initialize();
     await scans.initialize();
     await investigations.initialize();
     const adapter = new MastraServer({
@@ -187,6 +233,7 @@ export async function startControlPlane(
       investigations.startWorkers(OPERATOR_ID);
       await investigations.processSchedules(OPERATOR_ID);
     }
+    await advisoryScheduler.runDue();
     return {
       url: `http://127.0.0.1:${boundPort}`,
       mastra,

@@ -14,6 +14,13 @@ export const capabilityByCategory = {
   information_exposure: 'check_exposure',
 } as const;
 
+export const hypothesisRules = {
+  activeRiskIffCategory: 'ssrf',
+  pairedAdvisoryFields: ['advisoryId', 'advisoryRevision'],
+  advisoryPresentIffOrigin: 'cve',
+  unique: 'evidenceIds',
+} as const;
+
 export const hypothesisSchema = z
   .object({
     origin: z.enum(['playbook', 'novel', 'cve']),
@@ -42,13 +49,14 @@ export const hypothesisSchema = z
   .superRefine((value, context) => {
     if (capabilityByCategory[value.category] !== value.toolId)
       context.addIssue({ code: 'custom', message: 'The capability must match the category.' });
-    if ((value.category === 'ssrf') !== (value.risk === 'active'))
+    if ((value.category === hypothesisRules.activeRiskIffCategory) !== (value.risk === 'active'))
       context.addIssue({ code: 'custom', message: 'Active risk must match the controlled SSRF capability.' });
-    if ((value.advisoryId === undefined) !== (value.advisoryRevision === undefined))
+    const [advisoryId, advisoryRevision] = hypothesisRules.pairedAdvisoryFields;
+    if ((value[advisoryId] === undefined) !== (value[advisoryRevision] === undefined))
       context.addIssue({ code: 'custom', message: 'Advisory identity and revision must be paired.' });
-    if ((value.origin === 'cve') !== (value.advisoryId !== undefined))
+    if ((value.origin === hypothesisRules.advisoryPresentIffOrigin) !== (value[advisoryId] !== undefined))
       context.addIssue({ code: 'custom', message: 'CVE provenance requires a current advisory.' });
-    if (new Set(value.evidenceIds).size !== value.evidenceIds.length)
+    if (new Set(value[hypothesisRules.unique]).size !== value[hypothesisRules.unique].length)
       context.addIssue({ code: 'custom', message: 'Evidence IDs must be unique.' });
   });
 
@@ -61,7 +69,7 @@ export const investigationAdmissionSchema = z
       .max(128)
       .regex(/^[A-Za-z0-9_-]+$/),
     maxRequests: z.number().int().min(1).max(100),
-    maxTokens: z.number().int().min(1).max(16384),
+    maxTokens: z.number().int().min(1).max(24576),
     maxDurationSeconds: z.number().int().min(1).max(3600),
   })
   .strict();
@@ -93,6 +101,49 @@ export const ownedResourceSchema = z.discriminatedUnion('category', [
     .strict(),
   z
     .object({ ...ownedResourceBase, category: z.literal('bfla'), adminProfileId: idSchema, lowProfileId: idSchema })
+    .strict(),
+  z
+    .object({
+      category: z.literal('misconfiguration'),
+      path: pathSchema,
+      publicProfileId: idSchema,
+      headerName: z.enum([
+        'x-content-type-options',
+        'x-frame-options',
+        'referrer-policy',
+        'strict-transport-security',
+        'content-security-policy',
+      ]),
+      expectedValue: z
+        .string()
+        .min(1)
+        .max(300)
+        .regex(/^[\x20-\x7e]+$/),
+    })
+    .strict(),
+  z
+    .object({
+      ...ownedResourceBase,
+      category: z.literal('cors'),
+      publicProfileId: idSchema,
+    })
+    .strict(),
+  z
+    .object({
+      category: z.literal('open_redirect'),
+      path: pathSchema,
+      publicProfileId: idSchema,
+      parameter: z.string().regex(/^[a-z][a-z0-9_]{0,39}$/),
+      destination: z.literal('https://redirect.example.invalid/owned-destination'),
+    })
+    .strict(),
+  z
+    .object({
+      ...ownedResourceBase,
+      category: z.literal('information_exposure'),
+      publicProfileId: idSchema,
+      expectedAccess: z.literal('private'),
+    })
     .strict(),
 ]);
 

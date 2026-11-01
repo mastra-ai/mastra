@@ -13,7 +13,8 @@ A useful security inventory needs to show which identity observed a surface whil
 - Chromium must support the enabled namespace and seccomp sandbox. Setup rejects an unavailable browser sandbox instead of enabling unsafe flags or extra crawler capabilities.
 - Set `CONTROL_BOOTSTRAP_SECRET` to an independent random secret and `SCANNER_ENCRYPTION_KEY` to a 32-byte key encoded as 64 lowercase hex characters. [Local API setup](CONTROL_PLANE.md) includes generation and session commands. Keep the key outside source control; a lost key requires credential re-registration.
 - Discovery is disabled by default. `SCANNER_DISCOVERY_ENABLED=true` explicitly enables admission after successful setup; every request still requires current scope, profile and policy bindings. Use only targets you are authorized to assess. Non-lab targets require an operator-selected retention policy before admission.
-- No model API key is required for setup, the control plane, or discovery. Investigation planning is separately opt-in with `SCANNER_INVESTIGATION_ENABLED=true` and a private `MORPH_API_KEY`; it can make paid Morph requests. Keep it disabled while configuring scopes and budgets.
+- **[Morph API key](https://www.morphllm.com/dashboard/api-keys)**: required only for opt-in investigation planning. Set `SCANNER_INVESTIGATION_ENABLED=true` and a private `MORPH_API_KEY` after confirming access to the configured explorer and judge. Planning can make paid requests. Setup, the control plane and discovery need no model key.
+- Periodic advisory sync is separately disabled by default. Enabling it requires an explicit cadence and timezone; see [advisory configuration](INTELLIGENCE.md#periodic-advisory-sync). It can trigger paid investigation planning only when that feature is also enabled.
 
 ## Quickstart 🚀
 
@@ -35,12 +36,18 @@ A useful security inventory needs to show which identity observed a surface whil
 - Use the console's ten views to inspect real records and empty states. Create a policy and authorized target, restart the server, and confirm their persisted revisions through the console or local API.
 - Run public HTTP discovery, then compare a header, bearer, or cookie profile against the same authorized origin. Select headless mode for browser XHR surfaces. Inventory retains each observation's role, while credentials are never returned; discovery does not submit forms or authorize writes.
 - Cancel a running scan or update its bound target. Inspect persisted partial state, cleanup outcome, and evidence instead of assuming the interrupted run completed.
-- Search pinned offline references, [manually sync the advisory inbox](INTELLIGENCE.md), and inspect its stale status and revision events. In the owned Docker lab, opt into bounded investigation planning from a completed scan; per-target recurrence and new or materially revised advisories can replan from existing precedent without automatically starting a new discovery scan.
+- Search pinned offline references, [sync the advisory inbox manually or with an explicit schedule](INTELLIGENCE.md), and inspect its stale status and revision events. In the owned Docker lab, opt into bounded investigation planning from a completed scan; per-target recurrence and new or materially revised advisories can replan from existing precedent without automatically starting a new discovery scan.
 
 ## Customization
 
 - Open the project in your coding agent and describe a focused change, such as: "Add a new inventory view that groups sanitized endpoints by role. Explore the code and propose a plan before making changes."
 - Adjust target scopes, finite budgets, explicit retention, and identity endpoints through the protected API. Use [discovery operation](SCANNING.md) when extending the driver or lab, and preserve the same authorization and confinement boundaries.
+
+## Owned local lab
+
+Stop the normal listener, then run `npm run lab` after configuring the same local session settings. It starts an internal Docker fixture and the real application, provisions one public lab target through the protected API, and prints the console URL and target ID. Its dedicated `data/owned-lab.db` and native sibling retain actual application records. Close it with Ctrl+C to remove only its ephemeral fixture resources.
+
+The default experience is public discovery with `SCANNER_DISCOVERY_ENABLED=true`; it does not play back findings or scripted model responses. Authenticated verification requires registered identities/resources and current approval where applicable. Investigation models remain off unless the operator explicitly configures and enables the actual Morph provider. Keep advisory sync and investigation disabled for a discovery-only session. See [operation and recovery](OPERATIONS.md) before preserving or restoring lab data.
 
 ## Runtime operation
 
@@ -52,13 +59,13 @@ Each profile has its own ephemeral sandbox, credential file and browser state. A
 
 Raw crawler output remains bounded and private in trusted memory, with native retained buffers disabled. Strict normalization and credential-aware minimization precede persistence and API export. Reflected unsafe fields are withheld and produce partial results. Some credential fragments can conflict with required metadata; admission then returns `CREDENTIAL_METADATA_CONFLICT` without dispatch. Cookie support does not imply every cookie string is accepted.
 
-Local storage and receipts live under private `data/`. The configured `DATABASE_URL` file holds application-owned policy, target, discovery, advisory, and investigation state. Native Mastra storage uses a sibling file with `-mastra.db` in place of `.db`. Stop the server before backing up or restoring both files and their `-wal` and `-shm` sidecars. Setup and startup reject an existing single-file database with nonempty native SDK tables as `LEGACY_MASTRA_STATE`; they preserve those records and do not migrate them. Restore a compatible two-file backup or obtain a separately reviewed lossless migration before retrying.
+Local storage and receipts live under private `data/`. The configured `DATABASE_URL` file holds application-owned policy, target, discovery, advisory, and investigation state. Native Mastra storage uses a sibling file with `-mastra.db` in place of `.db`. Stop the server, drain pending work and use [two-file backup and recovery](OPERATIONS.md) with `npm run operate -- backup <name>` and `npm run operate -- restore <name>`. The commands preserve compatible pairs, validate integrity and handle their owned WAL/SHM state. Setup and startup reject an existing single-file database with nonempty native SDK tables as `LEGACY_MASTRA_STATE`; they preserve those records and do not migrate them. Restore a compatible two-file backup or obtain a separately reviewed lossless migration before retrying.
 
 One process owns the installation and one discovery runs at a time. Restart reconciles interrupted runs as failed and removes only recorded owned resources; it does not resume crawling or restore consumed budgets. Cleanup debt remains visible. Evidence expires only under the chosen retention policy, with persisted expiry counts and timestamps. Unrelated containers and shared-image consumers are preserved; no command uses global Docker pruning.
 
 Investigation planning uses the configured Morph explorer and judge only when enabled. The owned Docker lab adapter supports bounded verification and approval-gated SSRF with a unique receiver for each approval; outside that boundary, verification fails closed. Due per-target recurrences and new/materially revised local advisories automatically plan against an existing completed scan and investigation precedent, with durable event identities across restarts. Advisory applicability stays unknown without verified software version evidence. Native execution routes remain blocked; authenticated sessions can read allowlisted native metadata through the official Mastra Hono adapter. See [local API operation](CONTROL_PLANE.md) and [discovery operation](SCANNING.md) for supported routes and outcomes.
 
-The [offline reference catalog and advisory inbox](INTELLIGENCE.md) are available through the same protected API. Advisory synchronization is operator-initiated and remains visibly incomplete because it polls a bounded portion of the upstream feed each run.
+The [offline reference catalog and advisory inbox](INTELLIGENCE.md) are available through the same protected API. Advisory synchronization is manual unless the operator explicitly enables the separate periodic workflow. Each run remains visibly incomplete because it polls a bounded portion of the upstream feed. [Recovery and retention operation](OPERATIONS.md) explains bounded deletion, unavailable evidence, credential re-registration and compatible rollback.
 
 ## About Mastra templates
 

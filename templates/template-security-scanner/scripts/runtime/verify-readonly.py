@@ -6,6 +6,7 @@ import ssl
 import urllib.error
 import urllib.request
 from pathlib import Path
+from urllib.parse import urljoin
 
 
 MARKER = re.compile(rb"LAB_MARKER_[A-Z0-9]{8,64}")
@@ -48,10 +49,17 @@ def request_item(item, ca):
             if len(body) > 8192:
                 return {"code": "RESPONSE_BOUND"}
             marker = MARKER.search(body)
+            header = response.headers.get(item["headerName"]) if item.get("headerName") else None
+            location = urljoin(item["url"], response.headers["Location"]) if "Location" in response.headers else None
+            if (header is not None and len(header) > 300) or (location is not None and len(location) > 2048):
+                return {"code": "RESPONSE_BOUND"}
             return {
                 "code": "COMPLETE",
                 "status": response.status,
                 "marker": marker.group().decode("ascii") if marker else None,
+                "upstreamObserved": response.headers.get("X-Scanner-Upstream-Observed") == "1",
+                "observedHeader": header,
+                "location": location,
             }
     except (OSError, ValueError, ssl.SSLError, urllib.error.URLError):
         return {"code": "NETWORK_FAILURE"}

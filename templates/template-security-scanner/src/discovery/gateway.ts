@@ -39,6 +39,7 @@ export async function openGateway(
   signal: AbortSignal,
   guard: SecretGuard,
   setStage: (value: 'NETWORK' | 'GATEWAY') => void,
+  invalidSessionComparison?: { publicProfileId: string; url: string },
 ) {
   const client = resources.client;
   const common: Docker.HostConfig = {
@@ -101,6 +102,24 @@ export async function openGateway(
     excluded_paths: context.target.excludedPaths,
     methods: context.target.permittedMethods,
     ...(lab ? { lab_ips: [lab.address], resolver_ip: lab.address } : {}),
+    ...(invalidSessionComparison
+      ? (() => {
+          const profile = context.profiles.find(item => item.id === invalidSessionComparison.publicProfileId);
+          const url = new URL(invalidSessionComparison.url);
+          if (
+            !lab ||
+            context.target.environment !== 'lab' ||
+            profile?.kind !== 'public' ||
+            !context.target.approvedOrigins.includes(url.origin) ||
+            url.search ||
+            url.hash
+          )
+            throw new Error('INVALID_SESSION_COMPARISON_REJECTED');
+          return {
+            invalid_session_comparison: { role: profile.role, origin: originTuple(url.origin), path: url.pathname },
+          };
+        })()
+      : {}),
     budget: {
       requests: context.target.scanLimits.maxRequests,
       response_bytes: context.target.scanLimits.maxResponseBytes,

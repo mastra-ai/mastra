@@ -6,9 +6,9 @@ import { setTimeout as pause } from 'node:timers/promises';
 import type { Settings } from '../config/settings.js';
 import type { ScanContext } from '../core/control-plane.js';
 import { ControlPlaneError } from '../core/contracts.js';
-import { buildLocalImage, dockerClient, releaseImage, type ImageReceipt } from '../runtime/docker.js';
+import { buildLocalImage, type ImageReceipt } from '../runtime/docker.js';
 import { sandboxOptions } from '../runtime/sandbox.js';
-import { buildDiscoveryImages, releaseDiscoveryImages, type DiscoveryImages } from './images.js';
+import { buildDiscoveryImages, type DiscoveryImages } from './images.js';
 import { ScanResources } from './resources.js';
 import { DiscoveryStore } from './store.js';
 import { privateNativeSandbox, type PrivateSandbox } from './native.js';
@@ -114,9 +114,18 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
       await validate();
       joined.throwIfAborted();
       images = await buildDiscoveryImages(this.settings, joined, (imageId, inputHash) =>
-        this.store.remember({ id: imageId, kind: 'image', scanId: scan.id, token: inputHash }),
+        this.store.remember({ id: `${scan.id}:${imageId}`, imageId, kind: 'image', scanId: scan.id, token: inputHash }),
       );
       image = await buildLocalImage(this.settings, joined);
+      for (const imageId of (image.cleanupImageIds ?? [image.imageId]).toReversed())
+        await this.store.remember({
+          id: `${scan.id}:${imageId}`,
+          imageId,
+          kind: 'image',
+          scanId: scan.id,
+          token: image.sourceHash,
+          sharedBase: true,
+        });
       const session = await openGateway(this.settings, resources, context, images, this.lab, joined, guard, value => {
         stage = value;
       });
@@ -425,18 +434,7 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
           reason = 'CLEANUP_FAILED';
         });
       cleanupComplete = await resources.cleanup();
-      if (images)
-        try {
-          await releaseDiscoveryImages(client, this.settings, images);
-        } catch {
-          cleanupComplete = false;
-        }
-      if (image)
-        try {
-          await releaseImage(this.settings, image);
-        } catch {
-          cleanupComplete = false;
-        }
+      images?.certutil.fill(0);
       if (!cleanupComplete) {
         reason = 'CLEANUP_FAILED';
         diagnostic = 'CLEANUP';

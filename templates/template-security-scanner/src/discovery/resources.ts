@@ -90,11 +90,20 @@ export class ScanResources {
         if (resource.kind === 'image' && retainImageRecords) continue;
         if (resource.kind === 'container') await this.client.getContainer(resource.id).remove({ force: true, v: true });
         else if (resource.kind === 'network') await this.client.getNetwork(resource.id).remove();
-        else if (
-          !(await this.client.listContainers({ all: true, filters: { ancestor: [resource.imageId ?? resource.id] } }))
-            .length
-        )
+        else {
+          // A shared consumer owns its own lifecycle. Preserve both the image
+          // and this deletion receipt so a later owned cleanup can finish it.
+          if (
+            (await this.client.listContainers({ all: true, filters: { ancestor: [resource.imageId ?? resource.id] } }))
+              .length
+          )
+            continue;
+          if (resource.sharedBase && this.settings.DOCKER_RETAIN_SHARED_BASE_IMAGE) {
+            await this.store.forget(resource.id);
+            continue;
+          }
           await this.client.getImage(resource.imageId ?? resource.id).remove({ force: false, noprune: true });
+        }
         await this.store.forget(resource.id);
       } catch (error) {
         if ((error as { statusCode?: number }).statusCode === 404) await this.store.forget(resource.id);

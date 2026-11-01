@@ -199,6 +199,73 @@ describe('console component outcomes', () => {
     expect(requests).toContain('/api/hypotheses/hypothesis-second/approval');
   });
 
+  it.each(['expired', 'unknown'] as const)(
+    'marks %s evidence unavailable while retaining the dated outcome',
+    async state => {
+      vi.stubGlobal('fetch', async (input: string) => {
+        if (input.startsWith('/api/findings?'))
+          return Response.json({
+            items: [
+              {
+                id: 'finding-12345678',
+                investigationId: 'investigation-1',
+                hypothesisId: 'hypothesis-1',
+                jobId: 'job-1',
+                proofId: 'proof-1',
+                evidenceIds: [],
+                createdAt: '2026-01-01T00:00:00Z',
+                availability: { state, at: null },
+              },
+            ],
+            limit: 25,
+            offset: 0,
+          });
+        if (input === '/api/hypotheses/hypothesis-1')
+          return Response.json({
+            category: 'idor',
+            origin: 'playbook',
+            toolId: 'check_idor',
+            referenceIds: [],
+            evidenceIds: [],
+            lineage: {
+              targetId: 'target-1',
+              targetRevision: 1,
+              policyId: 'policy-1',
+              policyRevision: 1,
+              scanId: 'scan-1',
+            },
+          });
+        if (input === '/api/evaluations/proof-1')
+          return Response.json({
+            source: 'owned-gateway',
+            requestCount: 2,
+            withheld: true,
+            evidence: [],
+            availability: { state, at: null },
+          });
+        if (input === '/api/jobs/job-1')
+          return Response.json({ result: { outcome: 'CONFIRMED', reason: 'DATED_OWNED_PROOF' } });
+        throw new Error(`Unexpected ${input}`);
+      });
+      const view = render(createElement(FindingsView));
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(view.textContent).toContain(state === 'expired' ? 'EVIDENCE EXPIRED' : 'EVIDENCE UNKNOWN');
+      expect(view.textContent).not.toContain('CONFIRMED');
+      await act(async () => {
+        Array.from(view.querySelectorAll('button'))
+          .find(button => button.textContent === 'finding-')!
+          .click();
+        await new Promise(resolve => setTimeout(resolve, 0));
+      });
+      expect(view.textContent).toContain('Historical outcome');
+      expect(view.textContent).toContain('CONFIRMED');
+      expect(view.textContent).toContain(`Evidence availability: ${state}`);
+      expect(view.textContent).toContain('withheld evidence');
+    },
+  );
+
   it('shows verification proof and discovery scan evidence as separate provenance', async () => {
     const finding = {
       id: 'finding-12345678',
@@ -298,6 +365,12 @@ describe('console component outcomes', () => {
         nativeExecutionEnabled: false,
       };
       vi.stubGlobal('fetch', async (input: string) => {
+        if (input === '/api/operations')
+          return Response.json({
+            operation: { state: 'NOT_PERFORMED', detail: null, at: null },
+            retention: { state: 'READY', batchLimit: 128, pending: false },
+            imageRecordsPending: 0,
+          });
         const endpoint = input === '/api/settings' ? 'settings' : input === '/api/runtime' ? 'runtime' : '';
         if (!endpoint) throw new Error(`Unexpected ${input}`);
         return refresh && endpoint === failedEndpoint
