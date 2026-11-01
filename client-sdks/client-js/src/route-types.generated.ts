@@ -21746,6 +21746,8 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = {
   perPage?: number | undefined;
   /** Only return results that have all of these tags */
   tags?: string[] | undefined;
+  /** Only return results with this review status */
+  status?: ('needs-review' | 'reviewed' | 'complete') | undefined;
   orderBy?:
     | (
         | {

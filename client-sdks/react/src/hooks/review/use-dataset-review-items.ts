@@ -1,4 +1,4 @@
-import type { DatasetExperiment } from '@mastra/client-js';
+import type { DatasetExperiment, DatasetExperimentResult } from '@mastra/client-js';
 import { useQuery } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { useMastraClient } from '../../mastra-client-context';
@@ -8,6 +8,8 @@ import type { MastraQueryOptions } from '../shared/query-options';
 import type { ReviewItem } from './types';
 
 type ReviewStatus = 'needs-review' | 'complete';
+
+const RESULTS_PER_PAGE = 100;
 
 export interface ReviewItemsOptions extends ExperimentTargetFilter {
   /** When set, only this experiment's results are loaded; otherwise every experiment in the project. */
@@ -62,28 +64,38 @@ const useReviewItemsByStatus = (
         scopedExperiments.map(async exp => {
           if (!exp.datasetId) return [];
           try {
-            const { results } = await client.listDatasetExperimentResults(exp.datasetId, exp.id);
-            return results
-              .filter(r => r.status === status)
-              .map(r => ({
-                id: r.id,
-                input: r.input,
-                output: r.output,
-                error: r.error,
-                itemId: r.itemId,
-                experimentId: r.experimentId,
-                datasetId: exp.datasetId ?? undefined,
-                traceId: r.traceId ?? undefined,
-                scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
-                tags: r.tags ?? [],
-                targetType: r.targetType,
-                createdAt: r.createdAt,
-                startedAt: r.startedAt,
-                completedAt: r.completedAt,
-                status: r.status,
-                groundTruth: r.groundTruth,
-                toolMockReport: r.toolMockReport,
-              }));
+            const matching: DatasetExperimentResult[] = [];
+            let page = 0;
+            while (true) {
+              const response = await client.listDatasetExperimentResults(exp.datasetId, exp.id, {
+                page,
+                perPage: RESULTS_PER_PAGE,
+                status,
+              });
+              // Servers that predate the status filter return every result, so filter here too.
+              matching.push(...response.results.filter(r => r.status === status));
+              if (!response.pagination.hasMore || response.results.length === 0) break;
+              page++;
+            }
+            return matching.map(r => ({
+              id: r.id,
+              input: r.input,
+              output: r.output,
+              error: r.error,
+              itemId: r.itemId,
+              experimentId: r.experimentId,
+              datasetId: exp.datasetId ?? undefined,
+              traceId: r.traceId ?? undefined,
+              scores: r.scores ? Object.fromEntries(r.scores.map(s => [s.scorerId, s.score ?? 0])) : {},
+              tags: r.tags ?? [],
+              targetType: r.targetType,
+              createdAt: r.createdAt,
+              startedAt: r.startedAt,
+              completedAt: r.completedAt,
+              status: r.status,
+              groundTruth: r.groundTruth,
+              toolMockReport: r.toolMockReport,
+            }));
           } catch {
             return [];
           }

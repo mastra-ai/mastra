@@ -669,6 +669,45 @@ describe('Datasets Handlers', () => {
       expect(experimentResultResponseSchema.safeParse(listed.results[0]).success).toBe(true);
     });
 
+    it('filters listed results by review status', async () => {
+      const { dataset, item1, item2 } = await setupDatasetWithItems();
+      const created = (await TRIGGER_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        start: false,
+      } as any)) as any;
+
+      const submitted = [];
+      for (const item of [item1, item2]) {
+        submitted.push(
+          (await SUBMIT_EXPERIMENT_RESULT_ROUTE.handler({
+            ...createTestServerContext({ mastra }),
+            datasetId: dataset.id,
+            experimentId: created.experimentId,
+            itemId: item.id,
+            output: { a: 'ok' },
+          } as any)) as any,
+        );
+      }
+      await UPDATE_EXPERIMENT_RESULT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        resultId: submitted[1].id,
+        status: 'needs-review',
+      } as any);
+
+      const listed = (await LIST_EXPERIMENT_RESULTS_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: created.experimentId,
+        ...listExperimentResultsQuerySchema.parse({ status: 'needs-review' }),
+      } as any)) as any;
+      expect(listed.results.map((r: any) => r.id)).toEqual([submitted[1].id]);
+      expect(listed.pagination.total).toBe(1);
+      expect(() => listExperimentResultsQuerySchema.parse({ status: 'pending' })).toThrow();
+    });
+
     it('accepts agent output, including legacy empty errors, in the response schema', () => {
       const base = {
         id: 'r1',

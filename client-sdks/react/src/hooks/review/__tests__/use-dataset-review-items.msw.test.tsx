@@ -9,7 +9,7 @@ import { MastraReactProvider } from '../../../mastra-react-provider';
 
 import { server } from '../../../test/msw-server';
 import { useDatasetMutations } from '../../datasets';
-import { useReviewItems } from '../use-dataset-review-items';
+import { useCompletedItems, useReviewItems } from '../use-dataset-review-items';
 import type { ReviewItemsOptions } from '../use-dataset-review-items';
 import {
   DATASET_ID,
@@ -17,6 +17,7 @@ import {
   RESULT_ID,
   experimentsResponse,
   experiment,
+  needsReviewResultWithComment,
   resultsResponse,
   updatedResultResponse,
 } from './fixtures/dataset-review-items';
@@ -224,6 +225,57 @@ describe('useReviewItems', () => {
       expect(experimentQueries[0].get('targetId')).toBe('agent-1');
       expect(resultRequests).toEqual([EXPERIMENT_ID]);
     });
+  });
+});
+
+describe('when an experiment has more results than one page', () => {
+  const TOTAL_RESULTS = 150;
+  const NEEDS_REVIEW_INDICES = new Set([3, 120, 149]);
+  const requests: URLSearchParams[] = [];
+
+  // Pages through every stored result and ignores `status`, like a server that predates the status filter.
+  const setupPagedHandler = () => {
+    requests.length = 0;
+    const allResults = Array.from({ length: TOTAL_RESULTS }, (_, index) => ({
+      ...needsReviewResultWithComment,
+      id: `result-${index}`,
+      itemId: `item-${index}`,
+      status: NEEDS_REVIEW_INDICES.has(index) ? ('needs-review' as const) : ('complete' as const),
+    }));
+    server.use(
+      http.get(`${BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`, ({ request }) => {
+        const searchParams = new URL(request.url).searchParams;
+        requests.push(searchParams);
+        const page = Number(searchParams.get('page') ?? 0);
+        const perPage = Number(searchParams.get('perPage') ?? 10);
+        const start = page * perPage;
+        return HttpResponse.json({
+          results: allResults.slice(start, start + perPage),
+          pagination: { total: TOTAL_RESULTS, page, perPage, hasMore: start + perPage < TOTAL_RESULTS },
+        });
+      }),
+    );
+  };
+
+  it('lists needs-review results from every page', async () => {
+    setupPagedHandler();
+
+    const { result } = renderHook(() => useReviewItems({ experiments: [experiment] }), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.map(item => item.id)).toEqual(['result-3', 'result-120', 'result-149']);
+    expect(requests.map(params => params.get('page'))).toEqual(['0', '1']);
+    expect(requests.every(params => params.get('status') === 'needs-review')).toBe(true);
+  });
+
+  it('lists completed results from every page', async () => {
+    setupPagedHandler();
+
+    const { result } = renderHook(() => useCompletedItems({ experiments: [experiment] }), { wrapper: makeWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toHaveLength(TOTAL_RESULTS - NEEDS_REVIEW_INDICES.size);
+    expect(requests.every(params => params.get('status') === 'complete')).toBe(true);
   });
 });
 
