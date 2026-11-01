@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -137,5 +138,65 @@ describe('Board loading states', () => {
       }
     });
     expect(within(intake).getByText('Intake is clear')).toBeInTheDocument();
+  });
+
+  it('lets a card be created in Intake once work items load, before the intake feed resolves', async () => {
+    const { workItemsGate, issuesGate } = stubBoardEndpoints();
+    const created = {
+      id: 'manual-1',
+      orgId: 'org-1',
+      createdBy: 'user-1',
+      factoryProjectId: FACTORY_ID,
+      board: 'work',
+      externalSource: null,
+      parentWorkItemId: null,
+      title: 'Early card',
+      stages: ['intake'],
+      stageHistory: [{ stage: 'intake', enteredAt: '2026-08-05T00:00:00.000Z', by: 'user-1' }],
+      sessions: {},
+      metadata: {},
+      triageType: null,
+      acceptedAt: null,
+      commentCount: 0,
+      feedActivityAt: null,
+      revision: 1,
+      createdAt: '2026-08-05T00:00:00.000Z',
+      updatedAt: '2026-08-05T00:00:00.000Z',
+    };
+    let stored = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
+        await workItemsGate.promise;
+        return HttpResponse.json({ workItems: stored ? [created] : [] });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => {
+        stored = true;
+        return HttpResponse.json({ workItem: created });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    // Work items unresolved: creation stays unavailable, since the new card has no snapshot to join.
+    const intake = await screen.findByTestId('board-column-intake');
+    within(intake).getByRole('status', { name: 'Loading Intake column' });
+    expect(screen.queryByRole('button', { name: 'Create work item in Intake' })).not.toBeInTheDocument();
+
+    // Work items resolved, intake feed still pending: creation is available alongside the skeleton.
+    workItemsGate.resolve();
+    const create = await screen.findByRole('button', { name: 'Create work item in Intake' });
+    expect(create).toBeEnabled();
+    within(intake).getByRole('status', { name: 'Loading Intake column' });
+
+    await user.click(create);
+    await user.type(await screen.findByRole('textbox', { name: 'Work item title' }), 'Early card');
+    await user.click(screen.getByRole('button', { name: 'Add work item to Intake' }));
+
+    expect(await within(intake).findByText('Early card')).toBeInTheDocument();
+    within(intake).getByRole('status', { name: 'Loading Intake column' });
+
+    issuesGate.resolve();
+    await waitFor(() => expect(within(intake).queryByRole('status')).not.toBeInTheDocument());
+    expect(within(intake).getByText('Early card')).toBeInTheDocument();
   });
 });
