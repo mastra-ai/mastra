@@ -19,19 +19,21 @@ interface PromptHandoff {
   handoffThinkingLevel?: ThinkingLevelSetting;
 }
 
-// History keeps a thread's route state, so only the tab that opened it may send its first prompt, once.
-const unsentHandoffs = new Set<string>();
+interface HandoffModel {
+  modelId?: string;
+  thinkingLevel?: ThinkingLevelSetting;
+}
 
-export function startPromptHandoff(
-  sessionId: string,
-  prompt: string,
-  config: { modelId?: string; thinkingLevel?: ThinkingLevelSetting },
-): PromptHandoff {
-  unsentHandoffs.add(sessionId);
+// History keeps a thread's route state, so only the tab that opened it may send its first prompt, once.
+const unsentHandoffs = new Map<string, HandoffModel>();
+
+export function startPromptHandoff(sessionId: string, prompt: string, model: HandoffModel): PromptHandoff {
+  unsentHandoffs.set(sessionId, model);
+  storePendingHandoff(sessionId, prompt);
   return {
     handoffPrompt: prompt,
-    handoffModelId: config.modelId,
-    handoffThinkingLevel: config.thinkingLevel,
+    handoffModelId: model.modelId,
+    handoffThinkingLevel: model.thinkingLevel,
   };
 }
 
@@ -112,16 +114,20 @@ export function useHandoffPrompt(): void {
 
   useEffect(() => {
     if (handedOff.current) return;
+    const startOn = async ({ modelId, thinkingLevel }: HandoffModel) => {
+      if (!modelId) return;
+      await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
+        pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
+      );
+    };
     // The prompt shows as soon as the thread opens, while its session may still
-    // be being created; it sends once the session exists. Kept recoverable from
-    // then on: leaving before the send, or an interrupted send, must not lose it.
+    // be being created; it sends once the session exists.
     if (prompt !== undefined && !shown.current) {
       if (!unsentHandoffs.has(sessionId)) {
         void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
         return;
       }
       shown.current = true;
-      storePendingHandoff(sessionId, prompt);
       const files = peekHandoffFiles(sessionId);
       if (prompt || files.length > 0) localUser(prompt, false, toOutgoing(files));
     }
@@ -129,10 +135,12 @@ export function useHandoffPrompt(): void {
     if (prompt === undefined) {
       if (recovered.current) return;
       recovered.current = true;
+      const leftModel = unsentHandoffs.get(sessionId);
       unsentHandoffs.delete(sessionId);
       const interruptedPrompt = readPendingHandoff(sessionId);
       const interruptedFiles = takeHandoffFiles(sessionId);
       if (interruptedPrompt || interruptedFiles.length > 0) {
+        if (leftModel) void startOn(leftModel);
         if (interruptedPrompt) prefillComposer(interruptedPrompt);
         if (interruptedFiles.length > 0) setImages(current => [...interruptedFiles, ...current]);
         pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
@@ -147,11 +155,7 @@ export function useHandoffPrompt(): void {
     if (!prompt && files.length === 0) return;
     const outgoing = toOutgoing(files);
     void (async () => {
-      if (modelId) {
-        await switchModel({ modelId, thinkingLevel }).catch((error: unknown) =>
-          pushNotice(error instanceof Error ? error.message : `Could not start on ${modelId}.`, 'error'),
-        );
-      }
+      await startOn({ modelId, thinkingLevel });
       await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
       clearPendingHandoff(sessionId);
     })().catch(error => {
