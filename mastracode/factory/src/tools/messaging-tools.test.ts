@@ -327,12 +327,15 @@ describe('factory_signal_session', () => {
         deliverAt: '2026-10-14T10:10:00.000Z',
       });
       vi.useRealTimers();
-      await new Promise(resolve => setTimeout(resolve, QUEUE_WAIT_MS));
-      await new Promise(resolve => setTimeout(resolve, QUEUE_WAIT_MS));
-      expect(sent.slice(SIGNAL_RATE_LIMIT).map(entry => entry.input.summary)).toEqual([
-        'first queued',
-        'second queued',
-      ]);
+      await vi.waitFor(
+        () => {
+          expect(sent.slice(SIGNAL_RATE_LIMIT).map(entry => entry.input.summary)).toEqual([
+            'first queued',
+            'second queued',
+          ]);
+        },
+        { timeout: QUEUE_WAIT_MS * 2, interval: 20 },
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -353,18 +356,22 @@ describe('factory_signal_session', () => {
 
       dropThreads();
       vi.useRealTimers();
-      await new Promise(resolve => setTimeout(resolve, QUEUE_WAIT_MS));
-      expect(sent.filter(entry => entry.input.summary === 'will be gone')).toHaveLength(0);
-      expect(auditRecorder.record).toHaveBeenCalledWith(
-        expect.objectContaining({
-          action: 'factory.agent.signaled',
-          metadata: expect.objectContaining({
-            targetSessionId: 'session-b',
-            delivery: 'dropped',
-            reason: 'thread-not-found',
-          }),
-        }),
+      await vi.waitFor(
+        () => {
+          expect(auditRecorder.record).toHaveBeenCalledWith(
+            expect.objectContaining({
+              action: 'factory.agent.signaled',
+              metadata: expect.objectContaining({
+                targetSessionId: 'session-b',
+                delivery: 'dropped',
+                reason: 'thread-not-found',
+              }),
+            }),
+          );
+        },
+        { timeout: QUEUE_WAIT_MS * 2, interval: 20 },
       );
+      expect(sent.filter(entry => entry.input.summary === 'will be gone')).toHaveLength(0);
     } finally {
       vi.useRealTimers();
     }
