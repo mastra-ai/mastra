@@ -10,7 +10,8 @@
  * embedded mocks directly.
  */
 
-import { vi, type Mock } from 'vitest';
+import { vi } from 'vitest';
+import type { Mock } from 'vitest';
 
 export type MockFn = Mock<(...args: any[]) => any>;
 export type MockFactory = () => MockFn;
