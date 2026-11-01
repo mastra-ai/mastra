@@ -453,6 +453,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'studio/knowledge',
+              label: 'Knowledge',
+            },
+            {
+              type: 'doc',
               id: 'studio/observability',
               label: 'Observability',
             },

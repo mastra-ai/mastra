@@ -5,8 +5,8 @@ import { Knowledge } from './index';
 
 describe('Knowledge public types', () => {
   it('preserves keyed instance types through Mastra accessors', () => {
-    const primary = new Knowledge({ id: 'primary', storage: new InMemoryStore() });
-    const analytics = new Knowledge({ id: 'analytics', storage: new InMemoryStore() });
+    const primary = new Knowledge({ id: 'primary', storage: new InMemoryStore(), scopes: {} });
+    const analytics = new Knowledge({ id: 'analytics', storage: new InMemoryStore(), scopes: {} });
     const mastra = new Mastra({ knowledge: { default: primary, analytics } });
 
     expectTypeOf(mastra.getKnowledge('default')).toEqualTypeOf<Knowledge>();

@@ -84,6 +84,50 @@ describe('TemporalRun', () => {
     }
   });
 
+  it("uses the workflow's validateInputs when the build cannot read its options", async () => {
+    const packageRoot = fileURLToPath(new URL('..', import.meta.url));
+    const directory = await realpath(await mkdtemp(path.join(packageRoot, '.validate-inputs-')));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    try {
+      const sourcePath = path.join(directory, 'source.mjs');
+      await writeFile(
+        sourcePath,
+        `import { createWorkflow } from '@mastra/core/workflows';
+         import { sharedOptions } from './options.mjs';
+         export const echoWorkflow = createWorkflow({ id: 'echo-workflow', options: sharedOptions }).then('echo').commit();`,
+      );
+      await writeFile(path.join(directory, 'options.mjs'), 'export const sharedOptions = { validateInputs: false };');
+      const { outputPath } = await buildTemporalWorkflowModule(sourcePath, directory, 'workflow.mjs');
+      const workflows: Record<string, (args: unknown) => Promise<unknown>> = await import(
+        pathToFileURL(outputPath).href
+      );
+      const received: unknown[] = [];
+      vi.mocked(proxyActivities).mockReturnValue({
+        echo: async ({ validateInputs }: { validateInputs?: boolean }) => received.push(validateInputs),
+      });
+      const executions: Promise<unknown>[] = [];
+      const start = vi.fn(async (workflowType: string, options: { args: [unknown] }) => {
+        const execution = workflows[workflowType]!(overTheWire(options.args[0]));
+        executions.push(execution);
+        return { result: async () => overTheWire(await execution) };
+      });
+      const workflow = createWorkflow(
+        { id: 'echo-workflow', options: { validateInputs: false } },
+        { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+      );
+
+      await (await workflow.createRun()).start({ inputData: {} });
+      await (await workflow.createRun()).startAsync({ inputData: {} });
+      await Promise.all(executions);
+
+      expect(received).toEqual([false, false]);
+    } finally {
+      warn.mockRestore();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it('returns one step record per step, like a local run', async () => {
     const schema = z.object({ value: z.number() });
     const step = createStep({

@@ -14,11 +14,15 @@ function withRequestContext(params) {
   };
 }
 function createStep(args) {
-  return async params => {
-    return args.execute({
-      ...withRequestContext(params),
-      mastra
-    });
+  return {
+    inputSchema: args.inputSchema,
+    requestContextSchema: args.requestContextSchema,
+    execute: async params => {
+      return args.execute({
+        ...withRequestContext(params),
+        mastra
+      });
+    }
   };
 }
 const mastra = {

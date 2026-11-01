@@ -242,6 +242,29 @@ describe('workflow transform', () => {
     ).rejects.toThrow('requires an inline function or a statically declared function identifier');
   });
 
+  // A setting the build cannot read is left out, so the Worker uses the one run.start() sends.
+  const readSetting = 'validateInputs: false';
+  const leftOut = "createWorkflow('checked-workflow')";
+  it.each([
+    ['options: { ...sharedOptions, validateInputs: false }', readSetting],
+    ["options: { ['validateInputs']: false }", readSetting],
+    ['options: { validateInputs: false, tracingPolicy: sharedOptions.tracingPolicy }', readSetting],
+    ['options: sharedOptions', leftOut],
+    ['options: { validateInputs: flag }', leftOut],
+    ['options: { validateInputs: false, ...sharedOptions }', leftOut],
+    ['options: { [key]: false }', leftOut],
+  ])('reads validateInputs from %s at build time', async (options, expected) => {
+    const output = await transform(`
+      import { createWorkflow } from '@mastra/core/workflows';
+      const sharedOptions = {};
+      const flag = false;
+      const key = 'validateInputs';
+      export const checkedWorkflow = createWorkflow({ id: 'checked-workflow', ${options} }).commit();
+    `);
+
+    expect(output).toContain(expected);
+  });
+
   it('forwards mapping options while retaining the generated mapping activity id', async () => {
     const result = await transform(`
       import { createWorkflow } from '@mastra/core/workflows';

@@ -14,7 +14,6 @@ import { ScheduleFireComponent } from '../components/schedule-fire.js';
 import { SlashCommandComponent } from '../components/slash-command.js';
 import { StateSignalComponent } from '../components/state-signal.js';
 import { SubagentExecutionComponent } from '../components/subagent-execution.js';
-import { SubconsciousActivityComponent } from '../components/subconscious-activity.js';
 import { TemporalGapComponent } from '../components/temporal-gap.js';
 import { UserMessageComponent } from '../components/user-message.js';
 import { addPendingUserMessage, addUserMessage, renderExistingMessages } from '../render-messages.js';
@@ -261,54 +260,28 @@ describe('addUserMessage', () => {
     expect(state.messageComponentsById.get('state-signal-1')).toBeInstanceOf(StateSignalComponent);
   });
 
-  it('renders valid Subconscious activity values with the specialized component', () => {
+  it('labels the Knowledge state signal as pinned context', () => {
     const state = createState();
     addUserMessage(
       state,
       createStateSignalMessage(
         {
-          stateId: 'subconscious-activity',
+          stateId: 'knowledge',
           mode: 'snapshot',
           version: 1,
-          message: 'Hot: [[Atlas launch]] (1)',
-          value: {
-            updates: [
-              {
-                action: 'record-created',
-                type: 'record',
-                name: 'Atlas launch',
-                createdAt: '2026-07-15T00:00:00.000Z',
-              },
-            ],
-            hot: [{ type: 'node', name: 'Atlas launch', updates: 1 }],
-          },
+          message: '<pinned-knowledge count="1">Always answer in French.</pinned-knowledge>',
         },
-        'subconscious-activity-1',
+        'pins-1',
       ),
     );
 
-    expect(state.messageComponentsById.get('subconscious-activity-1')).toBeInstanceOf(SubconsciousActivityComponent);
-  });
-
-  it('falls back to generic state rendering for malformed Subconscious activity values', () => {
-    const state = createState();
-    addUserMessage(
-      state,
-      createStateSignalMessage(
-        {
-          stateId: 'subconscious-activity',
-          mode: 'snapshot',
-          version: 1,
-          message: 'Malformed activity remains visible',
-          value: { updates: 'invalid', hot: [] },
-        },
-        'subconscious-activity-invalid',
-      ),
-    );
-
-    const component = state.messageComponentsById.get('subconscious-activity-invalid');
-    expect(component).toBeInstanceOf(StateSignalComponent);
-    expect(component?.render(80).join('\n')).toContain('Malformed activity remains visible');
+    const rendered = state.messageComponentsById
+      .get('pins-1')!
+      .render(100)
+      .map(line => stripAnsi(line))
+      .join('\n');
+    expect(rendered).toContain('State snapshot: pinned context');
+    expect(rendered).not.toContain('subconscious');
   });
 
   it('does not render the tasks state signal inline (the pinned task UI shows it)', () => {
