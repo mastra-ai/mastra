@@ -46,6 +46,7 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -103,6 +104,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -171,6 +173,7 @@ jobs:
       TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout PR code
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -238,6 +241,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
 
     steps:
       - name: Skip tests when no test selection is needed
