@@ -1001,7 +1001,7 @@ export class MCPServer extends MCPServerBase {
       const tool = this.convertedTools[name];
       if (!tool) {
         this.logger.warn('Unknown tool requested', { tool: name });
-        return errorResult(`Unknown tool: ${name}`);
+        throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${name}`);
       }
       const args = request.params.arguments ?? {};
       const argsHash = hashArguments(args);

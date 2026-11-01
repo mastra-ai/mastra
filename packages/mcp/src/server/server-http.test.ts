@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import {
   Client,
   LOG_LEVEL_META_KEY,
+  ProtocolError,
   SdkError,
   SdkErrorCode,
   StreamableHTTPClientTransport,
@@ -184,9 +185,21 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
       const result = await client.callTool({ name: 'echoTool', arguments: { text: 42 } });
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain('text');
-      const unknown = await client.callTool({ name: 'nope', arguments: {} });
-      expect(unknown.isError).toBe(true);
-      expect(textOf(unknown)).toBe('Unknown tool: nope');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('rejects an unknown tool with a JSON-RPC InvalidParams error', async () => {
+    const client = await connectClient(served.url);
+    try {
+      const error = await client.callTool({ name: 'nope', arguments: {} }).then(
+        () => undefined,
+        (e: unknown) => e,
+      );
+      expect(error).toBeInstanceOf(ProtocolError);
+      expect((error as ProtocolError).code).toBe(-32602);
+      expect((error as ProtocolError).message).toContain('Unknown tool: nope');
     } finally {
       await client.close();
     }
