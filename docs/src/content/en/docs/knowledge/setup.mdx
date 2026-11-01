@@ -121,3 +121,87 @@ Knowledge tools need run scopes: give the agent or the call `scopes`, or run it 
 const tools = knowledge.createTools({ read: true })
 const instructions = knowledge.getInstructions({ read: true })
 ```
+
+## Sync content into Knowledge
+
+Use `knowledge.upsertPage()` to write pages from your own server code, for example to keep your product docs in Knowledge so agents can search and read them. A page is identified by its scope and its key path, so running the sync again updates the same pages and skips the ones that didn't change.
+
+Declare a scope for the synced content and say who can read it:
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'docs:$orgId': {
+      description: 'Product docs, synced from the docs site',
+      belongsTo: 'org:$orgId',
+      access: [{ principal: 'org:$orgId', role: 'viewer' }],
+    },
+  },
+  tools: true,
+})
+```
+
+Then write each doc to a path in that scope. Keys in a path can't contain `#` or `%`, and missing pages along the path are created with their key as name:
+
+```typescript title="src/sync-docs.ts"
+import { knowledge } from './mastra/knowledge'
+
+type Doc = { slug: string; title: string; markdown: string }
+
+export async function syncDocs(orgId: string, docs: Doc[]) {
+  for (const doc of docs) {
+    // slug "guides/install" becomes the page docs:acme#guides/install
+    const { status } = await knowledge.upsertPage({
+      scope: `docs:${orgId}`,
+      path: doc.slug,
+      name: doc.title,
+      body: doc.markdown,
+      author: 'sync:docs',
+    })
+    console.log(doc.slug, status) // 'created', 'updated' or 'unchanged'
+  }
+}
+
+export async function removeDocs(orgId: string, slugs: string[]) {
+  // Remove child pages before their parents.
+  const deepestFirst = [...slugs].sort((a, b) => b.split('/').length - a.split('/').length)
+  for (const slug of deepestFirst) {
+    await knowledge.removePage({ scope: `docs:${orgId}`, path: slug })
+  }
+}
+```
+
+Agents whose run scopes include `org:acme` can now find these pages with `knowledge_search` and open them with `knowledge_read`, for example `docs:acme#guides/install`.
+
+To sync notes too, such as comments or dated changes, add them to a page with `knowledge.addNote()`. Notes have no path, so store the ID it returns next to your source's ID:
+
+```typescript title="src/sync-docs.ts"
+const note = await knowledge.addNote({
+  scope: 'docs:acme',
+  path: 'guides/install',
+  text: 'Node 18 support ends on [[docs:acme#releases/2026-12]].',
+  when: new Date('2026-11-01'),
+  author: 'sync:docs',
+})
+
+// Notes are immutable: updateNote replaces the note and returns one with a new ID.
+const updated = await knowledge.updateNote({ id: note.id, text: 'Node 18 support ended.' })
+
+await knowledge.removeNote({ id: updated.id }) // null if it was already removed
+```
+
+A note is visible to readers of the page's scope unless you pass `stamps` (scope addresses) to narrow it. A `[[scope#path]]` mention links the note to that page and hides the note from readers who can't read that page's scope. Other `[[...]]` text stays as written.
+
+Keep in mind:
+
+- These methods are for trusted server code. They check no run scopes or access rules, so don't call them from an agent tool or from a route without admin-level auth. The scope's `access` rules decide who can read the pages. `explainAccess()` explains what runs can reach and doesn't cover these writes.
+- A scope first created by `upsertPage()` gets its `belongsTo` parent (here `org:acme`) the first time a run holding that parent uses Knowledge.
+- Notes, yours or agents', stay on a page when the sync updates its body. A note is at most 250 tokens.
+- Fields you leave out stay as they are. A `description` is at most 100 tokens.
+- With a `vector` store and `embedder`, written pages and notes are embedded. If embedding fails, the write still succeeds and Mastra logs a warning. Run `knowledge.reindex()` to repair.
+- `removePage()` returns `null` when no page is at that path. It refuses a page that still has child pages and a page declared in the scope's `pages`. If another write changes the page while it's being removed, the call throws, so run removals from one worker or retry them.
+- Track which paths you synced last time in your app, so you know which ones to remove. That includes pages created along a path, such as `releases` for `releases/2026-12`, which stay until you remove them.

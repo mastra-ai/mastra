@@ -249,6 +249,62 @@ const [scope] = await store.getScopesByAddress(['team:acme:support'])
 const page = await store.getPageByPath({ scopeId: scope.id, path: ['handbook', 'refunds'], read })
 ```
 
+### `upsertPage()`
+
+```typescript oxfmt:false
+upsertPage(input: {
+  scope: string
+  path: string
+  name: string
+  description?: string
+  body?: string
+  author?: string
+}): Promise<{ page: KnowledgePage; status: 'created' | 'updated' | 'unchanged' }>
+```
+
+Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. An empty key throws `Knowledge page path "<path>" needs non-empty keys.` See [sync content into Knowledge](/docs/knowledge/setup#sync-content-into-knowledge).
+
+This method and the four below are host-only: they check no run scopes or access rules. Don't expose them through an agent tool, or through a server route without admin-level auth.
+
+### `removePage()`
+
+```typescript oxfmt:false
+removePage(input: { scope: string; path: string; author?: string }): Promise<KnowledgePage | null>
+```
+
+Removes the page at `path` and resolves to it, or to `null` when no page is there. Throws `"<scope>#<path>" has child pages; remove them first.` for a page with children, and `"<scope>#<path>" is declared in config; change the scope's pages to remove it.` for a template page. Throws without retrying when another write changed the page first.
+
+### `addNote()`
+
+```typescript oxfmt:false
+addNote(input: {
+  scope: string
+  path: string
+  text: string
+  when?: Date
+  stamps?: string[]
+  author?: string
+}): Promise<KnowledgeNote>
+```
+
+Adds a note to the page at `path`. `text` is at most 250 tokens. `[[scope#path]]` mentions of existing pages link the note to them. Other `[[...]]` text stays plain. `stamps` are the scope addresses whose readers see the note and default to the page's scope. Throws `KnowledgeNotFoundError` when the page doesn't exist.
+
+### `updateNote()`
+
+```typescript oxfmt:false
+updateNote(input: { id: string; text: string; when?: Date; stamps?: string[]; author?: string }): Promise<KnowledgeNote>
+```
+
+Replaces a note: adds the new note, then removes the old one, and resolves to the new note with a new ID. `when` and `stamps` keep their old values when left out. If removing the old note fails, the new note is already written, so call `removeNote()` with the old ID.
+
+### `removeNote()`
+
+```typescript oxfmt:false
+removeNote(input: { id: string; author?: string }): Promise<KnowledgeNote | null>
+```
+
+Removes a note and resolves to it, or to `null` when it's already gone.
+
 ### `onChange()`
 
 ```typescript oxfmt:false
