@@ -1,5 +1,7 @@
+import { KnowledgeNotFoundError } from '../storage/domains/knowledge/base';
 import type { KnowledgeStorage } from '../storage/domains/knowledge/base';
-import type { KnowledgePage, KnowledgeProvenance } from '../storage/domains/knowledge/pages';
+import { assertKnowledgeNoteTextWithinBound } from '../storage/domains/knowledge/pages';
+import type { KnowledgeNote, KnowledgePage, KnowledgeProvenance } from '../storage/domains/knowledge/pages';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
 import type { KnowledgeSemanticIndex } from './semantic';
 
@@ -36,6 +38,34 @@ export interface KnowledgeUpsertPageResult {
 export interface KnowledgeRemovePageInput {
   scope: string;
   path: string;
+  author?: string;
+}
+
+/**
+ * A note an app adds to a page from outside an agent run, e.g. a comment synced from a docs site.
+ * @experimental
+ */
+export interface KnowledgeAddNoteInput {
+  /** Scope address and key path of the page, as in {@link KnowledgeUpsertPageInput}. */
+  scope: string;
+  path: string;
+  /** At most 250 tokens. `[[scope#path]]` mentions link to that page; other `[[...]]` stay text. */
+  text: string;
+  /** When the note's fact happened or applies. */
+  when?: Date;
+  /** Scope addresses whose readers see the note. Default: the page's scope. */
+  stamps?: string[];
+  author?: string;
+}
+
+/** @experimental */
+export interface KnowledgeUpdateNoteInput {
+  /** The note's id, from `addNote`. */
+  id: string;
+  text: string;
+  /** Left as they were when omitted. */
+  when?: Date;
+  stamps?: string[];
   author?: string;
 }
 
@@ -166,4 +196,99 @@ export async function removeKnowledgePage(
   }
   await embed(host, index => index.remove([`page:${page.id}`]));
   return deleted;
+}
+
+const MENTION = /\[\[([^\]]+)\]\]/g;
+
+/** Resolves `[[scope#path]]` mentions to page ids; anything else stays plain text. */
+async function resolveMentions(storage: KnowledgeStorage, text: string): Promise<string[]> {
+  const ids = new Set<string>();
+  for (const [, raw] of text.matchAll(MENTION)) {
+    const ref = raw!.trim();
+    const hash = ref.indexOf('#');
+    if (hash <= 0) continue;
+    const [scope] = await storage.getScopesByAddress([ref.slice(0, hash)]);
+    const keys = ref.slice(hash + 1).split('/');
+    if (!scope || keys.some(key => !key)) continue;
+    const page = await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' });
+    if (page) ids.add(page.id);
+  }
+  return [...ids];
+}
+
+async function stampScopeIds(host: KnowledgeHostWriter, stamps: string[], provenance: KnowledgeProvenance) {
+  const ids: string[] = [];
+  for (const address of new Set(stamps)) ids.push((await host.runtime.materializeScope(address, [], provenance)).id);
+  return ids;
+}
+
+/** @internal */
+export async function addKnowledgeNote(
+  host: KnowledgeHostWriter,
+  input: KnowledgeAddNoteInput,
+): Promise<KnowledgeNote> {
+  const keys = splitPath(input.path);
+  const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
+  const storage = await host.getStorage();
+  const [scope] = await storage.getScopesByAddress([input.scope]);
+  const page = scope ? await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' }) : null;
+  if (!scope || !page) throw new KnowledgeNotFoundError('page', `${input.scope}#${input.path}`);
+  const note = await storage.addNote({
+    pageId: page.id,
+    text: input.text,
+    when: input.when,
+    stampScopeIds: input.stamps?.length ? await stampScopeIds(host, input.stamps, provenance) : [scope.id],
+    mentions: await resolveMentions(storage, input.text),
+    provenance,
+  });
+  await embed(host, index => index.indexNote(note));
+  return note;
+}
+
+/** @internal */
+export async function updateKnowledgeNote(
+  host: KnowledgeHostWriter,
+  input: KnowledgeUpdateNoteInput,
+): Promise<KnowledgeNote> {
+  assertKnowledgeNoteTextWithinBound(input.text);
+  const provenance: KnowledgeProvenance = { author: input.author ?? 'host' };
+  const storage = await host.getStorage();
+  const old = await storage.getNote({ id: input.id, read: 'all' });
+  if (!old) throw new KnowledgeNotFoundError('note', input.id);
+  // Notes are immutable: add the new one first so a failed write never loses the old text.
+  const note = await storage.addNote({
+    pageId: old.pageId,
+    text: input.text,
+    when: input.when ?? old.when,
+    stampScopeIds: input.stamps?.length ? await stampScopeIds(host, input.stamps, provenance) : old.stampScopeIds,
+    mentions: await resolveMentions(storage, input.text),
+    provenance,
+  });
+  await storage.removeNote({ id: old.id, deletedBy: provenance.author, provenance });
+  await embed(host, async index => {
+    await index.remove([`note:${old.id}`]);
+    await index.indexNote(note);
+  });
+  return note;
+}
+
+/** @internal */
+export async function removeKnowledgeNote(
+  host: KnowledgeHostWriter,
+  input: { id: string; author?: string },
+): Promise<KnowledgeNote | null> {
+  const author = input.author ?? 'host';
+  const storage = await host.getStorage();
+  const note = await storage.getNote({ id: input.id, read: 'all' });
+  if (!note) return null;
+  let removed: KnowledgeNote;
+  try {
+    removed = await storage.removeNote({ id: note.id, deletedBy: author, provenance: { author } });
+  } catch (error) {
+    // Removed by someone else since the read.
+    if ((error as Error | undefined)?.name === 'KnowledgeNotFoundError') return null;
+    throw error;
+  }
+  await embed(host, index => index.remove([`note:${note.id}`]));
+  return removed;
 }

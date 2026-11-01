@@ -3,7 +3,7 @@ import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
 import type { KnowledgeReadScope, KnowledgeStorage } from '../storage/domains/knowledge';
-import type { KnowledgePage } from '../storage/domains/knowledge/pages';
+import type { KnowledgeNote, KnowledgePage } from '../storage/domains/knowledge/pages';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { knowledgeAccessGrants } from './access';
@@ -12,8 +12,20 @@ import type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
 import type { KnowledgeConfig } from './config';
 import { KnowledgeDeclarationError, strongerKnowledgeRole } from './declarations';
 import type { KnowledgeRole, KnowledgeScopeDeclarationInfo } from './declarations';
-import { removeKnowledgePage, upsertKnowledgePage } from './host-writes';
-import type { KnowledgeRemovePageInput, KnowledgeUpsertPageInput, KnowledgeUpsertPageResult } from './host-writes';
+import {
+  addKnowledgeNote,
+  removeKnowledgeNote,
+  removeKnowledgePage,
+  updateKnowledgeNote,
+  upsertKnowledgePage,
+} from './host-writes';
+import type {
+  KnowledgeAddNoteInput,
+  KnowledgeRemovePageInput,
+  KnowledgeUpdateNoteInput,
+  KnowledgeUpsertPageInput,
+  KnowledgeUpsertPageResult,
+} from './host-writes';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { buildKnowledgePageTools } from './page-tools';
@@ -228,6 +240,36 @@ export class Knowledge extends MastraBase {
    */
   removePage(input: KnowledgeRemovePageInput): Promise<KnowledgePage | null> {
     return removeKnowledgePage(this.#hostWriter(), input);
+  }
+
+  /**
+   * Adds a note to the page at `scope#path`; throws when there is no page there. Readers of the
+   * `stamps` scopes (default: the page's scope) see it. Keep the returned id to edit or remove it.
+   * Host-only, like {@link Knowledge.upsertPage}.
+   *
+   * @experimental
+   */
+  addNote(input: KnowledgeAddNoteInput): Promise<KnowledgeNote> {
+    return addKnowledgeNote(this.#hostWriter(), input);
+  }
+
+  /**
+   * Replaces a note's text. Notes are immutable, so this adds the new note and then removes the old
+   * one: the result has a **new id**. Host-only, like {@link Knowledge.upsertPage}.
+   *
+   * @experimental
+   */
+  updateNote(input: KnowledgeUpdateNoteInput): Promise<KnowledgeNote> {
+    return updateKnowledgeNote(this.#hostWriter(), input);
+  }
+
+  /**
+   * Removes a note; `null` when it is already gone. Host-only, like {@link Knowledge.upsertPage}.
+   *
+   * @experimental
+   */
+  removeNote(input: { id: string; author?: string }): Promise<KnowledgeNote | null> {
+    return removeKnowledgeNote(this.#hostWriter(), input);
   }
 
   #hostWriter() {
@@ -446,4 +488,10 @@ export interface KnowledgeScopeGrant {
   role: KnowledgeRole;
 }
 export type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
-export type { KnowledgeRemovePageInput, KnowledgeUpsertPageInput, KnowledgeUpsertPageResult } from './host-writes';
+export type {
+  KnowledgeAddNoteInput,
+  KnowledgeRemovePageInput,
+  KnowledgeUpdateNoteInput,
+  KnowledgeUpsertPageInput,
+  KnowledgeUpsertPageResult,
+} from './host-writes';

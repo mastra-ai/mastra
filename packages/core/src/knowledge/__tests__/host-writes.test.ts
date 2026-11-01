@@ -215,4 +215,70 @@ describe('Knowledge host page writes', () => {
     );
     expect(new Set(results.map(result => result.page.id)).size).toBe(1);
   });
+
+  describe('notes', () => {
+    it('adds a note runs can read, embeds it and links [[scope#path]] mentions', async () => {
+      const { knowledge, vector, call } = setup();
+      const install = await knowledge.upsertPage({ scope: 'docs:acme', path: 'install', name: 'Install' });
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'sso', name: 'SSO' });
+      const note = await knowledge.addNote({
+        scope: 'docs:acme',
+        path: 'install',
+        text: 'Needs [[docs:acme#sso]] set up first; see [[Nowhere]].',
+        when: new Date('2026-11-01'),
+      });
+      expect(note.pageId).toBe(install.page.id);
+      expect(note.provenance.author).toBe('host');
+      expect(note.mentions).toHaveLength(1);
+      expect(vector.rows.has(`note:${note.id}`)).toBe(true);
+
+      const read = await call(['org:acme'], 'knowledge_read', { page: 'docs:acme#install' });
+      expect(read.notes.map((n: { text: string }) => n.text)).toEqual([note.text]);
+      await expect(knowledge.addNote({ scope: 'docs:acme', path: 'missing', text: 'x' })).rejects.toThrow(/not found/);
+    });
+
+    it('stamps a note so only readers of those scopes see it', async () => {
+      const { knowledge, call } = setup();
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'install', name: 'Install' });
+      await knowledge.addNote({ scope: 'docs:acme', path: 'install', text: 'Acme only', stamps: ['org:acme'] });
+      const read = await call(['org:acme'], 'knowledge_read', { page: 'docs:acme#install' });
+      expect(read.notes.map((n: { text: string }) => n.text)).toEqual(['Acme only']);
+    });
+
+    it('updates a note as a new note and drops the old one and its vector', async () => {
+      const { knowledge, vector, storage, call } = setup();
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'install', name: 'Install' });
+      const old = await knowledge.addNote({
+        scope: 'docs:acme',
+        path: 'install',
+        text: 'Node 18',
+        when: new Date('2026-10-01'),
+      });
+      const updated = await knowledge.updateNote({ id: old.id, text: 'Node 20' });
+      expect(updated.id).not.toBe(old.id);
+      expect(updated.when).toEqual(old.when);
+      expect(updated.stampScopeIds).toEqual(old.stampScopeIds);
+      expect(vector.rows.has(`note:${old.id}`)).toBe(false);
+      expect(vector.rows.has(`note:${updated.id}`)).toBe(true);
+      const read = await call(['org:acme'], 'knowledge_read', { page: 'docs:acme#install' });
+      expect(read.notes.map((n: { text: string }) => n.text)).toEqual(['Node 20']);
+
+      const store = await knowledge.getStorage();
+      await expect(knowledge.updateNote({ id: updated.id, text: 'word '.repeat(400) })).rejects.toThrow(/250 token/);
+      expect((await store.getNote({ id: updated.id, read: 'all' }))?.text).toBe('Node 20');
+      await expect(knowledge.updateNote({ id: old.id, text: 'gone' })).rejects.toThrow(/not found/);
+    });
+
+    it('removes a note and its vector, and returns null when it is already gone', async () => {
+      const { knowledge, vector, call } = setup();
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'install', name: 'Install' });
+      const note = await knowledge.addNote({ scope: 'docs:acme', path: 'install', text: 'Old tip' });
+      expect((await knowledge.removeNote({ id: note.id }))?.deletedBy).toBe('host');
+      expect(vector.rows.has(`note:${note.id}`)).toBe(false);
+      const read = await call(['org:acme'], 'knowledge_read', { page: 'docs:acme#install' });
+      expect(read.notes).toEqual([]);
+      expect(await knowledge.removeNote({ id: note.id })).toBeNull();
+      expect(await knowledge.removeNote({ id: 'nope' })).toBeNull();
+    });
+  });
 });
