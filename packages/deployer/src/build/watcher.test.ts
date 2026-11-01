@@ -1,4 +1,6 @@
+import { posix } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { slash } from './utils';
 import { getInputOptions } from './watcher';
 
 // Mock bundler module at the top level
@@ -56,6 +58,32 @@ describe('watcher', () => {
   });
 
   describe('getInputOptions', () => {
+    it('writes analysis output to the provided outputDir', async () => {
+      const analyzeBundle = vi.mocked(await import('./analyze')).analyzeBundle;
+
+      await getInputOptions('test-entry.js', 'node', undefined, { outputDir: '/custom/root/.mastra/.build' });
+
+      expect(analyzeBundle).toHaveBeenCalledWith(
+        ['test-entry.js'],
+        'test-entry.js',
+        expect.objectContaining({ outputDir: '/custom/root/.mastra/.build' }),
+        expect.anything(),
+      );
+    });
+
+    it('defaults analysis output to <cwd>/.mastra/.build', async () => {
+      const analyzeBundle = vi.mocked(await import('./analyze')).analyzeBundle;
+
+      await getInputOptions('test-entry.js', 'node');
+
+      expect(analyzeBundle).toHaveBeenCalledWith(
+        ['test-entry.js'],
+        'test-entry.js',
+        expect.objectContaining({ outputDir: posix.join(slash(process.cwd()), '.mastra', '.build') }),
+        expect.anything(),
+      );
+    });
+
     it('should pass NODE_ENV to bundler when provided', async () => {
       // Arrange
       const env = { 'process.env.NODE_ENV': JSON.stringify('test') };
