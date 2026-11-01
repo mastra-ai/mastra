@@ -6,10 +6,10 @@
   "dependencies": {
     "@mastra/core": "e2e-test",
     "@mastra/libsql": "e2e-test",
-    "execa": "^9.6.1",
+    "execa": "^10.2.1",
     "typescript": "^5.9.3",
-    "typescript-language-server": "^4.3.4",
-    "vscode-jsonrpc": "^8.2.1",
+    "typescript-language-server": "^6.0.2",
+    "vscode-jsonrpc": "^10.0.0",
     "vscode-languageserver-protocol": "^3.17.5",
     "zod": "^4.6.7"
   },
