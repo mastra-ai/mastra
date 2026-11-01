@@ -129,22 +129,25 @@ describe('Transcript tool outcomes', () => {
         survivingEnd,
         [assistant('step', [gitStatus]), assistant('sealed', [gitStatusExit])],
       ],
-    ] as const)('reads as failed when the stream dropped %s, once the refetched thread brings it in', (_, survived, messages) => {
-      const events = [
-        { type: 'message_start', message: assistant('turn', []) },
-        survived,
-        { type: 'message_end', id: 'turn' },
-      ] as const;
-      const streamed = events.reduce(
-        (next, event) => transcriptReducer(next, { type: 'event', event }),
-        initialTranscript,
-      );
-      const refetched = transcriptReducer(streamed, { type: 'mergeWindow', messages: [...messages] });
-      renderEntries(refetched.entries);
+    ] as const)(
+      'reads as failed when the stream dropped %s, once the refetched thread brings it in',
+      (_, survived, messages) => {
+        const events = [
+          { type: 'message_start', message: assistant('turn', []) },
+          survived,
+          { type: 'message_end', id: 'turn' },
+        ] as const;
+        const streamed = events.reduce(
+          (next, event) => transcriptReducer(next, { type: 'event', event }),
+          initialTranscript,
+        );
+        const refetched = transcriptReducer(streamed, { type: 'mergeWindow', messages: [...messages] });
+        renderEntries(refetched.entries);
 
-      const line = screen.getByRole('group', { name: 'Ran git status' });
-      expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
-    });
+        const line = screen.getByRole('group', { name: 'Ran git status' });
+        expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
+      },
+    );
 
     it('keeps a clean exit, and a process it killed, successful', () => {
       const { entries } = createInitialTranscript({
