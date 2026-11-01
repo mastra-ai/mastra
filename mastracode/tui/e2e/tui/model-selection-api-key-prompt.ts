@@ -63,7 +63,6 @@ export const modelSelectionApiKeyPromptScenario = {
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Select model for plan mode/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Type to search/i, terminal, 8_000);
 
     terminal.write(selectedModel);
     await runtime.waitForScreenText(/Use: 302ai\/keyprompt-e2e-model/i, terminal, 8_000);

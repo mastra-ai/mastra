@@ -1,17 +1,19 @@
 /**
- * General settings component.
- * Uses pi-tui's SettingsList for a clean overlay with
- * notifications, YOLO mode, and thinking level configuration.
+ * General settings menu (/settings): notifications, YOLO mode, thinking level and more.
  *
- * Changes apply immediately — Esc closes the panel.
+ * Changes apply immediately — Esc closes the menu.
  */
 
-import { Box, Container, SelectList, SettingsList, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
+import { Container, Spacer, Text, matchesKey } from '@earendil-works/pi-tui';
 import type { Focusable, SelectItem, SettingItem } from '@earendil-works/pi-tui';
 import type { ExperimentalAgent, StorageBackend, WebSearchProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import type { NotificationMode } from '../notify.js';
-import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { theme } from '../theme.js';
 import { MaskedInput } from './masked-input.js';
+import type { MenuChrome } from './menu-chrome.js';
+import { lowerFirst } from './menu-chrome.js';
+import { MenuList } from './menu-list.js';
+import { SettingsMenu } from './settings-menu.js';
 import { getThinkingLevelsForModel } from './thinking-settings.js';
 
 // =============================================================================
@@ -60,14 +62,14 @@ export interface SettingsCallbacks {
 // Select Submenu (reusable for any enum-style setting)
 // =============================================================================
 
-class SelectSubmenu extends SelectList {
+class SelectSubmenu extends MenuList {
   constructor(
     items: SelectItem[],
     currentValue: string,
     onSelect: (value: string) => void | Promise<void>,
     onBack: () => void,
   ) {
-    super(items, Math.min(items.length, 8), getSelectListTheme());
+    super(items, Math.min(items.length, 8));
 
     const currentIndex = items.findIndex(i => i.value === currentValue);
     if (currentIndex !== -1) {
@@ -88,7 +90,7 @@ class SelectSubmenu extends SelectList {
 class StorageBackendSubmenu extends Container {
   private phase: 'select' | 'connection' = 'select';
   private pendingBackend: StorageBackend = 'libsql';
-  private selectList: SelectList;
+  private selectList: MenuList;
   private input!: MaskedInput;
   private onDone: (backend: StorageBackend, connectionUrl?: string) => void;
   private onBack: () => void;
@@ -112,17 +114,17 @@ class StorageBackendSubmenu extends Container {
     const items: SelectItem[] = [
       {
         value: 'libsql',
-        label: '  LibSQL',
+        label: 'LibSQL',
         description: 'Local file-based SQLite or remote Turso URL',
       },
       {
         value: 'pg',
-        label: '  PostgreSQL',
+        label: 'PostgreSQL',
         description: 'Remote PostgreSQL (requires connection string)',
       },
     ];
 
-    this.selectList = new SelectList(items, items.length, getSelectListTheme());
+    this.selectList = new MenuList(items, items.length);
     const currentIndex = items.findIndex(i => i.value === currentBackend);
     if (currentIndex !== -1) this.selectList.setSelectedIndex(currentIndex);
 
@@ -158,9 +160,6 @@ class StorageBackendSubmenu extends Container {
       this.input.setValue(currentValue);
     }
     this.addChild(this.input);
-
-    this.addChild(new Spacer(1));
-    this.addChild(new Text(theme.fg('dim', 'Enter to save · Esc to go back'), 0, 0));
   }
 
   handleInput(data: string): void {
@@ -217,8 +216,8 @@ function storageLabel(config: SettingsConfig): string {
 // Settings Component
 // =============================================================================
 
-export class SettingsComponent extends Box implements Focusable {
-  private settingsList: SettingsList;
+export class SettingsComponent extends Container implements Focusable, MenuChrome {
+  private settingsList: SettingsMenu;
   private _focused = false;
 
   get focused(): boolean {
@@ -229,11 +228,7 @@ export class SettingsComponent extends Box implements Focusable {
   }
 
   constructor(config: SettingsConfig, callbacks: SettingsCallbacks) {
-    super(4, 2, (text: string) => theme.bg('overlayBg', text));
-
-    // Title
-    this.addChild(new Text(theme.bold(theme.fg('accent', 'Settings')), 0, 0));
-    this.addChild(new Spacer(1));
+    super();
 
     // Build settings items
     const notificationModes: {
@@ -267,7 +262,7 @@ export class SettingsComponent extends Box implements Focusable {
           new SelectSubmenu(
             notificationModes.map(m => ({
               value: m.value,
-              label: `  ${m.label}`,
+              label: m.label,
               description: m.desc,
             })),
             config.notifications,
@@ -289,12 +284,12 @@ export class SettingsComponent extends Box implements Focusable {
             [
               {
                 value: 'on',
-                label: '  On',
+                label: 'On',
                 description: 'Auto-approve all tools',
               },
               {
                 value: 'off',
-                label: '  Off',
+                label: 'Off',
                 description: 'Require approval for tools',
               },
             ],
@@ -316,7 +311,7 @@ export class SettingsComponent extends Box implements Focusable {
           new SelectSubmenu(
             thinkingLevels.map(l => ({
               value: l.value,
-              label: `  ${l.label}`,
+              label: l.label,
               description: l.desc,
             })),
             config.thinkingLevel,
@@ -338,12 +333,12 @@ export class SettingsComponent extends Box implements Focusable {
             [
               {
                 value: 'on',
-                label: '  On',
+                label: 'On',
                 description: 'Escape clears input / aborts',
               },
               {
                 value: 'off',
-                label: '  Off',
+                label: 'Off',
                 description: 'Only Ctrl+C clears / aborts',
               },
             ],
@@ -365,7 +360,7 @@ export class SettingsComponent extends Box implements Focusable {
           new SelectSubmenu(
             [0, 1, 2, 4, 8].map(lines => ({
               value: String(lines),
-              label: `  ${previewLinesLabel(lines)}`,
+              label: previewLinesLabel(lines),
               description:
                 lines === 0
                   ? 'Hide tool previews and shell output'
@@ -390,19 +385,19 @@ export class SettingsComponent extends Box implements Focusable {
             [
               {
                 value: 'auto',
-                label: '  Auto',
+                label: 'Auto',
                 description: 'First configured provider key (Tavily, then Parallel)',
               },
               {
                 value: 'tavily',
-                label: config.tavilyKeyAvailable ? '  Tavily' : '  Tavily (unavailable)',
+                label: config.tavilyKeyAvailable ? 'Tavily' : 'Tavily (unavailable)',
                 description: config.tavilyKeyAvailable
                   ? 'Always use Tavily'
                   : 'Missing TAVILY_API_KEY — set it to use Tavily',
               },
               {
                 value: 'parallel',
-                label: config.parallelKeyAvailable ? '  Parallel' : '  Parallel (unavailable)',
+                label: config.parallelKeyAvailable ? 'Parallel' : 'Parallel (unavailable)',
                 description: config.parallelKeyAvailable
                   ? 'Always use Parallel'
                   : 'Missing PARALLEL_API_KEY — set it to use Parallel',
@@ -430,12 +425,12 @@ export class SettingsComponent extends Box implements Focusable {
             [
               {
                 value: 'on',
-                label: '  On',
+                label: 'On',
                 description: 'Enable GitHub signal processor and PR subscription tools',
               },
               {
                 value: 'off',
-                label: '  Off',
+                label: 'Off',
                 description: 'Disable GitHub signal processor and tools',
               },
             ],
@@ -460,12 +455,12 @@ export class SettingsComponent extends Box implements Focusable {
             [
               {
                 value: 'on',
-                label: '  On',
+                label: 'On',
                 description: 'Enable cross-agent connection tools and thread ownership advertisement',
               },
               {
                 value: 'off',
-                label: '  Off',
+                label: 'Off',
                 description: 'Disable cross-agent communication',
               },
             ],
@@ -489,12 +484,12 @@ export class SettingsComponent extends Box implements Focusable {
             [
               {
                 value: 'on',
-                label: '  On',
+                label: 'On',
                 description: 'Give the agent schedule_create, schedule_list, schedule_update, and schedule_run',
               },
               {
                 value: 'off',
-                label: '  Off',
+                label: 'Off',
                 description: 'Only you can manage schedules, with /schedules',
               },
             ],
@@ -547,11 +542,11 @@ export class SettingsComponent extends Box implements Focusable {
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
             [
-              { value: 'off', label: '  Off', description: 'Use the standard coding agent' },
-              { value: 'durable', label: '  Durable', description: 'Use resumable durable agent streams' },
+              { value: 'off', label: 'Off', description: 'Use the standard coding agent' },
+              { value: 'durable', label: 'Durable', description: 'Use resumable durable agent streams' },
               {
                 value: 'evented',
-                label: '  Evented',
+                label: 'Evented',
                 description: 'Run the agent loop on the evented workflow engine',
               },
             ],
@@ -578,8 +573,8 @@ export class SettingsComponent extends Box implements Focusable {
         submenu: (_currentValue, done) =>
           new SelectSubmenu(
             [
-              { value: 'on', label: '  On', description: 'Enable background tools and the activity center' },
-              { value: 'off', label: '  Off', description: 'Keep background tools disabled' },
+              { value: 'on', label: 'On', description: 'Enable background tools and the activity center' },
+              { value: 'off', label: 'Off', description: 'Keep background tools disabled' },
             ],
             config.backgroundToolsEnabled ? 'on' : 'off',
             value => {
@@ -630,10 +625,9 @@ export class SettingsComponent extends Box implements Focusable {
       });
     }
 
-    this.settingsList = new SettingsList(
+    this.settingsList = new SettingsMenu(
       items,
       10,
-      getSettingsListTheme(),
       (_id, _newValue) => {
         // All changes handled via submenu callbacks
       },
@@ -641,6 +635,12 @@ export class SettingsComponent extends Box implements Focusable {
     );
 
     this.addChild(this.settingsList);
+  }
+
+  /** "settings › notifications" while a setting's submenu is open. */
+  menuTitle(): string | undefined {
+    const open = this.settingsList.openSubmenuLabel();
+    return open ? `settings › ${lowerFirst(open)}` : undefined;
   }
 
   handleInput(data: string): void {

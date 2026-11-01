@@ -115,7 +115,7 @@ export const mcpOauthAuthenticateScenario = {
 
     terminal.submit('/mcp');
     await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);
-    await runtime.waitForScreenText(/oauth_server \[http\] needs auth/i, terminal, 8_000);
+    await runtime.waitForScreenText(/oauth_server\s+\S+ needs auth \[http\]/i, terminal, 8_000);
 
     // Open the sub-menu; Authenticate is the first action.
     terminal.write('\r');
@@ -153,7 +153,7 @@ export const mcpOauthAuthenticateScenario = {
     await runtime.waitForScreenText(/MCP: Authenticated "oauth_server" — 1 tool\(s\)/i, terminal, 15_000);
 
     terminal.submit('/mcp');
-    await runtime.waitForScreenText(/oauth_server \[http\] connected.*1 tools/i, terminal, 8_000);
+    await runtime.waitForScreenText(/oauth_server\s+\S+ connected \[http\].*1 tools/i, terminal, 8_000);
     runtime.printScreen('mcp selector after oauth authenticate', terminal);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);

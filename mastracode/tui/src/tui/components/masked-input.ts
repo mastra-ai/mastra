@@ -3,11 +3,11 @@
  * The actual value is preserved; only the rendered output is masked.
  */
 
-import { Input } from '@earendil-works/pi-tui';
 import type { Component, Focusable } from '@earendil-works/pi-tui';
+import { TextInput } from './text-input.js';
 
 export class MaskedInput implements Component, Focusable {
-  private input: Input;
+  private input: TextInput;
   private masked = true;
 
   get focused(): boolean {
@@ -26,7 +26,7 @@ export class MaskedInput implements Component, Focusable {
   }
 
   constructor() {
-    this.input = new Input();
+    this.input = new TextInput();
   }
 
   getValue(): string {

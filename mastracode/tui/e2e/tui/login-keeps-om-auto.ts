@@ -56,7 +56,7 @@ export const loginKeepsOmAutoScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
     terminal.submit('/login');
-    await runtime.waitForScreenText(/Select provider to login:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/select provider to login/i, terminal, 8_000);
     await runtime.waitForScreenText(/ChatGPT Plus\/Pro \(Codex Subscription\)/i, terminal, 8_000);
     terminal.write('\x1b[B');
     terminal.write('\r');

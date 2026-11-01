@@ -66,11 +66,15 @@ export const mcpSkippedValidationScenario = {
     await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);
     await runtime.waitForScreenText(/4 servers/i, terminal, 8_000);
     await runtime.waitForScreenText(/Skipped:/i, terminal, 8_000);
-    await runtime.waitForScreenText(/ambiguous_entry — Cannot specify both "command" and "url"/i, terminal, 8_000);
-    await runtime.waitForScreenText(/malformed_url — Invalid URL: "not a valid url"/i, terminal, 8_000);
-    await runtime.waitForScreenText(/bad_oauth_redirect — Invalid OAuth redirectUrl: must use HTTPS/i, terminal, 8_000);
+    await runtime.waitForScreenText(/ambiguous_entry\s+⊘ Cannot specify both "command" and "url"/i, terminal, 8_000);
+    await runtime.waitForScreenText(/malformed_url\s+⊘ Invalid URL: "not a valid url"/i, terminal, 8_000);
     await runtime.waitForScreenText(
-      /missing_entry_fields — Missing required field: "command" \(stdio\) or "url" \(http\)/i,
+      /bad_oauth_redirect\s+⊘ Invalid OAuth redirectUrl: must use HTTPS/i,
+      terminal,
+      8_000,
+    );
+    await runtime.waitForScreenText(
+      /missing_entry_fields\s+⊘ Missing required field: "command" \(stdio\) or "url" \(http\)/i,
       terminal,
       8_000,
     );

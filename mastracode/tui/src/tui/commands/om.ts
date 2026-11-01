@@ -134,7 +134,7 @@ export async function handleOMCommand(ctx: SlashCommandContext): Promise<void> {
       ctx.state.ui,
     );
 
-    showModalOverlay(ctx.state.ui, settings, { widthPercent: 0.8, maxHeight: '70%' });
+    showModalOverlay(ctx.state.ui, settings, { title: 'Observational memory settings' });
     settings.focused = true;
   });
 }

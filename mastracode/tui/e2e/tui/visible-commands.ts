@@ -35,11 +35,11 @@ export const visibleCommandsScenario: McE2eScenario = {
     runtime.printScreen('after /theme status', terminal);
 
     terminal.submit('/theme');
-    await runtime.waitForScreenText(/preview · Enter select · Esc cancel/i, terminal);
+    await runtime.waitForScreenText(/Custom themes:/i, terminal);
     runtime.printScreen('after /theme', terminal);
 
     terminal.write('\x1b');
-    await runtime.waitForScreenTextAbsent(/preview · Enter select · Esc cancel/i, terminal);
+    await runtime.waitForScreenTextAbsent(/Custom themes:/i, terminal);
 
     terminal.submit('/theme neon');
     await runtime.waitForScreenText(/Could not load theme:/i, terminal);
