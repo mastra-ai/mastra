@@ -6361,8 +6361,8 @@ importers:
   pubsub/google-cloud-pubsub:
     dependencies:
       '@google-cloud/pubsub':
-        specifier: ^5.3.1
-        version: 5.3.1(supports-color@10.2.2)
+        specifier: ^6.3.1
+        version: 6.3.2(supports-color@10.2.2)
       '@opentelemetry/api':
         specifier: ^1.10.0
         version: 1.10.0
@@ -14420,10 +14420,6 @@ packages:
     resolution: {integrity: sha512-DJS3s0OVH4zFDB1PzjxAsHqJT6sKVbRwwML0ZBP9PbU7Yebtu/7SWMRzvO2J3nUi9pRNITCfu4LJeooM2w4pjg==}
     engines: {node: '>=14.0.0'}
 
-  '@google-cloud/paginator@6.1.0':
-    resolution: {integrity: sha512-9bxQ/QNhcq5c6ra75khWjA5Q9UHWp0vQnhwesmqPpLLF5PxmxCIsadIA5ssLxKted4/iZ2RlRPkW/E8p68W8cg==}
-    engines: {node: '>=18'}
-
   '@google-cloud/paginator@7.2.0':
     resolution: {integrity: sha512-l+x6YObHGTuqBCMvC0SXo3Cnyqg4FkWWKYRptf46PACHJ5GAUuhsd2b3wphgGrg1ybs/LAb+q5MnUTuG/3+v7w==}
     engines: {node: '>=22'}
@@ -14432,13 +14428,13 @@ packages:
     resolution: {integrity: sha512-ckZ1elVT/JXbO4kxltiT8tumYnTXGIY7OFrDMAJyVWAte/rUYiCuH1YbaKLQrZpYDp522xgTfPqqW/VxfXFdgA==}
     engines: {node: '>=18'}
 
+  '@google-cloud/precise-date@6.2.1':
+    resolution: {integrity: sha512-yCDQg8CoQxNGI0Bk7oWk+I0iMnR/k5KF86edhJYMCxzaQC4CEZOzsdl/rAcNSiy7Najn6TNIdaJ6UxU7y1twFw==}
+    engines: {node: '>=22'}
+
   '@google-cloud/projectify@4.0.0':
     resolution: {integrity: sha512-MmaX6HeSvyPbWGwFq7mXdo0uQZLGBYCwziiLIGq5JVX+/bdI3SAq6bP98trV5eTWfLuvsMcIC1YJOF2vfteLFA==}
     engines: {node: '>=14.0.0'}
-
-  '@google-cloud/projectify@5.2.0':
-    resolution: {integrity: sha512-u4lTO+UI9bwyd/qaVkhVpp57jVH0Pc7wkHE0snZkpQyoKheHDJwmfStao8cWXSF03DmrQltLLSoDjM2CGBpFJA==}
-    engines: {node: '>=18'}
 
   '@google-cloud/projectify@6.2.1':
     resolution: {integrity: sha512-PV9oy7VpQRXLuqKuU5RSOHFQyWgvw2sT9MoTGykja9j6c9pv5+ttKTJiFsccu500YYIGiz8JCOsb60PfKmiV/w==}
@@ -14460,9 +14456,13 @@ packages:
     resolution: {integrity: sha512-/+RvLJ5u+WhGay6Z3aY6OApDQmNqq1427Mmt7Eov9kYp69gdUiGSwFnygeTxfz69XBtYZLAnWikGMIoFXtKt+A==}
     engines: {node: '>=22'}
 
-  '@google-cloud/pubsub@5.3.1':
-    resolution: {integrity: sha512-xXAQBVVrFviWz8L8yDKEqv1ziVw/gMSpYHt3IxSYRSY0fTyjis+xOrKJILj8dd8PAUHGnGiAIYuTprflkE9jsQ==}
-    engines: {node: '>=18'}
+  '@google-cloud/pubsub-api@0.7.0':
+    resolution: {integrity: sha512-HlBt8JEceIJX9pgikVavq+6umuiEqc1loRwPPJgE8WNiRx1IgAyk9ohhwXwskFbPdzScpb/NKnSQOPy6lJYLFA==}
+    engines: {node: '>=22'}
+
+  '@google-cloud/pubsub@6.3.2':
+    resolution: {integrity: sha512-Ym0Qsu4dep1Pn/m14QHABE5gJ6PyysrpbMXGlgerFRKmxE5E9O0Drxi24qA+/vYqC5bNQUR9+ua0IyvT+CS4fA==}
+    engines: {node: '>=22'}
 
   '@google-cloud/spanner-api@0.2.0':
     resolution: {integrity: sha512-aWvKaAUtc2qWyfZ0bARWEe9YYDraZPAjbvcjerw4d5DiMMkDoybOyPHai1hVP5JL/7oPjtjAUvmHuMn/STdXtA==}
@@ -37351,23 +37351,17 @@ snapshots:
       arrify: 2.0.1
       extend: 3.0.2
 
-  '@google-cloud/paginator@6.1.0':
-    dependencies:
-      extend: 3.0.2
-
   '@google-cloud/paginator@7.2.0':
     dependencies:
       extend: 3.0.2
-    optional: true
 
   '@google-cloud/precise-date@5.2.0': {}
 
+  '@google-cloud/precise-date@6.2.1': {}
+
   '@google-cloud/projectify@4.0.0': {}
 
-  '@google-cloud/projectify@5.2.0': {}
-
-  '@google-cloud/projectify@6.2.1':
-    optional: true
+  '@google-cloud/projectify@6.2.1': {}
 
   '@google-cloud/promisify@4.0.0': {}
 
@@ -37375,23 +37369,29 @@ snapshots:
 
   '@google-cloud/promisify@5.1.0': {}
 
-  '@google-cloud/promisify@6.2.1':
-    optional: true
+  '@google-cloud/promisify@6.2.1': {}
 
-  '@google-cloud/pubsub@5.3.1(supports-color@10.2.2)':
+  '@google-cloud/pubsub-api@0.7.0(supports-color@10.2.2)':
     dependencies:
-      '@google-cloud/paginator': 6.1.0
-      '@google-cloud/precise-date': 5.2.0
-      '@google-cloud/projectify': 5.2.0
-      '@google-cloud/promisify': 5.1.0
+      google-gax: 6.13.0(supports-color@10.2.2)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@google-cloud/pubsub@6.3.2(supports-color@10.2.2)':
+    dependencies:
+      '@google-cloud/paginator': 7.2.0
+      '@google-cloud/precise-date': 6.2.1
+      '@google-cloud/projectify': 6.2.1
+      '@google-cloud/promisify': 6.2.1
+      '@google-cloud/pubsub-api': 0.7.0(supports-color@10.2.2)
       '@opentelemetry/api': 1.9.1
-      '@opentelemetry/core': 1.30.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/core': 2.12.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/semantic-conventions': 1.39.0
       arrify: 2.0.1
       extend: 3.0.2
-      google-auth-library: 10.9.1(supports-color@10.2.2)
-      google-gax: 5.0.8(supports-color@10.2.2)
-      google-logging-utils: 1.2.0
+      google-auth-library: 11.3.1(supports-color@10.2.2)
+      google-gax: 6.13.0(supports-color@10.2.2)
+      google-logging-utils: 2.1.0
       heap-js: 2.7.1
       is-stream-ended: 0.1.4
       lodash.snakecase: 4.1.1
@@ -39954,11 +39954,6 @@ snapshots:
   '@opentelemetry/core@1.30.1(@opentelemetry/api@1.10.0)':
     dependencies:
       '@opentelemetry/api': 1.10.0
-      '@opentelemetry/semantic-conventions': 1.28.0
-
-  '@opentelemetry/core@1.30.1(@opentelemetry/api@1.9.1)':
-    dependencies:
-      '@opentelemetry/api': 1.9.1
       '@opentelemetry/semantic-conventions': 1.28.0
 
   '@opentelemetry/core@2.12.0(@opentelemetry/api@1.10.0)':
@@ -49006,7 +49001,6 @@ snapshots:
       retry-request: 9.1.0
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   google-logging-utils@0.0.2: {}
 
@@ -53587,7 +53581,6 @@ snapshots:
   proto3-json-serializer@4.1.0:
     dependencies:
       protobufjs: 8.8.0
-    optional: true
 
   protobufjs@8.8.0:
     dependencies:
@@ -54693,7 +54686,6 @@ snapshots:
   retry-request@9.1.0:
     dependencies:
       extend: 3.0.2
-    optional: true
 
   retry@0.12.0: {}
 
