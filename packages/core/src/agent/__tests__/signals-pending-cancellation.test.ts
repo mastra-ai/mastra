@@ -1860,7 +1860,19 @@ describe('Agent signals: pending cancellation', () => {
         cleanup();
         throw error;
       }
-      return { scope, pubsub, agent, model, subscription, follower, getStreamCount, deliver, releaseFollowUp, cleanup };
+      return {
+        scope,
+        pubsub,
+        agent,
+        model,
+        stream,
+        subscription,
+        follower,
+        getStreamCount,
+        deliver,
+        releaseFollowUp,
+        cleanup,
+      };
     }
 
     it('runs a message forwarded to a run that is then stopped exactly once', async () => {
@@ -1920,11 +1932,19 @@ describe('Agent signals: pending cancellation', () => {
     it('drains the message again when the run it was forwarded to loses its lease without an event', async () => {
       // Checks of the lease run on the interval timer, which is the only one faked.
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
-      const { scope, pubsub, model, getStreamCount, deliver, releaseFollowUp, cleanup } = await forwardToFollowUpRun(
-        'vanished-owner',
-        { silentRunEnds: true },
-      );
+      const { scope, pubsub, model, stream, getStreamCount, deliver, releaseFollowUp, cleanup } =
+        await forwardToFollowUpRun('vanished-owner', { silentRunEnds: true });
       try {
+        // Let the follow-up run's registration reach every subscriber before the run ends. The owner here shares this
+        // process, and a registration handled after the run ended would mark it active again, with the run-end event
+        // this test swallows as the only thing that could clear it.
+        await vi.waitFor(() =>
+          expect(pubsub.publishedData.some(data => data.type === 'run-registered' && data.runId !== stream.runId)).toBe(
+            true,
+          ),
+        );
+        await pubsub.flush();
+        await nextTick();
         releaseFollowUp();
         await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
         deliver();
