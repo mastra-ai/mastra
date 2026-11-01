@@ -638,7 +638,7 @@ By default, `s3fs` and `gcsfuse` are installed at first mount via `apt`, which a
 **Option 1: Declarative image build**
 
 ```typescript
-import { Daytona, Image } from '@daytonaio/sdk'
+import { Daytona, Image } from '@daytona/sdk'
 
 const template = Image.base('daytonaio/sandbox')
   .runCommands('sudo apt-get update -qq')
@@ -676,7 +676,7 @@ RUN sudo apt-get update -qq && sudo apt-get install -y gcsfuse
 ```
 
 ```typescript
-import { Daytona, Image } from '@daytonaio/sdk'
+import { Daytona, Image } from '@daytona/sdk'
 
 const daytona = new Daytona()
 

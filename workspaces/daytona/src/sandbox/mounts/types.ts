@@ -2,7 +2,7 @@
  * Shared types for Daytona mount operations.
  */
 
-import type { Sandbox } from '@daytonaio/sdk';
+import type { Sandbox } from '@daytona/sdk';
 
 import type { DaytonaAzureBlobMountConfig } from './azure';
 import type { DaytonaGCSMountConfig } from './gcs';

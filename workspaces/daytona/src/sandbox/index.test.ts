@@ -168,7 +168,7 @@ const { mockSandbox, mockDaytona, resetMockDefaults, DaytonaError, DaytonaNotFou
 });
 
 // Mock the Daytona SDK — must use `function` (not arrow) so `new Daytona()` works
-vi.mock('@daytonaio/sdk', () => ({
+vi.mock('@daytona/sdk', () => ({
   Daytona: vi.fn().mockImplementation(function () {
     return mockDaytona;
   }),
@@ -545,7 +545,7 @@ describe('DaytonaSandbox', () => {
     });
 
     it('creates Daytona client with connection opts', async () => {
-      const { Daytona } = await import('@daytonaio/sdk');
+      const { Daytona } = await import('@daytona/sdk');
       const sandbox = new DaytonaSandbox({
         apiKey: 'key-123',
         apiUrl: 'https://custom.api',
