@@ -938,8 +938,11 @@ export class MemoryPG extends MemoryStorage {
       `UPDATE ${tableName}
        SET
          title = COALESCE($1, title),
-         metadata = (CASE WHEN jsonb_typeof(metadata::jsonb) = 'object' THEN metadata::jsonb ELSE '{}'::jsonb END)
-                    || COALESCE($2::jsonb, '{}'::jsonb),
+         metadata = CASE
+           WHEN $2::jsonb IS NULL THEN metadata::jsonb
+           ELSE (CASE WHEN jsonb_typeof(metadata::jsonb) = 'object' THEN metadata::jsonb ELSE '{}'::jsonb END)
+                || $2::jsonb
+         END,
          "updatedAt" = $3,
          "updatedAtZ" = $4
        WHERE id = $5
@@ -958,13 +961,14 @@ export class MemoryPG extends MemoryStorage {
     id,
     resourceId,
     update,
-    fence,
+    fence: explicitFence,
   }: {
     id: string;
     resourceId?: string;
     update: (thread: StorageThreadType) => Record<string, unknown> | undefined;
     fence?: RunFence;
   }): Promise<StorageThreadType | null> {
+    const fence = resolveRunFence(this, explicitFence);
     const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     try {
       return await this.#db.client.tx(async t => {

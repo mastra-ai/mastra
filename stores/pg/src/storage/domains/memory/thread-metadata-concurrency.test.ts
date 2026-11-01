@@ -81,6 +81,18 @@ describe('PostgreSQL thread metadata writes across processes', () => {
     await expect(a.updateThread({ id: randomUUID(), title: 'x' })).rejects.toThrow(/not found/);
   });
 
+  it('updateThread leaves non-object metadata untouched on a title-only update', async () => {
+    const { id } = await createThread();
+    const pool = new Pool({ connectionString });
+    try {
+      await pool.query(`UPDATE "${schemaName}".mastra_threads SET metadata = '[1,2]' WHERE id = $1`, [id]);
+    } finally {
+      await pool.end();
+    }
+    expect((await a.updateThread({ id, title: 'renamed' })).metadata).toEqual([1, 2]);
+    expect((await a.updateThread({ id, metadata: { k: 1 } })).metadata).toEqual({ k: 1 });
+  });
+
   it('updateThreadMetadata respects resourceId, missing threads, and no-op updates', async () => {
     const thread = await createThread('owner');
     expect(await a.updateThreadMetadata({ id: thread.id, resourceId: 'other', update: () => ({ x: 1 }) })).toBeNull();
