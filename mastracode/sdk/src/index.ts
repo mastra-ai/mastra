@@ -70,6 +70,7 @@ import {
   getDynamicModel,
   getGoalJudgeModel,
   resolveModel,
+  resolveRequestThinkingLevel,
 } from './agents/model.js';
 import { buildMode } from './agents/modes/build.js';
 import { fastMode } from './agents/modes/explore.js';
@@ -1778,14 +1779,26 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // request-scoped custom providers come from the calling run's context.
     // Ids the model router would hand to another registered gateway (by
     // prefix or `handlesModel`) stay strings so that gateway resolves them.
-    resolveSubagentModel: (modelId, { requestContext }) =>
-      routesToOtherGateway(
-        modelId,
-        Object.values(controller.getMastra()?.listGateways() ?? {}),
-        new Set([mastraCodeGateway.id, amazonBedrockGateway.id, githubCopilotGateway.id, 'models.dev']),
-      )
-        ? modelId
-        : resolveModel(modelId, { requestContext }),
+    resolveSubagentModel: (modelId, { requestContext }) => {
+      if (
+        routesToOtherGateway(
+          modelId,
+          Object.values(controller.getMastra()?.listGateways() ?? {}),
+          new Set([mastraCodeGateway.id, amazonBedrockGateway.id, githubCopilotGateway.id, 'models.dev']),
+        )
+      ) {
+        return modelId;
+      }
+      const controllerContext = requestContext?.get('controller') as
+        AgentControllerRequestContext<{ thinkingLevel?: unknown }> | undefined;
+      return resolveModel(modelId, {
+        requestContext,
+        thinkingLevel: resolveRequestThinkingLevel(
+          modeless ? { state: controllerContext?.state } : controllerContext,
+          config?.settingsPath,
+        ),
+      });
+    },
     gateways: [amazonBedrockGateway, githubCopilotGateway, mastraCodeGateway],
     workspace: config?.workspace ?? (args => getDynamicWorkspace({ ...args, backgroundToolsEnabled })),
     browser: config?.browser,
