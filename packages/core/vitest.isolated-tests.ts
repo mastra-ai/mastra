@@ -16,9 +16,6 @@
 //   the same worker allocates into.
 // - timers: asserts vi.getTimerCount() is 0, which a timer scheduled by work an earlier file
 //   left running in the same worker breaks.
-// - timing: lease, claim or retry deadlines that lose to work earlier files left running in
-//   the same worker. Each failed once in a shared-worker core lane, passes alone 5/5, and
-//   the same file orders under isolate:true are clean.
 //
 // The list comes from scanning test sources for those patterns, then checking the rest
 // with a leak probe that diffs worker state between files.
@@ -33,7 +30,6 @@ export const isolatedTestFiles = [
   'src/agent/__tests__/mcp-instructions.test.ts', // vi.mock
   'src/agent/__tests__/model-retry-after.test.ts', // vi.mock
   'src/agent/__tests__/scorers.test.ts', // vi.mock
-  'src/agent/__tests__/signals-claimed-ownership.test.ts', // timing
   'src/agent/__tests__/structured-output.test.ts', // env
   'src/agent/__tests__/suspended-run-ttl.test.ts', // env
   'src/agent/__tests__/thread-lease-loss-abort.test.ts', // vi.mock,env
@@ -41,7 +37,6 @@ export const isolatedTestFiles = [
   'src/agent/__tests__/thread-lease-loss-tool-scope.test.ts', // env
   'src/agent/__tests__/thread-stream-late-generation.test.ts', // env
   'src/agent/__tests__/thread-stream-save-listener.test.ts', // vi.mock
-  'src/agent/__tests__/tools.test.ts', // timing
   'src/agent/durable/__tests__/agreement-memory.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-background-transform.test.ts', // vi.mock
   'src/agent/durable/__tests__/durable-agent-concurrent-runs.test.ts', // reset-modules
@@ -51,7 +46,6 @@ export const isolatedTestFiles = [
   'src/agent/durable/__tests__/durable-agent-parallel-tool-restart.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-step-budget-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/durable-agent-usage-detail-counters.test.ts', // reset-modules
-  'src/agent/durable/__tests__/evented-background-tools-redelivery.test.ts', // timing
   'src/agent/durable/__tests__/evented-workflow-agent-step-restart.test.ts', // reset-modules
   'src/agent/durable/__tests__/evented-workflow-agent-suspend-recovery.test.ts', // reset-modules
   'src/agent/durable/__tests__/evented-workflow-sleep-restart.test.ts', // reset-modules
@@ -112,7 +106,6 @@ export const isolatedTestFiles = [
   'src/loop/network/run-command-tool.test.ts', // global
   'src/loop/shared/steps/background-dispatch-core.test.ts', // vi.mock
   'src/loop/test-utils/aimock/scenarios/agent-prepare-step-dynamic.scenario.test.ts', // env
-  'src/loop/test-utils/aimock/scenarios/resume-claim-after-crash.scenario.test.ts', // timing
   'src/loop/workflows/agentic-execution/llm-execution-step.test.ts', // vi.mock
   'src/loop/workflows/stream.test.ts', // vi.mock
   'src/mastra/classifier-registry-schema.test.ts', // vi.mock
