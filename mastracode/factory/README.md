@@ -29,6 +29,49 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 `prepare()` initializes the Factory-owned resources needed before Mastra is constructed. `finalize()` connects those resources to the completed host, including Factory routes, integrations, storage-backed behavior, and agent-controller features. Consumers should keep frontend concerns in `factory-ui` and host-specific environment or deployment wiring in `web` rather than adding them to this package.
 
+### Work items and board items
+
+Factory stores provider facts separately from board activity:
+
+- A **work item** stores provider-independent identity, title, and parent linkage in `factory_work_items`.
+- A **source** stores provider identity, key, URL, state, labels, and author in `factory_work_item_sources`. A work item can have several sources; Factory-native work items have none.
+- A **board item** tracks Factory's board, stages, sessions, claim, revision, and process metadata in `factory_board_items`. Trust stamps such as `authorTrusted` and `factoryAuthored` stay here, not on the source.
+
+Storage returns a `Card` that joins these records. Read sources from `card.workItem.sources`; read Factory process state from placement fields such as `card.acceptedAt`, `card.plansPreapprovedAt`, and `card.metadata`. A provider-only refresh updates the source's revision without changing the board item's revision, so it doesn't invalidate a pending stage move. Changes to any of these records invalidate the board list cache.
+
+```typescript
+import type { Card } from '@mastra/factory';
+
+function summarizeCard(card: Card) {
+  return {
+    id: card.id,
+    key: card.workItem.key,
+    title: card.workItem.title,
+    state: card.workItem.state,
+    labels: card.workItem.labels,
+    author: card.workItem.author,
+    board: card.board,
+    stages: card.stages,
+  };
+}
+```
+
+Each work item has one board item. Factory's card-to-card parent link is `parentBoardItemId`; a provider sub-issue parent is `card.workItem.parentWorkItemId`. Existing card IDs, comments, subscriptions, run bindings, and `/work-items/:id` URLs stay unchanged. The work item gets its own ID. For one release, work-item API responses also retain the legacy top-level title, external source, and merged metadata fields.
+
+#### Migration and dry run
+
+Factory migrates existing cards before the work-items storage domain becomes ready. It keeps the legacy `work_items` table, copies each card into the new tables, and checks again on every startup. Unchanged legacy rows are no-ops; newer legacy rows are recopied. Deleted board items have tombstones so a later startup doesn't resurrect them. A legacy row whose source or claim conflicts with another card ID is skipped and logged rather than preventing startup. Review the `skipped` entries in the boot log and reconcile those card IDs before retiring the legacy data; comments and subscriptions linked to a skipped ID won't have a visible card until the conflict is resolved.
+
+To inspect the migration without switching storage, set this environment variable before starting Factory:
+
+```bash
+MASTRA_FACTORY_WORK_ITEM_SPLIT=dry-run
+```
+
+Dry-run mode logs the planned copies and keeps reads and writes on the legacy table. Remove the variable and restart to perform the migration and switch to the new tables. Normal operation doesn't write back to the legacy table, so rolling back to an older Factory version hides cards and changes created after cutover.
+
+During mixed-version deployments, a changed legacy row is recopied only while its split records still match the migration baseline. Conflicting split-side edits are skipped and logged rather than overwritten. Released legacy claims are recopied before new owners, across all projects and pages. Avoid simultaneous writes from old and new versions during the cutover.
+
 ### Product telemetry
 
 Factory records `factory_web_activity` in Mastra's existing PostHog project for users signed in through the default `mastra-studio` auth provider. The browser sends only a known page category and an activity type to the authenticated `/web/telemetry/activity` endpoint. The server adds the verified account and deployment context.
@@ -57,7 +100,7 @@ MASTRA_TELEMETRY_DISABLED=true
 
 ### Work items, sources and board placements
 
-Factory separates the work (`factory_work_items`) from external facts (`factory_work_item_sources`) and placement/process state (`factory_board_items`). A work item can have several sources; current intake still creates separate work items for an issue and its pull request. Native cards have no external source. Sources are deduplicated per organization, project, provider and external ID, not claimed across projects.
+Factory separates the work (`factory_work_items`) from external facts (`factory_work_item_sources`) and placement/process state (`factory_board_items`). A work item can have several sources; current intake still creates separate work items for an issue and its pull request. Native cards have no external source. Sources are deduplicated per organization, project, provider and external ID. Separately, board placements preserve main's organization-wide claim ownership, lookups, adoption and terminal release until the claim-removal change lands.
 
 The split migration preserves legacy card IDs for comments, subscriptions, runs and URLs. It never rewrites the legacy `work_items` table. Board placements preserve `claim_key`, `triage_type`, `accepted_at`, `autonomy_armed_at` and `plans_preapproved_at` with main's existing read/write behavior; their removal belongs to separate policy changes. A deterministic legacy fingerprint detects changes even when an older replica does not update `updated_at`; conflicting newer split-side changes are reported rather than overwritten.
 

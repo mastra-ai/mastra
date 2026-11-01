@@ -6,11 +6,11 @@ export function largeBoard(count: number, factoryProjectId = 'fp-1'): Card[] {
     workItemId: `work-large-${index}`,
     parentBoardItemId: null,
     workItem: {
+      sources: [],
       id: `work-large-${index}`,
       orgId: 'org-1',
       factoryProjectId,
       provider: 'factory',
-      kind: 'issue',
       externalId: `large-${index}`,
       key: `large-${index}`.slice(0, 8),
       url: null,

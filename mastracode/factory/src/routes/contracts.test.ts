@@ -202,7 +202,21 @@ describe('Factory route contracts', () => {
     ).toBe(true);
     expect(
       FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.safeParse({
-        workItems: [{ id: projectId }],
+        workItems: [
+          {
+            id: projectId,
+            workItem: {
+              provider: 'github',
+              kind: 'issue',
+              key: 'acme/app#42',
+              url: 'https://github.com/acme/app/issues/42',
+              title: 'Fix login',
+              state: 'open',
+              labels: ['bug'],
+              author: 'reporter',
+            },
+          },
+        ],
         runningSessionIds: ['session-1'],
         parkedSessionIds: ['session-2'],
       }).success,

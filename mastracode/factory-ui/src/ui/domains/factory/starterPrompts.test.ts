@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { providerFactsCard } from '../../__tests__/fixtures/providerFactsCard';
 import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem } from './services/workItems';
 import { starterPrompts } from './starterPrompts';
@@ -88,6 +89,26 @@ function promptFor(kind: StarterKind, cards: WorkItem[], effects: FactoryDecisio
 }
 
 describe('starterPrompts', () => {
+  it('uses normalized source labels and opening dates instead of stale board metadata', () => {
+    const bugs = ['one', 'two', 'three'].map(id =>
+      card(id, {
+        metadata: { labels: ['documentation', 'stale-area'] },
+        workItem: { ...providerFactsCard.workItem, labels: ['bug', 'Memory'], metadata: {} },
+      }),
+    );
+    const recentPullRequest = pullRequest(73, ['intake'], { sourceCreatedAt: daysAgo(60) });
+    recentPullRequest.workItem = {
+      ...providerFactsCard.workItem,
+      state: 'open',
+      metadata: { sourceCreatedAt: daysAgo(2) },
+    };
+
+    expect(promptFor('bug', bugs)).toMatchObject({ value: 3 });
+    expect(promptFor('sweep', bugs)).toMatchObject({ label: 'Memory backlog', value: 3 });
+    expect(promptFor('review', [recentPullRequest])).toMatchObject({ value: 2, unit: 'days' });
+    expect(build([recentPullRequest]).some(prompt => prompt.kind === 'stale')).toBe(false);
+  });
+
   it('offers nothing when no card waits on anyone', () => {
     expect(
       build([
