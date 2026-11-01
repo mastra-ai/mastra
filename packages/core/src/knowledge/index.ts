@@ -208,8 +208,9 @@ export class Knowledge extends MastraBase {
    * when Knowledge has `vector` and `embedder`, and change listeners are told.
    *
    * **Host-only.** No run scopes and no access rules are checked; who reads the page is decided by
-   * the scope's access rules as usual. Never expose it through an agent tool, or through a server
-   * route without admin-level auth.
+   * the scope's access rules as usual (`explainAccess` explains run access, not host writes). Never
+   * expose it through an agent tool, or through a server route without admin-level auth. A scope
+   * first created here gets its `belongsTo` parent when a run holding that parent first uses it.
    *
    * @experimental
    */
@@ -219,7 +220,9 @@ export class Knowledge extends MastraBase {
 
   /**
    * Deletes the page at `scope#path`; `null` when there is none. Refuses a page with child pages
-   * and a page declared in config. Host-only, like {@link Knowledge.upsertPage}.
+   * and a page declared in config. Host-only, like {@link Knowledge.upsertPage}. Not retried: a
+   * concurrent write to the same page between the read and the delete throws, so remove from one
+   * sync worker or retry the call.
    *
    * @experimental
    */
