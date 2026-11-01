@@ -192,7 +192,10 @@ describe('useThreadsListSource', () => {
       await nextTick();
       await waitFor(() => expect(threadIds(result.current.threads)).toContain(startedThread.threadId));
 
-      const where = buildThreadQueryWhere(statusAndRunTokens, []);
+      const where = buildThreadQueryWhere(statusAndRunTokens, [], {
+        withTimeToFirstChunk: true,
+        withTimeToFirstToken: true,
+      });
       rerender({ query: { ...rollingQuery, ...(where ? { where } : {}) }, rolling: true });
 
       await waitFor(() => expect(threadIds(result.current.threads)).toEqual(['thread-1', 'thread-2']));

@@ -19,7 +19,7 @@ import type {
 import { createCodingAgent } from '@mastra/core/coding-agent';
 import { classifyProviderError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
-import { Knowledge } from '@mastra/core/knowledge';
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
@@ -63,7 +63,7 @@ import {
   withCredentialTenantPreparation,
 } from './agents/credential-resolver.js';
 import { getDynamicInstructions } from './agents/instructions.js';
-import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
+import { getDynamicMemory } from './agents/memory.js';
 import {
   canUseProvider,
   createMastraCodeGateway,
@@ -98,6 +98,7 @@ import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/ind
 import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
+import { knowledgeUnresolvedScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
@@ -345,12 +346,27 @@ export interface MastraCodeConfig {
    * LibSQL fallback — if the injected store fails, that's a hard error.
    */
   storage?: StorageConfig | MastraCompositeStore;
+  /** Disable persistence of rich scorer results. Default: true. */
+  disableScoreStorage?: boolean;
   /** Backend for an injected custom storage instance. Inferred for LibSQLStore and PostgresStore. */
   storageBackend?: 'libsql' | 'pg';
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
-  /** Host-owned Knowledge instance and the key used to register it on the mounted Mastra runtime. */
-  knowledge?: { key: string; instance: Knowledge };
+  /**
+   * Knowledge for the code agent, attached like an Agent's `knowledge`. Unset, it follows the
+   * `signals.experimentalKnowledge` global setting (off; on means `true`). `false` keeps it off
+   * whatever the setting. `true` uses a Knowledge on Mastra Code's own storage with the read, write and pin tools, writing to a
+   * shared `org:local` scope (the TUI's `/settings` Knowledge toggle). A `Knowledge` instance is
+   * attached as configured and registered on the mounted Mastra under its `id`; pass
+   * `{ key, instance }` to register it under another key.
+   */
+  knowledge?: false | true | Knowledge | { key: string; instance: Knowledge };
+  /**
+   * The scopes every Knowledge run acts with, like an Agent's `scopes`, such as `'org:acme'`. What a
+   * run may do on each comes from the Knowledge instance's scope declarations. Factory sessions
+   * always add `org:` and `project:` scopes.
+   */
+  scopes?: string[];
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -752,11 +768,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   }
 
-  // mastracode's scorers persist every result through the scores domain, but
-  // nothing reads scores back. Accept the writes and keep nothing, so they
-  // neither grow mastra.db nor the process heap.
-  const scoresStorage = new DiscardingScoresStorage();
-
   const storage = new MastraCompositeStore({
     id: 'mastra-code-storage',
     default: storageResult.storage,
@@ -764,7 +775,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // When local tracing is off, disable the observability domain entirely so
       // trace/score/feedback writes never fall through to the default libsql store.
       observability: observabilityDomain ?? false,
-      scores: scoresStorage,
+      // Rich scorer results can retain large prompts, messages, inputs, and outputs.
+      // Discard them by default; hosts may opt into persistence for Studio access.
+      ...((config?.disableScoreStorage ?? true) ? { scores: new DiscardingScoresStorage() } : {}),
     },
   });
 
@@ -847,27 +860,36 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  const configuredKnowledgeKey = config?.knowledge?.key.trim();
-  if (config?.knowledge && !configuredKnowledgeKey) {
+  const knowledgeOption = config?.knowledge ?? (globalSettings.signals?.experimentalKnowledge ? true : undefined);
+  const knowledgeEntry =
+    !knowledgeOption || knowledgeOption === true || knowledgeOption instanceof Knowledge ? undefined : knowledgeOption;
+  const entryKey = knowledgeEntry?.key.trim();
+  if (knowledgeEntry && !entryKey) {
     throw new Error('knowledge.key must be a non-empty string.');
   }
   const knowledge =
-    config?.knowledge?.instance ??
-    (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1'
-      ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage })
-      : undefined);
-  const knowledgeKey = configuredKnowledgeKey ?? 'default';
+    knowledgeOption === true
+      ? new Knowledge({
+          id: 'mastracode',
+          name: 'MastraCode Knowledge',
+          storage,
+          scopes: knowledgeMemoryScopes(),
+          tools: true,
+          pinnedContext: true,
+        })
+      : knowledgeOption instanceof Knowledge
+        ? knowledgeOption
+        : knowledgeEntry?.instance;
+  const knowledgeKey = entryKey ?? knowledge?.id ?? 'default';
+  const knowledgeHostScopes: string[] = [
+    ...(config?.scopes ?? []),
+    ...(knowledgeOption === true && !(config?.scopes ?? []).length ? [`org:${LOCAL_KNOWLEDGE_ORG_ID}`] : []),
+  ];
   const dynamicMemory =
     config?.memory === undefined
-      ? getDynamicMemory(
-          storage,
-          vector,
-          config?.settingsPath,
-          {
-            disableSettingsOmSeed: config?.disableSettingsOmSeed,
-          },
-          knowledge,
-        )
+      ? getDynamicMemory(storage, vector, config?.settingsPath, {
+          disableSettingsOmSeed: config?.disableSettingsOmSeed,
+        })
       : undefined;
   const memory =
     config?.memory === false
@@ -876,10 +898,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // Keep settled() so shutdown still drains background memory work.
         (dynamicMemory &&
           Object.assign(withCredentialTenantPreparation(dynamicMemory), { settled: dynamicMemory.settled })));
-  // Only the default memory wiring registers the subconscious tools; a
-  // caller-supplied memory is opaque here, so its prompt must not advertise them.
-  const hasSubconscious =
-    config?.memory === undefined ? (state: MastraCodeState | undefined) => hasSubconsciousTools(vector, state) : false;
 
   // MCP
   const mcpManager = config?.disableMcp
@@ -1312,6 +1330,22 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     // workspace. An explicit `undefined` is required: the factory only builds a
     // default when the `workspace` key is absent.
     workspace: undefined,
+    ...(knowledge
+      ? {
+          knowledge,
+          // Factory sessions add their org + project tags to the host's scopes, on top of the run's
+          // incoming scopes (identity and per-message scopes). An unresolved Factory session keeps
+          // only identity tags, so its writes stay private to the run, matching the inspector,
+          // which refuses to read for it.
+          scopes: ({ scopes, requestContext }) => {
+            const controller = requestContext.get('controller') as
+              | AgentControllerRequestContext<MastraCodeState>
+              | undefined;
+            const session = resolveKnowledgeSessionScopes(controller?.state, knowledgeHostScopes);
+            return [...scopes, ...(session.resolved ? session.scopes : knowledgeUnresolvedScopes(knowledgeHostScopes))];
+          },
+        }
+      : {}),
     instructions: async ({ requestContext }) => {
       const configured = config?.hostInstructions;
       const hostInstructions = typeof configured === 'function' ? await configured({ requestContext }) : configured;
@@ -1319,7 +1353,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         requestContext,
         hostInstructions,
         coAuthor: config?.coAuthor,
-        hasSubconscious,
         hasSubagents: subagents.length > 0,
         disabledBuiltinTools: config?.disableBuiltinTools,
       });
@@ -1873,10 +1906,10 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     storageMaintenance,
     createKnowledgeInspector: (session: Session<MastraCodeState>, knowledgeKey?: string) =>
       createScopedKnowledgeInspector({
-        storage,
         knowledge: knowledgeKey ?? knowledge,
         mastra: controller.getMastra(),
         session,
+        hostScopes: knowledgeHostScopes,
       }),
     observability,
     memory,
@@ -2097,12 +2130,12 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   let knowledgeInspectorUnavailableReason: string | undefined;
   if (!base.knowledge) {
     knowledgeInspectorUnavailableReason =
-      'Knowledge is off. Set MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1 or pass a `knowledge` instance to createMastraCode.';
+      'Knowledge is off. Turn it on in /settings, or pass `knowledge` to createMastraCode.';
   } else {
     try {
       knowledgeInspector = await base.createKnowledgeInspector(session);
       if (!knowledgeInspector) {
-        knowledgeInspectorUnavailableReason = 'Knowledge inspection requires a configured knowledge storage domain.';
+        knowledgeInspectorUnavailableReason = 'Knowledge inspection requires a configured Knowledge runtime.';
       }
     } catch (error) {
       knowledgeInspectorUnavailableReason = `Knowledge is unavailable: ${error instanceof Error ? error.message : String(error)}`;
@@ -2233,6 +2266,7 @@ export async function prepareAgentControllerMount(
   const mastraArgs = {
     agentControllers: { [controllerId]: controller },
     storage,
+    observability: base.observability,
     ...(backgroundToolsEnabled
       ? {
           backgroundTasks: {

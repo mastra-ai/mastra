@@ -79,7 +79,8 @@ type OptionalizeUndefined<T> = T extends Date
           >
         : T;
 
-type Serialized<T> = T extends Date
+/** A server payload type as it arrives over JSON: `Date` fields become ISO strings. */
+export type Serialized<T> = T extends Date
   ? string
   : T extends readonly (infer U)[]
     ? Serialized<U>[]
@@ -693,6 +694,21 @@ export type McpServerEventOccurrence = McpServerEventPollResponse['events'][numb
 
 /** A frame yielded by `streamMcpServerEvent` (experimental). */
 export type McpServerEventStreamFrame = GeneratedResponse<'POST /mcp/:serverId/events/:eventName/stream'>;
+
+/** Task surfaces of an MCP server and its recent tasks across principals (experimental). */
+export type McpServerTaskListResponse = GeneratedResponse<'GET /mcp/:serverId/tasks'>;
+
+/** A tool, workflow or agent an MCP server runs as a task (experimental). */
+export type McpServerTaskSurface = McpServerTaskListResponse['surfaces'][number];
+
+/**
+ * One MCP server task as Studio sees it: identified by `taskKey` (a hash of the task id) and a
+ * hashed principal, never by the task id itself (experimental).
+ */
+export type McpServerTask = McpServerTaskListResponse['tasks'][number];
+
+/** Answers to a task's open input requests, keyed by request (experimental). */
+export type McpServerTaskInputResponses = Body<'POST /mcp/:serverId/tasks/:taskKey/input'>['inputResponses'];
 
 /**
  * Client version of ScoreRowData with dates serialized as strings (from JSON)

@@ -102,6 +102,7 @@ import {
 } from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
+import { knowledgeSettingsScenario } from './knowledge-settings.js';
 import { legacySettingsNoPromptScenario } from './legacy-settings-no-prompt.js';
 import { legacySettingsUpgradeScenario } from './legacy-settings-upgrade.js';
 import { legacyThreadModelRestoreScenario, savedThreadModelRestoreScenario } from './legacy-thread-model-restore.js';
@@ -228,7 +229,6 @@ import { subagentDelegationScenario } from './subagent-delegation.js';
 import { subagentModelStartupRestoreScenario } from './subagent-model-startup-restore.js';
 import { subagentPlanExecuteToolsScenario } from './subagent-plan-execute-tools.js';
 import { subagentsCommandScenario } from './subagents-command.js';
-import { subconsciousActivityRenderingScenario } from './subconscious-activity-rendering.js';
 import { taskInlineTransitionsScenario } from './task-inline-transitions.js';
 import { taskPatchToolsScenario } from './task-patch-tools.js';
 import { taskProgressEventsScenario } from './task-progress-events.js';
@@ -386,6 +386,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'notify-input-request-hook': notifyInputRequestHookScenario,
   'knowledge-browser': knowledgeBrowserScenario,
+  'knowledge-settings': knowledgeSettingsScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-auto-selection': omAutoSelectionScenario,
   'om-auto-preview-google-api-key': omAutoPreviewGoogleApiKeyScenario,
@@ -446,7 +447,6 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,
   'steer-drain-failure-recovery': steerDrainFailureRecoveryScenario,
-  'subconscious-activity-rendering': subconsciousActivityRenderingScenario,
   'setup-completion-persistence': setupCompletionPersistenceScenario,
   'setup-custom-pack-completion': setupCustomPackCompletionScenario,
   'setup-login-refresh': setupLoginRefreshScenario,

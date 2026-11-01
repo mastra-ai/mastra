@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Event } from '@mastra/core/events';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
+import { createClient, ValkeyStreamsClient } from './client';
 import { ValkeyStreamsPubSub } from './index';
 
 it('publishes and consumes through Valkey GLIDE', async () => {
@@ -19,6 +20,76 @@ it('publishes and consumes through Valkey GLIDE', async () => {
   } finally {
     await pubsub.clearTopic(topic);
     await pubsub.close();
+  }
+});
+
+it('trims only saved run entries while preserving other runs, pinned entries, and terminal events', async () => {
+  const keyPrefix = `valkey-trim-${randomUUID()}`;
+  const topic = `thread-${randomUUID()}`;
+  const pubsub = new ValkeyStreamsPubSub({ url: 'valkey://localhost:6381', keyPrefix, maxStreamLength: 10_000 });
+  const key = `${keyPrefix}:${topic}`;
+  try {
+    for (let i = 0; i < 510; i++) {
+      await pubsub.publish(topic, { type: 'stream-part', runId: 'target', data: { producedAt: 10, index: i } });
+    }
+    await pubsub.publish(topic, { type: 'stream-part', runId: 'target', data: { producedAt: 11 } });
+    await pubsub.publish(topic, { type: 'stream-part', runId: 'target', data: { producedAt: 10, pinned: true } });
+    await pubsub.publish(topic, {
+      type: 'thread-event',
+      runId: 'target',
+      data: { type: 'run-completed', producedAt: 10 },
+    });
+    await pubsub.publish(topic, { type: 'stream-part', runId: 'other', data: { producedAt: 10 } });
+
+    await pubsub.trimTopic(topic, { runId: 'target', producedBefore: 10, retainTerminalEvents: true });
+    expect(await xlenOf(key)).toBe(4);
+
+    await pubsub.trimTopic(topic, { runId: 'target', retainTerminalEvents: true });
+    expect(await xlenOf(key)).toBe(2);
+
+    await pubsub.trimTopic(topic, { runId: 'target' });
+    expect(await xlenOf(key)).toBe(1);
+  } finally {
+    await pubsub.clearTopic(topic);
+    await pubsub.close();
+  }
+});
+
+it('does not trim entries published after the cleanup scan begins', async () => {
+  const keyPrefix = `valkey-trim-tail-${randomUUID()}`;
+  const topic = `thread-${randomUUID()}`;
+  const pubsub = new ValkeyStreamsPubSub({ url: 'valkey://localhost:6381', keyPrefix });
+  const key = `${keyPrefix}:${topic}`;
+  const raw = createClient({ url: 'valkey://localhost:6381' });
+  await raw.connect();
+  const originalXRange = ValkeyStreamsClient.prototype.xRange;
+  let resumeScan!: () => void;
+  const scanPaused = new Promise<void>(resolve => (resumeScan = resolve));
+  let signalScan!: () => void;
+  const scanStarted = new Promise<void>(resolve => (signalScan = resolve));
+  let trim: Promise<void> | undefined;
+  try {
+    await pubsub.publish(topic, { type: 'stream-part', runId: 'target', data: { index: 'saved' } });
+    // Pause only the scan request, not Valkey itself: another writer can publish while cleanup is in flight.
+    vi.spyOn(ValkeyStreamsClient.prototype, 'xRange').mockImplementation(async function (...args) {
+      signalScan();
+      await scanPaused;
+      return originalXRange.apply(this, args);
+    });
+    trim = pubsub.trimTopic(topic, { runId: 'target' });
+    await scanStarted;
+    await pubsub.publish(topic, { type: 'stream-part', runId: 'target', data: { index: 'in-flight' } });
+    resumeScan();
+    await trim;
+    const remaining = await raw.xRange(key, '-', '+');
+    expect(remaining.map(entry => JSON.parse(entry.message.event!).data.index)).toEqual(['in-flight']);
+  } finally {
+    resumeScan();
+    await trim;
+    vi.restoreAllMocks();
+    await pubsub.clearTopic(topic);
+    await pubsub.close();
+    await raw.quit();
   }
 });
 
@@ -72,3 +143,81 @@ it('reclaims idle pending entries to a sibling consumer, never back to their stu
     await pubsub.close();
   }
 });
+
+async function pttlOf(key: string): Promise<number> {
+  const raw = createClient({ url: 'valkey://localhost:6381' });
+  await raw.connect();
+  try {
+    return Number(await raw.command(['PTTL', key]));
+  } finally {
+    await raw.quit();
+  }
+}
+
+async function xlenOf(key: string): Promise<number> {
+  const raw = createClient({ url: 'valkey://localhost:6381' });
+  await raw.connect();
+  try {
+    return Number(await raw.command(['XLEN', key]));
+  } finally {
+    await raw.quit();
+  }
+}
+
+it('expires idle streams by default (7 days) on both publish- and subscribe-created keys', async () => {
+  const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  const pubsub = new ValkeyStreamsPubSub({ url: 'valkey://localhost:6381', blockMs: 50 });
+  const publishTopic = `valkey-default-ttl-pub-${randomUUID()}`;
+  const subscribeTopic = `valkey-default-ttl-sub-${randomUUID()}`;
+  try {
+    await pubsub.publish(publishTopic, { type: 'hello', data: {}, runId: 'run-1' });
+    await pubsub.subscribe(subscribeTopic, (_event, ack) => void ack?.());
+    for (const topic of [publishTopic, subscribeTopic]) {
+      const pttl = await pttlOf(`mastra:topic:${topic}`);
+      expect(pttl).toBeGreaterThan(sevenDays - 60_000);
+      expect(pttl).toBeLessThanOrEqual(sevenDays);
+    }
+  } finally {
+    await pubsub.clearTopic(publishTopic);
+    await pubsub.clearTopic(subscribeTopic);
+    await pubsub.close();
+  }
+});
+
+it('keeps streams persistent with streamIdleTtlMs: 0', async () => {
+  const pubsub = new ValkeyStreamsPubSub({ url: 'valkey://localhost:6381', blockMs: 50, streamIdleTtlMs: 0 });
+  const topic = `valkey-nottl-${randomUUID()}`;
+  try {
+    await pubsub.publish(topic, { type: 'hello', data: {}, runId: 'run-1' });
+    expect(await pttlOf(`mastra:topic:${topic}`)).toBe(-1);
+  } finally {
+    await pubsub.clearTopic(topic);
+    await pubsub.close();
+  }
+});
+
+it('keeps delivering to a live subscriber after its idle stream expires', async () => {
+  // Expiry happens while the reader is blocked in XREADGROUP with no local
+  // cursor reset; the read loop must recreate the group and keep delivering.
+  const pubsub = new ValkeyStreamsPubSub({ url: 'valkey://localhost:6381', blockMs: 50, streamIdleTtlMs: 300 });
+  const topic = `valkey-ttl-expire-live-${randomUUID()}`;
+  const received: number[] = [];
+  try {
+    await pubsub.subscribe(topic, (event, ack) => {
+      received.push((event.data as { n: number }).n);
+      void ack?.();
+    });
+    await pubsub.publish(topic, { type: 'n', data: { n: 1 }, runId: 'run-1' });
+    await expect.poll(() => received, { timeout: 5_000 }).toEqual([1]);
+
+    // The read loop recreates the stream right after it expires, so check that
+    // entry 1 is gone (XLEN 0) rather than racing to see the key missing.
+    await expect.poll(() => xlenOf(`mastra:topic:${topic}`), { timeout: 5_000 }).toBe(0);
+
+    await pubsub.publish(topic, { type: 'n', data: { n: 2 }, runId: 'run-1' });
+    await expect.poll(() => received, { timeout: 5_000 }).toEqual([1, 2]);
+  } finally {
+    await pubsub.clearTopic(topic);
+    await pubsub.close();
+  }
+}, 20_000);

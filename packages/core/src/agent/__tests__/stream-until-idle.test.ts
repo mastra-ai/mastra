@@ -1466,7 +1466,8 @@ describe('Agent.streamUntilIdle', () => {
 describe('resolveScope scope parity with resolveAgentScopes', () => {
   const memoryAgent = (scopes?: string[]) => ({
     getMemory: async () => new MockMemory() as any,
-    getScopes: async () => scopes,
+    // The Agent contract: a static list is added to the incoming scopes.
+    getScopes: async ({ scopes: incoming }: { scopes: unknown[] }) => [...incoming, ...(scopes ?? [])] as string[],
   });
 
   it('matches the main resolver when only non-identity scopes plus memory identity are supplied', async () => {
@@ -1480,7 +1481,7 @@ describe('resolveScope scope parity with resolveAgentScopes', () => {
     // Same inputs as Agent#resolveScopedRunOptions passes (requestContext, agentScopes, callScopes, memory).
     const expected = resolveAgentScopes({
       requestContext: new RequestContext(),
-      agentScopes: [],
+      agentScopes: mergedOptions.scopes,
       callScopes: mergedOptions.scopes,
       memory: mergedOptions.memory,
     });
@@ -1503,7 +1504,7 @@ describe('resolveScope scope parity with resolveAgentScopes', () => {
 
     const expected = resolveAgentScopes({
       requestContext: new RequestContext(),
-      agentScopes: ['org:acme'],
+      agentScopes: [...mergedOptions.scopes, 'org:acme'],
       callScopes: mergedOptions.scopes,
       memory: undefined,
     });

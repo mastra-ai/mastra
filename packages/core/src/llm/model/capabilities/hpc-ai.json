@@ -22,10 +22,10 @@
     "zai-org/glm-5.2"
   ],
   "reasoning": {
-    "openai/gpt-5.5": [
+    "zai-org/glm-5.2": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["high", "max"]
       }
     ],
     "zai-org/glm-5.1": [
@@ -33,10 +33,10 @@
         "type": "toggle"
       }
     ],
-    "zai-org/glm-5.2": [
+    "openai/gpt-5.5": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "deepseek/deepseek-v4-pro": [

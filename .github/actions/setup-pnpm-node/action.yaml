@@ -35,18 +35,35 @@ runs:
     # setup-node's cache: 'pnpm' runs `pnpm store path --silent` which returns
     # a bogus path on self-hosted runners where pnpm is installed into
     # ~/setup-pnpm/node_modules/.bin/.
+    # StarSling Disks: on StarSling runners, a job granted `id-token: write` gets the pnpm store and
+    # cache that .github/workflows/starsling-disks.yml publishes from main, mounted before its first step.
+    # Install against them when they are there. Anywhere else (GitHub-hosted runners, fork PRs, jobs
+    # without `id-token: write`) nothing is mounted and the GitHub cache below works as before.
+    - name: Use the StarSling Disks pnpm store
+      id: disks
+      shell: bash
+      run: |
+        if command -v mountpoint >/dev/null && mountpoint -q "$HOME/.local/share/pnpm/store"; then
+          echo "pnpm_config_store_dir=$HOME/.local/share/pnpm/store" >> "$GITHUB_ENV"
+          if mountpoint -q "$HOME/.cache/pnpm"; then
+            echo "pnpm_config_cache_dir=$HOME/.cache/pnpm" >> "$GITHUB_ENV"
+          fi
+          echo "mounted=true" >> "$GITHUB_OUTPUT"
+        fi
+
     - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271
       name: Install pnpm
       with:
         version: ${{ inputs.version || '' }}
         run_install: false
         package_json_file: ${{ inputs.package-json-file || 'package.json' }}
-        cache: ${{ inputs.package-manager-cache == 'true' }}
+        cache: ${{ inputs.package-manager-cache == 'true' && steps.disks.outputs.mounted != 'true' }}
         cache_dependency_path: ${{ inputs.cache-dependency-path || 'pnpm-lock.yaml' }}
 
+    # A published disk is sealed and hash-checked, never a cache captured mid-write: nothing to reset.
     - name: Reset corrupt pnpm store cache
       id: reset-store
-      if: ${{ inputs.package-manager-cache == 'true' }}
+      if: ${{ inputs.package-manager-cache == 'true' && steps.disks.outputs.mounted != 'true' }}
       shell: bash
       run: |
         set +e

@@ -100,21 +100,19 @@ describe('TranscriptEntries signal rows', () => {
   it('renders a state delta signal as a collapsible row instead of raw markdown', async () => {
     renderEntries([stateSignalEntry('sig-1', 'factory-phase', 'delta', FACTORY_TEXT)]);
 
-    const row = screen.getByRole('group', { name: 'Signal: factory-phase' });
+    const row = screen.getByRole('group', { name: 'Signal: Factory phase' });
     expect(within(row).getByText('delta')).toBeVisible();
     expect(row).toHaveAttribute('data-signal-kind', 'state');
-    // Collapsed: only the truncated preview is shown; the tail of the raw
-    // contents (beyond the 72-char preview) must not be rendered.
     expect(screen.queryByText(/expectedRevision 4/)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /factory-phase/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Factory phase/ }));
     expect(screen.getByText(/expectedRevision 4 to advance/)).toBeInTheDocument();
   });
 
   it('labels state snapshots distinctly from deltas', () => {
     renderEntries([stateSignalEntry('sig-1', 'browser', 'snapshot', 'Browser state contents')]);
 
-    const row = screen.getByRole('group', { name: 'Signal: browser' });
+    const row = screen.getByRole('group', { name: 'Signal: Browser' });
     expect(within(row).getByText('snapshot')).toBeVisible();
   });
 
@@ -136,7 +134,7 @@ describe('TranscriptEntries signal rows', () => {
     ]);
 
     expect(screen.queryByText(/subscribed to PR/)).not.toBeInTheDocument();
-    const row = screen.getByRole('group', { name: 'Signal: build-status' });
+    const row = screen.getByRole('group', { name: 'Signal: Build status' });
     expect(row).toHaveAttribute('data-signal-kind', 'reactive');
   });
 
@@ -147,8 +145,19 @@ describe('TranscriptEntries signal rows', () => {
     expect(row).toHaveAttribute('data-signal-kind', 'reminder');
   });
 
-  it('names the project instructions a reminder loaded, by the file and the folder it governs', () => {
+  it('names the project instructions a reminder loaded, by their path in the working directory', () => {
     renderEntries([
+      {
+        kind: 'message',
+        id: 'sig-environment',
+        message: signalDBMessage({
+          id: 'sig-environment',
+          type: 'state',
+          tagName: 'factory-environment',
+          text: 'Factory environment: 1 repository at /sandboxes/7b45/mastra, your working directory.',
+          attributes: { workingDirectory: '/sandboxes/7b45/mastra', repositories: 1 },
+        }),
+      },
       {
         kind: 'message',
         id: 'sig-agents',
@@ -163,7 +172,7 @@ describe('TranscriptEntries signal rows', () => {
     ]);
 
     const row = screen.getByRole('group', { name: 'Signal: Project instructions' });
-    expect(within(row).getByText('core/AGENTS.md')).toBeVisible();
+    expect(within(row).getByText('packages/core/AGENTS.md')).toBeVisible();
   });
 
   it('renders the contents of a live system reminder data part on its line', () => {
@@ -194,7 +203,7 @@ describe('TranscriptEntries signal rows', () => {
     expect(within(row).queryByRole('button')).not.toBeInTheDocument();
   });
 
-  it('marks a temporal gap as a separator and keeps the stamp out of the line', () => {
+  it("leaves the agent's pause reminder to the divider the transcript draws from the messages", () => {
     renderEntries([
       {
         kind: 'message',
@@ -209,9 +218,7 @@ describe('TranscriptEntries signal rows', () => {
       },
     ]);
 
-    const gap = screen.getByRole('separator');
-    expect(gap).toHaveTextContent('1 hour 58 minutes later');
-    expect(gap).not.toHaveTextContent('5:21 PM');
+    expect(screen.queryByRole('separator')).not.toBeInTheDocument();
     expect(screen.queryByRole('group', { name: 'Signal: System reminder' })).not.toBeInTheDocument();
   });
 
@@ -219,7 +226,7 @@ describe('TranscriptEntries signal rows', () => {
     renderEntries([reactiveSignalEntry('sig-owner', SESSION_OWNER_SIGNAL_TAG, 'Damien took ownership')]);
 
     expect(screen.getByRole('separator', { name: 'Damien took ownership' })).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: `Signal: ${SESSION_OWNER_SIGNAL_TAG}` })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /^Signal:/ })).not.toBeInTheDocument();
   });
 
   it('keeps rendering persisted notification signals as notification rows', () => {

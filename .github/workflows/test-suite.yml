@@ -46,6 +46,7 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=8192
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -103,6 +104,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -171,6 +173,7 @@ jobs:
       TURBO_CACHE: ${{ secrets.TURBO_TOKEN == '' && 'local:rw' || 'remote:rw' }}
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout PR code
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -238,6 +241,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
 
     steps:
       - name: Skip tests when no test selection is needed
@@ -267,3 +271,23 @@ jobs:
       - name: Merge reports
         if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests
+
+      # A test job that failed or was cancelled before uploading its blob would otherwise
+      # be missing from the merged report, and this required check would pass without it.
+      - name: Require every test job to finish
+        if: always()
+        env:
+          UNIT: ${{ needs.unit-test.result }}
+          AFFECTED_UNIT: ${{ needs.affected-unit-test.result }}
+          E2E: ${{ needs.e2e-test.result }}
+        run: |
+          status=0
+          for job in UNIT AFFECTED_UNIT E2E; do
+            result="${!job}"
+            echo "$job: $result"
+            if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
+              echo "::error::$job test job ended with '$result'; its tests did not all run."
+              status=1
+            fi
+          done
+          exit $status

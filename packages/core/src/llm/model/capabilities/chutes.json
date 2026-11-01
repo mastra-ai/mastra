@@ -39,12 +39,7 @@
     "zai-org/GLM-5.2-TEE"
   ],
   "reasoning": {
-    "deepseek-ai/DeepSeek-V4-Flash-0731-TEE": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3.2-TEE": [
+    "zai-org/GLM-5.1-TEE": [
       {
         "type": "toggle"
       }
@@ -54,7 +49,7 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.1-TEE": [
+    "moonshotai/Kimi-K2.6-TEE": [
       {
         "type": "toggle"
       }
@@ -64,7 +59,12 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/Kimi-K2.6-TEE": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731-TEE": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.2-TEE": [
       {
         "type": "toggle"
       }

@@ -93,47 +93,11 @@ const result = await mastraClient.querySpans({
 console.log(result.spans)
 ```
 
-Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, `timeToFirstChunkMs`, or `timeToFirstTokenMs`, ascending or descending, and defaults to descending start time. Spans without a value for the `timeToFirstChunkMs` or `timeToFirstTokenMs` sort field sort last in both directions.
-
-| Fields | Operators |
-| - | - |
-| `traceId`, `spanId`, `parentSpanId`, `threadId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
-| `organizationId`, `resourceId`, `runId`, `sessionId`, `userId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
-| Entity, parent entity and root entity `Type`, `Id`, `Name`, `VersionId` fields, such as `parentEntityId` | Same string operators |
-| `name`, `spanType`, `status` | Same string operators; `name` also accepts `matches` / `notMatches` for normalized whole words and phrases |
-| `model`, `provider` | Same string operators |
-| `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | Comparisons, membership and presence |
-| `error` | `exists`, `notExists` |
-
-Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
-
-Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews.
-
-Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before using the additional identity, context and parent/root entity filters. A missing or false value means these filters aren't available. With an older adapter, requests using these filters return a structured `422` error.
-
-Check `capabilities.spanQueryModelFields` before filtering on `model` or `provider`. These filters read only the span's `model` and `provider` columns. `@mastra/observability` fills the columns only when a span has both a `model` and a `provider`, and versions before it filled them left them empty. Filters treat empty columns as missing, so `eq`, `in` and `exists` don't match those spans while `ne`, `notIn` and `notExists` do. Results still return `model` and `provider` for them from the span's attributes. Trace query `spans.some` filters fall back to the attributes and do match those spans. With an older adapter, requests using these filters return `501`.
-
-Check `capabilities.spanQueryOutcomeFields` before filtering or grouping spans by `outcome` and `stopReason`. Rows then also include `outcome`, `stopReason` and `stopReasonContext`. These record how the span ended, separately from `status`, and are `null` when the span didn't record them. A missing outcome means "not recorded", not success. `stopReasonContext` is returned only. For traces, `capabilities.traceQueryOutcomeFields` enables the same fields on `queryTraces()` and `aggregateTraces()`, where they read the root span. With an older adapter, requests using these fields return `501`:
-
-```typescript
-const { capabilities } = await mastraClient.getObservabilityCapabilities()
-
-if (capabilities.spanQueryOutcomeFields) {
-  const limited = await mastraClient.querySpans({
-    timeRange: { from: '2026-10-01T00:00:00.000Z', to: '2026-10-02T00:00:00.000Z' },
-    where: { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
-  })
-  console.log(limited.spans.map(span => [span.stopReason, span.stopReasonContext]))
-}
-```
-
-See [Filter by outcome](/reference/observability/tracing/advanced-queries#filter-by-outcome) for trace-scope and `spans.some` semantics.
-
-DuckDB returns `null` for parent/root entity type, ID and name on spans written before `@mastra/duckdb` stored them. Equality filters on these fields don't match those spans.
+The response is `{ spans, page: { next } }`. Check `capabilities.spanQuery` before calling, and the field-specific capabilities before using optional filters. See [Query spans](/reference/observability/tracing/advanced-queries#query-spans) for fields, operators, defaults, capabilities, response details, and cursor handling.
 
 ### Aggregate spans
 
-`aggregateSpans()` groups the spans `querySpans()` selects and returns one row per group. It counts spans at any depth, such as nested agent runs that trace aggregation misses:
+`aggregateSpans()` groups completed spans matching a direct span predicate. It returns one row per group, or per group and non-empty time bucket when `interval` is set. It counts spans at any depth, such as nested agent runs that trace aggregation misses:
 
 ```typescript
 const { capabilities } = await mastraClient.getObservabilityCapabilities()
@@ -152,7 +116,7 @@ if (capabilities.spanAggregate) {
 }
 ```
 
-The request and response match `aggregateTraces()`, with span dimensions such as `spanType`, `name`, and `parentEntityName`. Token and cost measures belong to the span that recorded the usage and aren't added to parent spans. Check `capabilities.spanAggregate` before calling.
+The request and response structure follows `aggregateTraces()`, with direct span predicates and span dimensions such as `spanType`, `name`, and `parentEntityName`. Token and cost measures belong to the span that recorded the usage and aren't added to parent spans. Check `capabilities.spanAggregate` before calling, and `capabilities.spanAggregateModelDimensions` before grouping or counting distinct values by `model` or `provider`. With an older adapter, those requests return `501`.
 
 See [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans) for selection, dimensions, per-span usage, and how to list the spans behind a group.
 
@@ -326,7 +290,7 @@ See [Delta polling](/reference/observability/tracing/advanced-queries#poll-after
 
 ### Aggregate traces
 
-`aggregateTraces()` groups the traces selected by a time range and optional `where` predicate, and returns one row per group. It accepts the same predicates as `queryTraces()`.
+`aggregateTraces()` groups the traces selected by a time range and optional `where` predicate, and returns one row per group, or per group and non-empty time bucket when `interval` is set. It accepts the same predicates as `queryTraces()`.
 
 ```typescript
 const { capabilities } = await mastraClient.getObservabilityCapabilities()
@@ -347,7 +311,7 @@ if (capabilities.traceAggregate) {
 }
 ```
 
-Each row has `dimensions` keyed by `groupBy` field, `measures` keyed by measure name, a `bucket` timestamp when `interval` is set, and `cost` coverage when a cost measure is requested. `truncated` is `true` when more groups matched than `limit`. Check `capabilities.traceAggregate` before calling. The client retries server errors like `queryTraces()` but doesn't retry `422` validation errors.
+Each row has `dimensions` keyed by `groupBy` field, `measures` keyed by measure name, a `bucket` timestamp when `interval` is set, and `cost` coverage when a cost measure is requested. `truncated` is `true` when more groups matched than `limit`. Check `capabilities.traceAggregate` before calling. The client applies its configured retry policy, except for `4xx` responses, `501`, and `504` responses with code `TRACE_QUERY_EXECUTION_TIMEOUT`, which aren't retried. Ordinary gateway `504` responses remain retryable.
 
 See [Aggregate traces](/reference/observability/tracing/advanced-queries#aggregate-traces) for dimensions, measures, token and cost semantics, time buckets, limits, and errors.
 
@@ -547,7 +511,7 @@ const ratingPercentiles = await mastraClient.getFeedbackPercentiles({
 
 ## Related
 
-- [Advanced trace queries](/reference/observability/tracing/advanced-queries): Query and aggregate completed traces with recursive predicates
+- [Query traces and spans](/reference/observability/tracing/advanced-queries): Filter and aggregate completed traces or spans
 - [Feedback guide](/docs/observability/feedback): Learn how to create, list, and query feedback
 - [Feedback reference](/reference/observability/feedback): Review feedback schemas and HTTP routes
 - [Agents API](./agents): Learn about agent interactions that generate traces
