@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { MockMemory } from '../../memory/mock';
 import { Agent } from '../agent';
+import { AGENT_LEASE_RENEW_INTERVAL_MS } from '../run-ownership';
 import { createSignal } from '../signals';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
@@ -1778,6 +1779,166 @@ describe('Agent signals: pending cancellation', () => {
         releaseFirst();
         subscription.unsubscribe();
         remoteSubscription.unsubscribe();
+      }
+    });
+
+    /**
+     * The first run is cancelled with "pending A" waiting, so a follow-up run takes the lease. The follower then
+     * forwards "idle B" to that follow-up run, and the forward is delivered only once `deliverForward` resolves.
+     */
+    async function forwardToFollowUpRun(
+      name: string,
+      { queueOwnerId, silentRunEnds = false }: { queueOwnerId?: string; silentRunEnds?: boolean } = {},
+    ) {
+      const scope = { resourceId: `${name}-user`, threadId: `${name}-thread` };
+      let forwarded!: () => void;
+      const forwardSent = new Promise<void>(resolve => {
+        forwarded = resolve;
+      });
+      let deliver!: () => void;
+      const deliverForward = new Promise<void>(resolve => {
+        deliver = resolve;
+      });
+      class HeldForwardPubSub extends ControlledLeasePubSub {
+        override async publish(topic: string, event: any): Promise<void> {
+          if (isIdleBForward(event.data)) {
+            forwarding = true;
+            forwarded();
+            await deliverForward;
+          }
+          // An owner that dies says nothing more about its run.
+          if (
+            silentRunEnds &&
+            forwarding &&
+            ['run-completed', 'run-failed', 'run-aborted'].includes(event.data?.type)
+          ) {
+            return;
+          }
+          await super.publish(topic, event);
+        }
+      }
+      let forwarding = false;
+      const pubsub = new HeldForwardPubSub();
+      const memory = new MockMemory();
+      const { model, releaseFirst, getStreamCount } = createBlockingFirstTextStreamModel(
+        'first response',
+        'later response',
+      );
+      let releaseFollowUp!: () => void;
+      const followUpGate = new Promise<void>(resolve => {
+        releaseFollowUp = resolve;
+      });
+      const doStream = model.doStream.bind(model);
+      model.doStream = async options => {
+        // Keep the follow-up run live until the follower has forwarded to it.
+        if (getStreamCount() === 1) await Promise.all([forwardSent, followUpGate]);
+        return doStream(options);
+      };
+      const agent = new Agent({ id: name, name, instructions: 'Test', model, memory, pubsub });
+      const subscription = await agent.subscribeToThread(scope);
+      const follower = new AgentThreadStreamRuntime();
+      const remoteSubscription = await follower.subscribeToThread(agent, scope, pubsub);
+      const stream = await agent.stream('first', { memory: { resource: scope.resourceId, thread: scope.threadId } });
+      const cleanup = () => {
+        forwarded();
+        deliver();
+        releaseFollowUp();
+        releaseFirst();
+        subscription.unsubscribe();
+        remoteSubscription.unsubscribe();
+      };
+      try {
+        await vi.waitFor(() => expect(getStreamCount()).toBe(1));
+        await agent.sendSignal({ type: 'user-message', contents: 'pending A' }, scope).accepted;
+        await vi.waitFor(() => expect(remoteSubscription.activeRunId()).toBe(stream.runId));
+        await follower.queueMessage(agent, 'idle B', { ...scope, queueOwnerId }, pubsub).accepted;
+        expect(subscription.abort()).toBe(true);
+        releaseFirst();
+        await stream.text;
+        await forwardSent;
+      } catch (error) {
+        cleanup();
+        throw error;
+      }
+      return { scope, pubsub, agent, model, subscription, follower, getStreamCount, deliver, releaseFollowUp, cleanup };
+    }
+
+    it('runs a message forwarded to a run that is then stopped exactly once', async () => {
+      const { pubsub, model, subscription, getStreamCount, deliver, releaseFollowUp, cleanup } =
+        await forwardToFollowUpRun('stopped-owner');
+      try {
+        expect(subscription.abort()).toBe(true);
+        await vi.waitFor(() => expect(pubsub.publishedData.some(data => data.type === 'run-aborted')).toBe(true));
+        deliver();
+        releaseFollowUp();
+        await vi.waitFor(() => expect(getStreamCount()).toBe(3));
+        expect(JSON.stringify(model.doStreamCalls[2]?.prompt)).toContain('idle B');
+        // It runs once: the stopped run admitted it while winding down, or it was queued again, never both.
+        await vi.waitFor(() => expect(pubsub.owners.size).toBe(0));
+        expect(getStreamCount()).toBe(3);
+      } finally {
+        cleanup();
+      }
+    });
+
+    it('does not run a forwarded message cancelled from its queue before the owner admitted it', async () => {
+      const { scope, agent, model, follower, pubsub, getStreamCount, deliver, releaseFollowUp, cleanup } =
+        await forwardToFollowUpRun('cancelled-forward', { queueOwnerId: 'group' });
+      const counts: number[] = [];
+      const stopListening = follower.subscribeThreadEvents(
+        agent,
+        { ...scope, queueOwnerId: 'group' },
+        event => {
+          if (event.type === 'queue-count-changed') counts.push(event.count);
+        },
+        pubsub,
+      );
+      try {
+        expect(counts.at(-1)).toBe(1);
+        const { cancelledSignalIds } = follower.cancelQueuedMessages(
+          agent,
+          { ...scope, queueOwnerId: 'group' },
+          pubsub,
+        );
+        expect(cancelledSignalIds).toHaveLength(1);
+        expect(counts.at(-1)).toBe(0);
+        releaseFollowUp();
+        await vi.waitFor(() =>
+          expect(pubsub.publishedData.filter(data => data.type === 'run-completed')).toHaveLength(2),
+        );
+        deliver();
+        await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+        await nextTick();
+        expect(getStreamCount()).toBe(2);
+        expect(JSON.stringify(model.doStreamCalls)).not.toContain('idle B');
+      } finally {
+        stopListening();
+        cleanup();
+      }
+    });
+
+    it('drains the message again when the run it was forwarded to loses its lease without an event', async () => {
+      // Checks of the lease run on the interval timer, which is the only one faked.
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      const { scope, pubsub, model, getStreamCount, deliver, releaseFollowUp, cleanup } = await forwardToFollowUpRun(
+        'vanished-owner',
+        { silentRunEnds: true },
+      );
+      try {
+        releaseFollowUp();
+        await vi.waitFor(() => expect(pubsub.owners.get(`${scope.resourceId}\u0000${scope.threadId}`)).toBeUndefined());
+        deliver();
+        await nextTick();
+        expect(getStreamCount()).toBe(2);
+        // The lease must be missing on two checks in a row.
+        await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        expect(getStreamCount()).toBe(2);
+        await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS);
+        await vi.waitFor(() => expect(getStreamCount()).toBe(3));
+        expect(JSON.stringify(model.doStreamCalls[2]?.prompt)).toContain('idle B');
+      } finally {
+        cleanup();
+        vi.useRealTimers();
       }
     });
   });
