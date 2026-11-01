@@ -1,6 +1,7 @@
 import { jwtVerify, createRemoteJWKSet } from 'jose';
 import { beforeEach, afterEach, describe, expect, test, vi } from 'vitest';
-import { MastraAuthNeon, MastraRBACNeon } from './index';
+import { MastraRBACNeon } from './ee';
+import { MastraAuthNeon } from './index';
 import type { NeonAuthUser } from './index';
 
 vi.mock('jose', () => ({

@@ -16,6 +16,16 @@
         "default": "./dist/index.cjs"
       }
     },
+    "./ee": {
+      "import": {
+        "types": "./dist/ee/index.d.ts",
+        "default": "./dist/ee/index.js"
+      },
+      "require": {
+        "types": "./dist/ee/index.d.ts",
+        "default": "./dist/ee/index.cjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "files": [

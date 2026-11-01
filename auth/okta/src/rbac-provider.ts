@@ -45,7 +45,8 @@ function getNextLink(linkHeader: string | null): string | undefined {
  *
  * @example Basic usage with Okta auth
  * ```typescript
- * import { MastraAuthOkta, MastraRBACOkta } from '@mastra/auth-okta';
+ * import { MastraAuthOkta } from '@mastra/auth-okta';
+ * import { MastraRBACOkta } from '@mastra/auth-okta/ee';
  *
  * const mastra = new Mastra({
  *   server: {
@@ -64,7 +65,7 @@ function getNextLink(linkHeader: string | null): string | undefined {
  * @example Cross-provider usage (Auth0 + Okta RBAC)
  * ```typescript
  * import { MastraAuthAuth0 } from '@mastra/auth-auth0';
- * import { MastraRBACOkta } from '@mastra/auth-okta';
+ * import { MastraRBACOkta } from '@mastra/auth-okta/ee';
  *
  * const mastra = new Mastra({
  *   server: {

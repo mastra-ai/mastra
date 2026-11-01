@@ -308,7 +308,8 @@ Use `MastraRBACGoogle` alongside an auth provider by passing it to the `rbac` op
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
-import { MastraAuthGoogle, MastraRBACGoogle } from '@mastra/auth-google'
+import { MastraAuthGoogle } from '@mastra/auth-google'
+import { MastraRBACGoogle } from '@mastra/auth-google/ee'
 
 export const mastra = new Mastra({
   server: {
@@ -335,7 +336,7 @@ To use Google Workspace RBAC with a different auth provider, pass a `getUserKey`
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { MastraAuthAuth0 } from '@mastra/auth-auth0'
-import { MastraRBACGoogle } from '@mastra/auth-google'
+import { MastraRBACGoogle } from '@mastra/auth-google/ee'
 
 export const mastra = new Mastra({
   server: {
