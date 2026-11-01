@@ -31,12 +31,14 @@ import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onb
 // Only the boards ship in the startup bundle; every other page loads on first
 // visit behind its own loader (see `lazyPage`).
 const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage));
-// A new session opens its thread on the first prompt, so that page loads alongside.
-const NewPage = lazyPage(() => {
-  // A failed preload retries on the visit.
-  ThreadPage.preload().catch(() => undefined);
-  return import('./pages/NewPage').then(module => module.NewPage);
-});
+// A new session opens its thread on the first prompt, so that page loads right after.
+const NewPage = lazyPage(() =>
+  import('./pages/NewPage').then(module => {
+    // A failed preload retries on the visit.
+    ThreadPage.preload().catch(() => undefined);
+    return module.NewPage;
+  }),
+);
 const KnowledgePage = lazyPage(() => import('./pages/KnowledgePage').then(module => module.KnowledgePage));
 const SettingsPage = lazyPage(() => import('./pages/SettingsPage').then(module => module.SettingsPage));
 const SlackConnectionPage = lazyPage(() =>
