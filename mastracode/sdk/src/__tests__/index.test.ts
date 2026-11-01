@@ -770,6 +770,29 @@ describe('createMastraCode', () => {
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
 
+  it('forwards plansDir to the instruction and default workspace callbacks', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ plansDir: '.artifacts/plans' });
+
+    const agentConfig = agentConstructorMock.mock.calls
+      .map(
+        ([config]) =>
+          config as {
+            instructions?: (ctx: { requestContext: { get(key: string): unknown } }) => Promise<string>;
+            workspace?: (ctx: { requestContext: { get(key: string): unknown } }) => unknown;
+          },
+      )
+      .find(config => typeof config.instructions === 'function');
+    if (!agentConfig?.instructions) throw new Error('Expected code agent instructions');
+    const requestContext = { get: () => undefined };
+    await agentConfig.instructions({ requestContext });
+    expect(getDynamicInstructionsMock).toHaveBeenCalledWith(expect.objectContaining({ plansDir: '.artifacts/plans' }));
+
+    const workspace = controllerConstructorMock.mock.calls[0]![0].workspace as (ctx: unknown) => unknown;
+    await workspace({ requestContext });
+    expect(getDynamicWorkspaceMock).toHaveBeenCalledWith(expect.objectContaining({ plansDir: '.artifacts/plans' }));
+  });
+
   it('passes configured co-author identity into the agent instruction callback', async () => {
     const { createMastraCode } = await import('../index.js');
     await createMastraCode({ coAuthor: { name: 'mastracode' } });

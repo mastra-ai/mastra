@@ -6,6 +6,8 @@
 
 import { MC_TOOLS } from '../../tool-names.js';
 
+const DEFAULT_PLANS_DIR = '.mastracode/plans';
+
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;
   hasSubagents?: boolean;
@@ -17,7 +19,7 @@ interface ToolGuidanceOptions {
 
 export function buildToolGuidance(modeId: string, options: ToolGuidanceOptions = {}): string {
   const denied = options.deniedTools ?? new Set<string>();
-  const plansDir = options.plansDir ?? '.mastracode/plans';
+  const plansDir = options.plansDir ?? DEFAULT_PLANS_DIR;
   const sections: string[] = [];
 
   sections.push(`# Tool Usage Rules
@@ -218,6 +220,15 @@ ${patchToolGuidance}
 - The plan will be rendered as markdown and the user can approve, reject, or request changes.
 - On approval, the system automatically switches to the default mode so you can implement.
 - Takes one argument: \`path\` (the plan markdown file you wrote under \`${plansDir}/\`). Do NOT pass the plan body — it lives in the file.`);
+  }
+
+  // Outside plan mode the only path hint is the submit_plan tool's own example
+  // (`.mastracode/plans/`), so name the real directory when the host moved it.
+  if (modeId !== 'plan' && !denied.has('submit_plan') && plansDir !== DEFAULT_PLANS_DIR) {
+    sections.push(`
+**submit_plan** — Submit a plan for user review
+- Write plan files under \`${plansDir}/\` (e.g. \`${plansDir}/add-dark-mode.md\`), never under \`${DEFAULT_PLANS_DIR}/\`. Plans anywhere else cannot be shown to the user.
+- Pass that file's \`path\` to \`submit_plan\`. Do NOT pass the plan body — it lives in the file.`);
   }
 
   if (modeId === 'plan') {

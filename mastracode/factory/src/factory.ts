@@ -1351,6 +1351,9 @@ export class MastraFactory {
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
+        // The Factory UI renders plans only from `.artifacts/`, including in user
+        // sessions, which carry no `factoryProjectId` to select it per session.
+        plansDir: '.artifacts/plans',
         // Subagents are disabled, matching the Mastra Code TUI default.
         subagents: [],
         resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
