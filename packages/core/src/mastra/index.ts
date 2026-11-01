@@ -86,6 +86,7 @@ import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform'
 import type { MastraTTS } from '../tts';
 import type { MastraIdGenerator, IdGeneratorContext } from '../types';
 import { readPositiveIntEnv } from '../utils';
+import { waitMs } from '../utils/test-waits';
 import type { MastraVector } from '../vector';
 import { OrchestrationWorker, SchedulerWorker, BackgroundTaskWorker } from '../worker';
 import type { MastraWorker, WorkerDeps, WorkerStopOptions } from '../worker';
@@ -7496,7 +7497,10 @@ export class Mastra<
    * pubsub is flushed.
    */
   public async stopWorkers(options?: WorkerStopOptions): Promise<void> {
-    const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'stopWorkers');
+    const drainTimeout = assertDrainTimeout(
+      options?.drainTimeout ?? waitMs(DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 50),
+      'stopWorkers',
+    );
     // One deadline for the whole call. Each worker's transport drain and the
     // push-event drain below typically wait on the same stuck step, so giving
     // each phase the full budget would multiply the worst-case stop time.
@@ -7898,7 +7902,10 @@ export class Mastra<
    * persisted.
    */
   async shutdown(options?: { drainTimeout?: number }): Promise<void> {
-    const drainTimeout = assertDrainTimeout(options?.drainTimeout ?? DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 'shutdown');
+    const drainTimeout = assertDrainTimeout(
+      options?.drainTimeout ?? waitMs(DEFAULT_SHUTDOWN_DRAIN_TIMEOUT_MS, 50),
+      'shutdown',
+    );
 
     // `drainTimeout` is a single deadline shared by every drain in this method
     // (evented runs here, then worker transports and push events inside

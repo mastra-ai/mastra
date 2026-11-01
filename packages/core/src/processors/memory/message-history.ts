@@ -9,6 +9,7 @@ import type { ObservabilityContext, MemoryOperationAttributes } from '../../obse
 import { MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
+import { waitMs } from '../../utils/test-waits';
 
 // Bounds the newest-first scan for continuation tool-call messages that fall outside the history window.
 const CONTINUATION_SCAN_PAGE_SIZE = 100;
@@ -331,7 +332,7 @@ export class MessageHistory implements Processor {
 
     await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
     // add extra 1ms latency to make sure the next generate has not the same input
-    await new Promise(resolve => setTimeout(resolve, 10));
+    await new Promise(resolve => setTimeout(resolve, waitMs(10, 1)));
 
     return messageList;
   }

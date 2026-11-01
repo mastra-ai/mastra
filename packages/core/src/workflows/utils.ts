@@ -5,6 +5,7 @@ import type { RequestContext } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import type { StandardSchemaWithJSON } from '../schema';
 import { removeUndefinedValues } from '../utils';
+import { waitMs } from '../utils/test-waits';
 import type { ExecutionGraph } from './execution-engine';
 import type { Step } from './step';
 import { getEntryId } from './step-entry';
@@ -902,7 +903,7 @@ export async function waitForSuspendedSnapshot(
       return null;
     }
 
-    await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_INTERVAL_MS));
+    await new Promise(resolve => setTimeout(resolve, waitMs(RESUME_SNAPSHOT_POLL_INTERVAL_MS, 1)));
   }
 
   return snapshot;
