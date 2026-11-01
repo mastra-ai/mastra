@@ -4,6 +4,7 @@
  */
 
 import { Text } from '@earendil-works/pi-tui';
+import { formatDuration } from '../format-duration.js';
 import { theme } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { statusDot, toolBlock } from './surface.js';
@@ -11,12 +12,6 @@ import { WidthAwareContainer } from './width-aware-container.js';
 
 const MAX_LINES = 200;
 const COLLAPSED_LINES = 20;
-
-function formatDuration(ms: number): string {
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = ms / 1000;
-  return seconds < 60 ? `${seconds.toFixed(1)}s` : `${Math.floor(seconds / 60)}m${Math.floor(seconds % 60)}s`;
-}
 
 export class ShellStreamComponent extends WidthAwareContainer {
   private command: string;
@@ -71,7 +66,9 @@ export class ShellStreamComponent extends WidthAwareContainer {
 
     const done = this.exitCode !== undefined;
     const failed = done && this.exitCode !== 0;
-    const durationStr = done ? theme.fg('muted', ` ${formatDuration(Date.now() - this.startTime)}`) : '';
+    const durationStr = done
+      ? theme.fg('muted', ` ${formatDuration(Date.now() - this.startTime, { precision: 'ms' })}`)
+      : '';
     const title = `${theme.bold(theme.fg('toolTitle', '$'))} ${theme.fg('toolArgs', this.command)}${durationStr}${failed ? theme.fg('error', ' ✗') : ''}`;
 
     const displayLines = [...this.lines];

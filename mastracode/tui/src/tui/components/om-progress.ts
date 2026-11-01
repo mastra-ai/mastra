@@ -6,6 +6,7 @@ import { Container, Text } from '@earendil-works/pi-tui';
 import { defaultOMProgressState } from '@mastra/core/agent-controller';
 import type { OMBufferedStatus, OMProgressState, OMStatus } from '@mastra/core/agent-controller';
 import chalk from 'chalk';
+import { formatDuration } from '../format-duration.js';
 import { theme, mastra } from '../theme.js';
 
 // Re-export types from core for backward compatibility
@@ -93,13 +94,13 @@ export class OMProgressComponent extends Container {
         this.statusText.setText('');
       }
     } else if (this.state.status === 'observing') {
-      const elapsed = this.state.startTime ? Math.round((Date.now() - this.state.startTime) / 1000) : 0;
+      const elapsed = formatDuration(this.state.startTime ? Date.now() - this.state.startTime : 0);
       const spinner = this.getSpinner();
-      this.statusText.setText(chalk.hex(mastra.orange)(`${spinner} Observing... ${elapsed}s`));
+      this.statusText.setText(chalk.hex(mastra.orange)(`${spinner} Observing... ${elapsed}`));
     } else if (this.state.status === 'reflecting') {
-      const elapsed = this.state.startTime ? Math.round((Date.now() - this.state.startTime) / 1000) : 0;
+      const elapsed = formatDuration(this.state.startTime ? Date.now() - this.state.startTime : 0);
       const spinner = this.getSpinner();
-      this.statusText.setText(chalk.hex(mastra.pink)(`${spinner} Reflecting... ${elapsed}s`));
+      this.statusText.setText(chalk.hex(mastra.pink)(`${spinner} Reflecting... ${elapsed}`));
     }
   }
 
