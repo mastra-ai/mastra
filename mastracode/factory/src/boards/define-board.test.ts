@@ -255,13 +255,14 @@ describe('defineBoard', () => {
   it('defines the built-in Work lifecycle and phase behavior', () => {
     expect(workBoard.initialPhase).toBe('intake');
     const flow: Record<string, string[]> = {
-      intake: ['triage', 'planning', 'review', 'done', 'canceled'],
+      intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
       triage: ['intake', 'planning', 'done', 'canceled'],
       planning: ['execute', 'intake', 'done', 'canceled'],
       execute: ['review', 'planning', 'done', 'canceled'],
       review: ['execute', 'intake', 'done', 'canceled'],
-      done: ['review'],
-      canceled: ['intake', 'review'],
+      'pr-review': ['intake', 'done', 'canceled'],
+      done: ['pr-review'],
+      canceled: ['intake', 'pr-review'],
     };
     for (const from of Object.keys(flow)) {
       for (const to of Object.keys(flow)) {

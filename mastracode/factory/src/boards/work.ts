@@ -288,10 +288,13 @@ export type WorkBoardPhase =
 const NON_PULL_REQUEST_PHASES: ReadonlySet<string> = new Set(['triage', 'planning', 'execute', 'review']);
 
 /**
- * Why a move breaks the shape of a pull request's card on Work, or undefined when it does not.
- * `nextPhases` cannot say this: it depends on the card, not the phase.
+ * Why a move breaks the shape of a card on Work, or undefined when it does not: a pull request's
+ * card is only reviewed, and PR review holds only pull request cards. `nextPhases` cannot say
+ * this: Intake leads to both Triage and PR review, and which one fits depends on the card.
  */
 export function workPullRequestCardRejection(isPullRequest: boolean, toStage: string): string | undefined {
+  if (!isPullRequest && toStage === 'pr-review')
+    return 'PR review holds only pull request cards; this work item goes to Review after Building.';
   if (!isPullRequest || !NON_PULL_REQUEST_PHASES.has(toStage)) return undefined;
   return `A pull request card is reviewed on the Work board; it cannot enter ${toStage}. Move it to pr-review, done, or canceled.`;
 }
@@ -309,9 +312,9 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     intake: {
       name: 'Intake',
       kind: 'resting',
-      // Never straight to Building: a plan comes first. Review takes a pull request's own card
-      // and resumes a card self-review parked here; Done is where a completed source closes it.
-      nextPhases: ['triage', 'planning', 'review', 'done', 'canceled'],
+      // Never straight to Building or Review: a plan comes first, and Review is self-review of a
+      // build. PR review takes a pull request's own card; Done is where a completed source closes it.
+      nextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
     },
     triage: {
       name: 'Triage',
@@ -384,6 +387,7 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       // reaches the builder's lanes through a pull request's.
       kind: 'working',
       runner: { context: 'work' },
+      // Merged, closed, or set aside in Intake: it never reaches the builder's lanes.
       nextPhases: ['intake', 'done', 'canceled'],
       onEnter: {
         pullRequest: reviewPullRequest,
@@ -394,7 +398,7 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       name: 'Done',
       kind: 'terminal',
       // A review request on a finished pull request reopens its review.
-      nextPhases: ['review'],
+      nextPhases: ['pr-review'],
       onEnter: { issue: completeIssue },
     },
     canceled: {
