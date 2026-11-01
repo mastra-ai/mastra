@@ -22,6 +22,7 @@ import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
+import { createStep, createWorkflow } from '../../../workflows';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 
@@ -267,6 +268,60 @@ describe('DurableAgent processor data-chunk persistence (#19375)', () => {
     expect(serialized.split('tool-writer-persisted').length - 1).toBe(1);
     expect(serialized).not.toContain('tool-writer-stream-only');
 
+    result.cleanup();
+  });
+
+  it('persists a nested workflow question before the durable tool suspends', async () => {
+    const step = createStep({
+      id: 'ask-question',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ answer: z.string() }),
+      resumeSchema: z.object({ answer: z.string() }),
+      suspendSchema: z.object({ question: z.string() }),
+      execute: async ({ writer, resumeData, suspend }) => {
+        await writer.custom({ type: 'data-question', id: 'question', data: { state: 'waiting' } });
+        if (!resumeData) return suspend({ question: 'Continue?' });
+        return resumeData;
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'question-workflow',
+      inputSchema: step.inputSchema,
+      outputSchema: step.outputSchema,
+    })
+      .then(step)
+      .commit();
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'question-agent',
+      name: 'Question Agent',
+      instructions: 'Ask the question.',
+      model: createToolCallingModel('workflow-questionWorkflow', { inputData: {} }) as LanguageModelV2,
+      memory,
+      workflows: { questionWorkflow: workflow },
+    });
+    const durable = createDurableAgent({ agent, pubsub });
+    new Mastra({
+      agents: { 'question-agent': durable as any },
+      workflows: { questionWorkflow: workflow },
+      storage: new InMemoryStore(),
+      pubsub,
+      logger: false,
+    });
+
+    const result = await durable.stream('Ask me', {
+      memory: { thread: 'thread-question', resource: 'resource-question' },
+      closeOnSuspend: true,
+    });
+    const chunks = await drain(result.fullStream);
+    expect(
+      chunks.some((chunk: any) => chunk.type === 'tool-output' && chunk.payload?.output?.type === 'data-question'),
+    ).toBe(true);
+    expect(chunks.some((chunk: any) => chunk.type === 'tool-call-suspended')).toBe(true);
+    const recalled = await memory.recall({ threadId: 'thread-question', resourceId: 'resource-question' });
+    expect(recalled.messages.flatMap(message => message.content.parts ?? [])).toContainEqual(
+      expect.objectContaining({ type: 'data-question', id: 'question', data: { state: 'waiting' } }),
+    );
     result.cleanup();
   });
 
