@@ -272,13 +272,14 @@ export class E2BSandbox extends MastraSandbox<Sandbox> {
     super({
       ...options,
       name: 'E2BSandbox',
-      processes: new E2BProcessManager({
-        defaultTimeout: options.timeout ?? 300_000,
-      }),
+      processes: new E2BProcessManager(),
     });
 
     this.id = options.id ?? this.generateId();
     this.timeout = options.timeout ?? 300_000; // 5 minutes;
+    // Bounds commands that run to completion. Background processes get no
+    // default: a dev server is meant to keep running.
+    this.defaultCommandTimeout = this.timeout;
     this.templateSpec = options.template;
     this.metadata = options.metadata ?? {};
     this.network = options.network;
