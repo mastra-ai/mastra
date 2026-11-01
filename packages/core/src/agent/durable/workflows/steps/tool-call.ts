@@ -27,6 +27,7 @@ import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { ProcessorRunner } from '../../../../processors/runner';
 import type { RequestContext } from '../../../../request-context';
+import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import type { ChunkType } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
 import {
@@ -165,6 +166,7 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
       z.object({
         type: z.string(),
         data: z.any().optional(),
+        id: z.string().optional(),
         messageId: z.string().optional(),
       }),
     )
@@ -401,8 +403,8 @@ export function createDurableToolCallStep() {
       // local copy whose mutations don't cross the step boundary, so parts are
       // collected here and carried on the output record for the mapping step
       // to persist into the authoritative messageList (#19375 parity port).
-      const processorDataParts: Array<{ type: string; data?: unknown; messageId?: string }> = [];
-      const collectProcessorDataPart = (part: { type: string; data?: unknown; messageId?: string }) => {
+      const processorDataParts: Array<{ type: string; data?: unknown; id?: string; messageId?: string }> = [];
+      const collectProcessorDataPart = (part: { type: string; data?: unknown; id?: string; messageId?: string }) => {
         ownership?.throwIfLost();
         processorDataParts.push(part);
       };
@@ -845,6 +847,14 @@ export function createDurableToolCallStep() {
             });
           await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
           if (!threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
+        }
+        if (messagesToFlush && processorDataParts.length) {
+          const invocation = [...messagesToFlush.get.all.db()].reverse().find(hasInvocation);
+          if (invocation) {
+            for (const part of processorDataParts.splice(0)) {
+              persistProcessorDataChunk(messagesToFlush, part.messageId ?? invocation.id, part);
+            }
+          }
         }
         await flushMessagesBeforeSuspension({
           saveQueueManager,
@@ -1410,8 +1420,14 @@ export function createDurableToolCallStep() {
       // regular agent does for tool-written data parts (#25122).
       const outputWriter = pubsub
         ? async (chunk: any) => {
-            if (typeof chunk?.type === 'string' && chunk.type.startsWith('data-') && !chunk.transient) {
-              collectProcessorDataPart({ type: chunk.type, data: chunk.data, messageId: chunk.messageId });
+            const dataPart = chunk?.type === 'tool-output' ? chunk.payload?.output : chunk;
+            if (typeof dataPart?.type === 'string' && dataPart.type.startsWith('data-') && !dataPart.transient) {
+              collectProcessorDataPart({
+                type: dataPart.type,
+                data: dataPart.data,
+                id: dataPart.id,
+                messageId: dataPart.messageId,
+              });
             }
             await emitChunkEvent(pubsub, runId, chunk as ChunkType);
           }
