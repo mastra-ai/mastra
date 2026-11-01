@@ -623,6 +623,8 @@ export class CoreToolBuilder extends MastraBase {
     if (!fgaProvider) return;
     const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
       await import('../../auth/ee/fga-check');
+    const user = requestContext?.get('user');
+    const resolved = await options.resolveExecuteFGA?.({ user, requestContext });
     const toolResourceId = mcpMeta?.serverName
       ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
       : options.agentId
@@ -630,13 +632,14 @@ export class CoreToolBuilder extends MastraBase {
         : getStandaloneToolFGAResourceId(options.name);
     await requireFGA({
       fgaProvider,
-      user: requestContext?.get('user'),
-      resource: { type: 'tool', id: toolResourceId },
-      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+      user,
+      resource: resolved?.resource ?? { type: 'tool', id: toolResourceId },
+      permission: resolved?.permission ?? MastraFGAPermissions.TOOLS_EXECUTE,
       requestContext,
       actor,
       context: {
         resourceId: options.resourceId,
+        ...resolved?.context,
       },
       metadata: {
         toolName: options.name,
@@ -646,6 +649,7 @@ export class CoreToolBuilder extends MastraBase {
         threadId: options.threadId,
         executionResourceId: options.resourceId,
         mcpMetadata: mcpMeta,
+        ...resolved?.metadata,
       },
     });
   }

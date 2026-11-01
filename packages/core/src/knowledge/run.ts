@@ -1,0 +1,172 @@
+import { getRunAgentScopes } from '../agent/scopes';
+import type {
+  KnowledgePage,
+  KnowledgeProvenance,
+  KnowledgeReadScope,
+  KnowledgeStorage,
+} from '../storage/domains/knowledge';
+import { knowledgeScopeReadable, parseKnowledgePageRef } from '../storage/domains/knowledge';
+import { knowledgeRoleOn } from './access';
+import { knowledgeRoleAtLeast, knowledgeRunScopes } from './declarations';
+import type { KnowledgeRole } from './declarations';
+import type { KnowledgeScopeRuntime } from './scope-runtime';
+
+/** What tools receive as their second argument. */
+export type KnowledgeRunContext = {
+  agent?: { threadId?: string; resourceId?: string; agentId?: string };
+  requestContext?: { get(key: string): unknown };
+};
+
+/** A page reference the run can't resolve; identical for missing and unreadable pages. */
+export class KnowledgeNotFoundError extends Error {
+  constructor(ref: string) {
+    super(`Knowledge page "${ref}" not found.`);
+    this.name = 'KnowledgeNotFoundError';
+  }
+}
+
+const NAME_CANDIDATES = 5;
+
+/**
+ * One call's view of Knowledge: the run's principals, its read scope and its provenance. Built per
+ * tool call from the run's own scopes, so access always follows the current declarations.
+ * @internal
+ */
+export class KnowledgeRun {
+  private constructor(
+    readonly runtime: KnowledgeScopeRuntime,
+    readonly storage: KnowledgeStorage,
+    readonly principals: string[],
+    readonly read: Exclude<KnowledgeReadScope, 'all'>,
+    readonly provenance: KnowledgeProvenance,
+  ) {}
+
+  static async start(
+    runtime: KnowledgeScopeRuntime,
+    storage: KnowledgeStorage,
+    context: KnowledgeRunContext | undefined,
+  ): Promise<KnowledgeRun> {
+    const principals = knowledgeRunPrincipals(runtime, context);
+    const author = context?.agent?.agentId ? `agent:${context.agent.agentId}` : 'agent';
+    const provenance: KnowledgeProvenance = {
+      author,
+      ...(context?.agent?.threadId ? { sourceThreadId: context.agent.threadId } : {}),
+    };
+    // Held scopes are host-vouched, so they materialize (and late-link) on first use.
+    for (const principal of principals) await runtime.materializeScope(principal, principals, provenance);
+    const read = (await runtime.readScopeFor(principals)) as Exclude<KnowledgeReadScope, 'all'>;
+    return new KnowledgeRun(runtime, storage, principals, read, provenance);
+  }
+
+  /** The strongest role on a scope page, or null. */
+  async roleOn(scope: KnowledgePage): Promise<KnowledgeRole | null> {
+    return this.runtime.roleOn(this.principals, scope);
+  }
+
+  /** The home scope page of a page the run can read. */
+  async scopeOf(page: KnowledgePage): Promise<KnowledgePage> {
+    if (page.isScope) return page;
+    const scope = await this.storage.getPage({ id: page.scopeId, read: this.read });
+    if (!scope) throw new Error(`Knowledge page "${page.id}" has no readable home scope.`);
+    return scope;
+  }
+
+  /** Throws unless the run holds at least `min` on `scope`. */
+  async require(scope: KnowledgePage, min: KnowledgeRole, action: string): Promise<void> {
+    const role = await this.roleOn(scope);
+    if (!knowledgeRoleAtLeast(role, min)) {
+      throw new Error(`${action} needs ${min} on "${scope.address}"; this run has ${role ? role : 'no role'} there.`);
+    }
+  }
+
+  /**
+   * A scope a write names (create home, move destination, note stamp). Unmaterialized scopes are
+   * created only when the run's rules already give it at least `min` there, so a model can't spawn
+   * scope pages it couldn't write to.
+   */
+  async targetScope(address: string, min: KnowledgeRole, action: string): Promise<KnowledgePage> {
+    const match = this.runtime.compiled.match(address);
+    if (!match) throw new Error(`Knowledge scope "${address}" does not match a declared scope type.`);
+    let [scope] = await this.storage.getScopesByAddress([address]);
+    if (!scope) {
+      const role = knowledgeRoleOn(this.runtime.compiled, this.principals, { address });
+      if (!knowledgeRoleAtLeast(role, min)) throw new KnowledgeNotFoundError(address);
+      scope = await this.runtime.materializeScope(address, this.principals, this.provenance);
+    }
+    const role = await this.roleOn(scope);
+    if (!role) throw new KnowledgeNotFoundError(address);
+    if (!knowledgeRoleAtLeast(role, min)) {
+      throw new Error(`${action} needs ${min} on "${address}"; this run has ${role} there.`);
+    }
+    return scope;
+  }
+
+  /**
+   * Resolves a page reference through the run's read view: a page id, a scope address,
+   * `<scope>#<key>[/<key>…]` (walked key by key), or an exact name (ambiguous names are refused with candidate ids).
+   * A scope that hasn't been created yet is not found, unless `createAt` is given and the run's rules give it at
+   * least that role there: model-supplied references never create scope pages on a read.
+   */
+  async page(ref: string, createAt?: KnowledgeRole): Promise<KnowledgePage> {
+    const byId = await this.storage.getPage({ id: ref, read: this.read });
+    if (byId && !byId.deletedAt) return byId;
+
+    if (ref.indexOf('#') > 0) {
+      const parsed = parseKnowledgePageRef(ref);
+      const scope = parsed ? await this.#readableScope(parsed.scope, createAt) : undefined;
+      const page =
+        parsed && scope
+          ? await this.storage.getPageByPath({ scopeId: scope.id, path: parsed.path, read: this.read })
+          : null;
+      if (!page) throw new KnowledgeNotFoundError(ref);
+      return page;
+    }
+
+    if (this.runtime.compiled.match(ref)) {
+      const scope = await this.#readableScope(ref, createAt);
+      if (scope) return scope;
+    }
+
+    const named = await this.storage.findPagesByName({ name: ref, read: this.read, limit: NAME_CANDIDATES });
+    if (named.length === 1) return named[0]!;
+    if (named.length > 1) {
+      throw new Error(
+        `Knowledge page name "${ref}" is ambiguous; use one of these ids: ${named
+          .map(page => `${page.id} (in ${page.scopeId})`)
+          .join(', ')}.`,
+      );
+    }
+    throw new KnowledgeNotFoundError(ref);
+  }
+
+  async #readableScope(address: string, createAt: KnowledgeRole | undefined): Promise<KnowledgePage | null> {
+    let [scope] = await this.storage.getScopesByAddress([address]);
+    // A write materializes a declared scope, with its template pages, when the run's rules let it write there.
+    if (
+      !scope &&
+      createAt &&
+      knowledgeRoleAtLeast(knowledgeRoleOn(this.runtime.compiled, this.principals, { address }), createAt)
+    ) {
+      scope = await this.runtime.materializeScope(address, this.principals, this.provenance);
+    }
+    return scope && knowledgeScopeReadable(scope, this.read) ? scope : null;
+  }
+}
+
+/**
+ * The run's principals in canonical form: its resolved run scopes plus its Memory identity. Every one
+ * must match a declared scope type.
+ * @internal
+ */
+export function knowledgeRunPrincipals(
+  runtime: KnowledgeScopeRuntime,
+  context: KnowledgeRunContext | undefined,
+): string[] {
+  const raw = getRunAgentScopes(context?.requestContext);
+  if (context?.agent?.resourceId) raw.push(`resource:${context.agent.resourceId}`);
+  if (context?.agent?.threadId) raw.push(`thread:${context.agent.threadId}`);
+  if (raw.length === 0) {
+    throw new Error('Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with Memory.');
+  }
+  return knowledgeRunScopes(runtime.compiled, raw);
+}

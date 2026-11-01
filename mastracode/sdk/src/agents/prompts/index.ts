@@ -23,8 +23,6 @@ import { buildToolGuidance } from './tool-guidance.js';
 export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   modeId: string;
   state?: any;
-  /** The subconscious knowledge tools are registered on the agent. */
-  hasSubconscious?: boolean;
   hostInstructions?: string;
   /** Controller built-in tools removed via `disableBuiltinTools`; treated as denied. */
   disabledBuiltinTools?: readonly string[];
@@ -110,7 +108,6 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
   const toolGuidance = buildToolGuidance(ctx.modeId, {
     hasWebSearch,
-    hasSubconscious: ctx.hasSubconscious === true,
     hasSubagents: ctx.hasSubagents,
     deniedTools,
     plansDir: getLocalPlansRelativeDir({ factoryProjectId }),

@@ -676,12 +676,18 @@ describe('MastraFactory.prepare', () => {
   });
 
   it('passes the host-owned keyed Knowledge instance through the SDK mount', async () => {
-    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
+    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge', scopes: {} });
     const knowledge = { key: 'mastra', instance };
 
     const config = await prepareFactory({ storage: fakeStorage(), knowledge });
 
     expect(config.knowledge).toEqual(knowledge);
+  });
+
+  it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+
+    expect(config.knowledge).toBe(false);
   });
 
   it('throws when called twice', async () => {

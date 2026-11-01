@@ -60,14 +60,24 @@ function countV1Nodes(databasePath: string) {
 function knowledgeSchemaVersion(databasePath: string) {
   const database = new DatabaseSync(databasePath, { readOnly: true });
   try {
-    return database.prepare("SELECT schemaVersion FROM mastra_knowledge_access_state WHERE id = 'global'").get();
+    return database.prepare("SELECT schemaVersion FROM mastra_knowledge_access_state WHERE id = 'knowledge'").get();
   } finally {
     database.close();
   }
 }
 
-async function start(directory: string, databasePath: string) {
+function hasTable(databasePath: string, name: string) {
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    return database.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?").get(name) !== undefined;
+  } finally {
+    database.close();
+  }
+}
+
+async function start(directory: string, databasePath: string, knowledge?: true) {
   return createMastraCode({
+    knowledge,
     cwd: directory,
     homeDir: directory,
     configDir: '.mastracode-test',
@@ -85,40 +95,40 @@ async function start(directory: string, databasePath: string) {
 
 describe('createMastraCode on a database with v1 Knowledge rows', () => {
   it('starts without touching Knowledge when Knowledge is off', async () => {
-    vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '');
     const { directory, databasePath } = createV1Database();
 
     const code = await start(directory, databasePath);
 
     expect(code.knowledge).toBeUndefined();
     expect(code.knowledgeInspector).toBeUndefined();
-    expect(code.knowledgeInspectorUnavailableReason).toContain('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1');
+    expect(code.knowledgeInspectorUnavailableReason).toContain('/settings');
     expect(countV1Nodes(databasePath)).toEqual({ count: 1 });
   });
 
-  it('replaces the v1 tables and opens Knowledge when Knowledge is on', async () => {
-    vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '1');
+  it('starts on schema 4 and drops the v1 tables when Knowledge is on', async () => {
     const { directory, databasePath } = createV1Database();
 
-    const code = await start(directory, databasePath);
+    const code = await start(directory, databasePath, true);
 
     expect(code.knowledge).toBeDefined();
     expect(code.knowledgeInspector).toBeDefined();
     expect(code.knowledgeInspectorUnavailableReason).toBeUndefined();
-    expect(countV1Nodes(databasePath)).toEqual({ count: 0 });
-    expect(knowledgeSchemaVersion(databasePath)).toEqual({ schemaVersion: 2 });
+    expect(knowledgeSchemaVersion(databasePath)).toEqual({ schemaVersion: 4 });
+    expect(hasTable(databasePath, 'mastra_knowledge_nodes')).toBe(false);
   });
 
-  it('starts and explains the reset when the Knowledge layout is not one Mastra published', async () => {
-    vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '1');
+  it('opens Knowledge on schema 4 after the host calls dangerouslyReset()', async () => {
     const { directory, databasePath } = createV1Database({ customIndex: true });
+    const storage = new LibSQLStore({ id: 'knowledge-reset', url: `file:${databasePath}` });
+    await storage.init();
+    await storage.stores?.knowledge?.dangerouslyReset();
 
-    const code = await start(directory, databasePath);
+    const code = await start(directory, databasePath, true);
 
     expect(code.knowledge).toBeDefined();
-    expect(code.knowledgeInspector).toBeUndefined();
-    expect(code.knowledgeInspectorUnavailableReason).toContain('Knowledge schema reset required');
-    expect(code.knowledgeInspectorUnavailableReason).toContain('dangerouslyReset()');
-    expect(countV1Nodes(databasePath)).toEqual({ count: 1 });
+    expect(code.knowledgeInspector).toBeDefined();
+    expect(code.knowledgeInspectorUnavailableReason).toBeUndefined();
+    expect(knowledgeSchemaVersion(databasePath)).toEqual({ schemaVersion: 4 });
+    expect(hasTable(databasePath, 'mastra_knowledge_nodes')).toBe(false);
   });
 });

@@ -18,6 +18,7 @@ export class TemporalExecutionEngine {
       ...(params.requestContext !== undefined && { requestContext: params.requestContext }),
       ...(params.runId !== undefined && { runId: params.runId }),
       ...(params.resourceId !== undefined && { resourceId: params.resourceId }),
+      validateInputs: params.validateInputs,
       workflowId: params.workflowId,
     };
     // Step times let start() build Mastra step records. Only recorded on request so runs that
@@ -211,6 +212,8 @@ export function createWorkflow(workflowId, options) {
       runId: startArgs?.runId,
       resourceId: startArgs?.resourceId,
       requestContext: startArgs?.requestContext,
+      // A child Workflow gets its parent's setting in startArgs, as nested workflows do in Mastra.
+      validateInputs: startArgs?.validateInputs ?? options?.validateInputs ?? true,
       graph: {
         id: workflowId,
         steps: stepFlow,
