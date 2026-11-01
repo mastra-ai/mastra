@@ -1,0 +1,358 @@
+---
+title: 'Reference: Knowledge class | Knowledge'
+description: 'Constructor options and methods of the Knowledge class (beta).'
+packages:
+  - '@mastra/core'
+---
+
+# Knowledge class
+
+:::beta
+
+Knowledge is in beta. Breaking changes may occur without a major version bump until the API is stable.
+
+:::
+
+The `Knowledge` class holds pages and notes, declares which scopes exist and who gets which role on them, and gives attached agents the Knowledge tools. See [Knowledge overview](/docs/knowledge/overview) for what it does and [Setup](/docs/knowledge/setup) for a walkthrough.
+
+## Usage example
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+  tools: true,
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'team:$orgId:$teamId': {
+      access: [
+        { principal: 'self', role: 'editor' },
+        { principal: 'org:$orgId', role: 'viewer' },
+      ],
+    },
+  },
+})
+```
+
+## Constructor options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'scopes',
+    type: 'KnowledgeScopeDeclarations',
+    description:
+      "Scope types and concrete scopes this Knowledge knows, keyed by pattern (`team:$orgId:$teamId`) or address (`org:acme`). Each declaration sets `access` rules and optionally `description`, `displayLabel`, `belongsTo`, `children`, `pages`, `pinnedContext` and `pinnedContextPriority`. `displayLabel` is a short name for UIs, such as `'$orgId organization'`; the model never sees it. Children take `displayLabel` too. Required: every run scope of an attached agent must match a declaration. Spread `knowledgeMemoryScopes()` for Memory's scopes; `{}` declares nothing. See [Declare scope types](/docs/knowledge/scope-types).",
+  },
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Identifier. Random if omitted.',
+    isOptional: true,
+  },
+  {
+    name: 'name',
+    type: 'string',
+    description: 'Name used in logs. Defaults to `id`.',
+    isOptional: true,
+  },
+  {
+    name: 'description',
+    type: 'string',
+    description: 'Prose context for agents.',
+    isOptional: true,
+  },
+  {
+    name: 'storage',
+    type: 'MastraCompositeStore',
+    description: 'Storage adapter. Without it, Knowledge uses the storage of the Mastra instance it is registered on.',
+    isOptional: true,
+  },
+  {
+    name: 'tools',
+    type: 'boolean | { read?: boolean; write?: boolean }',
+    description:
+      'Tools an attached agent gets. `true` gives `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first two, `{ write: true }` the last two. Off by default.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'pinnedContext',
+    type: 'boolean | { maxPins?: number; maxTokens?: number }',
+    description:
+      'Pinned pages delivered to an attached agent every turn, plus the `knowledge_pin` tool. Needs Memory. `maxPins` defaults to 20 and `maxTokens` to 500; `maxTokens` above 2000 throws. Off by default. See [Pins](/docs/knowledge/pins).',
+    isOptional: true,
+    defaultValue: 'false',
+  },
+  {
+    name: 'vector',
+    type: 'MastraVector',
+    description:
+      'Vector store for semantic search. Pass with `embedder`; passing only one throws. Without both, search is keyword only.',
+    isOptional: true,
+  },
+  {
+    name: 'embedder',
+    type: 'MastraEmbeddingModel<string>',
+    description: 'Embedding model for semantic search. Pass with `vector`.',
+    isOptional: true,
+  },
+  {
+    name: 'embedderOptions',
+    type: 'MastraEmbeddingOptions',
+    description:
+      'Options passed to the embedder on every call: `maxRetries`, `headers`, `providerOptions`, `telemetry`.',
+    isOptional: true,
+  },
+  {
+    name: 'instructions',
+    type: 'false | string | ((parts: { read: string; write: string; pins: string }) => string)',
+    description:
+      'Replaces the built-in usage instructions added when Knowledge attaches tools. `false` adds none. A function receives the built-in parts, with an empty string for each disabled group, and must return the same text for the same input so the prompt stays cacheable. See [Instructions](/docs/knowledge/instructions).',
+    isOptional: true,
+  },
+]}
+/>
+
+The constructor throws a `KnowledgeDeclarationError` when `scopes` is missing or a declaration is invalid, for example two patterns of one type that overlap or a rule principal that doesn't bind. Without `scopes` the message is:
+
+```text
+Knowledge needs `scopes`: declare the scopes its runs hold, e.g. `scopes: { ...knowledgeMemoryScopes() }`, or `{}` for none.
+```
+
+## Methods
+
+### `createTools()`
+
+```typescript oxfmt:false
+createTools(options?: { read?: boolean; write?: boolean; pinnedContext?: boolean }): Record<string, Tool>
+```
+
+Returns the Knowledge tools for explicit wiring, such as an agent that isn't attached with `knowledge`. Each option overrides the matching group set on the instance. See [Knowledge tools](/reference/knowledge/knowledge-tools).
+
+```typescript
+const tools = knowledge.createTools({ write: false })
+// knowledge_search, knowledge_read
+```
+
+### `getInstructions()`
+
+```typescript oxfmt:false
+getInstructions(options?: { read?: boolean; write?: boolean; pinnedContext?: boolean }): string
+```
+
+Returns the usage instructions that go with `createTools(options)`, built the same way as for an attached agent: the built-in parts for the enabled groups, or what the `instructions` option makes of them.
+
+### `reindex()`
+
+```typescript oxfmt:false
+reindex(): Promise<number>
+```
+
+Re-embeds every live page and note into the vector store and resolves to how many it indexed. Use it for content written straight to the store or after a failed embed. Throws without `vector` and `embedder`.
+
+### `explainAccess()`
+
+```typescript oxfmt:false
+explainAccess(
+  runScopes: readonly string[],
+  target: { scope: string } | { page: string },
+): Promise<KnowledgeAccessExplanation>
+```
+
+Says why a run holding `runScopes` can or can't reach a scope or page. `runScopes` are raw run scopes, as you'd pass to an agent. `target.page` takes a page ID or a page path such as `org:acme#policies/refund`. A run scope with no declaration throws, as it does at run start:
+
+```text
+Knowledge run scope "project:x" does not match a declared scope type. Declare it in Knowledge `scopes` (for Memory's resource:/thread: scopes, spread `...knowledgeMemoryScopes()`).
+```
+
+A `target.scope` with no declaration throws `Knowledge scope "project:x" does not match a declared scope type.`
+
+:::warning
+
+`explainAccess()` is host-only. It tells a missing page from a hidden one, which runs must never learn. Don't expose it through an agent tool, or through a server route without admin-level auth.
+
+:::
+
+```typescript
+await knowledge.explainAccess(['org:acme'], { page: 'team:acme:support#refunds' })
+// {
+//   role: 'viewer',
+//   reasons: [{ principal: 'org:acme', role: 'viewer', rule: 'team:$orgId:$teamId', via: 'rule' }],
+//   page: { id: '…', scope: 'team:acme:support' },
+// }
+
+await knowledge.explainAccess(['org:globex'], { page: 'team:acme:support#refunds' })
+// { role: null, reasons: [], page: { id: '…', scope: 'team:acme:support' }, reason: 'hidden' }
+```
+
+<PropertiesTable
+  content={[
+  {
+    name: 'role',
+    type: "'viewer' | 'contributor' | 'editor' | 'owner' | null",
+    description: "The strongest role the run has on the target scope. `null` when it can't read it.",
+  },
+  {
+    name: 'reasons',
+    type: 'Array<{ principal: string; role: string; rule: string; via: "self" | "rule" | "belongsTo" }>',
+    description:
+      "Every rule that gives one of the run's scopes a role there: the held scope, the role, the declaration key or concrete address, and how the rule bound.",
+  },
+  {
+    name: 'page',
+    type: '{ id: string; scope: string }',
+    description: 'The resolved page and its home scope, for page targets that exist.',
+    isOptional: true,
+  },
+  {
+    name: 'reason',
+    type: "'missing' | 'hidden' | 'no-rule'",
+    description:
+      "`missing`: no such page. `hidden`: the page exists but the run can't read its scope. `no-rule`: no rule gives the run a role on the scope.",
+    isOptional: true,
+  },
+]}
+/>
+
+### `readScopeFor()`
+
+```typescript oxfmt:false
+readScopeFor(principals: readonly string[]): Promise<KnowledgeReadScope>
+```
+
+Returns what a holder of `principals` can read: the principals themselves plus every scope their rules reach in one hop. Pass the result as `read` to the store's read methods when host code reads Knowledge for a user. Undeclared principals throw `Knowledge run scope "project:x" does not match a declared scope type.` An empty list reads nothing.
+
+### `renameScopeDeclaration()`
+
+```typescript oxfmt:false
+renameScopeDeclaration(from: string, to: string): Promise<number>
+```
+
+Moves stored scopes created from declaration key `from`, and its child scopes (`from/<name>`), to key `to`, in one step. Resolves to how many scopes moved. Refuses, and changes nothing, when `from` is still in `scopes`, `to` isn't, or a stored address doesn't match `to`'s pattern. Until stored keys match `scopes`, the instance refuses to run. On MongoDB the rename runs in a transaction only when the server is a replica set; on a standalone server it isn't atomic, so a failure partway can leave some scopes renamed. See [rename or retire a scope type](/docs/knowledge/scope-types#rename-or-retire-a-scope-type).
+
+### `getStorage()`
+
+```typescript oxfmt:false
+getStorage(): Promise<KnowledgeStorage>
+```
+
+Host code such as admin pages, deletes and your own import scripts uses the returned Knowledge store directly. Its methods skip role checks, so pass the `read` value from `readScopeFor()` whenever a read should be limited to what a user can see.
+
+```typescript
+const store = await knowledge.getStorage()
+const read = await knowledge.readScopeFor(['org:acme'])
+const [scope] = await store.getScopesByAddress(['team:acme:support'])
+const page = await store.getPageByPath({ scopeId: scope.id, path: ['handbook', 'refunds'], read })
+```
+
+### `upsertPage()`
+
+```typescript oxfmt:false
+upsertPage(input: {
+  scope: string
+  path: string
+  name: string
+  description?: string
+  body?: string
+  author?: string
+}): Promise<{ page: KnowledgePage; status: 'created' | 'updated' | 'unchanged' }>
+```
+
+Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. An empty key throws `Knowledge page path "<path>" needs non-empty keys.` See [sync content into Knowledge](/docs/knowledge/setup#sync-content-into-knowledge).
+
+This method and the four below are host-only: they check no run scopes or access rules. Don't expose them through an agent tool, or through a server route without admin-level auth.
+
+### `removePage()`
+
+```typescript oxfmt:false
+removePage(input: { scope: string; path: string; author?: string }): Promise<KnowledgePage | null>
+```
+
+Removes the page at `path` and resolves to it, or to `null` when no page is there. Throws `"<scope>#<path>" has child pages; remove them first.` for a page with children, and `"<scope>#<path>" is declared in config; change the scope's pages to remove it.` for a template page. Throws without retrying when another write changed the page first.
+
+### `addNote()`
+
+```typescript oxfmt:false
+addNote(input: {
+  scope: string
+  path: string
+  text: string
+  when?: Date
+  stamps?: string[]
+  author?: string
+}): Promise<KnowledgeNote>
+```
+
+Adds a note to the page at `path`. `text` is at most 250 tokens. `[[scope#path]]` mentions of existing pages link the note to them. Other `[[...]]` text stays plain. `stamps` are the scope addresses whose readers see the note and default to the page's scope. Throws `KnowledgeNotFoundError` when the page doesn't exist.
+
+### `updateNote()`
+
+```typescript oxfmt:false
+updateNote(input: { id: string; text: string; when?: Date; stamps?: string[]; author?: string }): Promise<KnowledgeNote>
+```
+
+Replaces a note: adds the new note, then removes the old one, and resolves to the new note with a new ID. `when` and `stamps` keep their old values when left out. If removing the old note fails, the new note is already written, so call `removeNote()` with the old ID.
+
+### `removeNote()`
+
+```typescript oxfmt:false
+removeNote(input: { id: string; author?: string }): Promise<KnowledgeNote | null>
+```
+
+Removes a note and resolves to it, or to `null` when it's already gone.
+
+### `onChange()`
+
+```typescript oxfmt:false
+onChange(listener: (event: KnowledgeChangeEvent) => void): () => void
+```
+
+Calls `listener` after each committed write made through this instance's store: tool writes, host writes through `getStorage()`, and new scopes. Returns a function that removes the listener. Use it to refresh a live UI. Writes made on a store obtained another way aren't seen.
+
+Events carry IDs, not content or access, so anything that relays them to people must re-read each page under that person's read scope from `readScopeFor()`:
+
+| `kind` | `op` | Fields |
+| - | - | - |
+| `scope` | `create` | `pageId`, `scopeId` (the new scope page's ID) |
+| `page` | `create`, `update`, `move`, `merge`, `delete` | `pageId`, `scopeId`; `fromScopeId` for `move` and `merge`; `sourceId` (the page merged away) for `merge` |
+| `note` | `add`, `restamp`, `remove`, `restore` | `pageId`, `noteId` |
+| `pin` | `add`, `remove` | `pageId` |
+
+Every event also has `knowledgeId` and `at`. Creating a scope emits one `scope` event, not one per child scope or template page, so re-list the scope when it arrives. A listener that throws is logged and doesn't fail the write.
+
+```typescript
+const unsubscribe = knowledge.onChange(event => {
+  if (event.kind === 'page') refreshPage(event.pageId)
+})
+```
+
+### `scopeDeclaration()`
+
+```typescript oxfmt:false
+scopeDeclaration(key: string): KnowledgeScopeDeclarationInfo | undefined
+```
+
+Returns the declaration a scope was created from, by its declaration key, for display: `{ key, description?, displayLabel?, belongsTo?, children }`. Child keys work too, such as `org:$orgId/private`. Access rules are left out. Use `explainAccess()` for those. Returns `undefined` for an unknown key.
+
+### `scopeLabel()`
+
+```typescript oxfmt:false
+scopeLabel(address: string): string | undefined
+```
+
+Returns the `displayLabel` for a scope address with its `$params` filled in: `'$orgId organization'` on `org:$orgId` gives `acme organization` for `org:acme`. A concrete address's own `displayLabel` wins. Returns `undefined` when the address matches no declaration or has no label.
+
+### `pinnedContextEnabled`
+
+`true` when `pinnedContext` is on, so attached agents get pinned pages every turn.
+
+## Related
+
+- [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes)
+- [Knowledge tools](/reference/knowledge/knowledge-tools)
+- [Declare scope types](/docs/knowledge/scope-types)
+- [Set who a run is](/docs/knowledge/run-scopes)

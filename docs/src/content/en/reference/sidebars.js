@@ -408,6 +408,17 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Knowledge',
+      collapsed: true,
+      customProps: { tags: ['beta'] },
+      items: [
+        { type: 'doc', id: 'knowledge/knowledge-class', label: 'Knowledge Class' },
+        { type: 'doc', id: 'knowledge/knowledge-tools', label: 'Knowledge Tools' },
+        { type: 'doc', id: 'knowledge/knowledge-memory-scopes', label: 'knowledgeMemoryScopes()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Memory',
       collapsed: true,
       items: [

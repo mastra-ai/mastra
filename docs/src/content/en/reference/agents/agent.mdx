@@ -1051,10 +1051,10 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'scopes',
-    type: 'string[] | ({ requestContext: RequestContext }) => string[] | Promise<string[]>',
+    type: 'string[] | ({ scopes: string[]; requestContext: RequestContext; mastra?: Mastra }) => string[] | Promise<string[]>',
     isOptional: true,
     description:
-      'Scopes every run of this agent acts as, written as `<type>:<value>`. Combined with per-call `scopes` and the `mastra__scopes` request context key.',
+      "Scopes the agent's runs act as, written as `<type>:<value>`. A list adds to the incoming scopes (per-call `scopes`, `defaultOptions.scopes` and the `mastra__scopes` request context key). A function receives the incoming scopes as `scopes` and returns the run's final set; it must keep every incoming `resource:` and `thread:` scope.",
   },
   {
     name: 'memory',
