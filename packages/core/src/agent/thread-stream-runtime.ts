@@ -3141,6 +3141,9 @@ export class AgentThreadStreamRuntime {
       // wait out the rest of its window so retries stay paced.
       const unusedMs = attemptMs - (Date.now() - attemptStartedAt);
       if (unusedMs > 0) await new Promise(resolve => setTimeout(resolve, unusedMs));
+      // Stop when this window ran to the deadline. Rereading Date.now() here can come up a
+      // millisecond short, since timers can fire just before it reaches their due time.
+      if (attemptStartedAt + attemptMs >= deadline) return undefined;
       attemptTimeoutMs *= 2;
     }
   }
