@@ -8757,8 +8757,8 @@ importers:
         specifier: ^7.5.0
         version: 7.5.0(supports-color@10.2.2)
       '@google-cloud/text-to-speech':
-        specifier: ^6.4.1
-        version: 6.4.1(supports-color@10.2.2)
+        specifier: ^7.2.0
+        version: 7.2.0(supports-color@10.2.2)
       zod:
         specifier: 4.6.7
         version: 4.6.7
@@ -14484,9 +14484,9 @@ packages:
     resolution: {integrity: sha512-M3kA6UA2Tjp5aznCrgKcm9CzOjiQyRMnquqalqXAeS5wvkqqZxN8wpNjjHafOSYs6lQ82U7f2i8we4eTfIrpkA==}
     engines: {node: '>=22'}
 
-  '@google-cloud/text-to-speech@6.4.1':
-    resolution: {integrity: sha512-iF1SpBPbP019zoLYzIJXp/yDumrSNl19T7hXP4Lg8d2cnNtxoQKQuNOpiwFrxEKV3CBJpp7OY5+z7/K73zNr5w==}
-    engines: {node: '>=18'}
+  '@google-cloud/text-to-speech@7.2.0':
+    resolution: {integrity: sha512-RsfBmiZvZ9aI8tr8PitPam5HDIL9X5upbrzBw5uZUP+syCo2AUZictX2bBeYZQa5sWx/bfp6G1sBE1TbAe4QAg==}
+    engines: {node: '>=22'}
 
   '@google/genai@1.52.0':
     resolution: {integrity: sha512-gwSvbpiN/17O9TbsqSsE/OzZcpv5Fo4RQjdngGgogtuB9RsyJ8ZHhX5KjHj1bp5N9snN2eK8LDGXSaWW2hof8Q==}
@@ -37390,9 +37390,9 @@ snapshots:
       - supports-color
     optional: true
 
-  '@google-cloud/text-to-speech@6.4.1(supports-color@10.2.2)':
+  '@google-cloud/text-to-speech@7.2.0(supports-color@10.2.2)':
     dependencies:
-      google-gax: 5.0.8(supports-color@10.2.2)
+      google-gax: 6.13.0(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
 
@@ -48824,7 +48824,6 @@ snapshots:
       retry-request: 9.1.0
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   google-logging-utils@0.0.2: {}
 
@@ -53405,7 +53404,6 @@ snapshots:
   proto3-json-serializer@4.1.0:
     dependencies:
       protobufjs: 8.8.0
-    optional: true
 
   protobufjs@8.8.0:
     dependencies:
@@ -54511,7 +54509,6 @@ snapshots:
   retry-request@9.1.0:
     dependencies:
       extend: 3.0.2
-    optional: true
 
   retry@0.12.0: {}
 
