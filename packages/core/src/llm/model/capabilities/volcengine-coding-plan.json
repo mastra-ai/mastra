@@ -30,19 +30,9 @@
     "kimi-k3"
   ],
   "reasoning": {
-    "doubao-seed-2.1-turbo": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "kimi-k3": [
+    "minimax-m3": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4-pro": [
@@ -50,18 +40,7 @@
         "type": "toggle"
       }
     ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-lite": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "doubao-seed-evolving": [
+    "doubao-seed-2.1-turbo": [
       {
         "type": "effort",
         "values": ["none", "low", "high"]
@@ -73,15 +52,36 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "doubao-seed-evolving": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
     "deepseek-v4-flash": [
       {
         "type": "toggle"
       }
     ],
-    "glm-5.3": [
+    "doubao-seed-2.0-lite": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "high"]
       }
     ]
   }

@@ -29923,8 +29923,8 @@
       "google/gemma-4-26b-a4b-it": {
         "cost": {
           "input": 0.024,
-          "output": 0.073,
-          "cache_read": 0.012
+          "output": 0.1,
+          "cache_read": 0.01
         }
       },
       "google/gemma-4-31b-it": {
@@ -30961,14 +30961,14 @@
       },
       "openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.028,
-          "output": 0.103
+          "input": 0.02,
+          "output": 0.072
         }
       },
       "openai/gpt-oss-20b": {
         "cost": {
-          "input": 0.009,
-          "output": 0.037
+          "input": 0.004,
+          "output": 0.019
         }
       },
       "openai/gpt-oss-safeguard-20b": {
@@ -31705,9 +31705,9 @@
       },
       "xiaomi/mimo-v2.6-pro": {
         "cost": {
-          "input": 0.435,
+          "input": 0.43,
           "output": 0.87,
-          "cache_read": 0.004
+          "cache_read": 0.0036
         }
       },
       "xiaomi/mimo-v2.6-pro-ultraspeed": {
@@ -31967,9 +31967,9 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.0114,
-          "output": 0.1584,
-          "cache_read": 0.0114
+          "input": 0.0285,
+          "output": 0.0923,
+          "cache_read": 0.0285
         }
       },
       "~z-ai/glm-latest": {
@@ -42772,9 +42772,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.018,
-          "output": 0.055,
-          "cache_read": 0.009
+          "input": 0.048,
+          "output": 0.144,
+          "cache_read": 0.024
         }
       },
       "google/gemma-4-26b-a4b-it-cybersecurity": {
@@ -42786,9 +42786,9 @@
       },
       "google/gemma-4-26b-a4b-it:thinking": {
         "cost": {
-          "input": 0.018,
-          "output": 0.055,
-          "cache_read": 0.009
+          "input": 0.048,
+          "output": 0.144,
+          "cache_read": 0.024
         }
       },
       "google/gemma-4-31b-it": {
@@ -43973,8 +43973,8 @@
       },
       "openai/gpt-oss-20b": {
         "cost": {
-          "input": 0.004,
-          "output": 0.017
+          "input": 0.005,
+          "output": 0.019
         }
       },
       "openai/gpt-oss-safeguard-20b": {
@@ -44154,18 +44154,18 @@
       },
       "pqhaz/DeepSeek-V4.1-Flash-1017-heretic": {
         "cost": {
-          "input": 0.18,
-          "output": 0.72,
-          "cache_read": 0.012,
-          "cache_write": 0.18
+          "input": 0.1854,
+          "output": 0.7416,
+          "cache_read": 0.01236,
+          "cache_write": 0.1854
         }
       },
       "pqhaz/DeepSeek-V4.1-Flash-1017-heretic:thinking": {
         "cost": {
-          "input": 0.18,
-          "output": 0.72,
-          "cache_read": 0.012,
-          "cache_write": 0.18
+          "input": 0.1854,
+          "output": 0.7416,
+          "cache_read": 0.01236,
+          "cache_write": 0.1854
         }
       },
       "prism-ml/ternary-bonsai-2-27b": {
@@ -53824,8 +53824,8 @@
       },
       "openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.015,
-          "output": 0.054
+          "input": 0.019,
+          "output": 0.071
         }
       },
       "openai/gpt-oss-20b": {
@@ -54893,16 +54893,16 @@
       },
       "z-ai/glm-5.3": {
         "cost": {
-          "input": 0.0699,
-          "output": 1.4,
-          "cache_read": 0.0689
+          "input": 0.08,
+          "output": 3.6,
+          "cache_read": 0.076
         }
       },
       "z-ai/glm-5.3-flash": {
         "cost": {
-          "input": 0.0114,
-          "output": 0.1584,
-          "cache_read": 0.0114
+          "input": 0.0285,
+          "output": 0.0923,
+          "cache_read": 0.0285
         }
       },
       "z-ai/glm-5.3-flashx": {
@@ -55177,9 +55177,9 @@
       },
       "~z-ai/glm-flash-latest": {
         "cost": {
-          "input": 0.0114,
-          "output": 0.1584,
-          "cache_read": 0.0114
+          "input": 0.0285,
+          "output": 0.0923,
+          "cache_read": 0.0285
         }
       },
       "~z-ai/glm-latest": {
