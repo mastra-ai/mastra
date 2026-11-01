@@ -2,7 +2,7 @@
 '@mastra/core': patch
 ---
 
-`ifIdle.streamOptions.runId` is now honoured when `sendSignal`, `sendMessage`, `queueSignal` or `queueMessage` starts a new run. Previously the runtime always generated a random id. The caller's id now appears in `accepted.runId`, `output.runId` and thread events, both when an idle thread wakes and when the run is queued behind the active one. If the requested id already names a known run, `accepted` rejects. Calls that omit it behave as before.
+Fixed signal-started runs to use the `ifIdle.streamOptions.runId` you provide. This applies when `sendSignal`, `sendMessage`, `queueSignal` or `queueMessage` wakes an idle thread or queues a run behind the active one. The id appears in `accepted.runId`, `output.runId` and thread events. If the id already names a known run, `accepted` rejects. Calls without an id still get a random one.
 
 ```ts
 const { accepted } = agent.sendSignal(

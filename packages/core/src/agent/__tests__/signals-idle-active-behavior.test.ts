@@ -1073,6 +1073,64 @@ describe('Agent signals: idle and active behaviors', () => {
       await expect(first.text).resolves.toBe('first response');
     });
 
+    it('rejects a caller run id already naming a threadless run', async () => {
+      const { model, releaseFirst } = createBlockingFirstTextStreamModel('first response', 'unused');
+      const agent = new Agent({
+        id: 'caller-run-id-threadless-agent',
+        name: 'Caller Run Id Threadless Agent',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+      });
+
+      const first = await agent.stream('Hello', { runId: 'threadless-run-id' });
+      try {
+        const result = agent.sendSignal(
+          { type: 'user-message', contents: 'hello' },
+          {
+            resourceId: 'threadless-res',
+            threadId: 'threadless-th',
+            ifIdle: { streamOptions: { runId: 'threadless-run-id' } },
+          },
+        );
+        await expect(result.accepted).rejects.toThrow('Run id "threadless-run-id" is already in use');
+      } finally {
+        releaseFirst();
+      }
+      await expect(first.text).resolves.toBe('first response');
+    });
+
+    it('rejects a caller run id held by a pending idle persist', async () => {
+      const memory = new MockMemory();
+      let releaseSave!: () => void;
+      const saveGate = new Promise<void>(resolve => {
+        releaseSave = resolve;
+      });
+      const saveMessages = memory.saveMessages.bind(memory);
+      memory.saveMessages = (async (...args: Parameters<typeof saveMessages>) => {
+        await saveGate;
+        return saveMessages(...args);
+      }) as typeof memory.saveMessages;
+      const agent = new Agent({
+        id: 'caller-run-id-persist-agent',
+        name: 'Caller Run Id Persist Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('unused'),
+        memory,
+      });
+      const target = {
+        resourceId: 'persist-res',
+        threadId: 'persist-th',
+        ifIdle: { behavior: 'persist' as const, streamOptions: { runId: 'persist-run-id' } },
+      };
+
+      const first = agent.sendSignal({ type: 'user-message', contents: 'first' }, target);
+      const second = agent.sendSignal({ type: 'user-message', contents: 'second' }, target);
+      await expect(second.accepted).rejects.toThrow('Run id "persist-run-id" is already in use');
+      releaseSave();
+      await expect(first.accepted).resolves.toEqual({ action: 'persist' });
+    });
+
     it('joins the active run and ignores the idle run id while the thread is active', async () => {
       const { model, releaseFirst } = createBlockingFirstTextStreamModel('first response', 'unused');
       const agent = new Agent({

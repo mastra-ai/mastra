@@ -692,6 +692,8 @@ type AgentThreadRuntimeState = {
   abortedRunIds: Set<string>;
   resumeFencedRunIds: Set<string>;
   startingQueuedRunIds: Set<string>;
+  /** Run ids an idle `persist` signal holds while its storage write is pending. */
+  persistingIdleRunIds: Set<string>;
   /**
    * Active lease-renewal timers keyed by runId. Set when the owner
    * process wins the cross-process lease, cleared on release. Stored
@@ -939,6 +941,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     abortedRunIds: new Set(),
     resumeFencedRunIds: new Set(),
     startingQueuedRunIds: new Set(),
+    persistingIdleRunIds: new Set(),
     leaseRenewalTimers: new Map(),
     leaseOwners: new Map(),
     leaseDeadlines: new Map(),
@@ -1138,7 +1141,9 @@ export class AgentThreadStreamRuntime {
       state.threadRunsById.has(runId) ||
       state.threadKeysByRunId.has(runId) ||
       state.remoteThreadKeysByRunId.has(runId) ||
-      state.startingQueuedRunIds.has(runId)
+      state.startingQueuedRunIds.has(runId) ||
+      state.persistingIdleRunIds.has(runId) ||
+      state.preparedRunsById.has(runId)
     ) {
       return true;
     }
@@ -4304,8 +4309,13 @@ export class AgentThreadStreamRuntime {
   ) {
     if (signal.transient) return;
 
-    await this.#persistSignal(agent, signal, resourceId, threadId, requestContext);
-    this.#broadcastPersistedSignal(state, pubsub, key, runId, agent.id, signal, resourceId, threadId);
+    state.persistingIdleRunIds.add(runId);
+    try {
+      await this.#persistSignal(agent, signal, resourceId, threadId, requestContext);
+      this.#broadcastPersistedSignal(state, pubsub, key, runId, agent.id, signal, resourceId, threadId);
+    } finally {
+      state.persistingIdleRunIds.delete(runId);
+    }
   }
 
   /**
