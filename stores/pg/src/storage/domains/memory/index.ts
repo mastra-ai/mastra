@@ -912,6 +912,96 @@ export class MemoryPG extends MemoryStorage {
     }
   }
 
+  #toThread(row: StorageThreadType & { createdAtZ?: Date; updatedAtZ?: Date }): StorageThreadType {
+    return {
+      id: row.id,
+      resourceId: row.resourceId,
+      title: row.title,
+      metadata: typeof row.metadata === 'string' ? JSON.parse(row.metadata) : row.metadata,
+      createdAt: row.createdAtZ || row.createdAt,
+      updatedAt: row.updatedAtZ || row.updatedAt,
+    };
+  }
+
+  /**
+   * Shallow-merges `metadata` into the stored metadata in one statement, so the
+   * merge always applies to the latest committed row. The `::jsonb` casts keep it
+   * working on tables whose metadata column is still TEXT.
+   */
+  async #mergeThreadUpdate(
+    q: Queryable,
+    tableName: string,
+    { id, title, metadata }: { id: string; title?: string; metadata?: Record<string, unknown> },
+  ): Promise<StorageThreadType | null> {
+    const nowStr = toUtcISOString(new Date());
+    const row = await q.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+      `UPDATE ${tableName}
+       SET
+         title = COALESCE($1, title),
+         metadata = (CASE WHEN jsonb_typeof(metadata::jsonb) = 'object' THEN metadata::jsonb ELSE '{}'::jsonb END)
+                    || COALESCE($2::jsonb, '{}'::jsonb),
+         "updatedAt" = $3,
+         "updatedAtZ" = $4
+       WHERE id = $5
+       RETURNING *`,
+      [title ?? null, metadata === undefined ? null : toPgJson(metadata), nowStr, nowStr, id],
+    );
+    return row ? this.#toThread(row) : null;
+  }
+
+  /**
+   * Cross-process atomic metadata read-modify-write: the thread row stays locked
+   * (`SELECT ... FOR UPDATE`) from the read through the write, so concurrent
+   * writers from any process serialize instead of overwriting each other.
+   */
+  override async updateThreadMetadata({
+    id,
+    resourceId,
+    update,
+    fence,
+  }: {
+    id: string;
+    resourceId?: string;
+    update: (thread: StorageThreadType) => Record<string, unknown> | undefined;
+    fence?: RunFence;
+  }): Promise<StorageThreadType | null> {
+    const threadsTable = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
+    try {
+      return await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runFencesTable(), fence, 'updateThreadMetadata');
+
+        const params: unknown[] = [id];
+        let query = `SELECT * FROM ${threadsTable} WHERE id = $1`;
+        if (resourceId !== undefined) {
+          query += ` AND "resourceId" = $2`;
+          params.push(resourceId);
+        }
+        const row = await t.oneOrNone<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
+          `${query} FOR UPDATE`,
+          params,
+        );
+        if (!row) return null;
+
+        const thread = this.#toThread(row);
+        const metadata = update(thread);
+        if (!metadata) return thread;
+
+        return this.#mergeThreadUpdate(t, threadsTable, { id, metadata });
+      });
+    } catch (error) {
+      if (error instanceof MastraError || isRunFenceConflictError(error)) throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'UPDATE_THREAD_METADATA', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { threadId: id },
+        },
+        error,
+      );
+    }
+  }
+
   async updateThread({
     id,
     title,
@@ -926,8 +1016,8 @@ export class MemoryPG extends MemoryStorage {
     const threadTableName = getTableName({ indexName: TABLE_THREADS, schemaName: getSchemaName(this.#schema) });
     try {
       return await this.#fenced(fence, 'updateThread', async q => {
-        const existingThread = await this.#getThreadById(q, { threadId: id });
-        if (!existingThread) {
+        const thread = await this.#mergeThreadUpdate(q, threadTableName, { id, title, metadata });
+        if (!thread) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'UPDATE_THREAD', 'FAILED'),
             domain: ErrorDomain.STORAGE,
@@ -939,34 +1029,7 @@ export class MemoryPG extends MemoryStorage {
             },
           });
         }
-
-        const mergedMetadata = {
-          ...existingThread.metadata,
-          ...metadata,
-        };
-
-        const nowStr = toUtcISOString(new Date());
-        const thread = await q.one<StorageThreadType & { createdAtZ: Date; updatedAtZ: Date }>(
-          `UPDATE ${threadTableName}
-                    SET
-                        title = COALESCE($1, title),
-                        metadata = $2,
-                        "updatedAt" = $3,
-                        "updatedAtZ" = $4
-                    WHERE id = $5
-                    RETURNING *
-                `,
-          [title ?? null, mergedMetadata, nowStr, nowStr, id],
-        );
-
-        return {
-          id: thread.id,
-          resourceId: thread.resourceId,
-          title: thread.title,
-          metadata: typeof thread.metadata === 'string' ? JSON.parse(thread.metadata) : thread.metadata,
-          createdAt: thread.createdAtZ || thread.createdAt,
-          updatedAt: thread.updatedAtZ || thread.updatedAt,
-        };
+        return thread;
       });
     } catch (error) {
       if (error instanceof MastraError || isRunFenceConflictError(error)) throw error;
