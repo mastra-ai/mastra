@@ -74,6 +74,16 @@ export const comboboxItemClass = cva(menuItemClass, {
   },
 });
 
+/** Fixed popup widths a call site can pick; without one the popup takes the trigger's width. Never narrower than the trigger or wider than the screen. */
+export type ComboboxPopupWidth = 'sm' | 'md' | 'lg' | 'xl';
+
+export const comboboxPopupWidthClass: Record<ComboboxPopupWidth, string> = {
+  sm: 'w-48',
+  md: 'w-64',
+  lg: 'w-80',
+  xl: 'w-96',
+};
+
 export const comboboxStyles = {
   /** @deprecated A `Field` lays out the combobox and its error. */
   root: 'flex flex-col gap-1.5',
@@ -115,6 +125,9 @@ export const comboboxStyles = {
   /** Option item base — rounded-lg sits concentrically inside rounded-xl + p-1. */
   item: comboboxItemClass({ multiple: false }),
 
+  /** An item's content beside its check: start slot, text, end slot. */
+  itemContent: 'flex min-w-0 flex-1 items-center gap-2',
+
   /** Multi-select item — same item rhythm with a right-aligned selected check. */
   itemMulti: comboboxItemClass({ multiple: true }),
 
@@ -130,11 +143,11 @@ export const comboboxStyles = {
   /** Option label/description wrapper */
   optionText: 'flex flex-col gap-0.5 min-w-0',
 
-  /** Option label */
-  optionLabel: 'truncate',
+  /** Option label: wraps (ids break anywhere) and clamps at two lines, so a long label stays readable without growing the row. */
+  optionLabel: 'line-clamp-2 whitespace-normal wrap-anywhere',
 
-  /** Option description */
-  optionDescription: 'text-caption text-muted-foreground truncate',
+  /** Option description: same two-line clamp as the label. */
+  optionDescription: 'text-caption text-muted-foreground line-clamp-2 whitespace-normal wrap-anywhere',
 
   /** Option end slot — `ml-auto` makes it push right inside flex containers (used by multi-select). */
   optionEnd: 'ml-auto flex items-center shrink-0',
