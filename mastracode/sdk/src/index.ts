@@ -1322,6 +1322,17 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     }
   };
 
+  const resolveTenantSessionModel = withCredentialTenantPreparation(async (ctx: { requestContext: RequestContext }) => {
+    // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
+    const controller = ctx.requestContext.get('controller') as
+      | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
+      | undefined;
+    const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
+    return getDynamicModel(ctx, config?.settingsPath, {
+      modeless,
+      defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
+    });
+  });
   const baseCodeAgent: Agent = createCodingAgent({
     id: CODE_AGENT_ID,
     name: 'Code Agent',
@@ -1359,17 +1370,14 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     },
     // `settingsPath` matches the source `createMastraCode()` reads from so the
     // per-mode thinking defaults resolve against the same config file.
-    model: withCredentialTenantPreparation(async ctx => {
-      // A session's own level wins, so skip the host lookup (and its failure modes) when one is set.
-      const controller = ctx.requestContext.get('controller') as
-        | AgentControllerRequestContext<{ thinkingLevel?: unknown }>
-        | undefined;
-      const hasSessionLevel = isThinkingLevelSetting(controller?.state?.thinkingLevel);
-      return getDynamicModel(ctx, config?.settingsPath, {
-        modeless,
-        defaultThinkingLevel: hasSessionLevel ? undefined : await config?.resolveDefaultThinkingLevel?.(ctx),
-      });
-    }),
+    // Without a controller session there is no model selection, so getDynamicModel
+    // throws "No model available" before reading any credential. Skip the tenant
+    // check (and its error log) and the host thinking lookup on that path, e.g.
+    // a host reading the agent's model at startup with an empty request context.
+    model: async ctx =>
+      ctx.requestContext.get('controller')
+        ? resolveTenantSessionModel(ctx)
+        : getDynamicModel(ctx, config?.settingsPath, { modeless }),
     // Deferred notifications are re-dispatched by the core notification
     // dispatch workflow long after the originating send; the delivery policy
     // rebuilds the request context (model selection included) at delivery time

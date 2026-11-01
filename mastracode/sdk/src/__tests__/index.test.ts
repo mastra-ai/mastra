@@ -618,12 +618,14 @@ describe('createMastraCode', () => {
       await createMastraCodeAgentController();
       const agentConfig = agentConstructorMock.mock.calls[0]![0];
       const memory = controllerConstructorMock.mock.calls[0]![0].memory;
-      for (const [callback, resolve] of [
-        [agentConfig.model, getDynamicModel],
-        [agentConfig.goal.judge, getGoalJudgeModel],
-        [memory, memoryResolve],
+      for (const [callback, resolve, needsController] of [
+        [agentConfig.model, getDynamicModel, true],
+        [agentConfig.goal.judge, getGoalJudgeModel, false],
+        [memory, memoryResolve, false],
       ]) {
         const requestContext = new RequestContext();
+        // The main model only runs tenant preparation for a controller session.
+        if (needsController) requestContext.set('controller', { state: {} });
         await callback({ requestContext });
         expect(resolveTenantFromRequestContext(requestContext)).toEqual(tenant);
         expect(resolve).toHaveBeenCalledOnce();
@@ -652,9 +654,33 @@ describe('createMastraCode', () => {
     expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
     expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: undefined });
 
-    await agentConfig.model({ requestContext: new RequestContext() });
+    const withoutSessionLevel = new RequestContext();
+    withoutSessionLevel.set('controller', { state: {} });
+    await agentConfig.model({ requestContext: withoutSessionLevel });
     expect(resolveDefaultThinkingLevel).toHaveBeenCalledOnce();
     expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: 'high' });
+  });
+
+  it('skips tenant preparation and the host thinking default for a model read without a controller session', async () => {
+    const { setCredentialStoreProvider } = await import('../agents/credential-resolver.js');
+    const { getDynamicModel } = await import('../agents/model.js');
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const lookup = vi.fn(async () => undefined);
+    const resolveDefaultThinkingLevel = vi.fn(async () => 'high' as const);
+    vi.mocked(getDynamicModel).mockClear();
+    setCredentialStoreProvider(() => undefined, lookup);
+    try {
+      await createMastraCodeAgentController({ resolveDefaultThinkingLevel });
+      const agentConfig = agentConstructorMock.mock.calls.at(-1)![0];
+
+      await agentConfig.model({ requestContext: new RequestContext() });
+      expect(lookup).not.toHaveBeenCalled();
+      expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
+      expect(getDynamicModel).toHaveBeenCalledOnce();
+      expect(vi.mocked(getDynamicModel).mock.calls[0]![2]).toEqual({ modeless: false });
+    } finally {
+      setCredentialStoreProvider(undefined);
+    }
   });
 
   it.each([
