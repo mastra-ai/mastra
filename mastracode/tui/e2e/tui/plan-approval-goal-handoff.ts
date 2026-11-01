@@ -9,7 +9,7 @@ let holdNextResponse = false;
 let releaseResume: () => void;
 
 const EXPECTED_OBJECTIVE =
-  '# E2E Goal Plan\n\n## Overview\nUse this plan as a persistent goal from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Select Use as /goal.\n3. Start the goal handoff.\n\n## Verification\nConfirm the goal handoff starts the canonical goal run.';
+  '# E2E Goal Plan\n\n## Overview\nUse this plan as a persistent goal from the real TUI.\n\n## Steps\n1. Render the submitted plan.\n2. Approve the plan.\n3. Start the goal handoff.\n\n## Verification\nConfirm the goal handoff starts the canonical goal run.';
 
 function readGoalObjective(dbPath: string): string {
   return execFileSync(
@@ -24,7 +24,7 @@ function readGoalObjective(dbPath: string): string {
 
 export const planApprovalGoalHandoffScenario: McE2eScenario = {
   name: 'plan-approval-goal-handoff',
-  description: 'Use AIMock submit_plan and select Use as /goal through the real TUI.',
+  description: 'Use AIMock submit_plan and approve it through the real TUI.',
   testName: 'sets the approved plan as the goal and delivers its reminder into the resumed run',
   useOpenAIModel: true,
   aimockFixture: 'plan-approval-goal-handoff.json',
@@ -87,11 +87,10 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
 
     terminal.submit('Create a concise goal implementation plan for the plan approval e2e test.');
     await runtime.waitForScreenText(/Plan: E2E Goal Plan/i, terminal, 10_000);
-    await runtime.waitForScreenText(/Use as \/goal\s+switch to Build mode and pursue this plan/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Approve\s+switch to Build mode and pursue this plan as a goal/i, terminal, 10_000);
     await runtime.waitForScreenText(/Confirm the goal handoff starts the canonical goal run/i, terminal, 10_000);
 
     holdNextResponse = true;
-    terminal.write('\x1b[B');
     terminal.write('\r');
 
     await runtime.waitForScreenText(/Resumed plan output after approval\./i, terminal, 10_000);
@@ -102,7 +101,7 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
     }
     releaseResume();
 
-    await runtime.waitForScreenText(/✓\s+Set as goal/i, terminal, 10_000);
+    await runtime.waitForScreenText(/✓\s+Approved/i, terminal, 10_000);
     await runtime.waitForScreenText(/Goal \(3 max attempts, judge:/i, terminal, 15_000);
     await runtime.waitForScreenText(/Goal\s+●\s+done/i, terminal, 15_000);
     // Give a stray second goal run time to surface before checking for one.
@@ -137,7 +136,7 @@ export const planApprovalGoalHandoffScenario: McE2eScenario = {
       throw new Error('Expected AIMock requests to include the plan goal objective');
     }
     if (body.includes('The user has approved the plan, begin executing.')) {
-      throw new Error('Use as /goal should not send the approve-to-build handoff reminder');
+      throw new Error('Approving a plan should not send the approve-to-build handoff reminder');
     }
   },
 };

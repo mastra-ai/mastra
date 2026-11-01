@@ -11,12 +11,14 @@ export async function getDynamicInstructions({
   coAuthor,
   hasSubagents,
   disabledBuiltinTools,
+  planApprovalStartsGoal,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
   coAuthor?: { name?: string; email?: string };
   hasSubagents?: boolean;
   disabledBuiltinTools?: readonly string[];
+  planApprovalStartsGoal?: boolean;
 }): Promise<string> {
   return joinPromptSections(
     await getDynamicInstructionSections({
@@ -25,6 +27,7 @@ export async function getDynamicInstructions({
       coAuthor,
       hasSubagents,
       disabledBuiltinTools,
+      planApprovalStartsGoal,
     }),
   );
 }
@@ -40,6 +43,7 @@ export async function getDynamicInstructionSections({
   coAuthor,
   hasSubagents,
   disabledBuiltinTools,
+  planApprovalStartsGoal,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
@@ -47,6 +51,8 @@ export async function getDynamicInstructionSections({
   hasSubagents?: boolean;
   /** Controller built-in tools removed via `disableBuiltinTools`; their prompt guidance is omitted. */
   disabledBuiltinTools?: readonly string[];
+  /** False when the host does not start a goal on plan approval; omits that promise from the prompt. */
+  planApprovalStartsGoal?: boolean;
 }): Promise<PromptSection[]> {
   const agentControllerContext = requestContext.get('controller') as
     | AgentControllerRequestContext<MastraCodeComposedState>
@@ -77,6 +83,7 @@ export async function getDynamicInstructionSections({
     hostInstructions,
     hasSubagents,
     disabledBuiltinTools,
+    planApprovalStartsGoal,
   };
 
   const promptSections = buildFullPromptSections(promptCtx);
