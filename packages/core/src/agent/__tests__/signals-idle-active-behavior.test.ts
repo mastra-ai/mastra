@@ -1129,6 +1129,7 @@ describe('Agent signals: idle and active behaviors', () => {
       await expect(second.accepted).rejects.toThrow('Run id "persist-run-id" is already in use');
       releaseSave();
       await expect(first.accepted).resolves.toEqual({ action: 'persist' });
+      await first.persisted;
     });
 
     it('joins the active run and ignores the idle run id while the thread is active', async () => {
