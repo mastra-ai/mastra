@@ -709,6 +709,7 @@ const sidebars = {
           label: 'createNotificationInboxTool()',
         },
         { type: 'doc', id: 'signals/notifications', label: 'Notifications' },
+        { type: 'doc', id: 'signals/ring-signals', label: 'RingSignals' },
         { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
         { type: 'doc', id: 'signals/task-signal-provider', label: 'TaskSignalProvider' },
         { type: 'doc', id: 'signals/thread-events', label: 'Thread events' },
