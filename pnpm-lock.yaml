@@ -99,7 +99,7 @@ overrides:
   immer@>=11.0.0 <11.1.9: 11.1.9
   '@clerk/shared@>=3.0.0 <3.47.5': 3.47.8
   js-cookie@>=3.0.0 <3.0.7: 3.0.7
-  path-to-regexp@<0.1.13: 0.1.13
+  path-to-regexp@<0.1.13: 9.0.0
   joi@>=17.0.0 <17.13.8: 17.13.9
   svgo@>=3.0.0 <3.3.5: 3.3.5
   e2b>undici8: npm:undici@8.12.2
