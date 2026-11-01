@@ -330,8 +330,6 @@ export class MessageHistory implements Processor {
     span?.update({ attributes: { messageCount: messagesToSave.length } });
 
     await this.persistMessages({ messages: messagesToSave, threadId, resourceId });
-    // add extra 1ms latency to make sure the next generate has not the same input
-    await new Promise(resolve => setTimeout(resolve, 10));
 
     return messageList;
   }
