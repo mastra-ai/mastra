@@ -45,6 +45,7 @@ import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/bas
 import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
+import type { SkillOverridesStorage } from '../storage/domains/skill-overrides/base.js';
 import {
   SessionBranchHeldError,
   SessionOwnershipMismatchError,
@@ -126,6 +127,7 @@ export interface FactoryApiRoutesDeps {
     workItems: WorkItemsStorage;
     channelIdentity: ChannelIdentityStorage;
     comments: WorkItemCommentsStorage;
+    skillOverrides: SkillOverridesStorage;
   };
   integrations?: IntegrationRegistration[];
   intakeReady: boolean;
@@ -798,6 +800,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
       ...(deps.skills ? { skills: deps.skills } : {}),
+      overrides: { projects: deps.domains.projects, storage: deps.domains.skillOverrides, audit: deps.audit },
     }).routes(),
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),
@@ -824,10 +827,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           knowledge: async key => deps.controller.getMastra()?.getKnowledge(key),
           defaultKnowledgeKey: deps.knowledgeKey,
-          threadTitle: async threadId => {
-            const memory = await deps.controller.getMastra()?.getStorage()?.getStore('memory');
-            return (await memory?.getThreadById({ threadId }))?.title;
-          },
         }).routes()
       : []),
     ...(deps.factoryReady

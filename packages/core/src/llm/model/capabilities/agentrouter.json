@@ -9,10 +9,13 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek-v4-flash": [
+    "gpt-5.6-sol": [
       {
-        "type": "toggle"
-      },
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -24,16 +27,13 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "glm-5.3": [
+    "deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "gpt-5.6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

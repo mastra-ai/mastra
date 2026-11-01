@@ -39,34 +39,7 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "glm-5.x-menthol": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
-      {
-        "type": "toggle"
-      }
-    ],
     "laguna-s-2.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.8-flash-next": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "mimo-v2.6-flash-rl": [
       {
         "type": "toggle"
       }
@@ -76,12 +49,10 @@
         "type": "toggle"
       }
     ],
-    "nemotron-3.5-content-safety": [
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
-      }
-    ],
-    "glm-5.3": [
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -96,25 +67,28 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "mimo-v2.6-pro-rl": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-v4-flash-0731": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.x-menthol": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -126,9 +100,35 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "mimo-v2.6-pro-rl": [
+    "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
+      }
+    ],
+    "deepseek-v4-flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.8-flash-next": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ]
   }

@@ -1,6 +1,7 @@
 import type { MessageMetadata, SuspendedToolMetadata, ToolApprovalMetadata } from '../messages/message-metadata';
 import type { ToolPartFields } from '../messages/renderers/tool-part';
 import { isRecord } from '../messages/signal-data';
+import { KNOWLEDGE_TOOLS, knowledgeCard } from './badges/knowledge-tool-badge';
 import { getCodeModeCall } from './code-mode';
 import { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
 import { SUBMIT_PLAN_TOOL_ID } from './submit-plan-tool-id';
@@ -23,6 +24,7 @@ export type ToolCardKind =
   | 'sandbox'
   | 'code_mode'
   | 'mcp_app'
+  | 'knowledge'
   | 'plain';
 
 export interface ToolCardContext {
@@ -92,7 +94,7 @@ export function isHiddenTool(toolName: string): boolean {
 }
 
 export function toolCardKind(
-  { toolName, toolCallId, input, output }: ToolPartFields,
+  { toolName, toolCallId, input, output, state }: ToolPartFields,
   { metadata, mcpAppTools }: ToolCardContext,
 ): ToolCardKind {
   if (toolName === 'mastra-memory-om-observation') return 'observation';
@@ -117,5 +119,9 @@ export function toolCardKind(
   if (SANDBOX_TOOLS.has(toolName)) return 'sandbox';
   if (codeModeCall(input, output)) return 'code_mode';
   if (mcpAppTools?.[toolName]) return 'mcp_app';
+  // A settled Knowledge result draws as a readable card; while running or failed it stays a plain badge.
+  if (KNOWLEDGE_TOOLS.has(toolName) && isSettledState(state) && knowledgeCard(toolName, input, output)) {
+    return 'knowledge';
+  }
   return 'plain';
 }

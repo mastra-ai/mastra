@@ -15,6 +15,10 @@ import {
 } from '../../__tests__/fixtures/threads';
 import { ThreadsExplorerBody } from '../threads-explorer-body';
 import { OBSERVABILITY_LIST_POLL_INTERVAL_MS } from '@/domains/observability/list-polling';
+import { savedViewFromSearchParams } from '@/domains/observability/saved-view-state';
+import { SavedViewsProvider } from '@/domains/observability/saved-views';
+import type { SavedViewsSource } from '@/domains/observability/saved-views';
+import { createInMemorySavedViewsSource } from '@/domains/observability/saved-views/__tests__/fixtures/in-memory-source';
 import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
@@ -51,8 +55,11 @@ const renderBody = () => {
   return { onSelectedThreadChange, unmount };
 };
 
-/** The body inside a stand-in router whose URL starts as `initial`; returns each thread query sent. */
-const renderBodyAtUrl = (initial: string) => {
+/**
+ * The body inside a stand-in router whose URL starts as `initial`, under a saved views store when
+ * one is given; returns each thread query sent.
+ */
+const renderBodyAtUrl = (initial: string, savedViews?: SavedViewsSource) => {
   const queries: ThreadQueryArgs[] = [];
   server.use(
     http.post(THREADS_QUERY_URL, async ({ request }) => {
@@ -60,7 +67,7 @@ const renderBodyAtUrl = (initial: string) => {
       return HttpResponse.json(threadRowsPage);
     }),
   );
-  renderWithProviders(
+  const body = (
     <SearchParamsHost initial={initial}>
       {urlState => (
         <ThreadsExplorerBody
@@ -70,7 +77,16 @@ const renderBodyAtUrl = (initial: string) => {
           urlState={urlState}
         />
       )}
-    </SearchParamsHost>,
+    </SearchParamsHost>
+  );
+  renderWithProviders(
+    savedViews ? (
+      <SavedViewsProvider source={savedViews} queryKeyScope={['test']}>
+        {body}
+      </SavedViewsProvider>
+    ) : (
+      body
+    ),
   );
   return { queries };
 };
@@ -327,6 +343,32 @@ describe('ThreadsExplorerBody', () => {
         expect(Math.round((Date.now() - from) / (24 * 60 * 60 * 1000))).toBe(30);
       });
       expect(screen.getByTestId('search-params').textContent).toBe('threadId=thread-2&datePreset=last-30d');
+    });
+  });
+
+  describe('saved views', () => {
+    const URL_BY_HAND = 'filter.entityName=Support+Agent&datePreset=last-24h&sort=startedAt&dir=asc';
+
+    it('shows no saved views when the host does not store them', async () => {
+      setHandlers(threadRowsPage);
+      renderBodyAtUrl(URL_BY_HAND);
+      await screen.findByText('Weather Agent');
+
+      expect(screen.queryByLabelText(/^View: /)).toBeNull();
+    });
+
+    it('applying a view queries what the user gets by setting it by hand', async () => {
+      setHandlers(threadRowsPage);
+      const state = savedViewFromSearchParams('threads', new URLSearchParams(URL_BY_HAND));
+      const source = createInMemorySavedViewsSource([{ name: 'Support', state }]);
+      const { queries } = renderBodyAtUrl('', source);
+      await screen.findByText('Weather Agent');
+
+      fireEvent.click(await screen.findByLabelText(/^View: /));
+      fireEvent.click(await screen.findByRole('option', { name: 'Support' }));
+
+      await waitFor(() => expect(screen.getByTestId('search-params').textContent).toBe(URL_BY_HAND));
+      await waitFor(() => expect(JSON.stringify(queries.at(-1)?.where)).toContain('"Support Agent"'));
     });
   });
 });

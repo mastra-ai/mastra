@@ -644,6 +644,15 @@ user-invocable: false
         'skills/skill-b/SKILL.md': VALID_SKILL_MD.replace('test-skill', 'skill-b'),
       });
 
+      // The default mock reports mtime = now, so a walk's stat count depends on
+      // whether a millisecond ticked since the last discovery (stale after 1 stat,
+      // full walk of 3 otherwise). A fixed past mtime makes every walk a full,
+      // non-stale one so both measurements below are comparable.
+      const statMock = filesystem.stat as ReturnType<typeof vi.fn>;
+      const currentStat = statMock.getMockImplementation()!;
+      const pastTime = new Date(Date.now() - 10_000);
+      statMock.mockImplementation(async (path: string) => ({ ...(await currentStat(path)), modifiedAt: pastTime }));
+
       const skills = new WorkspaceSkillsImpl({
         source: filesystem,
         skills: ['skills'],
@@ -651,17 +660,9 @@ user-invocable: false
 
       await skills.list();
 
-      const statMock = filesystem.stat as ReturnType<typeof vi.fn>;
       const originalCooldown = WorkspaceSkillsImpl.STALENESS_CHECK_COOLDOWN;
       try {
         (WorkspaceSkillsImpl as any).STALENESS_CHECK_COOLDOWN = 0;
-
-        // Settle any mtime/discovery-time tie left over from initial discovery:
-        // mock entries and #lastDiscoveryTime can land in the same millisecond,
-        // making the first walk short-circuit as stale (1 stat) while the next
-        // walk runs in full (3 stats). One refresh here guarantees both
-        // measurements below observe identical non-stale walks.
-        await skills.maybeRefresh();
 
         const before = statMock.mock.calls.length;
         await Promise.all([skills.maybeRefresh(), skills.maybeRefresh()]);
@@ -672,6 +673,7 @@ user-invocable: false
         const singleDelta = statMock.mock.calls.length - beforeSingle;
 
         // Two overlapping revalidations pay for exactly one walk
+        expect(singleDelta).toBeGreaterThan(0);
         expect(concurrentDelta).toBe(singleDelta);
       } finally {
         (WorkspaceSkillsImpl as any).STALENESS_CHECK_COOLDOWN = originalCooldown;

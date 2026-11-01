@@ -19,10 +19,48 @@ export type AgentScopesSnapshot = {
   scopes?: readonly string[];
 };
 
+/**
+ * The Agent `scopes` option: a static list added to the run's incoming scopes, or a function that
+ * receives the incoming scopes and returns the run's final set.
+ * @experimental
+ */
+export type AgentScopesConfig<TRequestContext = unknown> =
+  | string[]
+  | ((args: {
+      /** The run's incoming scopes: the call's `scopes`, `defaultOptions.scopes` and `mastra__scopes`. */
+      scopes: string[];
+      requestContext: RequestContext<TRequestContext>;
+      mastra?: any;
+    }) => string[] | Promise<string[]>);
+
+/**
+ * Applies an Agent's `scopes` option to a run's incoming scopes: no option keeps them, a static
+ * list adds to them, a function replaces them with what it returns.
+ */
+export async function applyAgentScopesConfig<TRequestContext>(
+  config: AgentScopesConfig<TRequestContext> | undefined,
+  args: { scopes: string[]; requestContext: RequestContext<TRequestContext>; mastra?: unknown },
+): Promise<string[]> {
+  if (config === undefined) return args.scopes;
+  if (typeof config !== 'function') return [...args.scopes, ...config];
+  return config(args);
+}
+
 export type ResolveAgentScopesInput = {
   requestContext?: RequestContext;
-  /** Scopes from the Agent config resolver and `defaultOptions.scopes`. */
+  /**
+   * The run's scopes after the Agent's `scopes` option ran on the incoming scopes (see
+   * `incomingAgentScopes`). When given, it is the run's final set: request-context and call scopes
+   * are not added again, but every `resource:`/`thread:` scope among them must still be in it.
+   * Ignored on resume.
+   */
   agentScopes?: readonly string[];
+  /**
+   * The incoming scopes `agentScopes` was computed from (see {@link incomingAgentScopes}), including
+   * `defaultOptions.scopes`. Every `resource:`/`thread:` scope in it must survive the Agent's
+   * function.
+   */
+  incomingScopes?: readonly string[];
   /** Scopes passed on the call. */
   callScopes?: readonly string[];
   memory?: { resource?: string; thread?: string | { id: string } };
@@ -61,6 +99,19 @@ export function setRunAgentScopes(requestContext: RequestContext<any>, scopes: r
 }
 
 /**
+ * The run's non-identity scopes, as Core wrote them onto the run's request context. Scopes a host
+ * or server supplies (agent config, call `scopes`, a `mastra__scopes` key on the caller's request
+ * context) are honored when the run starts, by `resolveAgentScopes`. This reader is for code
+ * running inside the run (tools, processors): it returns `[]` unless `mastra__scopes` is the exact
+ * array Core marked, so an array written or replaced after resolution gives the run nothing.
+ */
+export function getRunAgentScopes(requestContext: { get(key: string): unknown } | undefined): string[] {
+  const scopes = requestContext?.get(MASTRA_SCOPES_KEY);
+  if (!Array.isArray(scopes) || !runScopeValues.has(scopes)) return [];
+  return [...(scopes as string[])];
+}
+
+/**
  * Re-marks `mastra__scopes` on a context Core rebuilt from its own persisted run state (durable
  * snapshots, durable step input). The mark does not survive JSON, and these scopes already passed
  * resolution when the run started.
@@ -82,7 +133,9 @@ function hasOutdatedScopesServer(mastra: ResolveAgentScopesInput['mastra']): boo
   return !!server && server.reservesAgentScopes !== true;
 }
 
-function assertCallerScopesAllowed(input: ResolveAgentScopesInput): void {
+function assertCallerScopesAllowed(
+  input: Pick<ResolveAgentScopesInput, 'mastra' | 'requestContext' | 'callScopes'>,
+): void {
   if (!hasOutdatedScopesServer(input.mastra)) return;
   const fromContext = input.requestContext?.get(MASTRA_SCOPES_KEY);
   const contextSupplied =
@@ -129,7 +182,7 @@ function validateScopes(source: string, scopes: unknown): string[] {
   }
   for (const scope of scopes) {
     if (typeof scope !== 'string') {
-      throw scopesError('AGENT_SCOPES_INVALID', `Agent ${source} must contain only "<type>:<value>" strings.`);
+      throw scopesError('AGENT_SCOPES_INVALID', `Agent ${source} must be an array of "<type>:<value>" strings.`);
     }
     const parsed = parseAgentScope(scope);
     if (!parsed) {
@@ -146,6 +199,26 @@ function validateScopes(source: string, scopes: unknown): string[] {
     }
   }
   return scopes as string[];
+}
+
+/**
+ * The scopes a run starts from before the Agent's `scopes` option: the reserved `mastra__scopes`
+ * request-context key, the call's `scopes` and `defaultOptions.scopes`.
+ */
+export function incomingAgentScopes(input: {
+  requestContext?: RequestContext;
+  callScopes?: readonly string[];
+  defaultScopes?: readonly string[];
+  mastra?: ResolveAgentScopesInput['mastra'];
+}): string[] {
+  assertCallerScopesAllowed(input);
+  return [
+    ...new Set([
+      ...validateScopes(`request context "${MASTRA_SCOPES_KEY}"`, input.requestContext?.get(MASTRA_SCOPES_KEY)),
+      ...validateScopes('option "scopes"', input.callScopes),
+      ...validateScopes('default option "scopes"', input.defaultScopes),
+    ]),
+  ];
 }
 
 function identityFromScopes(scopes: readonly string[], type: 'resource' | 'thread'): string | undefined {
@@ -188,8 +261,9 @@ function memoryThreadId(memory: ResolveAgentScopesInput['memory']): string | und
 /**
  * Resolves the scopes an agent run acts with, and the Memory resource/thread they imply.
  *
- * Scopes from the reserved `mastra__scopes` request-context key, the Agent's `scopes`
- * resolver, and the call's `scopes` are unioned. `resource:` and `thread:` scopes set the
+ * The incoming scopes (the reserved `mastra__scopes` request-context key and the call's `scopes`)
+ * go through the Agent's `scopes` option first (`agentScopes`): a static list adds to them, a
+ * function replaces them. `resource:` and `thread:` scopes set the
  * run's Memory identity; every other source of resource/thread must agree with them or the
  * call throws. Resource and thread resolve independently: when scopes carry neither, the
  * existing precedence applies (reserved ID key, then options, then memory, then snapshot).
@@ -202,13 +276,26 @@ export function resolveAgentScopes(input: ResolveAgentScopesInput): ResolvedAgen
   const { requestContext, memory, snapshot } = input;
   assertCallerScopesAllowed(input);
   const agentScopes = validateScopes('config "scopes"', input.agentScopes);
-  const supplied = new Set<string>([
-    ...validateScopes(`request context "${MASTRA_SCOPES_KEY}"`, requestContext?.get(MASTRA_SCOPES_KEY)),
+  const fromContext = validateScopes(`request context "${MASTRA_SCOPES_KEY}"`, requestContext?.get(MASTRA_SCOPES_KEY));
+  const callScopes = validateScopes('option "scopes"', input.callScopes);
+  let supplied: Set<string>;
+  if (input.agentScopes !== undefined && !snapshot?.scopes) {
+    // The Agent's `scopes` option already ran on the incoming scopes; its result is the run's set.
+    supplied = new Set(agentScopes);
+    const incoming = validateScopes('incoming scopes', input.incomingScopes);
+    for (const scope of [...fromContext, ...callScopes, ...incoming]) {
+      if (isIdentityAgentScope(scope) && !supplied.has(scope)) {
+        throw scopesError(
+          'AGENT_SCOPES_INVALID',
+          `The agent's scopes function dropped "${scope}". A run keeps the "resource:" and "thread:" scopes it was given.`,
+        );
+      }
+    }
+  } else {
     // On resume the Agent's own configuration is not re-supplied by the caller: the suspended run
     // keeps its scopes, so an agent that adds or changes its resolver can still resume older runs.
-    ...(snapshot?.scopes ? [] : agentScopes),
-    ...validateScopes('option "scopes"', input.callScopes),
-  ]);
+    supplied = new Set<string>([...fromContext, ...callScopes]);
+  }
 
   let scopes: string[];
   if (snapshot?.scopes) {

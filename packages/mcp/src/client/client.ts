@@ -601,7 +601,7 @@ export class InternalMastraMCPClient extends MastraBase {
     return { ...getDefaultEnvironment(), ...configured };
   }
 
-  private async connectStdio(command: string) {
+  private async connectStdio(command: string, generation: number) {
     this.log('debug', `Using Stdio transport for command: ${command}`);
     // Held locally until the connect succeeds, mirroring connectHttp, so a failed
     // attempt leaves `this.transport` unset. connect()'s failure branch keys the
@@ -614,7 +614,9 @@ export class InternalMastraMCPClient extends MastraBase {
       cwd: this.serverConfig.cwd,
     });
     observeEventStreamRequests(transport, this.noteEventStreamSent);
+    this.connectingTransport = transport;
     try {
+      this.assertSameLifecycle(generation);
       await this.client.connect(transport, {
         timeout: this.serverConfig.timeout ?? this.timeout,
         prior: this.priorDiscovery,
@@ -629,10 +631,12 @@ export class InternalMastraMCPClient extends MastraBase {
       // outlives the failed attempt.
       await transport.close().catch(() => {});
       throw e;
+    } finally {
+      if (this.connectingTransport === transport) this.connectingTransport = undefined;
     }
   }
 
-  private async connectHttp(url: URL) {
+  private async connectHttp(url: URL, generation: number) {
     const { requestInit, authProvider, connectTimeout, fetch: userFetch, allowedHosts } = this.serverConfig;
 
     // Fail fast with a clear error before any transport is constructed.
@@ -673,7 +677,9 @@ export class InternalMastraMCPClient extends MastraBase {
     // transport that started the authorization flow (finishAuth must run on it).
     const transport = new StreamableHTTPClientTransport(url, { requestInit, authProvider, fetch });
     observeEventStreamRequests(transport, this.noteEventStreamSent);
+    this.connectingTransport = transport;
     try {
+      this.assertSameLifecycle(generation);
       await this.client.connect(transport, {
         timeout: connectTimeout ?? DEFAULT_SERVER_CONNECT_TIMEOUT_MSEC,
         prior: this.priorDiscovery,
@@ -695,6 +701,8 @@ export class InternalMastraMCPClient extends MastraBase {
         this.markNeedsAuth(transport);
       }
       throw error;
+    } finally {
+      if (this.connectingTransport === transport) this.connectingTransport = undefined;
     }
   }
 
@@ -802,6 +810,39 @@ export class InternalMastraMCPClient extends MastraBase {
 
   private isConnected: Promise<boolean> | null = null;
   private reconnectPromise: Promise<void> | null = null;
+  /**
+   * Transport of the connect attempt still in flight. The SDK only attaches it to
+   * the client once version negotiation finishes, so a server that never answers
+   * would otherwise leave nothing that disconnect() or a newer attempt can close.
+   */
+  private connectingTransport?: Transport;
+
+  /**
+   * Closes the transport of an unfinished connect attempt. Closing makes the SDK
+   * reject that attempt and reap the child (and any negotiation probe) it spawned.
+   */
+  private async abandonPendingConnect(): Promise<void> {
+    const pending = this.connectingTransport;
+    if (!pending) return;
+    this.connectingTransport = undefined;
+    await pending.close().catch(() => {});
+  }
+
+  /**
+   * Whether a connect or reconnect is still running on this client. A failed attempt
+   * that a newer one replaced reports true here, since the newer attempt owns the client.
+   *
+   * @internal
+   */
+  hasPendingConnect(): boolean {
+    return this.isConnected !== null || this.reconnectPromise !== null;
+  }
+
+  private assertSameLifecycle(generation: number): void {
+    if (this.lifecycleGeneration !== generation) {
+      throw new Error('MCP client was disconnected while connecting');
+    }
+  }
 
   /**
    * Change notifications the caller has asked for. The client keeps exactly one
@@ -837,21 +878,23 @@ export class InternalMastraMCPClient extends MastraBase {
    *
    * @internal
    */
-  async connect() {
+  async connect(generation = this.lifecycleGeneration) {
     if (this.isConnected) {
       return this.isConnected;
     }
 
-    this.isConnected = new Promise<boolean>(async (resolve, reject) => {
+    const attempt: Promise<boolean> = new Promise<boolean>(async (resolve, reject) => {
       try {
+        // An attempt that a reconnect replaced must not keep its child running.
+        await this.abandonPendingConnect();
         await this.detachStaleClientTransport();
 
         const { command, url } = this.serverConfig;
 
         if (command) {
-          await this.connectStdio(command);
+          await this.connectStdio(command, generation);
         } else if (url) {
-          await this.connectHttp(url);
+          await this.connectHttp(url, generation);
         } else {
           throw new Error('Server configuration must include either a command or a url.');
         }
@@ -904,18 +947,23 @@ export class InternalMastraMCPClient extends MastraBase {
         this.clientConnectionOnClose = connectionOnClose;
         this.client.onclose = connectionOnClose;
       } catch (e) {
-        // A connect that never reached a transport leaves nothing for disconnect() to
-        // tear down, so the process hooks must not outlive the failed attempt. A live
-        // transport means an earlier connection still owns them.
-        if (!this.transport) {
-          this.unregisterProcessHooks();
+        // A newer attempt that abandoned this one already owns the connection state
+        // and the process hooks, so leave both to it.
+        if (this.isConnected === attempt) {
+          // A connect that never reached a transport leaves nothing for disconnect() to
+          // tear down, so the process hooks must not outlive the failed attempt. A live
+          // transport means an earlier connection still owns them.
+          if (!this.transport) {
+            this.unregisterProcessHooks();
+          }
+          this.isConnected = null;
         }
-        this.isConnected = null;
         // A failed connect invalidates the cached verdict so a legacy verdict cannot stick.
         this.priorDiscovery = undefined;
         reject(e);
       }
     });
+    this.isConnected = attempt;
 
     // Registered before the connection settles so an exit during a connect attempt still
     // tears down anything the transport already started (a spawned stdio child, say).
@@ -1031,6 +1079,8 @@ export class InternalMastraMCPClient extends MastraBase {
     // recovery path must not establish a replacement connection afterwards.
     this.lifecycleGeneration++;
 
+    // A connect that never finishes would otherwise hold the reconnect awaited below forever.
+    await this.abandonPendingConnect();
     const reconnectPromise = this.reconnectPromise;
     if (reconnectPromise) {
       await reconnectPromise.catch(() => {});
@@ -1079,6 +1129,7 @@ export class InternalMastraMCPClient extends MastraBase {
       return await this.reconnectPromise;
     }
 
+    const generation = this.lifecycleGeneration;
     const reconnectPromise = (async () => {
       this.log('debug', 'Forcing reconnection to MCP server...');
 
@@ -1108,7 +1159,8 @@ export class InternalMastraMCPClient extends MastraBase {
         this.serverImplementation = undefined;
       }
 
-      await this.connect();
+      this.assertSameLifecycle(generation);
+      await this.connect(generation);
       this.log('debug', 'Successfully reconnected to MCP server');
     })();
     this.reconnectPromise = reconnectPromise;

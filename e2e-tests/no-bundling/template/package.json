@@ -25,7 +25,7 @@
     "@mastra/memory": "e2e-test",
     "@mastra/observability": "e2e-test",
     "ai": "^5.0.124",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "22.19.15",

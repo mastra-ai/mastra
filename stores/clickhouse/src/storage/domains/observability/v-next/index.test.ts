@@ -1081,6 +1081,7 @@ LIMIT 1`,
         'span-query-context-fields',
         'span-query-model-fields',
         'span-aggregate',
+        'span-aggregate-model-dimensions',
         'thread-query-rows',
       ]);
     });
@@ -1118,6 +1119,7 @@ LIMIT 1`,
           'span-query-context-fields',
           'span-query-model-fields',
           'span-aggregate',
+          'span-aggregate-model-dimensions',
           'thread-query-rows',
         ]);
       } finally {

@@ -55,7 +55,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
   const connectionNotice = useComposerConnectionNotice(status);
-  const connectionLost = connectionNotice.open && connectionNotice.notice !== 'reconnected';
+  const connectionLost = connectionNotice !== undefined;
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
@@ -249,8 +249,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerHeader open={connectionNotice.open}>
-        <ComposerConnectionNotice notice={connectionNotice.notice} />
+      <ComposerHeader open={connectionNotice !== undefined}>
+        {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
       </ComposerHeader>
       <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
         <ComposerBox>

@@ -16,7 +16,7 @@
  * local to the action module. File isolation prevents collisions without
  * producing names such as `getModelModelSchema`.
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -32,7 +32,7 @@ import {
   providerDir,
   providerRegistrationName,
   providersDir,
-  templatesDir,
+  templatePath,
   validateProviderId,
 } from './provider-utils.js';
 import type { ProviderManifest } from './provider-utils.js';
@@ -41,7 +41,7 @@ import type { TemplatePin } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
-const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'proxy']);
+const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'paginate', 'proxy']);
 const PROXY_CONTEXT_METHODS = new Set([
   ...PROXY_REQUEST_METHODS,
   'getConnection',
@@ -726,6 +726,73 @@ function outputSecretFields(action: ExtractedAction): readonly string[] | undefi
   return fields && fields.length > 0 ? fields : undefined;
 }
 
+/**
+ * Input fields whose values a template uses as a raw proxy endpoint, mapped to
+ * the pattern a legitimate value must match. Graph list templates follow the
+ * `@odata.nextLink` cursor verbatim; without a check an agent could pass any
+ * Graph path the connection's token can reach. Each pattern pins the cursor to
+ * the endpoint the tool itself lists, and requires the `?` right after it so
+ * the path portion can't be extended. Keyed by `<providerId>/<actionSlug>`.
+ */
+const INPUT_FIELD_PATTERNS = new Map<string, Readonly<Record<string, { pattern: RegExp; message: string }>>>([
+  [
+    'microsoft-excel-oauth2-cc/list-users',
+    {
+      cursor: {
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/users\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_users call',
+      },
+    },
+  ],
+  [
+    'microsoft-excel/list-users',
+    {
+      cursor: {
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/users\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_users call',
+      },
+    },
+  ],
+  [
+    'microsoft-excel-oauth2-cc/list-sites',
+    {
+      cursor: {
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/sites\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_sites call',
+      },
+    },
+  ],
+  [
+    'microsoft-excel/list-sites',
+    {
+      cursor: {
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/sites\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_sites call',
+      },
+    },
+  ],
+  [
+    'microsoft-excel-oauth2-cc/list-workbooks',
+    {
+      cursor: {
+        // Graph may percent-encode the quotes around the search term.
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/drives\/[^/?#]+\/root\/search\(q=[^/?#]*\)\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_workbooks call',
+      },
+    },
+  ],
+  [
+    'microsoft-excel/list-workbooks',
+    {
+      cursor: {
+        // Graph may percent-encode the quotes around the search term.
+        pattern: /^https:\/\/graph\.microsoft\.com\/v1\.0\/drives\/[^/?#]+\/root\/search\(q=[^/?#]*\)\?/,
+        message: 'cursor must be the nextCursor returned by a previous list_workbooks call',
+      },
+    },
+  ],
+]);
+
 function emitActionFile(action: ExtractedAction, pin: TemplatePin): string {
   const proxyTypeImports = [action.usesProxyRequestType ? 'PlatformProxyRequest' : undefined].filter(
     (name): name is string => Boolean(name),
@@ -740,6 +807,22 @@ function emitActionFile(action: ExtractedAction, pin: TemplatePin): string {
     ? `\n/** Provider secrets removed before the result leaves the tool. */\nexport const ${redactedSchemaName} = ${action.outputSchemaName}.omit({ ${omitKeys} });\n`
     : '';
   const outputSchemaName = secretFields ? redactedSchemaName : action.outputSchemaName;
+  const fieldPatterns = Object.entries(
+    INPUT_FIELD_PATTERNS.get(`${action.candidate.providerId}/${action.candidate.actionSlug}`) ?? {},
+  );
+  const checkedInputSchemaName = `${action.inputSchemaName}Checked`;
+  // Each pinned field is re-declared as `string().regex(...)` (not an object
+  // `.refine`) so the pattern lands in the JSON schema the model sees.
+  const checkedInputSchema =
+    fieldPatterns.length > 0
+      ? `\n/** Values the tool follows as a raw endpoint are pinned to the endpoint it lists. */\nexport const ${checkedInputSchemaName} = ${action.inputSchemaName}.extend({\n${fieldPatterns
+          .map(([field, { pattern, message }]) => {
+            const original = `${action.inputSchemaName}.shape[${JSON.stringify(field)}]`;
+            return `  ${JSON.stringify(field)}: ${original}.unwrap().regex(${pattern.toString()}, ${JSON.stringify(message)}).optional().describe(${original}.description ?? ''),\n`;
+          })
+          .join('')}});\n`
+      : '';
+  const inputSchemaName = fieldPatterns.length > 0 ? checkedInputSchemaName : action.inputSchemaName;
   const execute = secretFields
     ? `    execute: async (input, { requestContext }): Promise<z.infer<typeof ${redactedSchemaName}>> => {
       const platformProxy = proxy.withRequestContext(requestContext);
@@ -759,12 +842,12 @@ import { z } from 'zod';
 
 ${modelOutput ? `${modelOutput.importStatement}\n` : ''}${proxyImport}${redactImport}
 ${action.moduleStatements.join('\n\n')}
-${redactedSchema}
+${redactedSchema}${checkedInputSchema}
 export function ${action.toolFactoryName}(proxy: PlatformProxy) {
   return createTool({
     id: '${action.candidate.toolKey}',
     description: ${JSON.stringify(action.description)},
-    inputSchema: ${action.inputSchemaName},
+    inputSchema: ${inputSchemaName},
     outputSchema: ${outputSchemaName},
 ${modelOutput ? `${modelOutput.toolProperty}\n` : ''}${execute}
   });
@@ -843,8 +926,8 @@ export async function generateProvider({
   const pin = templatePinFor(providerId);
   const expectedSha = expectedTemplateSha ?? pin.sha;
 
-  const actionDir = resolve(templatesDir, providerId, 'actions');
-  if (!existsSync(actionDir)) {
+  const actionDir = templatePath(providerId, 'actions');
+  if (!actionDir) {
     throw new Error(`Unknown provider '${providerId}'. No actions directory exists in the template checkout.`);
   }
 
@@ -863,10 +946,14 @@ export async function generateProvider({
     .filter(filename => filename.endsWith('.ts'))
     .sort()) {
     const actionSlug = filename.replace(/\.ts$/, '');
+    const file = templatePath(providerId, 'actions', filename);
+    if (!file) {
+      throw new Error(`Action template '${providerId}/actions/${filename}' resolves outside the template checkout.`);
+    }
     const candidate: ActionCandidate = {
       providerId,
       localId,
-      file: resolve(actionDir, filename),
+      file,
       actionSlug,
       toolKey: `${localId.replace(/-/g, '_')}_${toSnake(actionSlug)}`,
     };

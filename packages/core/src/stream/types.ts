@@ -305,7 +305,10 @@ export interface ThreadHistoryPayload {
   messages: MastraDBMessage[];
   /** Whether older messages exist beyond this page. */
   hasMore: boolean;
-  /** Run holding the thread lease at hydration, or null when idle. */
+  /**
+   * Run holding the thread lease at hydration, or null when idle. When the lease backend doesn't answer in time,
+   * this is the run this process last saw take the thread, and it can be stale.
+   */
   activeRunId: string | null;
 }
 
@@ -829,7 +832,18 @@ interface ToolExecutionAbortPayload {
   primitiveId: string;
 }
 
-interface ToolCallApprovalPayload {
+/**
+ * Set when a supervisor re-raises a pause from a delegated sub-agent. `toolCallId` stays the
+ * supervisor's delegation call, which is what resumes the run.
+ */
+export interface DelegatedPauseIdentity {
+  /** The sub-agent's own tool call that paused. */
+  delegatedToolCallId?: string;
+  /** The name of the sub-agent's tool that paused. */
+  delegatedToolName?: string;
+}
+
+interface ToolCallApprovalPayload extends DelegatedPauseIdentity {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
@@ -842,7 +856,7 @@ interface ToolCallApprovalPayload {
   providerMetadata?: ProviderMetadata;
 }
 
-interface ToolCallSuspendedPayload {
+interface ToolCallSuspendedPayload extends DelegatedPauseIdentity {
   toolCallId: string;
   toolName: string;
   suspendPayload: any;
@@ -854,7 +868,7 @@ interface ToolCallSuspendedPayload {
   providerMetadata?: ProviderMetadata;
 }
 
-interface ToolCallResumedPayload {
+interface ToolCallResumedPayload extends DelegatedPauseIdentity {
   toolCallId: string;
   toolName: string;
   /** Whether the resumed pause was a `suspend()` call or a tool approval request. */

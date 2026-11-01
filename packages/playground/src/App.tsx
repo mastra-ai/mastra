@@ -68,6 +68,7 @@ import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
 import ReviewQueuePage from './pages/experiments/review-queue';
 import IntegrationsPage from './pages/integrations';
+import KnowledgePage from './pages/knowledge';
 import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
@@ -460,6 +461,8 @@ export const routes: RouteObject[] = [
           { path: 'schedules', element: <WorkflowSchedules /> },
         ],
       },
+
+      { path: '/knowledge', element: <KnowledgePage /> },
 
       ...(isExperimentalFeatures
         ? [

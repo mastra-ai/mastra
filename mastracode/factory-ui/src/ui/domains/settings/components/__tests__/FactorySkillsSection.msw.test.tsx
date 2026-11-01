@@ -335,63 +335,212 @@ describe('FactorySkillsSection', () => {
   });
 
   describe('when a skill is opened in the editor', () => {
-    it('shows the skill name, description, and SKILL.md body in the editor', async () => {
-      server.use(http.get(SKILLS_URL, () => HttpResponse.json(catalog)));
+    const SKILL_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1/skills/:name`;
 
+    /** A server holding one Factory's skill edits, answering like the real routes. */
+    function serveFactory({ canEdit = true, skills = catalog.skills } = {}) {
+      let current = skills.map(skill => ({ ...skill }));
+      const writes: { method: string; name: string; content?: string }[] = [];
+      const queries: (string | null)[] = [];
+      server.use(
+        http.get(BOARDS_URL, () => HttpResponse.json(builtinBoardCatalog)),
+        http.get(SKILLS_URL, ({ request }) => {
+          queries.push(new URL(request.url).searchParams.get('projectId'));
+          return HttpResponse.json({ skills: current, canEdit } satisfies FactorySkillsResponse);
+        }),
+        http.put(SKILL_URL, async ({ request, params }) => {
+          const { content } = (await request.json()) as { content: string };
+          const name = String(params.name);
+          writes.push({ method: 'PUT', name, content });
+          if (!content.includes(`name: ${name}\n`)) {
+            return HttpResponse.json({ error: 'invalid_skill', message: 'name must match' }, { status: 400 });
+          }
+          const description = JSON.parse(/^description: (.*)$/m.exec(content)![1]) as string;
+          const body = content.slice(content.indexOf('\n---\n') + 5).trim();
+          current = current.map(skill =>
+            skill.name === name
+              ? {
+                  ...skill,
+                  description,
+                  content: body,
+                  edited: { updatedBy: 'admin-1', updatedAt: '2026-10-29T00:00:00.000Z' },
+                  originalChanged: false,
+                }
+              : skill,
+          );
+          return HttpResponse.json({ skill: current.find(skill => skill.name === name) });
+        }),
+        http.delete(SKILL_URL, ({ params }) => {
+          const name = String(params.name);
+          writes.push({ method: 'DELETE', name });
+          const original = skills.find(skill => skill.name === name)!;
+          current = current.map(skill =>
+            skill.name === name ? { ...original, edited: undefined, originalChanged: undefined } : skill,
+          );
+          return HttpResponse.json({ skill: original });
+        }),
+      );
+      return { writes, queries };
+    }
+
+    function triageCard() {
+      return screen.getByRole('button', { name: /Triage/ }).parentElement!;
+    }
+
+    it("saves an admin's edit for this Factory and marks the skill edited", async () => {
+      const { writes, queries } = serveFactory();
       const user = userEvent.setup();
-      renderWithProviders(<FactorySkillsSection />);
+      renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
 
       await user.click(await screen.findByRole('button', { name: 'Edit factory-triage' }));
-
       const dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
-      expect(within(dialog).getByDisplayValue('factory-triage')).toBeEnabled();
-      expect(within(dialog).getByDisplayValue(catalog.skills[0].description)).toBeEnabled();
-      const editor = within(dialog).getByTestId('skill-instructions-input').querySelector('.cm-content');
-      expect(editor).toHaveAttribute('contenteditable', 'true');
-      expect(editor).toHaveTextContent('# Triage');
-      expect(editor).toHaveTextContent('Trace history and diagnose the root cause.');
+      expect(within(dialog).getByDisplayValue('factory-triage')).toBeDisabled();
+      const save = within(dialog).getByRole('button', { name: 'Save' });
+      expect(save).toBeDisabled();
+      const description = within(dialog).getByRole('textbox', { name: 'Description' });
+      await user.clear(description);
+      await user.type(description, 'Our triage: find the cause # first');
+      await user.click(save);
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(queries[0]).toBe('fp-1');
+      expect(writes).toEqual([
+        {
+          method: 'PUT',
+          name: 'factory-triage',
+          content:
+            '---\nname: factory-triage\ndescription: "Our triage: find the cause # first"\n---\n\n# Triage\n\nTrace history and diagnose the root cause.\n',
+        },
+      ]);
+      expect(await within(triageCard()).findByText('Edited')).toBeInTheDocument();
+      expect(within(triageCard()).getByText('Our triage: find the cause # first')).toBeInTheDocument();
     });
 
-    it('offers no way to save and sends no writes to the server', async () => {
-      server.use(http.get(SKILLS_URL, () => HttpResponse.json(catalog)));
-      const methods: string[] = [];
-      const record = ({ request }: { request: Request }) => methods.push(request.method);
-      server.events.on('request:start', record);
-
-      try {
-        const user = userEvent.setup();
-        renderWithProviders(<FactorySkillsSection />);
-
-        await user.click(await screen.findByRole('button', { name: 'Edit factory-plan' }));
-        const dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
-        await user.clear(within(dialog).getByDisplayValue(catalog.skills[1].description));
-        await user.type(within(dialog).getByRole('textbox', { name: 'Description' }), 'Edited locally');
-
-        expect(within(dialog).getByRole('button', { name: 'Save' })).toBeDisabled();
-        expect(within(dialog).getByText('Saving is not available yet')).toBeInTheDocument();
-        expect(methods.filter(method => method !== 'GET')).toEqual([]);
-      } finally {
-        server.events.removeListener('request:start', record);
-      }
-    });
-
-    it('discards local edits when the editor is closed and reopened', async () => {
-      server.use(http.get(SKILLS_URL, () => HttpResponse.json(catalog)));
-
+    it('keeps frontmatter fields the editor does not show when saving', async () => {
+      const { writes } = serveFactory({
+        skills: catalog.skills.map(skill =>
+          skill.name === 'factory-triage'
+            ? { ...skill, frontmatter: { license: 'MIT', 'user-invocable': false } }
+            : skill,
+        ),
+      });
       const user = userEvent.setup();
-      renderWithProviders(<FactorySkillsSection />);
+      renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
+
+      await user.click(await screen.findByRole('button', { name: 'Edit factory-triage' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
+      await user.type(within(dialog).getByRole('textbox', { name: 'Description' }), '!');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      await waitFor(() => expect(writes).toHaveLength(1));
+      expect(writes[0].content).toContain('\nlicense: "MIT"\nuser-invocable: false\n---\n');
+    });
+
+    it('shows why the server rejected a save and keeps the editor open', async () => {
+      serveFactory();
+      server.use(
+        http.put(SKILL_URL, () =>
+          HttpResponse.json(
+            { error: 'invalid_skill', message: 'description: Description must be 1024 characters or less' },
+            { status: 400 },
+          ),
+        ),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
+
+      await user.click(await screen.findByRole('button', { name: 'Edit factory-plan' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
+      await user.type(within(dialog).getByRole('textbox', { name: 'Description' }), ' and more');
+      await user.click(within(dialog).getByRole('button', { name: 'Save' }));
+
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Description must be 1024 characters or less');
+      expect(screen.getByRole('dialog', { name: 'Edit skill' })).toBeInTheDocument();
+    });
+
+    it('reverts an edited skill to the original', async () => {
+      const { writes } = serveFactory({
+        skills: catalog.skills.map(skill =>
+          skill.name === 'factory-triage'
+            ? { ...skill, edited: { updatedBy: 'admin-1', updatedAt: '2026-10-29T00:00:00.000Z' } }
+            : skill,
+        ),
+      });
+      const user = userEvent.setup();
+      renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
+
+      expect(
+        await within(await screen.findByRole('button', { name: /Triage/ })).findByText('Edited'),
+      ).toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Edit factory-triage' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
+      await user.click(within(dialog).getByRole('button', { name: 'Revert to original' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(writes).toEqual([{ method: 'DELETE', name: 'factory-triage' }]);
+      await waitFor(() => expect(within(triageCard()).queryByText('Edited')).not.toBeInTheDocument());
+    });
+
+    it('offers no revert for a skill this Factory has not edited', async () => {
+      serveFactory();
+      const user = userEvent.setup();
+      renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
+
+      await user.click(await screen.findByRole('button', { name: 'Edit factory-plan' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
+      expect(within(dialog).queryByRole('button', { name: 'Revert to original' })).not.toBeInTheDocument();
+    });
+
+    it('says when the original changed since the edit', async () => {
+      serveFactory({
+        skills: catalog.skills.map(skill =>
+          skill.name === 'factory-plan'
+            ? {
+                ...skill,
+                edited: { updatedBy: 'admin-1', updatedAt: '2026-10-29T00:00:00.000Z' },
+                originalChanged: true,
+              }
+            : skill,
+        ),
+      });
+      const user = userEvent.setup();
+      renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
+
+      await user.click(await screen.findByRole('button', { name: 'Edit factory-plan' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
+      expect(within(dialog).getByRole('note')).toHaveTextContent('The original changed since this was edited');
+    });
+
+    it('shows members who are not admins the skill read-only with the reason', async () => {
+      const { writes } = serveFactory({ canEdit: false });
+      const user = userEvent.setup();
+      renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
+
+      expect(await screen.findByRole('button', { name: 'View factory-plan' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Edit factory-plan' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'View factory-plan' }));
+      const dialog = await screen.findByRole('dialog', { name: 'View skill' });
+      expect(within(dialog).getByText('Only organization admins can edit skills.')).toBeInTheDocument();
+      expect(within(dialog).getByDisplayValue(catalog.skills[1].description)).toBeDisabled();
+      expect(within(dialog).queryByRole('button', { name: 'Save' })).not.toBeInTheDocument();
+      expect(within(dialog).queryByRole('button', { name: 'Revert to original' })).not.toBeInTheDocument();
+      expect(writes).toEqual([]);
+    });
+
+    it('discards unsaved edits when the editor is closed and reopened', async () => {
+      serveFactory();
+      const user = userEvent.setup();
+      renderWithProviders(<FactorySkillsSection factoryId="fp-1" />);
 
       await user.click(await screen.findByRole('button', { name: 'Edit factory-review' }));
       let dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
-      await user.clear(within(dialog).getByDisplayValue('factory-review'));
-      await user.type(within(dialog).getByRole('textbox', { name: 'Name' }), 'renamed');
+      await user.type(within(dialog).getByRole('textbox', { name: 'Description' }), ' locally');
       await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
       await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
 
       await user.click(screen.getByRole('button', { name: 'Edit factory-review' }));
       dialog = await screen.findByRole('dialog', { name: 'Edit skill' });
-      expect(within(dialog).getByDisplayValue('factory-review')).toBeInTheDocument();
-      expect(within(dialog).queryByDisplayValue('renamed')).not.toBeInTheDocument();
+      expect(within(dialog).getByDisplayValue('Review a Factory work item PR')).toBeInTheDocument();
     });
   });
 

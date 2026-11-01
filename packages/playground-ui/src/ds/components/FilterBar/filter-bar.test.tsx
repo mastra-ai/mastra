@@ -1655,6 +1655,36 @@ describe('FilterBar', () => {
       expect(chipLabels()).toEqual(['Tags prod, staging']);
     });
 
+    it('drops an added filter that the consumer later removes', async () => {
+      function ReplacedByHost() {
+        const [items, setItems] = useState<FilterBarItem[]>([]);
+        return (
+          <>
+            <button type="button" onClick={() => setItems([])}>
+              Pick another view
+            </button>
+            <FilterBar
+              fields={FIELDS}
+              operators={OPERATORS}
+              value={items}
+              onValueChange={setItems}
+              createItemId={fieldId => fieldId}
+            >
+              <FilterBar.Chips />
+              <FilterBar.Input placeholder="Filter…" />
+            </FilterBar>
+          </>
+        );
+      }
+      render(<ReplacedByHost />);
+      await addStatus(0, 'err');
+      expect(chipLabels()).toEqual(['Status is Error']);
+
+      fireEvent.click(screen.getByText('Pick another view'));
+
+      await waitFor(() => expect(chipLabels()).toEqual([]));
+    });
+
     it('replaces the value when the operators cannot be combined', async () => {
       render(<FieldKeyed initial={[{ id: 'status', fieldId: 'status', operatorId: 'is-not', value: 'running' }]} />);
 

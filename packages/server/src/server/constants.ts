@@ -15,6 +15,13 @@ export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
  */
 export const MASTRA_SCOPES_KEY = 'mastra__scopes';
 
+/**
+ * The Knowledge principals the signed-in caller holds, for the Studio Knowledge routes: a `string[]` of
+ * principal addresses, or `'all'` for an admin who may read the whole instance. Set it in
+ * `auth.authorize` (after authentication). With auth configured, a caller without it is refused.
+ */
+export const MASTRA_KNOWLEDGE_PRINCIPALS_KEY = 'mastra__knowledgePrincipals';
+
 export const MASTRA_USER_KEY = 'mastra__user';
 
 export const MASTRA_USER_PERMISSIONS_KEY = 'mastra__userPermissions';
@@ -66,6 +73,7 @@ export const RESERVED_REQUEST_CONTEXT_KEYS = [
   // Agent scopes decide memory identity and what the agent acts as; only
   // server middleware may set them.
   MASTRA_SCOPES_KEY,
+  MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
   MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,

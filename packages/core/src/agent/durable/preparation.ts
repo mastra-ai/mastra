@@ -44,7 +44,7 @@ import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
 import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
-import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
+import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes } from '../scopes';
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import { mastraDBMessageToSignal, signalSpanAttributes } from '../signals';
 import { TripWire } from '../trip-wire';
@@ -163,7 +163,7 @@ interface DurablePreparationAgent {
   maxRetries?: number;
   requestContextSchema?: StandardSchemaWithJSON<unknown>;
   getDefaultOptions(opts: { requestContext: RequestContext }): AgentExecutionOptions | Promise<AgentExecutionOptions>;
-  getScopes?(opts: { requestContext: RequestContext }): Promise<string[] | undefined>;
+  getScopes?(opts: { requestContext: RequestContext; scopes?: string[] }): Promise<string[]>;
   getInstructions(opts: { requestContext: RequestContext }): AgentInstructions | Promise<AgentInstructions>;
   __getModelAndModelList(opts: { requestContext: RequestContext; model?: unknown }): Promise<{
     model: MastraLanguageModel;
@@ -248,6 +248,12 @@ export interface PreparationOptions<OUTPUT = undefined> {
   /** Whether execution options already include the agent defaults. */
   optionsAreResolved?: boolean;
   /**
+   * The agent defaults `options` were resolved from. Function-based defaults can build new
+   * scorers on every call, so recording whether the completion policy came from the defaults
+   * must compare against this resolution rather than a fresh one.
+   */
+  resolvedDefaultOptions?: AgentExecutionOptions<OUTPUT>;
+  /**
    * Whether agent scopes were already applied to `options` (DurableAgent does this itself).
    * When false, preparation resolves scopes so wrappers that call it directly honor them.
    */
@@ -310,6 +316,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     messages,
     options: rawExecOptions,
     optionsAreResolved = false,
+    resolvedDefaultOptions,
     scopesResolved = false,
     resumedSpanData,
     runId: providedRunId,
@@ -367,7 +374,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // mirroring the non-durable Agent.stream()/generate() paths. Without this the
   // agent's configured defaults (maxSteps, providerOptions, etc.) are silently
   // dropped and durable runs fall back to DurableAgentDefaults.MAX_STEPS.
-  let defaultOptions: AgentExecutionOptions<OUTPUT> | undefined;
+  let defaultOptions: AgentExecutionOptions<OUTPUT> | undefined = resolvedDefaultOptions;
   const loadDefaultOptions = async () =>
     (defaultOptions ??= ((await typedAgent.getDefaultOptions({ requestContext })) ??
       {}) as AgentExecutionOptions<OUTPUT>);
@@ -384,13 +391,16 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 2b. Resolve agent scopes for callers that did not (DurableAgent resolves its own).
   // Durable runs read identity from `memory` only, so nothing changes without scopes.
   if (!scopesResolved) {
-    const configuredScopes = (await typedAgent.getScopes?.({ requestContext })) ?? [];
     const defaultScopes = (await loadDefaultOptions()).scopes ?? [];
-    const agentScopes = [...configuredScopes, ...defaultScopes];
+    const incoming = incomingAgentScopes({ requestContext, callScopes, defaultScopes, mastra });
+    const agentScopes = typedAgent.getScopes
+      ? await typedAgent.getScopes({ requestContext, scopes: incoming })
+      : incoming;
     if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
       const resolved = resolveAgentScopes({
         requestContext,
         agentScopes,
+        incomingScopes: incoming,
         callScopes,
         memory: execOptions.memory,
         mastra,
@@ -873,6 +883,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
   // 12. Resolve memory persistence flags
   const savePerStep = execOptions?.savePerStep;
   const observationalMemory = isObservationalMemoryEnabled(memoryConfig?.observationalMemory);
+  if (execOptions.isTaskComplete) await loadDefaultOptions();
 
   // 12b. Open MODEL_GENERATION under the AGENT_RUN opened in step 6, and export both
   // into the workflow input so each durable step can rebuild them. No-ops when
@@ -953,6 +964,19 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       transform: toolPayloadTransform?.targets ? { targets: toolPayloadTransform.targets } : undefined,
       isTaskComplete: execOptions?.isTaskComplete
         ? {
+            fromAgentDefaults: (() => {
+              const configured = defaultOptions?.isTaskComplete;
+              const active = execOptions.isTaskComplete;
+              return (
+                !!configured &&
+                !!active.scorers &&
+                !!configured.scorers &&
+                active.scorers.length === configured.scorers.length &&
+                active.scorers.every((scorer, index) => scorer === configured.scorers?.[index]) &&
+                active.onComplete === configured.onComplete
+              );
+            })(),
+            scorerIds: execOptions.isTaskComplete.scorers?.map(s => s.id),
             scorerNames: execOptions.isTaskComplete.scorers?.map(s => s.name).filter((n): n is string => !!n),
             strategy: execOptions.isTaskComplete.strategy,
             timeout: execOptions.isTaskComplete.timeout,
