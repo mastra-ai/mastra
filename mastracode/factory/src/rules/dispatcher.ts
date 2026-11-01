@@ -9,6 +9,7 @@ import {
   isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
+  pullRequestReviewPhase,
   reviewsPullRequest,
   workItemPhaseSemantics,
 } from '../boards/index.js';
@@ -538,7 +539,7 @@ function reviewsFactoryAuthoredCode(
   if (item.metadata?.factoryAuthored !== true) return false;
   if (decision.type === 'transition') {
     return (
-      decision.stage === 'review' &&
+      decision.stage === pullRequestReviewPhase(decision.board) &&
       reviewsPullRequest({ board: decision.board, item: { source: workItemSource(item.externalSource) } })
     );
   }

@@ -2,7 +2,7 @@
 '@mastra/factory': minor
 ---
 
-Pull requests and merge requests are now reviewed on the Work board. A new pull request gets its own card in Work Intake; its Review action moves it into Work's Review phase, where the independent reviewer runs (`factory-review` for GitHub pull requests and `factory-gitlab-review` for GitLab merge requests by default; override them through `factory-skills`). Merging moves the card to Done and closing it unmerged to Canceled. A pull request card can only be in Intake, Review, Done, or Canceled.
+Pull requests and merge requests are now reviewed on the Work board. A new pull request gets its own card in Work Intake; its Review action moves it into Work's new PR review phase (`pr-review`), where the independent reviewer runs (`factory-review` for GitHub pull requests and `factory-gitlab-review` for GitLab merge requests by default; override them through `factory-skills`). Merging moves the card to Done and closing it unmerged to Canceled. A pull request card can only be in Intake, PR review, Done, or Canceled; Work's Review phase stays the builder's self-review, and only pull request cards enter PR review. Use `pullRequestReviewPhase(board)` from `@mastra/factory/boards` to find where a pull request card is reviewed (`pr-review` on Work, `review` on the Review board).
 
 Cards already on the Review board stay there and keep working unchanged, and the Review board is still installed.
 

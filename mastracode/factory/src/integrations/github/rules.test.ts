@@ -1262,7 +1262,7 @@ describe('GithubRules', () => {
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(card).toMatchObject({
       title: 'PR 17',
-      stages: ['review'],
+      stages: ['pr-review'],
       metadata: {
         author: 'pr-author',
         authorTrusted: true,
@@ -1319,7 +1319,7 @@ describe('GithubRules', () => {
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(card).toMatchObject({
       title: 'PR 17',
-      stages: ['review'],
+      stages: ['pr-review'],
       metadata: { author: 'pr-author', authorTrusted: true, factoryAuthored: false, autoStartCandidate: true },
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
@@ -4765,6 +4765,11 @@ describe('GithubRules push hand-off', () => {
   });
 });
 
+/** Where a pull request's own card is reviewed: Work's PR review, or Review's Reviewing. */
+function reviewPhase(board: 'work' | 'review'): 'pr-review' | 'review' {
+  return board === 'work' ? 'pr-review' : 'review';
+}
+
 describe('pull request cards on the Work board', () => {
   async function workBoardHarness(permission: string | undefined) {
     const harness = await setup(permission);
@@ -4971,7 +4976,7 @@ describe('pull request cards on the Work board', () => {
     'ignores a comment on a pull request whose only card is on the %s board',
     async board => {
       const harness = await workBoardHarness('read');
-      await lonePullRequestCard(harness, board, 'review');
+      await lonePullRequestCard(harness, board, reviewPhase(board));
 
       await harness.service.ingest(
         pullRequestComment('delivery-feedback', { sender: 'reviewer', body: 'This needs a null check.' }),
@@ -4983,16 +4988,19 @@ describe('pull request cards on the Work board', () => {
 
   it.each(['work', 'review'] as const)('re-reviews a push to a reviewed pull request card on %s', async board => {
     const harness = await workBoardHarness('write');
-    const card = await lonePullRequestCard(harness, board, 'review', { reviewVerdict: 'approve' });
+    const card = await lonePullRequestCard(harness, board, reviewPhase(board), { reviewVerdict: 'approve' });
 
     await harness.service.ingest(pullRequest('synchronize', 'delivery-push'));
     await harness.dispatch();
 
-    expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ board, stages: ['review'] });
+    expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
+      board,
+      stages: [reviewPhase(board)],
+    });
     const decisions = await harness.decisions();
     expect(decisions.find(entry => entry.decision.type === 'transition')?.decision).toMatchObject({
       board,
-      stage: 'review',
+      stage: reviewPhase(board),
       reenter: true,
     });
     expect(decisions.find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
@@ -5017,7 +5025,7 @@ describe('pull request cards on the Work board', () => {
     'moves a merged pull request card to Done on %s, and a closed one to Canceled',
     async board => {
       const merged = await workBoardHarness('read');
-      const mergedCard = await lonePullRequestCard(merged, board, 'review');
+      const mergedCard = await lonePullRequestCard(merged, board, reviewPhase(board));
       await merged.service.ingest(pullRequest('closed', 'delivery-merge', true));
       await merged.dispatch();
       expect(await merged.workItems.get({ orgId: 'org-1', id: mergedCard.id })).toMatchObject({
@@ -5047,7 +5055,7 @@ describe('pull request cards on the Work board', () => {
 
       expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
         board,
-        stages: ['review'],
+        stages: [reviewPhase(board)],
       });
       expect(
         (await harness.decisions()).find(entry => entry.decision.type === 'invokeSkill')?.decision,
@@ -5055,14 +5063,14 @@ describe('pull request cards on the Work board', () => {
     },
   );
 
-  it("files a pull request a maintainer asks Factory to review straight into Work's review phase", async () => {
+  it("files a pull request a maintainer asks Factory to review straight into Work's PR review phase", async () => {
     const harness = await workBoardHarness('write');
 
     await harness.service.ingest(pullRequestComment('delivery-command'));
     await harness.dispatch();
 
     const [card] = await harness.cards();
-    expect(card).toMatchObject({ board: 'work', stages: ['review'] });
+    expect(card).toMatchObject({ board: 'work', stages: ['pr-review'] });
     expect((await harness.decisions()).find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
       role: 'review',
       skillName: 'factory-review',

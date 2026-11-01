@@ -1,4 +1,4 @@
-import { isPullRequestCard, reviewsPullRequest } from '../../boards/index.js';
+import { isPullRequestCard, pullRequestReviewPhase, reviewsPullRequest } from '../../boards/index.js';
 import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import { factoryRuleStage, isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
@@ -150,12 +150,13 @@ function mergeRequestUpdated(context: FactoryGitLabRuleContext) {
   if (context.item.stages.some(stage => stage === 'intake')) return;
   // An untrusted push must not start review passes on demand.
   if (!trustedGitLabActor(context) && !context.mergeRequest.factoryAuthored) return;
-  const alreadyReviewing = context.item.stages.some(stage => stage === 'review');
+  const stage = pullRequestReviewPhase(context.board);
+  const alreadyReviewing = context.item.stages.some(current => current === stage);
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-updated`,
     board: mergeRequestCardBoard(context),
-    stage: 'review',
+    stage,
     ...(alreadyReviewing ? { reenter: true } : {}),
   } as const;
 }

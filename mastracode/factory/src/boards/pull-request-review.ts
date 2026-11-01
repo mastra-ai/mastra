@@ -118,10 +118,10 @@ export function rejectAgentDone({ actor, toStage }: Pick<BoardTransitionPolicyCo
 export const reviewTransitionPolicy: BoardTransitionPolicy = rejectAgentDone;
 
 export function reviewPullRequest(context: FactoryStageRuleContext) {
-  // Only a Review-to-Review re-entry can supersede an active pass. A card
+  // Only a re-entry into the review phase can supersede an active pass. A card
   // returning from Done has no live review to cancel; aborting its bound session
   // would instead cancel the fresh re-review kickoff.
-  const supersedes = context.fromStage === 'review';
+  const supersedes = context.fromStage === context.toStage;
   // The re-review skill applies once a prior pass recorded a verdict. Cards
   // closed as Done before verdicts were recorded in place also count.
   const priorReviewCompleted = hasRecordedVerdict(context.item) || context.fromStage === 'done';

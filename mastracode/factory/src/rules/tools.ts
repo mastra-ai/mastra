@@ -2,7 +2,13 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import { boardForWorkItem, isPullRequestCard, reviewsPullRequest, workItemPhaseSemantics } from '../boards/index.js';
+import {
+  boardForWorkItem,
+  isPullRequestCard,
+  pullRequestReviewPhase,
+  reviewsPullRequest,
+  workItemPhaseSemantics,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -215,7 +221,7 @@ function createReviewVerdictTool(
             toolCallId: execution.agent?.toolCallId,
           });
         }
-        if (!reviewsPullRequest({ board, item: { source } }) || item.stages[0] !== 'review') {
+        if (!reviewsPullRequest({ board, item: { source } }) || item.stages[0] !== pullRequestReviewPhase(board)) {
           throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
         }
         const reviewedAt = new Date().toISOString();

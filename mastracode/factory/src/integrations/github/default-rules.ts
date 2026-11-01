@@ -1,4 +1,4 @@
-import { isPullRequestCard, reviewsPullRequest } from '../../boards/index.js';
+import { isPullRequestCard, pullRequestReviewPhase, reviewsPullRequest } from '../../boards/index.js';
 import { hasRecordedVerdict } from '../../boards/pull-request-review.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
@@ -149,7 +149,7 @@ function materializePullRequestIntake(
     idempotencyKey,
     autoStartCandidate,
     stage = 'intake',
-  }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'review' },
+  }: { idempotencyKey: string; autoStartCandidate: boolean; stage?: 'intake' | 'pr-review' },
 ) {
   if (!context.pullRequest) return;
   return {
@@ -383,19 +383,20 @@ function reReviewRequestedPullRequest(context: FactoryGithubRuleContext) {
     return materializePullRequestIntake(context, {
       idempotencyKey: `${context.ingress.id}:pull-request-review-requested-intake`,
       autoStartCandidate: true,
-      stage: 'review',
+      stage: 'pr-review',
     });
   }
   // Already in Reviewing with no verdict yet: a pass is pending or running.
   // Once a verdict is recorded the card rests in Reviewing, so a fresh request
   // re-enters the stage to start another pass.
-  const reviewing = context.item.stages.length === 1 && context.item.stages[0] === 'review';
+  const stage = pullRequestReviewPhase(context.board);
+  const reviewing = context.item.stages.length === 1 && context.item.stages[0] === stage;
   if (reviewing && !hasRecordedVerdict(context.item)) return;
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-requested`,
     board: pullRequestCardBoard(context),
-    stage: 'review',
+    stage,
     ...(reviewing ? { reenter: true } : {}),
   } as const;
 }
@@ -412,12 +413,13 @@ function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
   // A fork's author controls its head branch, so an untrusted push must not be
   // able to start review passes on demand; a maintainer can still request one.
   if (!trustedGithubActor(context) && !context.pullRequest.factoryAuthored) return;
-  const alreadyReviewing = context.item.stages.some(stage => stage === 'review');
+  const stage = pullRequestReviewPhase(context.board);
+  const alreadyReviewing = context.item.stages.some(current => current === stage);
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:re-review-updated`,
     board: pullRequestCardBoard(context),
-    stage: 'review',
+    stage,
     // Re-entry is the point when the card is already Reviewing: the stage's
     // entry rule is what cancels the superseded pass and starts one on the code
     // that just landed.
