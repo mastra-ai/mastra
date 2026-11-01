@@ -141,7 +141,14 @@ describe('resumeStage', () => {
         sessions: { work: sessionRef('work'), review: sessionRef('review') },
         stageHistory: history('triage', 'planning', 'execute', 'review', 'intake'),
       }),
-    ).toBe('review');
+    ).toBe('planning');
+    // A pull request card set aside from PR review resumes its review there.
+    expect(
+      resumeStage('intake', {
+        sessions: { review: sessionRef('review') },
+        stageHistory: history('pr-review', 'intake'),
+      }),
+    ).toBe('pr-review');
   });
 
   it('offers nothing for a fresh arrival or outside Intake', () => {

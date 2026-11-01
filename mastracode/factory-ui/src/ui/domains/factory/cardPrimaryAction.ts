@@ -92,8 +92,8 @@ export function resumeStage(
   if (columnStage !== 'intake' || Object.keys(item.sessions).length === 0) return undefined;
   const visited = new Set((item.stageHistory ?? []).map(entry => entry.stage));
   const lane = WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
-  // Intake does not lead to Building: a card that got that far resumes in Planning.
-  return lane === 'execute' ? 'planning' : lane;
+  // Intake leads to neither Building nor its self-review: a card that got that far resumes in Planning.
+  return lane === 'execute' || lane === 'review' ? 'planning' : lane;
 }
 
 /**

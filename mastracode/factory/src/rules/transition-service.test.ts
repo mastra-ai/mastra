@@ -1946,8 +1946,9 @@ describe('phase semantics', () => {
     ['review', 'work'],
   ] as const)('seats a human kickoff into Work %s with the %s role', async (stage, role) => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    // Building is entered from Planning; every other lane from Intake.
-    const item = await createItem(storage, { stages: [stage === 'execute' ? 'planning' : 'intake'] });
+    // Building is entered from Planning, its self-review from Building; every other lane from Intake.
+    const from = stage === 'execute' ? 'planning' : stage === 'review' ? 'execute' : 'intake';
+    const item = await createItem(storage, { stages: [from] });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const result = await service.transition({ ...request(item, { stage }), cause: 'board_drag' });
@@ -2716,13 +2717,14 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
 
     it('moves every card along the Work flow, for people and agents alike', async () => {
       const flow: Record<string, readonly string[]> = {
-        intake: ['triage', 'planning', 'review', 'done', 'canceled'],
+        intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
         triage: ['intake', 'planning', 'done', 'canceled'],
         planning: ['execute', 'intake', 'done', 'canceled'],
         execute: ['review', 'planning', 'done', 'canceled'],
         review: ['execute', 'intake', 'done', 'canceled'],
-        done: ['review'],
-        canceled: ['intake', 'review'],
+        'pr-review': ['intake', 'done', 'canceled'],
+        done: ['pr-review'],
+        canceled: ['intake', 'pr-review'],
       };
       org = `org-${randomUUID()}`;
       const storage = await workItemsOn(backend);
@@ -2730,8 +2732,11 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       const seen: string[] = [];
       for (const [from, allowed] of Object.entries(flow)) {
         for (const to of Object.keys(flow).filter(stage => stage !== from)) {
+          // PR review is a pull request card's lane; every other lane belongs to an issue card.
+          const pullRequest = from === 'pr-review' || to === 'pr-review';
           const item = await createItem(storage, {
             orgId: org,
+            ...(pullRequest ? { source: 'github-pr' as const, board: 'work' } : {}),
             sourceKey: `${org}-${from}-${to}`,
             stages: [from],
             metadata: { authorTrusted: true },
@@ -2756,21 +2761,35 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       expect(seen).toHaveLength(Object.values(flow).flat().length);
     });
 
-    it('resumes a card self-review parked in Intake through Review, never straight into Building', async () => {
+    it('resumes a card self-review parked in Intake through Planning, never straight into Building or Review', async () => {
       const parked = { selfReviewVerdict: 'request changes', selfReviewRounds: 3, selfReviewNeedsHuman: true };
       const { storage, item, service } = await card('intake', parked);
-      await expect(
-        service.transition({ ...request(item, { orgId: org, stage: 'execute' }), cause: 'board_drag' }),
-      ).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+      for (const stage of ['execute', 'review'] as const)
+        await expect(
+          service.transition({
+            ...request(item, { orgId: org, stage, identity: `drag-${stage}` }),
+            cause: 'board_drag',
+          }),
+        ).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
       const resumed = await service.transition({
-        ...request(item, { orgId: org, stage: 'review', identity: 'resume' }),
+        ...request(item, { orgId: org, stage: 'planning', identity: 'resume' }),
         cause: 'board_drag',
       });
-      expect(resumed).toMatchObject({ status: 'accepted', stage: 'review' });
-      const reviewing = (await storage.get({ orgId: org, id: item.id }))!;
-      await expect(
-        service.transition({ ...request(reviewing, { orgId: org, stage: 'execute' }), ...agent('review', 'changes') }),
-      ).resolves.toMatchObject({ status: 'accepted', stage: 'execute' });
+      expect(resumed).toMatchObject({ status: 'accepted', stage: 'planning' });
+      expect((await storage.get({ orgId: org, id: item.id }))?.stages).toEqual(['planning']);
+    });
+
+    it('keeps an agent on a trusted card in Intake out of Review and PR review, so Building still needs a plan', async () => {
+      // Before PR review had its own lane, Intake -> Review -> Building let an agent skip the plan.
+      const { storage, item, service } = await card('intake', {});
+      for (const stage of ['review', 'pr-review', 'execute'] as const)
+        await expect(
+          service.transition({
+            ...request(item, { orgId: org, stage, identity: `agent-${stage}` }),
+            ...agent('work', `skip-${stage}`),
+          }),
+        ).resolves.toMatchObject({ status: 'rejected', code: 'invalid_transition' });
+      expect((await storage.get({ orgId: org, id: item.id }))?.stages).toEqual(['intake']);
     });
 
     it('leaves Done on the Review board to its own flow: the review prompts keep it for the merge', async () => {

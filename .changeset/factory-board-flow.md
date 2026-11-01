@@ -8,15 +8,16 @@ Work and Review boards no longer use transition policies. Each phase's `nextPhas
 
 | From | To |
 | --- | --- |
-| Intake | Triage, Planning, Review, Done, Canceled |
+| Intake | Triage, Planning, PR review, Done, Canceled |
 | Triage | Intake, Planning, Done, Canceled |
 | Planning | Building, Intake, Done, Canceled |
 | Building | Review, Planning, Done, Canceled |
 | Review | Building, Intake, Done, Canceled |
-| Done | Review |
-| Canceled | Intake, Review |
+| PR review | Intake, Done, Canceled |
+| Done | PR review |
+| Canceled | Intake, PR review |
 
-This applies to people too: you can no longer drag a card from Intake or Triage straight into Building, and a card self-review parks in Intake resumes through Review. Pull request cards still only sit in Intake, Review, Done or Canceled. When work counts as finished (no open pull request, no review asking for changes) is now in the build and self-review instructions rather than enforced by the board.
+This applies to people too: you can no longer drag a card from Intake or Triage straight into Building, or from Intake into Review; Review (self-review) is reached only from Building, and a card self-review parks in Intake resumes through Planning. Pull request cards only sit in Intake, PR review, Done or Canceled, and only pull request cards enter PR review. When work counts as finished (no open pull request, no review asking for changes) is now in the build and self-review instructions rather than enforced by the board.
 
 **Plans always wait for a person.** The project's **Auto-approve plans** setting is removed. Every plan on the Work board waits for a person, who moves the card on or approves `submit_plan` in a chat they are signed in to. Projects that had the setting on now see plans wait. Custom boards can still approve plans without a person with `exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen }`. The project update API still accepts `autoApprovePlans` for one release and ignores it. `factory_update_work_item` and `PATCH /work-items/:id` no longer take `plansPreapproved`, and cards no longer report `plansPreapprovedAt`: the per-card pre-approval never skipped a plan on this board.
 
