@@ -3,6 +3,7 @@ import { MastraBase } from '../base';
 import type { Mastra } from '../mastra';
 import type { MastraCompositeStore } from '../storage';
 import type { KnowledgeReadScope, KnowledgeStorage } from '../storage/domains/knowledge';
+import type { KnowledgePage } from '../storage/domains/knowledge/pages';
 import { augmentWithInit, getStorageSource } from '../storage/storageWithInit';
 import type { ToolAction } from '../tools';
 import { knowledgeAccessGrants } from './access';
@@ -11,6 +12,8 @@ import type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
 import type { KnowledgeConfig } from './config';
 import { KnowledgeDeclarationError, strongerKnowledgeRole } from './declarations';
 import type { KnowledgeRole, KnowledgeScopeDeclarationInfo } from './declarations';
+import { removeKnowledgePage, upsertKnowledgePage } from './host-writes';
+import type { KnowledgeRemovePageInput, KnowledgeUpsertPageInput, KnowledgeUpsertPageResult } from './host-writes';
 import { buildKnowledgeInstructions } from './instructions';
 import type { KnowledgeInstructionsOption } from './instructions';
 import { buildKnowledgePageTools } from './page-tools';
@@ -196,6 +199,41 @@ export class Knowledge extends MastraBase {
           context as KnowledgeRunContext & { requestContext?: { delete?(key: string): void } }
         )?.requestContext?.delete?.(PINNED_READ_MEMO_KEY),
     );
+  }
+
+  /**
+   * Creates or updates the page at `scope#path`, for apps that sync content in from outside an agent
+   * run (a docs site, a CMS). The path is the page's identity, so running a sync again updates the
+   * same pages; an unchanged page is not written. Notes on the page are kept. The page is embedded
+   * when Knowledge has `vector` and `embedder`, and change listeners are told.
+   *
+   * **Host-only.** No run scopes and no access rules are checked; who reads the page is decided by
+   * the scope's access rules as usual. Never expose it through an agent tool, or through a server
+   * route without admin-level auth.
+   *
+   * @experimental
+   */
+  upsertPage(input: KnowledgeUpsertPageInput): Promise<KnowledgeUpsertPageResult> {
+    return upsertKnowledgePage(this.#hostWriter(), input);
+  }
+
+  /**
+   * Deletes the page at `scope#path`; `null` when there is none. Refuses a page with child pages
+   * and a page declared in config. Host-only, like {@link Knowledge.upsertPage}.
+   *
+   * @experimental
+   */
+  removePage(input: KnowledgeRemovePageInput): Promise<KnowledgePage | null> {
+    return removeKnowledgePage(this.#hostWriter(), input);
+  }
+
+  #hostWriter() {
+    return {
+      runtime: this.#runtime,
+      getStorage: () => this.getStorage(),
+      semantic: this.#semantic,
+      warn: (message: string) => this.logger.warn(message),
+    };
   }
 
   /**
@@ -405,3 +443,4 @@ export interface KnowledgeScopeGrant {
   role: KnowledgeRole;
 }
 export type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
+export type { KnowledgeRemovePageInput, KnowledgeUpsertPageInput, KnowledgeUpsertPageResult } from './host-writes';
