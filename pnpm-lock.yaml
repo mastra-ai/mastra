@@ -9314,8 +9314,8 @@ importers:
         specifier: workspace:*
         version: link:../_test-utils
       '@koa/router':
-        specifier: ^13.1.1
-        version: 13.1.1(supports-color@10.2.2)
+        specifier: ^15.7.0
+        version: 15.7.0(koa@3.2.1)(supports-color@10.2.2)
       '@mastra/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -15370,10 +15370,11 @@ packages:
   '@keyv/serialize@1.1.1':
     resolution: {integrity: sha512-dXn3FZhPv0US+7dtJsIi2R+c7qWYiReoEh5zUntWCf4oSpMNib8FDhSoed6m3QyZdx5hK7iLFkYk3rNxwt8vTA==}
 
-  '@koa/router@13.1.1':
-    resolution: {integrity: sha512-JQEuMANYRVHs7lm7KY9PCIjkgJk73h4m4J+g2mkw2Vo1ugPZ17UJVqEH8F+HeAdjKz5do1OaLe7ArDz+z308gw==}
-    engines: {node: '>= 18'}
-    deprecated: Please upgrade to v15 or higher. All reported bugs in this version are fixed in newer releases, dependencies have been updated, and security has been improved.
+  '@koa/router@15.7.0':
+    resolution: {integrity: sha512-WaAlk4TOl/O0rhTpOR0l052gz03syPMmI6Pe2gd7v3ubjfv5UcSGcnb0Y/J5NNC/ln+5FiUqPJTc/a15I+XqAA==}
+    engines: {node: '>= 20'}
+    peerDependencies:
+      koa: ^2.0.0 || ^3.0.0
 
   '@lancedb/lancedb-darwin-arm64@0.31.0':
     resolution: {integrity: sha512-6n3VxAenwcNWQpk9Ta4NL/KhpSywskafarBakzFPGe/OXzdKXbmbXdrhGdl8oMacbfgql6wmW3DcAJAbsiThvw==}
@@ -38305,12 +38306,13 @@ snapshots:
 
   '@keyv/serialize@1.1.1': {}
 
-  '@koa/router@13.1.1(supports-color@10.2.2)':
+  '@koa/router@15.7.0(koa@3.2.1)(supports-color@10.2.2)':
     dependencies:
       debug: 4.4.3(supports-color@10.2.2)
       http-errors: 2.0.1
+      koa: 3.2.1
       koa-compose: 4.1.0
-      path-to-regexp: 6.3.0
+      path-to-regexp: 8.4.2
     transitivePeerDependencies:
       - supports-color
 
