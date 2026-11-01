@@ -10,7 +10,6 @@ import { stripCachedSessionRefs } from './useWorkItems';
 import {
   createUserSession,
   deleteUserSession,
-  DraftSessionCreateError,
   getUserSession,
   listUserSessions,
   USER_SESSION_BRANCH_PREFIX,
@@ -155,9 +154,6 @@ export function useUserSessionQuery(sessionId: string | undefined) {
   return useQuery({
     queryKey: queryKeys.userSession(sessionId),
     queryFn: sessionId ? () => getUserSession(baseUrl, sessionId) : skipToken,
-    // A draft whose create failed keeps that failure, which returns its thread
-    // to the draft, rather than reading a session that was never made.
-    enabled: query => !(query.state.error instanceof DraftSessionCreateError),
     // A lazy page mounting after the session read failed must not read it again;
     // reopening the session still does, since its key changes.
     retryOnMount: false,
