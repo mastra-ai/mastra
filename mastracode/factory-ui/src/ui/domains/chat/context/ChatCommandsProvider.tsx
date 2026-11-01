@@ -25,8 +25,8 @@ export interface ChatCommandsApi {
 
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
-export function ChatCommandsProvider({ children }: { children: ReactNode }) {
-  const [composerDraft, setComposerDraft] = useState('');
+export function ChatCommandsProvider({ children, initialDraft = '' }: { children: ReactNode; initialDraft?: string }) {
+  const [composerDraft, setComposerDraft] = useState(initialDraft);
   const [composerPreview, setPreview] = useState<ComposerPreview>();
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   // Measured before the preview lands: a composer that grew to fit it would move what the pointer is on.

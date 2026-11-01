@@ -49,14 +49,15 @@ describe('Composer on a lazy user-session draft', () => {
     await waitFor(() =>
       expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'fix the login bug', visibility: 'private' }]),
     );
-    expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`);
-    expect(preparation.controllerCreates).toBe(0);
-
-    finishCreate();
-
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
     );
+    expect(screen.getByLabelText('Loading session')).toBeInTheDocument();
+    expect(preparation.controllerCreates).toBe(0);
+    expect(preparation.sessionLookups).toBe(0);
+
+    finishCreate();
+
     await waitFor(() => expect(preparation.posted).toEqual(['fix the login bug']));
     expect(preparation.delivered).toEqual([]);
     await waitFor(() => expect(screen.getByText('fix the login bug')).toBeInTheDocument());
@@ -227,11 +228,13 @@ describe('Composer on a lazy user-session draft', () => {
     await user.type(message, '  retry this prompt  ');
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(message).toHaveValue('retry this prompt'));
-    expect(screen.getByTestId('pathname')).toHaveTextContent(draftUrl);
     expect(await screen.findByText(/Could not create the session: Database unavailable/)).toBeInTheDocument();
+    expect(screen.getByTestId('pathname')).toHaveTextContent(draftUrl);
+    const restored = screen.getByRole('textbox', { name: 'Message' });
+    expect(restored).toHaveValue('retry this prompt');
     expect(preparation.posted).toEqual([]);
 
+    restored.focus();
     await user.keyboard('{Enter}');
 
     await waitFor(() =>
