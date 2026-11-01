@@ -19,10 +19,15 @@ interface PromptHandoff {
   handoffThinkingLevel?: ThinkingLevelSetting;
 }
 
-export function promptHandoffState(
+// History keeps a thread's route state, so only the tab that opened it may send its first prompt, once.
+const unsentHandoffs = new Set<string>();
+
+export function startPromptHandoff(
+  sessionId: string,
   prompt: string,
   config: { modelId?: string; thinkingLevel?: ThinkingLevelSetting },
 ): PromptHandoff {
+  unsentHandoffs.add(sessionId);
   return {
     handoffPrompt: prompt,
     handoffModelId: config.modelId,
@@ -58,7 +63,7 @@ function toOutgoing(files: PendingImage[]) {
 
 const pendingHandoffKey = (sessionId: string) => `factory-pending-handoff:${sessionId}`;
 
-export function storePendingHandoff(sessionId: string, prompt: string): void {
+function storePendingHandoff(sessionId: string, prompt: string): void {
   try {
     sessionStorage.setItem(pendingHandoffKey(sessionId), prompt);
   } catch {
@@ -111,6 +116,10 @@ export function useHandoffPrompt(): void {
     // be being created; it sends once the session exists. Kept recoverable from
     // then on: leaving before the send, or an interrupted send, must not lose it.
     if (prompt !== undefined && !shown.current) {
+      if (!unsentHandoffs.has(sessionId)) {
+        void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
+        return;
+      }
       shown.current = true;
       storePendingHandoff(sessionId, prompt);
       const files = peekHandoffFiles(sessionId);
@@ -120,6 +129,7 @@ export function useHandoffPrompt(): void {
     if (prompt === undefined) {
       if (recovered.current) return;
       recovered.current = true;
+      unsentHandoffs.delete(sessionId);
       const interruptedPrompt = readPendingHandoff(sessionId);
       const interruptedFiles = takeHandoffFiles(sessionId);
       if (interruptedPrompt || interruptedFiles.length > 0) {
@@ -130,6 +140,7 @@ export function useHandoffPrompt(): void {
       return;
     }
     handedOff.current = true;
+    unsentHandoffs.delete(sessionId);
     const files = takeHandoffFiles(sessionId);
     // Never auto-resend after an interruption: the server may already have accepted the message.
     void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });

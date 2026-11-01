@@ -1,4 +1,4 @@
-import { queryOptions, useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -10,13 +10,6 @@ import {
 } from '../ui/domains/workspaces/services/github';
 import type { FactoryModelScope } from '../ui/domains/workspaces/services/github';
 
-export function factoryProjectQueryOptions(baseUrl: string, factoryProjectId: string) {
-  return queryOptions({
-    queryKey: queryKeys.factoryProject(factoryProjectId),
-    queryFn: () => fetchFactoryProject(baseUrl, factoryProjectId),
-  });
-}
-
 /**
  * The Factory's org-wide default model. Factory runs (issue triage, board
  * work-item runs) start on this model; per-session model switching still
@@ -26,7 +19,8 @@ export function factoryProjectQueryOptions(baseUrl: string, factoryProjectId: st
 export function useFactoryProjectQuery(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    ...factoryProjectQueryOptions(baseUrl, factoryProjectId ?? ''),
+    queryKey: queryKeys.factoryProject(factoryProjectId),
+    queryFn: () => fetchFactoryProject(baseUrl, factoryProjectId!),
     enabled: !!factoryProjectId,
   });
 }

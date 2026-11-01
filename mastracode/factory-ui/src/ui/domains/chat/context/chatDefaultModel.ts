@@ -13,14 +13,6 @@ export function routedDefaultModelId(
   return (modelScope === 'factory' ? defaults.factory : defaults.personal) ?? undefined;
 }
 
-/** A hybrid Factory bills a draft by who it is for; otherwise the Factory's scope decides. */
-export function draftModelScope(
-  storedScope: FactoryModelScope | undefined,
-  kind: 'user' | 'factory',
-): Exclude<FactoryModelScope, 'hybrid'> | undefined {
-  return storedScope === 'hybrid' ? kind : storedScope;
-}
-
 export function newChatCatalogTarget(
   chatScope: FactoryModelScope | undefined,
   factoryId: string | undefined,

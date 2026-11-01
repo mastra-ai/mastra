@@ -15,6 +15,7 @@ import type { ComposerInputProps } from '@mastra/playground-ui/components/Compos
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
 import { ImagePlus } from 'lucide-react';
+import { useEffect, useEffectEvent, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
@@ -59,7 +60,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
-  const { error: modelError } = useChatModels();
+  const { isLoading: modelLoading, error: modelError } = useChatModels();
   const {
     commands,
     composerDraft: draft,
@@ -82,11 +83,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const preparingThreadId = usePreparingThreadId();
   const liveRun = phase === 'working' && !preparingThreadId && sessionEnabled;
-  const createDraftSessionMutation = useCreateUserSessionFromDraft();
+  const createSessionFromDraft = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   // A draft send waits for a model still loading, so only a model that failed to load holds it back.
   const draftModelFailed = onUserDraft && modelError !== undefined;
-  const startingDraft = createDraftSessionMutation.isPending;
+  const [heldDraftText, setHeldDraftText] = useState<string>();
+  const startingDraft = heldDraftText !== undefined;
   const attachDisabled = blocked || chatPreparing || planFeedback.pending || startingDraft;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
     disabled: chatPreparing || planFeedback.pending || startingDraft,
@@ -176,6 +178,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   const submitInput = (text: string) => {
+    if (onUserDraft && modelLoading && !text.startsWith('/')) {
+      setHeldDraftText(text);
+      return;
+    }
     updateDraft('');
     void handleInput(text).catch(error => {
       if (planFeedback.pending) updateDraft(text);
@@ -183,6 +189,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
     });
   };
+
+  const sendHeldDraft = useEffectEvent((text: string) => {
+    setHeldDraftText(undefined);
+    if (modelError) pushNotice(modelError.message, 'error');
+    else submitInput(text);
+  });
+  useEffect(() => {
+    if (heldDraftText !== undefined && !modelLoading) sendHeldDraft(heldDraftText);
+  }, [heldDraftText, modelLoading]);
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
@@ -227,7 +242,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (onUserDraft) {
       try {
-        await withPendingImages(files => createDraftSessionMutation.mutateAsync({ prompt: text, files }));
+        await withPendingImages(async files => createSessionFromDraft({ prompt: text, files }));
       } catch (error) {
         updateDraft(text);
         throw error;
