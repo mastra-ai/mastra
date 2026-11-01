@@ -2112,6 +2112,54 @@ describe('MDocument', () => {
       });
     });
 
+    describe('preserves all content', () => {
+      const chunkJson = async (data: unknown, options: { maxSize: number; minSize?: number }) => {
+        const doc = MDocument.fromJSON(JSON.stringify(data));
+        await doc.chunk({ strategy: 'json', ...options });
+        return doc.getText();
+      };
+
+      it('keeps undersized array groups when minSize is set', async () => {
+        const texts = await chunkJson({ items: ['aaaa', 'bbbb', 'c'] }, { maxSize: 24, minSize: 20 });
+
+        expect(texts.flatMap(t => JSON.parse(t).items)).toEqual(['aaaa', 'bbbb', 'c']);
+      });
+
+      it('keeps undersized nested object chunks when minSize is set', async () => {
+        const texts = await chunkJson({ item: { a: 'aaaa', b: 'bbbb', c: 'c' } }, { maxSize: 28, minSize: 25 });
+
+        expect(texts.length).toBeGreaterThan(0);
+        const merged = texts.map(t => JSON.parse(t).item).reduce((acc, curr) => ({ ...acc, ...curr }), {});
+        expect(merged).toEqual({ a: 'aaaa', b: 'bbbb', c: 'c' });
+      });
+
+      it('keeps undersized array groups with the default minSize', async () => {
+        const texts = await chunkJson({ items: ['aaaa', 'bbbb', 'c'] }, { maxSize: 24 });
+
+        expect(texts.flatMap(t => JSON.parse(t).items)).toEqual(['aaaa', 'bbbb', 'c']);
+      });
+
+      it('keeps every item of a large array with the default minSize', async () => {
+        const items = Array.from({ length: 150 }, (_, i) => ({ id: i, name: `item number ${i}` }));
+        const texts = await chunkJson({ items }, { maxSize: 2000 });
+
+        expect(texts.flatMap(t => JSON.parse(t).items.map((item: { id: number }) => item.id))).toEqual(
+          items.map(item => item.id),
+        );
+        texts.forEach(t => expect(t.length).toBeLessThanOrEqual(2000));
+      });
+
+      it('keeps scalar keys around a split array', async () => {
+        const list = Array.from({ length: 10 }, (_, i) => `value-${i}`);
+        const texts = await chunkJson({ a: 'x', list, z: 'y' }, { maxSize: 60 });
+        const parsed = texts.map(t => JSON.parse(t));
+
+        expect(parsed.some(chunk => chunk.a === 'x')).toBe(true);
+        expect(parsed.some(chunk => chunk.z === 'y')).toBe(true);
+        expect(parsed.flatMap(chunk => chunk.list ?? [])).toEqual(list);
+      });
+    });
+
     describe('JSON structure handling', () => {
       it('should handle flat objects', async () => {
         const flatJson = {
