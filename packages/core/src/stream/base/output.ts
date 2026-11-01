@@ -8,6 +8,7 @@ import { MastraBase } from '../../base';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals';
+import { DEADLINE_SAVE_WAIT_MS, isMastraTimeoutError, settledOrElapsed } from '../../loop/timeout';
 import type { ObservabilityContext } from '../../observability';
 import { getRootExportSpan, resolveObservabilityContext } from '../../observability';
 import type { OutputResult } from '../../processors';
@@ -2095,6 +2096,64 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               });
               self.#error = error;
               self.#status = 'failed';
+              // A total deadline closes the stream without a finish chunk, so the output processors
+              // (and with them memory) get their one pass here, over the steps that completed in time.
+              // The pass writes memory, so it only runs for callers that supply the write check.
+              const beforeDeadlineSave = self.#options.beforeDeadlineSave;
+              if (
+                isMastraTimeoutError(error) &&
+                error.timeoutType === 'total' &&
+                self.processorRunner &&
+                !self.#options.isLLMExecutionStep &&
+                beforeDeadlineSave
+              ) {
+                let streamOpen = true;
+                const deadlinePass = (async () => {
+                  try {
+                    await beforeDeadlineSave();
+                  } catch (authError) {
+                    self.logger?.warn('Memory write denied at the total deadline, the turn is not saved', {
+                      error: authError,
+                    });
+                    return;
+                  }
+                  // Like a cancel, the text the unfinished step already streamed is part of the turn.
+                  const turn = self.messageList.cloneWithCompletedSteps(self.#bufferedByStep.text);
+                  try {
+                    await self.processorRunner!.runOutputProcessors(
+                      turn,
+                      resolveObservabilityContext(options),
+                      self.#options.requestContext,
+                      0,
+                      {
+                        custom: async (
+                          data: { type: string; data?: unknown; transient?: boolean },
+                          writerOptions?: { messageId?: string },
+                        ) => {
+                          persistProcessorDataChunk(turn, writerOptions?.messageId ?? self.messageId, data);
+                          if (!streamOpen) return;
+                          self.#emitChunk(data as ChunkType<OUTPUT>);
+                          controller.enqueue(data as ChunkType<OUTPUT>);
+                        },
+                      },
+                      {
+                        text: self.#bufferedText.join(''),
+                        usage: self.#usageCount,
+                        finishReason: 'error',
+                        steps: [...self.#bufferedSteps] as LLMStepResult[],
+                      },
+                    );
+                  } catch (processorError) {
+                    if (processorError instanceof TripWire) await self.#options.onDeadlineTripwire?.();
+                    throw processorError;
+                  }
+                })().catch(processorError => {
+                  self.logger?.error('Output processors failed at the total deadline', { error: processorError });
+                });
+                // Saved before the stream ends, unless the store hangs: the deadline must still surface.
+                await settledOrElapsed(deadlinePass, DEADLINE_SAVE_WAIT_MS);
+                streamOpen = false;
+              }
               self.#streamFinished = true; // Mark stream as finished for EventEmitter
 
               Object.values(self.#delayedPromises).forEach(promise => {

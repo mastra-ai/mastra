@@ -3,14 +3,17 @@
  */
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { z } from 'zod';
 
 import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
 import { EventEmitterPubSub } from '../../events';
+import { ConsoleLogger } from '../../logger';
 import { Mastra } from '../../mastra';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
+import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { DurableStepIds } from '../durable/constants';
 import { createDurableAgent } from '../durable/create-durable-agent';
@@ -268,6 +271,84 @@ describe('Agent FGA checks', () => {
         .mock.calls.map(([, input]) => input.permission)
         .filter(permission => permission === 'memory:read' || permission === 'memory:write');
       expect(memoryPermissions).toEqual(['memory:read', 'memory:write']);
+    });
+
+    it('does not save the turn at the total deadline without write access', async () => {
+      const fgaProvider = createMockFGAProvider(true);
+      vi.mocked(fgaProvider.require).mockImplementation(async (_user, input) => {
+        if (input.permission === 'memory:write') {
+          throw new FGADeniedError({ id: 'user-1' }, input.resource, input.permission);
+        }
+      });
+      const memory = new MockMemory();
+      // An existing thread with unchanged metadata is read, not written, before the run.
+      await memory.createThread({ threadId: 'thread-1', resourceId: 'resource-1' });
+      const hang = createTool({
+        id: 'hang',
+        description: 'never finishes',
+        inputSchema: z.object({}),
+        execute: (_input, { abortSignal }) =>
+          new Promise(resolve => abortSignal?.addEventListener('abort', () => resolve({ done: true }))),
+      });
+      const model = new MockLanguageModelV2({
+        doGenerate: async () => ({
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+          finishReason: 'tool-calls',
+          usage: { inputTokens: 5, outputTokens: 10, totalTokens: 15 },
+          content: [
+            { type: 'tool-call', toolCallType: 'function', toolCallId: 'call_hang', toolName: 'hang', input: '{}' },
+          ],
+        }),
+      });
+      const agent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test',
+        model,
+        memory,
+        tools: { hang },
+      });
+      const logs: { level: string; message: string }[] = [];
+      class SpyLogger extends ConsoleLogger {
+        override child() {
+          return this;
+        }
+        override warn(message: string) {
+          logs.push({ level: 'warn', message });
+        }
+        override error(message: string) {
+          logs.push({ level: 'error', message });
+        }
+      }
+      new Mastra({
+        agents: { testAgent: agent },
+        logger: new SpyLogger(),
+        storage: new InMemoryStore(),
+        server: { fga: fgaProvider },
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'user-1', organizationMembershipId: 'om-1' });
+
+      await expect(
+        agent.generate('test', {
+          memory: { thread: 'thread-1', resource: 'resource-1' },
+          requestContext: requestContext as any,
+          modelSettings: { timeout: { totalMs: 300 } },
+        } as any),
+      ).rejects.toThrow();
+
+      expect(vi.mocked(fgaProvider.require).mock.calls.map(([, input]) => input.permission)).toContain('memory:write');
+      // Give a save that slipped through time to land.
+      await new Promise(resolve => setTimeout(resolve, 1_500));
+      const { messages } = await memory.recall({ threadId: 'thread-1', resourceId: 'resource-1', perPage: false });
+      expect(messages).toEqual([]);
+      // A denied write is reported as such, not as an output processor failure.
+      expect(logs).toContainEqual({
+        level: 'warn',
+        message: 'Memory write denied at the total deadline, the turn is not saved',
+      });
+      expect(logs.map(log => log.message)).not.toContain('Output processors failed at the total deadline');
     });
   });
 
