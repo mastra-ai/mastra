@@ -1,7 +1,20 @@
 import EventEmitter from 'node:events';
+import {
+  participateInDurableExecution,
+  retrySettledDurableExecution,
+  settleEventedDurableExecution,
+} from '../../../agent/durable/evented-execution';
+import {
+  DurableExecutionFenceError,
+  EXECUTION_SUPERSEDED_ERROR_ID,
+  getExecutionClaimScope,
+  isStorageFencedExecution,
+} from '../../../agent/durable/execution-fence';
+import { currentRunFenceScope } from '../../../agent/durable/run-fence-scope';
 import type { ActorSignal, RequireFGAOptions } from '../../../auth/ee';
 import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { EventProcessor } from '../../../events/processor';
 import { PublisherQueueLimitError } from '../../../events/publisher-queue-limit-error';
 import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
@@ -11,7 +24,13 @@ import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
 import { SpanType, getResumeTracingContext } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
-import { coverNestedRun } from '../../../storage/run-fencing';
+import {
+  coverNestedRun,
+  isRunFenceConflictError,
+  matchesRunFence,
+  resolveRunFence,
+  RunFenceConflictError,
+} from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
 import type { StepExecutionStrategy } from '../../../worker/types';
 import { getEntryId, getEntryRetries, getEntrySchemas, getEntryWorkflow } from '../../../workflows/step-entry';
@@ -164,6 +183,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutionStrategy?: StepExecutionStrategy;
   // Map of runId -> AbortController for active workflow runs
   private abortControllers: Map<string, AbortController> = new Map();
+  private controllerGenerations = new WeakMap<AbortController, Map<string, number>>();
   // Controllers aborted by a workflow.cancel this processor is already ending. A step that
   // unwinds on one of these must not publish a second workflow.cancel (and so a second workflow.end).
   private cancelHandledControllers: WeakSet<AbortController> = new WeakSet();
@@ -338,11 +358,40 @@ export class WorkflowEventProcessor extends EventProcessor {
   /**
    * Get or create an AbortController for a workflow run
    */
-  private getOrCreateAbortController(runId: string): AbortController {
+  private getOrCreateAbortController(
+    runId: string,
+    requestContext?: ProcessorArgs['requestContext'],
+    parentWorkflow?: ParentWorkflow,
+  ): AbortController {
+    const generation = currentRunFenceScope()?.generationFor?.(runId);
     let controller = this.abortControllers.get(runId);
-    if (!controller) {
+    const previous = controller && this.controllerGenerations.get(controller);
+    const context = new RequestContext<unknown>(Object.entries(requestContext ?? {}));
+    const claim = getExecutionClaimScope(context, runId, parentWorkflow)?.claim;
+    const generations = new Map<string, number>();
+    if (generation !== undefined) generations.set(runId, generation);
+    // Independent nested claims have their own generation counter. Capture the
+    // ancestor's claim separately so its cancellation targets this attachment.
+    for (let parent = parentWorkflow; parent?.runId; parent = parent.parentWorkflow) {
+      const claim = getExecutionClaimScope(context, parent.runId, parent.parentWorkflow)?.claim;
+      if (claim?.generation !== undefined) generations.set(parent.runId, claim.generation);
+    }
+    if (claim?.agentId && [...generations].some(([id, generation]) => generation < (previous?.get(id) ?? generation))) {
+      throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, {
+        runId,
+        agentId: claim.agentId,
+        executionId: claim.executionId,
+      });
+    }
+    if (
+      !controller ||
+      (generations.size > 0 &&
+        (previous?.size !== generations.size ||
+          [...generations].some(([id, generation]) => previous?.get(id) !== generation)))
+    ) {
       controller = new AbortController();
       this.abortControllers.set(runId, controller);
+      this.controllerGenerations.set(controller, generations);
     }
     return controller;
   }
@@ -350,17 +399,20 @@ export class WorkflowEventProcessor extends EventProcessor {
   /**
    * Cancel a workflow run and all its nested child workflows
    */
-  private cancelRunAndChildren(runId: string): void {
-    // Abort the controller for this run
+  private cancelRunAndChildren(runId: string, generation?: number, cancellationRunId = runId): void {
+    // Abort only the execution that issued the cancellation, not a successor.
     const controller = this.abortControllers.get(runId);
-    if (controller) {
+    if (
+      controller &&
+      (generation === undefined || this.controllerGenerations.get(controller)?.get(cancellationRunId) === generation)
+    ) {
       controller.abort();
     }
 
     // Find and cancel all child workflows
     for (const [childRunId, parentRunId] of this.parentChildRelationships.entries()) {
       if (parentRunId === runId) {
-        this.cancelRunAndChildren(childRunId);
+        this.cancelRunAndChildren(childRunId, generation, cancellationRunId);
       }
     }
   }
@@ -376,7 +428,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    * cancel and settles canceled. Idempotent: a redelivered or self-echoed
    * abort finds the controllers already aborted.
    */
-  private abortRunFromControl(runId: string): void {
+  private abortRunFromControl(runId: string, generation?: number): void {
     // Every processor hears every broadcast abort; only one executing a step
     // of this run (or of a nested run) has something to abort. Leaving other
     // controllers alone keeps a stale aborted one from outliving the run here.
@@ -385,10 +437,20 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
     const own = this.abortControllers.get(runId);
-    if (own && !own.signal.aborted) this.cancelHandledControllers.add(own);
+    if (
+      own &&
+      !own.signal.aborted &&
+      (generation === undefined || this.controllerGenerations.get(own)?.get(runId) === generation)
+    ) {
+      this.cancelHandledControllers.add(own);
+    }
     const visit = (id: string) => {
       const controller = this.abortControllers.get(id);
-      if (controller && !controller.signal.aborted) {
+      if (
+        controller &&
+        !controller.signal.aborted &&
+        (generation === undefined || this.controllerGenerations.get(controller)?.get(runId) === generation)
+      ) {
         this.controlAbortedControllers.add(controller);
         controller.abort();
       }
@@ -419,7 +481,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     const pubsub = this.mastra.pubsub;
     if (this.controlSubscription?.pubsub !== pubsub) {
       const cb: EventCallback = (event, ack) => {
-        if (event?.type === WORKFLOW_CONTROL_ABORT && event.runId) this.abortRunFromControl(event.runId);
+        if (event?.type === WORKFLOW_CONTROL_ABORT && event.runId)
+          this.abortRunFromControl(event.runId, event.data?.generation);
         // Ack every delivery so durable transports don't keep it pending.
         void ack?.().catch(() => {});
       };
@@ -473,7 +536,8 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Ancestors last, so a cancelled parent's walk sees the nested runs' controllers.
     for (let i = states.length - 1; i >= 0; i--) {
       if (states[i]?.status === 'canceled') {
-        this.abortRunFromControl(runIds[i]!.runId);
+        const runId = runIds[i]!.runId;
+        this.abortRunFromControl(runId, currentRunFenceScope()?.generationFor?.(runId));
         return;
       }
     }
@@ -521,6 +585,10 @@ export class WorkflowEventProcessor extends EventProcessor {
    * Also cleans up any orphaned child entries that reference this run as parent.
    */
   private cleanupRun(runId: string): void {
+    const generation = currentRunFenceScope()?.generationFor?.(runId);
+    const controller = this.abortControllers.get(runId);
+    if (controller && generation !== undefined && this.controllerGenerations.get(controller)?.get(runId) !== generation)
+      return;
     this.abortControllers.delete(runId);
     this.startedRuns.delete(runId);
     this.parentChildRelationships.delete(runId);
@@ -918,11 +986,16 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowCancel({ workflowId, runId, prevResult, ...args }: ProcessorArgs) {
+    const generation = currentRunFenceScope()?.generationFor?.(runId);
     const controller = this.abortControllers.get(runId);
-    if (controller) this.cancelHandledControllers.add(controller);
+    if (
+      controller &&
+      (generation === undefined || this.controllerGenerations.get(controller)?.get(runId) === generation)
+    )
+      this.cancelHandledControllers.add(controller);
 
     // Cancel this workflow and all nested child workflows
-    this.cancelRunAndChildren(runId);
+    this.cancelRunAndChildren(runId, generation);
 
     // workflow.cancel reaches one processor of the consumer group; steps of
     // this run (or its nested runs) on other replicas only hear about it here.
@@ -931,7 +1004,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     await this.mastra.pubsub.publish(WORKFLOW_CONTROL_TOPIC, {
       type: WORKFLOW_CONTROL_ABORT,
       runId,
-      data: {},
+      data: generation === undefined ? {} : { generation },
     });
 
     const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
@@ -1048,7 +1121,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     this.cancelRunTopicCleanup(runId);
     // Create abort controller for this workflow run
     this.startedRuns.add(runId);
-    this.getOrCreateAbortController(runId);
+    this.getOrCreateAbortController(runId, requestContext, parentWorkflow);
 
     // Track parent-child relationship if this is a nested workflow
     if (parentWorkflow?.runId) {
@@ -1094,6 +1167,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         status: 'running',
         guardedOnlySnapshot: !!requiresGuardedSnapshot && !shouldPersist,
         value: initialState,
+        // A cancel sent before the first step result reads its execution claim from here.
+        requestContext: withoutAuthToken(requestContext),
       };
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflow.id,
@@ -1293,7 +1368,19 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
   }
 
+  private async assertCurrentRunFence(runId: string): Promise<void> {
+    const store = await this.mastra.getStorage()?.getStore('workflows');
+    if (!store) return;
+    const fence = resolveRunFence(store, undefined, runId);
+    if (fence && !matchesRunFence(await store.getRunOwnership({ runId: fence.runId }), fence)) {
+      throw new RunFenceConflictError(fence, 'finalize workflow');
+    }
+  }
+
   protected async processWorkflowEnd(args: ProcessorArgs & { deleteSnapshotAfterEnd?: boolean }) {
+    const internalWorkflow = this.mastra.__hasInternalWorkflow(args.workflowId, args.runId)
+      ? this.mastra.__getInternalWorkflow(args.workflowId, args.runId)
+      : undefined;
     // Keep cleanup intent local to this serialized handoff, not downstream notifications.
     const { deleteSnapshotAfterEnd, ...finishArgs } = args;
     const {
@@ -1335,6 +1422,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
 
+    await this.assertCurrentRunFence(runId);
     this.endRunSpans(args, perStep ? 'paused' : (args.prevResult?.status ?? 'pending'));
 
     // Clean up abort controller and parent-child tracking
@@ -1435,6 +1523,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       },
     });
 
+    await this.assertCurrentRunFence(runId);
     if (deleteSnapshotAfterEnd === true) {
       // Declined terminal snapshots must not outlive completed runs (#22209),
       // but remain recoverable until parent/loop and finish publications succeed.
@@ -1442,6 +1531,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
       } catch (e) {
+        if (isRunFenceConflictError(e)) throw e;
         this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
       }
       await this.publishFinishEvent({
@@ -1451,9 +1541,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
-    // now that all events for this run have been processed.
-    if (this.mastra.__hasInternalWorkflow(args.workflowId, runId)) {
+    await this.assertCurrentRunFence(runId);
+    // A successor may have replaced the registration while finish was published.
+    if (
+      internalWorkflow &&
+      this.mastra.__hasInternalWorkflow(args.workflowId, runId) &&
+      this.mastra.__getInternalWorkflow(args.workflowId, runId) === internalWorkflow
+    ) {
       this.mastra.__unregisterInternalWorkflow(args.workflowId, runId);
     }
   }
@@ -2981,7 +3075,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     // Get the abort controller for this workflow run
-    const abortController = this.getOrCreateAbortController(runId);
+    const abortController = this.getOrCreateAbortController(runId, requestContext, parentWorkflow);
 
     let stepResult: StepResult<any, any, any, any>;
 
@@ -3045,6 +3139,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowId,
           entry: leaf,
           runId,
+          parentWorkflow: toStepExecutionParentWorkflow(parentWorkflow),
           stepResults,
           state: currentState,
           requestContext: rc,
@@ -4415,6 +4510,26 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    if (this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub) return this.#handleDelivery(event);
+    const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
+    if (!isStorageFencedExecution(context, event.runId, event.data?.parentWorkflow)) return this.#handleDelivery(event);
+    try {
+      if (await retrySettledDurableExecution(this.mastra, event)) return { ok: true };
+      const execute = async () => {
+        const result = await this.#handleDelivery(event);
+        if (result.ok) await settleEventedDurableExecution(this.mastra, event);
+        return result;
+      };
+      return await participateInDurableExecution(this.mastra, event, execute);
+    } catch (error) {
+      if (error instanceof DurableExecutionFenceError && error.id === EXECUTION_SUPERSEDED_ERROR_ID)
+        return { ok: true };
+      this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: durable execution delivery failed', { error });
+      return { ok: false, retry: true };
+    }
+  }
+
+  async #handleDelivery(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     // Fence step execution so a broker redelivery of a still-running
     // `workflow.step.run` (e.g. its ack deadline elapsed) is dropped instead of
     // running the step concurrently (#24589). Redeliveries keep the same event

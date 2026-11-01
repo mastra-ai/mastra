@@ -1,3 +1,4 @@
+import { isExecutionFenceError, isStorageFencedExecution } from '../../agent/durable/execution-fence';
 import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
@@ -15,6 +16,7 @@ import type { TracingContext, TracingPolicy } from '../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
+import type { StepExecutionParentWorkflow } from '../../worker/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
 import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
@@ -115,6 +117,7 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     requestContext: RequestContext;
+    parentWorkflow?: StepExecutionParentWorkflow;
     /** Caller identity, forwarded to step/tool/agent execution contexts (parity with the default engine). */
     actor?: ActorSignal;
     retryCount?: number;
@@ -411,6 +414,14 @@ export class StepExecutor extends MastraBase {
           error: errorInstance,
         },
       });
+
+      if (
+        isExecutionFenceError(error) &&
+        this.mastra &&
+        !(this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub)
+      ) {
+        if (isStorageFencedExecution(requestContext, runId, params.parentWorkflow)) throw error;
+      }
 
       // Log the error for observability (matching default engine behavior)
       const mastraError = new MastraError(
