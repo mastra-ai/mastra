@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-instructions';
 import { RequestContext } from '@mastra/core/request-context';
-import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
+import { FactorySandbox, LocalSandbox, WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import type { FactorySandboxContext, LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
@@ -1068,6 +1068,29 @@ describe('GitHub session workspace preparation', () => {
       workspace: eager(resolver),
     };
   }
+
+  it('lets plan-mode writes through the Factory plans dir on new and reused workspaces', async () => {
+    const { workspace } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', branch: 'feature-a' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+    const planWrite = (path: string) => ({
+      toolName: 'write_file',
+      workspaceToolName: WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE,
+      input: { path },
+      context: {
+        requestContext: {
+          harness: { session: { modeId: 'plan', state: { get: () => ({ projectPath: '/tmp/factory-plans' }) } } },
+        },
+      },
+    });
+
+    for (const resolved of [await workspace({ requestContext }), await workspace({ requestContext })]) {
+      const guard = resolved.getToolsConfig()!.hooks!.beforeToolCall!;
+      expect(guard(planWrite('.artifacts/plans/ratecard.md') as never)).toBeUndefined();
+      expect(guard(planWrite('.mastracode/plans/ratecard.md') as never)).toMatchObject({ proceed: false });
+    }
+  });
 
   it('prepares distinct local session checkouts and branches through the factory', async () => {
     const { root, workspace } = await createLocalFactory();
