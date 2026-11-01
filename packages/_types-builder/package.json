@@ -32,7 +32,7 @@
     "local-pkg": "^1.2.1",
     "resolve.exports": "^2.0.4",
     "tinyglobby": "^0.2.17",
-    "ts-morph": "^27.0.2",
+    "ts-morph": "^28.0.0",
     "typescript": "catalog:",
     "typescript-classic": "npm:typescript@^6.0.3"
   },
