@@ -247,6 +247,44 @@ describe('a user session draft on the real thread route', () => {
     await waitForMutationsIdle(client);
   });
 
+  it('keeps the person on the draft they moved to when an earlier send was still waiting on the model', async () => {
+    let releaseModelDefaults = () => {};
+    const modelDefaultsGate = new Promise<void>(resolve => {
+      releaseModelDefaults = resolve;
+    });
+    const route = stubDraftRoute({ modelDefaultsGate, defaultModelId: 'openai/gpt-4o-mini' });
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), {
+      initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
+    });
+    const { client } = renderWithProviders(<RouterProvider router={router} />);
+
+    const message = await screen.findByRole('textbox', { name: 'Message' });
+    expect(await screen.findByLabelText('Loading model')).toBeInTheDocument();
+    await user.type(message, 'fix the login bug');
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('button', { name: 'Send message' })).toHaveAttribute('title', 'Starting session…');
+
+    const otherDraftPath = `/factories/${FACTORY_ID}/user/new/${OTHER_DRAFT_SESSION_ID}`;
+    await router.navigate(otherDraftPath);
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled());
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'a second idea');
+
+    releaseModelDefaults();
+
+    await waitFor(() => expect(route.createBodies).toHaveLength(1));
+    await waitForMutationsIdle(client);
+    expect(router.state.location.pathname).toBe(otherDraftPath);
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('a second idea');
+
+    await router.navigate(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`);
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('fix the login bug'));
+    expect(route.posted).toEqual([]);
+
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
   it('retries a failed start on the model and thinking level picked in the draft', async () => {
     const route = stubDraftRoute({ failedCreates: 1, defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();

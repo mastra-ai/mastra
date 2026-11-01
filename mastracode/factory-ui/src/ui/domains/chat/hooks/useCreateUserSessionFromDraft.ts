@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
@@ -12,7 +13,7 @@ import { useChatThinking } from '../context/useChatThinking';
 import type { PendingImage } from '../context/ComposerImagesContext';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { stashHandoffFiles } from '../services/handoffFiles';
-import { promptHandoffState } from './useHandoffPrompt';
+import { promptHandoffState, storePendingHandoff } from './useHandoffPrompt';
 
 /**
  * Starts the draft's session and opens its thread without waiting for the
@@ -21,6 +22,8 @@ import { promptHandoffState } from './useHandoffPrompt';
  * under the session's query key, which the thread route reads, so the thread
  * waits on this create instead of reading a session that does not exist yet.
  * The server takes the draft's id, so a repeated create returns the same session.
+ * A draft left before its model is known still starts, but stays put: its
+ * session hands the prompt back when opened.
  */
 export function useCreateUserSessionFromDraft() {
   const { baseUrl, factorySessionState } = useChatSessionContext();
@@ -29,6 +32,13 @@ export function useCreateUserSessionFromDraft() {
   const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const draftLeft = useRef(false);
+  useEffect(() => {
+    draftLeft.current = false;
+    return () => {
+      draftLeft.current = true;
+    };
+  }, []);
 
   return useMutation({
     mutationFn: async ({ prompt, files }: { prompt: string; files: PendingImage[] }) => {
@@ -83,6 +93,10 @@ export function useCreateUserSessionFromDraft() {
         [],
       );
       stashHandoffFiles(draftSessionId, files);
+      if (draftLeft.current) {
+        storePendingHandoff(draftSessionId, prompt);
+        return;
+      }
       void navigate(`/factories/${factoryId}/user/threads/${draftSessionId}`, {
         replace: true,
         state: promptHandoffState(prompt, {

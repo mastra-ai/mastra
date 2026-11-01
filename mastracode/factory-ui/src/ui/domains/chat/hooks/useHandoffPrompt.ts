@@ -58,7 +58,7 @@ function toOutgoing(files: PendingImage[]) {
 
 const pendingHandoffKey = (sessionId: string) => `factory-pending-handoff:${sessionId}`;
 
-function storePendingHandoff(sessionId: string, prompt: string): void {
+export function storePendingHandoff(sessionId: string, prompt: string): void {
   try {
     sessionStorage.setItem(pendingHandoffKey(sessionId), prompt);
   } catch {
