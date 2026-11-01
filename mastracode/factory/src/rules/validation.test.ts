@@ -30,23 +30,22 @@ describe('Factory rule validation', () => {
     },
   );
 
-  it('carries an optional claim key on linked work item decisions', () => {
-    const linked = {
+  it('accepts a saved linked-item decision that still carries a claim key and drops the claim', () => {
+    const unclaimed = {
       type: 'upsertLinkedWorkItem',
       idempotencyKey: 'release:claimed',
       board: 'release',
       stage: 'queued',
       source: 'linear-issue',
       sourceKey: 'linear:ENG-1',
-      claimKey: 'linear:issue:1',
       title: 'ENG-1: claimed',
       url: null,
     };
-    expect(validateFactoryRuleDecision(linked)).toEqual(linked);
-    const { claimKey: _omitted, ...unclaimed } = linked;
-    expect(validateFactoryRuleDecision(unclaimed)).toEqual(unclaimed);
-    expect(() => validateFactoryRuleDecision({ ...linked, claimKey: 42 })).toThrow(/claimKey/);
-    expect(() => validateFactoryRuleDecision({ ...linked, claimKey: '' })).toThrow(/claimKey/);
+    for (const claimKey of ['linear:issue:1', '', 42]) {
+      const validated = validateFactoryRuleDecision({ ...unclaimed, claimKey });
+      expect(validated).toEqual(unclaimed);
+      expect(validated).not.toHaveProperty('claimKey');
+    }
   });
 
   it.each([

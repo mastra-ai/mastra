@@ -21,7 +21,6 @@ import type { IntakeStorage } from '../../../storage/domains/intake/base.js';
 import type { WorkItemsStorage } from '../../../storage/domains/work-items/base.js';
 import { JiraApiError } from '../../jira/api.js';
 import { scopeJiraSourcesToProject } from '../../jira/binding-scope.js';
-import { jiraIssueFiledIn } from '../../jira/claim.js';
 import { unfilteredJiraScopes } from '../../jira/intake-jql.js';
 import type { JiraRulesIngress } from '../../jira/rules.js';
 import type { PlatformJiraIntegration } from './integration.js';
@@ -68,7 +67,7 @@ export interface MountJiraRoutesOptions {
    */
   ingestFactoryIssues?: (input: JiraRulesIngress) => Promise<unknown>;
   /** Filed cards, so a Factory keeps reading issues it filed after a label filter moves them to another slice. */
-  workItems?: Pick<WorkItemsStorage, 'getByClaimKey' | 'listBySource'>;
+  workItems?: Pick<WorkItemsStorage, 'getByProjectSource'>;
 }
 
 /**
@@ -351,7 +350,11 @@ export function buildPlatformJiraRoutes(options: MountJiraRoutesOptions): ApiRou
             issue.identifier.toUpperCase() !== identifier.toUpperCase() ||
             !(
               projectScope.takes(sourceId, issue.labels) ||
-              (await jiraIssueFiledIn(workItems, { orgId: resolved.tenant.orgId, factoryProjectId, issueRef }))
+              !!(await workItems?.getByProjectSource({
+                orgId: resolved.tenant.orgId,
+                factoryProjectId,
+                source: { integrationId: 'jira', type: 'issue', externalId: issueRef },
+              }))
             )
           ) {
             return c.json({ error: 'issue_not_found' }, 404);
