@@ -983,4 +983,124 @@ describe('Agent signals: idle and active behaviors', () => {
       ).toBe(true);
     },
   );
+
+  describe('ifIdle.streamOptions.runId', () => {
+    it('uses the caller run id for the run an idle signal wakes', async () => {
+      const agent = new Agent({
+        id: 'caller-run-id-wake-agent',
+        name: 'Caller Run Id Wake Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('hi'),
+        memory: new MockMemory(),
+      });
+
+      const result = agent.sendSignal(
+        { type: 'user-message', contents: 'hello' },
+        { resourceId: 'res', threadId: 'th', ifIdle: { streamOptions: { runId: 'caller-run-id' } } },
+      );
+
+      const accepted = await result.accepted;
+      expect(accepted).toMatchObject({ action: 'wake', runId: 'caller-run-id' });
+      if (accepted.action !== 'wake') throw new Error('expected wake');
+      expect(accepted.output.runId).toBe('caller-run-id');
+      await expect(accepted.output.text).resolves.toBe('hi');
+    });
+
+    it('uses the caller run id for a run queued behind the active run', async () => {
+      const { model, releaseFirst } = createBlockingFirstTextStreamModel('first response', 'queued response');
+      const agent = new Agent({
+        id: 'caller-run-id-queued-agent',
+        name: 'Caller Run Id Queued Agent',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+      });
+      const resourceId = 'queued-res';
+      const threadId = 'queued-th';
+      const subscription = await agent.subscribeToThread({ resourceId, threadId });
+      const iterator = subscription.stream[Symbol.asyncIterator]();
+
+      try {
+        const first = await agent.stream('Hello', { memory: { resource: resourceId, thread: threadId } });
+        const firstRun = readNextRunWithParts(iterator);
+
+        const queued = agent.queueMessage('follow-up', {
+          resourceId,
+          threadId,
+          ifIdle: { streamOptions: { runId: 'caller-queued-run-id' } },
+        });
+        await expect(queued.accepted).resolves.toEqual({ action: 'deliver', runId: 'caller-queued-run-id' });
+
+        releaseFirst();
+        await expect(first.text).resolves.toBe('first response');
+        await withTimeout(firstRun, 'Timed out waiting for the active run');
+        const run = await withTimeout(readNextRunWithParts(iterator), 'Timed out waiting for the queued run');
+        expect(run.value.runId).toBe('caller-queued-run-id');
+        expect(run.value.text).toBe('queued response');
+      } finally {
+        releaseFirst();
+        subscription.unsubscribe();
+      }
+    });
+
+    it('rejects a caller run id already naming a known run', async () => {
+      const { model, releaseFirst } = createBlockingFirstTextStreamModel('first response', 'unused');
+      const agent = new Agent({
+        id: 'caller-run-id-collision-agent',
+        name: 'Caller Run Id Collision Agent',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+      });
+
+      const first = await agent.stream('Hello', {
+        runId: 'taken-run-id',
+        memory: { resource: 'collision-res', thread: 'collision-th' },
+      });
+      try {
+        const result = agent.sendSignal(
+          { type: 'user-message', contents: 'hello' },
+          {
+            resourceId: 'other-res',
+            threadId: 'other-th',
+            ifIdle: { streamOptions: { runId: 'taken-run-id' } },
+          },
+        );
+        await expect(result.accepted).rejects.toThrow('Run id "taken-run-id" is already in use');
+      } finally {
+        releaseFirst();
+      }
+      await expect(first.text).resolves.toBe('first response');
+    });
+
+    it('joins the active run and ignores the idle run id while the thread is active', async () => {
+      const { model, releaseFirst } = createBlockingFirstTextStreamModel('first response', 'unused');
+      const agent = new Agent({
+        id: 'caller-run-id-active-agent',
+        name: 'Caller Run Id Active Agent',
+        instructions: 'Test',
+        model,
+        memory: new MockMemory(),
+      });
+
+      const first = await agent.stream('Hello', {
+        runId: 'active-run-id',
+        memory: { resource: 'active-res', thread: 'active-th' },
+      });
+      try {
+        const result = agent.sendSignal(
+          { type: 'user-message', contents: 'steer' },
+          {
+            resourceId: 'active-res',
+            threadId: 'active-th',
+            ifIdle: { streamOptions: { runId: 'unused-idle-run-id' } },
+          },
+        );
+        await expect(result.accepted).resolves.toEqual({ action: 'deliver', runId: 'active-run-id' });
+      } finally {
+        releaseFirst();
+      }
+      await first.text;
+    });
+  });
 });
