@@ -312,14 +312,16 @@ describe('a user session draft on the real thread route', () => {
     const otherDraftPath = `/factories/${FACTORY_ID}/user/new/${OTHER_DRAFT_SESSION_ID}`;
     await router.navigate(otherDraftPath);
     await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toBeEnabled());
-    await user.type(screen.getByRole('textbox', { name: 'Message' }), 'a second idea');
+    // The held text is kept like any unsent new-session text, so it is not lost either.
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('fix the login bug');
+    await user.type(screen.getByRole('textbox', { name: 'Message' }), ', and a second idea');
 
     releaseModelDefaults();
 
     await waitFor(() => expect(screen.queryByLabelText('Loading model')).not.toBeInTheDocument());
     await waitForMutationsIdle(client);
     expect(router.state.location.pathname).toBe(otherDraftPath);
-    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('a second idea');
+    expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('fix the login bug, and a second idea');
     expect(route.createBodies).toEqual([]);
   });
 

@@ -181,6 +181,9 @@ export function ChatSessionBoundary({
   deferUntilMessagesReady?: boolean;
 }) {
   const { sessionId, resourceReady, baseUrl, sessionThreadId, draftSessionId } = useChatSessionContext();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  // Each new-session page gets a fresh draft id, so unsent text on one belongs to the factory, not the id.
+  const draftScope = `${factoryId}:${threadId ?? (draftSessionId ? 'user-new' : `new:${sessionId}`)}`;
   const location = useLocation();
   const failedDraft = readFailedDraft(location.state, draftSessionId);
   const messagesQuery = useAgentControllerThreadMessages({
@@ -220,8 +223,10 @@ export function ChatSessionBoundary({
       >
         <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
           <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
-            <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
-              <ComposerImagesProvider initialImages={failedDraft?.files}>{children}</ComposerImagesProvider>
+            <ChatCommandsProvider draftScope={draftScope} initialDraft={failedDraft?.prompt}>
+              <ComposerImagesProvider draftScope={draftScope} initialImages={failedDraft?.files}>
+                {children}
+              </ComposerImagesProvider>
             </ChatCommandsProvider>
           </ChatThinkingProvider>
         </ChatModelsProvider>

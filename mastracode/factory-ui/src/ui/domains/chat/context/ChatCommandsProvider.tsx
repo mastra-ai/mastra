@@ -3,6 +3,7 @@ import type { ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
 
 import type { SlashCommand } from '../services/commands';
+import { readComposerText, saveComposerText } from '../services/composerDrafts';
 import { useChatCommandRegistry } from './useChatCommandRegistry';
 
 export interface ComposerPreview {
@@ -25,8 +26,24 @@ export interface ChatCommandsApi {
 
 const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
-export function ChatCommandsProvider({ children, initialDraft = '' }: { children: ReactNode; initialDraft?: string }) {
-  const [composerDraft, setComposerDraft] = useState(initialDraft);
+/**
+ * `draftScope` names the chat whose unsent text is remembered; without it the composer starts empty.
+ * `initialDraft` (a prompt handed back after a failed start) wins over the remembered text.
+ */
+export function ChatCommandsProvider({
+  children,
+  draftScope,
+  initialDraft,
+}: {
+  children: ReactNode;
+  draftScope?: string;
+  initialDraft?: string;
+}) {
+  const [composerDraft, setDraft] = useState(() => initialDraft ?? (draftScope ? readComposerText(draftScope) : ''));
+  const setComposerDraft = (draft: string) => {
+    setDraft(draft);
+    if (draftScope) saveComposerText(draftScope, draft);
+  };
   const [composerPreview, setPreview] = useState<ComposerPreview>();
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   // Measured before the preview lands: a composer that grew to fit it would move what the pointer is on.
