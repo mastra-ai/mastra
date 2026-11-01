@@ -85,7 +85,7 @@ describe('Transcript tool outcomes', () => {
       expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
     });
 
-    it('reads as failed while the run streams it, even though the call itself reports no error', () => {
+    it('reads as failed from the exit its stream reported, even though the call itself reports no error', () => {
       const events = [
         { type: 'message_start', message: assistant('turn', []) },
         { type: 'tool_start', toolCallId: 'git', toolName: 'execute_command', args: { command: 'git status' } },
@@ -108,10 +108,24 @@ describe('Transcript tool outcomes', () => {
       expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
     });
 
-    it('reads as failed when the stream dropped its exit, once the refetched thread brings it in', () => {
+    it.each([
+      [
+        'its exit',
+        { type: 'tool_start', toolCallId: 'git', toolName: 'execute_command', args: { command: 'git status' } },
+      ],
+      [
+        'its start and its exit',
+        {
+          type: 'tool_end',
+          toolCallId: 'git',
+          result: 'fatal: not a git repository\n\nExit code: 128',
+          isError: false,
+        },
+      ],
+    ] as const)('reads as failed when the stream dropped %s, once the refetched thread brings it in', (_, survived) => {
       const events = [
         { type: 'message_start', message: assistant('turn', []) },
-        { type: 'tool_start', toolCallId: 'git', toolName: 'execute_command', args: { command: 'git status' } },
+        survived,
         { type: 'message_end', id: 'turn' },
       ] as const;
       const streamed = events.reduce(

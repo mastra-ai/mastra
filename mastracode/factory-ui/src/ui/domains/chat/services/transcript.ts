@@ -309,7 +309,7 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
     case 'command_exit':
       return knownToolIndex(state.entries, event.toolCallId) === -1
         ? state
-        : withTool(state, event.toolCallId, t => (runsCommand(t) ? { ...t, exitCode: event.exitCode } : t));
+        : withTool(state, event.toolCallId, t => ({ ...t, exitCode: event.exitCode }));
     case 'tool_update':
       return withTool(state, event.toolCallId, t => ({ ...t, result: event.partialResult }));
     case 'tool_end':
@@ -457,14 +457,7 @@ function messagesToEntries(messages: MastraDBMessage[]): TimelineEntry[] {
   return messages.flatMap(message => [toMessageEntry(message, { streaming: false }), ...persistedPrompts(message)]);
 }
 
-const COMMAND_TOOLS = new Set(['execute_command', 'mastra_workspace_execute_command']);
-
 const sandboxExitSchema = z.object({ toolCallId: z.string(), exitCode: z.number() });
-
-/** Only a command's own exit is its outcome: `kill_process` and `get_process_output` report another process's. */
-function runsCommand(tool: ToolCall): boolean {
-  return COMMAND_TOOLS.has(tool.toolName);
-}
 
 /** The exit shares its call's message, unless a sealed message pushed it into a later one. */
 function commandExits(messages: MastraDBMessage[]): ReadonlyMap<string, number> {
@@ -485,7 +478,7 @@ function settleCommandExits(state: TranscriptState, messages: MastraDBMessage[])
   let changed = false;
   const entries = state.entries.map(entry => {
     if (entry.kind !== 'message') return entry;
-    const exited = exitedCommands(entry, exits);
+    const exited = exitedTools(entry, exits);
     if (exited.length === 0) return entry;
     changed = true;
     return { ...entry, runtimeTools: { ...entry.runtimeTools, ...Object.fromEntries(exited) } };
@@ -494,13 +487,13 @@ function settleCommandExits(state: TranscriptState, messages: MastraDBMessage[])
   return changed ? { ...state, entries } : state;
 }
 
-function exitedCommands(entry: MessageEntry, exits: ReadonlyMap<string, number>): Array<readonly [string, ToolCall]> {
+function exitedTools(entry: MessageEntry, exits: ReadonlyMap<string, number>): Array<readonly [string, ToolCall]> {
   return entry.message.content.parts.flatMap(part => {
     const persisted = toolCallFromPart(part);
     if (!persisted) return [];
     const tool = entry.runtimeTools?.[persisted.toolCallId] ?? persisted;
     const exitCode = exits.get(tool.toolCallId);
-    if (exitCode === undefined || exitCode === tool.exitCode || !runsCommand(tool)) return [];
+    if (exitCode === undefined || exitCode === tool.exitCode) return [];
     return [[tool.toolCallId, { ...tool, exitCode }] as const];
   });
 }
