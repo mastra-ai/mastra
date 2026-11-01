@@ -1,74 +1,49 @@
 # Security Scanner
 
-Security Scanner maps explicitly authorized websites and APIs into a persisted inventory of endpoints, parameters, forms, and browser XHR requests. A local browser console and protected API manage target scopes and isolated public, header, bearer, or cookie profiles. Discovery uses a confined Katana/Chromium runtime and exports bounded, sanitized evidence with role and source provenance.
+Map authorized websites and APIs, compare access across identities, and investigate potential vulnerabilities with bounded evidence. This Mastra template includes a local console, Katana/Chromium discovery, offline security playbooks, and optional Morph models for planning and evidence review.
 
 ## Why we built this
 
-A useful security inventory needs to show which identity observed a surface while respecting the operator's authorization and request limits. This project keeps that execution boundary outside model decisions and makes incomplete discovery, authentication failures, and removed evidence visible.
+A security inventory needs to show what each identity can access and which findings have reproducible evidence. The scanner keeps target authorization, request limits, approvals, and confirmation checks under application control.
 
 ## Prerequisites
 
-- **[Docker Desktop](https://docs.docker.com/desktop/)**: run a native Linux ARM64 daemon and make the Docker CLI available. Complete setup and discovery currently support `DOCKER_PLATFORM=linux/arm64`. Emulation and other discovery platforms fail closed. The default local socket is `/var/run/docker.sock`; use `DOCKER_SOCKET` if yours differs.
-- Initial setup downloads pinned Katana/Chromium and mitmproxy images plus integrity-checked firewall and NSS inputs. Images are built locally and never published. After preparation, scan containers do not install dependencies or download reference content.
-- Chromium must support the enabled namespace and seccomp sandbox. Setup rejects an unavailable browser sandbox instead of enabling unsafe flags or extra crawler capabilities.
-- Set `CONTROL_BOOTSTRAP_SECRET` to an independent random secret and `SCANNER_ENCRYPTION_KEY` to a 32-byte key encoded as 64 lowercase hex characters. [Local API setup](CONTROL_PLANE.md) includes generation and session commands. Keep the key outside source control; a lost key requires credential re-registration.
-- Discovery is disabled by default. `SCANNER_DISCOVERY_ENABLED=true` explicitly enables admission after successful setup; every request still requires current scope, profile and policy bindings. Use only targets you are authorized to assess. Non-lab targets require an operator-selected retention policy before admission.
-- **[Morph API key](https://www.morphllm.com/dashboard/api-keys)**: required only for opt-in investigation planning. Set `SCANNER_INVESTIGATION_ENABLED=true` and a private `MORPH_API_KEY` after confirming access to the configured explorer and judge. Planning can make paid requests. Setup, the control plane and discovery need no model key.
-- Periodic advisory sync is separately disabled by default. Enabling it requires an explicit cadence and timezone; see [advisory configuration](INTELLIGENCE.md#periodic-advisory-sync). It can trigger paid investigation planning only when that feature is also enabled.
+- **[Docker Desktop](https://docs.docker.com/desktop/)**: a native Linux ARM64 daemon and the Docker CLI. Set `DOCKER_SOCKET` if your socket differs from `/var/run/docker.sock`. Setup downloads pinned runtime inputs and checks Chromium's sandbox.
+- Set `CONTROL_BOOTSTRAP_SECRET` to a random sign-in secret and `SCANNER_ENCRYPTION_KEY` to an independent 32-byte key in lowercase hex. See [configuration](docs/configuration.md) for the generation command. Keep the encryption key available across restarts.
+- Discovery is opt-in: set `SCANNER_DISCOVERY_ENABLED=true` after setup. Assess only authorized targets. Non-lab targets also require an explicit evidence-retention policy.
+- **[Morph API key](https://www.morphllm.com/dashboard/api-keys)**: optional. Set `MORPH_API_KEY` and `SCANNER_INVESTIGATION_ENABLED=true` for planning and review. This can incur charges. Setup and discovery do not need a model key.
 
 ## Quickstart 🚀
 
-1. **Open the template directory**
-   - In the Security Scanner directory from your checkout, run `npm install --workspaces=false`.
-2. **Configure the local runtime**
-   - Run `test -f .env || cp .env.example .env`, then fill in the operator settings under Prerequisites. Exported shell variables take precedence over `.env`.
+1. **Install the template**
+   - From `templates/template-security-scanner` in your checkout, run `npm install --workspaces=false`.
+2. **Configure the runtime**
+   - Run `cp .env.example .env` on a new checkout and fill in the settings under Prerequisites.
 3. **Prepare the runtime**
-   - Run `npm run setup`. It verifies the native sandbox, initializes local storage, prepares pinned gateway/firewall/browser inputs, and removes owned temporary resources.
-   - Setup saves private receipts under `data/`. A receipt describes prerequisites; it does not authorize a target or start a scan.
-4. **Open the local console**
-   - Run `npm run dev`, open `http://127.0.0.1:4111/` (or the configured `PORT`), and sign in with `CONTROL_BOOTSTRAP_SECRET`. The page contains no operational data until the local session is established.
-   - Create a policy, an explicitly authorized target, and a public profile in the Policies and Targets views. Reopen the page to confirm the records remain available. The [first API interaction](CONTROL_PLANE.md#first-interaction) is available for command-line operation.
-   - When discovery is explicitly enabled, check the public profile's identity and choose **New scan** on the target, or follow [discovery operation](SCANNING.md). Stop the listener and active discovery with Ctrl+C.
+   - Run `npm run setup`, then set `SCANNER_DISCOVERY_ENABLED=true` in `.env` to enable discovery.
+4. **Open the console**
+   - Run `npm run dev` and open [the local console](http://127.0.0.1:4111/).
+   - Sign in with `CONTROL_BOOTSTRAP_SECRET`. Create a policy and an authorized target, add a public profile, check its identity, and choose **New scan**. The Scans view shows its progress and retained inventory.
 
 ## Try it out
 
-- Run `npm run doctor` to inspect runtime prerequisites and discovery admission without creating an image, sandbox, or database.
-- Use the console's ten views to inspect real records and empty states. Create a policy and authorized target, restart the server, and confirm their persisted revisions through the console or local API.
-- Run public HTTP discovery, then compare a header, bearer, or cookie profile against the same authorized origin. Select headless mode for browser XHR surfaces. Inventory retains each observation's role, while credentials are never returned; discovery does not submit forms or authorize writes.
-- Cancel a running scan or update its bound target. Inspect persisted partial state, cleanup outcome, and evidence instead of assuming the interrupted run completed.
-- Search pinned offline references, [sync the advisory inbox manually or with an explicit schedule](INTELLIGENCE.md), and inspect its stale status and revision events. In the owned Docker lab, opt into bounded investigation planning from a completed scan; per-target recurrence and new or materially revised advisories can replan from existing precedent without automatically starting a new discovery scan.
+- Run `npm run doctor` to check runtime prerequisites and storage readiness.
+- Stop the listener and run `npm run lab` for a project-owned Docker target. Open the printed console URL and run public discovery. Ctrl+C removes its temporary resources.
+- Add a header, bearer, or cookie profile and compare its inventory with the public profile. Headless discovery also records browser XHR surfaces.
+- Cancel a scan and inspect its partial inventory and cleanup status. Restart the server to see the saved records.
+- Search offline references in the console. Optional advisory synchronization imports cve.now records; investigation planning and verification require the [configuration and execution boundaries](docs/configuration.md).
 
 ## Customization
 
-- Open the project in your coding agent and describe a focused change, such as: "Add a new inventory view that groups sanitized endpoints by role. Explore the code and propose a plan before making changes."
-- Adjust target scopes, finite budgets, explicit retention, and identity endpoints through the protected API. Use [discovery operation](SCANNING.md) when extending the driver or lab, and preserve the same authorization and confinement boundaries.
+- Open the project in your coding agent: “Add an inventory view that groups endpoints by role. Explore the code and propose a plan before making changes.”
+- Adjust target scopes, identities, finite budgets, and retention through the console or protected API. Contracts document their fields under `src/core/`, `src/discovery/`, and `src/investigation/`.
 
-## Owned local lab
+## Testing and maintenance
 
-Stop the normal listener, then run `npm run lab` after configuring the same local session settings. It starts an internal Docker fixture and the real application, provisions one public lab target through the protected API, and prints the console URL and target ID. Its dedicated `data/owned-lab.db` and native sibling retain actual application records. Close it with Ctrl+C to remove only its ephemeral fixture resources.
-
-The default experience is public discovery with `SCANNER_DISCOVERY_ENABLED=true`; it does not play back findings or scripted model responses. Authenticated verification requires registered identities/resources and current approval where applicable. Investigation models remain off unless the operator explicitly configures and enables the actual Morph provider. Keep advisory sync and investigation disabled for a discovery-only session. See [operation and recovery](OPERATIONS.md) before preserving or restoring lab data.
-
-## Runtime operation
-
-The console is served by the same loopback listener as the API. Its public shell and local hashed assets contain no operational records; session-protected reads provide current state and a CSRF token after reload. The bootstrap secret is submitted only for sign-in and is cleared from the input. The console displays conflicts and failed requests, and its Settings view shows redacted runtime configuration. See [browser console operation](CONTROL_PLANE.md#browser-console) for supported actions and session behavior.
-
-Crawler containers run as a nonroot user with no outer Linux capabilities, no host mounts or namespaces, no Docker socket, finite resources, disabled container logging, and `no-new-privileges`. The pinned Moby seccomp profile permits the four reviewed namespace setup calls so Chromium can construct its own sandbox. Chromium must report Namespace, PID/network namespaces, and Seccomp-BPF active. No browser sandbox layer or upstream TLS check is disabled.
-
-Each profile has its own ephemeral sandbox, credential file and browser state. A transient NET_ADMIN-only helper installs and verifies default-drop namespace rules before the capability-free crawler starts. The crawler can reach only its exact gateway endpoint and narrow browser-local control ports. A capability-free gateway checks origin, authority, paths, methods, fresh DNS answers, numeric peer pins, TLS, and shared finite budgets before upstream contact. Private destinations are rejected; an owned fixture exception exists only inside the controlled integration laboratory.
-
-Raw crawler output remains bounded and private in trusted memory, with native retained buffers disabled. Strict normalization and credential-aware minimization precede persistence and API export. Reflected unsafe fields are withheld and produce partial results. Some credential fragments can conflict with required metadata; admission then returns `CREDENTIAL_METADATA_CONFLICT` without dispatch. Cookie support does not imply every cookie string is accepted.
-
-Local storage and receipts live under private `data/`. The configured `DATABASE_URL` file holds application-owned policy, target, discovery, advisory, and investigation state. Native Mastra storage uses a sibling file with `-mastra.db` in place of `.db`. Stop the server, drain pending work and use [two-file backup and recovery](OPERATIONS.md) with `npm run operate -- backup <name>` and `npm run operate -- restore <name>`. The commands preserve compatible pairs, validate integrity and handle their owned WAL/SHM state. Setup and startup reject an existing single-file database with nonempty native SDK tables as `LEGACY_MASTRA_STATE`; they preserve those records and do not migrate them. Restore a compatible two-file backup or obtain a separately reviewed lossless migration before retrying.
-
-One process owns the installation and one discovery runs at a time. Restart reconciles interrupted runs as failed and removes only recorded owned resources; it does not resume crawling or restore consumed budgets. Cleanup debt remains visible. Evidence expires only under the chosen retention policy, with persisted expiry counts and timestamps. Unrelated containers and shared-image consumers are preserved; no command uses global Docker pruning.
-
-Investigation planning uses the configured Morph explorer and judge only when enabled. The owned Docker lab adapter supports bounded verification and approval-gated SSRF with a unique receiver for each approval; outside that boundary, verification fails closed. Due per-target recurrences and new/materially revised local advisories automatically plan against an existing completed scan and investigation precedent, with durable event identities across restarts. Advisory applicability stays unknown without verified software version evidence. Native execution routes remain blocked; authenticated sessions can read allowlisted native metadata through the official Mastra Hono adapter. See [local API operation](CONTROL_PLANE.md) and [discovery operation](SCANNING.md) for supported routes and outcomes.
-
-The [offline reference catalog and advisory inbox](INTELLIGENCE.md) are available through the same protected API. Advisory synchronization is manual unless the operator explicitly enables the separate periodic workflow. Each run remains visibly incomplete because it polls a bounded portion of the upstream feed. [Recovery and retention operation](OPERATIONS.md) explains bounded deletion, unavailable evidence, credential re-registration and compatible rollback.
+See [testing](docs/testing.md) for local checks and the Docker integration suites, [configuration](docs/configuration.md) for identities and optional services, and [operations](docs/operations.md) for drain, backup, restore, and key loss.
 
 ## About Mastra templates
 
 This is an official Mastra template in development. Official templates live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are synchronized to standalone repositories.
 
-[Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/CONTRIBUTING.md)
+[Want to contribute?](CONTRIBUTING.md)

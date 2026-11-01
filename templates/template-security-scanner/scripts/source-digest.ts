@@ -8,16 +8,13 @@ export async function sourceDigest(root: string) {
     'tsconfig.json',
     'vitest.config.ts',
     'README.md',
-    'CONTROL_PLANE.md',
-    'SCANNING.md',
-    'INTELLIGENCE.md',
-    'OPERATIONS.md',
+    'CONTRIBUTING.md',
     '.env.example',
     '.gitignore',
     '.nvmrc',
     '.oxfmtrc.json',
   ];
-  for (const directory of ['src', 'scripts', 'tests', 'docker', 'web', 'references']) {
+  for (const directory of ['src', 'scripts', 'tests', 'docker', 'web', 'references', 'docs']) {
     for (const entry of await readdir(join(root, directory), { recursive: true })) {
       const path = `${directory}/${entry}`,
         stat = await lstat(join(root, path));

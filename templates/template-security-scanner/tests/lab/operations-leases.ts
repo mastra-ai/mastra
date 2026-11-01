@@ -7,7 +7,7 @@ import { InvestigationStore, type Hypothesis } from '../../src/investigation/sto
 import { ReferenceCatalog } from '../../src/knowledge/catalog.js';
 import { PlaybookRegistry } from '../../src/knowledge/playbooks.js';
 import { drainOffline } from '../../src/runtime/operations.js';
-import { closeDiscoveryLabs, discoveryCase, startDiscoveryLab } from './harness.js';
+import { discoveryCase, startDiscoveryLab } from './harness.js';
 import { investigation } from './investigation.js';
 export async function activeLeaseCrash() {
   const lab = await startDiscoveryLab();

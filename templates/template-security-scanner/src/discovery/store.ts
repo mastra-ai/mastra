@@ -4,12 +4,19 @@ import { ControlPlaneError } from '../core/contracts.js';
 import { evidenceSchema, scanSchema, terminal, type Evidence, type Observation, type Scan } from './contracts.js';
 import { initializeRetention, purgeExpiredBatch, RETENTION_BATCH_SIZE } from './retention.js';
 
+/** Persisted exact resource ownership used for bounded crash cleanup. */
 export type OwnedResource = {
+  /** Exact Docker container, network, or image identifier. */
   id: string;
+  /** Docker resource category determining verification and cleanup. */
   kind: 'container' | 'network' | 'image';
+  /** Scan or owned job whose cleanup receipt records this resource. */
   scanId: string;
+  /** Expected provenance label value checked before cleanup. */
   token: string;
+  /** Expected immutable image for a recorded container, when present. */
   imageId?: string;
+  /** Whether image removal must also honor the shared-base retention policy. */
   sharedBase?: boolean;
 };
 export class DiscoveryStore {

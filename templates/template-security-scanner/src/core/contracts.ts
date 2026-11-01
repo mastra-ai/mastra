@@ -10,7 +10,9 @@ export class ControlPlaneError extends Error {
   }
 }
 
+/** Validated id contract; bounds and cross-field rules are enforced before use. */
 export const idSchema = z.string().uuid();
+/** Validated revision contract; bounds and cross-field rules are enforced before use. */
 export const revisionSchema = z.number().int().min(1).max(Number.MAX_SAFE_INTEGER);
 const label = z
   .string()
@@ -25,6 +27,7 @@ const identity = z
   .regex(/^[a-zA-Z0-9:_-]+$/);
 
 // Reject encodings before URL normalization can erase traversal or authority ambiguity.
+/** Validated url contract; bounds and cross-field rules are enforced before use. */
 export const urlSchema = z
   .string()
   .max(2048)
@@ -52,10 +55,12 @@ export const urlSchema = z
       });
     }
   });
+/** Validated origin contract; bounds and cross-field rules are enforced before use. */
 export const originSchema = urlSchema.refine(value => {
   const url = new URL(value);
   return value === url.origin;
 }, 'Use a canonical origin.');
+/** Validated path contract; bounds and cross-field rules are enforced before use. */
 export const pathSchema = z
   .string()
   .max(512)
@@ -84,49 +89,79 @@ const methods = z
   .min(1)
   .max(7)
   .refine(value => new Set(value).size === value.length);
+/** Validated limits contract; bounds and cross-field rules are enforced before use. */
 export const limitsSchema = z
   .object({
+    /** Maximum upstream requests allowed; reservations are shared and not refunded. */
     maxRequests: z.number().int().min(1).max(10000),
+    /** Maximum elapsed duration in seconds. */
     maxDurationSeconds: z.number().int().min(1).max(3600),
+    /** Maximum bytes accepted from one upstream response. */
     maxResponseBytes: z.number().int().min(1024).max(10485760),
+    /** Maximum simultaneous upstream requests. */
     maxConcurrency: z.number().int().min(1).max(8),
   })
   .strict();
+/** Validated policy contract; bounds and cross-field rules are enforced before use. */
 export const policySchema = z
   .object({
+    /** Human-readable label shown in the console. */
     name: label,
+    /** Unique HTTP methods explicitly allowed by the operator. */
     permittedMethods: methods,
+    /** Finite scan budgets, bounded by the target policy. */
     scanLimits: limitsSchema,
+    /** Explicit evidence-retention selection; required for non-lab targets. */
     retention: z
-      .object({ evidenceDays: z.number().int().min(1).max(365), approvedBy: label })
+      .object({
+        /** Number of days to retain evidence, from 1 through 365. */
+        evidenceDays: z.number().int().min(1).max(365),
+        /** Operator reference recording the retention decision. */
+        approvedBy: label,
+      })
       .strict()
       .optional(),
   })
   .strict();
+/** Validated target contract; bounds and cross-field rules are enforced before use. */
 export const targetSchema = z
   .object({
+    /** Human-readable label shown in the console. */
     name: label,
+    /** Canonical HTTP(S) entry URL inside the approved origin and path scope. */
     entryUrl: urlSchema,
+    /** Exact canonical origins the gateway may contact. */
     approvedOrigins: z
       .array(originSchema)
       .min(1)
       .max(16)
       .refine(value => new Set(value).size === value.length),
+    /** Allowed canonical path prefixes, matched at segment boundaries. */
     allowedPaths: paths,
+    /** Denied path prefixes; exclusions override allowed paths. */
     excludedPaths: z.array(pathSchema).max(64),
+    /** Unique HTTP methods explicitly allowed by the operator. */
     permittedMethods: methods,
+    /** Deployment classification; lab alone does not grant private-network access. */
     environment: z.enum(['lab', 'staging', 'production']),
+    /** Reference to the operator authorization for this target. */
     authorizationEvidenceRef: z
       .string()
       .min(1)
       .max(200)
       .regex(/^[a-zA-Z0-9][a-zA-Z0-9 ._:/-]*$/),
+    /** Explicit confirmation that the target is authorized. */
     authorizationConfirmed: z.literal(true),
+    /** Policy that bounds the target scope and budgets. */
     policyId: idSchema,
+    /** Exact policy revision authorized for this operation. */
     policyRevision: revisionSchema,
+    /** Discovery scheduling setting; recurrence is configured separately. */
     schedule: z
       .object({
+        /** Whether this feature is explicitly enabled. */
         enabled: z.literal(false),
+        /** IANA timezone used to calculate scheduled occurrences. */
         timezone: z
           .string()
           .min(1)
@@ -141,7 +176,9 @@ export const targetSchema = z
           }),
       })
       .strict(),
+    /** Finite scan budgets, bounded by the target policy. */
     scanLimits: limitsSchema,
+    /** Target-owned profile identifiers, maintained by profile registration/removal. */
     authProfileIds: z
       .array(idSchema)
       .max(32)
@@ -167,65 +204,144 @@ const privateValue = z
   .max(4096)
   .regex(/^[\x20-\x7e]+$/);
 const profileBase = {
+  /** Human-readable label shown in the console. */
   name: label,
+  /** Application role represented by this identity or observation. */
   role: identity,
+  /** Optional UTC expiration of the identity profile. */
   expiresAt: z.iso.datetime().optional(),
 };
 const authenticatedBase = {
   ...profileBase,
+  /** Scoped read-only endpoint returning the expected identity and role. */
   identityEndpoint: urlSchema,
+  /** Exact application identity the endpoint must report. */
   expectedIdentity: identity,
 };
+/** Validated profile contract; bounds and cross-field rules are enforced before use. */
 export const profileSchema = z.discriminatedUnion('kind', [
-  z.object({ ...profileBase, kind: z.literal('public') }).strict(),
   z
-    .object({ ...authenticatedBase, kind: z.literal('bearer'), credential: z.object({ value: privateValue }).strict() })
+    .object({
+      ...profileBase,
+      /** Discriminator selecting the supported record or credential shape. */
+      kind: z.literal('public'),
+    })
     .strict(),
   z
     .object({
       ...authenticatedBase,
-      kind: z.literal('header'),
+      /** Discriminator selecting the supported record or credential shape. */
+      kind: z.literal('bearer'),
+      /** Private registration-only credential; never returned with profile metadata. */
       credential: z
         .object({
+          /** Private printable-ASCII credential accepted only during registration. */
+          value: privateValue,
+        })
+        .strict(),
+    })
+    .strict(),
+  z
+    .object({
+      ...authenticatedBase,
+      /** Discriminator selecting the supported record or credential shape. */
+      kind: z.literal('header'),
+      /** Private registration-only credential; never returned with profile metadata. */
+      credential: z
+        .object({
+          /** Allowlisted header name used to transport the private credential. */
           name: z.enum(['authorization', 'cookie', 'x-api-key', 'x-test-identity']),
+          /** Private printable-ASCII credential accepted only during registration. */
           value: privateValue,
         })
         .strict(),
     })
     .strict(),
 ]);
+/** Validated binding contract; bounds and cross-field rules are enforced before use. */
 export const bindingSchema = z
   .object({
+    /** Exact target revision authorized for this operation. */
     targetRevision: revisionSchema,
+    /** Exact policy revision authorized for this operation. */
     policyRevision: revisionSchema,
+    /** Identity profile used for this observation or operation. */
     profileId: idSchema,
+    /** Exact profile metadata revision bound to this operation. */
     profileRevision: revisionSchema,
+    /** Credential version bound to this operation; changes invalidate prior authorization. */
     credentialRevision: revisionSchema,
   })
   .strict();
+/** Validated page contract; bounds and cross-field rules are enforced before use. */
 export const pageSchema = z
   .object({
+    /** Maximum number of records returned by one page. */
     limit: z.coerce.number().int().min(1).max(100).default(25),
+    /** Zero-based collection offset. */
     offset: z.coerce.number().int().min(0).max(1000000).default(0),
   })
   .strict();
-export const sessionSchema = z.object({ secret: z.string().min(32).max(256) }).strict();
+/** Validated session contract; bounds and cross-field rules are enforced before use. */
+export const sessionSchema = z
+  .object({
+    /** Private bootstrap secret submitted only to establish a local session. */
+    secret: z.string().min(32).max(256),
+  })
+  .strict();
+/** Validated input for policy creation and full replacement. */
 export type PolicyInput = z.infer<typeof policySchema>;
+/** Validated authorized-target input; profile membership is maintained separately. */
 export type TargetInput = z.infer<typeof targetSchema>;
+/** Discriminated registration input; credential fields are write-only. */
 export type ProfileInput = z.infer<typeof profileSchema>;
+/** Exact revisions required for identity checks and scan admission. */
 export type IdentityBinding = z.infer<typeof bindingSchema>;
+/** Authentication/readiness state, independent of vulnerability assessment. */
 export type IdentityStatus = 'CHECK_REQUIRED' | 'READY' | 'AUTH_REQUIRED' | 'CREDENTIAL_UNAVAILABLE' | 'UNAVAILABLE';
-export type IdentityResult = IdentityBinding & { status: IdentityStatus; checkedAt: string; reason: string };
-export type Policy = PolicyInput & { id: string; owner: string; revision: number };
-export type Target = TargetInput & { id: string; owner: string; revision: number };
-type ProfileMetadata<T> = T extends unknown ? Omit<T, 'credential'> : never;
-export type Profile = ProfileMetadata<ProfileInput> & {
+/** Dated identity check bound to the exact target, policy, and credential revisions. */
+export type IdentityResult = IdentityBinding & {
+  /** Identity readiness state; never a vulnerability verdict. */
+  status: IdentityStatus;
+  /** UTC timestamp of the identity check. */
+  checkedAt: string;
+  /** Sanitized machine-readable reason for the recorded state. */
+  reason: string;
+};
+/** Persisted operator-owned policy and its current revision. */
+export type Policy = PolicyInput & {
+  /** Stable identifier of this record. */
   id: string;
-  targetId: string;
+  /** Operator that owns this record; derived from the authenticated session. */
   owner: string;
+  /** Current optimistic-concurrency revision; stale writes are rejected. */
   revision: number;
+};
+/** Persisted authorized target and its policy binding. */
+export type Target = TargetInput & {
+  /** Stable identifier of this record. */
+  id: string;
+  /** Operator that owns this record; derived from the authenticated session. */
+  owner: string;
+  /** Current optimistic-concurrency revision; stale writes are rejected. */
+  revision: number;
+};
+type ProfileMetadata<T> = T extends unknown ? Omit<T, 'credential'> : never;
+/** Public identity metadata; private credential values are excluded. */
+export type Profile = ProfileMetadata<ProfileInput> & {
+  /** Stable identifier of this record. */
+  id: string;
+  /** Authorized target to which this record belongs. */
+  targetId: string;
+  /** Operator that owns this record; derived from the authenticated session. */
+  owner: string;
+  /** Current optimistic-concurrency revision; stale writes are rejected. */
+  revision: number;
+  /** Credential version bound to this operation; changes invalidate prior authorization. */
   credentialRevision: number;
+  /** Opaque reference to the sealed credential, never the credential itself. */
   credentialRef?: string;
+  /** Most recent identity check bound to the recorded revisions. */
   identityResult?: IdentityResult;
 };
 export function parse<T>(schema: z.ZodType<T>, value: unknown): T {

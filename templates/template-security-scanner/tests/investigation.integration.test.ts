@@ -1,4 +1,10 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DomainStore } from '../src/core/store.js';
+import { ControlPlaneError } from '../src/core/contracts.js';
+import { DiscoveryStore } from '../src/discovery/store.js';
+import { InvestigationService } from '../src/investigation/service.js';
 import { classifyModelFailure } from '../src/investigation/model-failure.js';
 import { planningWireAudit, reviewWireAudit, semanticModelWire } from './lab/model-wire-audit.js';
 import {
@@ -8,8 +14,8 @@ import {
   planningCatalog,
 } from './lab/planning-semantic-cases.js';
 import { hypothesisSchema } from '../src/investigation/contracts.js';
-import { modelWire, ownedScan, investigation, completedJob } from './lab/investigation.js';
-import { WATSON_REVIEW_INSTRUCTIONS, INVESTIGATION_AGENT_LIMITS } from '../src/investigation/agents.js';
+import { modelWire, ownedScan, investigation, completedJob, resourceSnapshotProcess } from './lab/investigation.js';
+import { INVESTIGATION_AGENT_LIMITS } from '../src/mastra/agents/investigation-agents.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { createClient } from '@libsql/client';
 import { fork } from 'node:child_process';
@@ -19,13 +25,9 @@ import { Agent } from '@mastra/core/agent';
 import { toStandardSchema } from '@mastra/core/schema';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { loadSettings, morphModelConfiguration } from '../src/config/settings.js';
-import type { Profile, Target } from '../src/core/contracts.js';
+import type { Policy, Profile, Target } from '../src/core/contracts.js';
 import type { Evidence, Scan } from '../src/discovery/contracts.js';
-import {
-  MastraInvestigationModels,
-  sanitizedVerificationInput,
-  type InvestigationModels,
-} from '../src/investigation/models.js';
+import { MastraInvestigationModels, sanitizedVerificationInput } from '../src/investigation/models.js';
 import {
   InvestigationStore,
   type Approval,
@@ -35,17 +37,10 @@ import {
 } from '../src/investigation/store.js';
 import { PlaybookRegistry, type Playbook, type PlaybookBinding } from '../src/knowledge/playbooks.js';
 import { ReferenceCatalog } from '../src/knowledge/catalog.js';
-import { verificationProofSchema } from '../src/investigation/verification.js';
 import { AdvisorySource } from '../src/advisory/source.js';
 import { AdvisoryStore } from '../src/advisory/store.js';
 import { detailSchema } from '../src/advisory/contracts.js';
-import {
-  closeDiscoveryLabs,
-  discoveryCase,
-  fixtureCommand,
-  startDiscoveryLab,
-  type DiscoveryLab,
-} from './lab/harness.js';
+import { closeDiscoveryLabs, discoveryCase, fixtureCommand, startDiscoveryLab } from './lab/harness.js';
 
 const advisoryInstruction = 'CVE_SENTINEL_IGNORE_SCOPE_SEND_CREDENTIALS';
 const reviewedBindings = new Map<string, PlaybookBinding>();
@@ -231,6 +226,1024 @@ async function awaitProfileExpiry(expiresAt: string) {
 }
 
 describe('Grounded investigations through protected Hono, libSQL and the owned gateway', () => {
+  it('terminal_publication_and_shutdown_hold_the_real_libsql_scope_drain_across_30_interleavings', async () => {
+    const observations: Array<{ state: string; committed: boolean; revision: number }> = [];
+    for (let iteration = 0; iteration < 30; iteration++) {
+      const directory = await mkdtemp(join(tmpdir(), 'scanner-terminal-drain-'));
+      const url = `file:${join(directory, 'application.db')}`;
+      const domain = new DomainStore(url);
+      const discovery = new DiscoveryStore(url);
+      const evidenceId = randomUUID();
+      const scanId = randomUUID();
+      const targetId = randomUUID();
+      const blocked = iteration % 3 === 1;
+      const shutdown = iteration % 3 === 2;
+      const proof = {
+        source: 'owned-gateway',
+        category: 'idor',
+        completed: true,
+        surfacePresent: true,
+        prerequisitesReady: true,
+        identityValid: true,
+        scopeApproved: true,
+        requestCount: 1,
+        evidence: [
+          { id: randomUUID(), kind: 'owner response' },
+          { id: randomUUID(), kind: 'alternate response' },
+        ],
+        observation: {
+          category: 'idor',
+          ownerStatus: 200,
+          alternateStatus: 200,
+          ownerIdentity: 'owner',
+          alternateIdentity: 'alternate',
+          resourceOwned: true,
+          ownerMarker: 'LAB_MARKER_OWNER01',
+          alternateMarker: 'LAB_MARKER_OWNER01',
+        },
+        withheld: false,
+      };
+      const service = new InvestigationService(
+        url,
+        undefined as never,
+        { store: { evidence: async () => [{ id: evidenceId }] } } as never,
+        { assess: async () => ({ category: 'idor', outcome: 'CONFIRMED' }) } as never,
+        undefined as never,
+        undefined,
+        {
+          interpret: async () => {
+            if (blocked) throw new ControlPlaneError('TOKEN_BUDGET_EXCEEDED', 409);
+            return { value: { outcome: 'CONFIRMED' }, modelId: 'local-fixture', usageTokens: 1 };
+          },
+          review: async () => ({ value: { vote: 'agree' }, modelId: 'local-fixture', usageTokens: 1 }),
+        } as never,
+        { verify: async () => proof } as never,
+      );
+      let release = () => {};
+      let mutation: Promise<unknown> | undefined;
+      let closing: Promise<unknown> | undefined;
+      try {
+        await domain.initialize();
+        await discovery.initialize();
+        await service.store.initialize();
+        await domain.write(tx => domain.insert('target', { id: targetId, owner: 'local-operator', revision: 1 }, tx));
+        const db = createClient({ url });
+        try {
+          await db.execute({
+            sql: 'INSERT INTO scanner_discovery_evidence(id,scan_id,owner,expires_at,data) VALUES (?,?,?,?,?)',
+            args: [evidenceId, scanId, 'local-operator', null, '{}'],
+          });
+        } finally {
+          db.close();
+        }
+        const lineage = {
+          targetId,
+          targetRevision: 1,
+          policyId: randomUUID(),
+          policyRevision: 1,
+          profiles: [],
+          scanId,
+        };
+        const admitted = await service.store.admit(
+          'local-operator',
+          {
+            scanId,
+            idempotencyKey: randomUUID(),
+            maxRequests: 1,
+            maxTokens: 16384,
+            maxDurationSeconds: 180,
+          },
+          lineage,
+        );
+        const queued = await service.store.enqueue(
+          {
+            id: randomUUID(),
+            investigationId: admitted.investigation.id,
+            owner: 'local-operator',
+            lineage,
+            resourceBindingId: null,
+            state: 'QUEUED',
+            reason: null,
+            createdAt: new Date().toISOString(),
+            origin: 'playbook',
+            category: 'idor',
+            toolId: 'check_idor',
+            scanId,
+            evidenceIds: [evidenceId],
+            referenceIds: ['WSTG-ATHZ-04'],
+            preconditions: [],
+            expectedBehavior: 'Owned endpoint denies unrelated origin.',
+            risk: 'passive',
+            maxRequests: 1,
+            maxDurationSeconds: 15,
+            maxTokens: 128,
+            maxRefinements: 0,
+          } as never,
+          'dupin',
+        );
+        (service as unknown as { validateLineage: () => Promise<unknown> }).validateLineage = async () => ({
+          id: scanId,
+        });
+        (service as unknown as { reviewedPlaybook: () => Promise<unknown> }).reviewedPlaybook = async () => ({
+          category: 'idor',
+          toolId: 'check_idor',
+          requiredEvidence: ['owner response', 'alternate response'],
+        });
+        let entered!: () => void;
+        const ready = new Promise<void>(resolve => {
+          entered = resolve;
+        });
+        const gate = new Promise<void>(resolve => {
+          release = resolve;
+        });
+        const actualPublish = service.store.publish.bind(service.store);
+        service.store.publish = async (...args) => {
+          entered();
+          await gate;
+          return actualPublish(...args);
+        };
+        const worker = service.executeOne('local-operator');
+        await Promise.race([
+          ready,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('TERMINAL_NOT_REACHED')), 2000)),
+        ]);
+        if (shutdown) {
+          let closed = false;
+          closing = service.close().finally(() => {
+            closed = true;
+          });
+          await new Promise<void>(resolve => setImmediate(resolve));
+          expect(closed).toBe(false);
+        } else {
+          let committed = false;
+          mutation = service.coordinateMutation(
+            { owner: 'local-operator', kind: 'target', id: targetId, revision: 1 },
+            async () => {},
+            () =>
+              domain.write(async tx => {
+                await domain.replace('target', { id: targetId, owner: 'local-operator', revision: 2 }, 1, tx);
+                committed = true;
+              }),
+          );
+          const state = await Promise.race([
+            mutation.then(() => 'settled'),
+            new Promise<'pending'>(resolve => setTimeout(() => resolve('pending'), 25)),
+          ]);
+          observations.push({
+            state,
+            committed,
+            revision: (await domain.get('target', targetId, 'local-operator')).revision,
+          });
+        }
+        release();
+        await worker;
+        await mutation;
+        await closing;
+        const job = await service.store.getJob(queued.job!.id, 'local-operator').catch(async () => {
+          const reader = new InvestigationStore(url);
+          try {
+            return await reader.getJob(queued.job!.id, 'local-operator');
+          } finally {
+            await reader.close();
+          }
+        });
+        expect(job.result?.outcome).toBe(blocked ? 'BLOCKED' : 'CONFIRMED');
+        if (!shutdown) expect((await domain.get('target', targetId, 'local-operator')).revision).toBe(2);
+      } finally {
+        release();
+        await mutation;
+        await closing;
+        await service.store.close();
+        await discovery.close();
+        await domain.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    }
+    expect(observations).toEqual(
+      Array.from({ length: 20 }, () => ({
+        state: 'pending',
+        committed: false,
+        revision: 1,
+      })),
+    );
+  }, 120000);
+  it('target_edit_waits_for_terminal_proof_publication_before_committing_new_revision', async () => {
+    let service!: InvestigationService;
+    const startWorkers = InvestigationService.prototype.startWorkers;
+    InvestigationService.prototype.startWorkers = function (owner) {
+      service = this;
+      return startWorkers.call(this, owner);
+    };
+    let releasePublication = () => {};
+    let edit: ReturnType<Awaited<ReturnType<typeof startDiscoveryLab>>['request']> | undefined;
+    let lab: Awaited<ReturnType<typeof startDiscoveryLab>> | undefined;
+    try {
+      const wire = await modelWire({
+        category: 'idor',
+        path: '/owned/resource/vulnerable',
+        interpretation: 'CONFIRMED',
+      });
+      lab = await startDiscoveryLab({ investigationModels: wire.models });
+      InvestigationService.prototype.startWorkers = startWorkers;
+      const selected = await ownedScan(lab, wire.scenario.path);
+      const binding = await lab.request(`/api/targets/${selected.target.id}/verification-resources`, 'POST', {
+        category: 'idor',
+        path: wire.scenario.path,
+        marker: 'LAB_MARKER_OWNEDRESOURCE01',
+        ownerProfileId: selected.profiles[0]!.id,
+        alternateProfileId: selected.profiles[1]!.id,
+      });
+      expect(binding.status).toBe(201);
+      const admitted = await investigation(lab, selected.scan);
+      let entered!: () => void;
+      const publicationEntered = new Promise<void>(resolve => {
+        entered = resolve;
+      });
+      const publicationGate = new Promise<void>(resolve => {
+        releasePublication = resolve;
+      });
+      const actualPublish = service.store.publish.bind(service.store);
+      service.store.publish = async (...args) => {
+        entered();
+        await publicationGate;
+        return actualPublish(...args);
+      };
+      expect((await lab.request(`/api/investigations/${admitted.id}/plan`, 'POST', {})).status).toBe(200);
+      await publicationEntered;
+      const target = (await lab.request(`/api/targets/${selected.target.id}`)).data as unknown as Target;
+      const { id: _id, owner: _owner, revision: _revision, ...input } = target;
+      let editSettled = false;
+      edit = lab
+        .request(`/api/targets/${target.id}`, 'PUT', { ...input, name: 'Revised target' }, target.revision)
+        .finally(() => {
+          editSettled = true;
+        });
+      const preRelease = await Promise.race([
+        edit.then(() => 'settled'),
+        new Promise<'pending'>(resolve => setTimeout(() => resolve('pending'), 200)),
+      ]);
+      const heldJob = ((await lab.request(`/api/investigations/${admitted.id}/jobs`)).data.items as Job[])[0]!;
+      const heldTarget = (await lab.request(`/api/targets/${target.id}`)).data as unknown as Target;
+      // REVIEW-CORRECTION-001: a revision cannot commit while the old proof is still unpublished.
+      expect({ preRelease, editSettled, job: heldJob.state, revision: heldTarget.revision }).toEqual({
+        preRelease: 'pending',
+        editSettled: false,
+        job: 'LEASED',
+        revision: target.revision,
+      });
+      releasePublication();
+      expect((await edit).status).toBe(200);
+      const completed = await completedJob(lab, admitted.id);
+      expect(completed.result?.outcome).toBe('CONFIRMED');
+      expect((await lab.request(`/api/investigations/${admitted.id}/findings`)).data.items).toHaveLength(1);
+      expect(((await lab.request(`/api/targets/${target.id}`)).data as unknown as Target).revision).toBe(
+        target.revision + 1,
+      );
+    } finally {
+      releasePublication();
+      InvestigationService.prototype.startWorkers = startWorkers;
+      await edit;
+      await lab?.stop();
+    }
+  }, 180000);
+  it('scope_edits_and_cancel_settle_when_claimed_verification_waits_to_enter', async () => {
+    const observations: Array<{ mutation: boolean; worker: boolean; dispatches: number }> = [];
+    for (let iteration = 0; iteration < 24; iteration++) {
+      const directory = await mkdtemp(join(tmpdir(), 'scanner-mutation-entry-'));
+      const url = `file:${join(directory, 'application.db')}`;
+      const domain = new DomainStore(url);
+      await domain.initialize();
+      let dispatches = 0;
+      const forbiddenDispatch = async (): Promise<never> => {
+        dispatches++;
+        throw new Error('STALE_DISPATCH');
+      };
+      const service = new InvestigationService(
+        url,
+        undefined as never,
+        undefined as never,
+        undefined as never,
+        undefined as never,
+        undefined,
+        { propose: forbiddenDispatch, interpret: forbiddenDispatch, review: forbiddenDispatch },
+        { verify: forbiddenDispatch },
+        true,
+      );
+      await service.store.initialize();
+      const profileId = randomUUID();
+      const lineage = {
+        targetId: randomUUID(),
+        targetRevision: 1,
+        policyId: randomUUID(),
+        policyRevision: 1,
+        profiles: [{ profileId, profileRevision: 1, credentialRevision: 1 }],
+        scanId: randomUUID(),
+      };
+      const admitted = await service.store.admit(
+        'local-operator',
+        {
+          scanId: lineage.scanId,
+          idempotencyKey: randomUUID(),
+          maxRequests: 2,
+          maxTokens: 16384,
+          maxDurationSeconds: 180,
+        },
+        lineage,
+      );
+      await service.store.enqueue(
+        {
+          id: randomUUID(),
+          investigationId: admitted.investigation.id,
+          owner: 'local-operator',
+          lineage,
+          resourceBindingId: null,
+          state: 'QUEUED',
+          reason: null,
+          createdAt: new Date().toISOString(),
+          origin: 'playbook',
+          category: 'cors',
+          toolId: 'check_cors',
+          scanId: lineage.scanId,
+          evidenceIds: [randomUUID()],
+          referenceIds: ['WSTG-CLNT-07'],
+          preconditions: [],
+          expectedBehavior: 'Owned endpoint denies an unrelated origin.',
+          risk: 'passive',
+          maxRequests: 2,
+          maxDurationSeconds: 15,
+          maxTokens: 128,
+          maxRefinements: 0,
+        },
+        'dupin',
+      );
+      let validationEntered!: () => void, releaseValidation!: () => void, readEntered!: () => void;
+      const validationReady = new Promise<void>(resolve => {
+        validationEntered = resolve;
+      });
+      const validationGate = new Promise<void>(resolve => {
+        releaseValidation = resolve;
+      });
+      const readReady = new Promise<void>(resolve => {
+        readEntered = resolve;
+      });
+      const read = service.store.getInvestigation.bind(service.store);
+      service.store.getInvestigation = async (...args) => {
+        const value = await read(...args);
+        readEntered();
+        return value;
+      };
+      const kind = (['target', 'policy', 'profile'] as const)[iteration % 3]!;
+      let mutation = false,
+        worker = false;
+      const mutationTask = service
+        .coordinateMutation(
+          {
+            owner: 'local-operator',
+            kind,
+            id: kind === 'target' ? lineage.targetId : kind === 'policy' ? lineage.policyId : profileId,
+            revision: 1,
+          },
+          async () => {
+            validationEntered();
+            await validationGate;
+          },
+          async () => true,
+        )
+        .finally(() => {
+          mutation = true;
+        });
+      await validationReady;
+      const abort = new AbortController();
+      const workerTask = service.executeOne('local-operator', abort.signal).finally(() => {
+        worker = true;
+      });
+      await readReady;
+      await new Promise<void>(resolve => setImmediate(resolve));
+      abort.abort();
+      releaseValidation();
+      await Promise.race([Promise.all([mutationTask, workerTask]), new Promise(resolve => setTimeout(resolve, 150))]);
+      observations.push({ mutation, worker, dispatches });
+      const jobs = await service.store.list<Job>('scanner_verification_jobs', 'local-operator', 10, 0);
+      expect(jobs).toHaveLength(1);
+      expect(jobs[0]!.attempts).toBe(1);
+      expect(await service.store.list('scanner_findings', 'local-operator', 10, 0)).toEqual([]);
+      await service.store.close();
+      await domain.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+    expect(observations).toEqual(Array.from({ length: 24 }, () => ({ mutation: true, worker: true, dispatches: 0 })));
+  }, 30000);
+
+  it('shutdown_waits_for_pending_mutation_and_failed_edits_release_consecutive_barriers', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'scanner-mutation-close-'));
+    const url = `file:${join(directory, 'application.db')}`;
+    const domain = new DomainStore(url);
+    await domain.initialize();
+    const service = new InvestigationService(
+      url,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+      undefined as never,
+    );
+    await service.store.initialize();
+    const scope = { owner: 'local-operator', kind: 'target' as const, id: randomUUID(), revision: 1 };
+    try {
+      await expect(
+        service.coordinateMutation(
+          scope,
+          async () => {
+            throw new Error('REVISION_CONFLICT');
+          },
+          async () => {
+            throw new Error('MUST_NOT_COMMIT');
+          },
+        ),
+      ).rejects.toThrow('REVISION_CONFLICT');
+      const order: number[] = [];
+      await Promise.all(
+        [1, 2].map(value =>
+          service.coordinateMutation(
+            scope,
+            async () => {},
+            async () => {
+              order.push(value);
+            },
+          ),
+        ),
+      );
+      expect(order).toEqual([1, 2]);
+      let entered!: () => void, release!: () => void;
+      const ready = new Promise<void>(resolve => {
+        entered = resolve;
+      });
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const scanId = randomUUID();
+      const mutation = service
+        .coordinateMutation(
+          scope,
+          async () => {
+            entered();
+            await gate;
+          },
+          () =>
+            service.store.admit(
+              'local-operator',
+              {
+                scanId,
+                idempotencyKey: 'shutdown-mutation',
+                maxRequests: 1,
+                maxTokens: 16384,
+                maxDurationSeconds: 180,
+              },
+              {
+                targetId: scope.id,
+                targetRevision: 1,
+                policyId: randomUUID(),
+                policyRevision: 1,
+                profiles: [],
+                scanId,
+              },
+            ),
+        )
+        .then(
+          value => value,
+          error => error,
+        );
+      await ready;
+      let closed = false;
+      const closing = service.close().finally(() => {
+        closed = true;
+      });
+      await new Promise<void>(resolve => setImmediate(resolve));
+      const closedBeforeCommit = closed;
+      release();
+      const result = await mutation;
+      await closing;
+      expect(closedBeforeCommit).toBe(false);
+      expect(result.created).toBe(true);
+      const reader = new InvestigationStore(url);
+      try {
+        expect(await reader.getInvestigation(result.investigation.id, 'local-operator')).toMatchObject({
+          state: 'QUEUED',
+        });
+      } finally {
+        await reader.close();
+      }
+      await expect(
+        service.coordinateMutation(
+          scope,
+          async () => {},
+          async () => true,
+        ),
+      ).rejects.toMatchObject({ code: 'SERVER_CLOSING' });
+    } finally {
+      await service.store.close();
+      await domain.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
+  it('protected_scope_edit_releases_cancelled_worker_before_validation_and_server_close', async () => {
+    let service!: InvestigationService;
+    const startWorkers = InvestigationService.prototype.startWorkers;
+    InvestigationService.prototype.startWorkers = function (owner) {
+      service = this;
+      return startWorkers.call(this, owner);
+    };
+    const wire = await modelWire({ category: 'idor', path: '/owned/resource/vulnerable', interpretation: 'CONFIRMED' });
+    let releaseValidation = () => {},
+      releaseClaim = () => {};
+    let mutationTask: Promise<unknown> | undefined;
+    let workerSettled = false;
+    try {
+      const lab = await startDiscoveryLab({ investigationModels: wire.models });
+      InvestigationService.prototype.startWorkers = startWorkers;
+      for (const mode of ['cancel', 'target', 'policy', 'profile', 'consecutive'] as const) {
+        console.log(`MUTATION_ENTRY_CASE ${mode}`);
+        const owned = await ownedScan(lab, wire.scenario.path);
+        const admitted = await investigation(lab, owned.scan);
+        let claimed!: () => void, validationEntered!: () => void, readEntered!: () => void;
+        const claimReady = new Promise<void>(resolve => {
+          claimed = resolve;
+        });
+        const claimGate = new Promise<void>(resolve => {
+          releaseClaim = resolve;
+        });
+        const validationReady = new Promise<void>(resolve => {
+          validationEntered = resolve;
+        });
+        const validationGate = new Promise<void>(resolve => {
+          releaseValidation = resolve;
+        });
+        const readReady = new Promise<void>(resolve => {
+          readEntered = resolve;
+        });
+        let latestWorker: Promise<unknown> | undefined, selectedWorker: Promise<unknown> | undefined;
+        const realClaim = service.store.claim.bind(service.store);
+        service.store.claim = async (...args) => {
+          const job = await realClaim(...args);
+          if (job?.investigationId === admitted.id) {
+            selectedWorker = latestWorker;
+            claimed();
+            await claimGate;
+          }
+          return job;
+        };
+        let workerReadArmed = false;
+        const realRead = service.store.getInvestigation.bind(service.store);
+        service.store.getInvestigation = async (...args) => {
+          const value = await realRead(...args);
+          if (workerReadArmed && value.id === admitted.id) readEntered();
+          return value;
+        };
+        const realExecute = service.executeOne.bind(service);
+        service.executeOne = (...args) => {
+          const task = realExecute(...args);
+          latestWorker = task;
+          void task
+            .finally(() => {
+              if (task === selectedWorker) workerSettled = true;
+            })
+            .catch(() => undefined);
+          return task;
+        };
+        // Delay the actual inner coordinator's no-op validator, after the outer
+        // scan validator has finished. This exposes the real entry/barrier window.
+        const coordinate = service.coordinateMutation.bind(service);
+        service.coordinateMutation = (scope, validate, commit) =>
+          coordinate(
+            scope,
+            async () => {
+              await validate();
+              validationEntered();
+              await validationGate;
+            },
+            commit,
+          );
+        expect((await lab.request(`/api/investigations/${admitted.id}/plan`, 'POST', {})).status).toBe(200);
+        await Promise.race([
+          claimReady,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('CLAIM_NOT_REACHED')), 10000)),
+        ]);
+        workerSettled = false;
+        const target = (await lab.request(`/api/targets/${owned.target.id}`)).data as unknown as Target;
+        const { id: _id, owner: _owner, revision: _revision, ...input } = target;
+        let secondMutation: ReturnType<typeof lab.request> | undefined;
+        if (mode === 'policy') {
+          const policy = (await lab.request(`/api/policies/${target.policyId}`)).data as unknown as Policy;
+          const { id: _policyId, owner: _policyOwner, revision: _policyRevision, ...policyInput } = policy;
+          mutationTask = lab.request(
+            `/api/policies/${policy.id}`,
+            'PUT',
+            { ...policyInput, name: 'Updated policy' },
+            policy.revision,
+          );
+        } else if (mode === 'profile') {
+          const profile = (await lab.request(`/api/targets/${target.id}/profiles/${owned.profiles[0]!.id}`))
+            .data as unknown as Profile;
+          mutationTask = lab.request(
+            `/api/targets/${target.id}/profiles/${profile.id}`,
+            'PUT',
+            {
+              kind: 'header',
+              role: profile.role,
+              name: 'Updated viewer',
+              identityEndpoint: 'http://allowed.lab:18080/identity',
+              expectedIdentity: 'viewer-account',
+              credential: { name: 'x-api-key', value: lab.privateValues.viewer },
+            },
+            profile.revision,
+          );
+        } else
+          mutationTask = lab.request(
+            `/api/targets/${target.id}`,
+            'PUT',
+            { ...input, name: 'Updated target' },
+            target.revision,
+          );
+        await Promise.race([
+          validationReady,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('MUTATION_VALIDATOR_NOT_ENTERED')), 10000)),
+        ]);
+        workerReadArmed = true;
+        releaseClaim();
+        await Promise.race([
+          readReady,
+          new Promise((_, reject) => setTimeout(() => reject(new Error('WORKER_READ_NOT_ENTERED')), 10000)),
+        ]);
+        await new Promise<void>(resolve => setImmediate(resolve));
+        if (mode === 'consecutive')
+          secondMutation = lab.request(
+            `/api/targets/${target.id}`,
+            'PUT',
+            { ...input, name: 'Second edit' },
+            target.revision + 1,
+          );
+        if (mode === 'cancel') {
+          const current = await realRead(admitted.id, 'local-operator');
+          expect(
+            (await lab.request(`/api/investigations/${admitted.id}/cancel`, 'POST', {}, current.revision)).status,
+          ).toBe(200);
+          await Promise.race([
+            new Promise<void>(resolve => {
+              const check = () => (workerSettled ? resolve() : setTimeout(check, 5));
+              check();
+            }),
+            new Promise(resolve => setTimeout(resolve, 150)),
+          ]);
+        }
+        const settledBeforeValidation = workerSettled;
+        // Failed pre-fix runs remove the inert waiting entry only during teardown,
+        // before releasing validation. The assertion records its pending state.
+        if (mode === 'cancel' && !workerSettled)
+          (service as unknown as { activeScopes: Map<unknown, unknown> }).activeScopes.clear();
+        releaseValidation();
+        const changed = (await mutationTask) as { status: number };
+        expect(changed.status).toBe(200);
+        if (secondMutation) expect((await secondMutation).status).toBe(200);
+        if (mode === 'cancel') {
+          expect(settledBeforeValidation).toBe(true);
+          expect((await lab.request(`/api/investigations/${admitted.id}/jobs`)).data.items).toMatchObject([
+            { state: 'CANCELLED' },
+          ]);
+        } else {
+          const job = await completedJob(lab, admitted.id);
+          expect(job).toMatchObject({
+            state: 'COMPLETED',
+            result: { outcome: 'BLOCKED', reason: 'REVISION_CONFLICT' },
+          });
+        }
+        expect((await lab.request(`/api/investigations/${admitted.id}/findings`)).data.items).toEqual([]);
+        expect(wire.received.filter(item => (item as { kind: string }).kind !== 'propose')).toEqual([]);
+        service.store.claim = realClaim;
+        service.store.getInvestigation = realRead;
+        service.executeOne = realExecute;
+        service.coordinateMutation = coordinate;
+      }
+      await Promise.race([
+        lab.stop(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('SERVER_CLOSE_TIMEOUT')), 10000)),
+      ]);
+    } finally {
+      InvestigationService.prototype.startWorkers = startWorkers;
+      releaseClaim();
+      releaseValidation();
+      await mutationTask;
+    }
+  }, 360000);
+
+  it('resource_registration_renews_current_lineage_without_rebinding_history', async () => {
+    let service!: InvestigationService;
+    const startWorkers = InvestigationService.prototype.startWorkers;
+    InvestigationService.prototype.startWorkers = function (owner) {
+      service = this;
+      return startWorkers.call(this, owner);
+    };
+    let releaseClaim = () => {},
+      releaseRegistration = () => {};
+    const wire = await modelWire({
+      category: 'idor',
+      path: '/owned/resource/patched',
+      interpretation: 'NOT_REPRODUCED',
+    });
+    try {
+      const lab = await startDiscoveryLab({ investigationModels: wire.models });
+      InvestigationService.prototype.startWorkers = startWorkers;
+      const selected = await ownedScan(lab, wire.scenario.path);
+      const request = {
+        category: 'idor',
+        path: wire.scenario.path,
+        marker: 'LAB_MARKER_OWNEDRESOURCE01',
+        ownerProfileId: selected.profiles[0]!.id,
+        alternateProfileId: selected.profiles[1]!.id,
+      };
+      const register = (body = request) =>
+        lab.request(`/api/targets/${selected.target.id}/verification-resources`, 'POST', body);
+      const history: Record<string, unknown>[] = [];
+      const renew = async () => {
+        const result = await register();
+        expect([result.status, result.data.code ?? null]).toEqual([201, null]);
+        expect(history.some(item => item.id === result.data.id)).toBe(false);
+        history.push(result.data);
+        const repeated = await register();
+        expect(repeated.status).toBe(200);
+        expect(repeated.data).toEqual(result.data);
+        return result.data;
+      };
+      const first = await renew();
+      const admitted = await investigation(lab, selected.scan);
+      let claimed!: () => void;
+      const claimReady = new Promise<void>(resolve => {
+        claimed = resolve;
+      });
+      const claimGate = new Promise<void>(resolve => {
+        releaseClaim = resolve;
+      });
+      const claim = service.store.claim.bind(service.store);
+      service.store.claim = async (...args) => {
+        const job = await claim(...args);
+        if (job?.investigationId === admitted.id) {
+          claimed();
+          await claimGate;
+        }
+        return job;
+      };
+      expect((await lab.request(`/api/investigations/${admitted.id}/plan`, 'POST', {})).status).toBe(200);
+      await Promise.race([
+        claimReady,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('HISTORY_JOB_NOT_CLAIMED')), 10000)),
+      ]);
+      const updateTarget = async (extra: Record<string, unknown> = {}) => {
+        const target = (await lab.request(`/api/targets/${selected.target.id}`)).data as unknown as Target;
+        const { id, owner, revision, ...input } = target;
+        const changed = await lab.request(
+          `/api/targets/${id}`,
+          'PUT',
+          { ...input, name: 'Renewed owned target', ...extra },
+          revision,
+        );
+        expect(changed.status).toBe(200);
+        return changed.data as unknown as Target;
+      };
+      await updateTarget();
+      await renew(); // Pre-fix:409 RESOURCE_BINDING_CONFLICT after target revision changes.
+      releaseClaim();
+      service.store.claim = claim;
+      expect(await completedJob(lab, admitted.id)).toMatchObject({
+        result: { outcome: 'BLOCKED', reason: 'REVISION_CONFLICT' },
+      });
+      expect((await lab.request(`/api/investigations/${admitted.id}/hypotheses`)).data.items).toMatchObject([
+        { resourceBindingId: first.id },
+      ]);
+      const policy = (await lab.request(`/api/policies/${selected.target.policyId}`)).data as unknown as Policy;
+      const { id: policyId, owner: policyOwner, revision: policyRevision, ...policyInput } = policy;
+      expect(
+        (
+          await lab.request(
+            `/api/policies/${policy.id}`,
+            'PUT',
+            { ...policyInput, name: 'Renewed policy' },
+            policy.revision,
+          )
+        ).status,
+      ).toBe(200);
+      await updateTarget({ policyRevision: policy.revision + 1 });
+      await renew();
+      const checkProfiles = async () => {
+        const target = (await lab.request(`/api/targets/${selected.target.id}`)).data as unknown as Target;
+        const bindings = [];
+        for (const selectedProfile of selected.profiles) {
+          const profile = (await lab.request(`/api/targets/${target.id}/profiles/${selectedProfile.id}`))
+            .data as unknown as Profile;
+          const binding = {
+            targetRevision: target.revision,
+            policyRevision: target.policyRevision,
+            profileId: profile.id,
+            profileRevision: profile.revision,
+            credentialRevision: profile.credentialRevision,
+          };
+          const checked = await lab.request(`/api/targets/${target.id}/profiles/${profile.id}/check`, 'POST', binding);
+          expect(checked.status, String(checked.data.code ?? 'IDENTITY_CHECK')).toBe(200);
+          bindings.push({ ...binding, profileRevision: Number(checked.data.revision) });
+        }
+        return { target, bindings };
+      };
+      await checkProfiles();
+      await renew(); // Profile-only revision changes.
+      const profile = (await lab.request(`/api/targets/${selected.target.id}/profiles/${selected.profiles[0]!.id}`))
+        .data as unknown as Profile;
+      expect(
+        (
+          await lab.request(
+            `/api/targets/${selected.target.id}/profiles/${profile.id}`,
+            'PUT',
+            {
+              kind: 'header',
+              role: 'viewer',
+              name: 'Rotated viewer',
+              identityEndpoint: 'http://allowed.lab:18080/identity',
+              expectedIdentity: 'viewer-account',
+              credential: { name: 'x-api-key', value: lab.privateValues.viewer },
+            },
+            profile.revision,
+          )
+        ).status,
+      ).toBe(200);
+      await renew(); // Credential revision changes, even when re-registering the same value.
+      await updateTarget();
+      const identical = await Promise.all([register(), register()]);
+      expect(identical.map(item => item.status).sort()).toEqual([200, 201]);
+      expect(identical[0]!.data.id).toBe(identical[1]!.data.id);
+      history.push(identical[0]!.data);
+      expect((await register({ ...request, marker: 'LAB_MARKER_INCOMPATIBLE01' })).status).toBe(409);
+      await updateTarget();
+      const incompatible = await Promise.all([
+        register(),
+        register({ ...request, marker: 'LAB_MARKER_INCOMPATIBLE01' }),
+      ]);
+      expect(incompatible.map(item => item.status).sort()).toEqual([201, 409]);
+      history.push(incompatible.find(item => item.status === 201)!.data);
+      let captured!: () => void;
+      const capturedReady = new Promise<void>(resolve => {
+        captured = resolve;
+      });
+      const registrationGate = new Promise<void>(resolve => {
+        releaseRegistration = resolve;
+      });
+      const bind = service.store.bindOwnedResource.bind(service.store);
+      service.store.bindOwnedResource = async (...args) => {
+        captured();
+        await registrationGate;
+        return bind(...args);
+      };
+      const delayed = register();
+      await capturedReady;
+      await updateTarget();
+      releaseRegistration();
+      const rejected = await delayed;
+      expect(rejected).toMatchObject({ status: 409, data: { code: 'REVISION_CONFLICT' } });
+      service.store.bindOwnedResource = bind;
+      let validated!: () => void, releaseWrite!: () => void, controlEnqueued!: () => void;
+      const validatedReady = new Promise<void>(resolve => {
+        validated = resolve;
+      });
+      const writeGate = new Promise<void>(resolve => {
+        releaseWrite = resolve;
+      });
+      const controlReady = new Promise<void>(resolve => {
+        controlEnqueued = resolve;
+      });
+      releaseRegistration = releaseWrite;
+      const domain = (service as unknown as { control: { store: DomainStore } }).control.store;
+      const domainWrite = domain.write.bind(domain);
+      let observeControl = false;
+      domain.write = operation => {
+        if (observeControl) {
+          observeControl = false;
+          controlEnqueued();
+        }
+        return domainWrite(operation);
+      };
+      service.store.bindOwnedResource = (binding, validate, serialize) =>
+        bind(
+          binding,
+          async tx => {
+            await validate?.(tx);
+            validated();
+            await writeGate;
+          },
+          serialize,
+        );
+      const inTransaction = register();
+      await validatedReady;
+      observeControl = true;
+      const queuedEdit = updateTarget();
+      await Promise.race([
+        controlReady,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('CONTROL_WRITE_NOT_QUEUED')), 10000)),
+      ]);
+      releaseWrite();
+      const committed = await inTransaction;
+      expect(committed.status).toBe(201);
+      history.push(committed.data);
+      await queuedEdit;
+      domain.write = domainWrite;
+      service.store.bindOwnedResource = bind;
+      await renew();
+      expect((await register({ ...request, path: '/excluded' })).status).toBe(403);
+      expect(
+        (
+          await lab.request(`/api/targets/${selected.target.id}/verification-resources`, 'POST', {
+            category: 'cors',
+            path: request.path,
+            marker: request.marker,
+            publicProfileId: selected.profiles[0]!.id,
+          })
+        ).status,
+      ).toBe(403);
+      const beforeAdmin = (await lab.request(`/api/targets/${selected.target.id}`)).data as unknown as Target;
+      const privateMarker = 'LAB_MARKER_METADATASECRET01';
+      expect(
+        (
+          await lab.request(
+            `/api/targets/${selected.target.id}/profiles`,
+            'POST',
+            {
+              kind: 'header',
+              role: 'admin',
+              name: 'Metadata guard account',
+              identityEndpoint: 'http://allowed.lab:18080/identity',
+              expectedIdentity: 'admin-account',
+              credential: { name: 'x-api-key', value: privateMarker },
+            },
+            beforeAdmin.revision,
+          )
+        ).status,
+      ).toBe(201);
+      expect(await register({ ...request, marker: privateMarker })).toMatchObject({
+        status: 403,
+        data: { code: 'CREDENTIAL_METADATA_CONFLICT' },
+      });
+      const current = await checkProfiles();
+      await renew();
+      const scanAdmission = await lab.request(`/api/targets/${current.target.id}/scans`, 'POST', {
+        targetRevision: current.target.revision,
+        policyRevision: current.target.policyRevision,
+        mode: 'http',
+        idempotencyKey: randomUUID(),
+        profiles: current.bindings,
+      });
+      expect(scanAdmission.status).toBe(202);
+      const scan = await lab.wait(String(scanAdmission.data.id));
+      expect(scan.state).toBe('COMPLETED');
+      // Discovery records a fresh identity revision. Keep the prior registration
+      // immutable and explicitly renew once that new scan has completed.
+      const staleAfterScan = await investigation(lab, scan);
+      expect(await lab.request(`/api/investigations/${staleAfterScan.id}/plan`, 'POST', {})).toMatchObject({
+        status: 409,
+        data: { code: 'RESOURCE_BINDING_STALE' },
+      });
+      const latest = await renew();
+      const fresh = await investigation(lab, scan);
+      const planned = await lab.request(`/api/investigations/${fresh.id}/plan`, 'POST', {});
+      expect([planned.status, planned.data.code ?? null]).toEqual([200, null]);
+      expect((await completedJob(lab, fresh.id)).result?.outcome).toBe('NOT_REPRODUCED');
+      expect((await lab.request(`/api/investigations/${fresh.id}/hypotheses`)).data.items).toMatchObject([
+        { resourceBindingId: latest.id },
+      ]);
+      const records = await lab.query('SELECT id,data FROM scanner_owned_resources ORDER BY rowid');
+      expect(records).toHaveLength(history.length);
+      expect(records.map(row => JSON.parse(String(row.data)))).toEqual(history);
+      expect(await lab.query('SELECT resource_id FROM scanner_current_owned_resources')).toEqual([
+        { resource_id: latest.id },
+      ]);
+      await lab.restart();
+      expect(
+        await resourceSnapshotProcess(lab.settings.databaseUrl, {
+          id: String(first.id),
+          targetId: selected.target.id,
+          category: request.category,
+          path: request.path,
+        }),
+      ).toEqual({ historical: first, current: latest });
+      const reopened = new InvestigationStore(lab.settings.databaseUrl);
+      try {
+        expect(await reopened.getOwnedResource(String(first.id), 'local-operator')).toEqual(first);
+      } finally {
+        await reopened.close();
+      }
+      expect((await register()).data).toEqual(latest);
+      expect(await lab.query('SELECT id,data FROM scanner_owned_resources ORDER BY rowid')).toEqual(records);
+    } finally {
+      InvestigationService.prototype.startWorkers = startWorkers;
+      releaseClaim();
+      releaseRegistration();
+    }
+  }, 360000);
+
   it('real_mastra_sherlock_wire_receives_only_structured_local_advisory_candidates', planningWireAudit, 30000);
 
   it('planning_global_deadline_stops_sherlock_after_slow_nemo_and_remains_terminal_on_restart', async () => {
@@ -2215,31 +3228,52 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
     }
   }, 180000);
 
-  it('active_cancellation_aborts_model_wire_and_prevents_judge_egress', async () => {
-    const wire = await modelWire({
-      category: 'idor',
-      path: '/owned/resource/vulnerable',
-      interpretation: 'CONFIRMED',
-      pauseInterpret: true,
-    });
-    const lab = await startDiscoveryLab({ investigationModels: wire.models });
-    const owned = await ownedScan(lab, '/owned/resource/vulnerable');
-    const admitted = await investigation(lab, owned.scan);
-    const planned = await lab.request(`/api/investigations/${admitted.id}/plan`, 'POST', {});
-    expect(planned.status).toBe(200);
-    await Promise.race([
-      wire.interpretStarted,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('INTERPRET_WIRE_NOT_REACHED')), 60000)),
-    ]);
-    const current = (await lab.request(`/api/investigations/${admitted.id}`)).data as unknown as Investigation;
-    const cancelled = await lab.request(`/api/investigations/${admitted.id}/cancel`, 'POST', {}, current.revision);
-    expect(cancelled.status).toBe(200);
-    wire.releaseInterpret();
-    const job = await completedJob(lab, admitted.id);
-    expect(job.state).toBe('CANCELLED');
-    expect(wire.received.filter(item => (item as { kind: string }).kind === 'review')).toEqual([]);
-    expect((await lab.request(`/api/investigations/${admitted.id}/findings`)).data.items).toEqual([]);
-  }, 180000);
+  it.each(['cancel', 'scope edit'] as const)(
+    'active_cancellation_aborts_model_wire_and_prevents_judge_egress: %s',
+    async mode => {
+      const wire = await modelWire({
+        category: 'idor',
+        path: '/owned/resource/vulnerable',
+        interpretation: 'CONFIRMED',
+        pauseInterpret: true,
+      });
+      const lab = await startDiscoveryLab({ investigationModels: wire.models });
+      const owned = await ownedScan(lab, '/owned/resource/vulnerable');
+      const admitted = await investigation(lab, owned.scan);
+      const planned = await lab.request(`/api/investigations/${admitted.id}/plan`, 'POST', {});
+      expect(planned.status).toBe(200);
+      await Promise.race([
+        wire.interpretStarted,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('INTERPRET_WIRE_NOT_REACHED')), 60000)),
+      ]);
+      if (mode === 'cancel') {
+        const current = (await lab.request(`/api/investigations/${admitted.id}`)).data as unknown as Investigation;
+        const cancelled = await lab.request(`/api/investigations/${admitted.id}/cancel`, 'POST', {}, current.revision);
+        expect(cancelled.status).toBe(200);
+      } else {
+        const target = (await lab.request(`/api/targets/${owned.target.id}`)).data as unknown as Target;
+        const { id, owner, revision, ...input } = target;
+        const changed = await Promise.race([
+          lab.request(`/api/targets/${id}`, 'PUT', { ...input, name: 'Changed while interpreting' }, revision),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('RUNNING_SCOPE_EDIT_TIMEOUT')), 10000)),
+        ]);
+        expect(changed.status).toBe(200);
+      }
+      wire.releaseInterpret();
+      if (mode === 'cancel') expect((await completedJob(lab, admitted.id)).state).toBe('CANCELLED');
+      else {
+        // The consumed lease remains conservative until retry/recovery; the
+        // cancelled worker must not publish from its old authorization snapshot.
+        expect((await lab.request(`/api/investigations/${admitted.id}/jobs`)).data.items).toMatchObject([
+          { state: 'LEASED', result: null },
+        ]);
+        expect(await lab.query('SELECT id FROM scanner_verification_proofs')).toEqual([]);
+      }
+      expect(wire.received.filter(item => (item as { kind: string }).kind === 'review')).toEqual([]);
+      expect((await lab.request(`/api/investigations/${admitted.id}/findings`)).data.items).toEqual([]);
+    },
+    180000,
+  );
 
   it('queue_fencing_budgets_cancel_and_schedule_restart', async () => {
     const lab = await startDiscoveryLab();
@@ -2816,7 +3850,7 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
     }
   }, 180000);
 
-  it('investigation_worker_auth_and_schedule_admission_variants', async () => {
+  it('disabled_investigation_schedules_do_not_admit_work_after_restart', async () => {
     const lab = await startDiscoveryLab();
     const selected = await discoveryCase(lab, { path: '/catalog' });
     const store = new InvestigationStore(lab.settings.databaseUrl);
@@ -2875,73 +3909,5 @@ describe('Grounded investigations through protected Hono, libSQL and the owned g
       await store.close();
     }
     await closeDiscoveryLabs();
-
-    const authWire = await modelWire({
-      category: 'idor',
-      path: '/owned/resource/vulnerable',
-      interpretation: 'CONFIRMED',
-    });
-    const authLab = await startDiscoveryLab({ investigationModels: authWire.models });
-    const expiresAt = new Date(Date.now() + 60000).toISOString();
-    const owned = await ownedScan(authLab, '/owned/resource/vulnerable', 'idor', expiresAt);
-    const authCase = await investigation(authLab, owned.scan, 2);
-    await awaitProfileExpiry(expiresAt);
-    const viewer = (await authLab.request(`/api/targets/${owned.target.id}/profiles/${owned.profiles[0]!.id}`))
-      .data as unknown as Profile;
-    const target = (await authLab.request(`/api/targets/${owned.target.id}`)).data as unknown as Target;
-    expect((viewer as Profile & { identity: { status: string } }).identity.status).toBe('AUTH_REQUIRED');
-    const beforeAuthJob = await authLab.stats();
-    const authFull = (await authLab.request(`/api/investigations/${authCase.id}`)).data as unknown as Investigation;
-    const authStore = new InvestigationStore(authLab.settings.databaseUrl);
-    await authStore.initialize();
-    try {
-      const ownedEvidence = owned.evidence.find(item => item.observation.path === '/owned/resource/vulnerable');
-      expect(ownedEvidence).toBeDefined();
-      const queued = await authStore.enqueue(
-        queuedHypothesis(authFull, owned.scan, ownedEvidence!.id, 'idor'),
-        'dupin',
-      );
-      expect(queued.created).toBe(true);
-      const classified = await completedJob(authLab, authCase.id);
-      expect(classified.state).toBe('COMPLETED');
-      expect(classified.result?.outcome, JSON.stringify(classified.result)).toBe('AUTH_REQUIRED');
-      expect(classified.result?.reason).toBe('AUTH_REQUIRED');
-      expect(classified.attempts).toBe(1);
-      expect((await authLab.request(`/api/investigations/${authCase.id}/findings`)).data.items).toEqual([]);
-      const afterAuthJob = await authLab.stats();
-      expect(afterAuthJob['owned-owned-resource-vulnerable-viewer']).toBe(
-        beforeAuthJob['owned-owned-resource-vulnerable-viewer'],
-      );
-      expect(afterAuthJob['owned-owned-resource-vulnerable-member']).toBe(
-        beforeAuthJob['owned-owned-resource-vulnerable-member'],
-      );
-
-      const recurrence = await authLab.request(`/api/targets/${target.id}/recurrence`, 'PUT', {
-        targetId: target.id,
-        cron: '* * * * *',
-        timezone: 'UTC',
-        enabled: true,
-      });
-      expect(recurrence.status).toBe(200);
-      await tickRecurrenceAtNextWindow(authStore, target.id, true);
-      const latestViewer = (await authLab.request(`/api/targets/${target.id}/profiles/${viewer.id}`))
-        .data as unknown as Profile;
-      const revoked = await authLab.request(
-        `/api/targets/${target.id}/profiles/${viewer.id}`,
-        'DELETE',
-        undefined,
-        latestViewer.revision,
-      );
-      expect(revoked.status).toBe(204);
-      await authLab.restart();
-      const afterRevoke = (await authLab.request('/api/investigations?limit=100')).data.items as Investigation[];
-      expect(afterRevoke.filter(item => item.lineage.targetId === target.id)).toHaveLength(1);
-      const revokedEvents = await authLab.query(
-        `SELECT state FROM scanner_recurrence_events WHERE target_id='${target.id}'`,
-      );
-      expect(revokedEvents.map(row => row.state)).toEqual(['CANCELLED']);
-    } finally {
-      await authStore.close();
-    }
   }, 180000);
 });

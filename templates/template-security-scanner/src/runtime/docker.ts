@@ -57,17 +57,26 @@ const cleanupImageIdsSchema = z
 
 export const imageReceiptSchema = z
   .object({
+    /** Image-receipt format version. */
     schemaVersion: z.literal(1),
+    /** Immutable Docker image identifier. */
     imageId: z.string().regex(/^sha256:[a-f0-9]{64}$/),
+    /** Pinned Katana base-image reference. */
     source: z.literal(KATANA_BASE),
+    /** Fingerprint of the pinned local build inputs. */
     sourceHash: z.string().regex(/^[a-f0-9]{64}$/),
+    /** Native Linux platform for this image. */
     platform: z.enum(['linux/arm64', 'linux/amd64']),
+    /** Installation ownership label derived from the template root. */
     owner: z.string(),
+    /** Docker-reported image size in bytes. */
     sizeBytes: z.number().positive(),
+    /** Owned image and matching ancestor IDs for bounded consumer-aware cleanup. */
     cleanupImageIds: cleanupImageIdsSchema.optional(),
   })
   .refine(receipt => !receipt.cleanupImageIds || receipt.cleanupImageIds[0] === receipt.imageId);
 
+/** Verified locally built image and its bounded cleanup provenance. */
 export type ImageReceipt = z.infer<typeof imageReceiptSchema>;
 
 // Classic Docker builds can retain a labeled parent below the final run-label

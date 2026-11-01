@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import {
-  get,
   send,
   type Advisory,
   type AgentData,

@@ -4,10 +4,15 @@ import { ControlPlaneError } from './contracts.js';
 
 const envelopeSchema = z
   .object({
+    /** Credential-envelope format version. */
     version: z.literal(1),
+    /** Fingerprint identifying the encryption key; never the key itself. */
     keyId: z.string().regex(/^[a-f0-9]{16}$/),
+    /** Unique authenticated-encryption nonce. */
     nonce: z.string().regex(/^[a-f0-9]{24}$/),
+    /** Authenticated-encryption integrity tag. */
     tag: z.string().regex(/^[a-f0-9]{32}$/),
+    /** Encrypted credential bytes; never exported as profile metadata. */
     ciphertext: z
       .string()
       .min(2)
@@ -15,7 +20,17 @@ const envelopeSchema = z
       .regex(/^(?:[a-f0-9]{2})+$/),
   })
   .strict();
-export type CredentialBinding = { targetId: string; profileId: string; role: string; credentialRevision: number };
+/** Authenticated context bound to a sealed credential envelope. */
+export type CredentialBinding = {
+  /** Authorized target to which this record belongs. */
+  targetId: string;
+  /** Identity profile used for this observation or operation. */
+  profileId: string;
+  /** Application role represented by this identity or observation. */
+  role: string;
+  /** Credential version bound to this operation; changes invalidate prior authorization. */
+  credentialRevision: number;
+};
 const associatedData = (binding: CredentialBinding) =>
   Buffer.from(
     JSON.stringify([

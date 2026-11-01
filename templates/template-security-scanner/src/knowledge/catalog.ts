@@ -13,10 +13,15 @@ const path = z
 const digest = z.string().regex(/^[a-f0-9]{64}$/);
 const reference = z
   .object({
+    /** Stable local reference identifier. */
     id: z.string().min(3).max(80),
+    /** Offline source collection: WSTG, ASVS, CWE, or CAPEC. */
     source,
+    /** Human-readable reference title. */
     title: z.string().min(1).max(240),
+    /** Relative bundled reference path verified against the integrity manifest. */
     file: path,
+    /** Optional bounded excerpt used instead of the complete source file. */
     text: z.string().max(10000).optional(),
   })
   .strict();
@@ -40,6 +45,7 @@ const manifestSchema = z
     references: z.array(reference).min(8),
   })
   .strict();
+/** Pinned offline catalog entry with a local source file and optional excerpt. */
 export type Reference = z.infer<typeof reference>;
 type Manifest = z.infer<typeof manifestSchema>;
 
@@ -49,7 +55,6 @@ const catalogError = () => new ControlPlaneError('CATALOG_INTEGRITY_FAILED', 503
 
 export class ReferenceCatalog {
   private readonly client;
-  private manifest?: Manifest;
   private readonly root: string;
 
   constructor(databaseUrl: string, root = resolve(process.cwd(), 'references')) {
@@ -99,7 +104,6 @@ export class ReferenceCatalog {
     } catch {
       throw catalogError();
     }
-    this.manifest = manifest;
     return manifest;
   }
 

@@ -11,7 +11,15 @@ const commandInput = z
   })
   .strict();
 const katanaBrand: unique symbol = Symbol('fixed-katana-command');
-export type KatanaCommand = { executable: 'katana'; args: string[]; [katanaBrand]: true };
+/** Opaque fixed Katana invocation produced only by the validated command builder. */
+export type KatanaCommand = {
+  /** Fixed allowlisted crawler executable. */
+  executable: 'katana';
+  /** Validated fixed arguments; credentials are never command arguments. */
+  args: string[];
+  /** Brand assigned by the trusted builder, never accepted from API input. */
+  [katanaBrand]: true;
+};
 export function katanaCommand(input: z.infer<typeof commandInput>): KatanaCommand {
   const { entryUrl, mode, proxy } = commandInput.parse(input);
   const args = [

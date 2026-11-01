@@ -2,6 +2,7 @@ import { isAbsolute, relative, resolve, sep } from 'node:path';
 import { z } from 'zod';
 import type { OpenAICompatibleConfig } from '@mastra/core/llm';
 import { parseCron } from '../investigation/schedule.js';
+import { INSTANCE_DATABASE_NAME } from './storage-names.js';
 
 export const KATANA_BASE =
   'projectdiscovery/katana@sha256:20c42a63b71f0c2e95cb02d973e8887e70ad65ea9cb818183f163143275e746c';
@@ -13,34 +14,54 @@ const integerSetting = (minimum: number, maximum: number, fallback: string) =>
 
 const environmentSchema = z
   .object({
+    /** Supported discovery implementation. */
     DISCOVERY_DRIVER: z.literal('katana').default('katana'),
+    /** Supported local sandbox implementation. */
     SANDBOX_DRIVER: z.literal('docker').default('docker'),
+    /** Durable local queue implementation. */
     QUEUE_DRIVER: z.literal('libsql').default('libsql'),
+    /** Local persistence implementation. */
     STORAGE_DRIVER: z.literal('libsql').default('libsql'),
+    /** Relative file URL under data/ for application-owned state. */
     DATABASE_URL: z
       .string()
       .regex(/^file:\.\/data\/[a-zA-Z0-9_-]+\.db$/)
+      .refine(value => {
+        const application = value.slice('file:./data/'.length);
+        const native = application.replace(/\.db$/, '-mastra.db');
+        return [application, native].every(name => name.toLowerCase() !== INSTANCE_DATABASE_NAME);
+      })
       .default('file:./data/security-scanner.db'),
+    /** Local tag for the image built from pinned Katana inputs. */
     DOCKER_DISCOVERY_IMAGE: z
       .string()
       .regex(/^security-scanner\/katana:[a-zA-Z0-9_.-]+$/)
       .default('security-scanner/katana:1.8.0'),
+    /** Requested native Linux Docker platform; discovery capability checks may narrow support. */
     DOCKER_PLATFORM: z.enum(['linux/arm64', 'linux/amd64']).default('linux/arm64'),
+    /** Absolute local Docker Unix socket path. */
     DOCKER_SOCKET: z
       .string()
       .max(4096)
       .regex(/^\/[^\0\r\n]+$/)
       .default('/var/run/docker.sock'),
+    /** Whether to retain the owned base image after its consumers stop. */
     DOCKER_RETAIN_SHARED_BASE_IMAGE: booleanSetting.prefault('false'),
+    /** Required cleanup policy for owned ephemeral scan images. */
     DOCKER_REMOVE_SCAN_IMAGES: z.literal('true').default('true'),
+    /** Explicit opt-in to authorized discovery and confined identity checks. */
     SCANNER_DISCOVERY_ENABLED: booleanSetting.prefault('false'),
+    /** Explicit opt-in to planning and reassessment; enabled models can incur charges. */
     SCANNER_INVESTIGATION_ENABLED: booleanSetting.prefault('false'),
+    /** Explicit opt-in to scheduled external advisory synchronization. */
     SCANNER_ADVISORY_SYNC_ENABLED: booleanSetting.prefault('false'),
+    /** Explicit five-field cadence for advisory synchronization. */
     SCANNER_ADVISORY_SYNC_CRON: z
       .string()
       .max(100)
       .refine(value => parseCron(value) !== null)
       .optional(),
+    /** Explicit IANA timezone for advisory synchronization. */
     SCANNER_ADVISORY_SYNC_TIMEZONE: z
       .string()
       .min(1)
@@ -55,23 +76,33 @@ const environmentSchema = z
         }
       })
       .optional(),
+    /** Sandbox memory ceiling in mebibytes. */
     SANDBOX_MEMORY_MIB: integerSetting(512, 2048, '1024'),
+    /** Maximum sandbox process count, including browser children. */
     SANDBOX_PIDS: integerSetting(64, 512, '256'),
+    /** Timeout in milliseconds for bounded runtime commands. */
     COMMAND_TIMEOUT_MS: integerSetting(1000, 60000, '20000'),
+    /** Retained-output byte ceiling for setup and diagnostic commands. */
     OUTPUT_LIMIT_BYTES: integerSetting(1024, 65536, '8192'),
+    /** Fixed local session lifetime in seconds. */
     CONTROL_SESSION_TTL_SECONDS: integerSetting(1, 3600, '1800'),
+    /** Private random secret used only to establish the local operator session. */
     CONTROL_BOOTSTRAP_SECRET: z
       .string()
       .min(32)
       .max(256)
       .regex(/^[a-zA-Z0-9_-]+$/)
       .optional(),
+    /** Private 32-byte credential-encryption key encoded as lowercase hexadecimal. */
     SCANNER_ENCRYPTION_KEY: z
       .string()
       .regex(/^[a-f0-9]{64}$/)
       .optional(),
+    /** Loopback HTTP listener port. */
     PORT: integerSetting(1024, 65535, '4111'),
+    /** Supported Morph model used by Nemo, Sherlock, and Dupin. */
     EXPLORER_MODEL: z.literal('morph-dsv41flash-abliterated').default('morph-dsv41flash-abliterated'),
+    /** Supported Morph model used for independent Watson review. */
     JUDGE_MODEL: z.literal('morph/morph-glm53-744b').default('morph/morph-glm53-744b'),
   })
   .superRefine((settings, context) => {
@@ -123,6 +154,7 @@ export function loadSettings(environment: NodeJS.ProcessEnv = process.env, root 
   };
 }
 
+/** Validated runtime settings with absolute application/native storage paths. */
 export type Settings = ReturnType<typeof loadSettings>;
 
 export function diagnostic(error: unknown) {

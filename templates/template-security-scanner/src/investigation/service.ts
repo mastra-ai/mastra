@@ -29,15 +29,24 @@ import type { InvestigationModels, ModelBudget, PlanningResources } from './mode
 import { deterministicOutcome, verificationProofSchema, type VerificationProof } from './verification.js';
 import { forbiddenCredentialValues, SecretGuard } from '../discovery/parser.js';
 
+/** Trusted allowlisted verification boundary; models cannot dispatch this driver. */
 export interface VerificationDriver {
+  /** Execute one bounded capability and return only sanitized deterministic facts. */
   verify(input: {
+    /** Persisted fenced job whose requests were reserved before execution. */
     jobId: string;
+    /** Complete discovery scan providing the immutable source lineage. */
     scan: Scan;
+    /** Grounded proposal fixing the category, capability, evidence, and limits. */
     hypothesis: Hypothesis;
+    /** Current consumed approval for active verification, or null for passive work. */
     approval: Approval | null;
+    /** Exact registered owned-resource snapshot, or null when prerequisites are absent. */
     resource: OwnedResource | null;
+    /** Cancellation, shutdown, and absolute-deadline signal. */
     signal: AbortSignal;
   }): Promise<VerificationProof>;
+  /** Reconcile recorded owned resources for these jobs after interruption. */
   recover?(jobIds: string[]): Promise<void>;
 }
 
@@ -54,7 +63,7 @@ export class InvestigationService {
   private readonly active = new Map<string, Set<AbortController>>();
   private readonly activeScopes = new Map<AbortController, { lineage: Lineage; finished: Promise<void> }>();
   private mutations: Promise<unknown> = Promise.resolve();
-  private mutationBarrier: Promise<void> = Promise.resolve();
+  private mutationBarrier?: Promise<void>;
   private readonly closing = new AbortController();
   constructor(
     databaseUrl: string,
@@ -95,15 +104,14 @@ export class InvestigationService {
     this.closing.abort();
     for (const controllers of this.active.values()) for (const controller of controllers) controller.abort();
     await Promise.allSettled([...this.workers]);
+    await this.mutations;
     await this.store.close();
   }
   startWorkers(owner: string) {
     if (this.workerTimer) return;
     const tick = () => {
       if (this.closing.signal.aborted || this.workers.size >= 6) return;
-      const task = this.executeOne(owner, this.closing.signal).catch(() => undefined);
-      this.workers.add(task);
-      void task.finally(() => this.workers.delete(task));
+      void this.executeOne(owner, this.closing.signal).catch(() => undefined);
     };
     this.workerTimer = setInterval(tick, 1000);
     this.workerTimer.unref();
@@ -114,6 +122,7 @@ export class InvestigationService {
     validate: () => Promise<void>,
     commit: () => Promise<T>,
   ): Promise<T> {
+    if (this.closing.signal.aborted) throw new ControlPlaneError('SERVER_CLOSING', 503);
     const operation = this.mutations.then(async () => {
       let release: () => void = () => {};
       this.mutationBarrier = new Promise<void>(resolve => {
@@ -132,6 +141,7 @@ export class InvestigationService {
         await Promise.all(affected.map(([, entry]) => entry.finished));
         return await commit();
       } finally {
+        this.mutationBarrier = undefined;
         release();
       }
     });
@@ -235,32 +245,6 @@ export class InvestigationService {
       profiles.some(profile => profile.kind !== 'public')
     )
       throw new ControlPlaneError('RESOURCE_PROFILES_INVALID', 403);
-    const safeContext = await this.control.store.write(tx =>
-      this.control.scanContext(
-        owner,
-        targetId,
-        {
-          targetRevision: target.revision,
-          policyRevision: target.policyRevision,
-          operation: 'identity',
-          profiles: profiles.map(profile => ({
-            targetRevision: target.revision,
-            policyRevision: target.policyRevision,
-            profileId: profile.id,
-            profileRevision: profile.revision,
-            credentialRevision: profile.credentialRevision,
-          })),
-        },
-        tx,
-      ),
-    );
-    try {
-      const guard = new SecretGuard(forbiddenCredentialValues(safeContext.guardHeaders.map(item => item.headers)));
-      if (guard.unsafe(JSON.stringify(request))) throw new ControlPlaneError('CREDENTIAL_METADATA_CONFLICT', 403);
-    } finally {
-      for (const header of [...safeContext.headers, ...safeContext.guardHeaders.map(item => item.headers)])
-        for (const name of Object.keys(header)) delete header[name];
-    }
     const binding: OwnedResource = {
       ...request,
       id: randomUUID(),
@@ -275,7 +259,34 @@ export class InvestigationService {
       })),
       createdAt: new Date().toISOString(),
     };
-    return this.store.bindOwnedResource(binding);
+    return this.store.bindOwnedResource(
+      binding,
+      async tx => {
+        const safeContext = await this.control.scanContext(
+          owner,
+          targetId,
+          {
+            targetRevision: binding.targetRevision,
+            policyRevision: binding.policyRevision,
+            operation: 'identity',
+            profiles: binding.profileRevisions.map(profile => ({
+              ...profile,
+              targetRevision: binding.targetRevision,
+              policyRevision: binding.policyRevision,
+            })),
+          },
+          tx,
+        );
+        try {
+          const guard = new SecretGuard(forbiddenCredentialValues(safeContext.guardHeaders.map(item => item.headers)));
+          if (guard.unsafe(JSON.stringify(request))) throw new ControlPlaneError('CREDENTIAL_METADATA_CONFLICT', 403);
+        } finally {
+          for (const header of [...safeContext.headers, ...safeContext.guardHeaders.map(item => item.headers)])
+            for (const name of Object.keys(header)) delete header[name];
+        }
+      },
+      this.control.store.write.bind(this.control.store),
+    );
   }
   async propose(owner: string, investigationId: string, input: unknown) {
     const investigation = await this.store.getInvestigation(investigationId, owner);
@@ -479,12 +490,47 @@ export class InvestigationService {
       },
     };
   }
-  async executeOne(owner: string, signal = AbortSignal.timeout(60000)) {
+  executeOne(owner: string, signal = AbortSignal.timeout(60000)) {
+    const task = this.executeClaimed(owner, signal);
+    this.workers.add(task);
+    void task.finally(() => this.workers.delete(task)).catch(() => undefined);
+    return task;
+  }
+  private async enterScope(
+    controller: AbortController,
+    lineage: Lineage,
+    finished: Promise<void>,
+    signal: AbortSignal,
+  ) {
+    // Recheck after every barrier: another queued mutation can install a new one
+    // before this entrant resumes. Registration and the final check are atomic.
+    while (this.mutationBarrier) {
+      signal.throwIfAborted();
+      const barrier = this.mutationBarrier;
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          cleanup();
+          reject(signal.reason);
+        };
+        const cleanup = () => signal.removeEventListener('abort', abort);
+        signal.addEventListener('abort', abort, { once: true });
+        void barrier.then(() => {
+          cleanup();
+          resolve();
+        });
+        if (signal.aborted) abort();
+      });
+    }
+    signal.throwIfAborted();
+    this.activeScopes.set(controller, { lineage, finished });
+  }
+  private async executeClaimed(owner: string, signal: AbortSignal) {
+    if (this.closing.signal.aborted || signal.aborted) return null;
     if (!this.models || !this.verifier) throw new ControlPlaneError('VERIFICATION_DISABLED', 503);
     const job = await this.store.claim(owner, 60000, 6, 3);
     if (!job) return null;
     const controller = new AbortController();
-    const workerSignal = AbortSignal.any([signal, controller.signal, AbortSignal.timeout(60000)]);
+    const workerSignal = AbortSignal.any([signal, this.closing.signal, controller.signal, AbortSignal.timeout(60000)]);
     let deadlineSignal: AbortSignal | null = null;
     let joined = workerSignal;
     const controllers = this.active.get(job.investigationId) ?? new Set<AbortController>();
@@ -494,6 +540,7 @@ export class InvestigationService {
     const finished = new Promise<void>(resolve => {
       finish = resolve;
     });
+    let publishing = false;
     try {
       const investigation = await this.store.getInvestigation(job.investigationId, owner);
       const remainingMs =
@@ -501,8 +548,7 @@ export class InvestigationService {
       if (remainingMs <= 0) throw new ControlPlaneError('INVESTIGATION_DURATION_EXCEEDED', 409);
       deadlineSignal = AbortSignal.timeout(remainingMs);
       joined = AbortSignal.any([workerSignal, deadlineSignal]);
-      this.activeScopes.set(controller, { lineage: investigation.lineage, finished });
-      await this.mutationBarrier;
+      await this.enterScope(controller, investigation.lineage, finished, joined);
       joined.throwIfAborted();
       const scan = await this.validateLineage(owner, investigation);
       const hypothesis = await this.store.getHypothesis(job.hypothesisId, owner);
@@ -524,6 +570,7 @@ export class InvestigationService {
           approval.callback !== ownedApprovalCallback(this.ownedLab, approval.id))
       )
         throw new ControlPlaneError('APPROVAL_CONFLICT', 409);
+      joined.throwIfAborted();
       const proof = verificationProofSchema.parse(
         await this.verifier.verify({ jobId: job.id, scan, hypothesis, approval, resource, signal: joined }),
       );
@@ -572,14 +619,17 @@ export class InvestigationService {
         usageTokens: reviewed?.usageTokens ?? interpreted.usageTokens,
       };
       await this.reviewedPlaybook(hypothesis);
-      return this.store.publish(job.id, owner, job.fence, result, outcome === 'CONFIRMED', proof);
+      joined.throwIfAborted();
+      publishing = true;
+      return await this.store.publish(job.id, owner, job.fence, result, outcome === 'CONFIRMED', proof);
     } catch (error) {
+      if (publishing) throw error;
       if (controller.signal.aborted || signal.aborted) return null;
       if (
         deadlineSignal?.aborted ||
         (error instanceof ControlPlaneError && error.code === 'INVESTIGATION_DURATION_EXCEEDED')
       )
-        return this.store.fail(job.id, owner, job.fence, 'INVESTIGATION_DURATION_EXCEEDED', false);
+        return await this.store.fail(job.id, owner, job.fence, 'INVESTIGATION_DURATION_EXCEEDED', false);
       if (joined.aborted) return null;
       if (
         error instanceof ControlPlaneError &&
@@ -597,7 +647,7 @@ export class InvestigationService {
           'EVIDENCE_UNAVAILABLE',
         ].includes(error.code)
       )
-        return this.store.publish(
+        return await this.store.publish(
           job.id,
           owner,
           job.fence,

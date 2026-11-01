@@ -5,11 +5,12 @@ import { open } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ControlPlaneError } from '../core/contracts.js';
 import type { Settings } from '../config/settings.js';
+import { INSTANCE_DATABASE_NAME } from '../config/storage-names.js';
 
 // The SQLite write transaction serializes stale-instance recovery. A live or
 // ambiguous PID fails closed even when its event loop/heartbeat is delayed.
 export async function acquireInstance(settings: Settings) {
-  const path = join(settings.dataDirectory, 'discovery-instance.db');
+  const path = join(settings.dataDirectory, INSTANCE_DATABASE_NAME);
   const file = await open(path, constants.O_CREAT | constants.O_RDWR | constants.O_NOFOLLOW, 0o600);
   try {
     const stat = await file.stat();

@@ -7,7 +7,7 @@ import {
   WATSON_REVIEW_INSTRUCTIONS,
   INVESTIGATION_INSTRUCTIONS,
   INVESTIGATION_AGENT_LIMITS,
-} from '../../src/investigation/agents.js';
+} from '../../src/mastra/agents/investigation-agents.js';
 import { MastraInvestigationModels } from '../../src/investigation/models.js';
 import { verificationProofSchema, deterministicOutcome } from '../../src/investigation/verification.js';
 import { PlaybookRegistry, type Playbook } from '../../src/knowledge/playbooks.js';

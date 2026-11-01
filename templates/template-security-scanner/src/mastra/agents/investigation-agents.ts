@@ -1,8 +1,6 @@
 import { Agent } from '@mastra/core/agent';
-import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { z } from 'zod';
-import { morphModelConfiguration, type Settings } from '../config/settings.js';
-import { hypothesisRules } from './contracts.js';
+import { morphModelConfiguration, type Settings } from '../../config/settings.js';
+import { hypothesisRules } from '../../investigation/contracts.js';
 
 // Disable both transport retries and Mastra's separate default error-processor retry lane.
 export const INVESTIGATION_AGENT_LIMITS = {
@@ -21,14 +19,6 @@ export const INVESTIGATION_INSTRUCTIONS = {
     'Assess the fixed claim VULNERABILITY_PRESENT using only the supplied minimized facts and category confirmation condition. CONFIRMED means complete admissible evidence demonstrates the vulnerability; NOT_REPRODUCED means a completed valid test did not demonstrate it. expectedCriterion is separate policy context: SECURE_BEHAVIOR describes the safe expectation; AUTHORIZED_REPRODUCTION describes an authorized positive reproduction, not a safe expectation to invert. INCONCLUSIVE means incomplete, withheld, ambiguous or insufficient evidence. NOT_APPLICABLE means the surface is absent; PRECONDITION_MISSING means required resources are unavailable; AUTH_REQUIRED means identity is invalid; OUT_OF_SCOPE means scope is not approved; BLOCKED means policy prevents the test; EXECUTION_ERROR means execution failed. Never infer a verdict from the category or policy text alone. You cannot select or execute a tool, change its inputs or override deterministic gates.',
   watson: WATSON_REVIEW_INSTRUCTIONS,
 } as const;
-
-const referenceInput = z.object({ investigationId: z.string().uuid(), evidenceIds: z.array(z.string().uuid()).max(8) });
-const referenceStep = createStep({
-  id: 'bounded-evidence-reference',
-  inputSchema: referenceInput,
-  outputSchema: referenceInput,
-  execute: async ({ inputData }) => referenceInput.parse(inputData),
-});
 
 export function createInvestigationAgents(settings: Settings) {
   const models = morphModelConfiguration(settings);
@@ -62,35 +52,5 @@ export function createInvestigationAgents(settings: Settings) {
       instructions: INVESTIGATION_INSTRUCTIONS.watson,
     }),
   };
-  const workflows = {
-    investigationReference: createWorkflow({
-      id: 'investigation-reference',
-      inputSchema: referenceInput,
-      outputSchema: referenceInput,
-    })
-      .then(referenceStep)
-      .commit(),
-  };
-  return { agents, workflows };
-}
-
-export function createInvestigationPlanningWorkflow(processDue: () => Promise<void>) {
-  const empty = z.object({}).strict();
-  const step = createStep({
-    id: 'process-due-local-investigations',
-    inputSchema: empty,
-    outputSchema: empty,
-    execute: async () => {
-      await processDue();
-      return {};
-    },
-  });
-  return createWorkflow({
-    id: 'local-investigation-planning',
-    inputSchema: empty,
-    outputSchema: empty,
-    schedule: { id: 'local-planning-wake', cron: '* * * * *', timezone: 'UTC', inputData: {} },
-  })
-    .then(step)
-    .commit();
+  return agents;
 }

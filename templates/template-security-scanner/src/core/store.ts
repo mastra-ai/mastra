@@ -1,8 +1,17 @@
 import { createClient, type Transaction } from '@libsql/client';
 import { ControlPlaneError } from './contracts.js';
 
+/** Supported operator-owned control-plane record category. */
 export type RecordKind = 'policy' | 'target' | 'profile';
-export type StoredRecord = { id: string; owner: string; revision: number };
+/** Minimal persisted identity and concurrency metadata. */
+export type StoredRecord = {
+  /** Stable identifier of this record. */
+  id: string;
+  /** Operator that owns this record; derived from the authenticated session. */
+  owner: string;
+  /** Current optimistic-concurrency revision; stale writes are rejected. */
+  revision: number;
+};
 
 // Application tables deliberately use a separate public libSQL client, never Mastra's internal client/tables.
 export class DomainStore {
@@ -17,7 +26,7 @@ export class DomainStore {
     await this.write(async transaction => {
       await transaction.execute('CREATE TABLE IF NOT EXISTS scanner_migrations (version INTEGER PRIMARY KEY)');
       const versions = await transaction.execute('SELECT version FROM scanner_migrations');
-      if (versions.rows.some(row => Number(row.version) > 3))
+      if (versions.rows.some(row => Number(row.version) > 4))
         throw new ControlPlaneError('DATABASE_VERSION_UNSUPPORTED', 503);
       if (!versions.rows.some(row => Number(row.version) === 1)) {
         await transaction.execute(`CREATE TABLE scanner_records (

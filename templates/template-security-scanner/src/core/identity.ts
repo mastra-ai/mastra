@@ -4,9 +4,18 @@ import { z } from 'zod';
 import type { Profile, Target } from './contracts.js';
 import { ControlPlaneError } from './contracts.js';
 
-export type IdentityObservation = { status: 'READY' | 'AUTH_REQUIRED' | 'UNAVAILABLE'; reason: string };
+/** Transport-level identity result without credentials or raw response bytes. */
+export type IdentityObservation = {
+  /** Observed identity, response, or feed state, as selected by the enclosing contract. */
+  status: 'READY' | 'AUTH_REQUIRED' | 'UNAVAILABLE';
+  /** Sanitized machine-readable reason for the recorded state. */
+  reason: string;
+};
+/** Trusted identity-check transport with explicit target/profile support. */
 export interface IdentityTransport {
+  /** Whether the transport supports this target/profile boundary. */
   supports(target: Target, profile: Profile): boolean;
+  /** Check the expected identity with trusted runtime-resolved credentials. */
   check(profile: Profile, headers: Record<string, string>): Promise<IdentityObservation>;
 }
 export class DisabledIdentityTransport implements IdentityTransport {

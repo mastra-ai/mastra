@@ -8,12 +8,21 @@ import type { Category, Observation, Playbook } from '../knowledge/playbooks.js'
 import type { VerificationProof } from './verification.js';
 import { vulnerabilityAssessmentContract } from './semantics.js';
 
+/** Validated vote contract; bounds and cross-field rules are enforced before use. */
 export const voteSchema = z
-  .object({ vote: z.enum(['agree', 'disagree', 'uncertain']), reasonCode: z.string().regex(/^[A-Z_]{3,60}$/) })
+  .object({
+    /** Independent agreement, disagreement, or uncertainty about the fixed vulnerability claim. */
+    vote: z.enum(['agree', 'disagree', 'uncertain']),
+    /** Finite sanitized diagnostic code rather than model prose. */
+    reasonCode: z.string().regex(/^[A-Z_]{3,60}$/),
+  })
   .strict();
+/** Validated interpretation contract; bounds and cross-field rules are enforced before use. */
 export const interpretationSchema = z
   .object({
+    /** Discriminator selecting the vulnerability category and its typed facts. */
     category: z.string(),
+    /** Deterministic verification outcome after applicable evidence review. */
     outcome: z.enum([
       'CONFIRMED',
       'NOT_REPRODUCED',
@@ -27,24 +36,47 @@ export const interpretationSchema = z
     ]),
   })
   .strict();
-export type ModelCall<T> = { value: T; modelId: string; usageTokens: number | null };
+/** Validated model result plus optional provider usage metadata. */
+export type ModelCall<T> = {
+  /** Structured model result validated before it reaches domain logic. */
+  value: T;
+  /** Model identifier returned by this completed model call. */
+  modelId: string;
+  /** Provider-reported usage, or null when unavailable. */
+  usageTokens: number | null;
+};
+/** Trusted atomic reservation boundary invoked before model dispatch. */
 export type ModelBudget = {
+  /** Atomically reserve conservative input/output capacity before each model call. */
   reserve(role: 'nemo' | 'sherlock' | 'dupin' | 'watson', inputBytes: number, outputTokens: number): Promise<void>;
 };
+/** Operator-selected planning envelope; it does not reserve remaining capacity. */
 export type PlanningLimits = Pick<InvestigationAdmission, 'maxRequests' | 'maxDurationSeconds' | 'maxTokens'>;
+/** Minimized revision-bound resource context for the exact supplied evidence slice. */
 export type PlanningResources = {
+  /** Exact target revision authorized for this operation. */
   targetRevision: number;
+  /** Exact policy revision authorized for this operation. */
   policyRevision: number;
+  /** Declares that resource context covers only the first 32 supplied evidence rows. */
   coverage: 'SUPPLIED_FIRST_32_EVIDENCE';
+  /** Whether this bounded context covers all available source evidence. */
   complete: boolean;
+  /** Revision-bound available resources; context does not authorize execution. */
   bindings: {
+    /** Discriminator selecting the vulnerability category and its typed facts. */
     category: Category;
+    /** Zero-based indexes into the exact supplied sanitized evidence slice. */
     evidenceIndexes: number[];
+    /** Persisted lifecycle state; read the reason and result before interpreting it. */
     state: 'CURRENT' | 'STALE';
+    /** Capability-role to supplied evidence-role mapping; null means the role was withheld. */
     roles: Record<string, string | null>;
   }[];
 };
+/** Typed model boundary; models cannot authorize or dispatch capabilities. */
 export interface InvestigationModels {
+  /** Plan grounded hypotheses from bounded evidence without authorizing network actions. */
   propose(
     scanId: string,
     evidence: Evidence[],
@@ -57,6 +89,7 @@ export interface InvestigationModels {
     signal: AbortSignal,
     availableResources?: PlanningResources,
   ): Promise<ModelCall<HypothesisInput[]>>;
+  /** Interpret one deterministic proof without choosing or executing a capability. */
   interpret(
     proof: VerificationProof,
     playbook: Playbook,
@@ -64,6 +97,7 @@ export interface InvestigationModels {
     budget: ModelBudget,
     signal: AbortSignal,
   ): Promise<ModelCall<z.infer<typeof interpretationSchema>>>;
+  /** Independently review the fixed claim using only the supplied proof. */
   review(
     proof: VerificationProof,
     playbook: Playbook,

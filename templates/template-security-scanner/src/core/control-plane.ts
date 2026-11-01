@@ -21,11 +21,13 @@ import { DomainStore, type RecordKind } from './store.js';
 
 const credentialSchema = z
   .object({
+    /** Validated result or private credential value, according to the enclosing contract. */
     value: z
       .string()
       .min(1)
       .max(4096)
       .regex(/^[\x20-\x7e]+$/),
+    /** Human-readable label shown in the console. */
     name: z.enum(['authorization', 'cookie', 'x-api-key', 'x-test-identity']).optional(),
   })
   .strict();
@@ -54,7 +56,18 @@ function requireBinding(expected: IdentityBinding, current: IdentityBinding) {
     throw new ControlPlaneError('REVISION_CONFLICT', 409);
   }
 }
-export type MutationScope = { owner: string; kind: RecordKind; id: string; revision: number };
+/** Operator-owned record whose mutation must quiesce affected work. */
+export type MutationScope = {
+  /** Operator that owns this record; derived from the authenticated session. */
+  owner: string;
+  /** Discriminator selecting the supported record or credential shape. */
+  kind: RecordKind;
+  /** Stable identifier of this record. */
+  id: string;
+  /** Current optimistic-concurrency revision; stale writes are rejected. */
+  revision: number;
+};
+/** Serialize validation and mutation with affected worker cancellation. */
 export type MutationCoordinator = <T>(
   scope: MutationScope,
   validate: () => Promise<void>,

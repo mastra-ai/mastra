@@ -27,8 +27,11 @@ export type Outcome =
 
 const limits = z
   .object({
+    /** Maximum execution attempts allowed by this playbook. */
     maxAttempts: z.number().int().min(1).max(4),
+    /** Maximum upstream requests allowed; reservations are shared and not refunded. */
     maxRequests: z.number().int().min(1).max(12),
+    /** Maximum elapsed duration in seconds. */
     maxDurationSeconds: z.number().int().min(1).max(60),
   })
   .strict();
@@ -44,24 +47,40 @@ const registeredTools = {
 } as const;
 const playbookSchema = z
   .object({
+    /** Playbook contract version. */
     version: z.literal(1),
+    /** Discriminator selecting the vulnerability category and its typed facts. */
     category: z.enum(categories),
+    /** Allowlisted capability identifier; must match the selected category. */
     toolId: z.enum(Object.keys(registeredTools) as [keyof typeof registeredTools, ...(keyof typeof registeredTools)[]]),
+    /** Pinned local catalog reference IDs required by this playbook. */
     references: z.array(z.string().min(3)).min(2).max(8),
+    /** Capability roles that must be bound before execution. */
     requiredRoles: z.array(z.string()).max(2),
+    /** Owned resources required before this capability may execute. */
     requiredResources: z.array(z.string()).max(3),
+    /** Evidence kinds required for deterministic confirmation. */
     requiredEvidence: z.array(z.string()).min(1).max(6),
+    /** Expected policy behavior; it cannot override deterministic confirmation. */
     expectedBehavior: z.string().min(10).max(400),
+    /** Whether a current exact operator approval is required. */
     approvalRequired: z.boolean(),
+    /** Explicit finite budgets recorded for this operation. */
     limits,
   })
   .strict()
   .refine(value => registeredTools[value.toolId] === value.category);
+/** Versioned capability prerequisites, references, evidence rules, and budgets. */
 export type Playbook = z.infer<typeof playbookSchema>;
+/** Integrity snapshot of the selected playbook and offline reference catalog. */
 export type PlaybookBinding = {
+  /** SHA-256 binding to the verified offline reference manifest. */
   catalogDigest: string;
+  /** Category identifier of the selected playbook. */
   playbookId: Category;
+  /** Version of the selected playbook contract. */
   playbookVersion: number;
+  /** SHA-256 binding to the reviewed playbook content. */
   playbookDigest: string;
 };
 
@@ -168,94 +187,146 @@ const definitions: Playbook[] = [
 
 const contextSchema = z
   .object({
+    /** Whether source evidence contains the relevant test surface. */
     surfacePresent: z.boolean(),
+    /** Whether all required owned resources and bindings are available. */
     prerequisitesReady: z.boolean(),
+    /** Whether the exact operation fits current authorization. */
     scopeApproved: z.boolean(),
+    /** Whether the bounded verification completed with admissible observations. */
     completed: z.boolean(),
+    /** Whether all participating identities passed the trusted check. */
     identityValid: z.boolean().default(true),
   })
   .strict();
 const responseCode = z.number().int().min(100).max(599);
+/** Validated observation contract; bounds and cross-field rules are enforced before use. */
 export const observationSchema = z.discriminatedUnion('category', [
   z
     .object({
+      /** Discriminator selecting the vulnerability category and its typed facts. */
       category: z.literal('idor'),
+      /** Trusted HTTP status observed for the resource owner. */
       ownerStatus: responseCode,
+      /** Trusted HTTP status observed for the alternate identity. */
       alternateStatus: responseCode,
+      /** Verified resource-owner identity. */
       ownerIdentity: z.string().min(1),
+      /** Verified distinct alternate identity. */
       alternateIdentity: z.string().min(1),
+      /** Confirms registration of the project-owned comparison resource. */
       resourceOwned: z.literal(true),
+      /** Expected marker observed for the resource owner. */
       ownerMarker: z.string().min(8).max(80),
+      /** Owned marker observed for the alternate identity, or null if absent. */
       alternateMarker: z.string().max(80).nullable(),
     })
     .strict()
     .refine(value => value.ownerIdentity !== value.alternateIdentity),
   z
     .object({
+      /** Discriminator selecting the vulnerability category and its typed facts. */
       category: z.literal('authentication_bypass'),
+      /** Trusted HTTP status for the authenticated request. */
       protectedStatus: responseCode,
+      /** Trusted HTTP status for the public request. */
       publicStatus: responseCode,
+      /** Trusted HTTP status for the invalid-session comparison. */
       invalidSessionStatus: responseCode,
+      /** Owned marker observed with valid authentication. */
       protectedMarker: z.string().min(8).max(80),
+      /** Owned marker observed publicly, or null if absent. */
       publicMarker: z.string().max(80).nullable(),
+      /** Owned marker observed with an invalid session, or null if absent. */
       invalidSessionMarker: z.string().max(80).nullable(),
     })
     .strict(),
   z
     .object({
+      /** Discriminator selecting the vulnerability category and its typed facts. */
       category: z.literal('bfla'),
+      /** Trusted HTTP status for the administrator. */
       adminStatus: responseCode,
+      /** Trusted HTTP status for the lower-privilege identity. */
       lowStatus: responseCode,
+      /** Confirms the compared roles are distinct. */
       rolesDistinct: z.literal(true),
+      /** Confirms the comparison does not perform writes. */
       readOnly: z.literal(true),
+      /** Owned marker observed for the administrator. */
       adminMarker: z.string().min(8).max(80),
+      /** Owned marker observed for the lower-privilege identity, or null if absent. */
       lowMarker: z.string().max(80).nullable(),
     })
     .strict(),
   z
     .object({
+      /** Discriminator selecting the vulnerability category and its typed facts. */
       category: z.literal('ssrf'),
+      /** Deployment classification; lab alone does not grant private-network access. */
       environment: z.enum(['lab', 'staging', 'production']),
+      /** Exact approval identifier authorizing the active probe. */
       approvalId: z.string().uuid().optional(),
+      /** Whether the approval matches current revisions and has not expired. */
       approvalCurrent: z.boolean(),
+      /** Whether the destination is the approval-specific owned receiver. */
       ownedCallback: z.boolean(),
+      /** Whether that owned receiver recorded the exact callback. */
       callbackObserved: z.boolean(),
     })
     .strict(),
   z
     .object({
+      /** Discriminator selecting the vulnerability category and its typed facts. */
       category: z.literal('misconfiguration'),
+      /** Allowlisted security response header evaluated by the configuration check. */
       headerName: z.string().regex(/^[a-z0-9-]{1,80}$/),
+      /** Registered safe value expected by the configuration check. */
       expectedValue: z.string().min(1).max(300),
+      /** Sanitized response-header value, or null if absent. */
       observedValue: z.string().max(300).nullable(),
     })
     .strict(),
   z
     .object({
+      /** Discriminator selecting the vulnerability category and its typed facts. */
       category: z.literal('cors'),
+      /** Confirms the request originated from the owned cross-origin browser fixture. */
       browserCrossOrigin: z.literal(true),
+      /** Confirms the registered fixture represents protected data. */
       sensitiveFixture: z.literal(true),
+      /** Whether the completed cross-origin response was readable by the browser. */
       responseReadable: z.boolean(),
     })
     .strict(),
   z
     .object({
+      /** Discriminator selecting the vulnerability category and its typed facts. */
       category: z.literal('open_redirect'),
+      /** Authorized origin of the redirecting endpoint. */
       approvedOrigin: z.url(),
+      /** Fixed destination supplied to the redirect parameter. */
       submittedDestination: z.url(),
+      /** Observed redirect location, or null if absent; it is never followed. */
       location: z.url().nullable(),
+      /** Always false; redirect verification never follows the destination. */
       followed: z.literal(false),
     })
     .strict(),
   z
     .object({
+      /** Discriminator selecting the vulnerability category and its typed facts. */
       category: z.literal('information_exposure'),
+      /** Registered owned-lab marker used only by deterministic verification. */
       marker: z.string().regex(/^LAB_MARKER_[A-Z0-9]{8,64}$/),
+      /** Owned marker observed in the response, or null if absent. */
       observedMarker: z.string().nullable(),
+      /** Confirms the response was obtained with the public profile. */
       publicResponse: z.literal(true),
     })
     .strict(),
 ]);
+/** Category-discriminated deterministic facts used to assess one verification. */
 export type Observation = z.infer<typeof observationSchema>;
 
 const tools: Record<Category, (observation: Observation) => Outcome> = {

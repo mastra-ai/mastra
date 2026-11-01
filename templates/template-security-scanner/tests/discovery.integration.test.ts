@@ -7,7 +7,7 @@ import { ControlPlane } from '../src/core/control-plane.js';
 import { CredentialVault } from '../src/core/credentials.js';
 import { DomainStore } from '../src/core/store.js';
 import { SecretGuard } from '../src/discovery/parser.js';
-import { terminal, type Scan, type Evidence } from '../src/discovery/contracts.js';
+import { type Scan, type Evidence } from '../src/discovery/contracts.js';
 import { SCAN_LABEL } from '../src/discovery/resources.js';
 import { ScanService } from '../src/discovery/service.js';
 import {

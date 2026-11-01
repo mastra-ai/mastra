@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { Settings } from '../config/settings.js';
-import { ControlPlaneError, pathAllowed, type Profile } from '../core/contracts.js';
+import { ControlPlaneError, pathAllowed } from '../core/contracts.js';
 import type { ControlPlane } from '../core/control-plane.js';
 import { ScanResources } from '../discovery/resources.js';
 import type { DiscoveryStore } from '../discovery/store.js';
@@ -227,7 +227,6 @@ export class OwnedGatewayVerifier implements VerificationDriver {
         }),
       );
       const gateway = await openGateway(
-        this.settings,
         resources,
         context,
         images,

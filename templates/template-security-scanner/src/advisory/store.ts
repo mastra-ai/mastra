@@ -4,25 +4,53 @@ import { advisoryId, detailSchema, materialHash, type AdvisoryDetail } from './c
 import type { Settings } from '../config/settings.js';
 import { nextOccurrence, scheduledEventId } from '../investigation/schedule.js';
 
+/** Persisted opt-in advisory schedule and its current revision. */
 export type AdvisoryScheduleState = {
+  /** Current optimistic-concurrency revision; stale writes are rejected. */
   revision: number;
+  /** Whether this feature is explicitly enabled. */
   enabled: boolean;
+  /** Whether the operator has paused this saved schedule. */
   paused: boolean;
+  /** Five-field cron using a wildcard or one integer per field. */
   cron: string | null;
+  /** IANA timezone used to calculate scheduled occurrences. */
   timezone: string | null;
+  /** Next scheduled UTC occurrence, or null when disabled. */
   nextAt: string | null;
+  /** Most recent durable scheduled-event identifier, or null. */
   lastEventId: string | null;
 };
 
+/** Minimized advisory metadata available to hypothesis planning. */
 export type PlanningAdvisory = {
+  /** Stable identifier of this record. */
   id: string;
+  /** Current optimistic-concurrency revision; stale writes are rejected. */
   revision: number;
+  /** Unknown until supported product/version evidence and range semantics are verified. */
   applicability: 'APPLICABILITY_UNKNOWN';
-  affectedProducts: Array<{ vendor: string; product: string } | { ecosystem: string; package: string }>;
+  /** Conservatively filtered product/package identifiers, without raw advisory text. */
+  affectedProducts: Array<
+    | {
+        /** Vendor named by the upstream advisory. */
+        vendor: string;
+        /** Product named by the upstream advisory. */
+        product: string;
+      }
+    | {
+        /** Package ecosystem named by the upstream advisory. */
+        ecosystem: string;
+        /** Package name supplied by the upstream advisory. */
+        package: string;
+      }
+  >;
+  /** Filtered source hostnames, never authorization for network access. */
   referenceHosts: string[];
 };
 const safeAtom = (value: string) => /^[A-Za-z0-9][A-Za-z0-9.+-]{0,63}$/.test(value);
 
+/** Newest-feed or rotating historical-page synchronization cursor. */
 export type CursorKind = 'head' | 'rotation';
 export class AdvisoryStore {
   private readonly client;

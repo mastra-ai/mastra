@@ -2,12 +2,19 @@ import type Docker from 'dockerode';
 import { z } from 'zod';
 const LAB_LABEL = 'dev.mastra.security-scanner.lab';
 const labBrand: unique symbol = Symbol('owned-lab-boundary');
+/** Verified project-owned Docker fixture boundary; not derived from API input. */
 export type OwnedLabBoundary = {
+  /** Verified internal Docker lab network identifier. */
   networkId: string;
+  /** Verified running owned-target container identifier. */
   fixtureId: string;
+  /** Pinned numeric address of the owned fixture. */
   address: string;
+  /** Owned callback base URL; the approval-specific path is appended separately. */
   callback: string;
+  /** Ownership token verified against both fixture and network labels. */
   token: string;
+  /** Optional lab CA bytes for the owned HTTPS fixture. */
   upstreamCa?: Buffer;
   [labBrand]: true;
 };

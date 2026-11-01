@@ -265,7 +265,6 @@ describe('Gateway authorization before contact', () => {
       guard.clear();
     });
     const session = await openGateway(
-      lab.settings,
       resources,
       context,
       lab.images,

@@ -5,7 +5,7 @@ import { createServer } from 'node:http';
 import { z } from 'zod';
 import { readFile, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { expect } from 'vitest';
 import { loadSettings } from '../../src/config/settings.js';
 import type { Policy, Profile, Target } from '../../src/core/contracts.js';
 import { startControlPlane } from '../../src/http/server.js';
@@ -15,7 +15,7 @@ import { buildDiscoveryImages, releaseDiscoveryImages } from '../../src/discover
 import { ownedLabBoundary } from '../../src/discovery/driver.js';
 import { stageFiles, control, readRuntimeFile } from '../../src/discovery/io.js';
 import { SecretGuard } from '../../src/discovery/parser.js';
-import { terminal, type Scan, type Evidence } from '../../src/discovery/contracts.js';
+import { terminal, type Scan } from '../../src/discovery/contracts.js';
 import type { InvestigationModels } from '../../src/investigation/models.js';
 import type { AdvisorySource } from '../../src/advisory/source.js';
 

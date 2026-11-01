@@ -8,7 +8,9 @@
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": ["./**/*.ts", "./**/*.tsx", "../tests/console.component.test.ts"]
 }

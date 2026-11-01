@@ -110,7 +110,17 @@ export async function prepareDiscoveryInputs(settings: Settings, signal?: AbortS
   if (digest(binary) !== manifest.certutilSha256) throw new ControlPlaneError('NSS_BINARY_INTEGRITY', 503);
   return { manifest, root, certutil: Buffer.from(binary) };
 }
-export type DiscoveryImages = { gateway: string; firewall: string; inputHash: string; certutil: Buffer };
+/** Built local gateway/firewall images and integrity-checked browser support input. */
+export type DiscoveryImages = {
+  /** Immutable local gateway image ID. */
+  gateway: string;
+  /** Immutable local namespace-firewall initializer image ID. */
+  firewall: string;
+  /** Fingerprint shared by the verified image inputs. */
+  inputHash: string;
+  /** Verified NSS certutil binary bytes used for the private browser profile. */
+  certutil: Buffer;
+};
 export async function buildDiscoveryImages(
   settings: Settings,
   signal?: AbortSignal,

@@ -8,56 +8,126 @@ export const advisoryId = z
 const short = z.string().max(500);
 const instant = z.iso.datetime({ offset: true });
 const sourceSchema = z
-  .object({ name: short, url: z.url().max(2048), firstSeenAt: instant.optional(), license: short })
+  .object({
+    /** Human-readable label shown in the console. */
+    name: short,
+    /** Source URL; not permission to dispatch a request. */
+    url: z.url().max(2048),
+    /** ISO 8601 timestamp when the source first observed the entry. */
+    firstSeenAt: instant.optional(),
+    /** Source license or attribution label. */
+    license: short,
+  })
   .strict();
 const affectedSchema = z.union([
-  z.object({ vendor: short, product: short, ranges: z.array(z.unknown()).max(50) }).strict(),
   z
     .object({
-      ecosystem: short,
-      package: short,
+      /** Vendor named by the upstream advisory. */
+      vendor: short,
+      /** Product named by the upstream advisory. */
+      product: short,
+      /** Uninterpreted affected-version ranges; no positive applicability is inferred. */
       ranges: z.array(z.unknown()).max(50),
+    })
+    .strict(),
+  z
+    .object({
+      /** Package ecosystem named by the upstream advisory. */
+      ecosystem: short,
+      /** Package name supplied by the upstream advisory. */
+      package: short,
+      /** Uninterpreted affected-version ranges; no positive applicability is inferred. */
+      ranges: z.array(z.unknown()).max(50),
+      /** Explicit affected-version strings supplied by the source. */
       versions: z.array(short).max(1000),
     })
     .strict(),
 ]);
+/** Validated detail contract; bounds and cross-field rules are enforced before use. */
 export const detailSchema = z
   .object({
+    /** Stable identifier of this record. */
     id: advisoryId,
+    /** Optional upstream feed identifier. */
     feedId: z.string().max(100).optional(),
+    /** Alternative upstream identifiers for the same advisory. */
     aliases: z.array(advisoryId).max(32).default([]),
+    /** Publisher lifecycle state, separate from local triage. */
     status: z.enum(['published', 'withdrawn', 'superseded']),
+    /** Identifiers of advisories replacing this entry. */
     supersededBy: z.array(advisoryId).max(32).default([]),
+    /** Upstream advisory title, treated as untrusted data. */
     title: short,
+    /** Optional upstream-generated summary and its provenance. */
     summary: z
-      .object({ text: z.string().max(10000), model: short, promptVersion: short })
+      .object({
+        /** Bounded source text; never an execution instruction. */
+        text: z.string().max(10000),
+        /** Upstream model label associated with a generated summary. */
+        model: short,
+        /** Upstream prompt version associated with the summary. */
+        promptVersion: short,
+      })
       .strict()
       .nullable()
       .optional(),
+    /** Bounded original advisory text; treated as untrusted data. */
     originalDescription: z.string().max(20000).nullable().optional(),
+    /** Uninterpreted upstream severity metadata. */
     severity: z.unknown().optional(),
+    /** Uninterpreted publisher-stated severity metadata. */
     statedSeverity: z.unknown().optional(),
+    /** Uninterpreted exploitation metadata, not proof against this target. */
     exploitation: z.unknown().optional(),
+    /** Uninterpreted upstream SSVC metadata. */
     ssvc: z.unknown().optional(),
+    /** Affected product/package metadata with unverified range semantics. */
     affected: z.array(affectedSchema).max(100),
+    /** Uninterpreted related advisory metadata. */
     related: z.array(z.unknown()).max(100).optional(),
+    /** Uninterpreted upstream bundle metadata. */
     bundles: z.array(z.unknown()).max(100).optional(),
+    /** Uninterpreted upstream early-warning metadata. */
     earlyWarning: z.unknown().optional(),
+    /** Uninterpreted upstream reference metadata; never network authorization. */
     references: z.array(z.unknown()).max(100).optional(),
+    /** Upstream source attribution and license records. */
     sources: z.array(sourceSchema).min(1).max(30),
+    /** ISO 8601 timestamp when the source first observed the entry. */
     firstSeenAt: instant.optional(),
+    /** ISO 8601 publication timestamp supplied by the source. */
     publishedAt: instant.optional(),
+    /** ISO 8601 upstream modification timestamp. */
     modifiedAt: instant,
   })
   .strict();
+/** Validated bounded upstream advisory; unknown metadata remains untrusted. */
 export type AdvisoryDetail = z.infer<typeof detailSchema>;
+/** Validated page contract; bounds and cross-field rules are enforced before use. */
 export const pageSchema = z
   .object({
-    entries: z.array(z.object({ id: advisoryId }).passthrough()).max(100),
+    /** Bounded advisory page entries. */
+    entries: z
+      .array(
+        z
+          .object({
+            /** Stable identifier of this record. */
+            id: advisoryId,
+          })
+          .passthrough(),
+      )
+      .max(100),
+    /** Opaque continuation cursor, or null at the end of a page. */
     nextCursor: z.string().min(1).max(1024).nullable(),
   })
   .strict();
-export const triageSchema = z.object({ status: z.enum(['new', 'triaged', 'investigating', 'closed']) }).strict();
+/** Validated triage contract; bounds and cross-field rules are enforced before use. */
+export const triageSchema = z
+  .object({
+    /** Local operator triage state, separate from the publisher lifecycle. */
+    status: z.enum(['new', 'triaged', 'investigating', 'closed']),
+  })
+  .strict();
 
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;

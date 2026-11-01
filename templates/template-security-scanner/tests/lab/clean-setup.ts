@@ -82,6 +82,7 @@ export async function cleanSetupAndPublicLab() {
       'tests',
       'docker',
       'references',
+      'docs',
       'web',
       'package.json',
       'tsconfig.json',
@@ -90,10 +91,7 @@ export async function cleanSetupAndPublicLab() {
       '.nvmrc',
       '.gitignore',
       'README.md',
-      'CONTROL_PLANE.md',
-      'SCANNING.md',
-      'INTELLIGENCE.md',
-      'OPERATIONS.md',
+      'CONTRIBUTING.md',
     ])
       await cp(join(sourceRoot, name), join(root, name), {
         recursive: true,

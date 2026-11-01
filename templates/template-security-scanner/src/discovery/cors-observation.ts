@@ -67,10 +67,22 @@ const readResult = z
   .object({ completed: z.boolean(), readable: z.boolean() })
   .strict()
   .refine(value => value.completed || !value.readable);
+/** Finite browser-read result; transport interruption is distinct from native CORS denial. */
 export type CorsReadOutcome =
-  | { state: 'COMPLETED_READ'; markerMatched: boolean }
-  | { state: 'CORS_DENIED' }
-  | { state: 'INCOMPLETE' };
+  | {
+      /** Completed readable response, trusted native CORS denial, or incomplete transport. */
+      state: 'COMPLETED_READ';
+      /** Whether the complete readable response contains the registered owned marker. */
+      markerMatched: boolean;
+    }
+  | {
+      /** Completed readable response, trusted native CORS denial, or incomplete transport. */
+      state: 'CORS_DENIED';
+    }
+  | {
+      /** Completed readable response, trusted native CORS denial, or incomplete transport. */
+      state: 'INCOMPLETE';
+    };
 type RequestState = {
   seen: boolean;
   matches: boolean;

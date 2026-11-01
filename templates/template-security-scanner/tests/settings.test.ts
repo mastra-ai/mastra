@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { readFileSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +40,40 @@ describe('local runtime configuration', () => {
     expect(configured.explorer.apiKey).toBe(syntheticKey);
     expect(configured.judge.apiKey).toBe(syntheticKey);
     expect(JSON.stringify(morphModelDescriptor(settings))).not.toContain(syntheticKey);
+  });
+
+  it('rejects_operational_fence_aliases_before_creating_files_and_keeps_adjacent_names_valid', () => {
+    const root = mkdtempSync(join(tmpdir(), 'scanner-reserved-database-'));
+    const before = readdirSync(root);
+    try {
+      for (const stem of ['discovery-instance', 'Discovery-Instance', 'DISCOVERY-INSTANCE', 'dIsCoVeRy-InStAnCe']) {
+        const configure = () => loadSettings({ DATABASE_URL: `file:./data/${stem}.db` }, root);
+        expect(configure).toThrowError(expect.objectContaining({ code: 'INVALID_CONFIGURATION' }));
+        try {
+          configure();
+        } catch (error) {
+          expect(diagnostic(error)).toEqual({
+            code: 'INVALID_CONFIGURATION',
+            message: 'Check supported values for: DATABASE_URL.',
+          });
+        }
+        expect(readdirSync(root)).toEqual(before);
+      }
+      for (const stem of [
+        'discovery-instance-history',
+        'discovery_instance',
+        'discovery-instance-mastra',
+        'discovery-instance2',
+        'DISCOVERY-INSTANCE-HISTORY',
+      ]) {
+        const settings = loadSettings({ DATABASE_URL: `file:./data/${stem}.db` }, root);
+        expect(settings.databasePath).toBe(join(root, 'data', `${stem}.db`));
+        expect(settings.mastraDatabasePath).toBe(join(root, 'data', `${stem}-mastra.db`));
+        expect(readdirSync(root)).toEqual(before);
+      }
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it.each([

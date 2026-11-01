@@ -2,7 +2,7 @@ import { createClient } from '@libsql/client';
 import { randomUUID } from 'node:crypto';
 import { expect } from 'vitest';
 import type { Finding, StoredProof } from '../../src/investigation/store.js';
-import { closeDiscoveryLabs, discoveryCase, startDiscoveryLab } from './harness.js';
+import { discoveryCase, startDiscoveryLab } from './harness.js';
 import { completedJob, investigation, modelWire } from './investigation.js';
 
 export async function retentionExpiryAndDebt() {

@@ -8,7 +8,16 @@ import { ControlPlaneError } from '../core/contracts.js';
 import { scanSchema } from '../discovery/contracts.js';
 import { DiscoveryStore } from '../discovery/store.js';
 import { ScanResources } from '../discovery/resources.js';
-import type { Approval, Hypothesis, Investigation, Job } from '../investigation/store.js';
+import {
+  InvestigationStore,
+  LEGACY_OWNED_RESOURCE_SQL,
+  CURRENT_OWNED_RESOURCE_SQL,
+  CURRENT_OWNED_RESOURCE_POINTER_SQL,
+  type Approval,
+  type Hypothesis,
+  type Investigation,
+  type Job,
+} from '../investigation/store.js';
 import type { Settings } from '../config/settings.js';
 import { acquireInstance } from '../discovery/instance.js';
 import { prepareDataDirectory } from './files.js';
@@ -19,31 +28,54 @@ const maximumFileBytes = 512 * 1024 * 1024;
 const safeName = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9_-]{0,79}$/);
 const hash = z.string().regex(/^[a-f0-9]{64}$/);
 const snapshotSchema = z
-  .object({ sha256: hash, bytes: z.number().int().min(1).max(maximumFileBytes), schemaHash: hash })
+  .object({
+    /** SHA-256 of this database snapshot. */
+    sha256: hash,
+    /** Snapshot file size in bytes. */
+    bytes: z.number().int().min(1).max(maximumFileBytes),
+    /** Fingerprint of the database schema. */
+    schemaHash: hash,
+  })
   .strict();
 const manifestSchema = z
   .object({
+    /** Backup-manifest format version. */
     version: z.literal(1),
+    /** Storage compatibility identifier required by restore. */
     compatibility: z.literal(compatibility),
+    /** UTC timestamp when the compatible pair was captured. */
     createdAt: z.iso.datetime(),
-    applicationSchema: z.literal(3),
+    /** Required scanner application schema version. */
+    applicationSchema: z.union([z.literal(3), z.literal(4)]),
+    /** Installed Mastra core version bound to this pair. */
     coreVersion: z.string().max(80),
+    /** Installed Mastra libSQL adapter version bound to this pair. */
     libsqlVersion: z.string().max(80),
+    /** Application database snapshot integrity metadata. */
     application: snapshotSchema,
+    /** Native Mastra database snapshot integrity metadata. */
     native: snapshotSchema,
   })
   .strict();
 const journalSchema = z
   .object({
+    /** Restoration-journal format version. */
     version: z.literal(1),
+    /** Last durably recorded replacement stage. */
     stage: z.enum(['PREPARED', 'APPLICATION_SWAPPED', 'BOTH_SWAPPED']),
+    /** Owned staging directory identifier under data/restore/. */
     directory: z.string().uuid(),
+    /** Application database basename to restore. */
     application: z.string().regex(/^[A-Za-z0-9_-]+\.db$/),
+    /** Native Mastra database basename to restore. */
     native: z.string().regex(/^[A-Za-z0-9_-]+-mastra\.db$/),
+    /** SHA-256 of the retained previous application snapshot. */
     previousApplication: hash,
+    /** SHA-256 of the retained previous native snapshot. */
     previousNative: hash,
   })
   .strict();
+/** Durable two-file restoration stage recorded before and between replacements. */
 export type RestoreStage = z.infer<typeof journalSchema>['stage'];
 
 async function privateDirectory(path: string) {
@@ -156,15 +188,26 @@ const applicationTables: Record<string, Record<string, string>> = {
     data: 'TEXT',
   },
   scanner_advisory_schedule: { singleton: 'INTEGER', data: 'TEXT' },
+  scanner_owned_resources: {
+    id: 'TEXT',
+    owner: 'TEXT',
+    target_id: 'TEXT',
+    category: 'TEXT',
+    path: 'TEXT',
+    data: 'TEXT',
+  },
 };
-// Storage-v1 supports migrations1–3 and these exact application field types.
-// Harmless code/documentation changes do not invalidate a compatible snapshot.
-async function applicationSchema(path: string) {
+// Restore compares exact schema fingerprints; the only supported historical
+// projection is the known schema3 resource table before immutable renewal.
+async function applicationSchema(path: string, version: 3 | 4, legacyProjection = false) {
   await inspectDatabase(path);
   const client = createClient({ url: `file:${path}` });
   try {
     const migrations = await client.execute('SELECT version FROM scanner_migrations ORDER BY version');
-    if (JSON.stringify(migrations.rows.map(row => Number(row.version))) !== JSON.stringify([1, 2, 3]))
+    if (
+      JSON.stringify(migrations.rows.map(row => Number(row.version))) !==
+      JSON.stringify(version === 3 ? [1, 2, 3] : [1, 2, 3, 4])
+    )
       throw new ControlPlaneError('BACKUP_APPLICATION_SCHEMA_INCOMPATIBLE', 409);
     for (const [table, expected] of Object.entries(applicationTables)) {
       const columns = await client.execute(`PRAGMA table_info(${table})`);
@@ -180,10 +223,59 @@ async function applicationSchema(path: string) {
     );
     if (schema.rows.some(row => row.type === 'trigger'))
       throw new ControlPlaneError('BACKUP_APPLICATION_SCHEMA_INCOMPATIBLE', 409);
-    return digest(JSON.stringify(schema.rows));
+    const resource = schema.rows.find(row => row.name === 'scanner_owned_resources');
+    const current = schema.rows.find(row => row.name === 'scanner_current_owned_resources');
+    if (version === 3 && (resource?.sql !== LEGACY_OWNED_RESOURCE_SQL || current))
+      throw new ControlPlaneError('BACKUP_APPLICATION_SCHEMA_INCOMPATIBLE', 409);
+    if (version === 4) {
+      if (resource?.sql !== CURRENT_OWNED_RESOURCE_SQL || current?.sql !== CURRENT_OWNED_RESOURCE_POINTER_SQL)
+        throw new ControlPlaneError('BACKUP_APPLICATION_SCHEMA_INCOMPATIBLE', 409);
+      const columns = await client.execute('PRAGMA table_info(scanner_current_owned_resources)');
+      if (
+        JSON.stringify(columns.rows.map(row => [row.name, row.type])) !==
+        JSON.stringify([
+          ['owner', 'TEXT'],
+          ['target_id', 'TEXT'],
+          ['category', 'TEXT'],
+          ['path', 'TEXT'],
+          ['resource_id', 'TEXT'],
+        ])
+      )
+        throw new ControlPlaneError('BACKUP_APPLICATION_SCHEMA_INCOMPATIBLE', 409);
+    }
+    const rows = legacyProjection
+      ? schema.rows
+          .filter(row => row.name !== 'scanner_current_owned_resources')
+          .map(row => (row.name === 'scanner_owned_resources' ? { ...row, sql: LEGACY_OWNED_RESOURCE_SQL } : row))
+      : schema.rows;
+    return digest(JSON.stringify(rows));
   } finally {
     client.close();
   }
+}
+async function applicationVersion(path: string): Promise<3 | 4> {
+  const db = createClient({ url: `file:${path}` });
+  try {
+    const rows = await db.execute('SELECT MAX(version) AS version FROM scanner_migrations');
+    const version = Number(rows.rows[0]?.version);
+    if (version !== 3 && version !== 4) throw new ControlPlaneError('BACKUP_APPLICATION_SCHEMA_INCOMPATIBLE', 409);
+    await applicationSchema(path, version);
+    return version;
+  } finally {
+    db.close();
+  }
+}
+async function upgradeApplicationCopy(path: string) {
+  const version = await applicationVersion(path);
+  if (version === 3) {
+    const store = new InvestigationStore(`file:${path}`);
+    try {
+      await store.initialize();
+    } finally {
+      await store.close();
+    }
+  }
+  return applicationSchema(path, 4);
 }
 async function snapshot(source: string, destination: string) {
   await ownedFile(source);
@@ -240,7 +332,8 @@ async function assertDrained(settings: Settings) {
       "SELECT 1 FROM scanner_investigations WHERE state IN ('QUEUED','PLANNING','RUNNING','AWAITING_APPROVAL') LIMIT 1",
     );
     const schema = await client.execute('SELECT MAX(version) AS version FROM scanner_migrations');
-    if (Number(schema.rows[0]?.version) !== 3) throw new ControlPlaneError('BACKUP_SCHEMA_INCOMPATIBLE', 409);
+    if (![3, 4].includes(Number(schema.rows[0]?.version)))
+      throw new ControlPlaneError('BACKUP_SCHEMA_INCOMPATIBLE', 409);
     if (scans.rows.length || jobs.rows.length || planning.rows.length)
       throw new ControlPlaneError('OPERATION_DRAIN_REQUIRED', 409);
   } finally {
@@ -515,13 +608,16 @@ export async function createBackup(settings: Settings, name: string) {
     await mkdir(directory, { mode: 0o700 });
     try {
       const application = await snapshot(settings.databasePath, join(directory, 'application.db'));
-      application.schemaHash = await applicationSchema(join(directory, 'application.db'));
+      application.schemaHash = await upgradeApplicationCopy(join(directory, 'application.db'));
+      const upgraded = await bytes(join(directory, 'application.db'));
+      application.sha256 = digest(upgraded);
+      application.bytes = upgraded.length;
       const native = await snapshot(settings.mastraDatabasePath, join(directory, 'native.db'));
       const manifest = manifestSchema.parse({
         version: 1,
         compatibility,
         createdAt: new Date().toISOString(),
-        applicationSchema: 3,
+        applicationSchema: 4,
         ...(await versions()),
         application,
         native,
@@ -570,8 +666,6 @@ export async function restoreBackup(
     const current = await versions();
     if (manifest.coreVersion !== current.coreVersion || manifest.libsqlVersion !== current.libsqlVersion)
       throw new ControlPlaneError('BACKUP_CODE_INCOMPATIBLE', 409);
-    if (manifest.application.schemaHash !== (await applicationSchema(settings.databasePath)))
-      throw new ControlPlaneError('BACKUP_APPLICATION_SCHEMA_INCOMPATIBLE', 409);
     for (const [name, record] of [
       ['application', manifest.application],
       ['native', manifest.native],
@@ -581,7 +675,9 @@ export async function restoreBackup(
       if (
         content.length !== record.bytes ||
         digest(content) !== record.sha256 ||
-        (await (name === 'application' ? applicationSchema(file) : inspectDatabase(file))) !== record.schemaHash
+        (await (name === 'application'
+          ? applicationSchema(file, manifest.applicationSchema)
+          : inspectDatabase(file))) !== record.schemaHash
       )
         throw new ControlPlaneError('BACKUP_HASH_MISMATCH', 409);
     }
@@ -595,8 +691,20 @@ export async function restoreBackup(
     try {
       const previousApplication = await snapshot(settings.databasePath, join(staging, 'application.previous'));
       const previousNative = await snapshot(settings.mastraDatabasePath, join(staging, 'native.previous'));
+      // Derive both supported contracts from a private copy of the live pair.
+      // Neither the original backup nor a live schema3 database is upgraded here.
+      await copyPrivate(join(staging, 'application.previous'), join(staging, 'application.expected'));
+      const expected = await upgradeApplicationCopy(join(staging, 'application.expected'));
+      const expectedBackup =
+        manifest.applicationSchema === 3
+          ? await applicationSchema(join(staging, 'application.expected'), 4, true)
+          : expected;
+      if (manifest.application.schemaHash !== expectedBackup)
+        throw new ControlPlaneError('BACKUP_APPLICATION_SCHEMA_INCOMPATIBLE', 409);
       await copyPrivate(join(directory, 'application.db'), join(staging, 'application.next'));
       await copyPrivate(join(directory, 'native.db'), join(staging, 'native.next'));
+      if ((await upgradeApplicationCopy(join(staging, 'application.next'))) !== expected)
+        throw new ControlPlaneError('BACKUP_APPLICATION_SCHEMA_INCOMPATIBLE', 409);
       await invalidateRestoredApprovals(join(staging, 'application.next'));
       // A valid old WAL belongs to the previous inode and must never be
       // replayed over a replacement database. Checkpoint under the offline

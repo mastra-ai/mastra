@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { expect } from 'vitest';
 import { z } from 'zod';
-import { closeDiscoveryLabs, discoveryCase, startDiscoveryLab } from './harness.js';
+import { discoveryCase, startDiscoveryLab } from './harness.js';
 
 export async function activeScanCrash() {
   const lab = await startDiscoveryLab({ processMode: true });

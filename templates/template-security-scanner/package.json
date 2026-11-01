@@ -28,7 +28,7 @@
     "test:discovery": "node --import tsx scripts/test-discovery.ts discovery",
     "test:gateway": "node --import tsx scripts/test-discovery.ts gateway",
     "test:intelligence": "vitest run tests/intelligence.integration.test.ts --reporter=verbose",
-    "test:investigation": "vitest run tests/storage.test.ts tests/investigation.integration.test.ts --reporter=verbose --maxWorkers=1 --no-file-parallelism",
+    "test:investigation": "vitest run tests/storage.test.ts tests/advisory-reassessment.test.ts tests/investigation.integration.test.ts --reporter=verbose --maxWorkers=1 --no-file-parallelism",
     "test:console:browser": "npm run build:console && vitest run tests/console.browser.test.ts --reporter=verbose --maxWorkers=1 --no-file-parallelism",
     "check:gateway": "node --import tsx scripts/check-gateway.ts",
     "operate": "node --env-file-if-exists=.env --import tsx scripts/operate.ts",

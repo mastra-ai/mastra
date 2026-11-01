@@ -1,7 +1,6 @@
 import type Docker from 'dockerode';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { z } from 'zod';
 import { setTimeout as pause } from 'node:timers/promises';
 import type { Settings } from '../config/settings.js';
 import type { ScanContext } from '../core/control-plane.js';
@@ -20,18 +19,27 @@ import { control, readRuntimeFile, stageFiles } from './io.js';
 import { verifyFirewall } from './firewall.js';
 import { budgetSchema, roleResultSchema, type Scan, type Observation, type ScanReason } from './contracts.js';
 
-import { ownedLabBoundary, type OwnedLabBoundary } from './lab.js';
+import type { OwnedLabBoundary } from './lab.js';
 export { ownedLabBoundary, type OwnedLabBoundary } from './lab.js';
 import { openGateway, gatewayStatsSchema } from './gateway.js';
+/** Sanitized discovery-driver outcome and shared-budget snapshot. */
 export type DriverResult = {
+  /** Sanitized machine-readable reason for the recorded state. */
   reason: ScanReason;
+  /** Whether this result is incomplete or contains withheld observations. */
   partial: boolean;
+  /** Whether all owned resources were cleaned successfully. */
   cleanupComplete: boolean;
+  /** Current shared-budget snapshot. */
   budget: Scan['budget'];
+  /** Finite runtime failure code, or null when none was recorded. */
   diagnostic: Scan['diagnostic'];
+  /** Sanitized gateway event counts keyed by allowlisted counter names. */
   networkCounters: Record<string, number>;
 };
+/** Allowlisted discovery boundary with cancellation and bounded output. */
 export interface DiscoveryDriver {
+  /** Execute bounded discovery using trusted runtime-resolved inputs. */
   discover(
     scan: Scan,
     context: ScanContext,
@@ -126,7 +134,7 @@ export class KatanaDiscoveryDriver implements DiscoveryDriver {
           token: image.sourceHash,
           sharedBase: true,
         });
-      const session = await openGateway(this.settings, resources, context, images, this.lab, joined, guard, value => {
+      const session = await openGateway(resources, context, images, this.lab, joined, guard, value => {
         stage = value;
       });
       gateway = session.container;

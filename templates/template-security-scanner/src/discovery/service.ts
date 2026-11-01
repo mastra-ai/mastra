@@ -2,7 +2,6 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { Settings } from '../config/settings.js';
 import { ControlPlaneError, parse, bindingSchema } from '../core/contracts.js';
 import { ControlPlane, type ScanContext, type MutationScope } from '../core/control-plane.js';
-import type { RecordKind } from '../core/store.js';
 import { scanAdmissionSchema, terminal, type Scan, type ScanReason } from './contracts.js';
 import { DiscoveryStore } from './store.js';
 import { KatanaDiscoveryDriver, type OwnedLabBoundary } from './driver.js';

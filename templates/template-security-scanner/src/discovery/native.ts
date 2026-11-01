@@ -146,4 +146,5 @@ export async function privateNativeSandbox(
   }
 }
 
+/** Trusted native sandbox whose raw retained output buffers are disabled. */
 export type PrivateSandbox = Awaited<ReturnType<typeof privateNativeSandbox>>;

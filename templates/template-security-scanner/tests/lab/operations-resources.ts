@@ -18,7 +18,7 @@ import { expect } from 'vitest';
 import { DiscoveryStore } from '../../src/discovery/store.js';
 import { ScanResources } from '../../src/discovery/resources.js';
 import { INPUT_LABEL } from '../../src/runtime/docker.js';
-import { closeDiscoveryLabs, startDiscoveryLab } from './harness.js';
+import { startDiscoveryLab } from './harness.js';
 
 export async function sharedImageLifecycle() {
   const lab = await startDiscoveryLab();

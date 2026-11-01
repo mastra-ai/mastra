@@ -8,6 +8,7 @@ const sdkBrands = {
   AI_NoObjectGeneratedError: 'MODEL_OUTPUT_INVALID',
   AI_APICallError: 'MODEL_PROVIDER_FAILED',
 } as const;
+/** Finite safe model-failure classification; unknown errors remain unknown. */
 export type ModelFailureCode =
   | 'MODEL_OUTPUT_INVALID'
   | 'MODEL_PROVIDER_FAILED'

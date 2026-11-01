@@ -4,7 +4,13 @@ import { scanSchema } from './contracts.js';
 import type { StoredProof, Finding, Job, Hypothesis } from '../investigation/store.js';
 
 export const RETENTION_BATCH_SIZE = 128;
-export type EvidenceAvailability = { state: 'available' | 'expired' | 'unknown'; at: string | null };
+/** Retained proof availability; unknown is distinct from expired. */
+export type EvidenceAvailability = {
+  /** Persisted lifecycle state; read the reason and result before interpreting it. */
+  state: 'available' | 'expired' | 'unknown';
+  /** UTC timestamp of the evidence-availability transition, or null when unknown. */
+  at: string | null;
+};
 
 export async function initializeRetention(tx: Transaction) {
   await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_retention_runs (

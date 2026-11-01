@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { InvestigationStore } from '../../src/investigation/store.js';
 
 const [url, owner, leaseText] = process.argv.slice(2);
@@ -7,7 +8,25 @@ await store.initialize();
 process.send({ ready: true });
 process.once('message', async value => {
   try {
-    if (value !== 'claim') throw new Error('CLAIM_WORKER_COMMAND_INVALID');
+    if (value !== 'claim') {
+      const request = z
+        .object({
+          operation: z.literal('resource-snapshot'),
+          id: z.string().uuid(),
+          targetId: z.string().uuid(),
+          category: z.string().max(80),
+          path: z.string().max(2048),
+        })
+        .strict()
+        .parse(value);
+      process.send?.({
+        resources: {
+          historical: await store.getOwnedResource(request.id, owner),
+          current: await store.ownedResource(owner, request.targetId, request.category, request.path),
+        },
+      });
+      return;
+    }
     let job;
     for (let attempt = 0; attempt < 4; attempt++) {
       try {

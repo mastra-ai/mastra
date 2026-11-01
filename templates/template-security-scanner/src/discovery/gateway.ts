@@ -1,7 +1,6 @@
 import type Docker from 'dockerode';
 import { z } from 'zod';
 import { setTimeout as pause } from 'node:timers/promises';
-import type { Settings } from '../config/settings.js';
 import type { ScanContext } from '../core/control-plane.js';
 import type { DiscoveryImages } from './images.js';
 import { ScanResources } from './resources.js';
@@ -10,11 +9,17 @@ import { readRuntimeFile, stageFiles } from './io.js';
 import { SecretGuard } from './parser.js';
 export const gatewayStatsSchema = z
   .object({
+    /** Sanitized gateway event counters. */
     counts: z.record(z.string().max(160), z.number().int().nonnegative()),
+    /** Remaining shared upstream request reservations. */
     remainingRequests: z.number().int().nonnegative(),
+    /** Remaining shared response-byte budget. */
     remainingBytes: z.number().int().nonnegative(),
+    /** Currently outstanding upstream reservations. */
     active: z.number().int().nonnegative(),
+    /** Whether further upstream admission is blocked by an exhausted budget. */
     exhausted: z.boolean(),
+    /** Exhausted dimension or peer-pin failure, or null while usable. */
     exhaustionReason: z.enum(['requests', 'bytes', 'time', 'peer-mismatch']).nullable(),
   })
   .strict();
@@ -31,7 +36,6 @@ export async function gatewayState(gateway: Docker.Container, guard: SecretGuard
   return state;
 }
 export async function openGateway(
-  settings: Settings,
   resources: ScanResources,
   context: ScanContext,
   images: DiscoveryImages,

@@ -13,107 +13,215 @@ import type { VerificationProof } from './verification.js';
 import type { PlaybookBinding } from '../knowledge/playbooks.js';
 import type { EvidenceAvailability } from '../discovery/retention.js';
 
+/** Immutable authorization and evidence revision snapshot. */
 export type Lineage = {
+  /** Authorized target to which this record belongs. */
   targetId: string;
+  /** Exact target revision authorized for this operation. */
   targetRevision: number;
+  /** Policy that bounds the target scope and budgets. */
   policyId: string;
+  /** Exact policy revision authorized for this operation. */
   policyRevision: number;
-  profiles: { profileId: string; profileRevision: number; credentialRevision: number }[];
+  /** Exact profile and credential revisions participating in this operation. */
+  profiles: {
+    /** Identity profile used for this observation or operation. */
+    profileId: string;
+    /** Exact profile metadata revision bound to this operation. */
+    profileRevision: number;
+    /** Credential version bound to this operation; changes invalidate prior authorization. */
+    credentialRevision: number;
+  }[];
+  /** Discovery scan supplying the source inventory. */
   scanId: string;
 };
+/** Persisted investigation and its shared conservative budget ledger. */
 export type Investigation = {
+  /** Stable identifier of this record. */
   id: string;
+  /** Operator that owns this record; derived from the authenticated session. */
   owner: string;
+  /** Caller-selected stable key; repeated input returns the existing admission. */
   idempotencyKey: string;
+  /** Immutable target, policy, profile, credential, and scan revision snapshot. */
   lineage: Lineage;
+  /** Persisted lifecycle state; read the reason and result before interpreting it. */
   state: 'QUEUED' | 'PLANNING' | 'RUNNING' | 'AWAITING_APPROVAL' | 'COMPLETED' | 'CANCELLED' | 'BLOCKED';
+  /** Current optimistic-concurrency revision; stale writes are rejected. */
   revision: number;
+  /** UTC timestamp when the record was created. */
   createdAt: string;
+  /** UTC timestamp of the latest persisted transition. */
   updatedAt: string;
+  /** Explicit finite budgets recorded for this operation. */
   limits: Pick<InvestigationAdmission, 'maxRequests' | 'maxTokens' | 'maxDurationSeconds'>;
+  /** Conservatively reserved upstream requests, never refunded after dispatch. */
   usedRequests: number;
+  /** Conservative shared model-token reservations, not actual provider billing. */
   usedTokens: number;
+  /** Sanitized machine-readable reason for the recorded state. */
   reason: string | null;
 };
+/** Persisted proposal bound to source evidence, resources, and reviewed rules. */
 export type Hypothesis = HypothesisInput & {
+  /** Stable identifier of this record. */
   id: string;
+  /** Investigation that owns this record and its shared budget. */
   investigationId: string;
+  /** Operator that owns this record; derived from the authenticated session. */
   owner: string;
+  /** Immutable target, policy, profile, credential, and scan revision snapshot. */
   lineage: Lineage;
+  /** Immutable owned-resource snapshot referenced by this hypothesis, or null. */
   resourceBindingId: string | null;
+  /** Digests and version binding for the reviewed playbook and reference catalog. */
   ruleBinding?: PlaybookBinding;
+  /** Persisted lifecycle state; read the reason and result before interpreting it. */
   state: 'QUEUED' | 'AWAITING_APPROVAL' | 'BLOCKED' | 'COMPLETED' | 'CANCELLED';
+  /** Sanitized machine-readable reason for the recorded state. */
   reason: string | null;
+  /** UTC timestamp when the record was created. */
   createdAt: string;
 };
+/** Persisted owned resource or cleanup resource, scoped by its enclosing module. */
 export type OwnedResource = OwnedResourceInput & {
+  /** Stable identifier of this record. */
   id: string;
+  /** Operator that owns this record; derived from the authenticated session. */
   owner: string;
+  /** Authorized target to which this record belongs. */
   targetId: string;
+  /** Exact target revision authorized for this operation. */
   targetRevision: number;
+  /** Exact policy revision authorized for this operation. */
   policyRevision: number;
-  profileRevisions: { profileId: string; profileRevision: number; credentialRevision: number }[];
+  /** Exact profile and credential revisions authorizing this resource. */
+  profileRevisions: {
+    /** Identity profile used for this observation or operation. */
+    profileId: string;
+    /** Exact profile metadata revision bound to this operation. */
+    profileRevision: number;
+    /** Credential version bound to this operation; changes invalidate prior authorization. */
+    credentialRevision: number;
+  }[];
+  /** UTC timestamp when the record was created. */
   createdAt: string;
 };
+/** Durable fenced verification job with single-use request reservations. */
 export type Job = {
+  /** Stable identifier of this record. */
   id: string;
+  /** Investigation that owns this record and its shared budget. */
   investigationId: string;
+  /** Grounded hypothesis that this record evaluates. */
   hypothesisId: string;
+  /** Authorized target to which this record belongs. */
   targetId: string;
+  /** Operator that owns this record; derived from the authenticated session. */
   owner: string;
+  /** Persisted lifecycle state; read the reason and result before interpreting it. */
   state: 'QUEUED' | 'LEASED' | 'AWAITING_APPROVAL' | 'COMPLETED' | 'CANCELLED' | 'DEAD';
+  /** Monotonic lease token; stale workers cannot publish. */
   fence: number;
+  /** UTC lease expiration, or null when no lease is held. */
   leaseUntil: string | null;
+  /** Number of persisted job claims. */
   attempts: number;
+  /** Requests already reserved for this job. */
   reservedRequests: number;
+  /** Persisted terminal result, or null before publication. */
   result: {
+    /** Deterministic verification outcome after applicable evidence review. */
     outcome: VerificationOutcome;
+    /** Source evidence identifiers grounding the hypothesis or result. */
     evidenceIds: string[];
+    /** Sanitized machine-readable reason for the recorded state. */
     reason: string;
+    /** Model identifier used for the recorded call or review; null if no call ran. */
     modelId: string | null;
+    /** Provider-reported usage, or null when unavailable. */
     usageTokens: number | null;
+    /** Whether retained proof is currently available, expired, or unknown. */
     evidenceAvailability?: 'available' | 'expired' | 'unknown';
   } | null;
+  /** UTC timestamp when the record was created. */
   createdAt: string;
+  /** UTC timestamp of the latest persisted transition. */
   updatedAt: string;
 };
+/** Revision-bound single-use authorization for an exact active probe. */
 export type Approval = {
+  /** Stable identifier of this record. */
   id: string;
+  /** Operator that owns this record; derived from the authenticated session. */
   owner: string;
+  /** Investigation that owns this record and its shared budget. */
   investigationId: string;
+  /** Grounded hypothesis that this record evaluates. */
   hypothesisId: string;
+  /** Durable job associated with this operation. */
   jobId: string;
+  /** Immutable target, policy, profile, credential, and scan revision snapshot. */
   lineage: Lineage;
+  /** Allowlisted capability identifier; must match the selected category. */
   toolId: string;
+  /** Exact owned callback bound to an active approval. */
   callback: string;
+  /** Maximum upstream requests allowed; reservations are shared and not refunded. */
   maxRequests: number;
+  /** UTC expiration timestamp. */
   expiresAt: string;
+  /** Approval state or operator decision, as selected by this contract. */
   decision: 'pending' | 'approved' | 'denied' | 'expired';
+  /** Current optimistic-concurrency revision; stale writes are rejected. */
   revision: number;
+  /** Whether the single-use approval was consumed by a claim. */
   consumed: boolean;
+  /** UTC timestamp when the record was created. */
   createdAt: string;
+  /** UTC decision timestamp, or null while undecided. */
   decidedAt: string | null;
 };
+/** Confirmed result linked to retained proof and source evidence. */
 export type Finding = {
+  /** Stable identifier of this record. */
   id: string;
+  /** Durable job associated with this operation. */
   jobId: string;
+  /** Investigation that owns this record and its shared budget. */
   investigationId: string;
+  /** Operator that owns this record; derived from the authenticated session. */
   owner: string;
+  /** Grounded hypothesis that this record evaluates. */
   hypothesisId: string;
+  /** Source evidence identifiers grounding the hypothesis or result. */
   evidenceIds: string[];
+  /** Retained verification-proof record supporting the finding. */
   proofId: string;
+  /** UTC timestamp when the record was created. */
   createdAt: string;
+  /** Current evidence availability and its dated retention state. */
   availability?: EvidenceAvailability;
 };
+/** Retained verification proof with expiry and availability state. */
 export type StoredProof = {
+  /** Stable identifier of this record. */
   id: string;
+  /** Durable job associated with this operation. */
   jobId: string;
+  /** Investigation that owns this record and its shared budget. */
   investigationId: string;
+  /** Operator that owns this record; derived from the authenticated session. */
   owner: string;
+  /** Grounded hypothesis that this record evaluates. */
   hypothesisId: string;
+  /** Sanitized deterministic verification proof. */
   proof: VerificationProof;
+  /** UTC timestamp when the record was created. */
   createdAt: string;
+  /** UTC expiration timestamp. */
   expiresAt?: string | null;
+  /** Current evidence availability and its dated retention state. */
   availability?: EvidenceAvailability;
 };
 
@@ -122,6 +230,65 @@ const read = <T>(row: object | undefined): T => {
   return JSON.parse(String((row as { data: unknown }).data)) as T;
 };
 const now = () => new Date().toISOString();
+
+/** Exact application-schema3 resource table, retained for bounded backup compatibility. */
+export const LEGACY_OWNED_RESOURCE_SQL = `CREATE TABLE scanner_owned_resources (
+        id TEXT PRIMARY KEY,owner TEXT NOT NULL,target_id TEXT NOT NULL,category TEXT NOT NULL,path TEXT NOT NULL,
+        data TEXT NOT NULL,UNIQUE(owner,target_id,category,path))`;
+
+/** Exact supported resource-history table after schema4's table replacement. */
+export const CURRENT_OWNED_RESOURCE_SQL = `CREATE TABLE "scanner_owned_resources" (
+    id TEXT PRIMARY KEY,owner TEXT NOT NULL,target_id TEXT NOT NULL,category TEXT NOT NULL,path TEXT NOT NULL,
+    data TEXT NOT NULL)`;
+/** Unique current registration for each operator-owned resource tuple. */
+export const CURRENT_OWNED_RESOURCE_POINTER_SQL = `CREATE TABLE scanner_current_owned_resources (
+    owner TEXT NOT NULL,target_id TEXT NOT NULL,category TEXT NOT NULL,path TEXT NOT NULL,
+    resource_id TEXT NOT NULL UNIQUE REFERENCES scanner_owned_resources(id),PRIMARY KEY(owner,target_id,category,path))`;
+
+/** Upgrade immutable resource history and current selection in the caller's transaction. */
+export async function migrateOwnedResources(tx: Transaction) {
+  const versions = await tx.execute('SELECT version FROM scanner_migrations');
+  if (versions.rows.some(row => Number(row.version) > 4))
+    throw new ControlPlaneError('DATABASE_VERSION_UNSUPPORTED', 503);
+  if (versions.rows.some(row => Number(row.version) === 4)) {
+    const schema = await tx.execute(
+      "SELECT name,sql FROM sqlite_master WHERE name IN ('scanner_owned_resources','scanner_current_owned_resources')",
+    );
+    if (
+      schema.rows.find(row => row.name === 'scanner_owned_resources')?.sql !== CURRENT_OWNED_RESOURCE_SQL ||
+      schema.rows.find(row => row.name === 'scanner_current_owned_resources')?.sql !==
+        CURRENT_OWNED_RESOURCE_POINTER_SQL
+    )
+      throw new ControlPlaneError('DATABASE_SCHEMA_UNSUPPORTED', 503);
+    const columns = await tx.execute('PRAGMA table_info(scanner_current_owned_resources)');
+    if (
+      JSON.stringify(columns.rows.map(row => [row.name, row.type, row.pk])) !==
+      JSON.stringify([
+        ['owner', 'TEXT', 1],
+        ['target_id', 'TEXT', 2],
+        ['category', 'TEXT', 3],
+        ['path', 'TEXT', 4],
+        ['resource_id', 'TEXT', 0],
+      ])
+    )
+      throw new ControlPlaneError('DATABASE_SCHEMA_UNSUPPORTED', 503);
+    return;
+  }
+  const legacy = await tx.execute("SELECT sql FROM sqlite_master WHERE name='scanner_owned_resources'");
+  if (legacy.rows[0]?.sql !== LEGACY_OWNED_RESOURCE_SQL)
+    throw new ControlPlaneError('DATABASE_SCHEMA_UNSUPPORTED', 503);
+  await tx.execute(CURRENT_OWNED_RESOURCE_SQL.replace('"scanner_owned_resources"', 'scanner_owned_resources_next'));
+  await tx.execute(
+    'INSERT INTO scanner_owned_resources_next SELECT id,owner,target_id,category,path,data FROM scanner_owned_resources',
+  );
+  await tx.execute('DROP TABLE scanner_owned_resources');
+  await tx.execute('ALTER TABLE scanner_owned_resources_next RENAME TO scanner_owned_resources');
+  await tx.execute(CURRENT_OWNED_RESOURCE_POINTER_SQL);
+  await tx.execute(
+    'INSERT INTO scanner_current_owned_resources SELECT owner,target_id,category,path,id FROM scanner_owned_resources',
+  );
+  await tx.execute('INSERT INTO scanner_migrations(version) VALUES (4)');
+}
 
 export class InvestigationStore {
   private readonly client;
@@ -186,9 +353,7 @@ export class InvestigationStore {
       await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_recurrences (
         target_id TEXT PRIMARY KEY,owner TEXT NOT NULL,revision INTEGER NOT NULL,enabled INTEGER NOT NULL,
         next_at TEXT NOT NULL,data TEXT NOT NULL)`);
-      await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_owned_resources (
-        id TEXT PRIMARY KEY,owner TEXT NOT NULL,target_id TEXT NOT NULL,category TEXT NOT NULL,path TEXT NOT NULL,
-        data TEXT NOT NULL,UNIQUE(owner,target_id,category,path))`);
+      await tx.execute(LEGACY_OWNED_RESOURCE_SQL.replace('CREATE TABLE', 'CREATE TABLE IF NOT EXISTS'));
       await tx.execute(`CREATE TABLE IF NOT EXISTS scanner_recurrence_events (
         id TEXT PRIMARY KEY,target_id TEXT NOT NULL,owner TEXT NOT NULL,occurred_at TEXT NOT NULL,
         state TEXT NOT NULL CHECK(state IN ('PENDING','CONSUMED','CANCELLED')))`);
@@ -215,6 +380,7 @@ export class InvestigationStore {
         'CREATE INDEX IF NOT EXISTS scanner_investigations_scheduled ON scanner_investigations(owner,state,idempotency_key)',
       );
       await tx.execute('INSERT OR IGNORE INTO scanner_migrations(version) VALUES (3)');
+      await migrateOwnedResources(tx);
     });
   }
   private async record<T>(table: string, id: string, owner: string, tx?: Transaction): Promise<T> {
@@ -293,26 +459,57 @@ export class InvestigationStore {
   }
   async ownedResource(owner: string, targetId: string, category: string, path: string) {
     const result = await this.client.execute({
-      sql: 'SELECT data FROM scanner_owned_resources WHERE owner=? AND target_id=? AND category=? AND path=?',
+      sql: `SELECT r.data FROM scanner_current_owned_resources c JOIN scanner_owned_resources r ON r.id=c.resource_id
+        WHERE c.owner=? AND c.target_id=? AND c.category=? AND c.path=?`,
       args: [owner, targetId, category, path],
     });
     return result.rows[0] ? read<OwnedResource>(result.rows[0]) : null;
   }
-  async bindOwnedResource(binding: OwnedResource) {
-    return this.write(async tx => {
+  async bindOwnedResource(
+    binding: OwnedResource,
+    validate: (transaction: Transaction) => Promise<void> = async () => {},
+    serialize: InvestigationStore['write'] = this.write.bind(this),
+  ) {
+    return serialize(async tx => {
+      await validate(tx);
       const prior = await tx.execute({
-        sql: 'SELECT data FROM scanner_owned_resources WHERE owner=? AND target_id=? AND category=? AND path=?',
+        sql: `SELECT r.data FROM scanner_current_owned_resources c JOIN scanner_owned_resources r ON r.id=c.resource_id
+        WHERE c.owner=? AND c.target_id=? AND c.category=? AND c.path=?`,
         args: [binding.owner, binding.targetId, binding.category, binding.path],
       });
       if (prior.rows[0]) {
         const existing = read<OwnedResource>(prior.rows[0]);
-        if (JSON.stringify({ ...existing, id: binding.id, createdAt: binding.createdAt }) !== JSON.stringify(binding))
+        if (JSON.stringify({ ...existing, id: binding.id, createdAt: binding.createdAt }) === JSON.stringify(binding))
+          return { binding: existing, created: false };
+        const sameProfiles = JSON.stringify(existing.profileRevisions) === JSON.stringify(binding.profileRevisions);
+        if (
+          existing.targetRevision === binding.targetRevision &&
+          existing.policyRevision === binding.policyRevision &&
+          sameProfiles
+        )
           throw new ControlPlaneError('RESOURCE_BINDING_CONFLICT', 409);
-        return { binding: existing, created: false };
+        const currentProfiles = new Map(binding.profileRevisions.map(profile => [profile.profileId, profile]));
+        if (
+          binding.targetRevision < existing.targetRevision ||
+          (binding.policyRevision < existing.policyRevision && binding.targetRevision <= existing.targetRevision) ||
+          existing.profileRevisions.some(profile => {
+            const current = currentProfiles.get(profile.profileId);
+            return current
+              ? current.profileRevision < profile.profileRevision ||
+                  current.credentialRevision < profile.credentialRevision
+              : binding.targetRevision <= existing.targetRevision;
+          })
+        )
+          throw new ControlPlaneError('REVISION_CONFLICT', 409);
       }
       await tx.execute({
         sql: 'INSERT INTO scanner_owned_resources(id,owner,target_id,category,path,data) VALUES (?,?,?,?,?,?)',
         args: [binding.id, binding.owner, binding.targetId, binding.category, binding.path, JSON.stringify(binding)],
+      });
+      await tx.execute({
+        sql: `INSERT INTO scanner_current_owned_resources(owner,target_id,category,path,resource_id) VALUES (?,?,?,?,?)
+          ON CONFLICT(owner,target_id,category,path) DO UPDATE SET resource_id=excluded.resource_id`,
+        args: [binding.owner, binding.targetId, binding.category, binding.path, binding.id],
       });
       return { binding, created: true };
     });

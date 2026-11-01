@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
+import { fork } from 'node:child_process';
+import { resolve } from 'node:path';
+import type { OwnedResource } from '../../src/investigation/store.js';
 import { expect } from 'vitest';
 import type { Evidence, Scan } from '../../src/discovery/contracts.js';
 import type { Profile, Target } from '../../src/core/contracts.js';
@@ -22,6 +25,43 @@ type Scenario = {
   advisory?: boolean;
   advisoryRevisionOffset?: number;
 };
+/** Observe immutable/current resource snapshots after a genuinely fresh process boot. */
+export async function resourceSnapshotProcess(
+  databaseUrl: string,
+  request: { id: string; targetId: string; category: string; path: string },
+) {
+  const child = fork(resolve(import.meta.dirname, 'claim-worker.ts'), [databaseUrl, 'local-operator'], {
+    execArgv: ['--import', 'tsx'],
+    stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+    env: { HOME: process.env.HOME, PATH: process.env.PATH },
+  });
+  return new Promise<{ historical: OwnedResource; current: OwnedResource | null }>((resolveResult, reject) => {
+    let result: { historical: OwnedResource; current: OwnedResource | null } | undefined;
+    let failure: string | undefined;
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error('RESOURCE_RESTART_TIMEOUT'));
+    }, 15000);
+    child.on('message', message => {
+      const data = message as { ready?: boolean; resources?: typeof result; error?: string };
+      if (data.ready) child.send({ operation: 'resource-snapshot', ...request });
+      else {
+        result = data.resources;
+        failure = data.error;
+      }
+    });
+    child.once('error', error => {
+      clearTimeout(timer);
+      reject(error);
+    });
+    child.once('exit', code => {
+      clearTimeout(timer);
+      if (code !== 0 || !result || failure) reject(new Error(`RESOURCE_RESTART_FAILED:${failure ?? code}`));
+      else resolveResult(result);
+    });
+  });
+}
+
 export async function modelWire(scenario: Scenario) {
   const received: unknown[] = [];
   let releaseInterpret: () => void = () => {};
@@ -212,7 +252,7 @@ export async function ownedScan(
     };
     if (current.kind !== 'public') {
       const checked = await lab.request(`/api/targets/${target.id}/profiles/${profile.id}/check`, 'POST', binding);
-      expect(checked.status).toBe(200);
+      expect(checked.status, String(checked.data.code ?? 'IDENTITY_CHECK')).toBe(200);
       expect((checked.data.identity as { status: string }).status).toBe('READY');
     }
     const updated = (await lab.request(`/api/targets/${target.id}/profiles/${profile.id}`)).data as unknown as Profile;

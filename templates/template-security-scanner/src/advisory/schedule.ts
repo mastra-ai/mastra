@@ -1,34 +1,6 @@
-import { createStep, createWorkflow } from '@mastra/core/workflows';
-import { z } from 'zod';
 import type { Settings } from '../config/settings.js';
 import { ControlPlaneError } from '../core/contracts.js';
 import type { AdvisorySync } from './sync.js';
-
-export function createAdvisorySyncWorkflow(settings: Settings, processDue: () => Promise<void>) {
-  const empty = z.object({}).strict();
-  const step = createStep({
-    id: 'process-due-advisory-sync',
-    inputSchema: empty,
-    outputSchema: empty,
-    execute: async () => {
-      await processDue();
-      return {};
-    },
-  });
-  return createWorkflow({
-    id: 'local-advisory-sync',
-    inputSchema: empty,
-    outputSchema: empty,
-    schedule: {
-      id: 'local-advisory-sync-wake',
-      cron: settings.SCANNER_ADVISORY_SYNC_CRON!,
-      timezone: settings.SCANNER_ADVISORY_SYNC_TIMEZONE!,
-      inputData: {},
-    },
-  })
-    .then(step)
-    .commit();
-}
 
 export class AdvisoryScheduler {
   private active?: Promise<void>;
