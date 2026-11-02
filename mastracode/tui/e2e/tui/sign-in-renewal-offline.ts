@@ -128,6 +128,9 @@ export const signInRenewalOfflineScenario: McE2eScenario = {
       }
       if (hostname === 'api.kimi.com') {
         if (!online) throw new TypeError('fetch failed');
+        // Only the token from the renewal is accepted, so recovery proves it was used.
+        const bearer = new Headers(init?.headers).get('authorization');
+        if (bearer !== `Bearer ${RENEWED_ACCESS}`) return new Response('{"error":"unauthorized"}', { status: 401 });
         return completionResponse(RESPONSE_TEXT);
       }
       return originalFetch(input, init);
@@ -153,7 +156,11 @@ export const signInRenewalOfflineScenario: McE2eScenario = {
     terminal.submit('Answer while the wifi is down.');
     // Renewal retries with backoff before giving up, so allow for it.
     await runtime.waitForScreenText(/Network error while contacting/i, terminal, 45_000);
-    await runtime.waitForScreenTextAbsent(/sign-in expired/i, terminal, 1_000);
+    // The whole scrollback, so an expired notice anywhere in the turn fails the test.
+    const offlineOutput = terminal.serializeHistory?.().output ?? '';
+    if (/sign-in expired/i.test(offlineOutput)) {
+      throw new Error('Expected a network error, but the offline turn reported an expired sign-in');
+    }
     runtime.printScreen('offline', terminal);
     if (savedRefreshToken() !== SAVED_REFRESH) {
       throw new Error(`Expected the saved sign-in to survive, saw refresh token: ${String(savedRefreshToken())}`);
