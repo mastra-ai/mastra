@@ -5478,7 +5478,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     const cards = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
-      item => item.metadata?.linearIssueId === 'issue-1',
+      item => item.workItem.metadata?.linearIssueId === 'issue-1',
     );
     expect(cards.map(card => card.id)).toEqual([renamed.item.id]);
     expect(await decisionByKey(storage, 'linked-renamed')).toMatchObject({ status: 'succeeded' });
@@ -5550,7 +5550,7 @@ describe('FactoryDecisionDispatcher', () => {
     await dispatcher.runOnce(new Date('2030-01-03T00:00:00Z'));
 
     const cards = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
-      item => item.metadata?.linearIssueId === 'issue-1',
+      item => item.workItem.metadata?.linearIssueId === 'issue-1',
     );
     expect(cards.map(card => card.id).sort()).toEqual([finished.id, live.id].sort());
     expect(await storage.get({ orgId: 'org-1', id: live.id })).toMatchObject({ parentWorkItemId: parent.id });

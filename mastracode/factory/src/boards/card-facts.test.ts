@@ -27,6 +27,35 @@ const STAMPS: Record<string, Record<string, unknown> | null> = {
   'factoryAuthored true, authorTrusted false': { factoryAuthored: true, authorTrusted: false },
 };
 
+describe('provider facts', () => {
+  it('uses normalized provider facts while keeping placement trust authoritative', () => {
+    const facts = cardRuleFacts({
+      title: 'Fix',
+      externalSource: SOURCES['github issue']!,
+      metadata: { labels: ['stale'], author: 'stale-author', authorTrusted: false },
+      workItem: { labels: ['bug'], author: 'provider-author' },
+    });
+    expect(facts).toMatchObject({
+      'item.labels': ['bug'],
+      'item.author': 'provider-author',
+      'author.trusted': false,
+    });
+  });
+
+  it('normalizes incoming source facts before the arrival has a persisted work item', () => {
+    const facts = cardRuleFacts({
+      title: 'Fix',
+      externalSource: SOURCES['github issue']!,
+      metadata: { labels: [{ name: 'bug' }], author: 'provider-author', authorTrusted: true },
+    });
+    expect(facts).toMatchObject({
+      'item.labels': ['bug'],
+      'item.author': 'provider-author',
+      'author.trusted': true,
+    });
+  });
+});
+
 describe('author.trusted', () => {
   it.each([
     ['authorTrusted true', true],

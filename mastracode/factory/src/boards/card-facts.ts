@@ -1,11 +1,18 @@
 import type { RuleFacts } from '../rules/rule-group.js';
 import { authorTrusted } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
+import { workItemProviderAdapter } from '../work-items/providers/index.js';
 
 /** What a condition (`autoStartWhen`, `exitTool.autoApproveWhen`, an intake route's `when`) can test about a card. */
-export function cardRuleFacts(item: Pick<Card, 'title' | 'metadata' | 'workItem' | 'externalSource'>): RuleFacts {
-  const { labels, author } = item.workItem;
+export function cardRuleFacts(
+  item: Pick<Card, 'title' | 'metadata' | 'externalSource'> & {
+    workItem?: Pick<Card['workItem'], 'labels' | 'author'>;
+  },
+): RuleFacts {
   const source = item.externalSource;
+  const provider = item.workItem ?? workItemProviderAdapter(source).toSource(source, item.metadata);
+  const labels = provider?.labels ?? [];
+  const author = provider?.author ?? null;
   return {
     'item.labels': labels,
     'item.title': item.title,

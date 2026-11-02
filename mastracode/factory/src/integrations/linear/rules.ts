@@ -87,7 +87,7 @@ export class LinearRules {
       // The identifier finds the card filed under it; after Linear renamed the
       // identifier, the stable issue id finds it, preferring a live card over
       // finished ones, as the issue detail route does.
-      const byIssueId = items.filter(item => item.metadata?.linearIssueId === issue.id);
+      const byIssueId = items.filter(item => item.workItem.metadata?.linearIssueId === issue.id);
       const relatedItem =
         itemsBySourceKey.get(`linear:${issue.identifier}`) ??
         byIssueId.find(item => !isTerminalWorkItem(this.options.boards, item)) ??

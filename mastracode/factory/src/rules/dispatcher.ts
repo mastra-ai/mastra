@@ -1328,7 +1328,7 @@ export class FactoryDecisionDispatcher {
     if (decision.source !== 'linear-issue' || typeof issueId !== 'string') return null;
     const items = await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
     const cards = items.filter(
-      item => item.externalSource?.integrationId === 'linear' && item.metadata?.linearIssueId === issueId,
+      item => item.externalSource?.integrationId === 'linear' && item.workItem.metadata?.linearIssueId === issueId,
     );
     return cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0] ?? null;
   }
