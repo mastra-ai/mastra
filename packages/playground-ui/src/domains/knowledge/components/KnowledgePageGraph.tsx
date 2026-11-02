@@ -21,6 +21,7 @@ import type { CSSProperties } from 'react';
 
 import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
+  KNOWLEDGE_DOT_HIT_MARGIN,
   KNOWLEDGE_DOT_SIZE,
   branchColors,
   graphShape,
@@ -261,6 +262,13 @@ function DotNode({ data }: { data: PageNodeData }) {
       onPointerEnter={() => setHover(true)}
       onPointerLeave={() => setHover(false)}
     >
+      {/* A larger target than the dot itself, so a small dot is easy to hit; it is part of the dot, so hover and click land here too. */}
+      <span
+        aria-hidden
+        data-testid="knowledge-dot-hit-area"
+        className="absolute rounded-full"
+        style={{ inset: -KNOWLEDGE_DOT_HIT_MARGIN }}
+      />
       <div
         className="size-full rounded-full border"
         style={{

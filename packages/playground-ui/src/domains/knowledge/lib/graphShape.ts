@@ -48,9 +48,12 @@ export function promotedCircles(
 }
 
 /** A dot's diameter. */
-export const KNOWLEDGE_DOT_SIZE = 14;
+export const KNOWLEDGE_DOT_SIZE = 20;
 /** A dot's diameter when it carries its link count. */
-export const KNOWLEDGE_COUNTED_DOT_SIZE = 22;
+export const KNOWLEDGE_COUNTED_DOT_SIZE = 28;
+
+/** How far past its edge a dot still counts as under the pointer. */
+export const KNOWLEDGE_DOT_HIT_MARGIN = 8;
 
 const PLACEHOLDER_PREFIX = 'more:';
 const REST_PREFIX = 'rest:';
@@ -173,7 +176,7 @@ const FIRST_DOT_RING_GAP = 150;
 /** Gap between rings of dots. */
 const DOT_RING_GAP = 70;
 /** Space a dot needs along its ring before the next one staggers outward. */
-const DOT_SPACING = 22;
+const DOT_SPACING = 28;
 
 /**
  * Places the focus at the centre and every other page on the ring for its depth, each page's children in

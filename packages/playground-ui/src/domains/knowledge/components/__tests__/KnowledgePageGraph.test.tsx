@@ -3,7 +3,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
-import { KNOWLEDGE_COUNTED_DOT_SIZE, KNOWLEDGE_DOT_SIZE } from '../../lib/graphShape';
+import { KNOWLEDGE_COUNTED_DOT_SIZE, KNOWLEDGE_DOT_HIT_MARGIN, KNOWLEDGE_DOT_SIZE } from '../../lib/graphShape';
 import type { KnowledgePagePayload } from '../../pageTypes';
 import { KnowledgePageGraph } from '../KnowledgePageGraph';
 
@@ -361,6 +361,14 @@ describe('KnowledgePageGraph', () => {
         fireEvent.mouseLeave(dot('ticket'));
         expect(legend.queryByTestId('knowledge-legend-out')).toBeNull();
         expect(legend.queryByTestId('knowledge-legend-in')).toBeNull();
+      });
+
+      it('gives every dot a hit area wider than the dot, and draws the dot at least 20px', () => {
+        renderGraph({ pages: linked, knownLinks: known });
+        const target = dot('ticket');
+        expect(Number.parseFloat(target.style.width)).toBeGreaterThanOrEqual(20);
+        const hit = within(target).getByTestId('knowledge-dot-hit-area');
+        expect(hit.style.inset).toBe(`-${KNOWLEDGE_DOT_HIT_MARGIN}px`);
       });
 
       it('puts the tooltip on the side that does not cover the focused page', () => {
