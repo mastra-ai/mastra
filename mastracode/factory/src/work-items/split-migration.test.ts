@@ -430,6 +430,32 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     expect(await readSplit(storage)).toEqual(before);
   });
 
+  it('does not recopy cards when an older replica refreshes only comment summaries or inert claims', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await migrateWorkItemSplit(storage);
+    const before = await readSplit(storage);
+
+    await storage.ops.updateMany(
+      'work_items',
+      { id: cards.get('github issue')! },
+      {
+        comment_count: 3,
+        feed_activity_at: new Date('2031-01-01T00:00:00Z'),
+        claim_key: 'legacy:unused',
+        source_key: 'legacy:unused-source-shadow',
+      },
+    );
+
+    expect(await migrateWorkItemSplit(storage)).toMatchObject({
+      workItems: 0,
+      recopied: 0,
+      unchanged: FIXTURES.length,
+      skipped: [],
+    });
+    expect(await readSplit(storage)).toEqual(before);
+  });
+
   it('picks up a card an older replica moved after the first pass, without reusing a revision', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);

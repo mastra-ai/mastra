@@ -70,8 +70,29 @@ function time(value: Date | string | null | undefined): number {
 }
 
 function legacyHash(row: WorkItemDbRow): string {
+  const copied = {
+    id: row.id,
+    org_id: row.org_id,
+    factory_project_id: row.factory_project_id,
+    board: row.board,
+    external_source: row.external_source,
+    parent_work_item_id: row.parent_work_item_id,
+    title: row.title,
+    stages: row.stages,
+    stage_history: row.stage_history,
+    sessions: row.sessions,
+    metadata: row.metadata,
+    triage_type: row.triage_type,
+    accepted_at: row.accepted_at,
+    autonomy_armed_at: row.autonomy_armed_at,
+    plans_preapproved_at: row.plans_preapproved_at,
+    revision: row.revision,
+    created_by: row.created_by,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
   // stableJson does not invoke Date.toJSON; normalize before hashing.
-  return factoryDecisionHash(JSON.parse(JSON.stringify(row)));
+  return factoryDecisionHash(JSON.parse(JSON.stringify(copied)));
 }
 
 export function splitLegacyWorkItem(
