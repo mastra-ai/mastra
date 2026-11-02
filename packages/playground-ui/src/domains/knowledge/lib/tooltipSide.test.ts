@@ -53,4 +53,29 @@ describe('chooseTooltipSide', () => {
       expect(chooseTooltipSide({ ...base, dot: at(500, 400), obstacles: [legend, focus] })).toMatch(/left|right/);
     });
   });
+
+  describe('when every side but below is covered', () => {
+    const dot = at(500, 400);
+    const above: Box = { left: 400, right: 600, top: 300, bottom: 380 };
+    const leftOf: Box = { left: 250, right: 480, top: 360, bottom: 440 };
+    const rightOf: Box = { left: 520, right: 750, top: 360, bottom: 440 };
+
+    it('goes below, so below is a candidate like the rest', () => {
+      expect(chooseTooltipSide({ ...base, dot, obstacles: [above, leftOf, rightOf] })).toBe('bottom');
+    });
+
+    it('goes below even when a line also runs up, left and right', () => {
+      const lines = [
+        { from: { x: 500, y: 400 }, to: { x: 500, y: 150 } },
+        { from: { x: 500, y: 400 }, to: { x: 150, y: 400 } },
+        { from: { x: 500, y: 400 }, to: { x: 850, y: 400 } },
+      ];
+      expect(chooseTooltipSide({ ...base, dot, lines })).toBe('bottom');
+    });
+
+    it('stays off below when below is the covered side instead', () => {
+      const below: Box = { left: 400, right: 600, top: 420, bottom: 500 };
+      expect(chooseTooltipSide({ ...base, dot, obstacles: [below] })).toBe('top');
+    });
+  });
 });

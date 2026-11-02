@@ -225,7 +225,7 @@ function DotNode({ data }: { data: PageNodeData }) {
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
   const linkText = links && (links.in > 0 || links.out > 0) ? linkCountsText(links) : null;
   const label = [page.name, hint ?? path, children, linkText].filter(Boolean).join(' · ');
-  // Pick the side that covers the least: not the focused page, not the highlighted lines, not the legend or Back.
+  // Pick the side that covers the least: not another page or dot, not the highlighted lines, not the legend or Back.
   useLayoutEffect(() => {
     const dot = dotRef.current;
     const tip = tipRef.current;
@@ -237,13 +237,18 @@ function DotNode({ data }: { data: PageNodeData }) {
     const scaledHeight = tip.offsetHeight * tipScale;
     if (!scaledWidth || !scaledHeight) return;
     const obstacles = [
-      ...graph.querySelectorAll('[data-testid="knowledge-page-node"]'),
+      ...graph.querySelectorAll('[data-testid="knowledge-page-node"], [data-testid="knowledge-page-dot"]'),
       ...(graph.parentElement ?? graph).querySelectorAll(
         '[aria-label="Legend"], [data-testid="knowledge-graph-back"], .react-flow__controls',
       ),
     ]
       .map(boxOf)
-      .filter(box => box.right > box.left && !(box.left === tipBox.left && box.top === tipBox.top));
+      .filter(
+        box =>
+          box.right > box.left &&
+          !(box.left === tipBox.left && box.top === tipBox.top) &&
+          !(box.left === dotBox.left && box.top === dotBox.top),
+      );
     setSide(
       chooseTooltipSide({
         dot: dotBox,
