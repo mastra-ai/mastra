@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { EditorView } from '@codemirror/view';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { SpanRecord } from '../../../types';
 
 import { SpanDataPanelView } from '../../span-data-panel-view';
 import { SpanDetailsView } from '../../span-details-view';
@@ -21,9 +24,12 @@ import {
   modelGenerationSpan,
   modelStepSpan,
   toolCallSpan,
+  traceWithoutToolCalls,
   unknownPartSpan,
   workflowStepSpan,
 } from './fixtures/span-payloads';
+import { server } from '@/test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // jsdom does not provide PointerEvent, which Base UI switches dispatch.
 beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
@@ -37,9 +43,21 @@ const sectionTitles = () =>
   );
 
 describe('Span metadata JSON sections', () => {
-  it.each([SpanDataPanelView, SpanDetailsView])('shows them folded, and as JSON only once opened', View => {
-    const span = { ...emptySpan, metadata: { origin: 'metadata-value' }, attributes: { custom: 'attribute-value' } };
-    render(<View span={span} spanId={span.spanId} traceId={span.traceId} onClose={() => {}} />);
+  const span = { ...emptySpan, metadata: { origin: 'metadata-value' }, attributes: { custom: 'attribute-value' } };
+
+  it('open folded on their root in the data panel, with their heading always shown', async () => {
+    render(<SpanDataPanelView span={span} spanId={span.spanId} traceId={span.traceId} />);
+
+    for (const title of ['Metadata', 'Attributes']) {
+      const section = screen.getByRole('region', { name: title });
+      await waitFor(() => expect(section.querySelector('.cm-foldPlaceholder')?.textContent).toBe('…'));
+      expect(section.textContent).not.toContain(`${title.toLowerCase().replace(/s$/, '')}-value`);
+      expect(section.querySelector('[data-slot="collapsible-box"]')).toBeNull();
+    }
+  });
+
+  it('show them collapsed, and as JSON only once opened, in the details layout', () => {
+    render(<SpanDetailsView span={span} spanId={span.spanId} traceId={span.traceId} onClose={() => {}} />);
     expect(document.body.textContent).not.toContain('metadata-value');
     expect(document.body.textContent).not.toContain('attribute-value');
 
@@ -184,17 +202,11 @@ describe.each(['panel', 'details'] as const)('SpanPayloadSection (%s)', layout =
   });
 });
 
-describe.each(['panel', 'details'] as const)('Span %s view', layout => {
+describe('Span details view', () => {
   describe('when an error has a formatted preview', () => {
     it('shows the original error JSON and restores the preview independently of other sections', () => {
       const original = JSON.stringify(errorSpan);
-      render(
-        layout === 'panel' ? (
-          <SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />
-        ) : (
-          <SpanDetailsView spanId={errorSpan.spanId} span={errorSpan} onClose={() => {}} />
-        ),
-      );
+      render(<SpanDetailsView spanId={errorSpan.spanId} span={errorSpan} onClose={() => {}} />);
       expect(slot('span-error')).not.toBeNull();
       const toggles = screen.getAllByRole('button', { name: 'JSON' });
       expect(toggles).toHaveLength(1);
@@ -216,43 +228,51 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
 });
 
 describe('SpanDataPanelView integration', () => {
-  it('sums up a tool call in one line and reads it as its input, then its output', () => {
-    render(<SpanDataPanelView traceId="trace-1" spanId={toolCallSpan.spanId} span={toolCallSpan} />);
-    expect(slot('span-outcome')?.querySelector('[data-slot="span-payload-section"]')).toBeNull();
-    expect(sectionTitles()).toEqual(['Input', 'Output']);
+  beforeEach(() => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceWithoutToolCalls)),
+    );
   });
 
-  it('reads a successful root span as its input, then its output, with no summary on top', () => {
-    render(<SpanDataPanelView traceId="trace-1" spanId={agentRunMessagesSpan.spanId} span={agentRunMessagesSpan} />);
+  const renderPanel = (span: SpanRecord) =>
+    renderWithProviders(<SpanDataPanelView traceId="trace-1" spanId={span.spanId} span={span} />);
+  const openTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name: new RegExp(`^${name}`, 'i') }));
+  const tabPanel = (name: string) => screen.getByRole('tabpanel', { name });
+
+  it('reads a tool call as its input in one tab and its output in the other', () => {
+    renderPanel(toolCallSpan);
+    openTab('input');
+    expect(within(tabPanel('Input')).getByRole('group', { name: 'Input' })).toBeTruthy();
+    openTab('output');
+    expect(within(tabPanel('Output')).getByRole('group', { name: 'Output' })).toBeTruthy();
     expect(slot('span-outcome')).toBeNull();
-    expect(sectionTitles().slice(0, 2)).toEqual(['Input', 'Output']);
   });
 
-  it('still sums up a root span whose run was stopped', () => {
-    render(<SpanDataPanelView traceId="trace-1" spanId={agentRunTripwireSpan.spanId} span={agentRunTripwireSpan} />);
-    expect(slot('span-outcome')).not.toBeNull();
+  it('puts no summary over the output of a successful root span', () => {
+    renderPanel(agentRunMessagesSpan);
+    openTab('output');
+    expect(slot('span-outcome')).toBeNull();
+    expect(within(tabPanel('Output')).getByRole('group', { name: 'Output' })).toBeTruthy();
   });
 
-  it('shows the error of a failed span once, in the summary at the top', () => {
-    render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />);
-    const outcome = slot('span-outcome');
-    expect(outcome?.textContent).toContain('getWeather failed');
-    expect(outcome?.querySelector('[data-slot="span-error"]')?.textContent).toContain('City not found: Atlantis');
-    expect(document.querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
-    expect(screen.getAllByText('City not found: Atlantis')).toHaveLength(1);
-    expect(sectionTitles()).not.toContain('Error');
+  it('still says why a root span whose run was stopped stopped', () => {
+    renderPanel(agentRunTripwireSpan);
+    openTab('output');
+    expect(within(tabPanel('Output')).getByRole('heading', { level: 3 })).toBeTruthy();
+  });
+
+  it('shows the error of a failed span once, at the top of the Output tab', () => {
+    renderPanel(errorSpan);
+    openTab('output');
+    const output = tabPanel('Output');
+    expect(within(output).getByRole('heading', { name: 'getWeather failed' })).toBeTruthy();
+    expect(output.querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
+    expect(within(output).getAllByText('City not found: Atlantis')).toHaveLength(1);
   });
 
   it('leads a failed root span with its error too', () => {
-    const failedRoot = { ...errorSpan, parentSpanId: null };
-    render(<SpanDataPanelView traceId="trace-1" spanId={failedRoot.spanId} span={failedRoot} />);
-    expect(slot('span-outcome')?.querySelector('[data-slot="span-error"]')).not.toBeNull();
-    expect(document.querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
-  });
-
-  it('shows rich payloads and the error banner for a span', () => {
-    render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />);
-    expect(slot('span-error')).not.toBeNull();
-    expect(screen.getByText('City not found: Atlantis')).toBeTruthy();
+    renderPanel({ ...errorSpan, parentSpanId: null });
+    openTab('output');
+    expect(tabPanel('Output').querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
   });
 });

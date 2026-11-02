@@ -1,4 +1,9 @@
-import { FilterBar } from '@mastra/playground-ui/components/FilterBar';
+import {
+  FilterBar,
+  FILTER_BAR_TIME_RANGE_FIELD,
+  FILTER_BAR_TIME_RANGE_FIELD_ID,
+  FILTER_BAR_TIME_RANGE_ITEM,
+} from '@mastra/playground-ui/components/FilterBar';
 import type { FilterBarField, FilterBarItem } from '@mastra/playground-ui/components/FilterBar';
 import { MetricsTimeRangeChip } from '@mastra/playground-ui/domains/metrics/components/metrics-time-range-chip';
 import { useMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
@@ -7,25 +12,20 @@ import {
   METRICS_FILTER_BAR_OPERATORS,
   metricsTokensToFilterBarItems,
 } from '@mastra/playground-ui/domains/metrics/metrics-filters';
-import {
-  TRACE_TIME_RANGE_FIELD,
-  TRACE_TIME_RANGE_FIELD_ID,
-  TRACE_TIME_RANGE_ITEM,
-} from '@mastra/playground-ui/domains/traces/components/trace-time-range-chip';
 
-const isTimeRangeItem = (item: FilterBarItem) => item.fieldId === TRACE_TIME_RANGE_FIELD_ID;
+const isTimeRangeItem = (item: FilterBarItem) => item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID;
 
-/** Typeahead filter bar for the metrics dashboard: the time range chip, then one chip per dimension. */
+/** Typeahead filter bar for the metrics dashboard: the time range, then one chip per dimension. */
 export function MetricsFilterBar({ fields }: { fields: FilterBarField[] }) {
   const { filterTokens, setFilterTokens } = useMetrics();
 
-  // The time range chip is a synthetic, always-present item, as on Traces. Its state lives in the
+  // The time range is a synthetic, always-present item, as on Traces. Its state lives in the
   // date params, so it never round-trips through the filter tokens.
-  const value = [TRACE_TIME_RANGE_ITEM, ...metricsTokensToFilterBarItems(filterTokens)];
+  const value = [FILTER_BAR_TIME_RANGE_ITEM, ...metricsTokensToFilterBarItems(filterTokens)];
 
   return (
     <FilterBar
-      fields={[TRACE_TIME_RANGE_FIELD, ...fields]}
+      fields={[FILTER_BAR_TIME_RANGE_FIELD, ...fields]}
       operators={METRICS_FILTER_BAR_OPERATORS}
       value={value}
       onValueChange={(items: FilterBarItem[]) =>

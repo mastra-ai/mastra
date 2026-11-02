@@ -5305,34 +5305,8 @@ export class Run<
       }
     });
 
-    // Build tracing options for the resumed span, linking to the original suspended span if available
-    // Priority: user-provided tracingOptions > persisted tracingContext from snapshot
     const persistedTracingContext = snapshot?.tracingContext;
-    const userProvidedTraceId = params.tracingOptions?.traceId;
-    const userProvidedParentSpanId = params.tracingOptions?.parentSpanId;
-
-    // Only fall back to persisted traceId when the caller didn't provide either tracing identifier.
-    // If the caller provided parentSpanId without traceId, using the persisted traceId would create
-    // invalid cross-trace parentage (a span in one trace claiming a parent from another trace).
-    const effectiveTraceId =
-      userProvidedTraceId ?? (!userProvidedParentSpanId ? persistedTracingContext?.traceId : undefined);
-
-    // Only use persisted spanId as parentSpanId if:
-    // 1. User didn't provide their own parentSpanId, AND
-    // 2. Either no user traceId was provided, OR user traceId matches persisted traceId
-    // This prevents cross-trace parentage where a span in one trace claims a parent from another trace
-    const shouldUsePersistedParentSpan =
-      !userProvidedParentSpanId && (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
-
-    const resumeTracingOptions = {
-      ...params.tracingOptions,
-      traceId: effectiveTraceId,
-    };
-
-    // The persisted resume link travels separately from tracingOptions:
-    // tracingOptions.parentSpanId is reserved for external correlation ids,
-    // while the suspended span's id is a Mastra span present in storage.
-    const resumedFromSpanId = shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : undefined;
+    const isAgentLoop = Boolean(this.executionEngine.options.resumeTracingContext);
 
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
@@ -5350,11 +5324,11 @@ export class Run<
         resumedFromSpanId: persistedTracingContext?.spanId,
       },
       tracingPolicy: this.tracingPolicy,
-      tracingOptions: resumeTracingOptions,
+      tracingOptions: params.tracingOptions,
       tracingContext: observabilityContext.tracingContext,
       requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
-      resumedFromSpanId,
+      resumeFrom: isAgentLoop ? undefined : persistedTracingContext,
     });
 
     this.workflowRunSpan = workflowSpan;

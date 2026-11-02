@@ -973,6 +973,25 @@ Unlike streams, [memory recall](/reference/memory/recall) hides reminders by def
 
 Exclusions control returned data, not authorization or delivery. They aren't a security boundary. Signal options such as `ifActive`, `ifIdle`, `persist`/`discard`, and `transient` retain their delivery and persistence meanings.
 
+## Aborting a run
+
+Pass an [`abortSignal`](#parameters) to stop a run from outside the agent:
+
+```ts
+const controller = new AbortController()
+const stream = await agent.stream('Summarize this repo', { abortSignal: controller.signal })
+
+setTimeout(() => controller.abort(), 5_000)
+```
+
+What abort does and doesn't do:
+
+- **The stream carries an `abort` chunk.** When the signal fires, the run stops at its next check and `fullStream` emits an `abort` chunk. The run's status ends as canceled with an `aborted` finish reason, and `onAbort` receives the steps that completed before the abort plus the assistant text streamed so far for the in-flight step.
+- **The abort is cooperative.** It takes effect at the next check inside the run. It doesn't forcibly stop tool code or an `onOutput` hook that's already executing, and side effects those started may still complete.
+- **Text the user already saw is saved.** With writable memory, the assistant text streamed before the abort is persisted to the thread as an ordinary assistant message, without an error part. Canceled runs still pass through output processors, so a processor that throws can still affect that save. Output that never reaches them isn't persisted.
+
+To abort a run you no longer hold a handle to, use the `runId` with [`durableAgent.abortRunStream(runId)`](/reference/agents/durable-agent#abortrunstreamrunid), which ends the run the same way.
+
 ## Extended usage example
 
 ### Mastra Format (Default)

@@ -107,10 +107,17 @@ export default function Workspace() {
   const deleteFile = useDeleteWorkspaceFile();
   const createDirectory = useCreateWorkspaceDirectory();
 
-  // Skills - pass workspaceId to get skills from the selected workspace
+  const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
+  // A resolver-backed filesystem only exists per request, so the file routes can't browse it.
+  const hasDynamicFilesystem = workspaceInfo?.capabilities?.hasDynamicFilesystem ?? false;
+  const hasFilesystem = (workspaceInfo?.capabilities?.hasFilesystem ?? false) && !hasDynamicFilesystem;
+  const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
+
+  // Skills are only shown in the file tree. Waiting for capabilities keeps the skills route,
+  // which can call a filesystem resolver, from running for resolver-backed workspaces.
   const { data: skillsData, refetch: refetchSkills } = useWorkspaceSkills({
     workspaceId: effectiveWorkspaceId,
-    queryOptions: { enabled: !!effectiveWorkspaceId },
+    queryOptions: { enabled: !!effectiveWorkspaceId && hasFilesystem },
   });
 
   // Skills.sh hooks
@@ -167,9 +174,6 @@ export default function Workspace() {
     }
   };
 
-  const isWorkspaceConfigured = workspaceInfo?.isWorkspaceConfigured ?? false;
-  const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? false;
-  const hasSkills = workspaceInfo?.capabilities?.hasSkills ?? false;
   // Check if the selected workspace is read-only
   const isReadOnly = selectedWorkspace?.safety?.readOnly ?? false;
 
@@ -401,7 +405,17 @@ export default function Workspace() {
           </div>
         )}
 
-        {!hasFilesystem && !isLoadingInfo && (
+        {hasDynamicFilesystem && !isLoadingInfo && (
+          <div className="min-h-0 flex-1">
+            <EmptyState
+              variant="fill"
+              titleSlot="Filesystem resolved per request"
+              descriptionSlot="This workspace creates its filesystem when an agent runs, so its files can't be browsed here."
+            />
+          </div>
+        )}
+
+        {!hasFilesystem && !hasDynamicFilesystem && !isLoadingInfo && (
           <div className="min-h-0 flex-1">
             <EmptyState
               variant="fill"

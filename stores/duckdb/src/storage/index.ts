@@ -15,7 +15,13 @@ import type {
   ObservabilityDuckDBConfig,
   ObservabilityStorageDuckDB as ObservabilityStorageDuckDBImpl,
 } from './domains/observability/index';
-import { spanAggregateFeatures, spanQueryFeatures, threadQueryFeatures, timingFeatures } from './features';
+import {
+  outcomeFeatures,
+  spanAggregateFeatures,
+  spanQueryFeatures,
+  threadQueryFeatures,
+  timingFeatures,
+} from './features';
 
 const OBSERVABILITY_UPGRADE_MESSAGE =
   'DuckDB observability storage requires `@mastra/core` with observability storage support. Upgrade `@mastra/core` to use this store.';
@@ -41,6 +47,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'feedback',
   'trace-query-context-ids',
   ...timingFeatures,
+  ...outcomeFeatures,
   'trace-query-root-span-fields',
   'trace-query-root-entity-id',
 ] as const;
@@ -66,6 +73,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'feedback',
   'trace-query-context-ids',
   ...timingFeatures,
+  ...outcomeFeatures,
   'trace-query-root-span-fields',
   'trace-query-root-entity-id',
 ] as const;

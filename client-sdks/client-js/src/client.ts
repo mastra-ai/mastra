@@ -7,6 +7,7 @@ import {
   Processor,
   Workflow,
   Vector,
+  Knowledge,
   BaseResource,
   A2A,
   A2AV1,
@@ -27,6 +28,7 @@ import {
   Channels,
   AgentController,
 } from './resources';
+import type { KnowledgeInstanceSummary } from './resources';
 import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
@@ -691,6 +693,23 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Lists the Knowledge instances registered on the server
+   * @returns Promise containing each instance's application key and id
+   */
+  public listKnowledge(): Promise<{ instances: KnowledgeInstanceSummary[] }> {
+    return this.request('/knowledge');
+  }
+
+  /**
+   * Gets read-only access to a registered Knowledge instance
+   * @param knowledgeKey - Application key the instance is registered under
+   * @returns Knowledge resource
+   */
+  public getKnowledge(knowledgeKey: string) {
+    return new Knowledge(this.options, knowledgeKey);
+  }
+
+  /**
    * Retrieves logs
    * @param params - Parameters for filtering logs
    * @returns Promise containing array of log messages
@@ -974,6 +993,73 @@ export class MastraClient extends BaseResource {
     return this.request(`/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/emit`, {
       method: 'POST',
       body: { data },
+    });
+  }
+
+  /**
+   * Lists which tools an MCP server runs as tasks, and its recent tasks across principals
+   * (experimental). `unavailable` says why `tasks` is empty for a store that can't be listed
+   * or a resource-scoped caller.
+   * @param serverId - The ID of the MCP server.
+   * @param params - Optional `limit`, `status`, `surface` and `client` (a listed `principalKey`)
+   *   filters, and the `cursor` from the previous page's `nextCursor`.
+   */
+  public getMcpServerTasks(
+    serverId: PathParams<'GET /mcp/:serverId/tasks'>['serverId'],
+    params: QueryParams<'GET /mcp/:serverId/tasks'> = {},
+  ): Promise<RouteResponse<'GET /mcp/:serverId/tasks'>> {
+    const searchParams = new URLSearchParams();
+    for (const [name, value] of Object.entries(params)) {
+      if (value !== undefined) searchParams.set(name, String(value));
+    }
+    const query = searchParams.size ? `?${searchParams}` : '';
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks${query}`);
+  }
+
+  /**
+   * Finds an MCP server task by its MCP task id, as a client sees it (experimental). The server
+   * hashes the id before the lookup; it is sent in the body so it stays out of URLs and logs.
+   * Rejects with 404 for an unknown task.
+   * @param serverId - The ID of the MCP server.
+   * @param taskId - The MCP task id.
+   */
+  public findMcpServerTask(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/find'>['serverId'],
+    taskId: Body<'POST /mcp/:serverId/tasks/find'>['taskId'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/find'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/find`, { method: 'POST', body: { taskId } });
+  }
+
+  /**
+   * Cancels an MCP server task by key, like the `tasks/cancel` MCP request (experimental).
+   * Rejects with 404 once the task is no longer running.
+   * @param serverId - The ID of the MCP server.
+   * @param taskKey - The task's `taskKey`, as listed.
+   */
+  public cancelMcpServerTask(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/:taskKey/cancel'>['serverId'],
+    taskKey: PathParams<'POST /mcp/:serverId/tasks/:taskKey/cancel'>['taskKey'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/:taskKey/cancel'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/${encodeURIComponent(taskKey)}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Answers an MCP server task's open input requests, like the `tasks/update` MCP request
+   * (experimental). Rejects with 404 unless the task is waiting for one of them.
+   * @param serverId - The ID of the MCP server.
+   * @param taskKey - The task's `taskKey`, as listed.
+   * @param inputResponses - Answers keyed by input request, e.g. `{ approve: { action: 'accept', content: {...} } }`.
+   */
+  public answerMcpServerTaskInput(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/:taskKey/input'>['serverId'],
+    taskKey: PathParams<'POST /mcp/:serverId/tasks/:taskKey/input'>['taskKey'],
+    inputResponses: Body<'POST /mcp/:serverId/tasks/:taskKey/input'>['inputResponses'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/:taskKey/input'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/${encodeURIComponent(taskKey)}/input`, {
+      method: 'POST',
+      body: { inputResponses },
     });
   }
 

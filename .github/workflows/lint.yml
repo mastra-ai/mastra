@@ -72,6 +72,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -139,8 +140,8 @@ jobs:
           # The check only needs pnpm workspace discovery, git and network.
           install-dependencies: 'false'
 
-      - name: Test npm package existence check and placeholder script
-        run: node --test .github/scripts/check-npm-packages-exist.test.mjs scripts/npm-placeholder-publish.test.mjs
+      - name: Test npm package existence check, publish and placeholder scripts
+        run: node --test .github/scripts/check-npm-packages-exist.test.mjs .github/scripts/publish-packages.test.mjs scripts/npm-placeholder-publish.test.mjs
 
       # npm-publish.yml publishes with npm trusted publishing (OIDC) and has no
       # token fallback, and npm only allows a trusted publisher on a package
@@ -182,6 +183,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -206,6 +208,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -245,6 +248,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -272,6 +276,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -294,6 +299,7 @@ jobs:
     if: needs.changes.outputs.has_readme_inputs == 'true' && github.repository == 'mastra-ai/mastra'
     permissions:
       contents: read
+      id-token: write
 
     steps:
       - name: Checkout repo
@@ -320,6 +326,7 @@ jobs:
     permissions:
       contents: read
       pull-requests: read
+      id-token: write
 
     steps:
       - name: Checkout repo

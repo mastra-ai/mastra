@@ -90,6 +90,7 @@ import type {
   StepMetadata,
   CreateWorkflowParams,
   InferSchemaOutput,
+  NestedWorkflowParent,
   InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
@@ -1865,6 +1866,9 @@ export class EventedWorkflow<
     const runIdToUse = options?.runId || globalThis.crypto.randomUUID();
 
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const storedSnapshot = options?.runId
+      ? await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.id, runId: runIdToUse })
+      : undefined;
 
     const supportsConcurrentUpdates = workflowsStore?.supportsConcurrentUpdates?.() ?? false;
     if (workflowsStore && !supportsConcurrentUpdates) {
@@ -1887,6 +1891,7 @@ export class EventedWorkflow<
       new EventedRun({
         workflowId: this.id,
         runId: runIdToUse,
+        parentWorkflow: storedSnapshot?.parentWorkflow,
         resourceId: options?.resourceId,
         isInternalWorkflow: this.isInternal,
         executionEngine: this.executionEngine,
@@ -1966,6 +1971,7 @@ export class EventedRun<
   constructor(params: {
     workflowId: string;
     runId: string;
+    parentWorkflow?: NestedWorkflowParent;
     resourceId?: string;
     isInternalWorkflow?: boolean;
     executionEngine: ExecutionEngine;
@@ -2001,6 +2007,8 @@ export class EventedRun<
   }
 
   #cancelPublished = false;
+  /** True while resumeStream() drives resume(); it closes the stream after setting its result. */
+  #resumeStreamOwnsClose = false;
 
   /**
    * Publish the workflow.cancel event that tells the event processor owning this run to stop it.
@@ -2437,6 +2445,7 @@ export class EventedRun<
           }
         };
 
+        self.#resumeStreamOwnsClose = true;
         try {
           const executionResults = await self.resume({
             resumeData,
@@ -2458,6 +2467,8 @@ export class EventedRun<
         } catch (err) {
           self.streamOutput?.rejectResults(err as Error);
           self.closeStreamAction?.().catch(() => {});
+        } finally {
+          self.#resumeStreamOwnsClose = false;
         }
       },
     });
@@ -2681,8 +2692,7 @@ export class EventedRun<
         resumedFromSpanId: snapshot.tracingContext?.spanId,
       },
       tracingPolicy: this.tracingPolicy,
-      tracingOptions: { traceId: snapshot.tracingContext?.traceId },
-      resumedFromSpanId: snapshot.tracingContext?.spanId,
+      resumeFrom: snapshot.tracingContext,
       requestContext,
       mastra: this.mastra,
     });
@@ -2725,6 +2735,50 @@ export class EventedRun<
       }
     };
 
+    let parentClaimed = false;
+    const releaseParentClaim = async () => {
+      if (!parentClaimed || !this.parentWorkflow) return;
+      try {
+        await workflowsStore.updateWorkflowState({
+          workflowName: this.parentWorkflow.workflowId,
+          runId: this.parentWorkflow.runId,
+          opts: { status: 'suspended', expectedStatus: 'running' },
+        });
+      } catch (releaseError) {
+        this.mastra
+          ?.getLogger()
+          ?.warn(
+            `[Workflow ${this.workflowId}] Failed to release parent resume claim for run ${this.parentWorkflow.runId}`,
+            releaseError,
+          );
+      }
+    };
+
+    if (this.parentWorkflow) {
+      let claimedParent;
+      try {
+        claimedParent = await workflowsStore.updateWorkflowState({
+          workflowName: this.parentWorkflow.workflowId,
+          runId: this.parentWorkflow.runId,
+          opts: { status: 'running', expectedStatus: 'suspended' },
+        });
+      } catch (error) {
+        await releaseClaimIfUnused();
+        throw error;
+      }
+      if (!claimedParent) {
+        await releaseClaimIfUnused();
+        throw new MastraError({
+          id: 'WORKFLOW_RESUME_ALREADY_CLAIMED',
+          domain: ErrorDomain.MASTRA_WORKFLOW,
+          category: ErrorCategory.USER,
+          text: `Workflow run ${this.parentWorkflow.runId} has already been resumed by another caller`,
+          details: { workflowId: this.parentWorkflow.workflowId, runId: this.parentWorkflow.runId },
+        });
+      }
+      parentClaimed = true;
+    }
+
     // Extract state from snapshot - could be in context.__state or in value
     const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
 
@@ -2733,6 +2787,7 @@ export class EventedRun<
       .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
+        parentWorkflow: this.parentWorkflow,
         graph: this.executionGraph,
         serializedStepGraph: this.serializedStepGraph,
         input: snapshot?.context?.input as TInput,
@@ -2769,7 +2824,8 @@ export class EventedRun<
 
         this.releaseWorkflowTracing(workflowSpan);
         if (result.status !== 'suspended') {
-          this.closeStreamAction?.().catch(() => {});
+          // Closing here would finish the stream before resumeStream() sets its result.
+          if (!this.#resumeStreamOwnsClose) this.closeStreamAction?.().catch(() => {});
           this.cleanup?.();
         }
 
@@ -2784,6 +2840,7 @@ export class EventedRun<
         });
 
         this.releaseWorkflowTracing(workflowSpan);
+        await releaseParentClaim();
         await releaseClaimIfUnused();
         throw error;
       });

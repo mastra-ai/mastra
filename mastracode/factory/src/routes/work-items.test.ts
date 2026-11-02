@@ -266,6 +266,31 @@ describe('installed board catalog', () => {
     expect(shipping.exitTool).not.toHaveProperty('autoApproveWhen');
   });
 
+  it('sends the skill a custom phase runs, so Settings can show it', async () => {
+    const board = defineBoard({
+      id: 'release',
+      name: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { name: 'Queued', kind: 'resting', nextPhases: ['drafting'] },
+        drafting: { name: 'Drafting', kind: 'working', nextPhases: ['shipped'], runner: { skill: 'release-notes' } },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    );
+    const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    const [queued, drafting] = body.boards[0].phases;
+    expect(drafting).toMatchObject({ kind: 'working', skill: 'release-notes' });
+    expect(queued).not.toHaveProperty('skill');
+  });
+
   it('supports an empty installation', async () => {
     const app = buildApp(
       orgUser,

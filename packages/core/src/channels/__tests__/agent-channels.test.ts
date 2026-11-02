@@ -1,3 +1,6 @@
+import { mkdir, mkdtemp, readdir, readFile, rm, truncate, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { format } from 'node:util';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
@@ -15,11 +18,12 @@ import type { IMastraLogger, LogFilter } from '../../logger';
 import { RequestContext } from '../../request-context';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../storage/domains/memory/inmemory';
+import { LocalFilesystem, Workspace, WORKSPACE_TOOLS } from '../../workspace';
 import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
-import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler } from '../types';
+import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler, ResolveResourceId } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -3729,6 +3733,52 @@ describe('thread history', () => {
     expect(withGone.contents).toEqual(expect.stringContaining('[Attachment unavailable: gone.jpg'));
   });
 
+  it('truncates large text attachments fetched through the adapter', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const log = 'line\n'.repeat(30_000);
+    const big = {
+      type: 'file',
+      mimeType: 'text/plain',
+      name: 'server.log',
+      url: 'https://files.slack.com/files-pri/T1-F1/server.log',
+      fetchData: vi.fn().mockResolvedValue(Buffer.from(log)),
+    };
+    await t.run(makeChatThread([historyMessage(0, { attachments: [big] })]));
+    const [withLog] = t.signals();
+
+    expect(withLog.contents).toEqual([
+      { type: 'text', text: 'message 0' },
+      {
+        type: 'text',
+        text: `[Attached file: server.log (text/plain)]\n${log.slice(0, 128 * 1024)}\n[Truncated: showing the first 131072 of ${log.length} bytes]`,
+      },
+    ]);
+  });
+
+  it('does not download text attachments larger than the download ceiling', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const fetchData = vi.fn().mockResolvedValue(Buffer.from('never read'));
+    const huge = {
+      type: 'file',
+      mimeType: 'text/plain',
+      name: 'huge.log',
+      url: 'https://files.slack.com/files-pri/T1-F1/huge.log',
+      size: 500 * 1024 * 1024,
+      fetchData,
+    };
+    await t.run(makeChatThread([historyMessage(0, { attachments: [huge] })]));
+    const [withLog] = t.signals();
+
+    expect(fetchData).not.toHaveBeenCalled();
+    expect(withLog.contents).toEqual([
+      { type: 'text', text: 'message 0' },
+      {
+        type: 'text',
+        text: '[Attached file: huge.log (text/plain) — https://files.slack.com/files-pri/T1-F1/huge.log]',
+      },
+    ]);
+  });
+
   it('skips the history walk for subscribed threads, DMs and maxMessages: 0', async () => {
     const subscribed = await setup();
     await subscribed.run(makeChatThread([historyMessage(0)], { isSubscribed: vi.fn().mockResolvedValue(true) }));
@@ -4076,6 +4126,9 @@ describe('per-sender handler runs end to end', () => {
       isDM?: boolean;
       disableDirect?: boolean;
       disableMention?: boolean;
+      workspace?: Workspace;
+      maxAttachmentStorageBytes?: number;
+      resolveResourceId?: ResolveResourceId;
     } = {},
   ) {
     const { Mastra } = await import('../../mastra');
@@ -4120,6 +4173,10 @@ describe('per-sender handler runs end to end', () => {
     const channels = new AgentChannels({
       adapters: { slack: adapter },
       chatOptions: { concurrency: { strategy: 'queue' } },
+      ...(options.maxAttachmentStorageBytes !== undefined
+        ? { maxAttachmentStorageBytes: options.maxAttachmentStorageBytes }
+        : {}),
+      ...(options.resolveResourceId ? { resolveResourceId: options.resolveResourceId } : {}),
       handlers: {
         onDirectMessage: options.disableDirect ? false : handle('direct'),
         onMention: options.disableMention ? false : handle('mention'),
@@ -4135,6 +4192,7 @@ describe('per-sender handler runs end to end', () => {
       model,
       memory: new MockMemory({ storage, options: { lastMessages: 50 } }),
       channels,
+      ...(options.workspace ? { workspace: options.workspace } : {}),
     });
     const mastra = new Mastra({ storage, agents: { agent } });
     await channels.initialize(mastra);
@@ -4342,4 +4400,367 @@ describe('per-sender handler runs end to end', () => {
     expect(followUp).toBeDefined();
     expect(systemText(followUp!)).toContain('tenant=user-a');
   }, 20_000);
+
+  it('gives the model the contents of text attachments that need an authenticated fetch (#28854)', async () => {
+    const h = await createHarness({ hold: false });
+    // Slack hands Core a private URL that only works with a bot token, plus a
+    // fetchData callback that carries the token.
+    const privateUrl = (name: string) => `https://files.slack.com/files-pri/T1-F1/${name}`;
+    const notes = {
+      type: 'file' as const,
+      mimeType: 'text/plain',
+      name: 'notes.txt',
+      url: privateUrl('notes.txt'),
+      fetchData: vi.fn().mockResolvedValue(Buffer.from('deploy window: Friday 14:00 UTC\n')),
+    };
+    const csv = {
+      type: 'file' as const,
+      mimeType: 'text/csv',
+      name: 'metrics.csv',
+      url: privateUrl('metrics.csv'),
+      fetchData: vi.fn().mockResolvedValue(Buffer.from('id,value\nlatency_p99,412\n')),
+    };
+    const deleted = {
+      type: 'file' as const,
+      mimeType: 'application/json',
+      name: 'gone.json',
+      url: privateUrl('gone.json'),
+      fetchData: vi.fn().mockRejectedValue(new Error('file_not_found')),
+    };
+    await h.deliver(
+      makeMessage({
+        id: 'files',
+        threadId: THREAD_ID,
+        text: '@TestBot please read these',
+        author: userA,
+        attachments: [notes, csv, deleted],
+        metadata: { dateSent: new Date(BASE_TIME), edited: false },
+      }),
+    );
+
+    expect(h.prompts).toHaveLength(1);
+    const userTurn = JSON.stringify((h.prompts[0] ?? []).filter(m => m.role === 'user'));
+    expect(userTurn).toContain('[Attached file: notes.txt (text/plain)]\\ndeploy window: Friday 14:00 UTC');
+    expect(userTurn).toContain('[Attached file: metrics.csv (text/csv)]\\nid,value\\nlatency_p99,412');
+    expect(userTurn).toContain('[Attachment unavailable: gone.json (application/json)');
+    expect(userTurn).not.toContain('files.slack.com');
+  });
+
+  describe('binary attachments that need an authenticated fetch (#28907)', () => {
+    const tempDirs: string[] = [];
+    afterEach(async () => {
+      await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+    });
+
+    const privateUrl = (name: string) => `https://files.slack.com/files-pri/T1-F1/${name}`;
+    const binary = (name: string, mimeType: string, fetchData?: () => Promise<Buffer>, size?: number) => ({
+      type: 'file' as const,
+      mimeType,
+      name,
+      url: privateUrl(name),
+      ...(size !== undefined ? { size } : {}),
+      ...(fetchData ? { fetchData: vi.fn(fetchData) } : {}),
+    });
+    const ZIP_BYTES = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00]);
+
+    async function deliverFiles(h: Awaited<ReturnType<typeof createHarness>>, attachments: unknown[]) {
+      await h.deliver(
+        makeMessage({
+          id: 'files',
+          threadId: THREAD_ID,
+          text: '@TestBot please open these',
+          author: userA,
+          attachments: attachments as Message['attachments'],
+          metadata: { dateSent: new Date(BASE_TIME), edited: false },
+        }),
+      );
+      expect(h.prompts).toHaveLength(1);
+      return JSON.stringify((h.prompts[0] ?? []).filter(m => m.role === 'user'));
+    }
+
+    it('saves fetched bytes to the agent workspace and gives the model the path instead of the private URL', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }) }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const docx = binary(
+        'spec.docx',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        async () => Buffer.from('PK docx body'),
+      );
+      const userTurn = await deliverFiles(h, [zip, docx]);
+
+      const zipPath = userTurn.match(/report\.zip \(application\/zip\) — saved in the workspace at ([^\]\\]+)\]/)?.[1];
+      const docxPath = userTurn.match(/spec\.docx \([^)]+\) — saved in the workspace at ([^\]\\]+)\]/)?.[1];
+      expect(zipPath).toMatch(/^channel-attachments\/[0-9a-f]+\/report\.zip$/);
+      expect(docxPath).toMatch(/^channel-attachments\/[0-9a-f]+\/spec\.docx$/);
+      expect(await readFile(join(dir, zipPath!))).toEqual(ZIP_BYTES);
+      expect((await readFile(join(dir, docxPath!))).toString()).toBe('PK docx body');
+      expect(userTurn).not.toContain('files.slack.com');
+    });
+
+    it('keeps the URL description when the file cannot be saved', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }) }),
+      });
+      const oversized = binary('huge.zip', 'application/zip', async () => ZIP_BYTES, 500 * 1024 * 1024);
+      const unreportedHuge = binary('unsized.zip', 'application/zip', async () => Buffer.alloc(10 * 1024 * 1024 + 1));
+      const failing = binary('gone.zip', 'application/zip', async () => {
+        throw new Error('file_not_found');
+      });
+      // Public-CDN adapters without fetchData keep working links.
+      const publicOnly = { ...binary('public.zip', 'application/zip'), url: 'https://cdn.example.com/public.zip' };
+      const userTurn = await deliverFiles(h, [oversized, unreportedHuge, failing, publicOnly]);
+
+      expect(oversized.fetchData).not.toHaveBeenCalled();
+      expect(unreportedHuge.fetchData).toHaveBeenCalledTimes(1);
+      expect(failing.fetchData).toHaveBeenCalledTimes(1);
+      expect(userTurn).toContain(`[Attached file: huge.zip (application/zip) — ${privateUrl('huge.zip')}]`);
+      expect(userTurn).toContain(`[Attached file: unsized.zip (application/zip) — ${privateUrl('unsized.zip')}]`);
+      expect(userTurn).toContain(`[Attached file: gone.zip (application/zip) — ${privateUrl('gone.zip')}]`);
+      expect(userTurn).toContain('[Attached file: public.zip (application/zip) — https://cdn.example.com/public.zip]');
+      expect(userTurn).not.toContain('saved in the workspace');
+      expect(await readdir(dir)).toEqual([]);
+    });
+
+    it('does not download binary attachments when the agent has no workspace', async () => {
+      const h = await createHarness({ hold: false });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      expect(zip.fetchData).not.toHaveBeenCalled();
+      expect(userTurn).toContain(`[Attached file: report.zip (application/zip) — ${privateUrl('report.zip')}]`);
+    });
+
+    it('saves to a filesystem the workspace resolves per request', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: () => new LocalFilesystem({ basePath: dir }) }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      const zipPath = userTurn.match(/report\.zip \(application\/zip\) — saved in the workspace at ([^\]\\]+)\]/)?.[1];
+      expect(zipPath).toMatch(/^channel-attachments\/[0-9a-f]+\/report\.zip$/);
+      expect(await readFile(join(dir, zipPath!))).toEqual(ZIP_BYTES);
+    });
+
+    it('resolves the filesystem with the channel already in the request context', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(root);
+      const seen: Array<string | undefined> = [];
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({
+          filesystem: ({ requestContext }) => {
+            const channel = requestContext.get('channel');
+            const channelId =
+              channel && typeof channel === 'object' && 'channelId' in channel && typeof channel.channelId === 'string'
+                ? channel.channelId
+                : undefined;
+            seen.push(channelId);
+            return new LocalFilesystem({ basePath: join(root, channelId ? 'per-channel' : 'no-channel') });
+          },
+        }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      const zipPath = userTurn.match(/report\.zip \(application\/zip\) — saved in the workspace at ([^\]\\]+)\]/)?.[1];
+      expect(zipPath).toBeDefined();
+      expect(seen.length).toBeGreaterThan(0);
+      expect(seen.every(id => typeof id === 'string' && id.length > 0)).toBe(true);
+      expect(await readdir(root)).toEqual(['per-channel']);
+      expect(await readFile(join(root, 'per-channel', zipPath!))).toEqual(ZIP_BYTES);
+    });
+
+    it('sets the channel in the request context before resolveResourceId runs', async () => {
+      const seen: unknown[] = [];
+      const h = await createHarness({
+        hold: false,
+        resolveResourceId: ({ requestContext, defaultResourceId }) => {
+          seen.push(requestContext.get('channel'));
+          return defaultResourceId;
+        },
+      });
+      await deliverFiles(h, []);
+
+      expect(seen).toHaveLength(1);
+      expect(seen[0]).toMatchObject({ platform: 'slack', channelId: expect.any(String) });
+    });
+
+    it('saves into the first writable mount of a mounted workspace', async () => {
+      const codeDir = await mkdtemp(join(tmpdir(), 'channel-attachments-code-'));
+      const dataDir = await mkdtemp(join(tmpdir(), 'channel-attachments-data-'));
+      tempDirs.push(codeDir, dataDir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({
+          mounts: {
+            '/code': new LocalFilesystem({ basePath: codeDir, readOnly: true }),
+            '/data': new LocalFilesystem({ basePath: dataDir }),
+          },
+        }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      const zipPath = userTurn.match(/report\.zip \(application\/zip\) — saved in the workspace at ([^\]\\]+)\]/)?.[1];
+      expect(zipPath).toMatch(/^\/data\/channel-attachments\/[0-9a-f]+\/report\.zip$/);
+      expect(await readFile(join(dataDir, zipPath!.slice('/data/'.length)))).toEqual(ZIP_BYTES);
+      expect(await readdir(codeDir)).toEqual([]);
+    });
+
+    it('follows the workspace write-file policy before saving', async () => {
+      for (const tools of [
+        { [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { enabled: false } },
+        { [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireApproval: true } },
+        { requireApproval: true },
+      ]) {
+        const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+        tempDirs.push(dir);
+        const h = await createHarness({
+          hold: false,
+          workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }), tools }),
+        });
+        const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+        const userTurn = await deliverFiles(h, [zip]);
+
+        expect(userTurn).toContain(`[Attached file: report.zip (application/zip) — ${privateUrl('report.zip')}]`);
+        expect(zip.fetchData).not.toHaveBeenCalled();
+        expect(await readdir(dir)).toEqual([]);
+      }
+    });
+
+    it('does not save into a root mount', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-root-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ mounts: { '/': new LocalFilesystem({ basePath: dir }) } }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      expect(userTurn).toContain(`[Attached file: report.zip (application/zip) — ${privateUrl('report.zip')}]`);
+      expect(zip.fetchData).not.toHaveBeenCalled();
+      expect(await readdir(dir)).toEqual([]);
+    });
+
+    it('keeps attachments without a URL apart when they share a name, type and size', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }) }),
+      });
+      const withoutUrl = (bytes: string) => {
+        const { url: _url, ...att } = binary('data.bin', 'application/octet-stream', async () => Buffer.from(bytes), 4);
+        return att;
+      };
+      const userTurn = await deliverFiles(h, [withoutUrl('AAAA'), withoutUrl('BBBB')]);
+
+      const paths = [
+        ...userTurn.matchAll(/data\.bin \(application\/octet-stream\) — saved in the workspace at ([^\]\\]+)\]/g),
+      ].map(m => m[1]!);
+      expect(paths).toHaveLength(2);
+      expect(paths[0]).not.toBe(paths[1]);
+      expect((await readFile(join(dir, paths[0]!))).toString()).toBe('AAAA');
+      expect((await readFile(join(dir, paths[1]!))).toString()).toBe('BBBB');
+    });
+
+    const savedPaths = (userTurn: string) =>
+      [...userTurn.matchAll(/saved in the workspace at ([^\]\\]+)\]/g)].map(m => m[1]!);
+    async function listFiles(root: string, sub = ''): Promise<string[]> {
+      const entries = await readdir(join(root, sub), { withFileTypes: true });
+      const nested = await Promise.all(
+        entries.map(e => (e.isDirectory() ? listFiles(root, join(sub, e.name)) : [join(sub, e.name)])),
+      );
+      return nested.flat().sort();
+    }
+
+    it('stops saving once channel-attachments reaches the default 100 MiB limit', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      // Earlier attachments already fill the folder to 4 bytes under the limit (sparse file).
+      await mkdir(join(dir, 'channel-attachments', 'earlier'), { recursive: true });
+      const seed = join('channel-attachments', 'earlier', 'old.bin');
+      await writeFile(join(dir, seed), '');
+      await truncate(join(dir, seed), 100 * 1024 * 1024 - 4);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }) }),
+      });
+      const fits = binary('fits.bin', 'application/octet-stream', async () => Buffer.from('FITS'), 4);
+      const declared = binary('declared.zip', 'application/zip', async () => ZIP_BYTES, ZIP_BYTES.length);
+      const undeclared = binary('undeclared.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [fits, declared, undeclared]);
+
+      const [fitsPath] = savedPaths(userTurn);
+      expect(savedPaths(userTurn)).toEqual([expect.stringMatching(/^channel-attachments\/[0-9a-f]+\/fits\.bin$/)]);
+      expect(declared.fetchData).not.toHaveBeenCalled();
+      expect(undeclared.fetchData).toHaveBeenCalledTimes(1);
+      expect(userTurn).toContain(`[Attached file: declared.zip (application/zip) — ${privateUrl('declared.zip')}]`);
+      expect(userTurn).toContain(`[Attached file: undeclared.zip (application/zip) — ${privateUrl('undeclared.zip')}]`);
+      expect(await listFiles(dir)).toEqual([fitsPath, seed].sort());
+    });
+
+    it('honours a custom maxAttachmentStorageBytes', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        maxAttachmentStorageBytes: 10,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }) }),
+      });
+      const first = binary('first.zip', 'application/zip', async () => ZIP_BYTES);
+      const second = binary('second.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [first, second]);
+
+      const saved = savedPaths(userTurn);
+      expect(saved).toEqual([expect.stringMatching(/^channel-attachments\/[0-9a-f]+\/first\.zip$/)]);
+      expect(userTurn).toContain(`[Attached file: second.zip (application/zip) — ${privateUrl('second.zip')}]`);
+      expect(await listFiles(dir)).toEqual(saved);
+    });
+
+    it('keeps a path-like file name inside its attachment folder', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(root);
+      const dir = join(root, 'workspace');
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }) }),
+      });
+      const evil = binary('../../escape.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [evil]);
+
+      const [savedPath] = savedPaths(userTurn);
+      expect(savedPath).toMatch(/^channel-attachments\/[0-9a-f]+\/_\.\._escape\.zip$/);
+      expect(await readFile(join(dir, savedPath!))).toEqual(ZIP_BYTES);
+      expect(await readdir(root)).toEqual(['workspace']);
+    });
+
+    it('keeps the URL description when the workspace is read-only', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir, readOnly: true }) }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      expect(zip.fetchData).not.toHaveBeenCalled();
+      expect(userTurn).toContain(`[Attached file: report.zip (application/zip) — ${privateUrl('report.zip')}]`);
+      expect(await readdir(dir)).toEqual([]);
+    });
+  });
 });

@@ -12,7 +12,7 @@ import { createLogger } from '../../utils/logger';
 import { getMastraPackages } from '../../utils/mastra-packages';
 import { computeSourceHash, writeBuildManifest } from '../../utils/source-hash';
 import { BuildBundler } from './BuildBundler';
-import { buildFactoryUI } from './factory-ui-build';
+import { buildFactoryUI, copyFactorySkills } from './factory-ui-build';
 import { guardAgainstLiveDevServer, prepareWithLiveDevGuard } from './guard-live-dev-server';
 
 export async function build({
@@ -73,6 +73,7 @@ export async function build({
     if (!platformDeployer) {
       const deployer = new BuildBundler({ studio });
       deployer.__setLogger(logger);
+      deployer.setConfigEntryFile(mastraEntryFile);
 
       // Use the bundler's getAllToolPaths method to prepare tools paths, plus
       // any tools defined under agents/*/tools for fs-routed agents.
@@ -90,6 +91,7 @@ export async function build({
       // Mirror authored `agents/<name>/workspace/**` seeds into the bundle so
       // fs-routed agents start with those files on disk.
       await mirrorFsAgentWorkspaces(mastraDir, join(outputDirectory, 'output'));
+      if (projectType === 'factory') await copyFactorySkills(mastraDir, join(outputDirectory, 'output'), logger);
 
       // Write build manifest with source hash for staleness detection
       const sourceHash = await computeSourceHash(rootDir, mastraDir, projectType);
@@ -109,6 +111,7 @@ export async function build({
     logger.info('Deployer found, preparing deployer build...');
 
     platformDeployer.__setLogger(logger);
+    platformDeployer.setConfigEntryFile?.(mastraEntryFile);
 
     const discoveredTools = platformDeployer.getAllToolPaths(mastraDir, [...(tools ?? []), ...fsAgents.toolPaths]);
 
@@ -124,6 +127,7 @@ export async function build({
     // Mirror authored `agents/<name>/workspace/**` seeds into the bundle so
     // fs-routed agents start with those files on disk.
     await mirrorFsAgentWorkspaces(mastraDir, join(outputDirectory, 'output'));
+    if (projectType === 'factory') await copyFactorySkills(mastraDir, join(outputDirectory, 'output'), logger);
 
     // Write build manifest with source hash for staleness detection
     const sourceHash = await computeSourceHash(rootDir, mastraDir, projectType);
@@ -138,18 +142,12 @@ export async function build({
 
     logger.info('You can now deploy the .mastra/output directory to your target platform.');
   } catch (error) {
-    try {
-      const { MastraError } = await import('@mastra/core/error');
-      if (error instanceof MastraError) {
-        const { message, ...details } = error.toJSONDetails();
-        logger.error(message, details);
-      } else if (error instanceof Error) {
-        logger.error(`Mastra Build failed: ${error.message}`, { stack: error.stack });
-      }
-    } catch {
-      if (error instanceof Error) {
-        logger.error(`Mastra Build failed: ${error.message}`, { stack: error.stack });
-      }
+    // Structural check: @mastra/deployer throws its own bundled copy of MastraError, so `instanceof` would miss it.
+    if (error instanceof Error && 'toJSONDetails' in error && typeof error.toJSONDetails === 'function') {
+      const { message, ...details } = error.toJSONDetails();
+      logger.error(message, details);
+    } else if (error instanceof Error) {
+      logger.error(`Mastra Build failed: ${error.message}`, { stack: error.stack });
     }
     process.exit(1);
   }

@@ -7,9 +7,14 @@
  * These unit tests focus on the bridge's core logic and API surface.
  */
 
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
+import { Mastra } from '@mastra/core/mastra';
 import type { CreateSpanOptions, LogEvent } from '@mastra/core/observability';
 import { InternalSpans, SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
-import { DefaultObservabilityInstance } from '@mastra/observability';
+import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
+import { DefaultObservabilityInstance, Observability, TestExporter } from '@mastra/observability';
 import { context, isSpanContextValid, trace } from '@opentelemetry/api';
 import { logs as otelLogs, SeverityNumber } from '@opentelemetry/api-logs';
 import { InMemoryLogRecordExporter, LoggerProvider, SimpleLogRecordProcessor } from '@opentelemetry/sdk-logs';
@@ -142,6 +147,74 @@ describe('OtelBridge', () => {
         span.end();
         await instance.flush();
         await bridge.shutdown();
+      });
+
+      it("keeps the initial run's ambient parent on a resume served under another ambient span", async () => {
+        let calls = 0;
+        const model = new MockLanguageModelV2({
+          doGenerate: async () => ({
+            content:
+              ++calls === 1
+                ? [{ type: 'tool-call' as const, toolCallId: 'call-1', toolName: 'confirm', input: '{}' }]
+                : [{ type: 'text' as const, text: 'Approved.' }],
+            finishReason: calls === 1 ? ('tool-calls' as const) : ('stop' as const),
+            usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+            warnings: [],
+          }),
+        });
+        const agent = new Agent({
+          id: 'ambient-resume',
+          name: 'Ambient resume',
+          instructions: 'Request approval, then answer.',
+          model,
+          tools: {
+            confirm: createTool({
+              id: 'confirm',
+              description: 'Request approval',
+              requireApproval: true,
+              execute: async () => ({ approved: true }),
+            }),
+          },
+        });
+        const exporter = new TestExporter();
+        const mastra = new Mastra({
+          agents: { agent },
+          storage: new InMemoryStore(),
+          logger: false,
+          observability: new Observability({
+            configs: { default: { serviceName: 'ambient-resume', bridge: new OtelBridge(), exporters: [exporter] } },
+          }),
+        });
+        const underAmbient = async <T>(name: string, fn: () => Promise<T>) => {
+          const ambient = trace.getTracer('ambient').startSpan(name);
+          try {
+            return { ambient, result: await context.with(trace.setSpan(context.active(), ambient), fn) };
+          } finally {
+            ambient.end();
+          }
+        };
+
+        try {
+          const start = await underAmbient('start request', () =>
+            agent.generate('Start.', { runId: 'ambient-resume' }),
+          );
+          expect(start.result.finishReason).toBe('suspended');
+          const resume = await underAmbient('resume request', () =>
+            agent.resumeGenerate({ approved: true }, { runId: 'ambient-resume', toolCallId: 'call-1' }),
+          );
+          expect(resume.result.text).toBe('Approved.');
+
+          const [initial, resumed] = exporter.getSpansByType(SpanType.AGENT_RUN);
+          expect(initial!.externalParentSpanId).toBe(start.ambient.spanContext().spanId);
+          expect(resumed).toMatchObject({
+            traceId: initial!.traceId,
+            parentSpanId: initial!.id,
+            resumedFromSpanId: initial!.id,
+            externalParentSpanId: start.ambient.spanContext().spanId,
+          });
+        } finally {
+          await mastra.shutdown();
+        }
       });
 
       it('reports an ambient parent as external on a bridged root', async () => {

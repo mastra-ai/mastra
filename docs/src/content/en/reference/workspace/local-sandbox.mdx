@@ -224,6 +224,12 @@ const sandbox = new LocalSandbox({
 
 Set `WORKSPACE_PATH` in your environment to an absolute path like `/home/user/my-project/workspace`. It ensures commands run from a consistent directory regardless of how you run your code.
 
+## Windows shell
+
+`executeCommand(command, args)` quotes `args` for a POSIX shell. On native Windows without isolation, `LocalSandbox` runs these commands through Git Bash instead of `cmd.exe`. It uses the shell in `MASTRA_WINDOWS_SHELL` if set, then the `bin\bash.exe` next to `git.exe` on the command's `PATH`, then `%ProgramFiles%\Git\bin\bash.exe`. If no shell is found, commands fall back to `cmd.exe`, which can't parse POSIX-quoted arguments. Commands passed as a single string without `args` always run through `cmd.exe`, as do argv calls to `cmd`, `powershell`, and `pwsh`. Under Git Bash, `LocalSandbox` sets `MSYS_NO_PATHCONV=1` and `MSYS2_ARG_CONV_EXCL=*` so switches like `/F` and Windows paths reach native tools unchanged.
+
+Install [Git for Windows](https://git-scm.com/download/win) to get Git Bash. Deep repository paths can exceed the Windows path limit, so also run `git config --global core.longpaths true`. To keep running argv commands through `cmd.exe`, for example to call `cmd.exe` builtins like `dir`, set `MASTRA_WINDOWS_SHELL` to the full path of `cmd.exe`.
+
 ## Background processes
 
 `LocalSandbox` includes a built-in process manager for spawning and managing background processes. Processes run as child processes on the local machine using `child_process.spawn`.

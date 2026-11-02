@@ -43,6 +43,7 @@ import type {
   MastraOnStepFinishCallback,
   MastraStreamTransformOptions,
   ModelManagerModelConfig,
+  ProviderMetadata,
   StreamChunkType,
   StreamTransportRef,
 } from '../stream/types';
@@ -139,8 +140,12 @@ export type StreamInternal = {
   toolApprovalVerdicts?: Map<string, boolean>;
   /** @deprecated Use `runScope.get(STEP_USAGE_KEY)` from `loop/run-scope-keys`. */
   stepUsage?: LanguageModelUsage;
+  /** @deprecated Use `runScope.get(STEP_PROVIDER_METADATA_KEY)` from `loop/run-scope-keys`. */
+  stepProviderMetadata?: ProviderMetadata;
   /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */
   stepModelMessages?: ModelMessage[];
+  /** @deprecated Use `runScope.get(STEP_RESPONSE_MESSAGE_ID_KEY)` from `loop/run-scope-keys`. */
+  stepResponseMessageId?: string;
   /** @deprecated Use `runScope.get(EAGER_TOOL_EXECUTION_KEY)` from `loop/run-scope-keys`. */
   eagerToolExecutionCoordinator?: import('./workflows/agentic-execution/eager-tool-execution').EagerToolExecutionCoordinator;
   // Set to true when a delegation hook calls ctx.bail() to signal the loop should stop

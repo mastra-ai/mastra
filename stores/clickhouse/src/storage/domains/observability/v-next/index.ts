@@ -190,10 +190,23 @@ import * as tracingOps from './tracing';
 
 const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
-    ? (['span-query', 'span-query-context-fields'] as const)
+    ? ([
+        'span-query',
+        'span-query-context-fields',
+        // Core before the fields rejects `model`/`provider` predicates, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? (['span-query-model-fields'] as const) : []),
+      ] as const)
     : ([] as const);
 const spanAggregateFeatures =
-  typeof coreStorage.planSpanAggregate === 'function' ? (['span-aggregate'] as const) : ([] as const);
+  typeof coreStorage.planSpanAggregate === 'function'
+    ? ([
+        'span-aggregate',
+        // Core before the dimensions rejects `model`/`provider` in `groupBy`, so only declare them when core plans them.
+        ...('model' in (coreStorage.SPAN_AGGREGATE_DIMENSION_REGISTRY ?? {})
+          ? (['span-aggregate-model-dimensions'] as const)
+          : []),
+      ] as const)
+    : ([] as const);
 const threadQueryFeatures =
   typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : ([] as const);
 
@@ -972,6 +985,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'feedback',
         'trace-query-context-ids',
         ...traceQueryOps.timingFeatures,
+        ...traceQueryOps.outcomeFeatures,
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
         'trace-aggregate',
@@ -999,6 +1013,7 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'feedback',
       'trace-query-context-ids',
       ...traceQueryOps.timingFeatures,
+      ...traceQueryOps.outcomeFeatures,
       'trace-query-root-span-fields',
       'trace-query-root-entity-id',
       'trace-aggregate',

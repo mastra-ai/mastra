@@ -25,6 +25,7 @@ jobs:
     timeout-minutes: 30
     permissions:
       contents: read
+      id-token: write
     outputs:
       digest: ${{ steps.registry_digest.outputs.digest }}
     env:
@@ -58,6 +59,11 @@ jobs:
         working-directory: ./e2e-tests/_local-registry-setup
         run: pnpm run publish-ci-registry
         env:
+          # The job has `id-token: write` for StarSling Disks. With it, `pnpm publish` tries an OIDC token
+          # exchange for every package before falling back (~2 min over ~280 packages); a local registry
+          # takes no OIDC token, so skip the exchange on this step only.
+          ACTIONS_ID_TOKEN_REQUEST_URL: ''
+          ACTIONS_ID_TOKEN_REQUEST_TOKEN: ''
           MASTRA_E2E_REGISTRY_DIR: ${{ runner.temp }}/mastra-e2e-registry
           MASTRA_E2E_REGISTRY_STORAGE: ${{ runner.temp }}/mastra-e2e-registry/storage
           MASTRA_E2E_REGISTRY_CONFIG: ${{ runner.temp }}/mastra-e2e-registry/verdaccio.yaml
@@ -87,6 +93,7 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
+      id-token: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
@@ -149,6 +156,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -198,6 +206,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -241,6 +250,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      id-token: write
     # Builds one package and runs PR-controlled scripts: no Turbo credentials needed here.
 
     steps:
@@ -271,6 +281,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -315,6 +326,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -358,6 +370,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -402,6 +415,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -448,6 +462,7 @@ jobs:
         shard: [1, 2, 3, 4]
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -491,6 +506,7 @@ jobs:
     continue-on-error: true
     permissions:
       contents: read
+      id-token: write
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

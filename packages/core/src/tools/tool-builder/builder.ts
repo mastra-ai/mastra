@@ -623,6 +623,8 @@ export class CoreToolBuilder extends MastraBase {
     if (!fgaProvider) return;
     const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
       await import('../../auth/ee/fga-check');
+    const user = requestContext?.get('user');
+    const resolved = await options.resolveExecuteFGA?.({ user, requestContext });
     const toolResourceId = mcpMeta?.serverName
       ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
       : options.agentId
@@ -630,13 +632,14 @@ export class CoreToolBuilder extends MastraBase {
         : getStandaloneToolFGAResourceId(options.name);
     await requireFGA({
       fgaProvider,
-      user: requestContext?.get('user'),
-      resource: { type: 'tool', id: toolResourceId },
-      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+      user,
+      resource: resolved?.resource ?? { type: 'tool', id: toolResourceId },
+      permission: resolved?.permission ?? MastraFGAPermissions.TOOLS_EXECUTE,
       requestContext,
       actor,
       context: {
         resourceId: options.resourceId,
+        ...resolved?.context,
       },
       metadata: {
         toolName: options.name,
@@ -646,6 +649,7 @@ export class CoreToolBuilder extends MastraBase {
         threadId: options.threadId,
         executionResourceId: options.resourceId,
         mcpMetadata: mcpMeta,
+        ...resolved?.metadata,
       },
     });
   }
@@ -759,7 +763,11 @@ export class CoreToolBuilder extends MastraBase {
                 name: options.name,
                 runId: options.runId!,
               },
-              options.outputWriter || execOptions.outputWriter,
+              // The execution-time writer is the step's own writer, which knows the
+              // current response message id. A tool built by a processor carries the
+              // run-level writer captured when the stream started, and that id goes
+              // stale once a signal or retry rotates the response id.
+              execOptions.outputWriter || options.outputWriter,
             ),
             ...createObservabilityContext({ currentSpan: contextSpan }),
             abortSignal: execOptions.abortSignal,
@@ -815,7 +823,7 @@ export class CoreToolBuilder extends MastraBase {
                 suspendPayload,
                 threadId,
                 resourceId,
-                outputWriter: options.outputWriter || execOptions.outputWriter,
+                outputWriter: execOptions.outputWriter || options.outputWriter,
                 flushMessages: execOptions.flushMessages,
                 ...(execOptions.isBackgroundTask ? { isBackgroundTask: true } : {}),
               },

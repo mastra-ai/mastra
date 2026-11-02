@@ -75,6 +75,11 @@ function definedLineage(source: SpanEntityLineage): SpanEntityLineage {
   return lineage;
 }
 
+function modelPair(attributes: unknown): { model?: string; provider?: string } {
+  const { model, provider } = (attributes ?? {}) as { model?: unknown; provider?: unknown };
+  return typeof model === 'string' && model && typeof provider === 'string' && provider ? { model, provider } : {};
+}
+
 /**
  * Determines if a span type should be considered internal based on flags.
  * Returns false if flags are undefined.
@@ -750,6 +755,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       ...(this.resumedFromSpanId !== undefined ? { resumedFromSpanId: this.resumedFromSpanId } : {}),
+      ...modelPair(this.attributes),
       ...(typeof timeToFirstTokenMs === 'number' ? { timeToFirstTokenMs } : {}),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
       ...(links ? { links } : {}),
@@ -761,7 +767,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
   public snapshot(): SpanSnapshot<TType> {
     return {
-      ...this.exportSpan(),
+      ...this.exportSpan(this.observabilityInstance.getConfig().includeInternalSpans),
       ownEntityVersionId: this.ownEntityVersionId ?? null,
       ...(this.traceState ? { traceState: this.traceState } : {}),
     };

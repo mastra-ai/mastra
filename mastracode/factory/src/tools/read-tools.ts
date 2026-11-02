@@ -3,6 +3,8 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
 import { factorySessionUrl, factoryWorkItemUrl } from '../links.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
@@ -39,7 +41,8 @@ export interface FactoryReadToolDependencies {
   >;
   comments: Pick<WorkItemCommentsStorage, 'listRecent'>;
   audit: Pick<AuditStorage, 'list'>;
-  boards: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards: BoardRegistry | ProjectBoardSource;
   /** The live controller, for whether a session is mid-run and when it last moved; absent before the mount is up. */
   messaging?: () => Promise<Pick<FactoryMessaging, 'controller'> | null>;
 }
@@ -236,7 +239,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         const itemDecisions = decisions.slice(-MAX_LIST);
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          deps.boards,
+          await toBoardSource(deps.boards).load(project),
           project,
           itemDecisions.filter(decision => decision.status === 'failed'),
         );
@@ -354,7 +357,7 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
         // Check exactly the decisions this call returns, so every canRetry is real.
         const overtaken = await overtakenDecisionIds(
           deps.workItems,
-          deps.boards,
+          await toBoardSource(deps.boards).load(project),
           project,
           incidents.flatMap(group => group.shown),
         );

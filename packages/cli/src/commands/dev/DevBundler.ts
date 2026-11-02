@@ -40,6 +40,8 @@ function collectInlinedPaths(agents: DiscoveredFsAgent[]): string[] {
 export class DevBundler extends Bundler {
   private customEnvFile?: string;
   private factory: boolean;
+  /** Resolved `bundler.sourcemap`, set by {@link watch}. */
+  sourcemapEnabled = false;
 
   constructor(customEnvFile?: string, factory = false) {
     super('Dev');
@@ -107,6 +109,7 @@ export class DevBundler extends Bundler {
     const envFiles = await this.getEnvFiles();
     const bundlerOptions = await this.getUserBundlerOptions(entryFile, outputDirectory);
     const sourcemapEnabled = !!bundlerOptions?.sourcemap;
+    this.sourcemapEnabled = sourcemapEnabled;
 
     const devServerAnalysisEntry = `
       import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';

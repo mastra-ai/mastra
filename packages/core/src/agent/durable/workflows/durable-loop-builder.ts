@@ -1172,6 +1172,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                       finishReason: finalOutput.stepResult?.reason,
                       ...(usageIncomplete ? { usageIncomplete: true } : {}),
                       ...clocks,
+                      responseId: state.lastResponse?.id,
+                      responseModel: state.lastResponse?.modelId,
                     },
                     usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
                   });
