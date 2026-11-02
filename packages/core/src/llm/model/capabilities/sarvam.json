@@ -1,7 +1,7 @@
 {
   "temperature": ["sarvam-105b", "sarvam-30b"],
   "reasoning": {
-    "sarvam-105b": [
+    "sarvam-30b": [
       {
         "type": "toggle"
       },
@@ -10,7 +10,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "sarvam-30b": [
+    "sarvam-105b": [
       {
         "type": "toggle"
       },

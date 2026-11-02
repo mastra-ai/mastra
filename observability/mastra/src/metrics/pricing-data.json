@@ -27909,7 +27909,7 @@
         "cost": {
           "input": 0.6825,
           "output": 3.5,
-          "cache_read": 0.1365,
+          "cache_read": 0.156,
           "cache_write": 0
         }
       },
@@ -27932,7 +27932,7 @@
       "zai-org/GLM-5.3": {
         "cost": {
           "input": 1.4,
-          "output": 2.64,
+          "output": 3.96,
           "cache_read": 0.14,
           "cache_write": 0
         }
@@ -27941,7 +27941,7 @@
         "cost": {
           "input": 0.19,
           "output": 0.6,
-          "cache_read": 0.06,
+          "cache_read": 0.04,
           "cache_write": 0
         }
       }
@@ -29929,9 +29929,9 @@
       },
       "google/gemma-4-31b-it": {
         "cost": {
-          "input": 0.089,
-          "output": 0.149,
-          "cache_read": 0.044
+          "input": 0.1,
+          "output": 0.34,
+          "cache_read": 0.1
         }
       },
       "google/lyria-3-clip-preview": {
@@ -30968,9 +30968,9 @@
       },
       "openai/gpt-oss-20b": {
         "cost": {
-          "input": 0.004,
-          "output": 0.018,
-          "cache_read": 0.003
+          "input": 0.016,
+          "output": 0.066,
+          "cache_read": 0.014
         }
       },
       "openai/gpt-oss-safeguard-20b": {
@@ -31160,8 +31160,8 @@
       },
       "qwen/qwen3-coder-30b-a3b-instruct": {
         "cost": {
-          "input": 0.15,
-          "output": 0.6
+          "input": 0.07,
+          "output": 0.28
         }
       },
       "qwen/qwen3-coder-flash": {
@@ -42774,9 +42774,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.03,
-          "output": 0.089,
-          "cache_read": 0.015
+          "input": 0.07,
+          "output": 0.24,
+          "cache_read": 0.046
         }
       },
       "google/gemma-4-26b-a4b-it-cybersecurity": {
@@ -42788,9 +42788,9 @@
       },
       "google/gemma-4-26b-a4b-it:thinking": {
         "cost": {
-          "input": 0.03,
-          "output": 0.089,
-          "cache_read": 0.015
+          "input": 0.07,
+          "output": 0.24,
+          "cache_read": 0.046
         }
       },
       "google/gemma-4-31b-it": {
@@ -43464,9 +43464,9 @@
       },
       "moonshotai/kimi-k3": {
         "cost": {
-          "input": 0.1495,
+          "input": 0.45,
           "output": 7.15,
-          "cache_read": 0.07475
+          "cache_read": 0.075
         }
       },
       "moonshotai/kimi-k3.1-pro": {
@@ -43630,12 +43630,6 @@
           "input": 0.15,
           "output": 0.5,
           "cache_read": 0.02
-        }
-      },
-      "openai/gpt-4-turbo": {
-        "cost": {
-          "input": 10,
-          "output": 30
         }
       },
       "openai/gpt-4.1": {
@@ -43968,9 +43962,9 @@
       },
       "openai/gpt-oss-20b": {
         "cost": {
-          "input": 0.02,
-          "output": 0.1,
-          "cache_read": 0.012
+          "input": 0.014,
+          "output": 0.058,
+          "cache_read": 0.013
         }
       },
       "openai/gpt-oss-safeguard-20b": {
@@ -44016,20 +44010,6 @@
           "cache_read": 1
         }
       },
-      "openai/o3-mini": {
-        "cost": {
-          "input": 1.1,
-          "output": 4.4,
-          "cache_read": 0.55
-        }
-      },
-      "openai/o3-mini-high": {
-        "cost": {
-          "input": 1.1,
-          "output": 4.4,
-          "cache_read": 0.55
-        }
-      },
       "openai/o3-mini-low": {
         "cost": {
           "input": 1.1,
@@ -44042,20 +44022,6 @@
           "input": 22,
           "output": 88,
           "cache_read": 11
-        }
-      },
-      "openai/o4-mini": {
-        "cost": {
-          "input": 1.1,
-          "output": 4.4,
-          "cache_read": 0.55
-        }
-      },
-      "openai/o4-mini-high": {
-        "cost": {
-          "input": 1.1,
-          "output": 4.4,
-          "cache_read": 0.55
         }
       },
       "orca/orcacyber-zero-1.5": {
@@ -52406,12 +52372,12 @@
       },
       "google/gemini-3.8-flash": {
         "cost": {
-          "input": 0.825,
-          "output": 4.125,
-          "reasoning": 4.125,
-          "cache_read": 0.0825,
+          "input": 0.75,
+          "output": 3.75,
+          "reasoning": 3.75,
+          "cache_read": 0.075,
           "cache_write": 0.041667,
-          "input_audio": 0.825
+          "input_audio": 0.75
         }
       },
       "google/gemini-4-argon": {
@@ -52457,9 +52423,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.03,
-          "output": 0.09,
-          "cache_read": 0.015
+          "input": 0.1,
+          "output": 0.3,
+          "cache_read": 0.05
         }
       },
       "google/gemma-4-26b-a4b-it:free": {
@@ -53239,13 +53205,6 @@
           "cache_read": 0.175
         }
       },
-      "openai/gpt-5.2-chat": {
-        "cost": {
-          "input": 1.75,
-          "output": 14,
-          "cache_read": 0.175
-        }
-      },
       "openai/gpt-5.2-codex": {
         "cost": {
           "input": 1.75,
@@ -53814,9 +53773,9 @@
       },
       "openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.01,
-          "output": 0.037,
-          "cache_read": 0.009
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.075
         }
       },
       "openai/gpt-oss-20b": {
@@ -54013,8 +53972,8 @@
       },
       "qwen/qwen3-coder-30b-a3b-instruct": {
         "cost": {
-          "input": 0.15,
-          "output": 0.6
+          "input": 0.07,
+          "output": 0.28
         }
       },
       "qwen/qwen3-coder-flash": {
@@ -58563,18 +58522,18 @@
       },
       "deepseek/deepseek-v4.1-flash": {
         "cost": {
-          "input": 0.3,
+          "input": 0.24,
           "output": 1.2,
-          "cache_read": 0.006,
-          "cache_write": 0.3
+          "cache_read": 0.0048,
+          "cache_write": 0.24
         }
       },
       "deepseek/deepseek-v4.1-flash-1017": {
         "cost": {
-          "input": 0.3,
+          "input": 0.24,
           "output": 1.2,
           "cache_read": 0.006,
-          "cache_write": 0.3
+          "cache_write": 0.24
         }
       },
       "google/gemini-3-flash-preview": {
@@ -58897,10 +58856,10 @@
       },
       "z-ai/glm-5.3": {
         "cost": {
-          "input": 0.98,
+          "input": 0.5,
           "output": 3.08,
-          "cache_read": 0.182,
-          "cache_write": 0.98
+          "cache_read": 0.093,
+          "cache_write": 0.5
         }
       },
       "z-ai/glm-5.3-flash": {
