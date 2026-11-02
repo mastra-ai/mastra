@@ -185,7 +185,7 @@ describe('QUERY_THREADS', () => {
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
-        message: 'Context identifier predicates are not supported by the configured observability store',
+        message: 'Context field predicates are not supported by the configured observability store',
       });
       expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
     }
@@ -211,7 +211,7 @@ describe('QUERY_THREADS', () => {
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
-        message: 'Context identifier predicates are not supported by the configured observability store',
+        message: 'Context field predicates are not supported by the configured observability store',
       });
       expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
     }

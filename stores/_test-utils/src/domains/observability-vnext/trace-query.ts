@@ -1459,11 +1459,11 @@ export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
     request: {
       traces: {
         timeRange: scopedRange,
-        where: { spans: { some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'checkout' } } } },
+        where: { spans: { some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'payments' } } } },
       },
-      where: { traces: { some: { op: 'eq', left: { path: 'requestId' }, right: { literal: 'request-b' } } } },
+      where: { traces: { some: { op: 'eq', left: { path: 'requestId' }, right: { literal: 'request-a' } } } },
     },
-    expected: [{ threadId: 'thread-org-b' }],
+    expected: [{ threadId: 'thread-org-a' }],
     requiresFeature: 'trace-query-context-fields',
   },
 ];

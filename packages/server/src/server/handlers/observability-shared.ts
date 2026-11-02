@@ -418,7 +418,7 @@ export function assertObservabilityTraceQueryContextFieldsSupported(
   if (!usesField(predicate, unsupported)) return;
 
   throw new HTTPException(501, {
-    message: 'Context identifier predicates are not supported by the configured observability store',
+    message: 'Context field predicates are not supported by the configured observability store',
   });
 }
 

@@ -217,7 +217,7 @@ const sessionTracesWithRun = {
 
 These identifiers support `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. Field discovery lists them, but value discovery doesn't return their recorded values. Stores advertise support through the `trace-query-context-ids` feature. A predicate on one of these fields against an older store returns `501` before storage runs, and field discovery omits them for that store.
 
-`requestId`, `serviceName`, and `experimentId` work the same way, at trace scope and inside `spans.some` / `spans.none`. This predicate finds checkout requests that reached the `payments` service on a child span:
+`requestId`, `serviceName`, and `experimentId` work the same way, at trace scope and inside `spans.some` / `spans.none`. This predicate finds checkout requests that reached the `payments` service on a child span. The child span records `metadata: { serviceName: 'payments' }`; the root keeps `checkout`:
 
 ```typescript
 const checkoutRequestsThroughPayments = {
