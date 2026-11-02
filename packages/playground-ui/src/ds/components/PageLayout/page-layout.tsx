@@ -10,7 +10,7 @@ export interface PageLayoutProps {
   breadcrumbs?: ReactNode;
   /** Right side of the page header row. */
   headerActions?: ReactNode;
-  /** Controls pinned between the header and the scrollable body (search, filters, toggles…). */
+  /** Controls at the top of the page body (search, filters, toggles…). They scroll with the body. */
   actionRow?: ReactNode;
   /** Page-level header (e.g. `PageHeader`) rendered inside the body container, above children. */
   header?: ReactNode;
@@ -36,11 +36,19 @@ export function PageLayout({
   variant = 'container',
   mask = false,
 }: PageLayoutProps) {
-  const headerSlot = header ? (
-    <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>
-      {header}
+  const actionRowSlot = actionRow ? (
+    <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 pb-4">
+      {actionRow}
     </div>
   ) : null;
+  // `fit` and `narrow` put the action row and the page header in the cell above the content, inside the scroll area.
+  const top =
+    actionRow || header ? (
+      <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>
+        {actionRowSlot}
+        {header}
+      </div>
+    ) : null;
 
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
@@ -52,21 +60,16 @@ export function PageLayout({
           )}
         </Header>
       )}
-      {actionRow && (
-        <div data-slot="page-layout-action-row" className="flex shrink-0 flex-col gap-2 px-4 pt-4">
-          {actionRow}
-        </div>
-      )}
       <main className="flex min-h-0 flex-1 flex-col">
         <ScrollArea mask={mask} className="min-h-0 flex-1">
           <ScrollAreaViewport
             className={cn(variant === 'container' && 'p-4')}
             contentClassName={cn(
-              variant === 'container' && 'h-full min-h-min',
+              variant === 'container' && 'flex h-full min-h-min flex-col',
               variant === 'narrow' && 'grid min-h-full grid-cols-1',
               // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
               variant === 'fit' &&
-                (header
+                (top
                   ? 'grid h-full grid-cols-1 grid-rows-[auto_minmax(0,1fr)]'
                   : 'grid h-full grid-cols-1 grid-rows-1'),
             )}
@@ -78,15 +81,26 @@ export function PageLayout({
                 data-slot="page-layout-container"
                 className={cn(
                   'mx-auto grid min-h-full w-full max-w-5xl grid-cols-1 p-4',
-                  header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
+                  top ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
                 )}
               >
-                {headerSlot}
+                {top}
                 {children}
               </div>
+            ) : variant === 'container' ? (
+              <>
+                {actionRowSlot}
+                {/* The body gets the height left under the row, so lists that scroll on their own still fit the
+                    page. Taller content overflows it, and scroll overflow skips the viewport's bottom padding, so a
+                    zero-height spacer puts that padding back. */}
+                <div data-slot="page-layout-body" className="min-h-0 flex-1 after:-mb-4 after:block after:h-4">
+                  {header && <div data-slot="page-layout-header">{header}</div>}
+                  {children}
+                </div>
+              </>
             ) : (
               <>
-                {headerSlot}
+                {top}
                 {children}
               </>
             )}

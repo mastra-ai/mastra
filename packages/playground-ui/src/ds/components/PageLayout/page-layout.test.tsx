@@ -28,20 +28,36 @@ describe('PageLayout', () => {
   });
 
   describe('when an action row is provided', () => {
-    it('pins it between the header and the scrollable body', () => {
+    it.each(['container', 'narrow', 'fit'] as const)('scrolls it with the body, above the content (%s)', variant => {
       render(
-        <PageLayout breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
+        <PageLayout variant={variant} breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
           <p>Body</p>
         </PageLayout>,
       );
 
       const row = screen.getByLabelText('Filter').closest('[data-slot="page-layout-action-row"]');
-      const main = screen.getByRole('main');
-      expect(row).not.toBeNull();
-      if (!row) return;
-      expect(main.contains(row)).toBe(false);
-      expect(screen.getByRole('banner').compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(row.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(row?.closest('[style*="overflow"]')).toBe(viewportOf('Body'));
+      expect(
+        screen.getByLabelText('Filter').compareDocumentPosition(screen.getByText('Body')) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
+    it('keeps the body mounted when the row appears', () => {
+      const { rerender } = render(
+        <PageLayout>
+          <input aria-label="Draft" />
+        </PageLayout>,
+      );
+      const draft = screen.getByLabelText('Draft');
+
+      rerender(
+        <PageLayout actionRow={<input aria-label="Filter" />}>
+          <input aria-label="Draft" />
+        </PageLayout>,
+      );
+
+      expect(screen.getByLabelText('Draft')).toBe(draft);
     });
   });
 
