@@ -203,4 +203,75 @@ describe('knowledge_list', () => {
     expect(below.entries[0].ref).toMatch(/^[^#]+$/);
     expect((await call(ORG, 'knowledge_read', { page: below.entries[0].ref })).page.name).toBe('Under');
   });
+
+  it('stops at about 5,000 tokens of entries and pages through the rest, each entry once, at depth 2', async () => {
+    const { knowledge, call } = setup();
+    const long = (i: number) => `Section ${i}: ${'detail '.repeat(60).trim()}`;
+    const expected: string[] = [];
+    for (let i = 0; i < 12; i++) {
+      const section = `s${String(i).padStart(2, '0')}`;
+      await knowledge.upsertPage({ scope: 'docs:acme', path: section, name: `S${i}`, description: long(i) });
+      expected.push(`docs:acme#${section}`);
+      for (let j = 0; j < 7; j++) {
+        const path = `${section}/c${j}`;
+        await knowledge.upsertPage({ scope: 'docs:acme', path, name: `C${i}.${j}`, description: long(j) });
+        expected.push(`docs:acme#${path}`);
+      }
+    }
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const result = await call(ORG, 'knowledge_list', {
+        from: 'docs:acme',
+        depth: 2,
+        limit: 100,
+        ...(cursor ? { cursor } : {}),
+      });
+      pages++;
+      seen.push(...result.entries.map((entry: any) => entry.ref));
+      expect(JSON.stringify(result.entries).length).toBeLessThan(5_000 * 6);
+      cursor = result.nextCursor;
+      if (cursor) {
+        expect(result.more).toEqual([
+          expect.stringMatching(
+            new RegExp(
+              `^entries: stopped at about 5,000 tokens; \\d+ more entries \\(about [\\d,]+ tokens\\) left out\\. List again with from: "docs:acme", cursor: "${cursor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"\\.$`,
+            ),
+          ),
+        ]);
+      }
+    } while (cursor && pages < 20);
+    expect(pages).toBeGreaterThan(1);
+    expect(seen).toEqual(expected);
+  });
+
+  it('pages a token cut that falls inside the count limit through to the depth-1 cursor', async () => {
+    const { knowledge, call } = setup();
+    const long = 'detail '.repeat(60).trim();
+    for (let i = 0; i < 70; i++) {
+      await knowledge.upsertPage({
+        scope: 'docs:acme',
+        path: `p${String(i).padStart(2, '0')}`,
+        name: `P${i}`,
+        description: long,
+      });
+    }
+    const first = await call(ORG, 'knowledge_list', { from: 'docs:acme', limit: 60 });
+    expect(first.entries.length).toBeLessThan(60);
+    expect(first.more[0]).toMatch(/^entries: stopped at about 5,000 tokens/);
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let result: any;
+    do {
+      result = await call(ORG, 'knowledge_list', { from: 'docs:acme', limit: 60, ...(cursor ? { cursor } : {}) });
+      seen.push(...result.entries.map((entry: any) => entry.ref));
+      cursor = result.nextCursor;
+    } while (cursor);
+    expect(seen).toHaveLength(70);
+    expect(new Set(seen).size).toBe(70);
+    await expect(call(ORG, 'knowledge_list', { from: 'docs:acme', cursor: 't1.5.x.' })).rejects.toThrow(
+      /did not come from knowledge_list/,
+    );
+  });
 });

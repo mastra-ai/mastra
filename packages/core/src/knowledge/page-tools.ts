@@ -607,6 +607,8 @@ function readTool(host: KnowledgePageToolHost) {
 const LIST_DEFAULT_LIMIT = 50;
 const LIST_MAX_LIMIT = 100;
 const LIST_MAX_DEPTH = 3;
+/** Most estimated tokens of entries one `knowledge_list` returns, the same budget as a body read. */
+const LIST_MAX_TOKENS = KNOWLEDGE_READ_BODY_TOKENS;
 
 /** One entry of a `knowledge_list` result. */
 interface ListEntry {
@@ -632,7 +634,8 @@ function listTool(host: KnowledgePageToolHost) {
     id: 'knowledge_list',
     description:
       'List the page tree under a starting point: each child with its ref (pass it to knowledge_read or knowledge_list), name, description and how many children it has. ' +
-      'Without `from`, lists the scopes this run can read. Use it to find your way around a scope before searching or reading.',
+      'Without `from`, lists the scopes this run can read. Use it to find your way around a scope before searching or reading. ' +
+      `One result holds at most \`limit\` entries and about ${LIST_MAX_TOKENS.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` says how many entries were left out and gives the \`cursor\` to list the rest (pass the same \`from\`).`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -652,7 +655,7 @@ function listTool(host: KnowledgePageToolHost) {
         cursor: {
           type: 'string',
           minLength: 1,
-          description: "The previous result's nextCursor, for the next entries at depth 1 (pass the same `from`).",
+          description: "The previous result's nextCursor, for the entries after it (pass the same `from`).",
         },
       },
       additionalProperties: false,
@@ -662,16 +665,29 @@ function listTool(host: KnowledgePageToolHost) {
         from,
         depth: requestedDepth,
         limit: requestedLimit,
-        cursor,
+        cursor: requestedCursor,
       } = input as {
         from?: string;
         depth?: number;
         limit?: number;
         cursor?: string;
       };
+      // A `t<depth>.<limit>.<skip>.<cursor>` cursor resumes a result cut short by tokens: it lists
+      // the same entries again (same depth, limit and underlying cursor) and skips those already
+      // returned, so paging returns every entry once at any depth.
+      let cursor = requestedCursor;
+      let depth = Math.min(Math.max(requestedDepth ?? 1, 1), LIST_MAX_DEPTH);
+      let limit = Math.min(Math.max(requestedLimit ?? LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT);
+      let skip = 0;
+      if (cursor?.startsWith('t')) {
+        const match = /^t(\d+)\.(\d+)\.(\d+)\.(.*)$/s.exec(cursor);
+        if (!match) throw new Error('knowledge_list: that cursor did not come from knowledge_list.');
+        depth = Math.min(Math.max(Number(match[1]), 1), LIST_MAX_DEPTH);
+        limit = Math.min(Math.max(Number(match[2]), 1), LIST_MAX_LIMIT);
+        skip = Number(match[3]);
+        cursor = match[4] || undefined;
+      }
       const run = await start(host, context);
-      const depth = Math.min(Math.max(requestedDepth ?? 1, 1), LIST_MAX_DEPTH);
-      const limit = Math.min(Math.max(requestedLimit ?? LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT);
 
       /** Readable scopes directly under a scope page; unreadable ones are left out entirely. */
       const childScopes = async (parentId: string): Promise<KnowledgePage[]> => {
@@ -810,9 +826,30 @@ function listTool(host: KnowledgePageToolHost) {
         }
       };
       flatten(top);
+
+      // Stop once the entries reach the token budget (always at least one), and hand back a cursor
+      // to the rest of this same listing.
+      const sizes = entries.map(entry => estimateTokenCount(JSON.stringify(entry)));
+      const begin = Math.min(skip, entries.length);
+      let end = begin;
+      let used = 0;
+      while (end < entries.length && (end === begin || used + sizes[end]! <= LIST_MAX_TOKENS)) used += sizes[end++]!;
+      if (end < entries.length) {
+        const left = entries.length - end;
+        const leftTokens = sizes.slice(end).reduce((sum, size) => sum + size, 0);
+        const tokenCursor = `t${depth}.${limit}.${end}.${cursor ?? ''}`;
+        return {
+          ...(origin ? { from: { ref: originRef!, name: origin.name } } : {}),
+          entries: entries.slice(begin, end),
+          nextCursor: tokenCursor,
+          more: [
+            `entries: stopped at about ${LIST_MAX_TOKENS.toLocaleString('en-US')} tokens; ${left} more ${left === 1 ? 'entry' : 'entries'} (about ${leftTokens.toLocaleString('en-US')} tokens) left out. List again with ${from ? `from: ${JSON.stringify(from)}, ` : ''}cursor: "${tokenCursor}".`,
+          ],
+        };
+      }
       return {
         ...(origin ? { from: { ref: originRef!, name: origin.name } } : {}),
-        entries,
+        entries: entries.slice(begin),
         ...(nextCursor ? { nextCursor } : {}),
         ...(more.length ? { more } : {}),
       };
