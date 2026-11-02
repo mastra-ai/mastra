@@ -133,15 +133,15 @@ async function resolveRelativeDeclaration(moduleSpecifier, fromFile) {
 }
 
 /**
- * Run-scoped caches shared by every `replaceTypes` call of one `generateTypes` run.
+ * Run-scoped state shared by every `replaceTypes` call of one `generateTypes` run.
  *
- * Each top-level declaration file re-walks the whole bundled declaration graph it references, with its own
- * `visited` set, and the order of those walks decides which copy wins when two sources map to the same
- * `_types` path. The caches below keep that exact sequence of writes; they only skip re-parsing files,
- * re-resolving packages, and rewriting files with the content they already hold.
+ * Every bundled package version gets its own `_types/<name>@<version>` directory, so each destination file
+ * has one source and is copied once per run, by whichever top-level file reaches it first.
  */
 export function createReplaceTypesState() {
   return {
+    /** @type {Set<string>} destination files already copied this run */
+    visited: new Set(),
     /** @type {Map<string, Promise<any>>} copy plan per source file + destination root */
     plans: new Map(),
     /** @type {Map<string, Promise<any>>} bundled specifier resolution per specifier + resolver directory */
@@ -241,16 +241,23 @@ async function resolveBundledSpecifierUncached(specifier, resolverParentFile, ro
   const sourceTypesPath =
     (await resolveRelativeDeclaration(`./${typesFiles[0]}`, join(sourcePkgRootPath, 'package.json'))) ??
     join(sourcePkgRootPath, typesFiles[0]);
-  const destTypesRoot = join(rootDir, 'dist', '_types', sourcePkgName.replace('/', '_'));
-
-  // Legacy CommonJS declarations must not inherit the consuming package's ESM mode.
   const sourcePackage = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
+
+  // Keyed by the installed package, not the import specifier: two versions of one package must not overwrite
+  // each other, and an npm alias shares the copy of the version it points to. (#28732)
+
+  const destName = sourcePackage.version
+    ? `${sourcePackage.name ?? sourcePkgName}@${sourcePackage.version}`
+    : sourcePkgName;
+
+  const destTypesRoot = join(rootDir, 'dist', '_types', destName.replace('/', '_'));
 
   return {
     sourcePkgRootPath,
     sourceTypesPath,
     destTypesRoot,
     destTypesPath: join(destTypesRoot, relative(sourcePkgRootPath, sourceTypesPath)),
+    // Legacy CommonJS declarations must not inherit the consuming package's ESM mode.
     packageJson: JSON.stringify({ type: sourcePackage.type ?? 'commonjs' }),
   };
 }
@@ -348,7 +355,7 @@ async function buildCopyPlan(sourceFilePath, sourceRootDir, destRootDir, rootDir
   };
 }
 
-async function copyBundledDependencies(steps, rootDir, bundledPackages, visited, state) {
+async function copyBundledDependencies(steps, rootDir, bundledPackages, state) {
   for (const step of steps) {
     await ensureDir(step.destTypesRoot, state);
     await writeIfChanged(join(step.destTypesRoot, 'package.json'), step.packageJson, state);
@@ -358,39 +365,31 @@ async function copyBundledDependencies(steps, rootDir, bundledPackages, visited,
       step.destTypesRoot,
       rootDir,
       bundledPackages,
-      visited,
       state,
     );
   }
 }
 
-async function copyDeclarationGraph(
-  sourceFilePath,
-  sourceRootDir,
-  destRootDir,
-  rootDir,
-  bundledPackages,
-  visited,
-  state,
-) {
-  const normalizedSourceFilePath = resolve(sourceFilePath);
-  if (visited.has(normalizedSourceFilePath)) {
+async function copyDeclarationGraph(sourceFilePath, sourceRootDir, destRootDir, rootDir, bundledPackages, state) {
+  // Keyed by destination: pnpm can install one package version at several paths (one per peer-dependency set),
+  // and all of them share one `_types` copy.
+  const destFilePath = join(destRootDir, relative(sourceRootDir, sourceFilePath));
+  if (state.visited.has(destFilePath)) {
     return;
   }
 
-  visited.add(normalizedSourceFilePath);
+  state.visited.add(destFilePath);
 
   const plan = await getCopyPlan(sourceFilePath, sourceRootDir, destRootDir, rootDir, bundledPackages, state);
   await ensureDir(dirname(plan.destFilePath), state);
 
   if (plan.steps) {
-    await copyBundledDependencies(plan.steps, rootDir, bundledPackages, visited, state);
+    await copyBundledDependencies(plan.steps, rootDir, bundledPackages, state);
   }
-  // A file with bundled imports is written after its dependencies, so it wins if one of them maps to the same path.
   await writeIfChanged(plan.destFilePath, plan.text, state);
 
   for (const referencedFile of plan.relativeChildren) {
-    await copyDeclarationGraph(referencedFile, sourceRootDir, destRootDir, rootDir, bundledPackages, visited, state);
+    await copyDeclarationGraph(referencedFile, sourceRootDir, destRootDir, rootDir, bundledPackages, state);
   }
 }
 
@@ -403,6 +402,6 @@ export async function replaceTypes(file, rootDir, bundledPackages, state = creat
     return;
   }
 
-  await copyBundledDependencies(bundled.steps, rootDir, bundledPackages, new Set(), state);
+  await copyBundledDependencies(bundled.steps, rootDir, bundledPackages, state);
   await writeIfChanged(file, bundled.text, state);
 }
