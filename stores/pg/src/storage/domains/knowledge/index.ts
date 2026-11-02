@@ -238,6 +238,30 @@ export class KnowledgePG extends KnowledgeStorage {
     return this.#pages.countChildPages(input);
   }
 
+  override replacePageBodyLinks(
+    input: Parameters<KnowledgePageStore['replacePageBodyLinks']>[0],
+  ): ReturnType<KnowledgePageStore['replacePageBodyLinks']> {
+    return this.#pages.replacePageBodyLinks(input);
+  }
+
+  override listPageBodyLinkSources(
+    input: Parameters<KnowledgePageStore['listPageBodyLinkSources']>[0],
+  ): ReturnType<KnowledgePageStore['listPageBodyLinkSources']> {
+    return this.#pages.listPageBodyLinkSources(input);
+  }
+
+  override countPageLinks(
+    input: Parameters<KnowledgePageStore['countPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['countPageLinks']> {
+    return this.#pages.countPageLinks(input);
+  }
+
+  override listPageLinks(
+    input: Parameters<KnowledgePageStore['listPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['listPageLinks']> {
+    return this.#pages.listPageLinks(input);
+  }
+
   override countNotes(
     input: Parameters<KnowledgePageStore['countNotes']>[0],
   ): ReturnType<KnowledgePageStore['countNotes']> {

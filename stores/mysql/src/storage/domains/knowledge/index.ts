@@ -126,7 +126,11 @@ export class KnowledgeMySQL extends KnowledgeStorage {
   }
 
   override async dangerouslyReset(): Promise<void> {
-    for (const table of [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, 'mastra_knowledge_pin_audiences'])
+    for (const table of [
+      ...KNOWLEDGE_RESETTABLE_TABLE_NAMES,
+      'mastra_knowledge_pin_audiences',
+      'mastra_knowledge_page_links',
+    ])
       await this.#pool.query(`DROP TABLE IF EXISTS \`${table}\``);
     await this.init();
   }
@@ -229,6 +233,30 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['countChildPages']>[0],
   ): ReturnType<KnowledgePageStore['countChildPages']> {
     return this.#pages.countChildPages(input);
+  }
+
+  override replacePageBodyLinks(
+    input: Parameters<KnowledgePageStore['replacePageBodyLinks']>[0],
+  ): ReturnType<KnowledgePageStore['replacePageBodyLinks']> {
+    return this.#pages.replacePageBodyLinks(input);
+  }
+
+  override listPageBodyLinkSources(
+    input: Parameters<KnowledgePageStore['listPageBodyLinkSources']>[0],
+  ): ReturnType<KnowledgePageStore['listPageBodyLinkSources']> {
+    return this.#pages.listPageBodyLinkSources(input);
+  }
+
+  override countPageLinks(
+    input: Parameters<KnowledgePageStore['countPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['countPageLinks']> {
+    return this.#pages.countPageLinks(input);
+  }
+
+  override listPageLinks(
+    input: Parameters<KnowledgePageStore['listPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['listPageLinks']> {
+    return this.#pages.listPageLinks(input);
   }
 
   override countNotes(
