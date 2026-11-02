@@ -408,6 +408,8 @@ export interface DurableLLMStepOutput {
     headers?: Record<string, string>;
     request?: LanguageModelRequestMetadata;
   };
+  /** Provider id and serving model of this step's response; absent when the provider sent none */
+  response?: { id?: string; modelId?: string };
   /** Processor retry count */
   processorRetryCount?: number;
   /** Processor retry feedback message */
@@ -592,6 +594,8 @@ export interface DurableAgenticExecutionOutput {
   completionStartTime?: Date;
   /** Time to first token of the inference that streamed this iteration's first chunk */
   timeToFirstTokenMs?: number;
+  /** Provider id and model of this iteration's response */
+  response?: { id?: string; modelId?: string };
 }
 
 /**

@@ -224,5 +224,6 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
           completionStartTime: executionOutput.completionStartTime,
           timeToFirstTokenMs: executionOutput.timeToFirstTokenMs,
         }),
+    lastResponse: signalPreempted ? currentState.lastResponse : executionOutput.response,
   };
 }

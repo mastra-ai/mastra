@@ -210,6 +210,8 @@ export const baseIterationStateSchema = z.object({
   completionStartTime: z.coerce.date().optional(),
   // Time to first token of the inference that streamed that chunk, carried the same way
   timeToFirstTokenMs: z.number().optional(),
+  // Provider id and model of the latest response, carried the same way
+  lastResponse: z.object({ id: z.string().optional(), modelId: z.string().optional() }).optional(),
 });
 
 /**

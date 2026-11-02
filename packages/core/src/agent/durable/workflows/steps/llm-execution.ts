@@ -9,6 +9,7 @@ import type { PubSub } from '../../../../events/pubsub';
 import { validateModelTimeoutSettings } from '../../../../llm/model/model-settings';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import { resolveApiProviderId } from '../../../../llm/model/router';
+import { resolveResponseModelId } from '../../../../llm/model/server-side-fallback';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
 import { LOCAL_MODEL_REQUEST_KEY, STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
@@ -234,6 +235,8 @@ const durableLLMOutputSchema = z.object({
   completionStartTime: z.coerce.date().optional(),
   // Time to first token of the inference that streamed that chunk; kept with it
   timeToFirstTokenMs: z.number().optional(),
+  // Provider id and serving model of the response, only when the provider sent one
+  response: z.object({ id: z.string().optional(), modelId: z.string().optional() }).optional(),
 });
 
 /**
@@ -2993,6 +2996,19 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 providerMetadata: responseMetadata,
                 headers: rawResponse?.headers,
               },
+              // Only a finished step has a step-finish chunk, so an aborted step records
+              // none. Its metadata already defaults the model to the requested one, and
+              // the serving model accounts for Anthropic server-side fallbacks, as the
+              // main loop does.
+              response: deferredStepFinishChunk
+                ? {
+                    id: deferredStepFinishChunk.payload?.metadata?.id,
+                    modelId: resolveResponseModelId(
+                      deferredStepFinishChunk.payload?.metadata?.providerMetadata,
+                      deferredStepFinishChunk.payload?.metadata?.modelId,
+                    ),
+                  }
+                : undefined,
               state: typedInput.state,
               // Pass span data so tool calls can be children of model_step
               modelSpanData:
