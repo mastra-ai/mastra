@@ -63,9 +63,14 @@ Pass both or neither. Passing only one throws ``Knowledge semantic search needs 
 
 `knowledge_search` then blends keyword and semantic results into one ranked list. Every semantic hit is read again with the run's access before it can take a place in the results. A run never sees content it can't read, and that content never takes a slot from content it can.
 
-Pages and notes written through the tools are embedded as they're written. Scope pages aren't embedded, but notes on them are. Run `reindex()` to re-embed every page and note. It returns how many it indexed. Run it after:
+Pages and notes written through the tools are embedded as they're written. Scope pages aren't embedded, but notes on them are.
+
+A page too long for one embedding is embedded as overlapping chunks of about 2,000 tokens, cut between paragraphs and before headings. Each chunk starts with the page's name and description. Search still returns the page once, ranked by its best chunk. A page gets at most 100 chunks, about 200,000 tokens of body. Search finds the rest of a longer body by keyword only. Rewriting a page replaces its chunks, and deleting it removes them.
+
+Run `reindex()` to re-embed every page and note. It returns how many it indexed. Run it after:
 
 - Content written straight to the store, outside the tools.
+- An upgrade from a release that didn't chunk long pages. Pages that were too long to embed then become searchable by meaning.
 - A write that logged `Knowledge semantic index update failed; run knowledge.reindex() to repair`. The write itself succeeded. Only search by meaning misses it until you reindex.
 
 ```typescript
