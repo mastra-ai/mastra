@@ -911,6 +911,8 @@ export interface KnowledgePageGraphProps {
   settled?: boolean;
   /** Exact links into and out of pages, from the store; they replace the counts taken from `knownLinks`. */
   exactLinkCounts?: ReadonlyMap<string, { in: number; out: number }>;
+  /** Links fetched for the page under the pointer: drawn on hover, never counted or laid out. */
+  fetchedLinks?: readonly KnowledgePageEdge[];
   /** The page under the pointer, or null: a host can fetch that page's links. */
   onHover?: (pageId: string | null) => void;
   /** Write each dot's total of links in and out inside it. */
@@ -1002,6 +1004,7 @@ function KnowledgePageGraphInner({
   knownLinks,
   nearIds,
   exactLinkCounts,
+  fetchedLinks,
   onHover,
   showCounts,
   onPreview,
@@ -1017,10 +1020,10 @@ function KnowledgePageGraphInner({
     return { graphPages: withPlaceholders, allEdges: [...pageGraphEdges(pages, edges), ...granted.edges] };
   }, [pages, edges, grants]);
   const linkSource = knownLinks ?? edges;
-  // `hoverLinks` maps a page id to its links, built once when links load: a hover is a lookup, not a scan.
-  const { linkCounts, hoverLinks } = useMemo(() => {
+  // Counts size the dots, so they feed the layout: they come from what is loaded and the store's counts,
+  // never from links fetched for a hover, or every hover would lay the whole graph out again.
+  const linkCounts = useMemo(() => {
     const counts = new Map<string, { in: number; out: number }>();
-    const touching = new Map<string, KnowledgePageEdge[]>();
     const pairs = new Set<string>();
     for (const edge of linkSource) {
       if (edge.kind !== 'mention' && edge.kind !== 'link') continue;
@@ -1033,18 +1036,25 @@ function KnowledgePageGraphInner({
       into.in++;
       counts.set(edge.target, into);
     }
-    for (const edge of linkSource) {
-      if (edge.kind !== 'mention' && edge.kind !== 'link') continue;
-      for (const id of edge.source === edge.target ? [edge.source] : [edge.source, edge.target]) {
-        const list = touching.get(id);
-        if (list) list.push(edge);
-        else touching.set(id, [edge]);
-      }
-    }
     // Counts from the store cover pages whose links go to pages that were never loaded.
     for (const [id, exact] of exactLinkCounts ?? []) counts.set(id, exact);
-    return { linkCounts: counts, hoverLinks: touching };
+    return counts;
   }, [linkSource, exactLinkCounts]);
+  // Page id -> its links, built once when links load; a hover is a lookup, not a scan of every link.
+  const hoverLinks = useMemo(() => {
+    const touching = new Map<string, KnowledgePageEdge[]>();
+    const add = (id: string, edge: KnowledgePageEdge) => {
+      const list = touching.get(id);
+      if (list) list.push(edge);
+      else touching.set(id, [edge]);
+    };
+    for (const edge of [...linkSource, ...(fetchedLinks ?? [])]) {
+      if (edge.kind !== 'mention' && edge.kind !== 'link') continue;
+      add(edge.source, edge);
+      if (edge.target !== edge.source) add(edge.target, edge);
+    }
+    return touching;
+  }, [linkSource, fetchedLinks]);
   // The focused page sits at the centre with its parent and children around it as full circles; pages
   // farther out are dots on outer rings, inside their branch's slice. A last overlap pass is the only force.
   const laidOut = useMemo(() => {

@@ -107,6 +107,29 @@ describe('KnowledgePageGraph', () => {
     });
   });
 
+  describe('with two thousand pages', () => {
+    it('highlights a hovered page at once, from an index and not a scan of every link', () => {
+      const many = [page('org', null, { name: 'Acme' })];
+      const links: Array<{ kind: 'link'; source: string; target: string; count: number }> = [];
+      for (let i = 0; i < 1999; i++) {
+        many.push(page(`p${i}`, 'org', { name: `Page ${i}`, key: `p${i}` }));
+        links.push({ kind: 'link', source: `p${i}`, target: `p${(i * 7 + 1) % 1999}`, count: 1 });
+      }
+      renderWithProviders(
+        <div style={{ width: 800, height: 600 }}>
+          <KnowledgePageGraph pages={many} edges={[]} knownLinks={links} onSelect={() => {}} />
+        </div>,
+      );
+      const target = document.querySelector<HTMLElement>('[data-page-id="p5"]');
+      expect(target).toBeTruthy();
+      const started = performance.now();
+      fireEvent.mouseEnter(target as HTMLElement);
+      const elapsed = performance.now() - started;
+      expect(document.querySelector('[data-emphasis]')).toBeTruthy();
+      expect(elapsed).toBeLessThan(1000);
+    });
+  });
+
   describe('when a page is pinned', () => {
     it('marks only that page as pinned', async () => {
       renderWithProviders(
@@ -522,6 +545,29 @@ describe('KnowledgePageGraph', () => {
         expect(onHover).toHaveBeenLastCalledWith('ticket');
         fireEvent.mouseLeave(dot('ticket'));
         expect(onHover).toHaveBeenLastCalledWith(null);
+      });
+
+      it('draws links fetched for a hover without counting them, so the dots are not laid out again', () => {
+        const withFar = [...linked, page('far', 'support', { name: 'Far', key: 'far' })];
+        const fetched = [{ kind: 'link' as const, source: 'far', target: 'faq', count: 1 }];
+        const { rerender } = renderGraph({ pages: withFar, knownLinks: known, showCounts: true });
+        const widthOf = (id: string) => dot(id).style.width;
+        expect(widthOf('far')).toBe(`${KNOWLEDGE_DOT_SIZE}px`);
+        rerender(
+          <div style={{ width: 800, height: 600 }}>
+            <KnowledgePageGraph
+              pages={withFar}
+              edges={[]}
+              knownLinks={known}
+              fetchedLinks={fetched}
+              showCounts
+              onSelect={() => {}}
+            />
+          </div>,
+        );
+        expect(widthOf('far')).toBe(`${KNOWLEDGE_DOT_SIZE}px`);
+        fireEvent.mouseEnter(dot('far'));
+        expect(line('link:far->faq')).toBeTruthy();
       });
 
       it("draws no body-link lines until a dot is hovered, then draws that dot's own", () => {

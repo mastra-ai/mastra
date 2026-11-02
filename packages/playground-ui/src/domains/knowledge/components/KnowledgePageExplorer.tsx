@@ -870,10 +870,7 @@ export function KnowledgePageExplorer({
         : [],
     [hoverFetchId, hovered.data],
   );
-  const graphLinks = useMemo(
-    () => (hoverEdges.length ? [...knownLinks, ...hoverEdges] : knownLinks),
-    [knownLinks, hoverEdges],
-  );
+
   // A clicked mention line shows the notes that make the mention; opening the page from there marks them.
   const [mention, setMention] = useState<MentionSelection | null>(null);
   const [marked, setMarked] = useState<{ source: string; target: string } | null>(null);
@@ -1112,7 +1109,8 @@ export function KnowledgePageExplorer({
                 selectedPageId={selectedPageId}
                 centerId={drawn.hub}
                 hiddenLinks={hiddenLinks}
-                knownLinks={graphLinks}
+                knownLinks={knownLinks}
+                fetchedLinks={hoverEdges}
                 exactLinkCounts={exactCounts}
                 onHover={setHoveredId}
                 nearIds={focusLinkIds}
