@@ -2633,7 +2633,7 @@ describe('pull request cards on the Work board', () => {
     });
   });
 
-  it('refuses an agent pulling an untrusted PR card into PR review', async () => {
+  it('lets an agent move an untrusted PR card into PR review: trust only decides where a card arrives', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await prCard(storage, { metadata: { authorTrusted: false } });
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
@@ -2644,7 +2644,7 @@ describe('pull request cards on the Work board', () => {
       ingress: { type: 'agent', identity: 'self-resume' },
     });
 
-    expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+    expect(result).toMatchObject({ status: 'accepted' });
   });
 
   it('still runs self-review, not the PR reviewer, for an issue card entering Review', async () => {

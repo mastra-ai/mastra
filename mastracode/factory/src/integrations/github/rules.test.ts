@@ -3638,7 +3638,7 @@ describe('GithubRules with intake routes', () => {
 
   /**
    * GitHub rules, a real dispatcher and transition service, the old label routes and the new intake
-   * routes. The project's default route is removed unless a test asks for it.
+   * routes. The project's default routes are removed unless a test asks for them.
    */
   async function setupIntake(permission: string, { withDefaultRoute = false } = {}) {
     const base = await setup(permission);
@@ -3673,8 +3673,10 @@ describe('GithubRules with intake routes', () => {
     });
     const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
     if (!withDefaultRoute) {
-      const [defaultRoute] = await base.boards.listIntakeRoutes(scope);
-      await base.boards.deleteIntakeRoute(scope, defaultRoute!.id, { expectedRevision: defaultRoute!.revision });
+      // Last first, so no delete moves (and re-revisions) a route still to delete.
+      for (const defaultRoute of (await base.boards.listIntakeRoutes(scope)).toReversed()) {
+        await base.boards.deleteIntakeRoute(scope, defaultRoute.id, { expectedRevision: defaultRoute.revision });
+      }
     }
     await base.boards.createIntakeRoute(
       scope,
@@ -5024,7 +5026,8 @@ function reviewPhase(board: 'work' | 'review'): 'pr-review' | 'review' {
 }
 
 describe('pull request cards on the Work board', () => {
-  async function workBoardHarness(permission: string | undefined) {
+  /** Pass `withRoutes` to place arrivals by the default intake routes every project starts with. */
+  async function workBoardHarness(permission: string | undefined, { withRoutes = false } = {}) {
     const harness = await setup(permission);
     const configVersion = 'factory-config-v1';
     const service = new GithubRules({
@@ -5045,6 +5048,7 @@ describe('pull request cards on the Work board', () => {
       }),
       storage: harness.workItems,
       boards: createBoardRegistry(),
+      ...(withRoutes ? { intakeRoutes: harness.boards } : {}),
       isAutoRunEnabled: async () => true,
       ownerId: 'worker-1',
     });
@@ -5156,6 +5160,42 @@ describe('pull request cards on the Work board', () => {
       stages: ['intake'],
       metadata: { authorTrusted: false, factoryAuthored: false, autoStartCandidate: false },
     });
+    expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+  });
+
+  it("files a maintainer's pull request straight into PR review by the default routes, and reviews it", async () => {
+    const harness = await workBoardHarness('write', { withRoutes: true });
+    await harness.service.ingest(pullRequest('opened', 'delivery-open'));
+    await harness.dispatch();
+
+    const [card, ...rest] = await harness.cards();
+    expect(rest).toEqual([]);
+    expect(card).toMatchObject({ board: 'work', stages: ['pr-review'], metadata: { authorTrusted: true } });
+    expect(card?.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'pr-review']);
+    expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([
+      expect.objectContaining({ decision: expect.objectContaining({ role: 'review', skillName: 'factory-review' }) }),
+    ]);
+  });
+
+  it("leaves an outside author's pull request in Intake by the default routes, without starting a review", async () => {
+    const harness = await workBoardHarness('read', { withRoutes: true });
+    await harness.service.ingest(pullRequest('opened', 'delivery-open'));
+    await harness.dispatch();
+
+    expect(await harness.cards()).toEqual([
+      expect.objectContaining({ board: 'work', stages: ['intake'], metadata: expect.objectContaining({ authorTrusted: false }) }),
+    ]);
+    expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+  });
+
+  it('leaves a Factory-authored pull request card in Intake beside its authoring card, which the routes never place', async () => {
+    const harness = await workBoardHarness('read', { withRoutes: true });
+    const { workId, pullRequestCard } = await authoredPullRequest(harness);
+
+    // Filed by the authoring card's own evaluation, so no intake route places it: the authoring
+    // card goes out for review instead, and the pull request is not reviewed twice.
+    expect(pullRequestCard).toMatchObject({ board: 'work', stages: ['intake'], parentWorkItemId: workId });
+    expect(pullRequestCard.metadata).not.toHaveProperty('intakeRouteId');
     expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
   });
 

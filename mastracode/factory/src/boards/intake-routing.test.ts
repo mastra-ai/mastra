@@ -110,13 +110,32 @@ describe('resolveIntakePlacement', () => {
     ).toEqual({ board: 'work', phase: 'intake', routeId: 'route' });
   });
 
-  it('keeps pull requests off the Work board and everything else off the Review board', () => {
-    expect(resolveIntakePlacement([route()], pullRequest, registry)).toBeUndefined();
+  it('lands pull requests on Work only in Intake or PR review, keeps everything else out of PR review, and off the Review board', () => {
+    const to = (boardKey: string, phaseKey: string) => [route({ target: { boardKey, phaseKey } })];
+    expect(resolveIntakePlacement(to('work', 'pr-review'), pullRequest, registry)).toEqual({
+      board: 'work',
+      phase: 'pr-review',
+      routeId: 'route',
+    });
+    expect(resolveIntakePlacement(to('work', 'intake'), pullRequest, registry)).toEqual({
+      board: 'work',
+      phase: 'intake',
+      routeId: 'route',
+    });
+    // A pull request card never enters the builder's lanes, so the next route places it.
     expect(
-      resolveIntakePlacement([route({ target: { boardKey: 'review', phaseKey: 'review' } })], issue(), registry),
-    ).toBeUndefined();
-    expect(
-      resolveIntakePlacement([route({ target: { boardKey: 'review', phaseKey: 'review' } })], pullRequest, registry),
-    ).toEqual({ board: 'review', phase: 'review', routeId: 'route' });
+      resolveIntakePlacement(
+        [route({ id: 'triage' }), route({ id: 'next', target: { boardKey: 'work', phaseKey: 'pr-review' } })],
+        pullRequest,
+        registry,
+      ),
+    ).toEqual({ board: 'work', phase: 'pr-review', routeId: 'next' });
+    expect(resolveIntakePlacement(to('work', 'pr-review'), issue(), registry)).toBeUndefined();
+    expect(resolveIntakePlacement(to('review', 'review'), issue(), registry)).toBeUndefined();
+    expect(resolveIntakePlacement(to('review', 'review'), pullRequest, registry)).toEqual({
+      board: 'review',
+      phase: 'review',
+      routeId: 'route',
+    });
   });
 });
