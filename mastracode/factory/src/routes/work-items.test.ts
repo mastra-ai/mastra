@@ -1,6 +1,6 @@
 import { RequestContext } from '@mastra/core/request-context';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 // ── Mocks ────────────────────────────────────────────────────────────────
 
@@ -102,6 +102,7 @@ function buildApp(
         isRunning: sessionId => running.has(sessionId),
         parked: sessionId => (parked.has(sessionId) ? PARKED_RUN : undefined),
         parkedIn: () => [...parked].map(sessionId => ({ sessionId, run: PARKED_RUN })),
+        sessionIds: () => [...new Set([...running, ...parked])],
       },
     }).routes(),
   );
@@ -873,6 +874,55 @@ describe('work item read wire', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('serves a built board launch, its lookups and its changes without reading every card', async () => {
+    let minute = 0;
+    vi.useFakeTimers({ now: new Date('2026-10-29T12:00:00.000Z'), toFake: ['Date'] });
+    onTestFinished(() => vi.useRealTimers());
+    const seedCard = async (title: string, stage: string, sessionId?: string) => {
+      vi.setSystemTime(new Date(Date.UTC(2026, 9, 29, 12, ++minute)));
+      const { item } = await seed.workItems.upsert({
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          title,
+          stages: [stage],
+          sessions: sessionId ? { work: { sessionId, branch: `b/${sessionId}`, threadId: sessionId } } : {},
+        },
+      });
+      return item;
+    };
+    await seedCard('Oldest', 'intake');
+    await seedCard('Older', 'intake');
+    const newest = await seedCard('Newest', 'intake');
+    const working = await seedCard('Working', 'execute', 'session-live');
+    await seedCard('Shipped', 'done');
+    await seed.workItems.index.build({ orgId: 'org1', factoryProjectId: PROJECT_ID });
+    const fullReads = vi.spyOn(seed.workItems, 'listShared');
+    const app = buildApp(orgUser, undefined, undefined, new Set(['session-live']));
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const read = async (path: string) => (await app.request(`${base}${path}`)).json();
+
+    const sync = await read('/sync?cards=changed');
+    expect(sync).toMatchObject({ reset: true, workItems: [], runningSessionIds: ['session-live'] });
+    expect(sync.counts).toEqual({ total: 5, boards: { work: { intake: 3, execute: 1, done: 1 } } });
+    const first = await read('?board=work&stage=intake&sort=created-newest&limit=2');
+    expect(first.workItems.map((item: { title: string }) => item.title)).toEqual(['Newest', 'Older']);
+    const second = await read(`?board=work&stage=intake&sort=created-newest&limit=2&cursor=${first.nextCursor}`);
+    expect(second.workItems.map((item: { title: string }) => item.title)).toEqual(['Oldest']);
+    expect(second.nextCursor).toBeUndefined();
+    const lookup = await read('?session=session-live');
+    expect(lookup.workItems.map((item: { id: string }) => item.id)).toEqual([working.id]);
+    expect(await read('/counts')).toEqual(sync.counts);
+
+    vi.setSystemTime(new Date(Date.UTC(2026, 9, 29, 12, ++minute)));
+    await seed.workItems.update({ orgId: 'org1', id: newest.id, userId: 'u1', patch: { stages: ['triage'] } });
+    const delta = await read(`/sync?cards=changed&cursor=${sync.cursor}`);
+    expect(delta.workItems.map((item: { title: string }) => item.title)).toContain('Newest');
+    expect(delta.counts.boards.work).toMatchObject({ intake: 2, triage: 1 });
+    expect(fullReads).not.toHaveBeenCalled();
   });
 
   it('drops internal tokens from browser writes', async () => {

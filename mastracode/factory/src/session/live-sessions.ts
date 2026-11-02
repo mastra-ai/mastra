@@ -74,6 +74,11 @@ export class LiveSessions {
     this.#byId.set(session.identity.getId(), { session, seenAt: Date.now(), suspendedAt, unsubscribe });
   }
 
+  /** Every session this process tracks, so a board can ask which of its cards' sessions are live without reading every card. */
+  sessionIds(): string[] {
+    return [...this.#byId.keys()];
+  }
+
   /** Whether the session has an agent run in flight right now. */
   isRunning(sessionId: string): boolean {
     return this.#byId.get(sessionId)?.session.run.isRunning() ?? false;

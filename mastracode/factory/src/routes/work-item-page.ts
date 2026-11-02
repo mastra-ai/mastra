@@ -7,6 +7,14 @@
 import { boardForWorkItem } from '../boards/semantics.js';
 import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
+import {
+  columnPosition,
+  headBranchOf,
+  isPullRequestRow,
+  workItemColumns,
+  workItemSourceEntry,
+} from '../storage/domains/work-items/work-item-index.js';
+import type { WorkItemSourceEntry } from '../storage/domains/work-items/work-item-index.js';
 import { encodeWorkItemCursor } from './work-item-cursor.js';
 import type { WorkItemPageCursor, WorkItemSort } from './work-item-cursor.js';
 
@@ -58,16 +66,6 @@ export interface WorkItemPage {
 }
 
 /** When the card entered the column it sits in now; the board's "recent" position. */
-function columnPosition(item: WorkItemRow): string {
-  const stage = item.stages[0];
-  let latest: string | undefined;
-  for (const entry of item.stageHistory) {
-    if (entry.stage !== stage || (latest !== undefined && entry.enteredAt <= latest)) continue;
-    latest = entry.enteredAt;
-  }
-  return latest ?? item.createdAt.toISOString();
-}
-
 function sortKey(item: WorkItemRow, sort: WorkItemSort, userId: string | undefined): string {
   if (sort === 'created-newest' || sort === 'created-oldest') return item.createdAt.toISOString();
   if (sort === 'recent-mine' && userId) {
@@ -185,16 +183,6 @@ export function pageWorkItems(items: readonly WorkItemRow[], query: WorkItemPage
   return { items: page.map(({ item }) => item), nextCursor: encodeWorkItemCursor(page.at(-1)!.at) };
 }
 
-/** Cards per board and column. Filters other than the stage apply, so a filtered board still counts every column. */
-function isPullRequestRow(item: WorkItemRow): boolean {
-  return item.externalSource?.type === 'pull-request';
-}
-
-function headBranchOf(item: WorkItemRow): string | undefined {
-  const branch = item.metadata?.headBranch;
-  return typeof branch === 'string' ? branch : undefined;
-}
-
 /**
  * `matched` plus the cards related to them the way the board relates cards: their parents and children,
  * pull requests opened from a matched card's session branch, and the cards whose branch a matched
@@ -227,11 +215,7 @@ export function withRelatedWorkItems(all: readonly WorkItemRow[], matched: reado
   return [...matched, ...related];
 }
 
-/** The columns a card shows in, as the board places it: every stage it holds, or Intake when it holds none. */
-function workItemColumns(item: WorkItemRow): readonly string[] {
-  return item.stages.length > 0 ? item.stages : ['intake'];
-}
-
+/** Cards per board and column. Filters other than the stage apply, so a filtered board still counts every column. */
 export function countWorkItems(
   items: readonly WorkItemRow[],
   filters: WorkItemFilters = {},
@@ -271,33 +255,12 @@ export function workItemActivity(
 }
 
 /** The metadata a board needs to recognise an issue or pull request it already has a card for. */
-const SOURCE_METADATA_KEYS = ['githubIssueNumber', 'githubPullRequestNumber', 'number', 'githubRepositoryId'] as const;
-
 /**
  * Every card's external source, without the rest of the card. Intake hides feed issues that
  * already have a card on any stage, so it needs these even for cards it never loads.
  */
-export function workItemSources(items: readonly WorkItemRow[]) {
-  return items.flatMap(item => {
-    const source = item.externalSource;
-    if (!source) return [];
-    const metadata: Record<string, unknown> = {};
-    for (const key of SOURCE_METADATA_KEYS) {
-      if (item.metadata?.[key] !== undefined) metadata[key] = item.metadata[key];
-    }
-    return [
-      {
-        board: boardForWorkItem(item),
-        externalSource: {
-          integrationId: source.integrationId,
-          type: source.type,
-          externalId: source.externalId,
-          ...(source.url ? { url: source.url } : {}),
-        },
-        metadata,
-      },
-    ];
-  });
+export function workItemSources(items: readonly WorkItemRow[]): WorkItemSourceEntry[] {
+  return items.flatMap(item => workItemSourceEntry(item) ?? []);
 }
 
 /** Card metadata the board never reads; the biggest per-card payload on review boards. */

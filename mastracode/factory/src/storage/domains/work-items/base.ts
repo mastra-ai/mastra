@@ -29,6 +29,7 @@ import {
   trackBoardWrites,
 } from './board-version.js';
 import type { BoardScope } from './board-version.js';
+import { indexWorkItemWrites, WORK_ITEM_INDEX_SCHEMAS, WorkItemIndex } from './work-item-index.js';
 
 export type WorkItemStage = string;
 
@@ -634,6 +635,11 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     {
       name: 'work_items_org_project_created_at_id_idx',
       columns: ['org_id', 'factory_project_id', 'created_at', 'id'],
+    },
+    {
+      // Board sync reads the cards written since its cursor.
+      name: 'work_items_org_project_changed_at_idx',
+      columns: ['org_id', 'factory_project_id', 'changed_at', 'id'],
     },
     {
       name: 'work_items_project_parent_idx',
@@ -1397,6 +1403,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
       WORK_ITEM_ACTIVITY_SCHEMA,
       FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA,
+      ...WORK_ITEM_INDEX_SCHEMAS,
     ]);
     await this.repairLegacyAttentionState();
   }
@@ -1416,8 +1423,18 @@ export class WorkItemsStorage extends FactoryStorageDomain {
 
   protected override get ops(): FactoryStorageOps {
     const ops = super.ops;
-    return trackBoardWrites(ops, scope => this.#bumpBoards(ops, [scope]));
+    return trackBoardWrites(indexWorkItemWrites(ops, toWorkItem), scope => this.#bumpBoards(ops, [scope]));
   }
+
+  /** Column pages, counts and lookups over indexed rows, so a board need not read every card. */
+  readonly index = new WorkItemIndex({
+    ops: () => super.ops,
+    listAll: ({ orgId, factoryProjectId }) => this.#listWithOps(super.ops, orgId, factoryProjectId),
+    byIds: (scope, ids) => this.listByIds({ ...scope, ids }),
+    version: async ({ orgId, factoryProjectId }) => readBoardVersion(super.ops, orgId, factoryProjectId),
+    onBuildError: (scope, error) =>
+      console.warn('[WorkItemsStorage] Failed to build the work-item index', { ...scope, error }),
+  });
 
   async #bumpBoards(ops: FactoryStorageOps, scopes: readonly BoardScope[]): Promise<void> {
     await bumpBoardVersions(ops, scopes);
@@ -1432,7 +1449,10 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     options?: { isolationLevel?: 'serializable' },
   ): Promise<T> {
     const changed = new BoardScopes();
-    const result = await this.storage.withTransaction(ops => fn(trackBoardWrites(ops, changed.add)), options);
+    const result = await this.storage.withTransaction(
+      ops => fn(trackBoardWrites(indexWorkItemWrites(ops, toWorkItem), changed.add)),
+      options,
+    );
     await this.#bumpBoards(super.ops, changed.values());
     return result;
   }
@@ -1654,6 +1674,31 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       this.#listCache.delete(this.#listCache.keys().next().value!);
     }
     return { items, cached: true };
+  }
+
+  /** Cards written after `since`, for a board sync's delta; cards never written since `changed_at` existed are older than any cursor. */
+  async listChangedSince({
+    orgId,
+    factoryProjectId,
+    since,
+  }: {
+    orgId: string;
+    factoryProjectId: string;
+    since: Date;
+  }): Promise<WorkItemRow[]> {
+    const rows = await super.ops.findMany<WorkItemDbRow>(
+      'work_items',
+      { org_id: orgId, factory_project_id: factoryProjectId },
+      {
+        orderBy: [
+          ['changed_at', 'asc'],
+          ['id', 'asc'],
+        ],
+        // Strictly after `since` (or at it with any id), the keyset form of `changed_at >= since`.
+        cursor: { values: [since, '00000000-0000-0000-0000-000000000000'] },
+      },
+    );
+    return rows.map(toWorkItem);
   }
 
   async listByIds({

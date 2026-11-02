@@ -48,14 +48,16 @@ import {
 } from '../storage/domains/work-items/base.js';
 import { WORK_ITEM_TOMBSTONE_TTL_MS } from '../storage/domains/work-items/board-version.js';
 import { computeFactoryMetrics, parseMetricsRange } from '../storage/domains/work-items/metrics.js';
+import type { IndexedSort } from '../storage/domains/work-items/work-item-index.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { resolveFactoryProposal, retryFactoryDecision } from '../work-items/decision-actions.js';
 import { buildAttentionRoutes, factoryDecisionType } from './attention.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
-import { encodeWorkItemSyncCursor } from './work-item-cursor.js';
-import type { WorkItemFilters } from './work-item-page.js';
+import { encodeWorkItemCursor, encodeWorkItemSyncCursor } from './work-item-cursor.js';
+import type { WorkItemSort } from './work-item-cursor.js';
+import type { WorkItemFilters, WorkItemPage } from './work-item-page.js';
 import {
   countWorkItems,
   pageWorkItems,
@@ -88,7 +90,7 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   /** Coordinator that binds a Factory run before dispatching its kickoff. */
   startCoordinator?: Pick<FactoryStartCoordinator, 'prepare'>;
   /** Materialized sessions, read to report which of the listed cards are being worked or wait on someone. */
-  liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn'>;
+  liveSessions: Pick<LiveSessions, 'isRunning' | 'parked' | 'parkedIn' | 'sessionIds'>;
 }
 
 /** The card as clients see it, without the dispatcher's internal bookkeeping. */
@@ -187,6 +189,22 @@ function hasFilters(filters: WorkItemFilters): boolean {
     filters.started !== undefined ||
     Object.values(filters.people ?? {}).some(ids => ids?.length),
   );
+}
+
+/** The board and column a query asks for when that is all it asks, so the index can page it. */
+function indexedColumn(
+  filters: WorkItemFilters,
+  sort: WorkItemSort,
+): { board: string; stage: string; sort: IndexedSort } | undefined {
+  if (sort !== 'recent' && sort !== 'created-newest' && sort !== 'created-oldest') return undefined;
+  const { boards, stages, ...rest } = filters;
+  if (boards?.length !== 1 || stages?.length !== 1 || hasFilters(rest)) return undefined;
+  return { board: boards[0]!, stage: stages[0]!, sort };
+}
+
+/** Every installed board's columns, which are the ones the index counts. */
+function installedStages(boards: BoardRegistry): Record<string, string[]> {
+  return Object.fromEntries([...boards].map(([id, board]) => [id, Object.keys(board.phases)]));
 }
 
 function loose(c: unknown): Context {
@@ -498,23 +516,50 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
             return c.json({ error: field === 'cursor' ? 'invalid_cursor' : 'invalid_work_item_query' }, 400);
           }
           await workItems.ensureReady();
-          const [all, boards] = await Promise.all([
-            workItems.listShared({
-              orgId: resolved.orgId,
-              factoryProjectId: resolved.factoryProjectId,
-            }),
-            query.data.open ? this.#boards.load(resolved) : undefined,
-          ]);
+          const scope = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          const boards = query.data.open ? await this.#boards.load(resolved) : undefined;
           const { sort, limit, cursor } = query.data;
           const filters = workItemFilters(query.data);
-          const pool = boards ? all.filter(item => !isTerminalWorkItem(boards, item)) : all;
           const paged = hasFilters(filters) || query.data.open || limit !== undefined || cursor !== undefined;
           // The query defaults `sort`, so ask the request whether the caller picked one.
           const sorted = paged || context.req.query('sort') !== undefined;
-          const page = sorted
-            ? pageWorkItems(pool, { ...filters, sort, userId: resolved.userId, limit, cursor })
-            : { items: all };
-          const items = query.data.related ? withRelatedWorkItems(all, page.items) : page.items;
+          const pageOf = (pool: readonly WorkItemRow[]) =>
+            pageWorkItems(boards ? pool.filter(item => !isTerminalWorkItem(boards, item)) : pool, {
+              ...filters,
+              sort,
+              userId: resolved.userId,
+              limit,
+              cursor,
+            });
+          let all: readonly WorkItemRow[] | undefined;
+          let page: WorkItemPage | undefined;
+          // One column of one board, the board's own read: page it off the index.
+          const column = indexedColumn(filters, sort);
+          if (column && limit !== undefined && !query.data.open) {
+            const indexed = await workItems.index.pageColumn(scope, { ...column, limit, cursor });
+            if (indexed) {
+              const { nextCursor } = indexed;
+              page = { items: indexed.items, ...(nextCursor ? { nextCursor: encodeWorkItemCursor(nextCursor) } : {}) };
+            }
+          }
+          // A lookup by session or thread: read only the cards holding one, then page those as usual.
+          if (!page && sorted && (filters.sessions?.length || filters.threads?.length)) {
+            const ids = filters.sessions?.length
+              ? await workItems.index.idsByRef(scope, 'session', filters.sessions)
+              : await workItems.index.idsByRef(scope, 'thread', filters.threads ?? []);
+            if (ids) page = pageOf(ids.length ? await workItems.listByIds({ ...scope, ids }) : []);
+          }
+          if (!page) {
+            all = await workItems.listShared(scope);
+            page = sorted ? pageOf(all) : { items: all };
+          }
+          const matched = page.items;
+          const items = !query.data.related
+            ? matched
+            : all
+              ? withRelatedWorkItems(all, matched)
+              : ((await workItems.index.related(scope, matched)) ??
+                withRelatedWorkItems(await workItems.listShared(scope), matched));
           return c.json({
             // A paged read is a board read, so it gets the board's card shape; the full list keeps the old one.
             workItems: paged ? items.map(item => toWireWorkItem(toSyncedWorkItem(item))) : items.map(toWireWorkItem),
@@ -534,11 +579,13 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const query = FACTORY_ROUTE_CONTRACTS.workItemCounts.querySchema.safeParse(filterQuery(loose(c)));
           if (!query.success) return c.json({ error: 'invalid_work_item_query' }, 400);
           await workItems.ensureReady();
-          const all = await workItems.listShared({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-          });
-          return c.json(countWorkItems(all, workItemFilters(query.data)));
+          const scope = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          const filters = workItemFilters(query.data);
+          if (!hasFilters(filters)) {
+            const counted = await workItems.index.counts(scope, installedStages(await this.#boards.load(resolved)));
+            if (counted) return c.json(counted);
+          }
+          return c.json(countWorkItems(await workItems.listShared(scope), filters));
         },
       }),
       // ── Keep an open board current: open cards first, then what changed ──
@@ -558,28 +605,41 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const now = new Date();
           const oldestDelta = new Date(now.getTime() - WORK_ITEM_TOMBSTONE_TTL_MS);
           const since = query.data.cursor;
-          const [all, deleted, boards] = await Promise.all([
-            workItems.listShared(scope),
-            since && since >= oldestDelta ? workItems.listDeletedSince({ ...scope, since }) : [],
+          const delta = since !== undefined && since >= oldestDelta;
+          const openCards = query.data.cards !== 'changed';
+          const [deleted, boards] = await Promise.all([
+            delta ? workItems.listDeletedSince({ ...scope, since }) : [],
             this.#boards.load(resolved),
           ]);
-          const sync = syncWorkItems(all, {
+          // Only a reset that hands over the open cards needs every card; a delta reads what changed.
+          const [counted, live] =
+            delta || !openCards
+              ? await Promise.all([
+                  workItems.index.counts(scope, installedStages(boards)),
+                  workItems.index.heldRefs(scope, 'session', liveSessions.sessionIds()),
+                ])
+              : [undefined, undefined];
+          const all = counted && live ? undefined : await workItems.listShared(scope);
+          const pool = all ?? (delta ? await workItems.listChangedSince({ ...scope, since }) : []);
+          const sync = syncWorkItems(pool, {
             since,
             now,
             deleted,
             isTerminal: item => isTerminalWorkItem(boards, item),
             oldestDelta,
-            openCards: query.data.cards !== 'changed',
+            openCards,
           });
+          const running = (sessionId: string) => liveSessions.isRunning(sessionId);
+          const parked = (sessionId: string) => liveSessions.parked(sessionId) !== undefined;
           return c.json({
             cursor: encodeWorkItemSyncCursor(sync.at),
             reset: sync.reset,
             workItems: sync.items.map(item => toWireWorkItem(toSyncedWorkItem(item))),
             deletedIds: sync.deletedIds,
-            counts: countWorkItems(all),
+            counts: all ? countWorkItems(all) : counted,
             // Whether a session is running is not a card write, so every sync carries all of them.
-            runningSessionIds: sessionIdsWhere(all, sessionId => liveSessions.isRunning(sessionId)),
-            parkedSessionIds: sessionIdsWhere(all, sessionId => liveSessions.parked(sessionId) !== undefined),
+            runningSessionIds: all ? sessionIdsWhere(all, running) : live!.filter(running),
+            parkedSessionIds: all ? sessionIdsWhere(all, parked) : live!.filter(parked),
           });
         },
       }),
@@ -591,11 +651,9 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
           await workItems.ensureReady();
-          const all = await workItems.listShared({
-            orgId: resolved.orgId,
-            factoryProjectId: resolved.factoryProjectId,
-          });
-          return c.json({ sources: workItemSources(all) });
+          const scope = { orgId: resolved.orgId, factoryProjectId: resolved.factoryProjectId };
+          const sources = await workItems.index.sources(scope);
+          return c.json({ sources: sources ?? workItemSources(await workItems.listShared(scope)) });
         },
       }),
       // ── When cards came in and shipped, for the activity chart ─────────────
