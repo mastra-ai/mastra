@@ -3079,6 +3079,61 @@ describe('MDocument', () => {
       expect(texts.some(t => t.includes('# Not a header'))).toBe(true);
       expect(texts.some(t => t.startsWith('# Real Header'))).toBe(false);
     });
+
+    describe('headers containing pipe characters', () => {
+      const headers: [string, string][] = [
+        ['#', 'title'],
+        ['##', 'section'],
+      ];
+      const markdown = '# API | Reference\nOverview.\n## Read | Write\nDetails.\n## Next\nNext details.';
+
+      it('should recognize and strip headers containing pipes', async () => {
+        const doc = MDocument.fromMarkdown(markdown);
+        await doc.chunk({ strategy: 'markdown', headers, stripHeaders: true });
+
+        expect(doc.getDocs().map(({ text, metadata }) => ({ text, metadata }))).toEqual([
+          { text: 'Overview.', metadata: { title: 'API | Reference' } },
+          { text: 'Details.', metadata: { title: 'API | Reference', section: 'Read | Write' } },
+          { text: 'Next details.', metadata: { title: 'API | Reference', section: 'Next' } },
+        ]);
+      });
+
+      it('should keep headers containing pipes when stripHeaders is false', async () => {
+        const doc = MDocument.fromMarkdown(markdown);
+        await doc.chunk({ strategy: 'markdown', headers, stripHeaders: false });
+
+        expect(doc.getDocs().map(({ text, metadata }) => ({ text, metadata }))).toEqual([
+          { text: '# API | Reference  \nOverview.', metadata: { title: 'API | Reference' } },
+          {
+            text: '## Read | Write  \nDetails.',
+            metadata: { title: 'API | Reference', section: 'Read | Write' },
+          },
+          { text: '## Next  \nNext details.', metadata: { title: 'API | Reference', section: 'Next' } },
+        ]);
+      });
+
+      it('should keep real tables as content under a header containing pipes', async () => {
+        const doc = MDocument.fromMarkdown(
+          '# API | Reference\n| a | b |\n| --- | --- |\n| 1 | 2 |\n## Next | Steps\nText.',
+        );
+        await doc.chunk({ strategy: 'markdown', headers, stripHeaders: true });
+
+        expect(doc.getDocs().map(({ text, metadata }) => ({ text, metadata }))).toEqual([
+          { text: '| a | b |\n| --- | --- |\n| 1 | 2 |', metadata: { title: 'API | Reference' } },
+          { text: 'Text.', metadata: { title: 'API | Reference', section: 'Next | Steps' } },
+        ]);
+      });
+
+      it('should not treat heading-like lines with pipes inside fenced code as headers', async () => {
+        const fenced = '```md\n# Not | Heading\n## Also | Not\n```';
+        const doc = MDocument.fromMarkdown(`# Title\n${fenced}\nAfter.`);
+        await doc.chunk({ strategy: 'markdown', headers, stripHeaders: true });
+
+        expect(doc.getDocs().map(({ text, metadata }) => ({ text, metadata }))).toEqual([
+          { text: `${fenced}\nAfter.`, metadata: { title: 'Title' } },
+        ]);
+      });
+    });
   });
 
   describe('metadata extraction', () => {

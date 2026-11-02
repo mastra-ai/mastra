@@ -124,9 +124,15 @@ export class MarkdownHeaderTransformer {
         continue;
       }
 
+      // Configured headers take precedence over table detection so headings containing pipes are still recognized
+      const isHeaderLine = this.headersToSplitOn.some(
+        ([sep]) =>
+          strippedLine.startsWith(sep) && (strippedLine.length === sep.length || strippedLine[sep.length] === ' '),
+      );
+
       // Handle markdown tables
-      // A table line must contain at least one pipe character and not be empty
-      const isTableLine = strippedLine.includes('|') && strippedLine.length > 0;
+      // A table line must contain at least one pipe character and not be a configured header
+      const isTableLine = !isHeaderLine && strippedLine.includes('|');
 
       if (isTableLine) {
         if (!inTable) {
