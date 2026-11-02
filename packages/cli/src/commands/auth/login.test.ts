@@ -246,6 +246,58 @@ describe('login() server lifecycle', () => {
     }
   });
 
+  it.each([{ skipOnInput: false }, { skipOnInput: true }])(
+    'signs in from a callback URL pasted into the terminal (skipOnInput: $skipOnInput)',
+    async ({ skipOnInput }) => {
+      const terminal = mockTerminal();
+      try {
+        const { login } = await import('./credentials.js');
+        const loginPromise = login(undefined, { skipOnInput });
+
+        await vi.waitFor(
+          () => {
+            extractPort();
+          },
+          { timeout: 5000 },
+        );
+        // A browser on another machine lands on this URL but can't load it.
+        const qs = new URLSearchParams({ ...validParams, state: extractState() }).toString();
+        const callbackUrl = `http://localhost:${extractPort()}/callback?${qs}`;
+        // Terminals may deliver a long paste in several chunks.
+        process.stdin.emit('data', Buffer.from(callbackUrl.slice(0, 20)));
+        process.stdin.emit('data', Buffer.from(`${callbackUrl.slice(20)}\r`));
+
+        await expect(loginPromise).resolves.toMatchObject({ token: 'test-token', organizationId: 'org-1' });
+        expect(terminal.setRawMode).toHaveBeenLastCalledWith(false);
+      } finally {
+        terminal.restore();
+      }
+    },
+  );
+
+  it('keeps waiting when the pasted URL is not a valid callback', async () => {
+    const terminal = mockTerminal();
+    try {
+      const { login } = await import('./credentials.js');
+      const loginPromise = login(undefined, { skipOnInput: true });
+
+      await vi.waitFor(
+        () => {
+          extractPort();
+        },
+        { timeout: 5000 },
+      );
+      const qs = new URLSearchParams({ ...validParams, state: 'wrong-state' }).toString();
+      process.stdin.emit('data', Buffer.from(`http://localhost:${extractPort()}/callback?${qs}\r`));
+      expect(console.info).toHaveBeenCalledWith(expect.stringContaining("doesn't look like the sign-in address"));
+
+      await sendCallback(extractPort(), { ...validParams, state: extractState() });
+      await expect(loginPromise).resolves.toMatchObject({ token: 'test-token' });
+    } finally {
+      terminal.restore();
+    }
+  });
+
   it('forwards Ctrl+C as SIGINT instead of treating it as a skip key', async () => {
     const stdin = mockTerminal();
     const controller = new AbortController();
