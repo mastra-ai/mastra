@@ -2,6 +2,7 @@ import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext } from 'react';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
 import { FileTreeBadge } from './badges/file-tree-badge';
+import { KnowledgeToolBadge, knowledgeCard } from './badges/knowledge-tool-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
@@ -37,6 +38,10 @@ export interface ToolCardProps {
   input: any;
   output: any;
   modelOutput?: unknown;
+  /** The Mastra background task running the call, when it was deferred. */
+  backgroundTaskId?: string;
+  /** The background task's status in the part's metadata: `running` until the part holds its result. */
+  backgroundTaskStatus?: string;
   toolCallId: string;
   /** Part state: v5 `output-available`/`output-error`/`input-available`, or v4 `result`/`call`. */
   state?: string;
@@ -66,6 +71,8 @@ export const ToolCardInner = ({
   input,
   output,
   modelOutput,
+  backgroundTaskId,
+  backgroundTaskStatus,
   toolCallId,
   state,
   errorText,
@@ -138,6 +145,8 @@ export const ToolCardInner = ({
           toolCalled={toolCalled}
           withoutArgs={isAgent || isWorkflow}
           status={status}
+          backgroundTaskId={backgroundTaskId}
+          backgroundTaskStatus={backgroundTaskStatus}
         />
       );
     }
@@ -221,6 +230,23 @@ export const ToolCardInner = ({
       }
       break;
     }
+    case 'knowledge': {
+      const card = knowledgeCard(toolName, input, output);
+      if (card) {
+        return (
+          <KnowledgeToolBadge
+            card={card}
+            toolName={toolName}
+            metadata={metadata}
+            toolCallId={toolCallId}
+            toolApprovalMetadata={toolApprovalMetadata}
+            isNetwork={isNetwork}
+            status={status}
+          />
+        );
+      }
+      break;
+    }
     case 'mcp_app':
     case 'plain':
       break;
@@ -242,6 +268,8 @@ export const ToolCardInner = ({
         isNetwork={isNetwork}
         toolCalled={toolCalled}
         status={status}
+        backgroundTaskId={backgroundTaskId}
+        backgroundTaskStatus={backgroundTaskStatus}
       />
       <ToolResultMedia modelOutput={modelOutput} />
       {mcpAppInfo && output !== undefined && (

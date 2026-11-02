@@ -1,6 +1,7 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
+import type { QueryClient } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useImperativeHandle } from 'react';
@@ -12,7 +13,7 @@ import { v2Agent } from './fixtures/composer-model-settings';
 import { RouteSidePanelProvider, useRouteSidePanel } from '@/lib/route-side-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
 const AGENT_ID = 'agent-1';
 const storedAgent: GetAgentResponse = { ...v2Agent, source: 'stored' };
@@ -39,8 +40,16 @@ function FakeLayoutPanel() {
   );
 }
 
+let queryClient: QueryClient | undefined;
+
+function render(ui: React.ReactElement) {
+  const result = renderWithProviders(ui, { router: true });
+  queryClient = result.queryClient;
+  return result;
+}
+
 function renderActions() {
-  return renderWithProviders(
+  return render(
     <TestLinkProvider>
       <TooltipProvider>
         <RouteSidePanelProvider>
@@ -51,11 +60,13 @@ function renderActions() {
         </RouteSidePanelProvider>
       </TooltipProvider>
     </TestLinkProvider>,
-    { router: true },
   );
 }
 
-afterEach(() => {
+// Let in-flight queries settle inside act; a React Query notification landing after jsdom teardown throws "window is not defined".
+afterEach(async () => {
+  if (queryClient) await waitForMutationsIdle(queryClient);
+  queryClient = undefined;
   vi.clearAllMocks();
   localStorage.clear();
   delete (window as unknown as Record<string, unknown>).MASTRA_EXPERIMENTAL_UI;
@@ -125,7 +136,7 @@ describe('when the screen is narrow', () => {
   it('opens the Config panel in a drawer from the header Config button', async () => {
     stubNarrowScreen();
     installHandlers();
-    renderWithProviders(
+    render(
       <TestLinkProvider>
         <TooltipProvider>
           <RouteSidePanelProvider>
@@ -137,7 +148,6 @@ describe('when the screen is narrow', () => {
           </RouteSidePanelProvider>
         </TooltipProvider>
       </TestLinkProvider>,
-      { router: true },
     );
 
     const toggle = await screen.findByTestId('agent-overview-panel-toggle');

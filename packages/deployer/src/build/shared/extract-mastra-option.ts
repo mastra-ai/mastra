@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { dirname, isAbsolute, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import type { IMastraLogger } from '@mastra/core/logger';
+import type { IMastraLogger } from '@internal/core/logger';
 import type { Config as MastraConfig } from '@mastra/core/mastra';
 import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import commonjs from '@rollup/plugin-commonjs';

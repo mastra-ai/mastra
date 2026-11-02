@@ -591,13 +591,6 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   board: FactoryRuleBoard;
   source: WorkItemSource;
   sourceKey: string;
-  /**
-   * Org-wide ownership key for the external record, when one Factory at a time
-   * may hold a live card for it (a stable Linear issue id, for instance). The
-   * store enforces it with a unique index, so a second project's materialization
-   * is refused rather than duplicated.
-   */
-  claimKey?: string;
   title: string;
   url: string | null;
   stage: FactoryRuleStage;
@@ -622,6 +615,13 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
+  /**
+   * Start this run even when the card was moved by the agent already running in
+   * this role's session. The prompt is queued onto that agent's run, so a phase
+   * that shares its context with the one before it still gets its own work.
+   * Without it, an agent's own move into a phase of its role starts nothing.
+   */
+  startsAfterOwnMove?: boolean;
 }
 
 /**

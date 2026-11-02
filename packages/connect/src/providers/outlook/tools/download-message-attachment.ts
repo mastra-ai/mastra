@@ -46,7 +46,7 @@ export function downloadMessageAttachmentTool(proxy: PlatformProxy) {
           endpoint: `/v1.0/me/messages/${encodedMessageId}/attachments/${encodedAttachmentId}/$value`,
           retries: 3,
         });
-      } catch (_err) {
+      } catch {
         // Item/reference attachments do not support $value — fall through to metadata fetch
       }
 

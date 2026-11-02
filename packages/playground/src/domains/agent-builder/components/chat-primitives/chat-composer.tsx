@@ -27,7 +27,7 @@ export const ChatComposer = ({
   disabled,
   canSubmit,
   isRunning = false,
-  placeholder = 'Ask a follow-up…',
+  placeholder = 'Ask a follow-up',
   inputTestId,
   submitTestId,
   containerTestId,

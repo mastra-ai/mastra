@@ -6,7 +6,6 @@ import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -159,7 +158,6 @@ function CommandPaletteResults({ children, footer, ...props }: CommandPaletteRes
         scrollAreaClassName="min-h-0 flex-1 rounded-none"
         scrollAreaViewportClassName="command-palette-scroll-viewport"
         className="command-palette-list max-h-none rounded-none border-none bg-transparent shadow-none"
-        highlightClassName="rounded-lg"
       >
         {children}
       </CommandList>
@@ -198,7 +196,6 @@ function CommandPaletteItem({
       <span
         className={cn(
           'mt-0.5 flex size-4 max-w-4 min-w-4 shrink-0 basis-4 items-center justify-center text-muted-foreground group-data-[selected=true]:text-foreground [&>svg]:!size-4 [&>svg]:shrink-0',
-          controlStateColorTransition,
         )}
       >
         {icon}

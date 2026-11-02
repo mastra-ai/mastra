@@ -7,7 +7,7 @@ description: "Browse ai& model IDs, capabilities, context windows, and pricing. 
 
 # <img src="https://models.dev/logos/aiand.svg" alt="ai& logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />ai&
 
-Access 10 ai& models through Mastra's model router. Authentication is handled automatically using the `AIAND_API_KEY` environment variable.
+Access 12 ai& models through Mastra's model router. Authentication is handled automatically using the `AIAND_API_KEY` environment variable.
 
 Learn more in the [ai& documentation](https://docs.aiand.com/).
 
@@ -70,6 +70,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.6
   },
   {
+    "model": "aiand/deepseek-ai/deepseek-v4.1-flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.3,
+    "outputCost": 0.6
+  },
+  {
     "model": "aiand/google/gemma-4-31b-it",
     "imageInput": true,
     "audioInput": false,
@@ -80,6 +92,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.2,
     "outputCost": 0.5
+  },
+  {
+    "model": "aiand/meta/muse-spark-open",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
+    "inputCost": 1.25,
+    "outputCost": 4.25
   },
   {
     "model": "aiand/moonshotai/kimi-k3",

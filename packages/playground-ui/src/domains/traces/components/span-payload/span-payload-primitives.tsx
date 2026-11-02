@@ -3,7 +3,10 @@ import { SpanPayloadTool } from './span-payload-tool';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { ScrollArea } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
+import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { cn } from '@/lib/utils';
 
 /** Small-caps label above a field of a rich payload. */
 export function SpanPayloadLabel({ children }: { children: ReactNode }) {
@@ -59,22 +62,32 @@ export interface SpanPayloadListItem {
   description?: string;
 }
 
-/** A scrollable list of named items with an optional description (tools, skills…). */
-export function SpanPayloadList({ items, slot }: { items: SpanPayloadListItem[]; slot: string }) {
+/**
+ * A scrollable list of named items with an optional description (tools, skills…). The scrollbar
+ * stays visible while the list overflows, so readers can tell there are more items below.
+ * `card` frames it on its own surface, for a list that stands alone in a section.
+ */
+export function SpanPayloadList({ items, slot, card }: { items: SpanPayloadListItem[]; slot: string; card?: boolean }) {
   return (
-    <ul data-slot={slot} className="flex max-h-48 flex-col gap-2 overflow-y-auto">
-      {items.map(item => (
-        <li key={item.key} className="flex min-w-0 flex-col">
-          {item.name}
-          {item.description && (
-            // Payload content reads in ink like the messages around it; grey is kept for the labels.
-            <Txt as="span" variant="body-sm" className="line-clamp-2" title={item.description}>
-              {item.description}
-            </Txt>
-          )}
-        </li>
-      ))}
-    </ul>
+    <ScrollArea
+      maxHeight="12rem"
+      alwaysShowScrollbar
+      className={cn(card && cn(raisedSurfaceStyle, 'rounded-lg [--scroll-area-scrollbar-inset:0.5rem]'))}
+    >
+      <ul data-slot={slot} className={cn('flex flex-col gap-2', card ? 'p-3 pr-4' : 'pr-3')}>
+        {items.map(item => (
+          <li key={item.key} className="flex min-w-0 flex-col">
+            {item.name}
+            {item.description && (
+              // Payload content reads in ink like the messages around it; grey is kept for the labels.
+              <Txt as="span" variant="body-sm" className="line-clamp-2" title={item.description}>
+                {item.description}
+              </Txt>
+            )}
+          </li>
+        ))}
+      </ul>
+    </ScrollArea>
   );
 }
 

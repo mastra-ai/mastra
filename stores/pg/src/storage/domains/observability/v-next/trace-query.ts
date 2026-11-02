@@ -48,9 +48,27 @@ export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRA
 /** Core before the sort rejects `orderBy` on the field, so the sort is only declared when core plans it. */
 const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstChunkMs') === true;
 
-export const timeToFirstChunkFeatures = [
+/** Same rule for time to first token: returned and sorted only when core knows the field. */
+export const timeToFirstTokenSupported = 'timeToFirstTokenMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
+const timeToFirstTokenSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstTokenMs') === true;
+
+/**
+ * Outcome fields follow the same rule: core before them rejects their predicates and strict rows,
+ * so they are only returned and declared when core knows them.
+ */
+export const spanQueryOutcomeFieldsSupported = 'outcome' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {});
+export const traceQueryOutcomeFieldsSupported = 'outcome' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
+
+export const outcomeFeatures = [
+  ...(spanQueryOutcomeFieldsSupported ? (['span-query-outcome-fields'] as const) : []),
+  ...(traceQueryOutcomeFieldsSupported ? (['trace-query-outcome-fields'] as const) : []),
+];
+
+export const timingFeatures = [
   ...(timeToFirstChunkSupported ? (['trace-query-time-to-first-chunk'] as const) : []),
   ...(timeToFirstChunkSortSupported ? (['trace-query-time-to-first-chunk-sort'] as const) : []),
+  ...(timeToFirstTokenSupported ? (['trace-query-time-to-first-token'] as const) : []),
+  ...(timeToFirstTokenSortSupported ? (['trace-query-time-to-first-token-sort'] as const) : []),
 ];
 
 /**
@@ -89,6 +107,7 @@ const TRACE_FIELDS = {
   endedAt: 'r."endedAt"',
   durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
   timeToFirstChunkMs: 'r."timeToFirstChunkMs"',
+  timeToFirstTokenMs: 'r."timeToFirstTokenMs"',
   entityId: 'r."entityId"',
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
@@ -96,6 +115,8 @@ const TRACE_FIELDS = {
   spanType: 'r."spanType"',
   environment: 'r."environment"',
   status: TRACE_STATUS_SQL,
+  outcome: 'r."outcome"',
+  stopReason: 'r."stopReason"',
   tags: 'r."tags"',
 } satisfies FieldRegistry<TraceQueryField>;
 
@@ -108,7 +129,10 @@ const SPAN_FIELDS = {
   endedAt: 's."endedAt"',
   durationMs: 's."durationMs"',
   timeToFirstChunkMs: 's."timeToFirstChunkMs"',
+  timeToFirstTokenMs: 's."timeToFirstTokenMs"',
   status: 's."status"',
+  outcome: 's."outcome"',
+  stopReason: 's."stopReason"',
   error: 's."error"',
   entityType: 's."entityType"',
   entityId: 's."entityId"',
@@ -183,10 +207,14 @@ const TRACE_SELECT = `
   r."startedAt" AS "startedAt",
   r."endedAt" AS "endedAt",
   r."timeToFirstChunkMs" AS "timeToFirstChunkMs",
+  r."timeToFirstTokenMs" AS "timeToFirstTokenMs",
   r."entityName" AS "entityName",
   r."entityType" AS "entityType",
   r."environment" AS "environment",
-  ${TRACE_STATUS_SQL} AS "status"`;
+  ${TRACE_STATUS_SQL} AS "status",
+  r."outcome" AS "outcome",
+  r."stopReason" AS "stopReason",
+  r."stopReasonContext" AS "stopReasonContext"`;
 
 function fieldSql<TField extends string>(
   registry: Partial<FieldRegistry<TField>>,
@@ -619,13 +647,15 @@ function compilePostgresTraceScope(
   ];
 
   if (relationCollections.has('spans')) {
+    // Model and provider fall back to span attributes: exporters before the dedicated columns
+    // existed wrote them only there. Span queries filter on the columns alone (memory budget).
     ctes.push(`current_spans AS MATERIALIZED (
     SELECT
       s."traceId",
       s."name",
       s."spanType",
-      CASE WHEN jsonb_typeof(s."attributes" -> 'model') = 'string' THEN s."attributes" ->> 'model' END AS "model",
-      CASE WHEN jsonb_typeof(s."attributes" -> 'provider') = 'string' THEN s."attributes" ->> 'provider' END AS "provider",
+      COALESCE(s."model", CASE WHEN jsonb_typeof(s."attributes" -> 'model') = 'string' THEN s."attributes" ->> 'model' END) AS "model",
+      COALESCE(s."provider", CASE WHEN jsonb_typeof(s."attributes" -> 'provider') = 'string' THEN s."attributes" ->> 'provider' END) AS "provider",
       s."startedAt",
       CASE WHEN s."isPending" THEN NULL ELSE s."endedAt" END AS "endedAt",
       CASE
@@ -633,7 +663,10 @@ function compilePostgresTraceScope(
         ELSE ${durationMsSql('s."startedAt"', 's."endedAt"')}
       END AS "durationMs",
       s."timeToFirstChunkMs",
+      s."timeToFirstTokenMs",
       CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
+      s."outcome",
+      s."stopReason",
       s."error",
       s."entityType",
       s."entityId",
@@ -1108,10 +1141,18 @@ function traceRowToResult(row: Record<string, unknown>) {
     ...(timeToFirstChunkSupported && {
       timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
     }),
+    ...(timeToFirstTokenSupported && {
+      timeToFirstTokenMs: row.timeToFirstTokenMs == null ? null : Number(row.timeToFirstTokenMs),
+    }),
     entityName: row.entityName == null ? null : String(row.entityName),
     entityType: row.entityType == null ? null : String(row.entityType),
     environment: row.environment == null ? null : String(row.environment),
     status: row.status,
+    ...(traceQueryOutcomeFieldsSupported && {
+      outcome: row.outcome == null ? null : String(row.outcome),
+      stopReason: row.stopReason == null ? null : String(row.stopReason),
+      stopReasonContext: (row.stopReasonContext ?? null) as Record<string, unknown> | null,
+    }),
   };
 }
 

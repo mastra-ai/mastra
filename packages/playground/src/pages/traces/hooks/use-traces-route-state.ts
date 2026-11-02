@@ -1,13 +1,13 @@
 import {
   DEFAULT_TRACES_FILTERS,
   DEFAULT_TRACES_SORT,
+  TRACES_SORT_FIELDS,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import type {
   TracesExplorerState,
   TracesFilters,
   TracesSelection,
   TracesSort,
-  TracesSortField,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import {
   TRACE_ANCHOR_SPAN_ID_PARAM,
@@ -19,6 +19,7 @@ import {
   getTraceFilterGroups,
   getTracePropertyFilterTokens,
 } from '@mastra/playground-ui/domains/traces/trace-filters';
+import { isSpanTab } from '@mastra/playground-ui/domains/traces/types';
 import { SORT_DIR_PARAM, SORT_KEY_PARAM, readUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import type { SetURLSearchParamsLike } from '@mastra/playground-ui/sort/use-url-sort';
 import { useMemo } from 'react';
@@ -32,8 +33,6 @@ const SPAN_VIEW_PARAM = 'spanView';
 const SCORE_ID_PARAM = 'scoreId';
 const HIGHLIGHT_SPAN_IDS_PARAM = 'highlightSpanIds';
 const PAGE_PARAM = 'page';
-
-const TRACES_SORT_FIELDS: readonly TracesSortField[] = ['startedAt', 'timeToFirstChunkMs'];
 
 const SELECTION_PARAMS = [
   TRACE_ID_PARAM,
@@ -81,7 +80,7 @@ function decodeSelection(params: URLSearchParams): TracesSelection {
   return {
     traceId: params.get(TRACE_ID_PARAM) || undefined,
     spanId: params.get(SPAN_ID_PARAM) || undefined,
-    spanTab: tab === 'feedback' || tab === 'details' ? tab : undefined,
+    spanTab: isSpanTab(tab) ? tab : undefined,
     spanView: params.get(SPAN_VIEW_PARAM) === 'timeline' ? 'timeline' : 'tree',
     scoreId: params.get(SCORE_ID_PARAM) || undefined,
     highlightSpanIds: highlight ? highlight.split(',').filter(Boolean) : [],

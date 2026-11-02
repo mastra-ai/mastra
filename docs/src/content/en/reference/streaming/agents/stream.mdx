@@ -568,56 +568,6 @@ const stream = await agent.stream('message for agent')
             description:
               'Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output',
           },
-          {
-            name: 'telemetry',
-            type: 'TelemetrySettings',
-            isOptional: true,
-            description: 'Settings for OTLP telemetry collection during streaming (not Tracing).',
-            properties: [
-              {
-                parameters: [
-                  {
-                    name: 'isEnabled',
-                    type: 'boolean',
-                    isOptional: true,
-                    description: 'Enable or disable telemetry. Disabled by default while experimental.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'recordInputs',
-                    type: 'boolean',
-                    isOptional: true,
-                    description:
-                      'Enable or disable input recording. Enabled by default. You might want to disable input recording to avoid recording sensitive information.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'recordOutputs',
-                    type: 'boolean',
-                    isOptional: true,
-                    description:
-                      'Enable or disable output recording. Enabled by default. You might want to disable output recording to avoid recording sensitive information.',
-                  },
-                ],
-              },
-              {
-                parameters: [
-                  {
-                    name: 'functionId',
-                    type: 'string',
-                    isOptional: true,
-                    description: 'Identifier for this function. Used to group telemetry data by function.',
-                  },
-                ],
-              },
-            ],
-          },
           MODEL_SETTINGS_OBJECT,
           {
             name: 'toolChoice',
@@ -1022,6 +972,25 @@ The same policy applies to `resumeStream()`, `untilIdle` continuations, and the 
 Unlike streams, [memory recall](/reference/memory/recall) hides reminders by default for compatibility. Recall exclusions match stored types exactly rather than normalizing aliases. Use `['reactive', 'system-reminder']` to exclude both reminder representations across surfaces.
 
 Exclusions control returned data, not authorization or delivery. They aren't a security boundary. Signal options such as `ifActive`, `ifIdle`, `persist`/`discard`, and `transient` retain their delivery and persistence meanings.
+
+## Aborting a run
+
+Pass an [`abortSignal`](#parameters) to stop a run from outside the agent:
+
+```ts
+const controller = new AbortController()
+const stream = await agent.stream('Summarize this repo', { abortSignal: controller.signal })
+
+setTimeout(() => controller.abort(), 5_000)
+```
+
+What abort does and doesn't do:
+
+- **The stream carries an `abort` chunk.** When the signal fires, the run stops at its next check and `fullStream` emits an `abort` chunk. The run's status ends as canceled with an `aborted` finish reason, and `onAbort` receives the steps that completed before the abort plus the assistant text streamed so far for the in-flight step.
+- **The abort is cooperative.** It takes effect at the next check inside the run. It doesn't forcibly stop tool code or an `onOutput` hook that's already executing, and side effects those started may still complete.
+- **Text the user already saw is saved.** With writable memory, the assistant text streamed before the abort is persisted to the thread as an ordinary assistant message, without an error part. Canceled runs still pass through output processors, so a processor that throws can still affect that save. Output that never reaches them isn't persisted.
+
+To abort a run you no longer hold a handle to, use the `runId` with [`durableAgent.abortRunStream(runId)`](/reference/agents/durable-agent#abortrunstreamrunid), which ends the run the same way.
 
 ## Extended usage example
 

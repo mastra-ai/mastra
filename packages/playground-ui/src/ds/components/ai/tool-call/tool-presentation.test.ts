@@ -57,6 +57,14 @@ describe('presentTool', () => {
     });
   });
 
+  it('turns the agent indicator into the work each call does, and a tool it does not know into a nut', () => {
+    expect(presentTool('execute_command', { command: 'ls' }).pose).toBe('running');
+    expect(presentTool('view', { path: 'a.ts' }).pose).toBe('reading');
+    expect(presentTool('mastra_workspace_grep', { pattern: 'x' }).pose).toBe('searching');
+    expect(presentTool('web_search', { query: 'oauth' }).pose).toBe('browsing');
+    expect(presentTool('fetch_pull_request', undefined).pose).toBe('tool');
+  });
+
   it('prettifies unknown tool names instead of surfacing raw identifiers', () => {
     expect(presentTool('fetch_pull_request', undefined).label).toBe('Fetch pull request');
   });

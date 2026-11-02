@@ -14,6 +14,7 @@ import {
 } from '../../scripts/generate-api-cli-route-metadata.js';
 import { buildAttentionRoutes } from './attention.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
+import { BoardRoutes } from './boards.js';
 import {
   attentionQuerySchema,
   createProjectBodySchema,
@@ -24,6 +25,7 @@ import {
   updateProjectBodySchema,
 } from './contracts.js';
 import { ProjectRoutes } from './projects.js';
+import { SkillRoutes } from './skills.js';
 import { WorkItemRoutes } from './work-items.js';
 
 const projectId = '11111111-1111-4111-8111-111111111111';
@@ -61,7 +63,16 @@ function registeredFactoryRoutes() {
     workItems,
     configVersion: 'test',
   } as never);
-  return [...projects, ...work, ...attention, ...automationRuns];
+  const boards = new BoardRoutes({
+    auth: {},
+    audit: {},
+    projects: {},
+    workItems,
+    storage: {},
+    boards: {},
+  } as never).routes();
+  const skills = new SkillRoutes({ auth: {}, controllerId: 'code', controller: {}, overrides: {} } as never).routes();
+  return [...projects, ...work, ...attention, ...automationRuns, ...boards, ...skills];
 }
 
 describe('Factory route contracts', () => {

@@ -1,12 +1,14 @@
 import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
+import { ChevronDown } from 'lucide-react';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 import { Icon } from '@/ds/icons/Icon';
 import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import type { IconSize } from '@/ds/icons/icon-size-classes';
-import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
+import { controlIconState } from '@/ds/primitives/control-icon';
+import { controlHeight, controlSizeClasses, controlSpacing } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,
   raisedControlSurfaceStyle,
@@ -15,7 +17,8 @@ import {
 import { controlStateColorTransition, focusRing, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-// Text-mode buttons are pills. Each size sets `--button-px`, the label's side padding. The
+// Text-mode buttons are pills. Each size takes `--control-px` (the label's side padding) and
+// `--control-gap` from `controlSpacing`, shared with every other pill control. The
 // icon side gets 2px less, because a glyph draws inside its box: the icon then reads as far
 // from the edge as the label does (shadcn's Button uses the same 2px step).
 // - `[data-slot=button-icon(-end)]`: the `<Icon>` wrappers the `icon` / `iconEnd` props render.
@@ -23,10 +26,14 @@ import { cn } from '@/lib/utils';
 // A button with no label takes an icon-mode size instead: a fixed square with its own
 // `rounded-full`, so it reads as a circle rather than a padded pill (lint rule
 // `mastra/icon-button-size`).
+// Insets are measured from the outer edge, border included: a variant with a real border (or a
+// segment a ButtonsGroup gives one) sets `--control-border` and the padding gives that width
+// back, so its label sits where a borderless `default` button's does.
 const TEXT_MODE_ADORNMENTS = cn(
-  'rounded-full px-(--button-px)',
-  'has-[>[data-slot=button-icon]]:pl-[calc(var(--button-px)-2px)] has-[>svg]:pl-[calc(var(--button-px)-2px)]',
-  'has-[>[data-slot=button-icon-end]]:pr-[calc(var(--button-px)-2px)]',
+  'rounded-full px-[calc(var(--control-px)-var(--control-border,0px))]',
+  'has-[>[data-slot=button-icon]]:pl-[calc(var(--control-px)-2px-var(--control-border,0px))]',
+  'has-[>svg]:pl-[calc(var(--control-px)-2px-var(--control-border,0px))]',
+  'has-[>[data-slot=button-icon-end]]:pr-[calc(var(--control-px)-2px-var(--control-border,0px))]',
 );
 
 const LINK_LAYOUT = cn(
@@ -41,15 +48,6 @@ const LINK_LABEL = cn(
   '[&>svg]:shrink-0',
   'after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:scale-x-0 after:bg-current',
   'after:transition-transform after:duration-fast after:ease-out-custom motion-reduce:after:transition-none',
-);
-
-// An icon is secondary to the label beside it, and on a neutral surface it says so with
-// a colour token rather than opacity. Opacity dims against whatever sits behind the
-// control, so the same glyph clears contrast on one surface and fails on another, and it
-// left icon-only buttons with no hover response at all: only their background moved.
-// Filled variants opt out because there the glyph colour carries the meaning.
-const NEUTRAL_ICON_STATE = cn(
-  '[&_svg]:text-muted-foreground not-disabled:hover:[&_svg]:text-foreground aria-disabled:[&_svg]:text-muted-foreground',
 );
 
 // eslint-disable-next-line react-refresh/only-export-components -- exported variant helper is part of Button's public API
@@ -71,30 +69,32 @@ export const buttonVariants = cva(
         default: cn(
           'border-0',
           raisedControlSurfaceStyle,
-          NEUTRAL_ICON_STATE,
+          controlIconState,
           'disabled:bg-fill-subtle aria-disabled:bg-fill-subtle',
         ),
         // Filled variants take the opaque ladder: their rest fill is a colour, not a rung
         // layered on the surface, so a state that thinned it would let whatever the button
-        // covers read through the hover it is meant to answer.
+        // covers read through the hover it is meant to answer. Their glyph colour carries the
+        // meaning, so they keep it with the label instead of taking `controlIconState`.
         primary: cn(
-          'border border-transparent bg-fill-inverse text-background not-disabled:hover:bg-fill-inverse-hover not-disabled:active:bg-fill-inverse-active',
+          'border border-transparent bg-fill-inverse text-background [--control-border:1px] not-disabled:hover:bg-fill-inverse-hover not-disabled:active:bg-fill-inverse-active',
           focusRingOffset,
           'focus-visible:border-transparent',
           'disabled:bg-fill-inverse-disabled disabled:text-background/75 aria-disabled:bg-fill-inverse-disabled aria-disabled:text-background/75',
         ),
         destructive: cn(
-          'border border-transparent bg-fill-destructive text-fill-destructive-foreground not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
+          'border border-transparent bg-fill-destructive text-fill-destructive-foreground [--control-border:1px] not-disabled:hover:bg-fill-destructive-hover not-disabled:active:bg-fill-destructive-active',
           focusRingOffset,
           'focus-visible:border-transparent',
           'disabled:bg-fill-destructive-disabled disabled:text-fill-destructive-disabled-foreground aria-disabled:bg-fill-destructive-disabled aria-disabled:text-fill-destructive-disabled-foreground',
         ),
         'destructive-ghost': cn(
-          'border border-transparent bg-transparent text-destructive-foreground not-disabled:hover:bg-destructive-subtle not-disabled:hover:text-destructive-foreground not-disabled:active:bg-destructive-subtle-active',
+          'border border-transparent bg-transparent text-destructive-foreground [--control-border:1px] not-disabled:hover:bg-destructive-subtle not-disabled:hover:text-destructive-foreground not-disabled:active:bg-destructive-subtle-active',
           'disabled:bg-transparent disabled:text-placeholder aria-disabled:bg-transparent aria-disabled:text-placeholder',
         ),
         ghost: cn(
-          'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
+          'border border-transparent bg-transparent text-muted-foreground [--control-border:1px] not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
+          controlIconState,
           'disabled:bg-transparent aria-disabled:bg-transparent',
         ),
         // A persistent neutral fill for selected controls. Match default's borderless
@@ -112,9 +112,27 @@ export const buttonVariants = cva(
         ),
       },
       size: {
-        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'gap-1 [--button-px:.9em]', TEXT_MODE_ADORNMENTS),
-        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'gap-1.5 [--button-px:.9em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'gap-1.5 [--button-px:1em]', TEXT_MODE_ADORNMENTS),
+        sm: cn(
+          controlSizeClasses.sm,
+          iconSizeClasses.sm,
+          controlSpacing.sm,
+          'gap-(--control-gap)',
+          TEXT_MODE_ADORNMENTS,
+        ),
+        md: cn(
+          controlSizeClasses.md,
+          iconSizeClasses.md,
+          controlSpacing.md,
+          'gap-(--control-gap)',
+          TEXT_MODE_ADORNMENTS,
+        ),
+        lg: cn(
+          controlSizeClasses.lg,
+          iconSizeClasses.lg,
+          controlSpacing.lg,
+          'gap-(--control-gap)',
+          TEXT_MODE_ADORNMENTS,
+        ),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // so icon-mode and text-mode use the same press feedback. The glyph is sized by the `Icon`
         // wrapper the component puts around an icon-mode child, keyed off the same scale.
@@ -201,6 +219,39 @@ const iconSizeMap: Record<ButtonSize, IconSize> = {
 function adornmentIconSize(variant: ButtonVariant, size: ButtonSize): IconSize {
   if (variant === 'link') return 'sm';
   return iconSizeMap[size];
+}
+
+/*
+ * Adornments for triggers that take the Button recipe without the Button component (Select,
+ * Combobox). They sit in the same slots as a Button's `icon` and `iconEnd`, so every trigger's
+ * leading icon and chevron share one size and one inset from the edge.
+ */
+
+/** A trigger's leading icon. */
+export function ButtonIcon({ size, children }: { size: ButtonSize; children: React.ReactNode }) {
+  return (
+    <ButtonAdornment slot="button-icon" size={iconSizeMap[size]}>
+      {children}
+    </ButtonAdornment>
+  );
+}
+
+/**
+ * The down chevron of a trigger that opens a list; static, it does not turn while open. Lucide's
+ * chevron ink spans the middle half of its box, twice a regular icon's inset, so it pulls in by
+ * 1/8em on each side to sit where a regular icon's ink would. Pass it as a Button's `iconEnd`.
+ */
+export function TriggerChevron() {
+  return <ChevronDown aria-hidden data-slot="trigger-chevron" className="mx-[-0.125em] shrink-0" />;
+}
+
+/** The trigger chevron in a Button's end slot. */
+export function ButtonChevron({ size }: { size: ButtonSize }) {
+  return (
+    <ButtonAdornment slot="button-icon-end" size={iconSizeMap[size]}>
+      <TriggerChevron />
+    </ButtonAdornment>
+  );
 }
 
 function ButtonAdornment({ slot, size, children }: { slot: string; size: IconSize; children: React.ReactNode }) {

@@ -5,6 +5,7 @@ import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
 import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { approvalResumeSchema } from '../../../../loop/shared/approval-schema';
+import { takeDelegationFailure } from '../../../../loop/shared/delegation-outcome';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
@@ -21,6 +22,7 @@ import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
 import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import type { ExportedSpan, ObservabilityContext } from '../../../../observability';
+import { compactStopReasonContext } from '../../../../observability/outcome-schema';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
 import { ProcessorRunner } from '../../../../processors/runner';
@@ -73,6 +75,7 @@ import {
 } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
 import { serializeError } from '../../utils/serialize-state';
+import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState } from '../shared/message-list-state';
 
 /**
@@ -96,6 +99,8 @@ const durableToolCallInputSchema = z.object({
   stepSpanData: z.any().optional(),
   // First-chunk clock of the step that produced this call, for ending spans on suspend
   completionStartTime: z.coerce.date().optional(),
+  // Time to first token of the same step, used the same way
+  timeToFirstTokenMs: z.number().optional(),
   // Model usage of the step that produced this call, reported on its suspension chunk
   stepUsage: z.any().optional(),
 });
@@ -132,6 +137,14 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // Set when an output processor dropped the tool-result chunk. The model still
   // gets the result; callbacks must not report a result the stream never emitted.
   resultHidden: z.boolean().optional(),
+  tripwire: z
+    .object({
+      reason: z.string(),
+      retry: z.boolean().optional(),
+      metadata: z.unknown().optional(),
+      processorId: z.string().optional(),
+    })
+    .optional(),
   error: serializedErrorSchema.optional(),
   // Approval decision for a `requireApproval` tool; a declined call carries its
   // `output-denied` marker across the boundary in this field.
@@ -421,6 +434,7 @@ export function createDurableToolCallStep() {
         agentSpanData?: unknown;
         modelSpanData?: unknown;
         completionStartTime?: Date | string;
+        timeToFirstTokenMs?: number;
       }>();
 
       const { runId, options: agentOptions, state } = initData;
@@ -444,21 +458,61 @@ export function createDurableToolCallStep() {
           const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
           const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
           const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
-          // Rebuilt spans come from the run-start snapshot, so end them with the clock
+          // Rebuilt spans come from the run-start snapshot, so end them with the clocks
           // their segment captured: the loop state's (or this step's, on the first
-          // iteration) for the originals, the registry's for a resumed segment.
-          const clock = reg?.resumeModelSpanData
-            ? reg.resumeCompletionStartTime
-            : (initData.completionStartTime ?? typedInput.completionStartTime);
-          const attributes = clock ? { completionStartTime: new Date(clock) } : undefined;
+          // iteration) for the originals.
+          const attributes = carriedSpanClocks(
+            reg,
+            initData.completionStartTime
+              ? { completionStartTime: initData.completionStartTime, timeToFirstTokenMs: initData.timeToFirstTokenMs }
+              : {
+                  completionStartTime: typedInput.completionStartTime,
+                  timeToFirstTokenMs: typedInput.timeToFirstTokenMs,
+                },
+          );
           if (typedInput.stepSpanData) {
-            obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({ output });
+            obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
+              output,
+              outcome: 'suspend',
+              stopReason: info.reason === 'approval' ? 'approval_required' : null,
+              stopReasonContext:
+                info.reason === 'approval'
+                  ? compactStopReasonContext('approval_required', {
+                      toolCallId: info.toolCallId,
+                      toolName: info.toolName,
+                    })
+                  : null,
+            });
           }
           if (modelSpanData) {
-            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({ output, attributes });
+            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({
+              output,
+              attributes,
+              outcome: 'suspend',
+              stopReason: info.reason === 'approval' ? 'approval_required' : null,
+              stopReasonContext:
+                info.reason === 'approval'
+                  ? compactStopReasonContext('approval_required', {
+                      toolCallId: info.toolCallId,
+                      toolName: info.toolName,
+                    })
+                  : null,
+            });
           }
           if (agentSpanData) {
-            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({ output, attributes });
+            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({
+              output,
+              attributes,
+              outcome: 'suspend',
+              stopReason: info.reason === 'approval' ? 'approval_required' : null,
+              stopReasonContext:
+                info.reason === 'approval'
+                  ? compactStopReasonContext('approval_required', {
+                      toolCallId: info.toolCallId,
+                      toolName: info.toolName,
+                    })
+                  : null,
+            });
           }
         } catch (error) {
           // Span bookkeeping must never break suspension.
@@ -840,6 +894,8 @@ export function createDurableToolCallStep() {
         resumeSchema?: string;
         suspendPayload?: unknown;
         delegatedRunId?: string;
+        delegatedToolCallId?: string;
+        delegatedToolName?: string;
         approvalToolName?: string;
         approvalArgs?: unknown;
       }) => {
@@ -858,6 +914,9 @@ export function createDurableToolCallStep() {
           // (mirrors the regular engine's tool-call-step metadata shape).
           runId,
           ...(opts.delegatedRunId && opts.delegatedRunId !== runId ? { delegatedRunId: opts.delegatedRunId } : {}),
+          // The delegate's own tool call that paused. Resume stays keyed on `toolCallId`.
+          ...(opts.delegatedToolCallId ? { delegatedToolCallId: opts.delegatedToolCallId } : {}),
+          ...(opts.delegatedToolName ? { delegatedToolName: opts.delegatedToolName } : {}),
           ...(opts.type === 'suspension' ? { suspendPayload: opts.suspendPayload } : {}),
           ...(opts.resumeSchema ? { resumeSchema: opts.resumeSchema } : {}),
         };
@@ -997,6 +1056,12 @@ export function createDurableToolCallStep() {
               toolName: matchedEntry.toolName ?? toolName,
               kind: type,
               args: displayed.payload.args,
+              ...(typeof matchedEntry.delegatedToolCallId === 'string'
+                ? { delegatedToolCallId: matchedEntry.delegatedToolCallId }
+                : {}),
+              ...(typeof matchedEntry.delegatedToolName === 'string'
+                ? { delegatedToolName: matchedEntry.delegatedToolName }
+                : {}),
               ...(type === 'suspension' ? { suspendPayload: (displayed.payload as any).suspendPayload } : {}),
               resumeSchema: displayed.payload.resumeSchema,
             },
@@ -1404,6 +1469,18 @@ export function createDurableToolCallStep() {
             typeof suspendOptions?.runId === 'string' && suspendOptions.runId !== runId
               ? suspendOptions.runId
               : undefined;
+          // Set by the agent-tool wrapper when a delegated sub-agent paused: the sub-agent's own
+          // tool call. Carried alongside the delegation call, which stays the resume key. Ignored
+          // unless the wrapper raised the pause, so a plain tool's suspend options can't set it.
+          const fromDelegate = suspendOptions?.isAgentSuspend === true;
+          const delegatedToolCallId =
+            fromDelegate && typeof suspendOptions?.delegatedToolCallId === 'string'
+              ? suspendOptions.delegatedToolCallId
+              : undefined;
+          const delegatedToolName =
+            fromDelegate && typeof suspendOptions?.delegatedToolName === 'string'
+              ? suspendOptions.delegatedToolName
+              : undefined;
           if (suspendOptions?.requireToolApproval) {
             const innerApproval =
               typeof suspendOptions.requireToolApproval === 'object' && suspendOptions.requireToolApproval
@@ -1423,6 +1500,8 @@ export function createDurableToolCallStep() {
               type: 'approval',
               resumeSchema: approvalResumeSchema,
               delegatedRunId,
+              delegatedToolCallId,
+              delegatedToolName,
               ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
             });
 
@@ -1438,6 +1517,8 @@ export function createDurableToolCallStep() {
                     toolCallId,
                     toolName: approvalToolName,
                     args: approvalArgs,
+                    ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+                    ...(delegatedToolName ? { delegatedToolName } : {}),
                     resumeSchema: approvalResumeSchema,
                     updatedAt: Date.now(),
                     usage: typedInput.stepUsage,
@@ -1494,6 +1575,8 @@ export function createDurableToolCallStep() {
             suspendPayload,
             resumeSchema: suspendOptions?.resumeSchema,
             delegatedRunId,
+            delegatedToolCallId,
+            delegatedToolName,
           });
 
           await doFlush();
@@ -1507,6 +1590,8 @@ export function createDurableToolCallStep() {
                 payload: {
                   toolCallId,
                   toolName,
+                  ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+                  ...(delegatedToolName ? { delegatedToolName } : {}),
                   suspendPayload,
                   args,
                   resumeSchema: suspendOptions?.resumeSchema,
@@ -1907,8 +1992,12 @@ export function createDurableToolCallStep() {
         let bailed = false;
         for (const rc of [registryEntry?.requestContext, rebuiltRequestContext, requestContext]) {
           if (rc?.get('__mastra_delegationBailed')) {
+            // Reset once for this bail, before collecting causes from the live contexts.
+            if (!bailed && registryEntry) registryEntry.tracingDelegationFailure = undefined;
             bailed = true;
             rc.set('__mastra_delegationBailed', false);
+            const cause = takeDelegationFailure(rc);
+            if (cause && registryEntry) registryEntry.tracingDelegationFailure = cause;
           }
         }
         return bailed;
@@ -2050,18 +2139,19 @@ export function createDurableToolCallStep() {
               // `resultBlocked` entries the way it skips `aborted` ones, so
               // the invocation stays in 'call' state — mirroring the main
               // loop, where a tripwire skips both commit and emission.
+              const tripwire = {
+                reason: processorError.message || 'Tool result blocked by processor',
+                retry: processorError.options?.retry,
+                metadata: processorError.options?.metadata,
+                processorId: processorError.processorId,
+              };
               if (pubsub) {
                 try {
                   await emitChunkEvent(pubsub, runId, {
                     type: 'tripwire',
                     runId,
                     from: ChunkFrom.AGENT,
-                    payload: {
-                      reason: processorError.message || 'Tool result blocked by processor',
-                      retry: processorError.options?.retry,
-                      metadata: processorError.options?.metadata,
-                      processorId: processorError.processorId,
-                    },
+                    payload: tripwire,
                   } as ChunkType);
                 } catch (emitError) {
                   logger?.warn?.(`[DurableAgent] Failed to emit tripwire chunk for ${toolName}: ${emitError}`);
@@ -2070,6 +2160,7 @@ export function createDurableToolCallStep() {
               return {
                 ...typedInput,
                 resultBlocked: true,
+                tripwire,
                 ...(processorDataParts.length ? { processorDataParts } : {}),
               };
             }

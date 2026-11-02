@@ -2,9 +2,15 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { isReplayRecord, replayContext } from '../../utils/replay';
-import { getResultErrorMessage, getResultOutputText } from '../../utils/result-output';
+import {
+  getMissingTextNotice,
+  getResultErrorMessage,
+  getResultOutputText,
+  getResultToolCalls,
+} from '../../utils/result-output';
 import { ConversationReplayResult } from '../conversation-replay-result';
 import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonColumn } from './build-comparison-rows';
@@ -91,6 +97,8 @@ export function ComparisonSideCell({
   const outputStr = formatValue(data.output);
   const outputText = getResultOutputText(data);
   const errorMessage = getResultErrorMessage(data);
+  const toolCalls = getResultToolCalls(data);
+  const missingTextNotice = getMissingTextNotice(data);
   const metrics = sideMetrics(data, showUsage).filter(metric => isMetricVisible(metric.id));
   const { traceId } = data;
   const traceAction =
@@ -143,7 +151,19 @@ export function ComparisonSideCell({
           expanded={outputExpanded}
           onExpandedChange={onOutputExpandedChange}
         >
-          <ComparisonPayload value={outputText ?? data.output} />
+          {missingTextNotice ? (
+            <Txt tone="muted" className="p-3 break-words">
+              {missingTextNotice}
+            </Txt>
+          ) : (
+            <ComparisonPayload value={outputText ?? data.output} />
+          )}
+        </ComparisonSection>
+      )}
+
+      {!conversationOutput && toolCalls.length > 0 && (
+        <ComparisonSection title={`Tool calls (${toolCalls.length})`}>
+          <SpanPayloadToolCalls toolCalls={toolCalls} />
         </ComparisonSection>
       )}
 
