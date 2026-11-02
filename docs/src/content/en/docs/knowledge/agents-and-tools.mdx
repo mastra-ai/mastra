@@ -77,7 +77,7 @@ Reading a scope address, such as `{ "page": "org:acme" }`, lists the pages in th
 { "from": "org:acme#policies", "depth": 2 }
 ```
 
-A long page doesn't come back whole. A read returns at most 1,000 tokens of body by default ([configurable](/docs/knowledge/setup#set-how-much-one-read-returns)), and `more` says how to get the rest. A long body comes back as numbered lines (`12│text`). The agent can read the body's `outline` of headings with their lines and sizes, then one `section`, or `match` a term to get the matching lines with a few around them, like `grep -C`:
+A long page doesn't come back whole. A read returns at most 1,000 tokens of body by default ([configurable](/docs/knowledge/setup#set-how-much-one-read-returns)), and `more` says how to get the rest. A long body comes back as numbered lines (`12│text`). The first read shows every heading with its line number and the first lines under it, so the agent can pick the part it needs. It can then read one `section` or read on `from` a line, or `match` a term to get the matching lines with a few around them, like `grep -C`:
 
 ```json
 { "page": "org:acme#policies/refund", "match": "damaged", "context": 2 }
