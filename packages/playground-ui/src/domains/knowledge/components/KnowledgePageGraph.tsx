@@ -39,6 +39,7 @@ import { KNOWLEDGE_PAGE_SIZE, grantGraph, pageGraphEdges, pageNeighbourIds, toPa
 import { childCountLabel } from '../lib/pageTree';
 import { chooseTooltipSide } from '../lib/tooltipSide';
 import type { Box, TooltipPlacementInput, TooltipSide } from '../lib/tooltipSide';
+import { prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 
 import { Txt } from '@/ds/components/Txt';
@@ -1170,6 +1171,8 @@ function KnowledgePageGraphInner({
   // computed from the layout's own positions and sizes rather than React Flow's `fitView`, which only
   // counts nodes it has measured in the DOM: in a production Studio it measured none, so the view never
   // moved. State is read through a ref so a refetch with the same selection never moves the view.
+  // Pages that just left the view stay a moment, fading, so a refocus reads as a change and not a cut.
+  const drawnNodes = useLeavingNodes(nodes, prefersMotion());
   const fitState = useRef({ nodes, allEdges, selectedPageId, reactFlow });
   fitState.current = { nodes, allEdges, selectedPageId, reactFlow };
   // Set when a fit found the pane 0×0, so the next non-zero size fits even if it matches the last one seen.
@@ -1288,7 +1291,7 @@ function KnowledgePageGraphInner({
         )}
       />
       <ReactFlow
-        nodes={nodes}
+        nodes={drawnNodes}
         edges={flowEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}

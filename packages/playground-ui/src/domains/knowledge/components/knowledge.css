@@ -16,9 +16,28 @@
   box-shadow: 0 0 22px 4px color-mix(in srgb, var(--knowledge-color) 45%, transparent);
 }
 
-/* A refocus moves every circle to its new ring: glide there instead of jumping. */
+/* A refocus: pages in both views glide and resize to their new place, new ones fade in, and ones that
+   leave are faded out (the graph keeps them a moment). Under reduced motion every one of these is off. */
 .knowledge-graph .react-flow__node {
-  transition: transform var(--duration-normal, 300ms) var(--ease-out-custom, ease-out);
+  transition:
+    transform var(--duration-normal, 300ms) var(--ease-out-custom, ease-out),
+    width var(--duration-normal, 300ms) var(--ease-out-custom, ease-out),
+    height var(--duration-normal, 300ms) var(--ease-out-custom, ease-out),
+    opacity var(--duration-normal, 300ms) var(--ease-out-custom, ease-out);
+  animation: knowledge-node-in var(--duration-normal, 300ms) var(--ease-out-custom, ease-out) both;
+}
+
+@keyframes knowledge-node-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .knowledge-graph .react-flow__node {
+    transition: none;
+    animation: none;
+  }
 }
 
 /* A hovered dot's tooltip sits above every other circle. */
