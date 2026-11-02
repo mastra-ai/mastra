@@ -66,11 +66,11 @@ async function factoryWithSlack({
 }
 
 describe('Slack channel tools', () => {
-  it('gives a web prompt on a Slack-linked session both tools, posting into the recorded thread', async () => {
+  it('gives a web prompt on a Slack-linked session its Slack tools, posting into the recorded thread', async () => {
     const { slack, requestContext, post } = await factoryWithSlack();
 
     const tools = await slack.agentTools({ requestContext });
-    expect(Object.keys(tools).sort()).toEqual(['attach_file', REPLY_TOOL_NAME, ...WORKSPACE_TOOLS].sort());
+    expect(Object.keys(tools).sort()).toEqual(['attach_file', 'read_attachment', REPLY_TOOL_NAME, ...WORKSPACE_TOOLS].sort());
 
     await (tools[REPLY_TOOL_NAME] as unknown as Execute).execute({ text: 'Done: tests pass.' }, {});
     expect(post).toHaveBeenCalledWith({ markdown: 'Done: tests pass.' });
@@ -88,7 +88,7 @@ describe('Slack channel tools', () => {
     const fromSlack = await factoryWithSlack();
     fromSlack.requestContext.set('channel', { platform: 'slack', isDM: false });
     const tools = await fromSlack.slack.agentTools({ requestContext: fromSlack.requestContext });
-    expect(Object.keys(tools).sort()).toEqual(['attach_file', REPLY_TOOL_NAME, ...WORKSPACE_TOOLS].sort());
+    expect(Object.keys(tools).sort()).toEqual(['attach_file', 'read_attachment', REPLY_TOOL_NAME, ...WORKSPACE_TOOLS].sort());
     expect(fromSlack.getThreadById).not.toHaveBeenCalled();
   });
 
@@ -104,7 +104,7 @@ describe('Slack channel tools', () => {
     const { slack, requestContext } = await factoryWithSlack({ textDisplay: 'show' });
 
     expect(Object.keys(await slack.agentTools({ requestContext })).sort()).toEqual(
-      ['attach_file', ...WORKSPACE_TOOLS].sort(),
+      ['attach_file', 'read_attachment', ...WORKSPACE_TOOLS].sort(),
     );
     expect(slack.processors.input.map(p => p.constructor)).toEqual([FactoryChannelReplyProcessor]);
     expect(slack.processors.output.map(p => p.constructor)).toEqual([FactoryChannelSessionLinkProcessor]);

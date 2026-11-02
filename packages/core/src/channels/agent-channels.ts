@@ -51,6 +51,7 @@ import { extractErrorMessage } from './stream-helpers';
 import type { PendingApprovalRecord } from './stream-helpers';
 import {
   collectThreadHistory,
+  THREAD_HISTORY_OMITTED_CAP,
   formatLegacyHistoryBlock,
   formatOmittedCount,
   formatOmittedMarker,
@@ -1782,7 +1783,8 @@ export class AgentChannels {
           parts.push({
             type: 'text',
             text:
-              `[Attached file: ${filename} (${mimeType})]\n${content}` +
+              // A truncated file keeps its URL so the agent can read the rest with `read_attachment`.
+              `[Attached file: ${filename} (${mimeType})${truncated && att.url ? ` — ${att.url}` : ''}]\n${content}` +
               (truncated
                 ? `\n[Truncated: showing the first ${MAX_TEXT_ATTACHMENT_BYTES} of ${bytes.byteLength} bytes]`
                 : ''),
@@ -2547,7 +2549,71 @@ export class AgentChannels {
           return { ok: true };
         },
       }),
+
+      read_attachment: createTool({
+        id: 'read_attachment',
+        description:
+          'Read a file someone attached in this conversation. Pass the URL shown next to the attachment. The file is downloaded on each call and never saved. Text files come back as text, other files as base64. Files longer than one read come back in chunks: call again with `offset` set to the returned `nextOffset`.',
+        inputSchema: z.object({
+          url: z.string().min(1).describe('The URL shown next to the attached file'),
+          offset: z.number().int().min(0).optional().describe('Byte offset to start reading from (default 0)'),
+          length: z
+            .number()
+            .int()
+            .min(1)
+            .max(MAX_TEXT_ATTACHMENT_BYTES)
+            .optional()
+            .describe(`Bytes to read (default and maximum ${MAX_TEXT_ATTACHMENT_BYTES})`),
+        }),
+        execute: async ({ url, offset = 0, length = MAX_TEXT_ATTACHMENT_BYTES }, context) => {
+          const chatThread = await this.getChatThreadFromContext(context);
+          const att = await findThreadAttachment(chatThread, url);
+          if (!att?.fetchData) throw new Error(`No file with the URL ${url} was attached in this conversation.`);
+          if (att.size !== undefined && att.size > MAX_ATTACHMENT_DOWNLOAD_BYTES) {
+            throw new Error(`${att.name ?? url} is ${att.size} bytes; the limit is ${MAX_ATTACHMENT_DOWNLOAD_BYTES}.`);
+          }
+          const buf = await att.fetchData();
+          const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+          if (bytes.byteLength > MAX_ATTACHMENT_DOWNLOAD_BYTES) {
+            throw new Error(
+              `${att.name ?? url} is ${bytes.byteLength} bytes; the limit is ${MAX_ATTACHMENT_DOWNLOAD_BYTES}.`,
+            );
+          }
+          const mimeType = att.mimeType ?? 'application/octet-stream';
+          const text = isTextMimeType(mimeType);
+          const start = Math.min(offset, bytes.byteLength);
+          let end = Math.min(start + length, bytes.byteLength);
+          // Don't split a UTF-8 character across chunks: back off to its first byte.
+          if (text) while (end > start && end < bytes.byteLength && (bytes[end]! & 0xc0) === 0x80) end--;
+          const chunk = bytes.subarray(start, end);
+          return {
+            name: att.name,
+            mimeType,
+            size: bytes.byteLength,
+            offset: start,
+            encoding: text ? ('utf8' as const) : ('base64' as const),
+            content: text ? new TextDecoder().decode(chunk) : Buffer.from(chunk).toString('base64'),
+            ...(end < bytes.byteLength ? { nextOffset: end } : {}),
+          };
+        },
+      }),
     };
+  }
+
+  /** The chat thread of the current conversation, resolved like {@link getAdapterFromContext}. */
+  private async getChatThreadFromContext(context: {
+    requestContext?: RequestContext;
+    agent?: { threadId?: string };
+  }): Promise<Thread> {
+    const stashed = context.requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as
+      | ChatChannelRenderContext
+      | undefined;
+    if (stashed) return stashed.chatThread;
+    const memoryThreadId =
+      context.agent?.threadId ?? parseMemoryRequestContext(context.requestContext)?.thread?.id ?? undefined;
+    const render = memoryThreadId ? await this.buildRenderContextForThread(memoryThreadId) : null;
+    if (!render) throw new Error('No channel context — cannot determine platform or thread');
+    return render.chatThread;
   }
 
   /**
@@ -2747,4 +2813,19 @@ async function storedAttachmentBytes(fs: WorkspaceFilesystem, dir: string, root 
     else total += entry.size ?? (await fs.stat(path)).size;
   }
   return total;
+}
+
+/**
+ * The attachment with `url` on one of the thread's most recent messages, so
+ * `read_attachment` only downloads files that were shared in the conversation
+ * it runs in. Walks newest first, as far as the thread-history walk goes.
+ */
+async function findThreadAttachment(chatThread: Thread, url: string): Promise<Attachment | undefined> {
+  let walked = 0;
+  for await (const message of chatThread.messages) {
+    const found = message.attachments?.find(att => att.url === url);
+    if (found) return found;
+    if (++walked >= THREAD_HISTORY_OMITTED_CAP) return undefined;
+  }
+  return undefined;
 }
