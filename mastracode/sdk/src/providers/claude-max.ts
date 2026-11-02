@@ -9,7 +9,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
-import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
+import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 import { runCatalogThinkingLevel } from '../thinking-catalog.js';
@@ -17,6 +17,8 @@ import { ANTHROPIC_PROMPT_CACHE_TTL } from './anthropic-prompt-cache.js';
 import type { AnthropicPromptCacheScope } from './anthropic-prompt-cache.js';
 import { ANTHROPIC_THINKING_BUDGET_TOKENS, getAnthropicThinkingCapability } from './anthropic-thinking.js';
 import type { ThinkingLevel } from './openai-codex.js';
+
+const PROVIDER_NAME = 'Anthropic';
 
 // Required for Claude Max plan OAuth - the endpoint checks for this system message
 const claudeCodeIdentity = "You are Claude Code, Anthropic's official CLI for Claude.";
@@ -221,7 +223,9 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
 
     const accessToken = await storage.getApiKey('anthropic');
     if (!accessToken) {
-      throw new ProviderAuthRequiredError('Not logged in to Anthropic.');
+      throw storage.get('anthropic')?.type === 'oauth'
+        ? ProviderAuthRequiredError.signInExpired(PROVIDER_NAME)
+        : ProviderAuthRequiredError.notSignedIn(PROVIDER_NAME);
     }
 
     // Preserve Request headers and let explicit init headers override them.
@@ -237,13 +241,15 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
     headers.set('anthropic-beta', Array.from(new Set([...OAUTH_REQUIRED_BETAS, ...requestBetas])).join(','));
     headers.set('anthropic-version', '2023-06-01');
 
+    const requestUrl = url instanceof URL ? url.toString() : typeof url === 'string' ? url : url.url;
     try {
-      return await fetch(url, { ...init, headers });
+      return await rejectUnauthorizedResponse(await fetch(url, { ...init, headers }), {
+        providerName: PROVIDER_NAME,
+        requestUrl,
+      });
     } catch (error) {
       if (error && typeof error === 'object') {
-        Object.assign(error as Record<string, unknown>, {
-          requestUrl: url instanceof URL ? url.toString() : typeof url === 'string' ? url : url.url,
-        });
+        Object.assign(error as Record<string, unknown>, { requestUrl });
       }
       throw error;
     }
@@ -255,7 +261,7 @@ export function buildAnthropicOAuthFetch(opts: { authStorage?: CredentialStore }
  * Uses OAuth tokens from AuthStorage (auto-refreshes when needed)
  */
 export function opencodeClaudeMaxProvider(
-  modelId: string = 'claude-sonnet-4-20250514',
+  modelId: string = 'claude-sonnet-5-5',
   options?: {
     headers?: Record<string, string>;
     authStorage?: CredentialStore;

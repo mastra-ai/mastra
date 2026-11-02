@@ -12,7 +12,8 @@ const webToolMocks = vi.hoisted(() => ({
 vi.mock('../tools/index.js', () => ({
   createWebSearchTool: () => ({ description: 'web search' }),
   createWebExtractTool: () => ({ description: 'web extract' }),
-  createConfiguredWebTools: () => webToolMocks.configuredTools,
+  createConfiguredWebTools: () =>
+    webToolMocks.configuredTools ? Promise.resolve(webToolMocks.configuredTools) : undefined,
   hasParallelKey: () => false,
   hasTavilyKey: () => false,
   requestSandboxAccessTool: { description: 'request sandbox access' },
@@ -39,7 +40,7 @@ describe('createDynamicTools', () => {
     webToolMocks.configuredTools = undefined;
   });
 
-  it('exposes the configured model-independent web provider', () => {
+  it('exposes the configured model-independent web provider', async () => {
     const parallelSearch = { description: 'parallel search' };
     const parallelExtract = { description: 'parallel extract' };
     webToolMocks.configuredTools = {
@@ -48,7 +49,7 @@ describe('createDynamicTools', () => {
     };
 
     const getDynamicTools = createDynamicTools();
-    const tools = getDynamicTools({ requestContext: createRequestContext({}) });
+    const tools = await getDynamicTools({ requestContext: createRequestContext({}) });
 
     expect(tools.web_search).toBe(parallelSearch);
     expect(tools.web_extract).toBe(parallelExtract);

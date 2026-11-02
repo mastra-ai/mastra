@@ -17,24 +17,37 @@ import { SpeechifyVoice } from '@mastra/voice-speechify';
 
 const voice = new SpeechifyVoice({
   speechModel: {
-    name: 'simba-3.2', // Optional, defaults to 'simba-english'
+    name: 'simba-3.5', // Optional, defaults to 'simba-3.5'
     apiKey: 'your-api-key', // Optional, can use SPEECHIFY_API_KEY env var
   },
   speaker: 'harper_32', // Optional, defaults to a voice that matches the model
 });
 
-// List available speakers
+// List available speakers, read live from Speechify's catalog
 const speakers = await voice.getSpeakers();
 
 // Generate speech
 const stream = await voice.speak('Hello world', {
   speaker: 'harper_32', // Optional, defaults to constructor speaker
-  // Additional Speechify options
-  audioFormat: 'mp3',
+  language: 'en-US', // Optional, the voice's own locale when omitted
+  audioFormat: 'mp3', // Optional: mp3, ogg, aac or pcm
 });
 
 // The stream can be piped to a destination
 stream.pipe(destination);
+```
+
+### Models
+
+- `simba-3.5`: the default and Speechify's recommended model. 48 languages on one id, and every catalog voice, cloned voices included, speaks all of them. Pass `language` to choose one.
+- `simba-3.2`: English only. A non-English voice returns an error.
+- `simba-3.0`: English, German, Spanish, French, Italian and Portuguese.
+- `simba-english` and `simba-multilingual`: legacy ids. New workspaces get a `model_retired` error; from 2026-11-21 they are served by `simba-3.2` and `simba-3.5`.
+
+The model can also be overridden per request:
+
+```typescript
+const stream = await voice.speak('Olá, mundo', { language: 'pt-BR' });
 ```
 
 ## Documentation

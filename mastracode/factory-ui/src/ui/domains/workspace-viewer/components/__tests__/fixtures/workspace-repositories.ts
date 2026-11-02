@@ -1,7 +1,6 @@
-import type { WorkspaceChanges, WorkspaceFilesListing } from '../../../../../../api/types';
+import type { WorkspaceChanges } from '../../../../../../api/types';
 
 export const WORKSPACE = 'session-1';
-export const THREAD = 'thread-1';
 
 /** A session whose environment holds three repositories under one workspace root. */
 export const multiRepositoryChanges: WorkspaceChanges = {
@@ -45,22 +44,6 @@ export const multiRepositoryChanges: WorkspaceChanges = {
   ],
 };
 
-export const multiRepositoryFiles: WorkspaceFilesListing = {
-  workspacePath: WORKSPACE,
-  threadId: THREAD,
-  files: [
-    { path: 'mastra/src/agent.ts' },
-    { path: 'platform/proof.txt' },
-    { path: 'mastra-website/proof.txt' },
-    { path: '.artifacts/report.md' },
-  ],
-  repositories: [
-    { slug: 'mastra-ai/mastra', prefix: 'mastra/' },
-    { slug: 'mastra-ai/platform', prefix: 'platform/' },
-    { slug: 'mastra-ai/mastra-website', prefix: 'mastra-website/' },
-  ],
-};
-
 /** A one-repository session: no `repositories` key, paths relative to the checkout. */
 export const singleRepositoryChanges: WorkspaceChanges = {
   workspacePath: WORKSPACE,
@@ -71,10 +54,4 @@ export const singleRepositoryChanges: WorkspaceChanges = {
     { path: 'src/agent.ts', status: 'modified', additions: 4, deletions: 1 },
     { path: 'README.md', status: 'untracked', additions: 0, deletions: 0 },
   ],
-};
-
-export const singleRepositoryFiles: WorkspaceFilesListing = {
-  workspacePath: WORKSPACE,
-  threadId: THREAD,
-  files: [{ path: 'src/agent.ts' }, { path: 'README.md' }, { path: '.artifacts/report.md' }],
 };

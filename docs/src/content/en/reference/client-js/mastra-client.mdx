@@ -114,7 +114,7 @@ You can also pass `requestContext` as a `Record<string, any>`.
     name: 'getAgentController(controllerId)',
     type: 'AgentController',
     description:
-      'Retrieves a specific agent controller by the key it is registered under in `new Mastra({ agentControllers })`, which can differ from the controller `id`. `.session(resourceId)` returns a session client; call `await session.create()` to create or resume the server session.',
+      'Retrieves a specific agent controller by the key it is registered under in `new Mastra({ agentControllers })`, which can differ from the controller `id`. `.session(sessionId)` returns a session client; call `await session.create()` to create or resume the server session.',
   },
   {
     name: 'listMemoryThreads(params)',

@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { createInterface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 
@@ -157,10 +157,31 @@ export function currentTemplateSha(): string {
   return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: checkoutRoot, encoding: 'utf8' }).trim();
 }
 
+/**
+ * Resolves a path inside the template checkout, following symlinks. Returns
+ * `undefined` when it does not exist or resolves outside the checkout, since
+ * template content is untrusted.
+ */
+export function templatePath(...segments: string[]): string | undefined {
+  if (!existsSync(templatesDir)) return undefined;
+
+  try {
+    const templateRoot = realpathSync(templatesDir);
+    const target = realpathSync(resolve(templatesDir, ...segments));
+    const relativePath = relative(templateRoot, target);
+    if (relativePath === '..' || relativePath.startsWith(`..${sep}`) || isAbsolute(relativePath)) return undefined;
+    return target;
+  } catch {
+    return undefined;
+  }
+}
+
 export function templateProviderIds(): string[] {
   if (!existsSync(templatesDir)) return [];
   return readdirSync(templatesDir, { withFileTypes: true })
-    .filter(entry => entry.isDirectory() && existsSync(resolve(templatesDir, entry.name, 'actions')))
+    .filter(
+      entry => (entry.isDirectory() || entry.isSymbolicLink()) && templatePath(entry.name, 'actions') !== undefined,
+    )
     .map(entry => entry.name)
     .sort();
 }

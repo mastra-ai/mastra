@@ -3,7 +3,12 @@ import type { ExpectedStep, Trajectory, TrajectoryExpectation, TrajectoryStep } 
 import { createScorer } from '@mastra/core/evals';
 import type { MastraModelConfig } from '@mastra/core/llm';
 import { z } from 'zod/v4';
-import { getUserMessageFromRunInput, getAssistantMessageFromRunOutput, roundToTwoDecimals } from '../../utils';
+import {
+  getUserMessageFromRunInput,
+  getAssistantMessageFromRunOutput,
+  roundToTwoDecimals,
+  toToolLevelSteps,
+} from '../../utils';
 import { TRAJECTORY_EVALUATION_INSTRUCTIONS, createAnalyzePrompt, createReasonPrompt } from './prompts';
 
 export interface TrajectoryAccuracyLLMOptions {
@@ -38,8 +43,6 @@ function formatStepDetails(step: TrajectoryStep): string {
       if (step.toolResult !== undefined) parts.push(`result: ${JSON.stringify(step.toolResult)}`);
       return parts.length > 0 ? ` (${parts.join(', ')})` : '';
     }
-    case 'model_generation':
-      return step.modelId ? ` (model: ${step.modelId})` : '';
     case 'workflow_step':
       return step.output !== undefined ? ` (output: ${JSON.stringify(step.output)})` : '';
     default:
@@ -47,9 +50,11 @@ function formatStepDetails(step: TrajectoryStep): string {
   }
 }
 
+// Formats the tool-level view, so the judge sees the same steps for trace-derived and
+// message-derived trajectories (no processor_run or model_generation wrappers).
 function formatTrajectory(trajectory: Trajectory, indent: number = 0): string {
   const prefix = '  '.repeat(indent);
-  return trajectory.steps
+  return toToolLevelSteps(trajectory.steps)
     .map((step: TrajectoryStep, i: number) => {
       let line = `${prefix}${i + 1}. [${step.stepType}] ${step.name}${formatStepDetails(step)}`;
       if (step.children && step.children.length > 0) {

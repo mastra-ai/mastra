@@ -68,6 +68,7 @@ function setupMockModel(result: { object: ModerationResult } | { object: Moderat
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
         usage: { promptTokens: 10, completionTokens: 20 },
+        // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve response text coercion when a mock fixture serializes to undefined.
         text: `${JSON.stringify(currentResult.object)}`,
       };
     },
@@ -89,13 +90,17 @@ describe('ModerationProcessor', () => {
       expect(moderator.id).toBe('moderation');
     });
 
-    it('should use default categories when none specified', () => {
+    it('should use default categories when none specified', async () => {
       const model = setupMockModel({ object: createMockModerationResult(false) });
-      const moderator = new ModerationProcessor({
-        model,
-      });
+      const generateSpy = vi.spyOn(model, 'doGenerate');
+      const moderator = new ModerationProcessor({ model });
 
-      expect(moderator.id).toBe('moderation');
+      await moderator.processInput({ messages: [createTestMessage('Safe content')], abort: vi.fn() as any });
+
+      const call = JSON.stringify(generateSpy.mock.calls[0]?.[0]);
+      for (const category of ['hate/threatening', 'self-harm/instructions', 'sexual/minors', 'violence/graphic']) {
+        expect(call).toContain(`- ${category}`);
+      }
     });
 
     it('should accept custom categories', () => {

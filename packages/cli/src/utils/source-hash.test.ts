@@ -150,6 +150,24 @@ describe.sequential('source-hash', () => {
       expect(hash1).not.toBe(hash2);
     });
 
+    it.each([['factory-skills'], ['public/factory-skills']])(
+      'should include app skills in %s when projectType is factory',
+      async folder => {
+        await writeFileSynced(join(mastraDir, 'index.ts'), 'export const mastra = {}');
+        await writeFileSynced(join(testDir, 'package.json'), '{"name": "test"}');
+        await writeFileSynced(join(mastraDir, folder, 'release-notes', 'SKILL.md'), '# Release notes');
+
+        const hash1 = await computeSourceHash(testDir, mastraDir, 'factory');
+
+        // Editing only a skill must make the build stale, or mastra deploy ships the old skill.
+        await writeFileSynced(join(mastraDir, folder, 'release-notes', 'SKILL.md'), '# Release notes, changed');
+
+        const hash2 = await computeSourceHash(testDir, mastraDir, 'factory');
+
+        expect(hash1).not.toBe(hash2);
+      },
+    );
+
     it('should NOT include Factory UI inputs when projectType is undefined', async () => {
       await writeFileSynced(join(mastraDir, 'index.ts'), 'export const mastra = {}');
       await writeFileSynced(join(testDir, 'package.json'), '{"name": "test"}');

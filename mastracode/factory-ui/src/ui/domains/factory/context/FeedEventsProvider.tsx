@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { useDocumentVisible } from '../../../lib/hooks/useDocumentVisible';
+import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
 import { streamFeedEvents } from '../services/feedEvents';
 import { RequestError } from '../services/request';
 
@@ -27,7 +27,8 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
   const queryClient = useQueryClient();
   // A hidden tab must not hold a stream: browsers cap HTTP/1.1 at 6 connections
   // per host, so a few background tabs starve every other request to the app.
-  const visible = useDocumentVisible();
+  // A quick tab switch keeps the stream; only a tab left hidden releases it.
+  const visible = useRecentlyVisible();
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
@@ -35,9 +36,6 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
 
     const abort = new AbortController();
     let retry: ReturnType<typeof setTimeout> | undefined;
-
-    const refreshAttention = () =>
-      void queryClient.invalidateQueries({ queryKey: queryKeys.factoryAttentionRoot(factoryProjectId) });
 
     const connect = () => {
       streamFeedEvents(
@@ -50,13 +48,11 @@ export function FeedEventsProvider({ factoryProjectId, children }: { factoryProj
             if (workItemId) {
               void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsRoot(workItemId) });
             }
-            refreshAttention();
           },
           onConnected: () => {
             setConnected(true);
             // Whatever landed while this tab held no stream was never announced.
             void queryClient.invalidateQueries({ queryKey: queryKeys.workItemCommentsAll() });
-            refreshAttention();
           },
         },
         abort.signal,

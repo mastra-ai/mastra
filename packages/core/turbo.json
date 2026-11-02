@@ -27,10 +27,11 @@
       ]
     },
     "test": {
-      "dependsOn": ["test:unit", "test:integration"],
+      "dependsOn": ["^build"],
       "inputs": ["src/**", "tsconfig.json", "package.json", "vitest.config.*", "!**/*.md"]
     },
     "test:unit": {
+      "dependsOn": ["^build"],
       "inputs": ["src/**", "tsconfig.json", "package.json", "vitest.config.*", "!**/*.md"]
     }
   }

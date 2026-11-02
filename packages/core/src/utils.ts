@@ -4,6 +4,7 @@ import { jsonSchemaToZod } from '@mastra/schema-compat/json-to-zod';
 import { z } from 'zod/v4';
 import type { MastraPrimitives } from './action';
 import type { ToolsInput } from './agent';
+import type { FGACheckContext, MastraFGAPermissionInput } from './auth/ee';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from './background-tasks';
 import type { MastraBrowser } from './browser/browser';
 import { ErrorCategory, ErrorDomain, MastraError } from './error';
@@ -321,6 +322,26 @@ export interface ToolOptions extends Partial<ObservabilityContext> {
    * browser capabilities for web automation, screenshots, and data extraction.
    */
   browser?: MastraBrowser;
+  /**
+   * Resolves what this tool's `tools:execute` check authorizes against, when the tool's owner has its
+   * own rule (`MCPServer` checks its tools against its own resource and `fga` mapping). Without it,
+   * the check uses the standalone or agent tool resource.
+   * @internal
+   */
+  resolveExecuteFGA?: (ctx: { user: unknown; requestContext?: RequestContext }) => Promise<ToolExecuteFGACheck>;
+}
+
+/**
+ * The FGA check a tool runs before each execution, as returned by `ToolOptions.resolveExecuteFGA`.
+ * @internal
+ */
+export interface ToolExecuteFGACheck {
+  resource: { type: string; id: string };
+  permission: MastraFGAPermissionInput;
+  /** Merged into the check context the FGA provider receives. */
+  context?: FGACheckContext;
+  /** Merged into the check metadata the FGA provider receives. */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -439,6 +460,39 @@ export function makeCoreTool(
     autoResumeSuspendedTools,
     backgroundTaskEnabled,
   }).build();
+}
+
+const rebindToRequestContext = Symbol('rebindToRequestContext');
+
+/**
+ * Converts a raw tool an input processor added during a step. The processor does not run
+ * again before a suspended call resumes, so the converted tool remembers how to rebuild
+ * itself for the resuming call's request context (see {@link rebindProcessorTools}).
+ */
+export function makeProcessorCoreTool(...args: Parameters<typeof makeCoreTool>): CoreTool {
+  const [originalTool, options, ...rest] = args;
+  const tool = makeCoreTool(originalTool, options, ...rest);
+  Object.defineProperty(tool, rebindToRequestContext, {
+    value: (requestContext: RequestContext) =>
+      makeProcessorCoreTool(originalTool, { ...options, requestContext }, ...rest),
+  });
+  return tool;
+}
+
+/**
+ * Rebuilds the processor-added tools in `tools` for `requestContext`, the way request tools
+ * are rebuilt when a suspended run resumes, so an approved processor tool runs with the
+ * approver's request context like a statically defined tool does.
+ */
+export function rebindProcessorTools<T extends Record<string, unknown>>(tools: T, requestContext: RequestContext): T {
+  const rebound: Record<string, unknown> = { ...tools };
+  for (const [name, tool] of Object.entries(tools)) {
+    const rebind = (tool as { [rebindToRequestContext]?: (rc: RequestContext) => CoreTool } | undefined)?.[
+      rebindToRequestContext
+    ];
+    if (rebind) rebound[name] = rebind(requestContext);
+  }
+  return rebound as T;
 }
 
 export function makeCoreToolV5(
@@ -574,9 +628,8 @@ function detectSingleMessageCharacteristics(
     ['system', 'user', 'assistant', 'tool'].includes(message.role)
   ) {
     return 'message';
-  } else {
-    return 'other';
   }
+  return 'other';
 }
 
 export function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {

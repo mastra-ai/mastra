@@ -6,7 +6,7 @@ import {
   isWorkingFactoryRuleStage,
 } from '../rules/types.js';
 import { MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
-import { BoardDefinitionError, defineBoard } from './define-board.js';
+import { BoardDefinitionError, compileBoardDefinition, defineBoard, isDefinedBoard } from './define-board.js';
 import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
 import { allowsBuiltInBoardTransition } from './index.js';
@@ -180,8 +180,8 @@ describe('defineBoard', () => {
       expect(board.roleForPhase('shipped')).toBeUndefined();
       expect(board.phaseForRole('release')).toBe('shipping');
       expect(board.phaseForRole('work')).toBeUndefined();
-      expect(board.phases.shipping.role).toBe('release');
-      expect('role' in board.phases.queued).toBe(false);
+      expect(board.phases.shipping.kind === 'working' && board.phases.shipping.runner.context).toBe('release');
+      expect('runner' in board.phases.queued).toBe(false);
     });
 
     it('ignores inherited property names', () => {
@@ -201,15 +201,15 @@ describe('defineBoard', () => {
       expect(() => looseBoard({ queued: { title: 'Queued', kind: 'idle' } })).toThrow(BoardDefinitionError);
     });
 
-    it('rejects working phases without a valid role', () => {
-      const cases: unknown[] = [undefined, '', 'has space', 'x'.repeat(33), 42];
+    it('rejects working phases with an invalid role', () => {
+      const cases: unknown[] = ['', 'has space', 'x'.repeat(33), 42];
       for (const role of cases) {
         expect(() =>
           looseBoard({
             queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
             shipping: { title: 'Shipping', kind: 'working', role },
           }),
-        ).toThrow(new BoardDefinitionError('Working phase "shipping" must declare a valid role.'));
+        ).toThrow(new BoardDefinitionError('Working phase "shipping" must declare a valid context.'));
       }
     });
 
@@ -269,10 +269,11 @@ describe('defineBoard', () => {
     expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.phaseKind('intake')).toBe('resting');
     expect(workBoard.roleForPhase('triage')).toBe('triage');
-    expect(workBoard.roleForPhase('planning')).toBe('plan');
+    expect(workBoard.roleForPhase('planning')).toBe('work');
     expect(workBoard.roleForPhase('execute')).toBe('work');
     expect(workBoard.roleForPhase('review')).toBe('work');
-    expect(workBoard.phaseForRole('work')).toBe('execute');
+    // The first phase of the `work` context; a run started on a resting Work card uses its role's lane instead.
+    expect(workBoard.phaseForRole('work')).toBe('planning');
     expect(workBoard.isTerminal('done')).toBe(true);
     expect(workBoard.isTerminal('canceled')).toBe(true);
   });
@@ -283,11 +284,19 @@ describe('defineBoard', () => {
       expect(workBoard.isTerminal(stage), `${stage} terminal`).toBe(isTerminalFactoryRuleStage([stage]));
       expect(workBoard.isWorking(stage), `${stage} working`).toBe(isWorkingFactoryRuleStage(stage));
     }
+    // Each role's lane is a working phase. Planning runs in the `work` context; `plan` stays
+    // as the old role name for Planning's lane, so its phase reports the `work` context.
     for (const [role, stage] of Object.entries(FACTORY_ROLE_STAGES)) {
       const board = role === 'review' ? reviewBoard : workBoard;
-      expect(board.phaseForRole(role), `lane for ${role}`).toBe(stage);
-      expect(board.roleForPhase(stage), `role for ${stage}`).toBe(role);
+      expect(board.isWorking(stage), `lane for ${role}`).toBe(true);
     }
+    expect(['triage', 'planning', 'execute', 'review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
+      'triage',
+      'work',
+      'work',
+      'work',
+    ]);
+    expect(reviewBoard.roleForPhase('review')).toBe('review');
     for (const stage of Object.keys(reviewBoard.phases)) {
       expect(reviewBoard.isTerminal(stage)).toBe(isTerminalFactoryRuleStage([stage]));
       expect(reviewBoard.isWorking(stage)).toBe(isWorkingFactoryRuleStage(stage));
@@ -333,8 +342,8 @@ describe('defineBoard tool-result rules', () => {
     expect(() => define({ ship_it: () => undefined })).toThrow(BoardDefinitionError);
   });
 
-  it('declares Work’s submit_plan rule and nothing on Review', () => {
-    expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
+  it('declares Work’s submit_plan and review-verdict rules and nothing on Review', () => {
+    expect(Object.keys(workBoard.tools)).toEqual(['submit_plan', 'factory_record_review_verdict']);
     expect(Object.keys(reviewBoard.tools)).toEqual([]);
   });
 });
@@ -377,5 +386,27 @@ describe('defineBoard sourceClosed', () => {
   it('maps Work closures to its Done and Canceled phases and leaves Review undeclared', () => {
     expect(workBoard.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
     expect(reviewBoard.sourceClosed).toBeUndefined();
+  });
+});
+
+describe('isDefinedBoard', () => {
+  const config = {
+    id: 'release',
+    name: 'Release',
+    initialPhase: 'queued',
+    phases: {
+      queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped'] },
+      shipped: { name: 'Shipped', kind: 'terminal' },
+    },
+  } as const;
+
+  it('recognises a board an app declared with defineBoard(), but not a copy of it or a built-in board', () => {
+    const board = defineBoard(config);
+
+    expect(isDefinedBoard(board)).toBe(true);
+    expect(isDefinedBoard({ ...board })).toBe(false);
+    expect(isDefinedBoard(compileBoardDefinition(config))).toBe(false);
+    expect(isDefinedBoard(workBoard)).toBe(false);
+    expect(isDefinedBoard(reviewBoard)).toBe(false);
   });
 });

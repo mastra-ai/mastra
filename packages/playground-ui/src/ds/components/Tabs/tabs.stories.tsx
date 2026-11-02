@@ -210,10 +210,10 @@ export const ManyTabs: Story = {
     <Tabs defaultTab="tab1" className="w-125">
       <TabList>
         <Tab value="tab1">Overview</Tab>
-        <Tab value="tab2">Usage Metrics</Tab>
-        <Tab value="tab3">Connected Tools</Tab>
-        <Tab value="tab4">Tracing Options</Tab>
-        <Tab value="tab5">Advanced Settings</Tab>
+        <Tab value="tab2">Usage metrics</Tab>
+        <Tab value="tab3">Connected tools</Tab>
+        <Tab value="tab4">Tracing options</Tab>
+        <Tab value="tab5">Advanced settings</Tab>
       </TabList>
       <TabContent value="tab1">
         <div className="p-4 text-foreground">Content 1</div>

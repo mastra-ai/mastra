@@ -68,14 +68,13 @@ const omPart = (name: string, data: Record<string, unknown>) => ({
   data,
 });
 
-const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage =>
-  ({
-    id: 'msg-1',
-    role: 'assistant',
-    createdAt: new Date(),
-    content: { format: 2, parts: [] },
-    ...over,
-  }) as MastraDBMessage;
+const baseMessage = (over: Partial<MastraDBMessage>): MastraDBMessage => ({
+  id: 'msg-1',
+  role: 'assistant',
+  createdAt: new Date(),
+  content: { format: 2, parts: [] },
+  ...over,
+});
 
 describe('MessageRow', () => {
   describe('when a user message is a skill envelope', () => {
@@ -108,6 +107,22 @@ describe('MessageRow', () => {
       }),
     );
     expect(screen.getByText('world')).toBeTruthy();
+  });
+
+  it('shows a persisted terminal error after the partial reply', () => {
+    const { container } = renderRow(
+      baseMessage({
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'partial answer' },
+            { type: 'error', error: { name: 'APICallError', message: 'The model request failed.' } },
+          ],
+        },
+      }),
+    );
+    expect(container.textContent).toMatch(/partial answer[\s\S]*APICallError[\s\S]*The model request failed\./);
   });
 
   // The reveal only paces if the factory keeps the text part mounted as the
@@ -287,8 +302,8 @@ describe('MessageRow', () => {
     const { container } = renderRow(
       baseMessage({
         id: 'sig-1',
-        role: 'signal' as MastraDBMessage['role'],
-        type: 'reactive' as MastraDBMessage['type'],
+        role: 'signal',
+        type: 'reactive',
         content: {
           format: 2,
           metadata: { signal: { type: 'reactive', tagName: 'system-reminder' } },
@@ -306,8 +321,8 @@ describe('MessageRow', () => {
     const { container } = renderRow(
       baseMessage({
         id: 'sig-unknown',
-        role: 'signal' as MastraDBMessage['role'],
-        type: 'internal' as MastraDBMessage['type'],
+        role: 'signal',
+        type: 'internal',
         content: {
           format: 2,
           parts: [{ type: 'text', text: 'internal signal body' }],
@@ -321,8 +336,8 @@ describe('MessageRow', () => {
     renderRow(
       baseMessage({
         id: 'sig-user',
-        role: 'signal' as MastraDBMessage['role'],
-        type: 'user' as MastraDBMessage['type'],
+        role: 'signal',
+        type: 'user',
         content: { format: 2, parts: [{ type: 'text', text: 'echoed user signal' }] },
       }),
     );

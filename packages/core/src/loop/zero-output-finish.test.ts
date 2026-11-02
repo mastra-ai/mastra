@@ -1,5 +1,6 @@
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import type { Mastra } from '../mastra';
 import type { ErrorProcessor } from '../processors';
 import type { ModelManagerModelConfig } from '../stream/types';
@@ -31,8 +32,10 @@ describe('zero-output finishReason "other"', () => {
     models,
     errorProcessors,
     maxProcessorRetries,
+    tools,
   }: {
     models: ModelManagerModelConfig[];
+    tools?: Record<string, unknown>;
     errorProcessors?: ErrorProcessor[];
     maxProcessorRetries?: number;
   }) => {
@@ -46,6 +49,7 @@ describe('zero-output finishReason "other"', () => {
       models,
       errorProcessors,
       maxProcessorRetries,
+      ...(tools ? { tools } : {}),
     } as any);
 
     const chunks: any[] = [];
@@ -80,10 +84,47 @@ describe('zero-output finishReason "other"', () => {
     expect(errorChunk.payload.error.message).toContain('finishReason "other"');
   });
 
-  it('still continues the loop when finishReason "other" comes with output', async () => {
+  // Issue #26811: a non-standard finish reason after text output, with no tool calls,
+  // must end the run instead of re-sending the same request until maxSteps.
+  it.each(['other', 'unknown'] as const)(
+    'ends the run when finishReason "%s" comes with text output and no tool calls',
+    async finishReason => {
+      let call = 0;
+      const model: ModelManagerModelConfig = {
+        id: `text-then-${finishReason}`,
+        maxRetries: 0,
+        model: new MockLanguageModelV2({
+          doStream: async () => {
+            call++;
+            return {
+              stream: convertArrayToReadableStream([
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Hello.' },
+                { type: 'text-end', id: 'text-1' },
+                { type: 'finish', finishReason, usage: testUsage },
+              ]),
+            };
+          },
+        }),
+      };
+
+      const chunks = await runLoop({ models: [model] });
+
+      expect(call).toBe(1);
+      expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
+      const text = chunks
+        .filter(chunk => chunk.type === 'text-delta')
+        .map(chunk => chunk.payload.text)
+        .join('');
+      expect(text).toBe('Hello.');
+      expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+    },
+  );
+
+  it('still continues the loop when finishReason "other" comes with a client tool call', async () => {
     let call = 0;
     const model: ModelManagerModelConfig = {
-      id: 'other-with-output',
+      id: 'other-with-tool-call',
       maxRetries: 0,
       model: new MockLanguageModelV2({
         doStream: async () => {
@@ -92,9 +133,12 @@ describe('zero-output finishReason "other"', () => {
             stream: convertArrayToReadableStream(
               call === 1
                 ? [
-                    { type: 'text-start', id: 'text-1' },
-                    { type: 'text-delta', id: 'text-1', delta: 'partial output' },
-                    { type: 'text-end', id: 'text-1' },
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'call-1',
+                      toolName: 'tool1',
+                      input: '{ "value": "value" }',
+                    },
                     { type: 'finish', finishReason: 'other', usage: testUsage },
                   ]
                 : [
@@ -109,12 +153,19 @@ describe('zero-output finishReason "other"', () => {
       }),
     };
 
-    const chunks = await runLoop({ models: [model] });
+    const chunks = await runLoop({
+      models: [model],
+      tools: {
+        tool1: {
+          inputSchema: z.object({ value: z.string() }),
+          execute: async ({ value }: { value: string }) => `${value}-result`,
+        },
+      },
+    });
 
-    // 'other' with output is non-terminal: the loop continues and finishes on 'stop'.
     expect(call).toBe(2);
+    expect(chunks.some(chunk => chunk.type === 'tool-result')).toBe(true);
     expect(chunks.some(chunk => chunk.type === 'error')).toBe(false);
-    expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
   });
 
   it('routes the synthetic error through error processors for bounded retries', async () => {

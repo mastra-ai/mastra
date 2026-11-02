@@ -3,7 +3,8 @@ import { redactStreamChunk, serializeStreamChunk } from '@mastra/server/server-a
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { Observable, from, of, switchMap } from 'rxjs';
+import type { Observable } from 'rxjs';
+import { from, of, switchMap } from 'rxjs';
 
 import { MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';

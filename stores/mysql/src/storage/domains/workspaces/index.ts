@@ -100,6 +100,7 @@ export class WorkspacesMySQL extends WorkspacesStorage {
    * Currently no default indexes are defined for workspaces.
    */
   async createDefaultIndexes(): Promise<void> {
+    // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
     if (this.#skipDefaultIndexes) return;
     // No default indexes for workspaces domain
   }

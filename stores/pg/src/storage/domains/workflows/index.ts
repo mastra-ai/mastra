@@ -1,6 +1,8 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
   mergeWorkflowStepResult,
+  assertWorkflowStepGuard,
+  isWorkflowStepConflictError,
   normalizePerPage,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_WORKFLOW_RUN_OWNERS,
@@ -19,6 +21,8 @@ import type {
   RenewRunOwnershipResult,
   RunFence,
   RunOwnershipRecord,
+  WorkflowStepStartGuard,
+  WorkflowStepCompletionGuard,
   UpdateWorkflowStateOptions,
   StorageListWorkflowRunsInput,
   WorkflowRun,
@@ -30,7 +34,7 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import { schemaNamePrefix } from '../../../shared/schema-name';
 import { PgDB, resolvePgConfig, generateTableSQL, generateIndexSQL } from '../../db';
 import type { PgDomainConfig } from '../../db';
@@ -179,6 +183,18 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   supportsConcurrentUpdates(): boolean {
     return true;
+  }
+
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
+  }
+
+  /** SQL for a snapshot's status. Legacy json/text columns can hold escapes that fail a jsonb cast (#11563). */
+  async #statusExpression(column: string): Promise<string> {
+    const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
+    return snapshotType === 'jsonb'
+      ? `${column} ->> 'status'`
+      : `regexp_replace(${column}::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status'`;
   }
 
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
@@ -488,6 +504,10 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
   }
 
+  supportsWorkflowStepGuards(): boolean {
+    return true;
+  }
+
   async updateWorkflowResults({
     workflowName,
     runId,
@@ -496,6 +516,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     requestContext,
     state,
     fence: explicitFence,
+    startGuard,
+    completionGuard,
   }: {
     workflowName: string;
     runId: string;
@@ -504,6 +526,8 @@ export class WorkflowsPG extends WorkflowsStorage {
     requestContext: Record<string, any>;
     state?: Record<string, any>;
     fence?: RunFence;
+    startGuard?: WorkflowStepStartGuard;
+    completionGuard?: WorkflowStepCompletionGuard;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
     const fence = resolveRunFence(this, explicitFence, runId);
     try {
@@ -520,16 +544,38 @@ export class WorkflowsPG extends WorkflowsStorage {
         );
 
         if (!existingSnapshotResult) {
+          assertWorkflowStepGuard({ snapshot: null, stepId, startGuard, completionGuard });
           return {};
         }
 
         const existingSnapshot = existingSnapshotResult.snapshot;
         const snapshot: WorkflowRunState =
           typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
+        assertWorkflowStepGuard({ snapshot, stepId, startGuard, completionGuard });
 
-        // Merge the new step result using element-wise array merging
-        // (critical for concurrent foreach iteration results)
-        mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
+        if (completionGuard?.pruneOnly) {
+          snapshot.context[stepId] = {
+            ...result,
+            metadata: { ...snapshot.context[stepId]?.metadata, ...result.metadata, __continuationStarted: true },
+          };
+        } else {
+          // Merge the new step result using element-wise array merging
+          // (critical for concurrent foreach iteration results)
+          mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
+        }
+        const previous = startGuard?.previousStep;
+        const previousResult = previous && snapshot.context[previous.stepId];
+        if (
+          previous &&
+          previous.stepId !== stepId &&
+          previousResult?.status === 'success' &&
+          previousResult.metadata?.startedBy === previous.eventId
+        ) {
+          snapshot.context[previous.stepId] = {
+            ...previous.result,
+            metadata: { ...previousResult.metadata, ...previous.result.metadata, __continuationStarted: true },
+          };
+        }
 
         // Upsert the snapshot within the same transaction
         const now = new Date();
@@ -546,7 +592,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return snapshot.context;
       });
     } catch (error) {
-      if (isRunFenceConflictError(error)) throw error;
+      if (isRunFenceConflictError(error) || isWorkflowStepConflictError(error)) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('PG', 'UPDATE_WORKFLOW_RESULTS', 'FAILED'),
@@ -646,6 +692,7 @@ export class WorkflowsPG extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -654,25 +701,31 @@ export class WorkflowsPG extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     try {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
       const sanitizedSnapshot = toPgJson(snapshot);
-      await withRunFence(
+      // The status guard sits on the upsert itself, so a concurrent status change can't land
+      // between the check and the write. An empty list matches no status.
+      const guard =
+        expectedStatus === undefined ? '' : ` WHERE ${await this.#statusExpression('t.snapshot')} = ANY($9::text[])`;
+      const written = await withRunFence(
         this.#db.client,
         this.#runOwnersTable(),
         resolveRunFence(this, fence, runId),
         'persistWorkflowSnapshot',
         q =>
-          q.none(
+          q.oneOrNone<{ written: number }>(
             `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t
                  (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8`,
+                 SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8${guard}
+                 RETURNING 1 AS written`,
             [
               workflowName,
               runId,
@@ -682,9 +735,13 @@ export class WorkflowsPG extends WorkflowsStorage {
               updatedAtValue,
               createdAtValue,
               updatedAtValue,
+              ...(expectedStatus === undefined
+                ? []
+                : [Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]]),
             ],
           ),
       );
+      return written !== null;
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
@@ -692,6 +749,34 @@ export class WorkflowsPG extends WorkflowsStorage {
           id: createStorageErrorId('PG', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    try {
+      const statusExpr = await this.#statusExpression('snapshot');
+      const row = await this.#db.client.oneOrNone<{ status: unknown }>(
+        `SELECT ${statusExpr} AS status FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE "workflow_name" = $1 AND "run_id" = $2 ORDER BY "createdAt" DESC LIMIT 1`,
+        [workflowName, runId],
+      );
+      const status = row?.status;
+      return (status ?? null) as WorkflowRunStatus | null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'LOAD_WORKFLOW_RUN_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
         },
         error,
       );

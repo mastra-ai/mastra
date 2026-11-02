@@ -862,7 +862,10 @@ name: Tyler
       });
       const omResource = createOM(storage, {
         scope: 'resource',
-        observerModel: createMockObserverModel(undefined, gatewayMetadata),
+        observerModel: createMockObserverModel(
+          `<observations>\n<thread id="${threadId}">\n* User discussed various topics in the conversation\n</thread>\n</observations>`,
+          gatewayMetadata,
+        ),
       });
       const messages = createBulkMessages(10, threadId);
       const hooks = {

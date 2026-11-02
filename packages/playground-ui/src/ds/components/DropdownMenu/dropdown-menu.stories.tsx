@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import {
+  ArrowUpDown,
+  CircleDashed,
   Cloud,
   CreditCard,
   Keyboard,
@@ -8,15 +10,19 @@ import {
   Mail,
   MessageSquare,
   Plus,
+  RotateCcw,
   Settings,
+  Settings2,
   User,
   UserPlus,
+  UserRound,
   Users,
 } from 'lucide-react';
 import { useState } from 'react';
 import { GithubIcon } from '../../icons/GithubIcon';
 import { Button } from '../Button';
 import { DropdownMenu } from './dropdown-menu';
+import type { DropdownMenuRadioOption } from './dropdown-menu';
 
 const meta: Meta<typeof DropdownMenu> = {
   title: 'Elements/DropdownMenu',
@@ -78,7 +84,7 @@ export const Variants: Story = {
 export const CustomRender: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger render={<Button size="md">Open Menu</Button>} />
+      <DropdownMenu.Trigger render={<Button size="md">Open menu</Button>} />
       {menuItems}
     </DropdownMenu>
   ),
@@ -97,6 +103,21 @@ export const Compact: Story = {
           <Settings />
           Settings
         </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  ),
+};
+
+export const CompactWithManyItems: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button size="sm">Open long menu</Button>} />
+      <DropdownMenu.Content size="sm" className="w-40 min-w-0">
+        {Array.from({ length: 30 }, (_, i) => (
+          <DropdownMenu.Item key={i} size="sm">
+            Item {i + 1}
+          </DropdownMenu.Item>
+        ))}
       </DropdownMenu.Content>
     </DropdownMenu>
   ),
@@ -169,7 +190,7 @@ export const WithLabelsAndGroups: Story = {
           </DropdownMenu.Item>
           <DropdownMenu.Item>
             <Plus />
-            <span>New Team</span>
+            <span>New team</span>
             <DropdownMenu.Shortcut>Ctrl+T</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
         </DropdownMenu.Group>
@@ -197,10 +218,10 @@ export const WithCheckboxItems: Story = {
           <DropdownMenu.Label>Appearance</DropdownMenu.Label>
           <DropdownMenu.Separator />
           <DropdownMenu.CheckboxItem checked={showStatusBar} onCheckedChange={setShowStatusBar}>
-            Status Bar
+            Status bar
           </DropdownMenu.CheckboxItem>
           <DropdownMenu.CheckboxItem checked={showActivityBar} onCheckedChange={setShowActivityBar}>
-            Activity Bar
+            Activity bar
           </DropdownMenu.CheckboxItem>
           <DropdownMenu.CheckboxItem checked={showPanel} onCheckedChange={setShowPanel}>
             Panel
@@ -226,6 +247,84 @@ export const WithRadioItems: Story = {
             <DropdownMenu.RadioItem value="bottom">Bottom</DropdownMenu.RadioItem>
             <DropdownMenu.RadioItem value="right">Right</DropdownMenu.RadioItem>
           </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
+  },
+};
+
+type ListSort = 'activity' | 'updated' | 'created';
+type OwnerScope = 'mine' | 'all';
+type ItemStatus = 'all' | 'working' | 'idle';
+
+const DEFAULT_LIST_SORT: ListSort = 'activity';
+const DEFAULT_OWNER_SCOPE: OwnerScope = 'mine';
+const DEFAULT_ITEM_STATUS: ItemStatus = 'all';
+
+const listSortOptions: readonly DropdownMenuRadioOption<ListSort>[] = [
+  { value: 'activity', label: 'Activity' },
+  { value: 'updated', label: 'Last updated' },
+  { value: 'created', label: 'Last created' },
+];
+
+const ownerScopeOptions: readonly DropdownMenuRadioOption<OwnerScope>[] = [
+  { value: 'mine', label: 'Mine' },
+  { value: 'all', label: 'Everyone' },
+];
+
+const itemStatusOptions: readonly DropdownMenuRadioOption<ItemStatus>[] = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'working', label: 'Working' },
+  { value: 'idle', label: 'Idle' },
+];
+
+/** Each `RadioSub` row shows its selected label, so a properties menu reads its current state without opening a submenu. */
+export const WithRadioSubs: Story = {
+  render: function Render() {
+    const [sort, setSort] = useState<ListSort>(DEFAULT_LIST_SORT);
+    const [owner, setOwner] = useState<OwnerScope>(DEFAULT_OWNER_SCOPE);
+    const [status, setStatus] = useState<ItemStatus>(DEFAULT_ITEM_STATUS);
+    const changed = sort !== DEFAULT_LIST_SORT || owner !== DEFAULT_OWNER_SCOPE || status !== DEFAULT_ITEM_STATUS;
+
+    return (
+      <DropdownMenu>
+        <DropdownMenu.Trigger size="icon-sm" variant={changed ? 'default' : 'ghost'} tooltip="List properties">
+          <Settings2 aria-hidden />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end">
+          <DropdownMenu.RadioSub
+            label="Sort"
+            icon={<ArrowUpDown aria-hidden />}
+            options={listSortOptions}
+            value={sort}
+            onValueChange={setSort}
+          />
+          <DropdownMenu.RadioSub
+            label="Owner"
+            icon={<UserRound aria-hidden />}
+            options={ownerScopeOptions}
+            value={owner}
+            onValueChange={setOwner}
+          />
+          <DropdownMenu.RadioSub
+            label="Status"
+            icon={<CircleDashed aria-hidden />}
+            options={itemStatusOptions}
+            value={status}
+            onValueChange={setStatus}
+          />
+          <DropdownMenu.Separator />
+          <DropdownMenu.Item
+            disabled={!changed}
+            onClick={() => {
+              setSort(DEFAULT_LIST_SORT);
+              setOwner(DEFAULT_OWNER_SCOPE);
+              setStatus(DEFAULT_ITEM_STATUS);
+            }}
+          >
+            <RotateCcw aria-hidden />
+            <span>Reset to default</span>
+          </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
     );
@@ -364,6 +463,9 @@ export const KitchenSink: Story = {
             <DropdownMenu.RadioItem value="small">Radio small</DropdownMenu.RadioItem>
             <DropdownMenu.RadioItem value="medium">Radio medium</DropdownMenu.RadioItem>
           </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Label inset>Inset label</DropdownMenu.Label>
+          <DropdownMenu.Item inset>Inset item</DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger>

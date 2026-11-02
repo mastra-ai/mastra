@@ -34,7 +34,7 @@
     "fast-xml-parser": "5.11.2",
     "fflate": "0.8.3",
     "pdfjs-dist": "6.4.299",
-    "zod": "4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@mastra/evals": "1.10.5",

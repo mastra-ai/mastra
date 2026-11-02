@@ -49,6 +49,9 @@ Each entry's `id` is the key the controller is registered under in `new Mastra({
 Get an instance of an agent controller by the key it's registered under in `new Mastra({ agentControllers })`. The key can differ from the controller's `id`. In this example, pass `'coding'`, not `'coding-controller'`:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { AgentController } from '@mastra/core/agent-controller'
+
 const codingController = new AgentController({ id: 'coding-controller', agent, modes })
 
 export const mastra = new Mastra({
@@ -84,11 +87,19 @@ Returns the controller's workspace status.
 
 Returns: `Promise<AgentControllerWorkspaceStatus>`
 
-### `session(resourceId, scope?)`
+### `session(sessionId)`
 
-Returns an `AgentControllerSession` bound to one resource. Sessions are get-or-create on the server, so calling `create()` on the same `resourceId` and `scope` resumes the existing conversation instead of forking it.
+Returns an `AgentControllerSession` addressed by its session id. Every request goes to `/agent-controller/:controllerId/sessions/:sessionId/...`. Sessions are get-or-create on the server, so calling `create()` with the same `sessionId` resumes the existing conversation instead of forking it.
 
-Pass `scope` to address an independent session over the same `resourceId`. Sessions that share a `resourceId` but use different scopes each get their own run loop, thread binding, mode, model, and state. A common pattern is one session per git worktree with the worktree path as the scope. The scope travels on every request as a `sessionScope` query parameter.
+Sessions that share a resource but use different session ids each get their own run loop, thread binding, mode, model, and state. Their stored threads and resource-scoped memory belong to the shared resource. Pass the resource to `create()`:
+
+```typescript
+const runA = client.getAgentController('code').session('run-a')
+await runA.create({ resourceId: 'factory-1' })
+
+const runB = client.getAgentController('code').session('run-b')
+await runB.create({ resourceId: 'factory-1' })
+```
 
 ## Session methods
 
@@ -98,6 +109,13 @@ Creates or resumes the session.
 
 <PropertiesTable
   content={[
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description:
+      "Memory resource that owns the session's threads. Defaults to the session id, so a session created with only an id keeps one resource of its own.",
+  },
   {
     name: 'tags',
     type: 'Record<string, string>',
@@ -147,6 +165,14 @@ Subscribes to the session's event stream over SSE. The promise resolves once the
     isOptional: true,
     description:
       'Re-establishes the stream after an established stream drops. Retries back off exponentially from `delayMs` (default `1000`) up to `maxDelayMs` (default `30000`). `maxRetries` (default `Infinity`) bounds the attempts per outage and resets once a connection is re-established. When retries are exhausted, `onError` fires. A reconnect request that fails with a 4xx (other than `408` and `429`) or `501` stops reconnecting immediately and passes that `MastraClientError` to `onError`.',
+  },
+  {
+    name: 'idleTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '60000',
+    description:
+      'Treats the stream as dropped after this many milliseconds without receiving any data. Server heartbeats, sent every 25 seconds, reset the timer, so only a silent connection, such as one left half-open by laptop sleep or a proxy timeout, trips it. A timeout is handled like any other drop: it triggers `reconnect` and `onReconnect` when reconnect is enabled, otherwise `onError`. Also bounds opening the stream: `subscribe()` rejects, and a reconnect attempt counts as failed, when no response arrives in time. Set to `0` to disable.',
   },
 ]}
 />
@@ -205,7 +231,7 @@ Switches the active mode.
 
 ### `switchModel(modelId, options?)`
 
-Switches the session's active model and persists it as the current model for the active thread. Switching modes doesn't change it. Pass `{ thinkingLevel }` as the second argument to apply and persist a thinking level with the model.
+Switches the session's active model and persists it as the current model for the active thread, independently of mode changes. Pass `{ thinkingLevel }` as the second argument to apply and persist a thinking level with the model.
 
 ```typescript
 await session.switchModel('__GATEWAY_ANTHROPIC_MODEL_SONNET__', {

@@ -1,7 +1,13 @@
 import { useEffect, useId, useRef } from 'react';
-import { contour, factoryPaths, panel } from './onboarding-drawing';
+import { contour, DRAWING_SURFACE_COUNT, factoryPaths, panel } from './onboarding-drawing';
 import type { AccountsMode, DrawingScene } from './onboarding-drawing';
 import { createOnboardingMotion } from './onboarding-motion';
+
+const FOREGROUND_SURFACES = [0, 1, 2];
+const BACKGROUND_SURFACES = Array.from(
+  { length: DRAWING_SURFACE_COUNT - FOREGROUND_SURFACES.length },
+  (_, index) => FOREGROUND_SURFACES.length + index,
+);
 
 /** The SVG stays mounted between steps; only its coordinates and the separate HTML labels change. */
 export function OnboardingIllustration({ scene, mode }: { scene: DrawingScene; mode: AccountsMode }) {
@@ -60,7 +66,7 @@ export function OnboardingIllustration({ scene, mode }: { scene: DrawingScene; m
       {[0, 1, 2].map(index => (
         <path key={index} data-link className="onboarding-sketch-link" />
       ))}
-      {[3, 4, 5].map(index => (
+      {BACKGROUND_SURFACES.map(index => (
         <g key={index} data-surface={index}>
           <path data-face className="onboarding-sketch-surface" />
           <path data-marks className="onboarding-sketch-detail" />
@@ -69,7 +75,7 @@ export function OnboardingIllustration({ scene, mode }: { scene: DrawingScene; m
       {[0, 1, 2].map(index => (
         <circle key={index} data-packet r={3} className="onboarding-sketch-surface" />
       ))}
-      {[0, 1, 2].map(index => (
+      {FOREGROUND_SURFACES.map(index => (
         <g key={index} data-surface={index}>
           <path data-face className="onboarding-sketch-surface" />
           <path data-marks className="onboarding-sketch-detail" />

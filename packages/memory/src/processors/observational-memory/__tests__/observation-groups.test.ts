@@ -7,8 +7,8 @@ import {
   reconcileObservationGroupsFromReflection,
   renderObservationGroupsForReflection,
   stripObservationGroups,
-  type ObservationGroup,
 } from '../observation-groups';
+import type { ObservationGroup } from '../observation-groups';
 
 function group(id: string, range: string, content = '- Fact'): ObservationGroup {
   return { id, range, content };

@@ -131,8 +131,6 @@ describe('durable output processor errors', () => {
   it.each([
     ['durable', 'start'],
     ['evented', 'start'],
-    ['durable', 'step-start'],
-    ['evented', 'step-start'],
     ['durable', 'step-finish'],
     ['evented', 'step-finish'],
     ['durable', 'finish'],
@@ -184,6 +182,58 @@ describe('durable output processor errors', () => {
       expect((streamError as Error).message).toContain(`threw on ${chunkType}`);
       await expect(output.text).rejects.toThrow(`threw on ${chunkType}`);
       await expect(output.finishReason).rejects.toThrow(`threw on ${chunkType}`);
+      cleanup();
+    },
+    15_000,
+  );
+
+  // The producer runs output processors on step-start, like on model chunks (#28231),
+  // so a crash there fails the run with an error chunk instead of throwing from the stream.
+  it.each(['durable', 'evented'] as const)(
+    '%s engine fails the run when an output processor throws on step-start',
+    async engine => {
+      const pubsub = new EventEmitterPubSub();
+      pubsubs.push(pubsub);
+      const agent = new Agent({
+        id: `output-processor-error-${engine}-producer-step-start`,
+        name: `Output Processor Error ${engine} producer step-start`,
+        instructions: 'You are a test agent.',
+        model: createModel(['hello']) as LanguageModelV2,
+        outputProcessors: [
+          {
+            id: 'throwing-processor',
+            name: 'Throwing processor',
+            processOutputStream: async ({ part }) => {
+              if (part.type === 'step-start') {
+                throw new Error('threw on step-start');
+              }
+              return part;
+            },
+          },
+        ],
+      });
+      const outputAgent =
+        engine === 'durable' ? createDurableAgent({ agent, pubsub }) : createEventedAgent({ agent, pubsub });
+
+      new Mastra({
+        agents: { [agent.id]: outputAgent as any },
+        storage: new InMemoryStore(),
+        pubsub,
+        logger: false,
+      });
+
+      const { output, cleanup } = await outputAgent.stream('Say hello');
+      const chunks: any[] = [];
+      for await (const chunk of output.fullStream) {
+        chunks.push(chunk);
+      }
+
+      const errors = chunks.filter(chunk => chunk.type === 'error');
+      expect(errors).toHaveLength(1);
+      expect(JSON.stringify(errors[0].payload)).toContain('threw on step-start');
+      expect(chunks.some(chunk => chunk.type === 'step-start')).toBe(false);
+      expect(chunks.some(chunk => chunk.type === 'text-delta')).toBe(false);
+      expect(await output.finishReason).toBe('error');
       cleanup();
     },
     15_000,

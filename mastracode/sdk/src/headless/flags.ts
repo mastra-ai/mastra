@@ -154,6 +154,7 @@ export const FLAGS: FlagSpec[] = [
       '  human  streaming text to stdout, activity to stderr',
       '  json   single final JSON object (text, usage, tools)',
       '  jsonl  newline-delimited JSON event stream',
+      '         (omits display_state_changed UI snapshots)',
     ],
   },
   {

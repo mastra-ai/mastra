@@ -4,7 +4,8 @@ import type { ReactNode } from 'react';
 import { MemoryRouter, useSearchParams } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { useTargetFilterParams, type TargetFilterParamsOptions } from '../use-target-filter-params';
+import { useTargetFilterParams } from '../use-target-filter-params';
+import type { TargetFilterParamsOptions } from '../use-target-filter-params';
 
 const renderParams = (initialEntry: string, options?: TargetFilterParamsOptions) => {
   const wrapper = ({ children }: { children: ReactNode }) => (

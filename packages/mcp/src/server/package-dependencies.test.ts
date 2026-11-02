@@ -10,9 +10,7 @@ const packageRoot = new URL('../../', import.meta.url);
  * consumers whose package manager skips automatic peer installation (e.g. npm with
  * --legacy-peer-deps), see https://github.com/mastra-ai/mastra/issues/21974.
  */
-const UNDECLARED_PEER_ALLOWLIST: Record<string, string> = {
-  zod: 'always resolvable: @modelcontextprotocol/sdk and @mastra/core (our required peer) ship zod as a regular dependency',
-};
+const UNDECLARED_PEER_ALLOWLIST: Record<string, string> = {};
 
 async function readPackageJson(url: URL): Promise<Record<string, any>> {
   return JSON.parse(await readFile(url, 'utf8'));

@@ -13,13 +13,11 @@ import { useCreateAgentControllerThreadMutation } from '../useAgentControllerThr
 import { useAgentControllerThreads } from '../useAgentControllerThreads';
 
 const controllerId = 'code';
-const resourceId = 'resource-test';
-const scope = '/sandbox/mastra';
-const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${resourceId}`;
+const sessionId = 'session-test';
+const sessionUrl = `${TEST_BASE_URL}/api/agent-controller/${controllerId}/sessions/${sessionId}`;
 const hookArgs = {
   agentControllerId: controllerId,
-  resourceId,
-  scope,
+  sessionId,
   baseUrl: TEST_BASE_URL,
   enabled: true,
 };

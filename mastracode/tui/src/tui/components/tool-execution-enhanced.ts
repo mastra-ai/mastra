@@ -15,10 +15,9 @@ import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import type { TaskItemInput } from '@mastra/core/signals';
 import chalk from 'chalk';
-import { highlight } from 'cli-highlight';
-import type { Theme as HighlightTheme } from 'cli-highlight';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { formatStatusDuration } from '../status-duration.js';
+import { highlightCode } from '../syntax-highlight.js';
 import {
   BOX_INDENT,
   theme,
@@ -58,33 +57,6 @@ function normalizeHexColor(color: string | undefined): string | undefined {
   if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined;
   return color;
 }
-
-/**
- * Syntax roles mapped onto the theme's semantic colors. theme.fg resolves the
- * active theme lazily and contrast-adapts, so code previews recolor with
- * custom themes and stay readable on any background.
- */
-const CODE_HIGHLIGHT_THEME: HighlightTheme = {
-  default: text => theme.fg('toolArgs', text),
-  keyword: text => theme.fg('textHighlight', text),
-  built_in: text => theme.fg('function', text),
-  type: text => theme.fg('function', text),
-  literal: text => theme.fg('error', text),
-  number: text => theme.fg('number', text),
-  string: text => theme.fg('success', text),
-  regexp: text => theme.fg('error', text),
-  title: text => theme.fg('function', text),
-  function: text => theme.fg('function', text),
-  params: text => theme.fg('secondary', text),
-  comment: text => theme.fg('muted', text),
-  meta: text => theme.fg('muted', text),
-  attr: text => theme.fg('number', text),
-  variable: text => theme.fg('secondary', text),
-  tag: text => theme.fg('textHighlight', text),
-  name: text => theme.fg('textHighlight', text),
-};
-
-const codeHighlightTheme = (): HighlightTheme => CODE_HIGHLIGHT_THEME;
 
 const SHELL_CONTROL_WORDS = new Set([
   'if',
@@ -666,11 +638,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private highlightCodePreview(preview: string): string {
     const path = this.getFirstStringArg('path');
     try {
-      return highlight(preview, {
-        language: getLanguageFromPath(path),
-        ignoreIllegals: true,
-        theme: codeHighlightTheme(),
-      });
+      return highlightCode(preview, getLanguageFromPath(path));
     } catch {
       return theme.fg('toolArgs', preview);
     }

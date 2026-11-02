@@ -192,7 +192,7 @@ export function DuplicateDatasetDialog({
           <DialogFooter>
             <DialogCancel>Cancel</DialogCancel>
             <DialogAction type="submit" disabled={!name.trim()}>
-              {isDuplicating ? 'Duplicating...' : 'Duplicate Dataset'}
+              {isDuplicating ? 'Duplicating...' : 'Duplicate dataset'}
             </DialogAction>
           </DialogFooter>
         </Form>

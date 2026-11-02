@@ -73,9 +73,10 @@ export const mastra = new Mastra({
   {
     name: 'streamIdleTtlMs',
     type: 'number',
-    description: 'Sliding idle expiry refreshed on stream writes. Set to 0 to disable.',
+    description:
+      'Sliding idle expiry in milliseconds, refreshed on every write to a stream. A stream left idle for the full duration is deleted with its entries and consumer groups. Keep it above the longest time a grouped worker may be offline while still expecting to replay its backlog. Set to 0 to disable expiry; streams that never reach `clearTopic` then stay in Valkey forever.',
     isOptional: true,
-    defaultValue: '0',
+    defaultValue: '604800000 (7 days)',
   },
   {
     name: 'reclaimIntervalMs',
@@ -124,6 +125,10 @@ Use `startFrom: "latest"` to skip retained entries when a group is first created
 When a subscriber calls `nack`, the event is republished with an incremented `deliveryAttempt` and the original is acknowledged. Once an event reaches `maxDeliveryAttempts`, it's dropped instead of redelivered. Separately, each subscription periodically reclaims events that an earlier consumer in the group read but never acknowledged, controlled by `reclaimIntervalMs` and `reclaimIdleMs`.
 
 A subscription never reclaims an event its own handler is still processing, so a slow handler isn't invoked twice for the same event. If a handler hangs, a different consumer in the group reclaims the event once it has been idle for `reclaimIdleMs`. In a single-consumer group there's no sibling to do that, so set `inFlightTimeoutMs` to have the subscription nack the event itself after that long.
+
+## Server configuration
+
+Set `maxmemory-policy` to `noeviction`. Consumer groups, unacknowledged entries, and lease keys are live state, and any evicting policy deletes them when the server reaches `maxmemory`, dropping events and leases. When `maxmemory` is set and the policy isn't `noeviction`, `ValkeyStreamsPubSub` logs a warning once after it first connects. To reclaim streams created without a TTL, follow the [Redis Streams runbook](/reference/pubsub/redis-streams#reclaim-streams-created-without-a-ttl) with `valkey-cli`.
 
 ## Cleanup and shutdown
 

@@ -16,6 +16,7 @@
 import { acquireMaintenanceLock, MaintenanceLockError } from '@mastra/code-sdk/utils/maintenance-lock';
 import { runStorageMaintenance } from '@mastra/code-sdk/utils/storage-maintenance';
 
+import { requireLocal } from '../runtime.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handlePruneCommand(ctx: SlashCommandContext, args: string[] = []): Promise<void> {
@@ -65,8 +66,8 @@ export async function handlePruneCommand(ctx: SlashCommandContext, args: string[
     const quiesceSteps = ['MCP disconnect', 'stop workers', 'stop intervals'] as const;
     const quiesceResults = await Promise.allSettled([
       ctx.mcpManager?.disconnect(),
-      ctx.controller.getMastra()?.stopWorkers(),
-      ctx.controller.stopIntervals(),
+      requireLocal(ctx.state, '/prune').controller.getMastra()?.stopWorkers(),
+      requireLocal(ctx.state, '/prune').controller.stopIntervals(),
     ]);
     for (const [i, result] of quiesceResults.entries()) {
       if (result.status === 'rejected') {

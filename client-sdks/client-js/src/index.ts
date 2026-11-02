@@ -16,6 +16,15 @@ export type {
   GetAgentCardOptions,
   VerifyAgentCardSignatureOptions,
 } from './resources/a2a';
+export type {
+  KnowledgeActivityResponse,
+  KnowledgeChangeNotice,
+  KnowledgeGraphResponse,
+  KnowledgeInstanceSummary,
+  KnowledgePageResponse,
+  KnowledgeSearchResponse,
+  KnowledgeTreeResponse,
+} from './resources/knowledge';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
 export type {
   MastraDBMessage,
@@ -46,8 +55,28 @@ export type {
   QueryTracesPaginatedInput,
 } from './resources/observability';
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
+export type {
+  DashboardColumn,
+  DashboardDefaults,
+  DashboardDefinition,
+  DashboardDefinitionEnvelope,
+  DashboardDrilldown,
+  DashboardDrilldownTarget,
+  DashboardQuery,
+  DashboardRow,
+  DashboardWidget,
+  DashboardBuiltInWidgetKind,
+  DashboardWidgetView,
+  NormalizedDashboardDefinition,
+  NormalizedDashboardQuery,
+} from '@mastra/core/storage';
 export type { GetMetricTimeSeriesResponse } from './types';
 export type {
+  AggregateTracesArgs,
+  AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
+  TraceAggregateDiscovery,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,

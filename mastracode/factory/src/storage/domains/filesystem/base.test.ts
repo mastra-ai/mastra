@@ -91,6 +91,21 @@ describe('FilesystemStorage', () => {
     ]);
   });
 
+  it('clears every thread snapshot for one resource and keeps other resources', async () => {
+    await domain.replaceFiles({ resourceId: 'resource-1', threadId: 'thread-1', files: [{ path: 'first.ts' }] });
+    await domain.replaceFiles({ resourceId: 'resource-1', threadId: 'thread-2', files: [{ path: 'second.ts' }] });
+    await domain.replaceFiles({ resourceId: 'resource-2', threadId: 'thread-1', files: [{ path: 'other.ts' }] });
+
+    await expect(domain.deleteResourceFiles({ resourceId: 'resource-1' })).resolves.toBe(2);
+
+    await expect(domain.listFiles({ resourceId: 'resource-1', threadId: 'thread-1' })).resolves.toEqual([]);
+    await expect(domain.listFiles({ resourceId: 'resource-1', threadId: 'thread-2' })).resolves.toEqual([]);
+    await expect(domain.listFiles({ resourceId: 'resource-2', threadId: 'thread-1' })).resolves.toEqual([
+      { path: 'other.ts' },
+    ]);
+    await expect(domain.deleteResourceFiles({ resourceId: ' ' })).rejects.toThrow('resourceId must not be empty');
+  });
+
   it('clears all snapshots', async () => {
     await domain.replaceFiles({ resourceId: 'resource-1', threadId: 'thread-1', files: [{ path: 'first.ts' }] });
     await domain.replaceFiles({ resourceId: 'resource-2', threadId: 'thread-2', files: [{ path: 'second.ts' }] });

@@ -294,7 +294,6 @@ describe('Board card buttons move the card', () => {
       workItems: [{ ...linearWorkItem, stages: ['intake'] }],
     });
     renderWorkBoard();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
 
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
@@ -337,7 +336,6 @@ describe('Board card buttons move the card', () => {
     });
     renderWorkBoard();
     const user = userEvent.setup();
-    await user.click(await screen.findByRole('button', { name: 'Linear' }));
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 
     const dialog = await screen.findByRole('dialog', { name: 'Choose a repository' });
@@ -381,7 +379,6 @@ describe('Board card buttons move the card', () => {
       ],
     });
     renderWorkBoard();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
 
     await moveFromCardDetails('Fix intake sync', 'Investigate');
 
@@ -410,7 +407,6 @@ describe('Board card buttons move the card', () => {
       ],
     });
     renderWorkBoard();
-    await userEvent.setup().click(await screen.findByRole('button', { name: 'Linear' }));
 
     await moveFromCardDetails('ENG-42: Fix intake sync', 'Investigate');
 

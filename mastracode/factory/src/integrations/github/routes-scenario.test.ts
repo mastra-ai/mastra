@@ -498,7 +498,8 @@ describe('S1: full write-back journey through the real route handlers', () => {
         repositorySlug: 'octo/hello',
         sessionId: session.sessionId,
         ownerId: 'u1',
-        resourceId: session.sessionId,
+        // The subscription names the Factory, like subscriptions the agent creates.
+        resourceId: 'factory-project-1',
         threadId: session.sessionId,
         source: 'factory-pr-create',
       }),

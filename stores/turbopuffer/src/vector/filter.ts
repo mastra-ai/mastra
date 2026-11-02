@@ -158,14 +158,13 @@ export class TurbopufferFilterTranslator extends BaseFilterTranslator<
           // For multiple comparison operators on one field
           const conditions = operators.map(op => this.translateOperator(field, op, value[op]));
           return ['And', conditions] as unknown as FilterCondition;
-        } else {
-          // For nested objects with multiple fields
-          const conditions = operators.map(op => {
-            const nestedField = `${field}.${op}`;
-            return this.translateFieldCondition(nestedField, value[op]);
-          });
-          return ['And', conditions] as unknown as FilterCondition;
         }
+        // For nested objects with multiple fields
+        const conditions = operators.map(op => {
+          const nestedField = `${field}.${op}`;
+          return this.translateFieldCondition(nestedField, value[op]);
+        });
+        return ['And', conditions] as unknown as FilterCondition;
       }
 
       // Single operator

@@ -70,6 +70,8 @@ export const AgentMetadataModelSwitcher = ({
         });
         console.info('Model updated:', result);
       } catch (error) {
+        setSelectedModel(defaultModel);
+        setSelectedProvider(defaultProvider || '');
         console.error('Failed to update model:', error);
       } finally {
         setLoading(false);
@@ -228,13 +230,12 @@ export const AgentMetadataModelSwitcher = ({
 
         <Button
           variant="default"
-          size="md"
+          size="icon-md"
           onClick={handleReset}
           disabled={loading}
-          className="flex items-center gap-1.5 border-0! whitespace-nowrap"
-          title="Reset to original model"
+          tooltip="Reset to original model"
         >
-          <RotateCcw className="h-3.5 w-3.5" />
+          <RotateCcw />
         </Button>
       </div>
 

@@ -4,6 +4,7 @@ import { workflowBuilderSettingsResponseSchema } from '../schemas/workflow-build
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { handleError } from './error';
 import {
+  applyEffectiveThreadId,
   enforceThreadAccess,
   getEffectiveResourceId,
   getEffectiveThreadId,
@@ -92,7 +93,7 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
         authorizedMemoryOption = {
           ...memoryOption,
           resource: effectiveResourceId ?? memoryOption.resource,
-          thread: effectiveThreadId ?? memoryOption.thread,
+          thread: applyEffectiveThreadId(memoryOption.thread, effectiveThreadId),
         };
       }
 

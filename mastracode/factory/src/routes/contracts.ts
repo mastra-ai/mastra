@@ -1,13 +1,19 @@
+import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
+import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
+import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
+export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   description: string;
   pathSchema?: z.ZodType;
@@ -38,6 +44,27 @@ const nullableTrimmed = (max: number) =>
   ]);
 const projectPathSchema = z.object({ id: uuidSchema });
 const projectDecisionPathSchema = z.object({ id: uuidSchema, decisionId: uuidSchema });
+const boardPathSchema = z.object({ id: uuidSchema, boardKey: z.string().min(1).max(MAX_BOARD_IDENTIFIER_LENGTH) });
+const boardRevisionSchema = z.number().int().min(1);
+/** A board's definition; send the `revision` you read so a concurrent edit is not overwritten. */
+export const replaceBoardBodySchema = storedBoardDefinitionSchema.extend({ expectedRevision: boardRevisionSchema });
+export const boardDeleteQuerySchema = z.object({ expectedRevision: z.coerce.number().int().min(1) });
+const storedBoardResponseSchema = z.object({
+  board: z.object({
+    key: z.string(),
+    name: z.string(),
+    description: z.string().nullable(),
+    /** In order; the first phase is where cards start. */
+    phases: z.array(storedPhaseInputSchema),
+    /** Send it back as `expectedRevision` when editing. Null for code boards, which are not stored. */
+    revision: z.number().int().nullable(),
+    source: z.enum(['builtin', 'app', 'stored']),
+    /** False for built-in and app boards: they are defined in code and read-only here. */
+    editable: z.boolean(),
+    /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
+    problems: z.array(z.string()),
+  }),
+});
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -49,6 +76,7 @@ const decisionResponseSchema = z.object({ decision: entitySchema });
 export const createProjectBodySchema = z.object({
   name: nonEmptyTrimmed(200),
   description: nullableTrimmed(2_000).optional().default(null),
+  modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
 });
 
 export const updateProjectBodySchema = z
@@ -57,9 +85,11 @@ export const updateProjectBodySchema = z
     description: nullableTrimmed(2_000).optional(),
     defaultModelId: nullableTrimmed(200).optional(),
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
-    slackWorkItemsEnabled: z.boolean().optional(),
+    defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     autoRunEnabled: z.boolean().optional(),
     autoApprovePlans: z.boolean().optional(),
+    reviewTestChecksEnabled: z.boolean().optional(),
+    selfReviewEnabled: z.boolean().optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one project field is required' });
 
@@ -381,7 +411,6 @@ const attentionKindSchema = z.enum([
   'automation-proposed',
   'mention',
   'activity',
-  'supervisor-finding',
   'agent-waiting',
 ]);
 type AttentionKind = z.infer<typeof attentionKindSchema>;
@@ -456,13 +485,41 @@ const attentionActionPathSchema = z
         return z.NEVER;
       }),
   })
-  .refine(
-    input =>
-      input.kind === 'supervisor-finding'
-        ? /^[a-z0-9:_-]{1,256}$/i.test(input.sourceId)
-        : new RegExp(UUID_PATTERN).test(input.sourceId),
-    { message: 'Invalid attention source id', path: ['sourceId'] },
-  );
+  .refine(input => new RegExp(UUID_PATTERN).test(input.sourceId), {
+    message: 'Invalid attention source id',
+    path: ['sourceId'],
+  });
+
+/** Largest SKILL.md a project may save as an edit. */
+export const MAX_SKILL_OVERRIDE_LENGTH = 200_000;
+
+const skillNameSchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const skillPathSchema = z.object({ id: uuidSchema, name: skillNameSchema });
+const skillResponseSchema = z.object({ skill: entitySchema });
+
+/** Adds the runtime's SKILL.md validation errors, checking the frontmatter name against `directoryName` when given. */
+function refineSkillContent(content: string, context: z.RefinementCtx, directoryName?: string) {
+  const result = validateSkillContent({ content, directoryName });
+  for (const message of result.errors) context.addIssue({ code: 'custom', message, path: ['content'] });
+}
+
+const skillContentSchema = z.string().min(1).max(MAX_SKILL_OVERRIDE_LENGTH);
+
+export const skillOverrideBodySchema = z
+  .object({ content: skillContentSchema })
+  .strict()
+  .superRefine((input, context) => refineSkillContent(input.content, context));
+
+/**
+ * The full save request: the edited SKILL.md must load under the skill's own
+ * name, exactly as the runtime validates it.
+ */
+export const skillOverrideSaveRequestSchema = skillPathSchema
+  .extend({ content: skillContentSchema })
+  .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
 
 export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
@@ -584,20 +641,83 @@ export const FACTORY_ROUTE_CONTRACTS = {
       boards: z.array(
         z.object({
           id: z.string(),
+          /** Absent from servers older than the phase fields. */
+          name: z.string().optional(),
+          /** @deprecated Use `name`. */
           title: z.string(),
+          description: z.string().optional(),
+          /** Where the board came from: Factory's built-ins, the app's code, or created through the API. */
+          source: z.enum(['builtin', 'app', 'stored']).optional(),
+          /** False for built-in and app boards, which are defined in code and read-only. */
+          editable: z.boolean().optional(),
+          /** Problems with the board, such as a runner skill that does not exist. */
+          problems: z.array(z.string()).optional(),
           initialPhase: z.string(),
           phases: z.array(
             z.object({
               id: z.string(),
+              name: z.string().optional(),
+              /** @deprecated Use `name`. */
               title: z.string(),
+              description: z.string().optional(),
               kind: z.enum(['resting', 'working', 'terminal']),
+              nextPhases: z.array(z.string()).optional(),
+              /** The session context a working phase runs in. */
+              context: z.string().optional(),
+              /** @deprecated Use `context`. */
               role: z.string().optional(),
+              /** The skill the phase's runner starts when a card enters it (`runner.skill`). */
+              skill: z.string().optional(),
+              autoStart: z.boolean().optional(),
+              /** Cards the phase starts on its own for; absent means every card. */
+              autoStartWhen: cardRuleGroupSchema.optional(),
+              exitTool: z
+                .object({
+                  id: z.string(),
+                  autoApprove: z.boolean(),
+                  /** Cards the exit tool is approved for; absent means every card. */
+                  autoApproveWhen: cardRuleGroupSchema.optional(),
+                })
+                .optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),
         }),
       ),
+      /** Stored boards that could not be loaded or are hidden by a code board with the same key, and why. */
+      problems: z.array(z.string()).optional(),
     }),
+  },
+  boardGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/boards/:boardKey',
+    description: "Get a project board's definition",
+    pathSchema: boardPathSchema,
+    responseSchema: storedBoardResponseSchema,
+  },
+  boardCreate: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/boards',
+    description: 'Create a board in a Factory project',
+    pathSchema: projectPathSchema,
+    bodySchema: storedBoardInputSchema,
+    responseSchema: storedBoardResponseSchema,
+  },
+  boardReplace: {
+    method: 'PATCH',
+    path: '/web/factory/projects/:id/boards/:boardKey',
+    description: "Replace a project board's definition",
+    pathSchema: boardPathSchema,
+    bodySchema: replaceBoardBodySchema,
+    responseSchema: storedBoardResponseSchema,
+  },
+  boardDelete: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/boards/:boardKey',
+    description: 'Delete a board from a Factory project',
+    pathSchema: boardPathSchema,
+    querySchema: boardDeleteQuerySchema,
+    responseSchema: z.null(),
   },
   workItemList: {
     method: 'GET',
@@ -735,23 +855,27 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: attentionActionPathSchema,
     responseSchema: z.object({ receipt: entitySchema }),
   },
-  supervisorSession: {
-    method: 'POST',
-    path: '/web/factory/projects/:id/supervisor/session',
-    description: 'Get the deterministic Factory supervisor session address',
-    pathSchema: projectPathSchema,
-    responseSchema: z.object({ sessionId: z.string(), threadId: z.string(), factoryProjectId: uuidSchema }),
-  },
-  supervisorHealth: {
+  skillList: {
     method: 'GET',
-    path: '/web/factory/projects/:id/supervisor/health',
-    description: 'Run the deterministic Factory supervisor health check',
-    pathSchema: projectPathSchema,
-    responseSchema: z.object({
-      checkedAt: z.string(),
-      findings: z.array(entitySchema),
-      counts: z.record(z.string(), z.number().int().nonnegative()),
-    }),
+    path: '/web/factory/skills',
+    description: "List Factory skills, with a project's edits when a project is given",
+    querySchema: z.object({ projectId: uuidSchema.optional() }),
+    responseSchema: z.object({ skills: z.array(entitySchema), canEdit: z.boolean().optional() }),
+  },
+  skillOverrideSave: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/skills/:name',
+    description: "Save a project's edited SKILL.md for a Factory skill",
+    pathSchema: skillPathSchema,
+    bodySchema: skillOverrideBodySchema,
+    responseSchema: skillResponseSchema,
+  },
+  skillOverrideRevert: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/skills/:name',
+    description: "Revert a project's edited Factory skill to its original SKILL.md",
+    pathSchema: skillPathSchema,
+    responseSchema: skillResponseSchema,
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

@@ -138,7 +138,7 @@ describe('ComposerModelSettings', () => {
     );
   });
 
-  it('keeps the popover open when the Advanced Settings dialog is dismissed via its built-in close button', async () => {
+  it('keeps the popover open when the Advanced settings dialog is dismissed via its built-in close button', async () => {
     useDefaultHandlers();
     renderSettings();
     await openAdvancedDialog();
@@ -156,7 +156,7 @@ describe('ComposerModelSettings', () => {
     expect(screen.getByText('Chat Method')).not.toBeNull();
   });
 
-  it('keeps the popover open when the Advanced Settings dialog is closed via Escape', async () => {
+  it('keeps the popover open when the Advanced settings dialog is closed via Escape', async () => {
     useDefaultHandlers();
     renderSettings();
     await openAdvancedDialog();
@@ -175,7 +175,7 @@ describe('ComposerModelSettings', () => {
     expect(screen.getByText('Chat Method')).not.toBeNull();
   });
 
-  it('closes the popover when Escape is pressed while no Advanced Settings dialog is open', async () => {
+  it('closes the popover when Escape is pressed while no Advanced settings dialog is open', async () => {
     useDefaultHandlers();
     renderSettings();
     await openPopover();

@@ -27,15 +27,13 @@ import type { JiraComment, JiraIssue, JiraTransition } from '../../jira/api.js';
 import { JiraApiClient, JiraApiError } from '../../jira/api.js';
 import type { JiraEventRules, JiraRuleOverrides } from '../../jira/default-rules.js';
 import { resolveJiraRules } from '../../jira/default-rules.js';
+import { buildIntakeJql, unfilteredJiraScopes } from '../../jira/intake-jql.js';
+import type { JiraIntakeScope } from '../../jira/intake-jql.js';
 import { attachJiraIssueReconciler } from '../../jira/issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from '../../jira/reconciliation-config.js';
 import { attachJiraRules } from '../../jira/rules.js';
-import {
-  logPlatformInfo,
-  PlatformApiClient,
-  platformApiClientConfigFromEnv,
-  type PlatformApiClientConfig,
-} from '../api-client.js';
+import { logPlatformInfo, PlatformApiClient, platformApiClientConfigFromEnv } from '../api-client.js';
+import type { PlatformApiClientConfig } from '../api-client.js';
 import { buildPlatformJiraAgentTools } from './agent-tools.js';
 import { buildPlatformJiraRoutes } from './routes.js';
 
@@ -182,6 +180,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   }
 
   readonly intake: Intake = {
+    bindingLabelFilters: true,
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: () => this.#listSources(),
     listItems: input => this.#listItems(input),
@@ -230,7 +229,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
 
   async #listItems({ sourceIds, cursor }: ListIntakeItemsInput): Promise<IntakeItemPage> {
     if (sourceIds.length === 0) return { items: [], nextCursor: null };
-    const page = await this.listActiveIssues(cursor, sourceIds);
+    const page = await this.listActiveIssues(cursor, unfilteredJiraScopes(sourceIds));
     return {
       items: page.issues.map(issue => ({
         source: { type: 'issue', externalId: issue.externalId, url: issue.url },
@@ -263,19 +262,24 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   }
 
   async #listIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
-    const page = await this.listActiveIssues(input.cursor, input.sourceIds, input.labels);
+    const page = await this.listActiveIssues(input.cursor, unfilteredJiraScopes(input.sourceIds ?? []), input.labels);
     return { issues: page.issues, nextCursor: page.nextCursor };
   }
 
+  /**
+   * One page of active issues across connections. Each scope's `projectId` is
+   * an encoded Platform source id; sources are grouped per connection and each
+   * group runs one JQL built from only that connection's projects.
+   */
   async listActiveIssues(
     cursor?: string,
-    sourceIds: string[] = [],
+    scopes: JiraIntakeScope[] = [],
     labels?: string[],
   ): Promise<{
     issues: Array<IntakeIssue & { sourceId: string; externalId: string; site: string }>;
     nextCursor: string | null;
   }> {
-    const grouped = groupSources(sourceIds);
+    const grouped = groupSources(scopes);
     if (grouped.length === 0) return { issues: [], nextCursor: null };
     const decodedCursor = decodePageCursor(cursor);
     if (decodedCursor.group >= grouped.length) return { issues: [], nextCursor: null };
@@ -283,7 +287,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     for (let groupIndex = decodedCursor.group; groupIndex < grouped.length; groupIndex++) {
       const group = grouped[groupIndex]!;
       const context = await this.#connectionContextById(group.connectionId);
-      const jql = buildIntakeJql(group.projectIds, labels);
+      const jql = buildIntakeJql(group.scopes, labels);
       if (jql === null) continue;
       const page = await context.api.searchIssues({
         jql,
@@ -296,7 +300,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
           : null;
       return {
         issues: page.issues.map(issue => {
-          const projectId = issue.fields.project?.id ?? group.projectIds[0] ?? '';
+          const projectId = issue.fields.project?.id ?? group.scopes[0]?.projectId ?? '';
           return {
             ...this.#toIntakeIssue(issue, context.siteUrl),
             sourceId: encodeSourceId(group.connectionId, projectId),
@@ -490,6 +494,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     const api = new JiraApiClient({
       baseUrl: `${proxyBaseUrl}/ex/jira/${encodeURIComponent(cloudId)}`,
       accessToken: this.#clientConfig.accessToken,
+      ...(this.#clientConfig.projectId ? { projectId: this.#clientConfig.projectId } : {}),
       ...(this.#clientConfig.fetchImpl ? { fetchImpl: this.#clientConfig.fetchImpl } : {}),
     });
     let siteUrl = this.#siteUrlByConnectionId.get(connection.id);
@@ -521,6 +526,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
       jira: this,
       auth: ctx.auth,
       intake: ctx.storage.intake,
+      workItems: ctx.runtime?.workItems,
       appDbConfigured: Boolean(ctx.factoryStorage),
       ingestFactoryIssues: attachJiraRules(this, ctx),
     });
@@ -583,18 +589,22 @@ export function decodeIssueReference(value: string): JiraIssueReference | null {
   }
 }
 
-function groupSources(sourceIds: string[]): Array<{ connectionId: string; projectIds: string[] }> {
-  const groups = new Map<string, Set<string>>();
-  for (const sourceId of sourceIds) {
-    const source = decodeSourceId(sourceId);
+/** A Platform source scope: `projectId` is the encoded source id, decoded per connection here. */
+function groupSources(scopes: JiraIntakeScope[]): Array<{ connectionId: string; scopes: JiraIntakeScope[] }> {
+  const groups = new Map<string, Map<string, JiraIntakeScope>>();
+  for (const scope of scopes) {
+    const source = decodeSourceId(scope.projectId);
     if (!source) continue;
-    const projectIds = groups.get(source.connectionId) ?? new Set<string>();
-    projectIds.add(source.projectId);
-    groups.set(source.connectionId, projectIds);
+    const projects = groups.get(source.connectionId) ?? new Map<string, JiraIntakeScope>();
+    if (!projects.has(source.projectId)) projects.set(source.projectId, { ...scope, projectId: source.projectId });
+    groups.set(source.connectionId, projects);
   }
   return [...groups.entries()]
     .sort(([left], [right]) => left.localeCompare(right))
-    .map(([connectionId, projectIds]) => ({ connectionId, projectIds: [...projectIds].sort() }));
+    .map(([connectionId, projects]) => ({
+      connectionId,
+      scopes: [...projects.values()].sort((left, right) => left.projectId.localeCompare(right.projectId)),
+    }));
 }
 
 function encodePageCursor(cursor: JiraPageCursor): string {
@@ -628,20 +638,6 @@ function normalizeSiteUrl(value: string): string {
   }
   if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new JiraApiError('Jira site URL is invalid.', 502);
   return url.origin;
-}
-
-function buildIntakeJql(projectIds?: string[], labels?: string[]): string | null {
-  const clauses: string[] = [];
-  const safeProjects = (projectIds ?? [])
-    .map(id => id.trim())
-    .filter(id => /^[A-Za-z0-9_]+$/.test(id))
-    .map(id => (/^\d+$/.test(id) ? id : `"${id}"`));
-  if (projectIds && safeProjects.length === 0) return null;
-  if (safeProjects.length > 0) clauses.push(`project IN (${safeProjects.join(', ')})`);
-  clauses.push('statusCategory != Done');
-  const safeLabels = [...new Set((labels ?? []).map(label => label.trim().replace(/["\\]/g, '')).filter(Boolean))];
-  if (safeLabels.length > 0) clauses.push(`labels IN (${safeLabels.map(label => `"${label}"`).join(', ')})`);
-  return `${clauses.join(' AND ')} ORDER BY updated DESC`;
 }
 
 function currentStatusMatches(issue: JiraIssue, target: UpdateIntakeIssueInput['state']): boolean {

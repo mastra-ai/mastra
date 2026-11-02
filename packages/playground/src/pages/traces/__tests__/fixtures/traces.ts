@@ -1,6 +1,6 @@
 import type { GetObservabilityCapabilitiesResponse, GetScoresScorers_Response, MastraClient } from '@mastra/client-js';
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
-import { SpanType } from '@mastra/core/observability';
+import { EntityType, SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 import { traceQueryCapabilities } from './trace-query';
 
@@ -23,6 +23,7 @@ const trace = {
   spanId: 'span-a',
   name: 'Studio preview agent',
   spanType: SpanType.AGENT_RUN,
+  entityType: EntityType.AGENT,
   isEvent: false,
   startedAt: new Date('2026-07-31T12:00:00.000Z'),
   endedAt: new Date('2026-07-31T12:00:01.000Z'),
