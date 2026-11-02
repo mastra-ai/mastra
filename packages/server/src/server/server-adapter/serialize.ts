@@ -25,7 +25,9 @@ export function serializeStreamChunk(chunk: unknown): SerializedStreamChunk {
 
 /**
  * `JSON.stringify(new Error('x'))` keeps only own enumerable fields, so an Error subclass that sets `name`
- * arrives as `{ name }` and clients show `[object Object]`. Send the message too; never the stack.
+ * arrives as `{ name }` and clients show `[object Object]`. Send the message too; never the stack. An
+ * error whose class curates its JSON (`toJSON`, e.g. MastraError) keeps that shape, so fields it leaves
+ * out stay out.
  */
 function withPlainPayloadError(chunk: unknown): unknown {
   if (!chunk || typeof chunk !== 'object' || !('payload' in chunk)) return chunk;
@@ -34,7 +36,19 @@ function withPlainPayloadError(chunk: unknown): unknown {
     return chunk;
   }
   const { error } = payload;
-  const plain: Record<string, unknown> = { ...error, message: error.message };
-  if (error.name !== 'Error') plain.name = error.name;
+  const plain: Record<string, unknown> = { ...(curatedJson(error) ?? error), message: error.message };
+  delete plain.stack;
+  if (!plain.name && error.name !== 'Error') plain.name = error.name;
   return { ...chunk, payload: { ...payload, error: plain } };
+}
+
+function curatedJson(error: Error): Record<string, unknown> | undefined {
+  const toJSON = (error as { toJSON?: unknown }).toJSON;
+  if (typeof toJSON !== 'function') return undefined;
+  try {
+    const json: unknown = toJSON.call(error);
+    return json && typeof json === 'object' ? (json as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
 }

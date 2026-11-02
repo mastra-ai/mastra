@@ -77,5 +77,38 @@ describe('serializeStreamChunk', () => {
       expect(JSON.parse(json).payload.error).toEqual({ message: 'boom' });
       expect(chunk.payload.error).toBe(error);
     });
+
+    describe('when the error class curates its own JSON', () => {
+      class ProviderError extends Error {
+        requestBodyValues = { apiKey: 'sk-live-secret' };
+        constructor() {
+          super('provider said no');
+          this.name = 'ProviderError';
+        }
+        toJSON() {
+          return { name: this.name, message: this.message };
+        }
+      }
+
+      it('sends only what its toJSON sends, plus the message', () => {
+        const json = expectJson(serializeStreamChunk({ type: 'error', payload: { error: new ProviderError() } }));
+        expect(JSON.parse(json).payload.error).toEqual({ name: 'ProviderError', message: 'provider said no' });
+        expect(json).not.toContain('sk-live-secret');
+      });
+
+      it('keeps the codes and cause a MastraError-style toJSON sends, without a stack', () => {
+        class CodedError extends Error {
+          toJSON() {
+            return { message: this.message, code: 'KNOWLEDGE_PAGE_NOT_FOUND', cause: { id: 'INNER' }, stack: 'at x' };
+          }
+        }
+        const json = expectJson(serializeStreamChunk({ type: 'error', payload: { error: new CodedError('inner') } }));
+        expect(JSON.parse(json).payload.error).toEqual({
+          message: 'inner',
+          code: 'KNOWLEDGE_PAGE_NOT_FOUND',
+          cause: { id: 'INNER' },
+        });
+      });
+    });
   });
 });
