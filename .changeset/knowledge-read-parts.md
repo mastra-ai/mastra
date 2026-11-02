@@ -21,3 +21,9 @@ Every part of a body a read returns comes with its `range`. `knowledge_page` tak
 const { page } = await knowledge_read({ page: 'docs:acme#models/anthropic', section: 'Setup' });
 knowledge_page({ op: 'write', page: page.ref, body: editedSetup, range: page.range, expectedVersion: page.version });
 ```
+
+The per-result cap is configurable: `tools: { read: true, write: true, maxTokens: 3000 }` sets how many estimated tokens one `knowledge_read` body window or match result, and one `knowledge_list` result, returns (default 1,000, at least 100). The write guard for line ranges follows the same cap.
+
+```ts
+const knowledge = new Knowledge({ scopes, tools: { read: true, write: true, maxTokens: 3000 } });
+```

@@ -1,6 +1,9 @@
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
 
-/** Most estimated tokens of body text one `knowledge_read` returns; the rest comes by `from`. */
+/**
+ * Default most estimated tokens one `knowledge_read` or `knowledge_list` result returns; the rest
+ * comes by `from` or `cursor`. Set per Knowledge with `tools.maxTokens`.
+ */
 export const KNOWLEDGE_READ_BODY_TOKENS = 1_000;
 /**
  * Most estimated tokens of notes, or of mentioning notes, a whole-page read carries inline. Past it
@@ -172,18 +175,19 @@ export class KnowledgeBodyLines {
 }
 
 /**
- * What one read returns from body character `start`, up to `limit`: at most
- * {@link KNOWLEDGE_READ_BODY_TOKENS}, ended at the last whole line that fits. Only a line too long
+ * What one read returns from body character `start`, up to `limit`: at most `maxTokens`
+ * (default {@link KNOWLEDGE_READ_BODY_TOKENS}), ended at the last whole line that fits. Only a line too long
  * for one read is cut inside it, never splitting a surrogate pair. `next` is where the rest starts.
  */
 export function knowledgeBodyWindow(
   lines: KnowledgeBodyLines,
   start: number,
   limit = lines.body.length,
+  maxTokens = KNOWLEDGE_READ_BODY_TOKENS,
 ): { start: number; end: number; next?: number } {
   const rest = lines.body.slice(start, limit);
-  if (estimateTokenCount(rest) <= KNOWLEDGE_READ_BODY_TOKENS) return { start, end: limit };
-  let end = start + sliceByTokens(rest, 0, KNOWLEDGE_READ_BODY_TOKENS).length;
+  if (estimateTokenCount(rest) <= maxTokens) return { start, end: limit };
+  let end = start + sliceByTokens(rest, 0, maxTokens).length;
   const newline = lines.body.lastIndexOf('\n', end - 1);
   if (newline >= start) return { start, end: newline, next: newline + 1 };
   const last = lines.body.charCodeAt(end - 1);

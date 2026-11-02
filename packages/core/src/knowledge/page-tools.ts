@@ -37,6 +37,12 @@ export interface KnowledgePageToolHost {
   /** Set when Knowledge has a vector store and embedder: search is hybrid and writes are embedded. */
   semantic?: KnowledgeSemanticIndex;
   warn?: (message: string) => void;
+  /** Most estimated tokens one read, match or list result returns; defaults to {@link KNOWLEDGE_READ_BODY_TOKENS}. */
+  maxTokens?: number;
+}
+
+function maxTokensOf(host: KnowledgePageToolHost): number {
+  return host.maxTokens ?? KNOWLEDGE_READ_BODY_TOKENS;
 }
 
 /** Embeds after a committed write. A failure only costs recall, so it warns instead of failing the write. */
@@ -348,6 +354,7 @@ function bodyView(
     context: number;
     from?: KnowledgeLinePosition;
     more: string[];
+    maxTokens: number;
   },
 ): {
   body?: string;
@@ -387,9 +394,9 @@ function bodyView(
     for (const part of parts) {
       const shown = lines.numbered(part.start, part.end);
       tokens += estimateTokenCount(shown);
-      if (matches.length && tokens > KNOWLEDGE_READ_BODY_TOKENS) {
+      if (matches.length && tokens > input.maxTokens) {
         more.push(
-          `match: stopped at about ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens; more matches from line ${lines.lineAt(part.start)}. Read again with the same match and from: ${fromText({ line: lines.lineAt(part.start) })}.`,
+          `match: stopped at about ${input.maxTokens.toLocaleString('en-US')} tokens; more matches from line ${lines.lineAt(part.start)}. Read again with the same match and from: ${fromText({ line: lines.lineAt(part.start) })}.`,
         );
         break;
       }
@@ -421,7 +428,7 @@ function bodyView(
     start = Math.max(from, found.section.start);
     again = `section: ${JSON.stringify(input.section)}, `;
   }
-  const window = knowledgeBodyWindow(lines, start, limit);
+  const window = knowledgeBodyWindow(lines, start, limit, input.maxTokens);
   // A whole body that fits comes as it is; any part comes numbered, with the range a write takes back.
   if (!input.section && start === 0 && window.next === undefined) return { body };
   const range = { start: lines.startPosition(window.start), end: lines.endPosition(window.end) };
@@ -460,7 +467,7 @@ function readTool(host: KnowledgePageToolHost) {
     description:
       'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists the scopes this run holds. ' +
       `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
-      `A body returns at most ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read cut short also gives the \`outline\` of the headings it did not reach. ` +
+      `A body returns at most ${maxTokensOf(host).toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read cut short also gives the \`outline\` of the headings it did not reach. ` +
       'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
       'Those part reads return just that part of the body. To edit part of a long body, pass the `range` a read gave you to knowledge_page.',
     inputSchema: {
@@ -576,7 +583,15 @@ function readTool(host: KnowledgePageToolHost) {
       // children and mentions came with the first read and would only repeat.
       if (outline || section || match || from) {
         const more: string[] = [];
-        const view = bodyView(page.body ?? '', { outline, section, match, context: matchContext, from, more });
+        const view = bodyView(page.body ?? '', {
+          outline,
+          section,
+          match,
+          context: matchContext,
+          from,
+          more,
+          maxTokens: maxTokensOf(host),
+        });
         return {
           page: { ...pageSummary(page, await pageRefs(run, [page])), version: page.version, ...view },
           ...(more.length ? { more } : {}),
@@ -655,7 +670,7 @@ function readTool(host: KnowledgePageToolHost) {
       ]);
       const ownRef = addresses.refs.get(page.id) ?? page.id;
       const more: string[] = [];
-      const view = bodyView(page.body ?? '', { context: matchContext, more });
+      const view = bodyView(page.body ?? '', { context: matchContext, more, maxTokens: maxTokensOf(host) });
       const noteList = await noteSummaries(run, notes.notes, mentionCache);
       const mentionList = (await noteSummaries(run, mentioning.notes, mentionCache)).map((note, i) => ({
         ...note,
@@ -712,8 +727,6 @@ function readTool(host: KnowledgePageToolHost) {
 const LIST_DEFAULT_LIMIT = 50;
 const LIST_MAX_LIMIT = 100;
 const LIST_MAX_DEPTH = 3;
-/** Most estimated tokens of entries one `knowledge_list` returns, the same budget as a body read. */
-const LIST_MAX_TOKENS = KNOWLEDGE_READ_BODY_TOKENS;
 
 /** One entry of a `knowledge_list` result. */
 interface ListEntry {
@@ -735,12 +748,13 @@ function childRef(parent: KnowledgePage, parentRef: string, child: KnowledgePage
 }
 
 function listTool(host: KnowledgePageToolHost) {
+  const maxTokens = maxTokensOf(host);
   return createTool({
     id: 'knowledge_list',
     description:
       'List the page tree under a starting point: each child with its ref (pass it to knowledge_read or knowledge_list), name and how many children it has. Pass `descriptions: true` to include page descriptions too. ' +
       'Without `from`, lists the scopes this run can read. Use it to find your way around a scope before searching or reading. ' +
-      `One result holds at most \`limit\` entries and about ${LIST_MAX_TOKENS.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` says how many entries were left out and gives the \`cursor\` to list the rest (pass the same \`from\`).`,
+      `One result holds at most \`limit\` entries and about ${maxTokens.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` says how many entries were left out and gives the \`cursor\` to list the rest (pass the same \`from\`).`,
     inputSchema: {
       type: 'object',
       properties: {
@@ -945,7 +959,7 @@ function listTool(host: KnowledgePageToolHost) {
       const begin = Math.min(skip, entries.length);
       let end = begin;
       let used = 0;
-      while (end < entries.length && (end === begin || used + sizes[end]! <= LIST_MAX_TOKENS)) used += sizes[end++]!;
+      while (end < entries.length && (end === begin || used + sizes[end]! <= maxTokens)) used += sizes[end++]!;
       if (end < entries.length) {
         const left = entries.length - end;
         const leftTokens = sizes.slice(end).reduce((sum, size) => sum + size, 0);
@@ -955,7 +969,7 @@ function listTool(host: KnowledgePageToolHost) {
           entries: entries.slice(begin, end),
           nextCursor: tokenCursor,
           more: [
-            `entries: stopped at about ${LIST_MAX_TOKENS.toLocaleString('en-US')} tokens; ${left} more ${left === 1 ? 'entry' : 'entries'} (about ${leftTokens.toLocaleString('en-US')} tokens) left out. List again with ${from ? `from: ${JSON.stringify(from)}, ` : ''}cursor: "${tokenCursor}".`,
+            `entries: stopped at about ${maxTokens.toLocaleString('en-US')} tokens; ${left} more ${left === 1 ? 'entry' : 'entries'} (about ${leftTokens.toLocaleString('en-US')} tokens) left out. List again with ${from ? `from: ${JSON.stringify(from)}, ` : ''}cursor: "${tokenCursor}".`,
           ],
         };
       }
@@ -976,7 +990,7 @@ const NUMBERED_LINE = /^\s*\d+│/;
  * Without one, a body longer than one read returns is refused: the writer can only have seen part
  * of it, and writing that part back would drop the rest.
  */
-function writtenBody(args: PageInput, page: KnowledgePage): string | undefined {
+function writtenBody(args: PageInput, page: KnowledgePage, maxTokens: number): string | undefined {
   const stored = page.body ?? '';
   if (args.body !== undefined) {
     const written = args.body.split('\n').filter(line => line.trim());
@@ -1000,7 +1014,7 @@ function writtenBody(args: PageInput, page: KnowledgePage): string | undefined {
       throw new Error(`The range starts after it ends. Pass the range a knowledge_read returned.`);
     }
     // A read from `start` returns at most this window, so a wider range can't be one a read gave.
-    if (end > knowledgeBodyWindow(lines, start).end) {
+    if (end > knowledgeBodyWindow(lines, start, stored.length, maxTokens).end) {
       throw new Error(
         `Lines ${args.range.start.line}–${args.range.end.line} run past what one knowledge_read from line ${args.range.start.line} shows, so this can't be a range a read gave you. ` +
           'Edit the body part by part: write each part back with the range its own read returned.',
@@ -1014,7 +1028,7 @@ function writtenBody(args: PageInput, page: KnowledgePage): string | undefined {
     }
     return stored.slice(0, start) + args.body + stored.slice(end);
   }
-  if (args.body !== undefined && estimateTokenCount(stored) > KNOWLEDGE_READ_BODY_TOKENS) {
+  if (args.body !== undefined && estimateTokenCount(stored) > maxTokens) {
     throw new Error(
       `This page's body is ${stored.length} characters, more than one knowledge_read returns, and a body write without a range replaces all of it. ` +
         'Write back only the lines you read, with the range that read returned and its expectedVersion; ' +
@@ -1118,7 +1132,7 @@ function pageTool(host: KnowledgePageToolHost) {
             expectedVersion: args.expectedVersion ?? page.version,
             name: args.name,
             description: args.description,
-            body: writtenBody(args, page),
+            body: writtenBody(args, page, maxTokensOf(host)),
             provenance,
           });
           await reindex(host, index => index.indexPage(updated));

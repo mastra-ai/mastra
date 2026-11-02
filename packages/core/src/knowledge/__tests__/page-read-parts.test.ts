@@ -9,10 +9,10 @@ import { KNOWLEDGE_READ_BODY_TOKENS, KNOWLEDGE_READ_REST_OUTLINE_TOKENS, knowled
 
 const memory = knowledgeMemoryScopes();
 
-function setup() {
+function setup(maxTokens?: number) {
   const knowledge = new Knowledge({
     storage: new InMemoryStore(),
-    tools: true,
+    tools: maxTokens === undefined ? true : { read: true, write: true, maxTokens },
     scopes: {
       ...memory,
       'docs:$orgId': { belongsTo: 'org:$orgId', access: [{ principal: 'org:$orgId', role: 'editor' }] },
@@ -581,5 +581,68 @@ describe('knowledgeBodySections', () => {
         ['D', '# D\n'],
       ],
     );
+  });
+});
+
+describe('tools.maxTokens', () => {
+  it('sets how much one read, match or list returns, and the write guard follows it', async () => {
+    const body = referenceBody();
+    const small = setup();
+    const large = setup(3_000);
+    for (const { knowledge } of [small, large]) {
+      await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
+      for (let i = 0; i < 120; i++)
+        await knowledge.upsertPage({ scope: 'docs:acme', path: `section/p${i}`, name: `Page ${i}` });
+    }
+    const text = (result: any) =>
+      numbered(result.page.lines)
+        .map(([, line]) => line)
+        .join('\n');
+    const smallRead = await small.call('knowledge_read', { page: 'docs:acme#anthropic' });
+    const largeRead = await large.call('knowledge_read', { page: 'docs:acme#anthropic' });
+    expect(estimateTokenCount(text(smallRead))).toBeLessThanOrEqual(KNOWLEDGE_READ_BODY_TOKENS);
+    expect(estimateTokenCount(text(largeRead))).toBeGreaterThan(KNOWLEDGE_READ_BODY_TOKENS * 2);
+    expect(estimateTokenCount(text(largeRead))).toBeLessThanOrEqual(3_000);
+    expect(await readAll(large.call, 'docs:acme#anthropic')).toBe(body);
+
+    const smallList = await small.call('knowledge_list', { from: 'docs:acme#section', limit: 100 });
+    const largeList = await large.call('knowledge_list', { from: 'docs:acme#section', limit: 100 });
+    expect(largeList.entries.length).toBeGreaterThan(smallList.entries.length);
+
+    // A range the larger read gave is accepted there; one line more is still refused.
+    const { range, version } = largeRead.page;
+    await expect(
+      large.call('knowledge_page', {
+        op: 'write',
+        page: 'docs:acme#anthropic',
+        range: { start: range.start, end: { line: range.end.line + 1 } },
+        body: 'x',
+        expectedVersion: version,
+      }),
+    ).rejects.toThrow(/run past what one knowledge_read/);
+    const written = await large.call('knowledge_page', {
+      op: 'write',
+      page: 'docs:acme#anthropic',
+      range,
+      body: text(largeRead),
+      expectedVersion: version,
+    });
+    expect(written.page.version).toBe(version + 1);
+    expect(await readAll(large.call, 'docs:acme#anthropic')).toBe(body);
+    // The default-cap tools refuse that wider range: it is more than one of their reads shows.
+    const smallVersion = (await small.call('knowledge_read', { page: 'docs:acme#anthropic' })).page.version;
+    await expect(
+      small.call('knowledge_page', {
+        op: 'write',
+        page: 'docs:acme#anthropic',
+        range,
+        body: 'x',
+        expectedVersion: smallVersion,
+      }),
+    ).rejects.toThrow(/run past what one knowledge_read/);
+  });
+
+  it('refuses a cap that is not a whole number of at least 100', () => {
+    for (const maxTokens of [0, 50, 1.5, Number.NaN]) expect(() => setup(maxTokens)).toThrow(/tools.maxTokens/);
   });
 });
