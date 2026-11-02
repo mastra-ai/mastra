@@ -64,7 +64,10 @@ class MemoryVector extends MastraVector {
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     this.indexes.get(indexName)?.rows.delete(id);
   }
+  /** Set to make deleteVectors throw, like Astra, which can't delete by id list. */
+  failDeletes = false;
   async deleteVectors({ indexName, ids }: DeleteVectorsParams): Promise<void> {
+    if (this.failDeletes) throw new Error('deleteVectors is not supported');
     for (const id of ids ?? []) this.indexes.get(indexName)?.rows.delete(id);
   }
   ids(): string[] {
@@ -392,23 +395,48 @@ describe('Knowledge semantic search', () => {
 
   it('a shorter rewrite drops the old chunks, and deleting the page drops them all', async () => {
     embedder.maxTokens = 3_000;
-    const { page } = await acme()('knowledge_page', {
-      op: 'write',
-      scope: 'resource:u-acme',
-      name: 'Handbook',
-      body: longBody('Reimbursement goes back to the original card.'),
-    });
+    // A long body can only be replaced whole by the host; the tool edits it part by part.
+    const write = (body: string) =>
+      knowledge.upsertPage({ scope: 'org:acme', path: 'handbook', name: 'Handbook', body });
+    const { page } = await write(longBody('Reimbursement goes back to the original card.'));
     expect(chunkIds(page.id).length).toBeGreaterThan(1);
 
-    await acme()('knowledge_page', { op: 'write', page: page.id, body: 'Courier pickups at 3pm.' });
+    await write('Courier pickups at 3pm.');
     expect(chunkIds(page.id)).toEqual([`page:${page.id}`]);
     expect(titles(await acme()('knowledge_search', { query: 'money' }))).toEqual(['Handbook']);
     expect(titles(await acme()('knowledge_search', { query: 'delivery' }))[0]).toBe('Handbook');
 
-    await acme()('knowledge_page', { op: 'write', page: page.id, body: longBody('Holiday calendar.') });
+    await write(longBody('Holiday calendar.'));
     expect(chunkIds(page.id).length).toBeGreaterThan(1);
-    await acme()('knowledge_page', { op: 'delete', page: page.id });
+    await knowledge.removePage({ scope: 'org:acme', path: 'handbook' });
     expect(chunkIds(page.id)).toEqual([]);
+  });
+
+  it('a rewrite still embeds the new body when the store cannot delete old chunks', async () => {
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'a', name: 'A', body: 'Courier pickups at 3pm.' });
+    vector.failDeletes = true;
+    await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'a',
+      name: 'A',
+      body: 'Reimbursement goes back to the card.',
+    });
+    expect(warnings).toEqual([]);
+    expect(titles(await acme()('knowledge_search', { query: 'money' }))).toEqual(['A']);
+  });
+
+  it('a long name does not crowd the body out of its chunks', async () => {
+    embedder.maxTokens = 3_000;
+    const name = 'Handbook '.repeat(2_000);
+    const { page } = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'handbook',
+      name,
+      body: longBody('Reimbursement goes back to the original card.'),
+    });
+    expect(warnings).toEqual([]);
+    expect(chunkIds(page.id).length).toBeGreaterThan(1);
+    expect(chunkIds(page.id).length).toBeLessThan(10);
   });
 
   it('needs both vector and embedder; reindex without them throws', async () => {
