@@ -13,7 +13,16 @@ const alice = { id: 'alice', role: 'admin' };
 const bob = { id: 'bob', role: 'member' };
 
 // Keys the server auth middleware sets for an authenticated request.
-const USER_KEYS = [MASTRA_NORMALIZED_USER_KEY, 'mastra__user', 'mastra__userRoles', 'mastra__userPermissions'];
+const USER_KEYS = [
+  MASTRA_NORMALIZED_USER_KEY,
+  'mastra__user',
+  'mastra__userRoles',
+  'mastra__userPermissions',
+  // The server auth middleware also writes these unprefixed aliases.
+  'user',
+  'userRoles',
+  'userPermissions',
+];
 
 function contextFor(user: { id: string; role: string }) {
   const requestContext = new RequestContext();
@@ -21,6 +30,9 @@ function contextFor(user: { id: string; role: string }) {
   requestContext.set('mastra__user', { sub: user.id });
   requestContext.set('mastra__userRoles', [user.role]);
   requestContext.set('mastra__userPermissions', [`${user.role}:*`]);
+  requestContext.set('user', { sub: user.id });
+  requestContext.set('userRoles', [user.role]);
+  requestContext.set('userPermissions', [`${user.role}:*`]);
   requestContext.set('tenant', 'acme');
   return requestContext;
 }
@@ -31,6 +43,9 @@ function userKeysFor(user: { id: string; role: string } | undefined) {
     mastra__user: user && { sub: user.id },
     mastra__userRoles: user && [user.role],
     mastra__userPermissions: user && [`${user.role}:*`],
+    user: user && { sub: user.id },
+    userRoles: user && [user.role],
+    userPermissions: user && [`${user.role}:*`],
   };
 }
 
