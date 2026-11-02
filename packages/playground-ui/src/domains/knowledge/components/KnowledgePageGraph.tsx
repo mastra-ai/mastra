@@ -351,12 +351,12 @@ function DotNode({ data }: { data: PageNodeData }) {
   );
 }
 
-/** A scope or page: its kind on top, its name below, both inside the circle; far pages draw as dots. */
 /** Below this a circle uses the small type and two lines of name. */
 const COMPACT_CIRCLE_SIZE = 96;
 /** The share of a circle's width its text may use; a circle is narrower toward the top and bottom. */
 const CIRCLE_TEXT_SHARE = 0.74;
 
+/** A scope or page: its kind on top, its name below, both inside the circle; far pages draw as dots. */
 function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeData }>) {
   if (data.form === 'dot') return <DotNode data={data} />;
   const { page, size, selected, pinned, dimmed, badge } = data;
