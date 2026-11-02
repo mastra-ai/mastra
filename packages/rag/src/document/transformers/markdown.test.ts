@@ -27,6 +27,49 @@ Follow up.`;
       ]);
     });
 
+    it('retains pipe-containing headings and metadata when headers are not stripped (#29178)', () => {
+      const transformer = new MarkdownHeaderTransformer(
+        [
+          ['#', 'Title'],
+          ['##', 'Section'],
+        ],
+        false,
+        false,
+      );
+      const result = transformer.splitText({ text: '# API | Reference\n## Inputs | Outputs\nDetails.' });
+
+      expect(result.map(doc => [doc.text, doc.metadata])).toEqual([
+        [
+          '# API | Reference  \n## Inputs | Outputs  \nDetails.',
+          { Title: 'API | Reference', Section: 'Inputs | Outputs' },
+        ],
+      ]);
+    });
+
+    it('does not treat indented pipe-containing code as headings (#29178)', () => {
+      const transformer = new MarkdownHeaderTransformer([['##', 'Section']]);
+      const result = transformer.splitText({
+        text: '## Real | Heading\n    ## Fake | Heading\nAfter code.',
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.metadata).toEqual({ Section: 'Real | Heading' });
+      expect(result[0]?.text).toContain('    ## Fake | Heading');
+      expect(result[0]?.text).toContain('After code.');
+    });
+
+    it('does not split on pipe-containing headings inside longer fenced code (#29178)', () => {
+      const transformer = new MarkdownHeaderTransformer([['##', 'Section']]);
+      const result = transformer.splitText({
+        text: '## Real | Heading\n````markdown\n```\n## Fake | Heading\n````\nContent.',
+      });
+
+      expect(result).toHaveLength(1);
+      expect(result[0]?.metadata).toEqual({ Section: 'Real | Heading' });
+      expect(result[0]?.text).toContain('## Fake | Heading');
+      expect(result[0]?.text).toContain('Content.');
+    });
+
     it('does not split on pipe-containing headings inside fenced code (#29178)', () => {
       const transformer = new MarkdownHeaderTransformer([['##', 'Section']]);
       const result = transformer.splitText({

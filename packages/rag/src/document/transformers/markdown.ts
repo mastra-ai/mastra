@@ -107,14 +107,15 @@ export class MarkdownHeaderTransformer {
 
       // Handle code blocks
       if (!inCodeBlock) {
-        if (
-          (strippedLine.startsWith('```') && strippedLine.split('```').length === 2) ||
-          strippedLine.startsWith('~~~')
-        ) {
+        const fence = strippedLine.match(/^(`{3,}|~{3,})/);
+        if (fence) {
           inCodeBlock = true;
-          openingFence = strippedLine.startsWith('```') ? '```' : '~~~';
+          openingFence = fence[1]!;
         }
-      } else if (strippedLine.startsWith(openingFence)) {
+      } else if (
+        strippedLine.startsWith(openingFence) &&
+        new RegExp(`^${openingFence[0]}{${openingFence.length},}\\s*$`).test(strippedLine)
+      ) {
         inCodeBlock = false;
         openingFence = '';
       }
@@ -124,9 +125,15 @@ export class MarkdownHeaderTransformer {
         continue;
       }
 
+      // Preserve existing matching of indented headings without pipes.
+      const isIndentedCode = strippedLine.includes('|') && /^(?: {4}|\t)/.test(line);
       let headerMatched = false;
       for (const [sep, name] of this.headersToSplitOn) {
-        if (strippedLine.startsWith(sep) && (strippedLine.length === sep.length || strippedLine[sep.length] === ' ')) {
+        if (
+          !isIndentedCode &&
+          strippedLine.startsWith(sep) &&
+          (strippedLine.length === sep.length || strippedLine[sep.length] === ' ')
+        ) {
           headerMatched = true;
 
           // If we have existing content, save it before processing the header
