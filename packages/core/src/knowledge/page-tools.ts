@@ -26,6 +26,7 @@ import {
 import type { KnowledgeLinePosition, KnowledgeLineRange } from './page-body';
 import { knowledgePageRefs } from './page-refs';
 import type { KnowledgePageRefs } from './page-refs';
+import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
 import type { KnowledgeRunContext } from './run';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
@@ -1169,6 +1170,10 @@ function pageTool(host: KnowledgePageToolHost) {
             provenance,
           });
           await embed(host, index => index.indexPage(updated));
+          await updateKnowledgeLinks(host.warn, async () => {
+            if (args.body !== undefined) await syncKnowledgePageBodyLinks(storage, updated);
+            if (args.name !== undefined) await refreshKnowledgeLinksTo(storage, [updated]);
+          });
           return done(updated);
         }
         if (!args.scope || !args.name) throw new Error('Creating a page needs scope and name.');
@@ -1186,6 +1191,10 @@ function pageTool(host: KnowledgePageToolHost) {
           provenance,
         });
         await embed(host, index => index.indexPage(created));
+        await updateKnowledgeLinks(host.warn, async () => {
+          await syncKnowledgePageBodyLinks(storage, created);
+          await refreshKnowledgeLinksTo(storage, [created]);
+        });
         return done(created);
       }
 
@@ -1217,6 +1226,10 @@ function pageTool(host: KnowledgePageToolHost) {
           throw error;
         }
         await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
+        await updateKnowledgeLinks(host.warn, async () => {
+          await syncKnowledgePageBodyLinks(storage, deleted);
+          await refreshKnowledgeLinksTo(storage, [deleted]);
+        });
         return done(deleted);
       }
 
@@ -1231,14 +1244,18 @@ function pageTool(host: KnowledgePageToolHost) {
         if (parent.id !== destination.id && parent.scopeId !== destination.id) {
           throw new Error(`Parent "${args.parent}" is not in scope "${args.scope}".`);
         }
-        return done(
-          await storage.movePage({
-            id: page.id,
-            expectedVersion: args.expectedVersion ?? page.version,
-            parentId: parent.id,
-            provenance,
-          }),
-        );
+        const moved = await storage.movePage({
+          id: page.id,
+          expectedVersion: args.expectedVersion ?? page.version,
+          parentId: parent.id,
+          provenance,
+        });
+        // The subtree's `scope#key/key` paths changed: links by old path stop resolving, new ones may.
+        await updateKnowledgeLinks(host.warn, async () => {
+          await syncKnowledgePageBodyLinks(storage, moved);
+          await refreshKnowledgeLinksTo(storage, [moved], { withDescendants: true });
+        });
+        return done(moved);
       }
 
       if (!args.into) throw new Error('Merging needs into: the page that remains.');
@@ -1258,6 +1275,12 @@ function pageTool(host: KnowledgePageToolHost) {
         provenance,
       });
       await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
+      // The source is gone and its children now live under the target, at new paths.
+      await updateKnowledgeLinks(host.warn, async () => {
+        const source = { ...page, deletedAt: merged.updatedAt, mergedInto: merged.id };
+        await syncKnowledgePageBodyLinks(storage, source);
+        await refreshKnowledgeLinksTo(storage, [source, merged], { withDescendants: true });
+      });
       return done(merged);
     },
   });
