@@ -2063,27 +2063,15 @@ describe('MDocument', () => {
         });
 
         expect(doc.getText().some(chunk => chunk.includes('\\u'))).toBe(true);
+        expect(doc.getText().every(chunk => /^[\x00-\x7F]*$/.test(chunk))).toBe(true);
 
         const combined = doc
           .getText()
-          .map(chunk => {
-            const c = JSON.parse(chunk);
-            const retVal: Record<string, string> = {};
-            Object.entries(c).forEach(([key, value]) => {
-              retVal[key] = JSON.parse(`"${value as string}"`);
-            });
-
-            return retVal;
-          })
+          .map(chunk => JSON.parse(chunk))
           .reduce((acc, curr) => ({ ...acc, ...curr }), {});
 
-        expect(combined?.key1?.charCodeAt(0)).toBe('你'.charCodeAt(0));
-        expect(combined?.key1?.charCodeAt(1)).toBe('好'.charCodeAt(0));
-        expect(combined?.key2?.charCodeAt(0)).toBe('世'.charCodeAt(0));
-        expect(combined?.key2?.charCodeAt(1)).toBe('界'.charCodeAt(0));
-
-        expect(combined?.key1).toBe('你好');
-        expect(combined?.key2).toBe('世界');
+        expect(combined.key1).toBe('你好');
+        expect(combined.key2).toBe('世界');
       });
 
       it('should handle non-ASCII without escaping when ensureAscii is false', async () => {
@@ -2109,6 +2097,70 @@ describe('MDocument', () => {
 
         expect(combined.key1).toBe('你好');
         expect(combined.key2).toBe('世界');
+      });
+
+      const unicodeInput = {
+        text: '你好',
+        café: 'naïve',
+        emoji: '😀',
+        nested: { arr: ['ü', { ключ: 'значение' }] },
+      };
+
+      it.each([true, undefined])(
+        'should round-trip non-ASCII keys and values through a single JSON.parse (ensureAscii: %s)',
+        async ensureAscii => {
+          const doc = MDocument.fromJSON(JSON.stringify(unicodeInput));
+          await doc.chunk({ strategy: 'json', maxSize: 1000, ensureAscii });
+
+          const chunks = doc.getText();
+          expect(chunks.every(chunk => /^[\x00-\x7F]*$/.test(chunk))).toBe(true);
+          expect(chunks.some(chunk => chunk.includes('"\\u4f60\\u597d"'))).toBe(true);
+          const combined = chunks.map(chunk => JSON.parse(chunk)).reduce((acc, curr) => ({ ...acc, ...curr }), {});
+          expect(combined).toEqual(unicodeInput);
+        },
+      );
+
+      it('should round-trip non-ASCII keys and values when ensureAscii is false', async () => {
+        const doc = MDocument.fromJSON(JSON.stringify(unicodeInput));
+        await doc.chunk({ strategy: 'json', maxSize: 1000, ensureAscii: false });
+
+        const chunks = doc.getText();
+        expect(chunks.some(chunk => chunk.includes('你好'))).toBe(true);
+        const combined = chunks.map(chunk => JSON.parse(chunk)).reduce((acc, curr) => ({ ...acc, ...curr }), {});
+        expect(combined).toEqual(unicodeInput);
+      });
+
+      it.each([true, false, undefined])(
+        'should preserve literal escape sequences in values (ensureAscii: %s)',
+        async ensureAscii => {
+          const input = { literal: '\\u00e9', path: 'C:\\new' };
+          const doc = MDocument.fromJSON(JSON.stringify(input));
+          await doc.chunk({ strategy: 'json', maxSize: 1000, ensureAscii });
+
+          const parsed = JSON.parse(doc.getText()[0]!);
+          expect(parsed.literal).toBe('\\u00e9');
+          expect(parsed.path).toBe('C:\\new');
+        },
+      );
+
+      it.each([true, false])('should keep every chunk valid across splits (ensureAscii: %s)', async ensureAscii => {
+        const input = {
+          café: 'crème brûlée',
+          日本: '東京タワー',
+          straße: 'München',
+          город: 'Москва',
+          emoji: '🌍🚀',
+        };
+        const doc = MDocument.fromJSON(JSON.stringify(input));
+        await doc.chunk({ strategy: 'json', maxSize: 50, minSize: 10, ensureAscii });
+
+        const chunks = doc.getText();
+        expect(chunks.length).toBeGreaterThan(1);
+        if (ensureAscii) {
+          expect(chunks.every(chunk => /^[\x00-\x7F]*$/.test(chunk))).toBe(true);
+        }
+        const combined = chunks.map(chunk => JSON.parse(chunk)).reduce((acc, curr) => ({ ...acc, ...curr }), {});
+        expect(combined).toEqual(input);
       });
     });
 
@@ -2397,6 +2449,7 @@ describe('MDocument', () => {
 
         const asciiChunks = doc.getText();
         expect(asciiChunks[0]).not.toMatch(/[^\x00-\x7F]/);
+        expect(JSON.parse(asciiChunks[0]!).text).toBe(data.text);
 
         // With ensureAscii false
         await doc.chunk({
@@ -2408,6 +2461,7 @@ describe('MDocument', () => {
 
         const unicodeChunks = doc.getText();
         expect(JSON.parse(unicodeChunks[0]).text).toMatch(/[^\x00-\x7F]/);
+        expect(JSON.parse(unicodeChunks[0]!).text).toBe(data.text);
       });
 
       it('should handle deeply nested structures', async () => {
