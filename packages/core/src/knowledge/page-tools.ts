@@ -603,7 +603,7 @@ function listTool(host: KnowledgePageToolHost) {
       } else {
         origin = await run.pageOrCloseMatches(from);
         originRef = (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id;
-        if (origin.isScope && !pageCursor) scopes = await childScopes(origin.id);
+        if (origin.isScope && !cursor?.startsWith('p')) scopes = await childScopes(origin.id);
       }
       // A scope's readable child scopes come first, then its child pages; both count against `limit`.
       const shownScopes = scopes.slice(scopeOffset, scopeOffset + limit);

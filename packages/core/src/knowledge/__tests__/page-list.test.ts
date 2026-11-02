@@ -157,6 +157,22 @@ describe('knowledge_list', () => {
     await expect(call(held, 'knowledge_list', { cursor: 'bogus' })).rejects.toThrow(/did not come from knowledge_list/);
   });
 
+  it('moves on to child pages when the child scopes exactly fill the limit', async () => {
+    const { knowledge, call } = setup();
+    const held = ['org:acme', 'docs:acme'];
+    for (let i = 0; i < 3; i++) {
+      held.push(`team:acme:t${i}`);
+      await call([...held], 'knowledge_read', { page: `team:acme:t${i}` });
+    }
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'p0', name: 'P0' });
+    const first = await call(held, 'knowledge_list', { from: 'docs:acme', limit: 3 });
+    expect(first.entries.map((entry: any) => entry.ref)).toEqual(['team:acme:t0', 'team:acme:t1', 'team:acme:t2']);
+    expect(first.nextCursor).toBe('p');
+    const second = await call(held, 'knowledge_list', { from: 'docs:acme', limit: 3, cursor: first.nextCursor });
+    expect(second.entries.map((entry: any) => entry.ref)).toEqual(['docs:acme#p0']);
+    expect(second.nextCursor).toBeUndefined();
+  });
+
   it('says when deeper levels were cut off by the limit', async () => {
     const { call } = await site();
     const result = await call(ORG, 'knowledge_list', { from: 'docs:acme', depth: 3, limit: 6 });
