@@ -20,14 +20,44 @@ export interface CyberRefusalFallbackContext {
   requestContext?: RequestContext;
 }
 
+/**
+ * Where `'auto'` sends a model after a cyber refusal survives the nudge: the
+ * model each provider routes that model's cyber refusals to itself. Keys and
+ * values are model router ids. Models that are missing have no published cyber
+ * fallback, so their refusals end the turn as before.
+ *
+ * Sources:
+ * - Claude Fable 5 / 5.1: https://www.anthropic.com/news/claude-fable-5-mythos-5 ("handled by Claude Opus 4.8 instead")
+ * - Claude Opus 5.5: https://www.anthropic.com/news/claude-opus-5-5 ("cybersecurity tasks will be re-routed to Opus 4.8")
+ * - Claude Sonnet 5.5: https://www.anthropic.com/news/claude-sonnet-5-5 ("visibly fall back to Sonnet 5")
+ * - GPT-5.3-Codex: https://github.com/openai/codex/issues/12088 (Codex: "routed to gpt-5.2 as a fallback")
+ */
+export const CYBER_REFUSAL_AUTO_FALLBACKS: Readonly<Record<string, string>> = Object.freeze({
+  'anthropic/claude-fable-5': 'anthropic/claude-opus-4-8',
+  'anthropic/claude-fable-5-1': 'anthropic/claude-opus-4-8',
+  'anthropic/claude-opus-5-5': 'anthropic/claude-opus-4-8',
+  'anthropic/claude-sonnet-5-5': 'anthropic/claude-sonnet-5',
+  'openai/gpt-5.3-codex': 'openai/gpt-5.2',
+});
+
+/** The `'auto'` cyber refusal fallback for a model router id (`provider/model`), if it has one. */
+export function getCyberRefusalAutoFallback(modelId: string): string | undefined {
+  return Object.hasOwn(CYBER_REFUSAL_AUTO_FALLBACKS, modelId) ? CYBER_REFUSAL_AUTO_FALLBACKS[modelId] : undefined;
+}
+
 export interface CyberRefusalHandlerOptions {
   /**
    * Models to switch to when a refusal survives the `continue` nudge, tried in
    * order. Pass a function to choose the model when the refusal happens; return
    * `undefined` when there is none left. The switch lasts for the rest of the
    * run, and the next run starts on the agent's own model again.
+   *
+   * `'auto'` (the default) switches once to the model the provider itself routes
+   * cyber refusals to (see {@link CYBER_REFUSAL_AUTO_FALLBACKS}), resolved through
+   * the model router with the same provider. Other models end the turn as before.
    */
   fallbackModels?:
+    | 'auto'
     | CyberRefusalFallbackModel[]
     | ((
         context: CyberRefusalFallbackContext,
@@ -36,6 +66,8 @@ export interface CyberRefusalHandlerOptions {
 
 const FALLBACK_ATTEMPT_KEY = 'fallbackAttempt';
 const FALLBACK_MODEL_KEY = 'fallbackModel';
+const REFUSING_MODEL_KEY = 'refusingModel';
+const PINNED_OVER_KEY = 'fallbackPinnedOver';
 
 const CYBER_POLICY_ERROR_CODE = 'cyber_policy';
 const CYBER_REFUSAL_MESSAGE = 'this content was flagged for possible cybersecurity risk';
@@ -145,15 +177,27 @@ export class CyberRefusalHandler implements Processor<'cyber-refusal-handler'> {
   readonly id = 'cyber-refusal-handler' as const;
   readonly name = 'Cyber Refusal Handler';
 
-  readonly #fallbackModels: CyberRefusalHandlerOptions['fallbackModels'];
+  readonly #fallbackModels: NonNullable<CyberRefusalHandlerOptions['fallbackModels']>;
 
   constructor(options: CyberRefusalHandlerOptions = {}) {
-    this.#fallbackModels = options.fallbackModels;
+    this.#fallbackModels = options.fallbackModels ?? 'auto';
   }
 
-  async processInputStep({ state }: ProcessInputStepArgs): Promise<ProcessInputStepResult | undefined> {
-    const model = state[FALLBACK_MODEL_KEY] as MastraLanguageModel | undefined;
-    return model ? { model } : undefined;
+  async processInputStep({ state, model }: ProcessInputStepArgs): Promise<ProcessInputStepResult | undefined> {
+    // A provider like `anthropic.messages` is the `anthropic` router provider.
+    const running = model ? `${model.provider.split('.')[0]}/${model.modelId}` : undefined;
+    const fallback = state[FALLBACK_MODEL_KEY] as MastraLanguageModel | undefined;
+    if (fallback) {
+      // The fallback only stands in for the model that refused. If the agent has
+      // moved on to another of its own models (the fallback failed with an error
+      // and the agent's model list continued), let that model run.
+      if (running === state[PINNED_OVER_KEY]) return { model: fallback };
+      delete state[FALLBACK_MODEL_KEY];
+      delete state[PINNED_OVER_KEY];
+    }
+    // Remember which model is running so 'auto' knows where its refusal should go.
+    if (running) state[REFUSING_MODEL_KEY] = running;
+    return undefined;
   }
 
   async processAPIError({
@@ -191,7 +235,7 @@ export class CyberRefusalHandler implements Processor<'cyber-refusal-handler'> {
     if (!isCyberStopRefusal(finishReason, providerMetadata)) return messageList;
     // A repeated refusal is genuine unless a fallback model can take over
     if (retryCount > 0) {
-      if (!this.#fallbackModels) return messageList;
+      if (this.#fallbackModels === 'auto' && !this.#autoFallback(state)) return messageList;
       return this.#switchToFallback(state, requestContext).then(switched =>
         switched ? abort('continue', { retry: true }) : messageList,
       );
@@ -205,10 +249,15 @@ export class CyberRefusalHandler implements Processor<'cyber-refusal-handler'> {
 
   async #switchToFallback(state: Record<string, unknown>, requestContext?: RequestContext): Promise<boolean> {
     const fallbacks = this.#fallbackModels;
-    if (!fallbacks) return false;
-
     const attempt = (state[FALLBACK_ATTEMPT_KEY] as number | undefined) ?? 0;
-    const config = Array.isArray(fallbacks) ? fallbacks[attempt] : await fallbacks({ attempt, requestContext });
+    const config =
+      fallbacks === 'auto'
+        ? attempt === 0
+          ? this.#autoFallback(state)
+          : undefined
+        : Array.isArray(fallbacks)
+          ? fallbacks[attempt]
+          : await fallbacks({ attempt, requestContext });
     if (!config) return false;
 
     const model = await resolveModelConfig(config, requestContext);
@@ -218,6 +267,12 @@ export class CyberRefusalHandler implements Processor<'cyber-refusal-handler'> {
 
     state[FALLBACK_ATTEMPT_KEY] = attempt + 1;
     state[FALLBACK_MODEL_KEY] = model;
+    state[PINNED_OVER_KEY] ??= state[REFUSING_MODEL_KEY];
     return true;
+  }
+
+  #autoFallback(state: Record<string, unknown>): string | undefined {
+    const refusing = state[REFUSING_MODEL_KEY];
+    return typeof refusing === 'string' ? getCyberRefusalAutoFallback(refusing) : undefined;
   }
 }

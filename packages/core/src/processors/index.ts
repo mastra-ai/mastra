@@ -1041,7 +1041,11 @@ export {
 } from './stability-defaults';
 
 export * from './processors';
-export { CyberRefusalHandler } from './cyber-refusal-handler';
+export {
+  CYBER_REFUSAL_AUTO_FALLBACKS,
+  CyberRefusalHandler,
+  getCyberRefusalAutoFallback,
+} from './cyber-refusal-handler';
 export type {
   CyberRefusalFallbackContext,
   CyberRefusalFallbackModel,
