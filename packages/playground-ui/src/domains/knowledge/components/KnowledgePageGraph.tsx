@@ -438,12 +438,15 @@ function GraphLegend({
   links,
   directions,
   dots,
+  focused,
   branches,
 }: {
   grants: boolean;
   links: boolean;
   directions: boolean;
   dots: boolean;
+  /** A page is focused, drawn larger and ringed at the centre. */
+  focused: boolean;
   /** The branches dots are coloured by, each named for the circle it hangs under. */
   branches: Array<{ id: string; name: string; color: string }>;
 }) {
@@ -464,6 +467,18 @@ function GraphLegend({
           Page
         </Txt>
       </li>
+      {focused ? (
+        <li className="flex items-center gap-2" data-testid="knowledge-legend-focused">
+          <span
+            className={LEGEND_SWATCH}
+            style={{ ...PAGE_STYLE, outline: '2px solid var(--knowledge-color)', outlineOffset: 2, borderWidth: 3 }}
+            aria-hidden
+          />
+          <Txt as="span" variant="meta" tone="muted">
+            Focused page
+          </Txt>
+        </li>
+      ) : null}
       {dots ? (
         <li className="flex items-center gap-2" data-testid="knowledge-legend-dot">
           <span className="inline-block size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
@@ -576,6 +591,8 @@ function GraphLegend({
 
 /** How far the pointer may move between press and release and still count as a click, not a pan. */
 const CLICK_SLOP_PX = 4;
+/** The focused page's circle is this much larger than its neighbours'. */
+const FOCUSED_SCALE = 1.2;
 /** Most branch colours the legend names; the rest are counted. */
 const LEGEND_BRANCH_CAP = 6;
 /** Most links a hovered page draws that aren't drawn already. */
@@ -655,6 +672,7 @@ function KnowledgePageGraphInner({
     const flow = toPageFlow(graphPages, allEdges);
     for (const node of flow.nodes) {
       if (shape.form.get(node.id) === 'dot') node.data.size = dotSize;
+      else if (node.id === selectedPageId) node.data.size = Math.round(node.data.size * FOCUSED_SCALE);
     }
     const sizes = new Map(flow.nodes.map(node => [node.id, node.data.size]));
     const radial = radialLayout(graphPages, shape, page => sizes.get(page.id) ?? dotSize);
@@ -972,6 +990,7 @@ function KnowledgePageGraphInner({
     >
       <GraphLegend
         branches={dotBranches}
+        focused={!!selectedPageId && laidOut.positions.has(selectedPageId)}
         dots={[...laidOut.shape.form.values()].includes('dot')}
         grants={allEdges.some(edge => edge.kind === 'grant')}
         links={allEdges.some(edge => edge.kind === 'link')}

@@ -193,6 +193,26 @@ describe('KnowledgePageGraph', () => {
     });
   });
 
+  describe('the focused page', () => {
+    const width = (id: string) =>
+      Number.parseFloat(document.querySelector<HTMLElement>(`.react-flow__node[data-id="${id}"]`)?.style.width ?? '');
+
+    it('is drawn larger than the circles around it and named in the legend', () => {
+      renderGraph({ selectedPageId: 'refunds' });
+      expect(width('refunds')).toBeGreaterThan(108);
+      expect(width('org')).toBe(124);
+      expect(
+        within(screen.getByRole('list', { name: 'Legend' })).getByTestId('knowledge-legend-focused').textContent,
+      ).toBe('Focused page');
+    });
+
+    it('is not singled out when nothing is focused', () => {
+      renderGraph();
+      expect(width('refunds')).toBe(108);
+      expect(screen.queryByTestId('knowledge-legend-focused')).toBeNull();
+    });
+  });
+
   describe('dots', () => {
     // Acme at the centre, Support one ring out, and Support's thread scopes collapsed into one dot further on.
     const deep = [
