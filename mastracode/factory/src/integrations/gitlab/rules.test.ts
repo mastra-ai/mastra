@@ -5,7 +5,7 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { FactoryGitLabRuleContext } from '../../rules/types.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { resolveGitLabRules } from './default-rules.js';
-import { encodeSourceId } from './integration.js';
+import { encodeIssueReference, encodeSourceId } from './integration.js';
 import { GitLabRules } from './rules.js';
 import type { GitLabRulesIntegration } from './rules.js';
 
@@ -568,6 +568,67 @@ describe('GitLabRules', () => {
       },
     ]);
   });
+
+  it.each([['intake'], ['triage'], ['planning']])(
+    'does not re-run triage when a person edits or comments on the issue of a card in %s',
+    async stage => {
+      const { seeded, project, service } = await setup();
+      const card = (
+        await seeded.workItems.upsert({
+          orgId: 'org-1',
+          userId: 'user-1',
+          factoryProjectId: project.id,
+          input: {
+            externalSource: {
+              integrationId: 'gitlab',
+              type: 'issue',
+              externalId: encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
+              url: 'https://gitlab.example.com/acme/app/-/issues/42',
+            },
+            title: 'Issue 42',
+            board: 'work',
+            stages: [stage],
+            sessions: {},
+            metadata: {},
+          },
+        })
+      ).item;
+      const opened = issueOpened('delivery-issue-updated');
+      const issueUpdated = {
+        ...opened,
+        payload: {
+          ...opened.payload,
+          object_attributes: { ...opened.payload.object_attributes, action: 'update', description: 'New details' },
+        },
+      };
+      const issueNote = {
+        event: 'Note Hook',
+        deliveryId: 'delivery-issue-note',
+        instanceHost: 'gitlab.example.com',
+        payload: {
+          user_username: 'maintainer',
+          user: { username: 'maintainer' },
+          project: { id: 101, path_with_namespace: PROJECT_PATH, web_url: 'https://gitlab.example.com/acme/app' },
+          object_attributes: {
+            id: 98,
+            noteable_type: 'Issue',
+            note: 'More details on the bug.',
+            url: 'https://gitlab.example.com/acme/app/-/issues/42#note_98',
+          },
+          issue: opened.payload.object_attributes,
+        },
+      } as const;
+
+      await service.ingest(issueUpdated);
+      await service.ingest(issueNote);
+
+      expect(await seeded.workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+      expect(await seeded.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
+        stages: [stage],
+        revision: card.revision,
+      });
+    },
+  );
 
   describe('recording the pushed head against a review verdict', () => {
     const reviewedHeadSha = 'be10bfa000000000000000000000000000000000';
