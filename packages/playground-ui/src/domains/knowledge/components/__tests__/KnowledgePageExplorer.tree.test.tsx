@@ -59,10 +59,13 @@ function Host({
   requested,
   siteChildCount,
   siteCapped,
+  extraSiblings = 0,
 }: {
   requested: KnowledgeExplorerTreeRequest[];
   siteChildCount?: number;
   siteCapped?: boolean;
+  /** Extra pages under the site, each with one child waiting. */
+  extraSiblings?: number;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<KnowledgeExplorerView>('graph');
@@ -71,14 +74,25 @@ function Host({
     ...(siteChildCount === undefined ? {} : { childCount: siteChildCount }),
     ...(siteCapped ? { childCountCapped: true } : {}),
   };
+  const extras = Array.from({ length: extraSiblings }, (_, index) =>
+    page(`x${String(index).padStart(2, '0')}`, 'site', {
+      name: `Extra ${index}`,
+      position: `b${String(index).padStart(2, '0')}`,
+      childCount: 1,
+    }),
+  );
+  const levelOf = (parentId: string): KnowledgeExplorerTreeLevel => {
+    if (parentId === 'site') return { pages: [articles, pricing, ...extras] };
+    if (parentId.startsWith('x'))
+      return { pages: [page(`y-${parentId}`, parentId, { name: `Child of ${parentId}`, childCount: 0 })] };
+    return levels[parentId] ?? { pages: [] };
+  };
   const source: KnowledgeExplorerSource = {
     usePage: pageId => (pageId ? ok(detail(pageId)) : idle),
     useSearch: () => ({ data: { results: [] } }),
     useTreeLevels: requests => {
       requested.push(...requests);
-      return requests.map(({ parentId }) =>
-        ok(parentId === null ? { pages: [siteNow] } : (levels[parentId] ?? { pages: [] })),
-      );
+      return requests.map(({ parentId }) => ok(parentId === null ? { pages: [siteNow] } : levelOf(parentId)));
     },
   };
   return (
@@ -118,7 +132,8 @@ describe('KnowledgePageExplorer tree with child counts', () => {
     const requested: KnowledgeExplorerTreeRequest[] = [];
     renderWithProviders(<Host requested={requested} />);
     expect(tree().getAllByRole('treeitem')).toHaveLength(3);
-    expect(new Set(requested.map(request => request.parentId))).toEqual(new Set([null, 'site']));
+    // The tree holds one level; the graph also loads the next, to draw its pages as dots.
+    expect(new Set(requested.map(request => request.parentId))).toEqual(new Set([null, 'site', 'articles']));
   });
 
   it('shows how many pages sit under each page that has any', () => {
@@ -199,14 +214,16 @@ describe('KnowledgePageExplorer tree with child counts', () => {
     };
     const standIns = (container: HTMLElement) => container.querySelectorAll('[data-page-type="stand-in"]');
 
-    it('starts from the root scope and its first level, as the tree does, with a count where children wait', () => {
+    it('starts from the root scope and its first level, with the level after as dots', () => {
       const { container } = renderWithProviders(<Host requested={[]} />);
-      expect(parentLines(container).filter(id => !id?.includes('more:'))).toEqual([
+      expect(parentLines(container)).toEqual([
+        'parent:articles->first',
+        'parent:articles->second',
         'parent:site->articles',
         'parent:site->pricing',
       ]);
-      expect(within(graphNode('articles')).getByTestId('knowledge-child-count-badge').textContent).toBe('2');
-      expect(standIns(container)).toHaveLength(2);
+      expect(graphNode('first').getAttribute('data-testid')).toBe('knowledge-page-dot');
+      expect(standIns(container)).toHaveLength(0);
       expect(within(graphNode('pricing')).queryByTestId('knowledge-child-count-badge')).toBeNull();
     });
 
@@ -221,13 +238,15 @@ describe('KnowledgePageExplorer tree with child counts', () => {
     });
 
     it("loads a page's children when the pointer rests on the dots standing in for them", () => {
-      const { container } = renderWithProviders(<Host requested={[]} />);
+      // Only so many circles load their children up front; the rest stand in with dots from their count.
+      const requested: KnowledgeExplorerTreeRequest[] = [];
+      const { container } = renderWithProviders(<Host requested={requested} extraSiblings={14} />);
       const standIn = standIns(container)[0]?.closest('.react-flow__node');
       if (!standIn) throw new Error('no stand-in dot');
+      const before = standIns(container).length;
       fireEvent.mouseEnter(standIn);
-      expect(parentLines(container)).toContain('parent:articles->first');
-      expect(parentLines(container)).toContain('parent:articles->second');
-      expect(standIns(container)).toHaveLength(0);
+      expect(standIns(container).length).toBeLessThan(before);
+      expect(requested.some(request => request.parentId?.startsWith('x'))).toBe(true);
     });
 
     it('grows a dot into a labelled circle when it is focused', () => {

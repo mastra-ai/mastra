@@ -4,6 +4,7 @@ import type { KnowledgePagePayload } from '../pageTypes';
 import {
   GRAPH_CHILD_CAP,
   PLACEHOLDER_CAP,
+  WANTED_CIRCLE_CAP,
   graphShape,
   isChildPlaceholder,
   isScopeGroup,
@@ -209,5 +210,32 @@ describe('lazyGraph', () => {
       focusId: null,
     });
     expect(graph.wanted).toEqual(['a', 'b']);
+  });
+
+  it('also wants the children of the circles it draws, so their children show as dots, up to a cap', () => {
+    const kids = Array.from({ length: 15 }, (_, index) =>
+      page(`k${String(index).padStart(2, '0')}`, 'site', { childCount: 3 }),
+    );
+    const graph = lazyGraph({
+      ...base,
+      pages: [page('site', null, { address: 'site:mastra' }), ...kids, page('leaf', 'site')],
+      loadedParents: new Set(['', 'site']),
+      focusId: 'site',
+    });
+    expect(graph.wanted[0]).toBe('site');
+    expect(graph.wanted).toHaveLength(1 + WANTED_CIRCLE_CAP);
+    expect(graph.wanted).not.toContain('leaf');
+  });
+
+  it('keeps wanting a circle once its children have loaded, so the host does not drop the level again', () => {
+    const input = {
+      ...base,
+      pages: [page('site', null, { address: 'site:mastra' }), page('blog', 'site', { childCount: 2 })],
+      focusId: 'site',
+    };
+    const before = lazyGraph({ ...input, loadedParents: new Set(['', 'site']) });
+    const after = lazyGraph({ ...input, loadedParents: new Set(['', 'site', 'blog']) });
+    expect(before.wanted).toEqual(['site', 'blog']);
+    expect(after.wanted).toEqual(before.wanted);
   });
 });

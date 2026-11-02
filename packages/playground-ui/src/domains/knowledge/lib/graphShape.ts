@@ -217,6 +217,8 @@ export function branchColors(pages: readonly KnowledgePagePayload[], shape: Grap
 export const GRAPH_CHILD_CAP = 24;
 /** Stand-in dots drawn at most for a page whose children haven't loaded yet. */
 export const PLACEHOLDER_CAP = 8;
+/** Most circles whose children are loaded just to draw them as dots around it. */
+export const WANTED_CIRCLE_CAP = 12;
 /** Sibling scopes of one type (e.g. `thread`) collapse into one circle from this many. */
 export const SCOPE_GROUP_MIN = 3;
 
@@ -372,5 +374,11 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
     : center
       ? [center.id]
       : roots.map(root => root.id);
+  // One level beyond the circles: the children of the pages drawn as circles, so their own children show as dots.
+  const circles = [...depth]
+    .filter(([id, at]) => at <= 1 && !wanted.includes(id))
+    .map(([id]) => drawn.get(id) as KnowledgePagePayload)
+    .filter(page => (page.childCount ?? 0) > 0 && !isScopeGroup(page) && !isChildPlaceholder(page));
+  wanted.push(...circles.slice(0, WANTED_CIRCLE_CAP).map(page => page.id));
   return { pages: [...drawn.values()], hiddenChildren, wanted };
 }
