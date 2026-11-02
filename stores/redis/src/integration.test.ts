@@ -167,6 +167,17 @@ describe('RedisServerCache Integration', () => {
       }
     });
 
+    it('listPushIndexed keeps both keys for a requested TTL longer than the default', async () => {
+      const day = 24 * 60 * 60;
+      await cache.listPushIndexed('events', 'events:counter', { type: 'a' }, day * 1000);
+
+      for (const key of ['test:events', 'test:events:counter']) {
+        const ttl = await redis.ttl(key);
+        expect(ttl).toBeGreaterThan(day - 120);
+        expect(ttl).toBeLessThanOrEqual(day);
+      }
+    });
+
     it('should apply TTL to keys written via increment', async () => {
       await cache.increment('counter');
 

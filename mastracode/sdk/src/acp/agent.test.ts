@@ -166,6 +166,40 @@ describe('ACP Agent - Turn failures and cancellation', () => {
     await expect(agent.prompt({ sessionId, prompt: [] })).resolves.toMatchObject({ stopReason: 'end_turn' });
   });
 
+  it('rejects when an internal failure aborts the turn without a client cancel', async () => {
+    const { agent, emit, sendMessage } = setup();
+    const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+    sendMessage.mockImplementationOnce(async () => {
+      emit({ type: 'error', error: new Error('Observational memory observation run failed: boom') });
+      emit({ type: 'agent_end', reason: 'aborted' });
+    });
+    await expect(agent.prompt({ sessionId, prompt: [] })).rejects.toMatchObject({
+      code: -32603,
+      message: expect.stringContaining('boom'),
+    });
+  });
+
+  it('still reports cancelled when the client cancels after an error', async () => {
+    const { agent, emit, sendMessage } = setup();
+    const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+    const prompt = agent.prompt({ sessionId, prompt: [] });
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+    emit({ type: 'error', error: new Error('boom') });
+    await agent.cancel({ sessionId });
+    emit({ type: 'agent_end', reason: 'aborted' });
+    await expect(prompt).resolves.toMatchObject({ stopReason: 'cancelled' });
+  });
+
+  it('reports cancelled for an abort after only a retryable error', async () => {
+    const { agent, emit, sendMessage } = setup();
+    const { sessionId } = await agent.newSession({ cwd: '/tmp', mcpServers: [] });
+    sendMessage.mockImplementationOnce(async () => {
+      emit({ type: 'error', error: new Error('Retrying'), retryable: true });
+      emit({ type: 'agent_end', reason: 'aborted' });
+    });
+    await expect(agent.prompt({ sessionId, prompt: [] })).resolves.toMatchObject({ stopReason: 'cancelled' });
+  });
+
   it('does not abort another session when an unknown session is cancelled', async () => {
     const { agent, emit, sendMessage, abort } = setup();
     const first = await agent.newSession({ cwd: '/tmp', mcpServers: [] });

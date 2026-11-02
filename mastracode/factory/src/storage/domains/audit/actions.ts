@@ -19,6 +19,9 @@ export const AUDIT_ACTIONS = {
   git: ['commit', 'push', 'pr_opened'],
   agent: ['commit', 'push', 'pr_opened', 'signaled'],
   intake: ['config_updated', 'binding_updated', 'label_route_updated'],
+  session: ['owner_transferred'],
+  board: ['created', 'updated', 'deleted'],
+  skill: ['updated', 'reverted'],
 } as const;
 
 export type AuditNamespace = keyof typeof AUDIT_ACTIONS;

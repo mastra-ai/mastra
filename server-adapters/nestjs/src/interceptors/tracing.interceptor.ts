@@ -2,7 +2,7 @@ import { createRequire } from 'node:module';
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
 import type { Request, Response } from 'express';
-import { Observable } from 'rxjs';
+import type { Observable } from 'rxjs';
 import { catchError, finalize, tap } from 'rxjs/operators';
 
 import { MASTRA_OPTIONS } from '../constants';

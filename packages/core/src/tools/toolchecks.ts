@@ -66,6 +66,21 @@ export function getProviderToolName(providerId: string): string {
   return providerId.split('.').slice(1).join('.');
 }
 
+const APPROVAL_EXEMPT = Symbol.for('mastra.tool.approvalExempt');
+
+/**
+ * Marks a built tool as never requiring approval, overriding a global `requireToolApproval`
+ * (e.g. skill tools). Only the approval resolvers read this, so it does not affect
+ * tool-call concurrency or eager execution the way a `requireApproval` function would.
+ */
+export function markApprovalExempt(tool: object): void {
+  Object.defineProperty(tool, APPROVAL_EXEMPT, { value: true, enumerable: false });
+}
+
+export function isApprovalExempt(tool: unknown): boolean {
+  return typeof tool === 'object' && tool !== null && (tool as Record<symbol, unknown>)[APPROVAL_EXEMPT] === true;
+}
+
 /**
  * Reads a per-tool {@link NeedsApprovalFn} attached to a tool instance, if present.
  *

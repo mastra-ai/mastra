@@ -80,11 +80,6 @@ describe('filterSpansKeepingAncestors', () => {
     expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x']);
   });
 
-  it('keeps only itself and its ancestors when a leaf matches', () => {
-    const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'a1x');
-    expect(ids(result)).toEqual(['root', 'a', 'a1', 'a1x']);
-  });
-
   it('returns the entire tree, in order, when the root matches', () => {
     const result = filterSpansKeepingAncestors(tree, span => span.spanId === 'root');
     expect(ids(result)).toEqual(ids(tree));

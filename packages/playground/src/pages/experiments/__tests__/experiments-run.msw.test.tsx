@@ -1,7 +1,8 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 import ExperimentsPage from '..';
+import { storageWithoutMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { emptyDatasetItems } from '@/domains/datasets/components/__tests__/fixtures/dataset-items';
 import { datasetVersionsResponse } from '@/domains/datasets/components/__tests__/fixtures/dataset-versions';
 import { buildDataset, buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
@@ -25,33 +26,6 @@ vi.mock('react-router', async importOriginal => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
-vi.mock('@mastra/playground-ui/components/Combobox', () => ({
-  Combobox: ({
-    options,
-    value,
-    onValueChange,
-    placeholder,
-  }: {
-    options: Array<{ label: string; value: string }>;
-    value?: string | string[];
-    onValueChange?: (value: string) => void;
-    placeholder?: string;
-  }) => (
-    <select
-      aria-label={placeholder}
-      value={Array.isArray(value) ? (value[0] ?? '') : (value ?? '')}
-      onChange={event => onValueChange?.(event.target.value)}
-    >
-      <option value="">{placeholder}</option>
-      {options.map(option => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  ),
-}));
-
 vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
   CodeEditor: ({ value, onChange }: { value: string; onChange?: (value: string) => void }) => (
     <textarea aria-label="Request context JSON" value={value} onChange={event => onChange?.(event.target.value)} />
@@ -63,6 +37,7 @@ function setupHandlers() {
   const dataset = buildDataset();
 
   server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(storageWithoutMetrics)),
     http.get(`${TEST_BASE_URL}/api/experiments`, () => HttpResponse.json(buildListExperimentsResponse([]))),
     http.get(`${TEST_BASE_URL}/api/experiments/review-summary`, () => HttpResponse.json(emptyReviewSummary)),
     http.get(`${TEST_BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse([dataset]))),
@@ -94,39 +69,32 @@ function setupHandlers() {
   return { triggerCalls };
 }
 
-const selectOption = (label: string, value: string) =>
-  fireEvent.change(screen.getByRole('combobox', { name: label }), { target: { value } });
-
-describe('Experiments page — Run Experiment', () => {
+describe('Experiments page — New experiment', () => {
   it('runs an experiment from scratch and navigates to it', async () => {
     const { triggerCalls } = setupHandlers();
     mockNavigate.mockClear();
     renderWithProviders(<ExperimentsPage />, { router: true });
 
-    fireEvent.click(await screen.findByRole('button', { name: /run experiment/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /new experiment/i }));
+    const dialog = within(await screen.findByRole('dialog', { name: /new experiment/i }));
 
-    const dialog = await screen.findByRole('dialog', { name: /run experiment/i });
-    expect(dialog).toBeDefined();
+    // The dataset starts on the newest one; pick the target and name the run under Advanced.
+    await waitFor(() =>
+      expect(dialog.getByRole<HTMLInputElement>('combobox', { name: /^Dataset/ }).value).toBe('Dataset 1'),
+    );
+    const target = dialog.getByRole<HTMLInputElement>('combobox', { name: /^Target/ });
+    await waitFor(() => expect(target.disabled).toBe(false));
+    fireEvent.keyDown(target, { key: 'ArrowDown' });
+    fireEvent.click(await screen.findByRole('option', { name: 'Agent One' }));
 
-    fireEvent.change(screen.getByLabelText(/^Name/), { target: { value: 'My experiment' } });
+    fireEvent.click(dialog.getByRole('button', { name: 'Advanced' }));
+    fireEvent.change(await dialog.findByLabelText('Experiment name'), { target: { value: 'My experiment' } });
 
-    // Select dataset, version, and target
-    await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
-    selectOption('Select a dataset...', 'dataset-1');
-    await waitFor(() => expect(screen.getByRole('option', { name: 'v11' })).toBeDefined());
-    selectOption('Select version', '11');
-    selectOption('Select target type', 'agent');
-    await waitFor(() => expect(screen.getByRole('option', { name: 'Agent One' })).toBeDefined());
-    selectOption('Select agent', 'agent-1');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    fireEvent.click(dialog.getByRole('button', { name: 'Run experiment' }));
 
     await waitFor(() => expect(triggerCalls).toHaveLength(1));
     expect(triggerCalls[0].datasetId).toBe('dataset-1');
-    expect(triggerCalls[0].body.name).toBe('My experiment');
-    expect(triggerCalls[0].body.targetType).toBe('agent');
-    expect(triggerCalls[0].body.targetId).toBe('agent-1');
-    expect(triggerCalls[0].body.version).toBe(11);
+    expect(triggerCalls[0].body).toMatchObject({ name: 'My experiment', targetType: 'agent', targetId: 'agent-1' });
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('/experiments/exp-42'));
   });
 });

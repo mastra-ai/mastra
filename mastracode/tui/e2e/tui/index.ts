@@ -70,6 +70,7 @@ import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
 import { experimentalAgentDurableScenario, experimentalAgentEventedScenario } from './experimental-agent-runtime.js';
 import { experimentalAgentSettingsScenario } from './experimental-agent-settings.js';
+import { factoryClientModeScenario } from './factory-client-mode.js';
 import { fileAttachmentBlockedRetryScenario } from './file-attachment-blocked-retry.js';
 import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
@@ -101,6 +102,7 @@ import {
 } from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
+import { knowledgeSettingsScenario } from './knowledge-settings.js';
 import { legacySettingsNoPromptScenario } from './legacy-settings-no-prompt.js';
 import { legacySettingsUpgradeScenario } from './legacy-settings-upgrade.js';
 import { legacyThreadModelRestoreScenario, savedThreadModelRestoreScenario } from './legacy-thread-model-restore.js';
@@ -135,6 +137,11 @@ import { notificationSignalInterruptScenario } from './notification-signal-inter
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { notifyInputRequestHookScenario } from './notify-input-request-hook.js';
 import { omAttachmentObservationScenario } from './om-attachment-observation.js';
+import {
+  omAutoPreviewAnthropicOnlyScenario,
+  omAutoPreviewGoogleApiKeyScenario,
+  omAutoPreviewStoredGoogleKeyScenario,
+} from './om-auto-preview-credentials.js';
 import { omAutoSelectionScenario } from './om-auto-selection.js';
 import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
 import { omModelOverrideReloadScenario } from './om-model-override-reload.js';
@@ -222,7 +229,6 @@ import { subagentDelegationScenario } from './subagent-delegation.js';
 import { subagentModelStartupRestoreScenario } from './subagent-model-startup-restore.js';
 import { subagentPlanExecuteToolsScenario } from './subagent-plan-execute-tools.js';
 import { subagentsCommandScenario } from './subagents-command.js';
-import { subconsciousActivityRenderingScenario } from './subconscious-activity-rendering.js';
 import { taskInlineTransitionsScenario } from './task-inline-transitions.js';
 import { taskPatchToolsScenario } from './task-patch-tools.js';
 import { taskProgressEventsScenario } from './task-progress-events.js';
@@ -253,6 +259,7 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
+  'factory-client-mode': factoryClientModeScenario,
   'abort-followup': abortFollowupScenario,
   'abort-escape-off': abortEscapeOffScenario,
   'abort-escape-durable': abortEscapeDurableScenario,
@@ -379,8 +386,12 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'notify-input-request-hook': notifyInputRequestHookScenario,
   'knowledge-browser': knowledgeBrowserScenario,
+  'knowledge-settings': knowledgeSettingsScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-auto-selection': omAutoSelectionScenario,
+  'om-auto-preview-google-api-key': omAutoPreviewGoogleApiKeyScenario,
+  'om-auto-preview-stored-google-key': omAutoPreviewStoredGoogleKeyScenario,
+  'om-auto-preview-anthropic-only': omAutoPreviewAnthropicOnlyScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-model-override-reload': omModelOverrideReloadScenario,
   'om-pack-startup-restore': omPackStartupRestoreScenario,
@@ -436,7 +447,6 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'state-signal-reload': stateSignalReloadScenario,
   'state-signal-rendering': stateSignalRenderingScenario,
   'steer-drain-failure-recovery': steerDrainFailureRecoveryScenario,
-  'subconscious-activity-rendering': subconsciousActivityRenderingScenario,
   'setup-completion-persistence': setupCompletionPersistenceScenario,
   'setup-custom-pack-completion': setupCustomPackCompletionScenario,
   'setup-login-refresh': setupLoginRefreshScenario,

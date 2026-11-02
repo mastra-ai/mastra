@@ -13,7 +13,7 @@ For setup instructions, see the [Metrics overview](/docs/observability/metrics/o
 
 ## When Mastra emits automatic metrics
 
-Metrics are extracted from spans when they end. The observability layer inspects each completed span, calculates duration, and (for model generation spans) reads token usage data. No manual instrumentation is needed.
+Metrics are extracted from spans when they end. The observability layer inspects each completed span, calculates duration, and reads token usage data from model generation and classifier evaluation spans. No manual instrumentation is needed.
 
 ### What affects whether a metric is available
 
@@ -38,7 +38,7 @@ Duration metrics record execution time in milliseconds, calculated from the span
 
 ## Token usage metrics
 
-Token metrics are emitted only from `MODEL_GENERATION` spans that include `usage` data. Token metrics require usage data from the provider.
+Token metrics are emitted from `MODEL_GENERATION` and `CLASSIFIER_EVALUATION` spans that include `usage` data. Token metrics require usage data from the provider.
 
 ### Input token metrics
 
@@ -48,6 +48,8 @@ Token metrics are emitted only from `MODEL_GENERATION` spans that include `usage
 | `mastra_model_input_text_tokens` | Text tokens in the input prompt |
 | `mastra_model_input_cache_read_tokens` | Tokens read from prompt cache (e.g. Anthropic) |
 | `mastra_model_input_cache_write_tokens` | Tokens written to prompt cache |
+| `mastra_model_input_cache_write_5m_tokens` | Tokens written to prompt cache with a 5-minute TTL (e.g. Anthropic) |
+| `mastra_model_input_cache_write_1h_tokens` | Tokens written to prompt cache with a 1-hour TTL (e.g. Anthropic) |
 | `mastra_model_input_audio_tokens` | Audio tokens in the input (multimodal models) |
 | `mastra_model_input_image_tokens` | Image tokens in the input (vision models) |
 
@@ -145,7 +147,7 @@ When you spot a spike in latency or token usage on the Metrics dashboard, correl
 
 ### Token metrics are missing
 
-- **Span is a model generation**: Token metrics are only emitted from `MODEL_GENERATION` spans.
+- **Span is a model generation or classifier evaluation**: Token metrics are only emitted from `MODEL_GENERATION` and `CLASSIFIER_EVALUATION` spans.
 - **Provider reports usage**: The model provider must include `usage` data in its response. Usage data is required to emit token metrics.
 
 ## Related

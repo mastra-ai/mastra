@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 const roles: Record<TextRole, string> = {
   hero: 'text-hero font-display',
   lead: 'text-lead',
+  'display-lg': 'text-display-lg',
   display: 'text-display',
   title: 'text-title',
   heading: 'text-heading',
@@ -14,6 +15,7 @@ const roles: Record<TextRole, string> = {
   'card-title-tight': 'text-card-title-tight',
   'card-title-strong': 'text-card-title-strong',
   'body-sm': 'text-body-sm',
+  menu: 'text-menu',
   column: 'text-column',
   caption: 'text-caption',
   eyebrow: 'text-eyebrow uppercase',

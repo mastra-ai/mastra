@@ -29,7 +29,7 @@ export function LiveKitRecordingReview({ traceId, spans }: { traceId: string; sp
     <>
       <Button size="sm" onClick={() => setOpen(true)}>
         <AudioLinesIcon />
-        Review Audio
+        Review audio
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent size="lg">

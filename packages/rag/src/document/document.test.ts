@@ -492,6 +492,58 @@ describe('MDocument', () => {
     });
   });
 
+  describe('addStartIndex', () => {
+    const text = Array.from({ length: 400 }, (_, i) => `word${i}`).join(' ');
+
+    const expectCorrectStartIndexes = (chunks: { text: string; metadata: Record<string, any> }[]) => {
+      expect(chunks.length).toBeGreaterThan(1);
+      let previous = -1;
+      for (const chunk of chunks) {
+        const startIndex = chunk.metadata.startIndex;
+        expect(startIndex).toBeGreaterThan(previous);
+        expect(text.slice(startIndex).startsWith(chunk.text)).toBe(true);
+        previous = startIndex;
+      }
+    };
+
+    it('reports the real start of every chunk with the token strategy and overlap', async () => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({ strategy: 'token', maxSize: 50, overlap: 10, addStartIndex: true });
+
+      expectCorrectStartIndexes(chunks);
+      expect(chunks[1]!.metadata.startIndex).toBe(130);
+    });
+
+    it('reports the real start of every chunk with a token-counting lengthFunction', async () => {
+      const { getEncoding } = await import('js-tiktoken');
+      const encoding = getEncoding('cl100k_base');
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({
+        strategy: 'recursive',
+        maxSize: 50,
+        overlap: 10,
+        addStartIndex: true,
+        lengthFunction: t => encoding.encode(t).length,
+      });
+
+      expectCorrectStartIndexes(chunks);
+    });
+
+    it('keeps correct start indexes with the default character length', async () => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({ strategy: 'recursive', maxSize: 200, overlap: 40, addStartIndex: true });
+
+      expectCorrectStartIndexes(chunks);
+    });
+
+    it('keeps correct start indexes with the token strategy and no overlap', async () => {
+      const doc = MDocument.fromText(text);
+      const chunks = await doc.chunk({ strategy: 'token', maxSize: 50, overlap: 0, addStartIndex: true });
+
+      expectCorrectStartIndexes(chunks);
+    });
+  });
+
   describe('chunkRecursive', () => {
     it('chunkRecursive', async () => {
       const text =

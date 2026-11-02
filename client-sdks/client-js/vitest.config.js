@@ -5,5 +5,10 @@ export default defineConfig({
     name: 'unit:client-sdks/client-js',
     environment: 'node',
     include: ['src/**/*.test.ts'],
+    typecheck: {
+      enabled: true,
+      include: ['type-tests/thread-query.test-d.ts'],
+      tsconfig: './type-tests/tsconfig.thread-query.json',
+    },
   },
 });

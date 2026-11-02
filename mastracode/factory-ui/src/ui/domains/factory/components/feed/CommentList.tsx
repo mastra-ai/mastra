@@ -3,7 +3,7 @@ import { ArrivalScope } from '@mastra/playground-ui/components/Arrival';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Comment, CommentArrival } from '@mastra/playground-ui/components/Comment';
 import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components/ScrollArea';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { CommentListSkeleton } from './CommentListSkeleton';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { MessageCircle, RefreshCw } from 'lucide-react';
 import { useRef, useState } from 'react';
@@ -196,13 +196,7 @@ export function CommentList({
                 <span className="bg-border h-px flex-1" />
               </div>
             )}
-            {showSkeleton ? (
-              <div className="flex flex-col gap-2 px-2 py-2" role="status" aria-label="Loading comments">
-                <Skeleton className="h-10 w-full" />
-                <Skeleton className="h-10 w-4/5" />
-                <Skeleton className="h-10 w-full" />
-              </div>
-            ) : null}
+            {showSkeleton ? <CommentListSkeleton /> : null}
             {comments.isError ? (
               <div className="text-muted-foreground flex items-center gap-2 px-2 py-2">
                 <Txt as="span" variant="caption">

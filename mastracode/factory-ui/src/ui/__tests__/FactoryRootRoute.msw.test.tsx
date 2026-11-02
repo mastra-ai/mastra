@@ -27,6 +27,7 @@ const draft = {
     sandboxProvider: 'local',
     sandboxWorkdir: '/workspace/hello',
   },
+  modelScope: 'factory',
   model: { providerId: 'openai', modelId: 'openai/gpt-5.6-sol', method: 'api_key' },
 };
 
@@ -126,7 +127,7 @@ describe('Factory root route', () => {
     }
   });
 
-  it('continues from project management to Factory model setup', async () => {
+  it('continues from project management to account setup', async () => {
     seedOnboarding('project-management', null);
 
     server.use(
@@ -146,7 +147,7 @@ describe('Factory root route', () => {
 
     try {
       await user.click(await screen.findByRole('button', { name: 'Skip for now' }));
-      await screen.findByRole('heading', { name: 'Choose your model.' });
+      await screen.findByRole('heading', { name: 'Choose your setup.' });
     } finally {
       clearOnboarding();
     }

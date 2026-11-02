@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../../../error';
-import type { StepResult, WorkflowRunState } from '../../../workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../../../workflows';
 import type {
   ClaimRunOwnershipInput,
   ClaimRunOwnershipResult,
@@ -10,6 +10,7 @@ import type {
 } from '../../run-fencing';
 import { runFencingNotSupportedError } from '../../run-fencing';
 import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
+import type { WorkflowStepStartGuard, WorkflowStepCompletionGuard } from '../../workflow-step-guard';
 import { StorageDomain } from '../base';
 import type { StateRef, StateVersion, StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunHeader } from './journal';
 import type { StatePatchOp } from './state-patch';
@@ -32,6 +33,11 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }
 
   abstract supportsConcurrentUpdates(): boolean;
+
+  /** Atomic occurrence checks for evented step writes and replay-safe continuation. */
+  supportsWorkflowStepGuards(): boolean {
+    return false;
+  }
 
   /**
    * Whether this adapter implements run ownership: the claim/renew/release
@@ -261,6 +267,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
      */
     state?: Record<string, any>;
     fence?: RunFence;
+    startGuard?: WorkflowStepStartGuard;
+    completionGuard?: WorkflowStepCompletionGuard;
   }): Promise<Record<string, StepResult<any, any, any, any>>>;
 
   /**
@@ -282,6 +290,24 @@ export abstract class WorkflowsStorage extends StorageDomain {
     storageVersion?: 1 | 2;
   }): Promise<WorkflowRunState | undefined>;
 
+  /**
+   * Whether `persistWorkflowSnapshot` enforces its `expectedStatus` guard atomically
+   * with the write. Adapters that return false ignore the guard, so callers that
+   * need it must check the run status themselves before writing.
+   */
+  supportsGuardedSnapshotWrites(): boolean {
+    return false;
+  }
+
+  /**
+   * Upserts a run snapshot.
+   *
+   * `expectedStatus` is an optional compare-and-set guard, honored only by adapters
+   * where `supportsGuardedSnapshotWrites()` is true. When the run already has a
+   * snapshot whose status is not one of these values, the write is skipped and the
+   * call resolves to `false`. A run with no snapshot yet is always written. Adapters
+   * that honor the guard resolve to `true` after a write; others resolve to `undefined`.
+   */
   abstract persistWorkflowSnapshot(_: {
     workflowName: string;
     runId: string;
@@ -290,7 +316,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void>;
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean | void>;
 
   /**
    * `storageVersion` limits the lookup to one store. Without it, adapters that support run
@@ -306,6 +333,22 @@ export abstract class WorkflowsStorage extends StorageDomain {
     /** @experimental */
     storageVersion?: 1 | 2;
   }): Promise<WorkflowRunState | null>;
+
+  /**
+   * Returns only the persisted status of a run, or `null` when the run has no
+   * snapshot. Adapters should override this to avoid reading the whole snapshot;
+   * the default loads it.
+   */
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    const snapshot = await this.loadWorkflowSnapshot({ workflowName, runId });
+    return snapshot?.status ?? null;
+  }
 
   /** Adapters that support run journals list runs of both versions. */
   abstract listWorkflowRuns(args?: StorageListWorkflowRunsInput): Promise<WorkflowRuns>;

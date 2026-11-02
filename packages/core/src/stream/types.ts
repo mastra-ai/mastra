@@ -14,10 +14,11 @@ import type {
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
 import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
-import type { AgentSignalType } from '../agent/signals';
+import type { AgentSignalDataPart, AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
@@ -230,6 +231,8 @@ export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   providerMetadata?: ProviderMetadata;
   args?: TArgs;
   dynamic?: boolean;
+  /** Partial provider-executed result (e.g. an in-progress image). A final, non-preliminary result always follows. */
+  preliminary?: boolean;
 }
 
 export type DynamicToolCallPayload = ToolCallPayload<any, any>;
@@ -302,6 +305,11 @@ export interface ThreadHistoryPayload {
   messages: MastraDBMessage[];
   /** Whether older messages exist beyond this page. */
   hasMore: boolean;
+  /**
+   * Run holding the thread lease at hydration, or null when idle. When the lease backend doesn't answer in time,
+   * this is the run this process last saw take the thread, and it can be stale.
+   */
+  activeRunId: string | null;
 }
 
 interface StartPayload {
@@ -312,6 +320,8 @@ export interface StepStartPayload {
   messageId?: string;
   /** Epoch milliseconds sampled immediately before the model provider call. Absent when no provider call occurred. */
   startedAt?: number;
+  modelId?: string;
+  provider?: string;
   request: {
     body?: string;
     [key: string]: unknown;
@@ -822,24 +832,43 @@ interface ToolExecutionAbortPayload {
   primitiveId: string;
 }
 
-interface ToolCallApprovalPayload {
+/**
+ * Set when a supervisor re-raises a pause from a delegated sub-agent. `toolCallId` stays the
+ * supervisor's delegation call, which is what resumes the run.
+ */
+export interface DelegatedPauseIdentity {
+  /** The sub-agent's own tool call that paused. */
+  delegatedToolCallId?: string;
+  /** The name of the sub-agent's tool that paused. */
+  delegatedToolName?: string;
+}
+
+interface ToolCallApprovalPayload extends DelegatedPauseIdentity {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
   resumeSchema: string;
   /** Epoch ms when approval was requested; matches the tool part's `updatedAt`. */
   updatedAt?: number;
+  /** Token usage of the model step that produced this tool call. */
+  usage?: LanguageModelUsage;
+  /** Provider metadata of the model step that produced this tool call. */
+  providerMetadata?: ProviderMetadata;
 }
 
-interface ToolCallSuspendedPayload {
+interface ToolCallSuspendedPayload extends DelegatedPauseIdentity {
   toolCallId: string;
   toolName: string;
   suspendPayload: any;
   args: Record<string, any>;
   resumeSchema: string;
+  /** Token usage of the model step that produced this tool call. */
+  usage?: LanguageModelUsage;
+  /** Provider metadata of the model step that produced this tool call. */
+  providerMetadata?: ProviderMetadata;
 }
 
-interface ToolCallResumedPayload {
+interface ToolCallResumedPayload extends DelegatedPauseIdentity {
   toolCallId: string;
   toolName: string;
   /** Whether the resumed pause was a `suspend()` call or a tool approval request. */
@@ -848,6 +877,20 @@ interface ToolCallResumedPayload {
   suspendPayload?: any;
   resumeSchema?: string;
 }
+
+/** Subscription-only presentation of admitted input, not the step-boundary delivery echo. */
+export type UserMessagePendingChunk = BaseChunkType & {
+  type: 'data-user-message-pending';
+  transient: true;
+  data: AgentSignalDataPart['data'] & { metadata: Record<string, unknown> & { status: 'pending' | 'queued' } };
+};
+
+/** Emitted only for input actually removed before delivery, never for a cancellation request. */
+export type UserMessageCancelledChunk = BaseChunkType & {
+  type: 'data-user-message-cancelled';
+  transient: true;
+  data: { id: string };
+};
 
 export type DataChunkType = {
   type: `data-${string}`;
@@ -898,6 +941,12 @@ export type NetworkChunkType<OUTPUT = undefined> =
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
 /** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
 export type ThreadHistoryChunk = BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload };
+
+/** A thread run's outcome, independent of stored-message replay. Suspension is resumable. */
+export type ThreadRunStatusChunk = BaseChunkType & {
+  type: 'thread-run-status';
+  payload: { status: 'success' | 'failed' | 'aborted' | 'suspended' };
+};
 
 export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
@@ -1087,6 +1136,8 @@ export type TypedChunkType<OUTPUT = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
   | NetworkChunkType<OUTPUT>
+  | UserMessagePendingChunk
+  | UserMessageCancelledChunk
   | (DataChunkType & {
       from: never;
       runId: never;
@@ -1172,6 +1223,10 @@ export type MastraOnStepFinishCallback<OUTPUT = undefined> = (
 ) => Promise<void> | void;
 
 export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPUT> & {
+  /** Present when execution ends at a tool suspension boundary. */
+  suspendReason?: 'tool-call-approval' | 'tool-call-suspended';
+  toolCallId?: string;
+  toolName?: string;
   error?: Error | string | { message: string; stack: string };
   object?: OUTPUT;
   /**
@@ -1186,6 +1241,17 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
   runId?: string;
   /** Model messages the run added to the conversation (the response messages). */
   messages?: ModelMessage[];
+  /**
+   * @internal Cumulative usage already recorded by earlier suspended legs of this run, so the
+   * MODEL_GENERATION span of a resumed leg records only its own share.
+   */
+  generationReportedUsage?: LanguageModelUsage;
+  /**
+   * @internal Provider metadata of each model step this leg of the run ran, so the
+   * MODEL_GENERATION span of a suspended or resumed leg records only its own provider cost.
+   * Absent when no earlier leg reported any step, so every step in `steps` belongs to this leg.
+   */
+  generationStepProviderMetadata?: (ProviderMetadata | undefined)[];
 };
 
 /**
@@ -1257,6 +1323,8 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   /** Loads response messages the run pruned from its message list (kept there by id only) for scorer data. */
   loadStoredMessages?: StoredMessageLoader;
   processorStates?: Map<string, any>;
+  /** The agent producing this output, passed to output processors as `agent`. */
+  agent?: Agent<any, any, any, any>;
   requestContext?: RequestContext;
   /** The run's abort signal, forwarded to output processors. */
   abortSignal?: AbortSignal;

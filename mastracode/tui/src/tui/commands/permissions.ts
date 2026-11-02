@@ -1,3 +1,4 @@
+import { requireLocal } from '../runtime.js';
 import type { SlashCommandContext } from './types.js';
 
 export async function handlePermissionsCommand(ctx: SlashCommandContext, args: string[]): Promise<void> {
@@ -24,7 +25,7 @@ export async function handlePermissionsCommand(ctx: SlashCommandContext, args: s
 async function showPermissions(ctx: SlashCommandContext): Promise<void> {
   const { TOOL_CATEGORIES, getToolsForCategory } = await import('@mastra/code-sdk/permissions');
   const rules = ctx.state.session.permissions.getRules();
-  const grants = ctx.state.session.getGrants();
+  const grants = ctx.state.local?.session.getGrants() ?? { categories: [], tools: [] };
   const isYolo = (ctx.state.session.state.get() as any)?.yolo === true;
 
   const lines: string[] = [];

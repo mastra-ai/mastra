@@ -197,10 +197,12 @@ describe('modelSupportsTemperature — Bedrock resolution (issue #23319)', () =>
     // @ai-sdk/amazon-bedrock exposes provider `amazon-bedrock` and region/vendor-qualified ids.
     expect(modelSupportsTemperature('amazon-bedrock/us.anthropic.claude-sonnet-5')).toBe(false);
     expect(modelSupportsTemperature('amazon-bedrock/eu.anthropic.claude-sonnet-4-6')).toBe(true);
-    // Global and geographic (JP/AU) inference-profile prefixes resolve the same way.
+    // Global and geographic (JP/AU/IN) inference-profile prefixes resolve the same way.
     expect(modelSupportsTemperature('amazon-bedrock/global.anthropic.claude-sonnet-5')).toBe(false);
     expect(modelSupportsTemperature('amazon-bedrock/jp.anthropic.claude-sonnet-4-6')).toBe(true);
     expect(modelSupportsTemperature('amazon-bedrock/au.anthropic.claude-sonnet-4-6')).toBe(true);
+    expect(modelSupportsTemperature('amazon-bedrock/in.anthropic.claude-sonnet-5')).toBe(false);
+    expect(modelSupportsTemperature('amazon-bedrock/in.anthropic.claude-opus-5')).toBe(false);
   });
 
   it('applies the Bedrock grok temperature override without affecting direct xai', () => {
@@ -407,6 +409,20 @@ describe('GatewayRegistry Auto-Refresh', () => {
     } catch (error) {
       console.warn('Failed to restore files in afterAll:', error);
     }
+  });
+
+  it('should not sync the global cache on every registry read once loaded', () => {
+    const registry = GatewayRegistry.getInstance({ useDynamicLoading: true });
+    registry.getProviders();
+
+    const globalCachePath = path.join(os.homedir(), '.cache', 'mastra', 'provider-registry.json');
+    const existsSpy = vi.spyOn(fs, 'existsSync');
+
+    registry.getProviders();
+    registry.isProviderRegistered('openai');
+    registry.getModels();
+
+    expect(existsSpy.mock.calls.some(([p]) => p === globalCachePath)).toBe(false);
   });
 
   it('should create cache file on first sync', async () => {
@@ -702,25 +718,24 @@ describe('GatewayRegistry Auto-Refresh', () => {
             gateway: 'models.dev',
           },
         };
-      } else {
-        // Second call - add a new model and a new provider
-        return {
-          'test-provider': {
-            name: 'Test Provider',
-            url: 'https://test.com/v1',
-            apiKeyEnvVar: 'TEST_API_KEY',
-            models: ['model-a', 'model-b', 'model-c'], // Added model-c
-            gateway: 'models.dev',
-          },
-          'new-provider': {
-            name: 'New Provider',
-            url: 'https://new.com/v1',
-            apiKeyEnvVar: 'NEW_API_KEY',
-            models: ['new-model-1', 'new-model-2'],
-            gateway: 'models.dev',
-          },
-        };
       }
+      // Second call - add a new model and a new provider
+      return {
+        'test-provider': {
+          name: 'Test Provider',
+          url: 'https://test.com/v1',
+          apiKeyEnvVar: 'TEST_API_KEY',
+          models: ['model-a', 'model-b', 'model-c'], // Added model-c
+          gateway: 'models.dev',
+        },
+        'new-provider': {
+          name: 'New Provider',
+          url: 'https://new.com/v1',
+          apiKeyEnvVar: 'NEW_API_KEY',
+          models: ['new-model-1', 'new-model-2'],
+          gateway: 'models.dev',
+        },
+      };
     });
 
     // Mock Netlify to return empty

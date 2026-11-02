@@ -77,8 +77,11 @@ export function handleTabsContainer(
     }
   }
 
-  // Find tab panels (divs with role="tabpanel")
-  const tabPanels = findAllElementsByRole(node, 'tabpanel')
+  // Find tab panels (divs with role="tabpanel"). Only look at the panels that
+  // belong to this container: nested tab groups (for example a framework tab
+  // containing an npm2yarn code block) render their own tabpanels, and
+  // collecting those recursively shifts every label onto the wrong panel.
+  const tabPanels = findDirectTabPanels(node)
 
   // Generate output: pair labels with content
   for (let i = 0; i < tabPanels.length; i++) {
@@ -470,6 +473,27 @@ function findElementByRole(node: Element, role: string): Element | null {
     }
   }
   return null
+}
+
+/**
+ * Find the tabpanels owned by a tabs container.
+ *
+ * The panels sit in a wrapper element alongside the tablist, and each panel can
+ * itself contain another tabs container (for example a framework tab whose
+ * content is an npm2yarn code block with its own npm/pnpm/Yarn/Bun tabs).
+ * Recursing would mix those inner panels into this container's `tabPanels`,
+ * so only the panels that are direct children of the wrapper are returned.
+ */
+function findDirectTabPanels(node: Element): Element[] {
+  const isTabPanel = (child: ElementContent): child is Element =>
+    child.type === 'element' && child.properties?.role === 'tabpanel'
+
+  const wrapper = node.children.find(
+    (child): child is Element =>
+      child.type === 'element' && child.properties?.role !== 'tablist' && child.children.some(isTabPanel),
+  )
+
+  return wrapper ? wrapper.children.filter(isTabPanel) : []
 }
 
 /**

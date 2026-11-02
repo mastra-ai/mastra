@@ -88,7 +88,7 @@ function TimePartSelect({ label, options, value, onValueChange }: TimePartSelect
   return (
     <Select value={options.indexOf(value).toString()} onValueChange={onValueChange}>
       <SelectTrigger size="sm" aria-label={label}>
-        <SelectValue placeholder="Select..." />
+        <SelectValue placeholder="Select" />
       </SelectTrigger>
       <SelectContent>
         {options.map((option, idx) => (

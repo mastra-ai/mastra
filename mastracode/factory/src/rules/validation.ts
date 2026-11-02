@@ -17,7 +17,7 @@ const MAX_MESSAGE_LENGTH = 8_192;
 const MAX_ARGUMENTS_LENGTH = 4_096;
 export const MAX_ROLE_LENGTH = 32;
 export const MAX_TOOL_NAME_LENGTH = 128;
-const MAX_SKILL_NAME_LENGTH = 128;
+export const MAX_SKILL_NAME_LENGTH = 128;
 const MAX_SOURCE_KEY_LENGTH = 256;
 const MAX_URL_LENGTH = 2_048;
 const MAX_METADATA_JSON_LENGTH = 16_384;
@@ -27,7 +27,7 @@ const MAX_JSON_COLLECTION_SIZE = 100;
 export const MAX_BOARD_IDENTIFIER_LENGTH = 128;
 export const IDENTIFIER_RE = /^[a-z0-9][a-z0-9_-]*$/i;
 export const BOARD_IDENTIFIER_RE = IDENTIFIER_RE;
-const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+export const SKILL_NAME_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const SENSITIVE_KEY_RE = /(?:authorization|cookie|credential|password|secret|token)/i;
 const WORK_ITEM_SOURCES: readonly WorkItemSource[] = [
   'github-issue',
@@ -242,6 +242,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'board',
           'source',
           'sourceKey',
+          // Decisions saved before claims were dropped still carry it; it is ignored.
           'claimKey',
           'title',
           'url',
@@ -254,11 +255,6 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       if (value.skipRules !== undefined && typeof value.skipRules !== 'boolean') {
         throw new FactoryRuleValidationError('Factory linked work item skipRules must be a boolean.');
       }
-      const claimKey = optionalBoundedString(
-        value.claimKey,
-        'Factory linked work item claimKey',
-        MAX_SOURCE_KEY_LENGTH,
-      );
       const url = value.url;
       if (url !== null && (typeof url !== 'string' || url.length > MAX_URL_LENGTH || !/^https?:\/\//.test(url))) {
         throw new FactoryRuleValidationError('Factory linked work item URL is invalid.');
@@ -270,7 +266,6 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         board: boardIdentifier(value.board, 'Factory linked work item board'),
         source: enumValue(value.source, WORK_ITEM_SOURCES, 'Factory linked work item source'),
         sourceKey: boundedString(value.sourceKey, 'Factory linked work item sourceKey', MAX_SOURCE_KEY_LENGTH),
-        ...(claimKey ? { claimKey } : {}),
         title: boundedString(value.title, 'Factory linked work item title', MAX_TITLE_LENGTH),
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
@@ -290,6 +285,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'arguments',
           'precedingMessage',
           'cancelInFlight',
+          'startsAfterOwnMove',
           'resume',
         ],
         'Factory invoke skill decision',
@@ -308,6 +304,9 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
       );
       if (value.cancelInFlight !== undefined && typeof value.cancelInFlight !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill cancelInFlight must be a boolean.');
+      }
+      if (value.startsAfterOwnMove !== undefined && typeof value.startsAfterOwnMove !== 'boolean') {
+        throw new FactoryRuleValidationError('Factory skill startsAfterOwnMove must be a boolean.');
       }
       if (value.resume !== undefined && typeof value.resume !== 'boolean') {
         throw new FactoryRuleValidationError('Factory skill resume must be a boolean.');
@@ -330,6 +329,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         ...(args ? { arguments: args } : {}),
         ...(precedingMessage ? { precedingMessage } : {}),
         ...(value.cancelInFlight === true ? { cancelInFlight: true } : {}),
+        ...(value.startsAfterOwnMove === true ? { startsAfterOwnMove: true } : {}),
       };
     }
     case 'sendMessage': {

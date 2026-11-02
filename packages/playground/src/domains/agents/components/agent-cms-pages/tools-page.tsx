@@ -225,7 +225,7 @@ export function ToolsPage() {
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="ghost" size="sm" icon={<PlusIcon />}>
-                    Add Tools
+                    Add tools
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent align="end" className="max-h-72 w-80 overflow-y-auto p-0 pt-4">

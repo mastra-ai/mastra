@@ -1,8 +1,6 @@
 @import './fonts.css';
 @import '../../playground-ui/src/index.css';
-
-/* Scan playground-ui dist for Tailwind classes used by consumed components */
-@source '../../node_modules/@mastra/playground-ui';
+@import '@mastra/playground-ui/sources.css';
 
 @layer base {
   :root {

@@ -23,7 +23,13 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "qwen3.6-35b": [
+    "gemma4-26b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral4-119b": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -35,10 +41,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "mistral4-119b": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "deepseek-v4.1-flash-552b": [
@@ -47,13 +53,7 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemma4-26b": [
+    "qwen3.6-35b": [
       {
         "type": "effort",
         "values": ["none", "high"]

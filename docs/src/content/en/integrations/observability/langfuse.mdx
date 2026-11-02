@@ -229,6 +229,19 @@ This thread-to-session fallback is specific to Langfuse. Observational Memory do
 
 Internal observer and reflector execution threads remain separate. Multi-thread observation uses the invoking caller's session, not the first thread in the batch. This session behavior applies regardless of the `bufferOnIdle` setting and doesn't change buffering or span parentage.
 
+## Cost tracking
+
+The exporter forwards provider-reported cost to Langfuse's `cost_details` field, but only when the generation's cost metadata meets every condition:
+
+- The span is a model generation span.
+- `costContext.costMetadata.source` is `'provider_reported'`.
+- `costContext.costUnit` is `'USD'`.
+- `costContext.estimatedCost` is a finite, non-negative number.
+
+Estimated costs are deliberately not exported, so Langfuse can apply its own pricing model. If your generations show as missing cost in Langfuse, check whether your provider reports cost; otherwise configure model prices in Langfuse.
+
+See the [`LangfuseExporter` reference](/reference/observability/tracing/exporters/langfuse#cost-tracking) for the exact rules.
+
 ## Prompt linking
 
 You can link LLM generations to prompts stored in [Langfuse Prompt Management](https://langfuse.com/docs/prompt-management). It enables version tracking and metrics for your prompts.

@@ -6,7 +6,8 @@ import * as React from 'react';
 import { Button } from '@/ds/components/Button';
 import type { ButtonProps } from '@/ds/components/Button/Button';
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
-import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
+import { controlIconState } from '@/ds/primitives/control-icon';
+import { ControlSizeContext, controlHeight, controlSpacing } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import {
   deprecatedErrorAria,
@@ -83,7 +84,14 @@ function InputGroup({ className, size, ...props }: InputGroupProps) {
       role="group"
       data-slot="input-group"
       data-size={resolved}
-      className={cn(inputGroupClassName, controlHeight[resolved], className)}
+      className={cn(
+        inputGroupClassName,
+        controlHeight[resolved],
+        controlSpacing[resolved],
+        controlIconState,
+        'has-[:disabled]:[--control-icon:var(--control-icon-rest)]',
+        className,
+      )}
       {...props}
     />
   );
@@ -95,15 +103,27 @@ const inputGroupControlTextBySize = cn(
   'group-data-[size=lg]/input-group:text-body',
 );
 
+// An addon's icon takes the group's rung, as a Button's does (`iconSizeClasses`), unless it
+// sizes itself.
+const inputGroupIconBySize = cn(
+  "group-data-[size=sm]/input-group:[&>svg:not([class*='size-'])]:size-icon-sm",
+  "group-data-[size=md]/input-group:[&>svg:not([class*='size-'])]:size-icon-md",
+  "group-data-[size=lg]/input-group:[&>svg:not([class*='size-'])]:size-icon-lg",
+);
+
 const inputGroupAddonVariants = cva(
   cn(
     'flex items-center justify-center gap-2 text-muted-foreground select-none',
     inputGroupControlTextBySize,
     'group-has-[:disabled]/input-group:text-muted-foreground',
-    "[&>svg:not([class*='size-'])]:size-4",
+    inputGroupIconBySize,
   ),
   {
     variants: {
+      variant: {
+        default: '',
+        flush: '',
+      },
       align: {
         'inline-start': 'order-first pr-1 pl-3 has-[>button]:pl-1',
         'inline-end': 'order-last pr-3 pl-1 has-[>button]:pr-1',
@@ -111,21 +131,38 @@ const inputGroupAddonVariants = cva(
         'block-end': 'order-last w-full justify-start border-t border-border px-3 pt-1 pb-2',
       },
     },
+    compoundVariants: [
+      { variant: 'flush', align: ['inline-start', 'inline-end'], className: 'gap-0 [&>button]:mx-0' },
+      { variant: 'flush', align: 'inline-start', className: 'pl-0 has-[>button]:pl-0' },
+      { variant: 'flush', align: 'inline-end', className: 'pr-0 has-[>button]:pr-0' },
+    ],
     defaultVariants: {
+      variant: 'default',
       align: 'inline-start',
     },
   },
 );
 
-export type InputGroupAddonProps = React.ComponentProps<'div'> & VariantProps<typeof inputGroupAddonVariants>;
+export type InputGroupAddonProps = React.ComponentProps<'div'> &
+  Omit<VariantProps<typeof inputGroupAddonVariants>, 'variant'> & {
+    /** `flush` joins inline buttons without a gap or an inset from the field's outside edge. */
+    variant?: VariantProps<typeof inputGroupAddonVariants>['variant'];
+  };
 
-function InputGroupAddon({ className, align = 'inline-start', onClick, ...props }: InputGroupAddonProps) {
+function InputGroupAddon({
+  className,
+  align = 'inline-start',
+  variant = 'default',
+  onClick,
+  ...props
+}: InputGroupAddonProps) {
   return (
     <div
       role="group"
       data-slot="input-group-addon"
       data-align={align}
-      className={cn(inputGroupAddonVariants({ align }), className)}
+      data-variant={variant}
+      className={cn(inputGroupAddonVariants({ align, variant }), className)}
       onClick={event => {
         // Click on non-interactive addon area focuses the control inside the group.
         // Skip when a button/input handled the click itself.

@@ -261,6 +261,7 @@ describe('storageVersion per run', () => {
     await vi.waitFor(() => expect(died).toBe(true));
     store.writeWorkflowRunCheckpoint = checkpoint;
     store.appendWorkflowRunEntries = append;
+    await expireRunLeases(storage);
 
     // The checkpoint still holds b's earlier success; a restart must run b again, not skip to c.
     const second = build();
@@ -313,6 +314,7 @@ describe('storageVersion per run', () => {
       const run = await first.createRun();
       void run.start({ inputData: { n: 0 }, initialState: { seen: [] } });
       await vi.waitFor(() => expect(died).toBe(true));
+      await expireRunLeases(storage);
       const stored = () => store.loadWorkflowSnapshot({ workflowName: 'counted', runId: run.runId });
       const atDeath = await stored();
 
@@ -772,6 +774,7 @@ describe('storage v2 write volume', () => {
         void (await workflow.createRun({ runId })).restart();
       }
       await vi.waitFor(() => expect(died).toBe(true));
+      await expireRunLeases(storage);
       const stored = await store.loadWorkflowRun({ workflowName: 'restarted', runId, successfulSteps: 'full' });
       expect(stored!.state.a).toBe(kb(life));
       expect(stored!.statePatchBytes).toBeLessThanOrEqual(size);
@@ -1133,6 +1136,14 @@ function innerCheckpoints(sends: ReturnType<typeof recordStateSends>) {
   return [...byRun.values()];
 }
 
+/** A dead process stops renewing its run ownership leases; let them lapse so another process can restart its runs. */
+async function expireRunLeases(storage: InstanceType<typeof MockStore>) {
+  const store = storage.stores.workflows!;
+  for (const runId of [...(store as any).db.runOwners.keys()]) {
+    await store.claimRunOwnership({ runId, ownerId: 'lapsed', leaseMs: -1, force: true });
+  }
+}
+
 /** Every stored run's status and state. */
 async function storedStates(storage: InstanceType<typeof MockStore>, storageVersion: 1 | 2) {
   const store = storage.stores.workflows!;
@@ -1304,6 +1315,7 @@ describe('storage v2 nested runs', () => {
         new Mastra({ logger: false, storage, workflows: { outer: first } });
         void (await first.createRun({ runId: 'run-1' })).start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
         await vi.waitFor(() => expect(died).toBe(true));
+        await expireRunLeases(storage);
 
         const second = build(storageVersion);
         new Mastra({ logger: false, storage, workflows: { outer: second } });
@@ -1371,6 +1383,7 @@ describe('storage v2 nested runs', () => {
         initialState: { items: [PAD] },
       });
       await vi.waitFor(() => expect(died).toBe(true));
+      await expireRunLeases(storage);
 
       await new Mastra({ logger: false, storage, workflows: build() }).restartAllActiveWorkflowRuns();
 
@@ -1887,7 +1900,7 @@ describe('a nested run hands back only its changes', () => {
     stateSchema: typeof items | undefined = items,
   ) =>
     steps
-      .reduce(
+      .reduce<any>(
         (wf, step) => wf.then(step),
         createWorkflow({
           id: 'inner',
@@ -1895,7 +1908,7 @@ describe('a nested run hands back only its changes', () => {
           outputSchema: num,
           stateSchema,
           options: { storageVersion },
-        }) as any,
+        }),
       )
       .commit();
   const outerOf = (storageVersion: 1 | 2, inputSchema: z.ZodType = num) =>
@@ -2026,7 +2039,10 @@ describe('a re-driven nested step whose nested run already finished', () => {
         if (args.workflowName === 'inner' && (args.snapshot ?? args.header)?.status === 'success') innerDone = true;
       };
     }
-    return dead.then(() => (dying = false));
+    return dead.then(async () => {
+      dying = false;
+      await expireRunLeases(storage);
+    });
   }
 
   it.each([1, 2] as const)('keeps its state changes on v%s', async storageVersion => {
@@ -2107,7 +2123,7 @@ describe('a restarted v2 nested run', () => {
     const build = () => {
       const nested = (id: string, ...steps: ReturnType<typeof appendItem>[]) =>
         steps
-          .reduce(
+          .reduce<any>(
             (wf, s) => wf.then(s),
             createWorkflow({
               id,
@@ -2115,7 +2131,7 @@ describe('a restarted v2 nested run', () => {
               outputSchema: num,
               stateSchema: items,
               options: { storageVersion: 2 },
-            }) as any,
+            }),
           )
           .commit();
       const dies = () => {
@@ -2141,6 +2157,7 @@ describe('a restarted v2 nested run', () => {
     new Mastra({ logger: false, storage, workflows: { outer: first } });
     void (await first.createRun({ runId: 'run-1' })).start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
     await vi.waitFor(() => expect(died).toBe(true));
+    await expireRunLeases(storage);
 
     dying = false;
     const outer = build();

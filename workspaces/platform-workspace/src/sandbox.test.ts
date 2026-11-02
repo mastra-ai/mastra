@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
-import { PlatformSandbox, type SandboxAddressRegistry } from './sandbox.js';
+import { PlatformSandbox } from './sandbox.js';
+import type { SandboxAddressRegistry } from './sandbox.js';
 import { serializeSandboxTemplate, Template } from './template.js';
 
 function json(body: unknown, init?: ResponseInit) {

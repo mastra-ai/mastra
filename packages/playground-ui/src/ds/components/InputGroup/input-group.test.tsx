@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 
-import { cleanup, render } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, assert, describe, expect, it } from 'vitest';
 
 import { Field } from '../Field';
-import { InputGroup, InputGroupAddon, InputGroupInput, InputGroupText } from './input-group';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGroupText } from './input-group';
 
 afterEach(() => {
   cleanup();
@@ -21,6 +21,73 @@ const getInput = () => {
   assert(input, 'Expected input group control');
   return input;
 };
+
+describe('InputGroupAddon variants', () => {
+  it.each([
+    { align: 'inline-start', padding: 'pl' },
+    { align: 'inline-end', padding: 'pr' },
+  ] as const)('removes the gap and outside inset only for flush $align addons', ({ align, padding }) => {
+    render(
+      <>
+        <InputGroup>
+          <InputGroupInput aria-label="Default input" />
+          <InputGroupAddon align={align} aria-label="Default addon">
+            <InputGroupButton>Default action</InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        <InputGroup>
+          <InputGroupInput aria-label="Flush input" />
+          <InputGroupAddon align={align} variant="flush" aria-label="Flush addon">
+            <InputGroupButton>Flush action</InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </>,
+    );
+
+    const defaultAddon = screen.getByRole('group', { name: 'Default addon' });
+    const flushAddon = screen.getByRole('group', { name: 'Flush addon' });
+    const defaultClasses = defaultAddon.className.split(/\s+/);
+    const flushClasses = flushAddon.className.split(/\s+/);
+
+    expect(defaultAddon.getAttribute('data-variant')).toBe('default');
+    expect(defaultClasses).toEqual(expect.arrayContaining(['gap-2', `${padding}-3`, `has-[>button]:${padding}-1`]));
+    expect(defaultClasses).not.toContain('[&>button]:mx-0');
+
+    expect(flushAddon.getAttribute('data-variant')).toBe('flush');
+    expect(flushClasses).toEqual(
+      expect.arrayContaining(['gap-0', `${padding}-0`, `has-[>button]:${padding}-0`, '[&>button]:mx-0']),
+    );
+    expect(flushClasses).not.toContain('gap-2');
+    expect(flushClasses).not.toContain(`${padding}-3`);
+    expect(flushClasses).not.toContain(`has-[>button]:${padding}-1`);
+  });
+
+  it.each(['block-start', 'block-end'] as const)('keeps %s spacing when flush is selected', align => {
+    render(
+      <>
+        <InputGroup>
+          <InputGroupInput aria-label="Default input" />
+          <InputGroupAddon align={align} aria-label="Default addon">
+            <InputGroupButton>Default action</InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+        <InputGroup>
+          <InputGroupInput aria-label="Flush input" />
+          <InputGroupAddon align={align} variant="flush" aria-label="Flush addon">
+            <InputGroupButton>Flush action</InputGroupButton>
+          </InputGroupAddon>
+        </InputGroup>
+      </>,
+    );
+
+    const defaultAddon = screen.getByRole('group', { name: 'Default addon' });
+    const flushAddon = screen.getByRole('group', { name: 'Flush addon' });
+    expect(flushAddon.getAttribute('data-variant')).toBe('flush');
+    expect(flushAddon.className).toBe(defaultAddon.className);
+    expect(flushAddon.className.split(/\s+/)).toEqual(expect.arrayContaining(['gap-2', 'px-3']));
+    expect(flushAddon.className.split(/\s+/)).not.toContain('[&>button]:mx-0');
+  });
+});
 
 describe('InputGroup', () => {
   it('puts an explicit height on the root box so the group matches a same-size sibling control', () => {

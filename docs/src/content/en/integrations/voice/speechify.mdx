@@ -20,16 +20,19 @@ const voice = new SpeechifyVoice()
 // Initialize with custom configuration
 const voice = new SpeechifyVoice({
   speechModel: {
-    name: 'simba-3.2',
+    name: 'simba-3.5',
     apiKey: 'your-api-key',
   },
-  speaker: 'harper_32', // Default voice (simba-3.2 serves the curated Simba 3 voices only)
+  speaker: 'harper_32', // Default voice
 })
 
 // Convert text to speech
 const audioStream = await voice.speak('Hello, world!', {
   speaker: 'imogen_32', // Override default voice
 })
+
+// Any voice speaks any of simba-3.5's 48 languages
+const portuguese = await voice.speak('Olá, mundo!', { language: 'pt-BR' })
 ```
 
 ## Constructor parameters
@@ -41,7 +44,7 @@ const audioStream = await voice.speak('Hello, world!', {
     type: 'SpeechifyConfig',
     description: 'Configuration for text-to-speech functionality',
     isOptional: true,
-    defaultValue: "{ name: 'simba-english' }",
+    defaultValue: "{ name: 'simba-3.5' }",
     properties: [
       {
         type: 'SpeechifyConfig',
@@ -50,9 +53,9 @@ const audioStream = await voice.speak('Hello, world!', {
             name: 'name',
             type: 'SpeechifyModel',
             description:
-              "The Speechify model to use ('simba-3.2', 'simba-3.0', 'simba-english', or 'simba-multilingual')",
+              "The Speechify model to use ('simba-3.5', 'simba-3.2', 'simba-3.0', or the legacy 'simba-english' and 'simba-multilingual')",
             isOptional: true,
-            defaultValue: "'simba-english'",
+            defaultValue: "'simba-3.5'",
           },
           {
             name: 'apiKey',
@@ -68,9 +71,9 @@ const audioStream = await voice.speak('Hello, world!', {
     name: 'speaker',
     type: 'SpeechifyVoiceId',
     description:
-      'Default voice ID to use for speech synthesis. The Simba 3 models serve a curated voice set only (harper_32, imogen_32, ...); the classic catalog voices (george, henry, ...) work with simba-english and simba-multilingual',
+      "Default voice ID to use for speech synthesis. Any id from Speechify's catalog; every catalog voice works on simba-3.5. simba-3.2 accepts English voices only",
     isOptional: true,
-    defaultValue: "'harper_32' for Simba 3 models, otherwise 'george'",
+    defaultValue: "'harper_32' for the Simba 3 models, otherwise 'george'",
   },
 ]}
 />
@@ -112,6 +115,32 @@ Converts text to speech using the configured speech model and voice.
             isOptional: true,
             defaultValue: "Constructor's model value",
           },
+          {
+            name: 'language',
+            type: 'string',
+            description: "Locale of the text, such as 'pt-BR'. On simba-3.5 any voice speaks it",
+            isOptional: true,
+            defaultValue: "The voice's own locale",
+          },
+          {
+            name: 'audioFormat',
+            type: "'mp3' | 'ogg' | 'aac' | 'pcm'",
+            description: 'Container of the audio stream',
+            isOptional: true,
+            defaultValue: "'mp3'",
+          },
+          {
+            name: 'outputFormat',
+            type: 'string',
+            description: "Sample rate and bitrate, such as 'mp3_24000_128' or 'pcm_16000'",
+            isOptional: true,
+          },
+          {
+            name: 'options',
+            type: 'object',
+            description: 'Synthesis switches such as { loudness_normalization: true }',
+            isOptional: true,
+          },
         ],
       },
     ],
@@ -123,7 +152,7 @@ Returns: `Promise<NodeJS.ReadableStream>`
 
 ### `getSpeakers()`
 
-Returns an array of available voice options, where each node contains:
+Returns every voice the API key can use, read live from Speechify's catalog. Each entry contains:
 
 <PropertiesTable
   content={[
@@ -147,6 +176,11 @@ Returns an array of available voice options, where each node contains:
     type: 'string',
     description: 'Gender of the voice',
   },
+  {
+    name: 'models',
+    type: 'string[]',
+    description: 'Models that render this voice',
+  },
 ]}
 />
 
@@ -157,10 +191,10 @@ This method isn't supported by Speechify and will throw an error. Speechify does
 ## Notes
 
 - Speechify requires an API key for authentication
-- The default model is 'simba-english'
-- 'simba-3.2' is Speechify's latest streaming model with the lowest latency and richest expressivity, and the recommended model for English
-- 'simba-3.2' and 'simba-3.0' are currently English only; use 'simba-multilingual' for non-English or mixed-language input
-- 'simba-3.2' and 'simba-3.0' serve a curated voice set only: 'beatrice\_32', 'dominic\_32', 'edmund\_32', 'geffen\_32', 'harper\_32', 'hugh\_32', 'imogen\_32', 'wyatt\_32'. Classic catalog voices such as 'george' return an error on these models
-- The default speaker follows the configured model: 'harper\_32' for the Simba 3 models, otherwise 'george'
+- The default model is 'simba-3.5', Speechify's recommended model: 48 languages on one id, and every catalog voice speaks all of them
+- 'simba-3.2' is English only; a non-English voice returns an error
+- 'simba-3.0' covers English, German, Spanish, French, Italian and Portuguese
+- 'simba-english' and 'simba-multilingual' are legacy ids. New workspaces get a 'model_retired' error, and from 2026-11-21 they are served by 'simba-3.2' and 'simba-3.5'
+- The default speaker follows the configured model: 'harper_32' for the Simba 3 models, otherwise 'george'
 - Speech-to-text functionality isn't supported
 - Additional audio stream options can be passed through the speak() method's options parameter

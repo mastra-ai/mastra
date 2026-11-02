@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { ChunkFrom } from '../stream/types';
-import { getSuspensionAddressKey, type Session } from './session';
+import { getSuspensionAddressKey } from './session';
+import type { Session } from './session';
 import { createTestSession } from './test-utils';
 import type { AgentControllerEvent, AgentControllerSubagent, AgentControllerSubagentHistoryEntry } from './types';
 import { createEmptyTokenUsage, defaultDisplayState } from './types';
@@ -666,6 +667,49 @@ describe('tool lifecycle', () => {
       expect(suspension!.toolName).toBe('confirmAction');
       expect(suspension!.args).toEqual({ action: 'deploy' });
       expect(suspension!.suspendPayload).toEqual({ reason: 'Needs confirmation' });
+    });
+
+    it("clears the ending run's own prompts on a non-suspended agent_end and keeps other runs' prompts", () => {
+      // A run can end with its prompt never answered or cancelled, e.g. when it
+      // loses the thread lease: the error path skips the per-prompt cancel.
+      for (const runId of ['run-own', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      session.run.setRunId({ runId: 'run-own' });
+
+      emit(session, { type: 'agent_end', reason: 'error' });
+
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
+    });
+
+    it('clears the prompts of the run that ended even when the tracked run moves on before agent_end', async () => {
+      for (const runId of ['run-own', 'run-other']) {
+        emit(session, {
+          type: 'tool_suspended',
+          resourceId: 'resource',
+          threadId: 'thread',
+          runId,
+          toolCallId: `call-${runId}`,
+          toolName: 'ask_user',
+          args: {},
+          suspendPayload: {},
+        });
+      }
+      session.run.setRunId({ runId: 'run-own' });
+      session.onBeforeAgentEnd(() => session.run.setRunId({ runId: 'run-other' }));
+
+      await session.finishAgentRun('error');
+
+      expect([...session.displayState.get().pendingSuspensions.values()].map(s => s.runId)).toEqual(['run-other']);
     });
 
     it('keeps duplicate tool-call ids from separate runs independently addressable', () => {

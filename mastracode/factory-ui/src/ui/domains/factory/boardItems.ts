@@ -141,7 +141,7 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
     typeof item.metadata.githubRepositoryId === 'number' ? item.metadata.githubRepositoryId : undefined;
   if (item.source === 'github-issue') return githubSourceKey('issue', itemNumber, repositoryId);
   if (item.source === 'github-pr') return githubSourceKey('pull-request', itemNumber, repositoryId);
-  return;
+  return undefined;
 }
 
 /** Aria label for the icon-only external link next to a card title. */
@@ -159,6 +159,12 @@ export function externalLinkLabel(source: WorkItemSource): string {
 export function sourceCreatedAt(metadata: Record<string, unknown>): string | undefined {
   const value = metadata.sourceCreatedAt;
   return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
+}
+
+export function doneAt(item: Pick<WorkItem, 'stages' | 'stageHistory'>): number | undefined {
+  if (!item.stages.includes('done')) return undefined;
+  const entry = item.stageHistory.findLast(candidate => candidate.stage === 'done');
+  return entry && Date.parse(entry.enteredAt);
 }
 
 /** The upstream key a card is known by: `#123` on GitHub, `ENG-42` on Linear. */

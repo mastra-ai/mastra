@@ -2,9 +2,10 @@ import { createHash } from 'node:crypto';
 import { link, mkdir, open, readFile, readdir, rename, rm, stat, unlink, writeFile } from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import net from 'node:net';
-import { basename, dirname, join } from 'node:path';
+import { basename, dirname, join, sep } from 'node:path';
 
 import { decode, encode } from './codec';
+import { PublisherQueueLimitError } from './publisher-queue-limit-error';
 import { PubSub } from './pubsub';
 import type { LeaseProvider, PubSubDeliveryMode } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
@@ -28,6 +29,8 @@ type LocalSubscription = {
 
 type UnixSocketPubSubOptions = {
   maxRemoteClientQueuedBytes?: number;
+  /** Maximum outstanding client-to-broker frame bytes, including a single frame. */
+  maxPublisherQueuedBytes?: number;
   /**
    * Maximum size in bytes of a single inbound newline-delimited frame,
    * including a partial frame that has not been terminated yet. A peer that
@@ -68,6 +71,7 @@ type MembershipWaiter = {
 };
 
 const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
+const DEFAULT_MAX_PUBLISHER_QUEUED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_INBOUND_FRAME_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MEMBERSHIP_ACK_TIMEOUT_MS = 5_000;
 const DEFAULT_BROKER_PATH_CHECK_INTERVAL_MS = 2_000;
@@ -347,6 +351,9 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   #pendingWrites = new Set<Promise<void>>();
   #recovering?: Promise<void>;
   #maxRemoteClientQueuedBytes: number;
+  #maxPublisherQueuedBytes: number;
+  #publisherQueuedBytes = 0;
+  #publisherCapacityWaiters = new Set<() => void>();
   #maxInboundFrameBytes: number;
   #membershipAckTimeoutMs: number;
   #leaseDirectoriesReady?: Promise<void>;
@@ -360,6 +367,11 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     this.#leaseProcessDirectory = join(this.#leaseDirectory, 'processes');
     LIVE_LEASE_RECOVERY_OWNERS.add(this.#leaseRecoveryOwnerToken);
     this.#maxRemoteClientQueuedBytes = options.maxRemoteClientQueuedBytes ?? DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES;
+    const maxPublisherQueuedBytes = options.maxPublisherQueuedBytes ?? DEFAULT_MAX_PUBLISHER_QUEUED_BYTES;
+    if (!Number.isFinite(maxPublisherQueuedBytes) || maxPublisherQueuedBytes <= 0) {
+      throw new Error('UnixSocketPubSub maxPublisherQueuedBytes must be a positive finite number');
+    }
+    this.#maxPublisherQueuedBytes = maxPublisherQueuedBytes;
 
     const maxInboundFrameBytes = options.maxInboundFrameBytes ?? DEFAULT_MAX_INBOUND_FRAME_BYTES;
     if (!Number.isFinite(maxInboundFrameBytes) || maxInboundFrameBytes <= 0) {
@@ -1197,7 +1209,10 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       const hex = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(6))).toString('hex');
       const name = nameLength > 1 ? `.${hex.slice(0, nameLength - 1)}` : hex.slice(0, 1);
       if (name === sharedName) continue;
-      const privatePath = join(dirname(this.socketPath), name);
+      // join() normalizes `.`-equivalent directories away, and listen() reads
+      // a bare numeric-looking name such as `.28381e422682` as a TCP port.
+      const joined = join(dirname(this.socketPath), name);
+      const privatePath = joined.includes(sep) ? joined : `.${sep}${joined}`;
       try {
         return { server: await this.#listen(privatePath), privatePath };
       } catch (error) {
@@ -1452,7 +1467,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     try {
       if (socket) {
         registerWaiter();
-        await writeFrame(socket, frame);
+        await this.#writePublisherFrame(socket, frame);
       } else {
         await this.#sendToBroker(frame, registerWaiter);
       }
@@ -1800,7 +1815,30 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       // NOTE: keep this exact message in sync with isBrokerConnectionError.
       throw new Error('UnixSocketPubSub is not connected to a broker');
     }
-    await writeFrame(activeSocket, frame);
+    await this.#writePublisherFrame(activeSocket, frame);
+  }
+
+  async #writePublisherFrame(socket: net.Socket, frame: ClientFrame) {
+    const serialized = serializeFrame(frame);
+    const bytes = Buffer.byteLength(serialized);
+    if (this.#publisherQueuedBytes + bytes > this.#maxPublisherQueuedBytes) {
+      const waitForCapacity =
+        bytes <= this.#maxPublisherQueuedBytes
+          ? () =>
+              this.#publisherQueuedBytes + bytes <= this.#maxPublisherQueuedBytes
+                ? Promise.resolve()
+                : new Promise<void>(resolve => this.#publisherCapacityWaiters.add(resolve))
+          : undefined;
+      throw new PublisherQueueLimitError('UnixSocketPubSub publisher queue limit exceeded', waitForCapacity);
+    }
+    this.#publisherQueuedBytes += bytes;
+    try {
+      await writeSerializedFrame(socket, serialized);
+    } finally {
+      this.#publisherQueuedBytes -= bytes;
+      for (const resolve of this.#publisherCapacityWaiters) resolve();
+      this.#publisherCapacityWaiters.clear();
+    }
   }
 
   async #handlePromotedBrokerFrame(frame: ClientFrame) {

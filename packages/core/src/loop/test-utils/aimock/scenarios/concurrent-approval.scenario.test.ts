@@ -1,8 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { describeForAllEngines, runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
 /**
  * Regression class: concurrent approval requests.
@@ -15,7 +15,7 @@ import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * 2. Approving all of them allows the loop to complete.
  * 3. Declining one while approving another still lets the non-declined tool execute.
  */
-describe('AIMock loop scenario: concurrent approval requests', () => {
+describeForAllEngines('AIMock loop scenario: concurrent approval requests', engine => {
   const getMock = useLoopScenarioAimock();
 
   // Two destructive tools that both require approval.
@@ -51,6 +51,7 @@ describe('AIMock loop scenario: concurrent approval requests', () => {
   it('all concurrent tool calls requiring approval are surfaced and approved individually', async () => {
     const { output, approvals, requests } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Delete old.txt and rename new.txt to final.txt.',
       tools: { delete_file: makeDeleteTool(), rename_file: makeRenameTool() },
       stopWhen: stepCountIs(5),
@@ -88,6 +89,7 @@ describe('AIMock loop scenario: concurrent approval requests', () => {
   it('mixing approved and declined concurrent requests lets approved tools execute', async () => {
     const { output, approvals } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Read config.yaml, delete old.txt, and rename new.txt.',
       tools: {
         read_file: makeReadTool(),
@@ -148,6 +150,7 @@ describe('AIMock loop scenario: concurrent approval requests', () => {
 
     const { output, approvals } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Delete old.txt, rename new.txt, and archive data.csv.',
       tools: {
         delete_file: makeDeleteTool(),

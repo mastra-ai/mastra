@@ -75,7 +75,7 @@ const InlineResult = ({
 export const Default: Story = {
   render: () => (
     <Command className="w-100 rounded-lg shadow-raised">
-      <CommandInput placeholder="Type a command or search..." />
+      <CommandInput placeholder="Type a command or search" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Suggestions">
@@ -120,7 +120,7 @@ export const InlineVercelStyle: Story = {
     <div className="w-sm overflow-hidden rounded-xl bg-card shadow-raised">
       <Command className="rounded-none bg-background">
         <CommandInput
-          placeholder="Find..."
+          placeholder="Find"
           rightSlot={<Kbd className="min-w-0 rounded bg-muted px-1.5 py-0 text-meta text-muted-foreground">Esc</Kbd>}
         />
         <CommandList
@@ -201,9 +201,9 @@ export const WithDialog: Story = {
           </kbd>{' '}
           or click the button below
         </p>
-        <Button onClick={() => setOpen(true)}>Open Command Palette</Button>
+        <Button onClick={() => setOpen(true)}>Open command palette</Button>
         <CommandDialog open={open} onOpenChange={setOpen}>
-          <CommandInput placeholder="Type a command or search..." />
+          <CommandInput placeholder="Type a command or search" />
           <CommandList>
             <CommandEmpty>No results found.</CommandEmpty>
             <CommandGroup heading="Suggestions">
@@ -248,7 +248,7 @@ export const WithDialog: Story = {
 export const Empty: Story = {
   render: () => (
     <Command className="w-100 rounded-lg shadow-raised">
-      <CommandInput placeholder="Search..." />
+      <CommandInput placeholder="Search" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
       </CommandList>
@@ -259,7 +259,7 @@ export const Empty: Story = {
 export const WithShortcuts: Story = {
   render: () => (
     <Command className="w-100 rounded-lg shadow-raised">
-      <CommandInput placeholder="Type a command..." />
+      <CommandInput placeholder="Type a command" />
       <CommandList>
         <CommandEmpty>No results found.</CommandEmpty>
         <CommandGroup heading="Actions">
@@ -318,7 +318,7 @@ export const SearchOnly: Story = {
 
     return (
       <Command className="w-100 rounded-lg shadow-raised">
-        <CommandInput placeholder="Search fruits..." value={search} onValueChange={setSearch} />
+        <CommandInput placeholder="Search fruits" value={search} onValueChange={setSearch} />
         <CommandList>
           <CommandEmpty>No fruits found.</CommandEmpty>
           <CommandGroup heading="Fruits">

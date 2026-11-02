@@ -133,6 +133,13 @@ describe('api command descriptors', () => {
       'factoryWork-itemStart': ['workItemStart', ['id'], true, true, false],
       'factoryWork-itemAutomation-run': ['workItemAutomationRun', ['id', 'workItemId'], true, true, false],
       factoryBoards: ['boardCatalog', ['id'], false, false, false],
+      factoryBoardGet: ['boardGet', ['id', 'boardKey'], false, false, false],
+      factoryBoardCreate: ['boardCreate', ['id'], true, true, false],
+      factoryBoardUpdate: ['boardReplace', ['id', 'boardKey'], true, true, false],
+      factoryBoardDelete: ['boardDelete', ['id', 'boardKey'], true, true, false],
+      factorySkills: ['skillList', [], true, false, false],
+      factorySkillUpdate: ['skillOverrideSave', ['id', 'name'], true, true, false],
+      factorySkillRevert: ['skillOverrideRevert', ['id', 'name'], false, false, false],
       factoryMetrics: ['metricsGet', ['id'], true, false, false],
       factoryHealthThresholds: ['healthThresholdsGet', ['id'], false, false, false],
       factoryDecisionList: ['decisionList', ['id'], true, false, false],
@@ -144,8 +151,6 @@ describe('api command descriptors', () => {
       factoryAttentionRead: ['attentionRead', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
       factoryAttentionArchive: ['attentionArchive', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
       factoryAttentionRestore: ['attentionRestore', ['id', 'kind', 'sourceId', 'occurrence'], false, false, false],
-      factorySupervisorSession: ['supervisorSession', ['id'], false, false, false],
-      factorySupervisorHealth: ['supervisorHealth', ['id'], false, false, false],
     } as const;
 
     const exposedRouteKeys = new Set<string>();

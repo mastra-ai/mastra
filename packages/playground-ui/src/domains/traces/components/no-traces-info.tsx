@@ -11,39 +11,43 @@ const PRESET_LABELS: Record<Exclude<TraceDatePreset, 'all' | 'custom'>, string> 
 };
 
 export interface NoTracesInfoProps {
+  /** What the empty list holds. Defaults to `traces`. */
+  resource?: 'traces' | 'spans' | 'threads';
   datePreset?: TraceDatePreset;
   dateFrom?: Date;
   dateTo?: Date;
 }
 
-const RANGE_TIP = 'Pick a wider time range — older traces may fall outside the current window.';
-
-function describeRange({ datePreset, dateFrom, dateTo }: NoTracesInfoProps): { title: string; description: string } {
+function describeRange({ resource = 'traces', datePreset, dateFrom, dateTo }: NoTracesInfoProps): {
+  title: string;
+  description: string;
+} {
+  const rangeTip = `Pick a wider time range — older ${resource} may fall outside the current window.`;
   if (datePreset && datePreset !== 'all' && datePreset !== 'custom') {
     return {
-      title: `No traces for ${PRESET_LABELS[datePreset]}`,
-      description: RANGE_TIP,
+      title: `No ${resource} for ${PRESET_LABELS[datePreset]}`,
+      description: rangeTip,
     };
   }
   if (dateFrom && dateTo) {
     return {
-      title: `No traces between ${formatDate(dateFrom, 'date-time')} and ${formatDate(dateTo, 'date-time')}`,
-      description: RANGE_TIP,
+      title: `No ${resource} between ${formatDate(dateFrom, 'date-time')} and ${formatDate(dateTo, 'date-time')}`,
+      description: rangeTip,
     };
   }
   if (dateFrom) {
     return {
-      title: `No traces since ${formatDate(dateFrom, 'date-time')}`,
-      description: RANGE_TIP,
+      title: `No ${resource} since ${formatDate(dateFrom, 'date-time')}`,
+      description: rangeTip,
     };
   }
   return {
-    title: 'No traces yet',
-    description: 'Traces will appear here once agents, workflows, or tools are executed.',
+    title: `No ${resource} yet`,
+    description: `${resource.charAt(0).toUpperCase()}${resource.slice(1)} will appear here once agents, workflows, or tools are executed.`,
   };
 }
 
-export const NoTracesInfo = ({ datePreset, dateFrom, dateTo }: NoTracesInfoProps = {}) => {
-  const { title, description } = describeRange({ datePreset, dateFrom, dateTo });
+export const NoTracesInfo = (props: NoTracesInfoProps = {}) => {
+  const { title, description } = describeRange(props);
   return <EmptyState titleSlot={title} descriptionSlot={description} variant="fill" />;
 };

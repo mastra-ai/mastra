@@ -72,6 +72,7 @@ type ConsumedDuringPreparation =
   | 'hideSignals'
   // Caller-local stream lifecycle; read by DurableAgent.stream()/resume(), never serialized.
   | 'closeOnSuspend'
+  | '_detachObserverOnCancel'
   // AbortSignal is managed via the registry's abortController/abortSignal
   | 'abortSignal'
   // Toolsets and clientTools are resolved into the `tools` record during

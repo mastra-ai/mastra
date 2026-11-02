@@ -16,9 +16,11 @@ import type { IterationCompleteContext } from '../../../../agent';
  * 3. The hook can inject feedback that the model sees on the next iteration.
  */
 describeForAllEngines('AIMock loop scenario: onIterationComplete hook', engine => {
+  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
-  it('onIterationComplete receives iteration context with tool calls and results', async () => {
+  // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
+  itFailsOnInngest('onIterationComplete receives iteration context with tool calls and results', async () => {
     const iterations: IterationCompleteContext[] = [];
 
     const addTool = createTool({
@@ -82,7 +84,8 @@ describeForAllEngines('AIMock loop scenario: onIterationComplete hook', engine =
     expect(text).toContain('sum of 2 and 3 is 5');
   });
 
-  it('onIterationComplete can stop iteration early with continue: false', async () => {
+  // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
+  itFailsOnInngest('onIterationComplete can stop iteration early with continue: false', async () => {
     const iterations: IterationCompleteContext[] = [];
 
     const searchTool = createTool({
@@ -132,7 +135,8 @@ describeForAllEngines('AIMock loop scenario: onIterationComplete hook', engine =
     expect(text).toBe('Response 1');
   });
 
-  it('onIterationComplete can inject feedback (basic verification)', async () => {
+  // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
+  itFailsOnInngest('onIterationComplete can inject feedback (basic verification)', async () => {
     const iterations: IterationCompleteContext[] = [];
     let feedbackInjected = false;
 

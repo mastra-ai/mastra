@@ -399,6 +399,22 @@ describe('workspace_read_file', () => {
     expect(result).not.toContain('binary file not readable as text');
   });
 
+  it.each([
+    ['events.jsonl', '{"a":1}'],
+    ['index.php', '<?php echo "hi";'],
+    ['main.dart', 'void main() => print("hi");'],
+  ])('should read %s as text although its mime type is application/*', async (name, content) => {
+    await fs.writeFile(path.join(tempDir, name), content);
+    const workspace = new Workspace({ filesystem: new LocalFilesystem({ basePath: tempDir }) });
+    const tools = await createWorkspaceTools(workspace);
+
+    const result = await tools[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE].execute({ path: name }, { workspace });
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain(content);
+    expect(result).not.toContain('binary file not readable as text');
+  });
+
   it('should read files with unknown extensions as text (octet-stream fallback)', async () => {
     // An unknown extension maps to application/octet-stream but is likely text.
     await fs.writeFile(path.join(tempDir, 'app.log'), 'INFO server started\nWARN slow query');

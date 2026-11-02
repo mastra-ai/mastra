@@ -23,6 +23,7 @@ import {
   WORKFLOW_CANCELLED_SYMBOL,
 } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import { workflowChildTermination as workflowTermination } from '../execution-outcome';
 import { buildStepResultAccessors } from '../run-journal';
 import type { ParentStateLink } from '../run-journal';
 import type { Step, SuspendOptions } from '../step';
@@ -46,6 +47,7 @@ import {
   validateStepStateData,
   validateStepRequestContext,
 } from '../utils';
+import { omitForeachProgress } from './foreach-progress';
 
 export interface ExecuteStepParams extends ObservabilityContext {
   workflowId: string;
@@ -162,8 +164,12 @@ export async function executeStep(
   }
 
   // Extract suspend data if this step was previously suspended
+  // A resumed step re-run after a crash is stored as 'running' but still carries its suspendPayload.
+  const priorStatus = stepResults[step.id]?.status;
   let suspendDataToUse =
-    stepResults[step.id]?.status === 'suspended' ? stepResults[step.id]?.suspendPayload : undefined;
+    priorStatus === 'suspended' || (priorStatus === 'running' && resumeDataToUse !== undefined)
+      ? stepResults[step.id]?.suspendPayload
+      : undefined;
 
   // A suspended foreach step's step-level suspendPayload only carries the FIRST suspended
   // iteration's payload. When resuming a specific iteration, use that iteration's own payload
@@ -192,8 +198,12 @@ export async function executeStep(
   const stepInfo = {
     // Drop prior completion/suspend fields so they cannot linger across re-entry
     // (e.g. suspendPayload/suspendedAt after resume, or startedAt > suspendedAt on loops).
-    ...omitPriorCompletionFields((stepResults[step.id] ?? {}) as Record<string, unknown>),
+    ...omitForeachProgress(omitPriorCompletionFields((stepResults[step.id] ?? {}) as Record<string, unknown>)),
     ...(hasResumeData ? { resumePayload: resumeDataToUse } : { payload: inputData, resumePayload: undefined }),
+    // Keep the suspend payload while the resumed step runs so a restart after a crash still sees it.
+    ...(hasResumeData && stepResults[step.id]?.suspendPayload !== undefined
+      ? { suspendPayload: stepResults[step.id]?.suspendPayload }
+      : {}),
     ...(startTime ? { startedAt: startTime } : {}),
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
     status: 'running',
@@ -209,6 +219,7 @@ export async function executeStep(
     options: {
       name: `workflow step: '${step.id}'`,
       type: SpanType.WORKFLOW_STEP,
+      outcome: null,
       entityType: EntityType.WORKFLOW_STEP,
       entityId: step.id,
       input: inputData,
@@ -236,27 +247,59 @@ export async function executeStep(
     skipEmits,
   });
 
-  await engine.persistStepUpdate({
-    workflowId,
-    runId,
-    resourceId,
-    serializedStepGraph,
-    stepResults: {
-      ...stepResults,
-      [step.id]: stepInfo,
-    } as Record<string, StepResult<any, any, any, any>>,
-    executionContext,
-    workflowStatus: 'running',
-    requestContext,
-    phase: 'start',
-    recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
-    // A foreach's iterations all run this step, so their writes would name the same step at the
-    // same time. Its result is written when the foreach ends. A loop runs one iteration at a time
-    // and can't be a parallel or branch arm, so nothing else of the run is in flight here: the
-    // write is a boundary write and stores the state each iteration starts from, as v1 does.
-    stepIds: executionContext.foreachIndex !== undefined ? [] : iterationCount !== undefined ? undefined : [step.id],
-    journal,
-  });
+  // Foreach items do not write their own start snapshot when the foreach checkpoints its
+  // progress: the foreach writes it once, throttled, instead of one growing full snapshot
+  // per item (#26214). Engines that replay durable operations (Inngest) keep the write.
+  const skipStartWrite = executionContext.foreachIndex !== undefined && !engine.requiresDurableContextSerialization();
+
+  if (!skipStartWrite) {
+    await engine.persistStepUpdate({
+      workflowId,
+      runId,
+      resourceId,
+      serializedStepGraph,
+      stepResults: {
+        ...stepResults,
+        [step.id]: stepInfo,
+      } as Record<string, StepResult<any, any, any, any>>,
+      executionContext,
+      workflowStatus: 'running',
+      requestContext,
+      phase: 'start',
+      recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
+      // A foreach's iterations all run this step, so their writes would name the same step at the
+      // same time. Its result is written when the foreach ends. A loop runs one iteration at a time
+      // and can't be a parallel or branch arm, so nothing else of the run is in flight here: the
+      // write is a boundary write and stores the state each iteration starts from, as v1 does.
+      stepIds: executionContext.foreachIndex !== undefined ? [] : iterationCount !== undefined ? undefined : [step.id],
+      journal,
+    });
+  }
+
+  // The store refused the start write because another process canceled the run.
+  // Stop here so loop and foreach iterations don't keep running the step body.
+  if (engine.honorsStoredCancellation(runId) && engine.getLastPersistedStatus(runId) === 'canceled') {
+    abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
+    delete executionContext.activeStepsPath[step.id];
+    await engine.endStepSpan({
+      span: stepSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
+      endOptions: { ...workflowTermination({ status: 'canceled' }), attributes: { status: 'canceled' } },
+    });
+    const canceledResult = {
+      ...omitPriorCompletionFields(stepInfo),
+      status: 'canceled',
+      endedAt: Date.now(),
+    } as StepResult<any, any, any, any>;
+    return {
+      result: canceledResult,
+      stepResults: { [step.id]: canceledResult },
+      mutableContext: engine.buildMutableContext(executionContext),
+      requestContext: engine.requiresDurableContextSerialization()
+        ? engine.serializeRequestContext(requestContext)
+        : undefined,
+    };
+  }
 
   // Check if this is a nested workflow that requires special handling
   if (engine.isNestedWorkflowStep(step)) {
@@ -288,6 +331,7 @@ export async function executeStep(
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
             operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
             errorOptions: {
+              ...workflowTermination(workflowResult),
               error:
                 workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
               attributes: { status: 'failed' },
@@ -303,6 +347,7 @@ export async function executeStep(
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
             operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
             endOptions: {
+              ...workflowTermination(workflowResult),
               output,
               attributes: { status: workflowResult.status },
             },
@@ -648,6 +693,7 @@ export async function executeStep(
       span: stepSpan,
       operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
       endOptions: {
+        ...workflowTermination(execResults),
         output: execResults.output,
         attributes: {
           status: execResults.status,
