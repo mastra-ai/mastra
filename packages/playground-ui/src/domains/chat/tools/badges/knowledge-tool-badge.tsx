@@ -17,6 +17,7 @@ export const KNOWLEDGE_TOOLS = new Set([
   'knowledge_page',
   'knowledge_note',
   'knowledge_pin',
+  'knowledge_list',
 ]);
 
 interface PageSummary {
@@ -136,6 +137,51 @@ function NoteList({ notes }: { notes: NoteSummary[] }) {
               {note.author}
             </Meta>
           ) : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** One entry of a `knowledge_list` result: a page or scope at some depth below the starting point. */
+interface ListEntry {
+  ref: string;
+  name: string;
+  description?: string;
+  depth: number;
+  children: number;
+  scope?: boolean;
+}
+
+function asListEntry(value: unknown): ListEntry | undefined {
+  if (!isRecord(value) || !str(value.ref) || typeof value.name !== 'string') return undefined;
+  if (typeof value.depth !== 'number' || typeof value.children !== 'number') return undefined;
+  return value as unknown as ListEntry;
+}
+
+const DEPTH_INDENT = ['', 'pl-4', 'pl-8'] as const;
+
+/** A `knowledge_list` result as an indented tree: name, ref, and how many children each entry has. */
+function ListTree({ entries }: { entries: ListEntry[] }) {
+  return (
+    <ul className="flex max-h-64 flex-col gap-1 overflow-auto" data-testid="knowledge-list-entries">
+      {entries.map((entry, index) => (
+        <li
+          key={`${entry.ref}-${index}`}
+          className={`flex min-w-0 flex-col ${DEPTH_INDENT[Math.min(Math.max(entry.depth, 1), 3) - 1]}`}
+        >
+          <div className="flex min-w-0 items-baseline gap-2">
+            <Txt as="span" variant="label" className="truncate">
+              {entry.name}
+            </Txt>
+            {entry.ref !== entry.name ? <Meta>{entry.ref}</Meta> : null}
+            {entry.children ? (
+              <Meta>
+                {entry.children} {entry.children === 1 ? 'child' : 'children'}
+              </Meta>
+            ) : null}
+          </div>
+          {entry.description ? <Meta>{entry.description}</Meta> : null}
         </li>
       ))}
     </ul>
@@ -325,6 +371,22 @@ export function knowledgeCard(
               <PageLink page={{ id: pageId, name: pageRef ?? 'the page' }} />
             </Meta>
             <Meta>{audience.length ? `Pinned for ${audience.join(', ')}` : 'No longer pinned for anyone'}</Meta>
+          </div>
+        ),
+      };
+    }
+    case 'knowledge_list': {
+      if (!Array.isArray(output.entries)) return null;
+      const entries = output.entries.map(asListEntry).filter((entry): entry is ListEntry => entry !== undefined);
+      const from = str(args.from);
+      const more = str(output.nextCursor) || output.more !== undefined;
+      return {
+        title: from ? 'Listed pages' : 'Listed Knowledge scopes',
+        detail: from,
+        body: (
+          <div className="flex flex-col gap-2">
+            {entries.length ? <ListTree entries={entries} /> : <Meta>{from ? 'No pages under it' : 'No scopes'}</Meta>}
+            {more ? <Meta>More entries not shown</Meta> : null}
           </div>
         ),
       };

@@ -107,6 +107,71 @@ describe('Knowledge tool cards', () => {
     });
   });
 
+  describe('when knowledge_list lists the scopes a run can read', () => {
+    it('names each scope with its child count', () => {
+      renderCard({
+        toolName: 'knowledge_list',
+        input: {},
+        output: {
+          entries: [
+            {
+              ref: 'site:mastra',
+              name: 'site:mastra',
+              description: 'Pages synced from a website',
+              depth: 1,
+              children: 45,
+              scope: true,
+            },
+            { ref: 'thread:t1', name: 'thread:t1', depth: 1, children: 0, scope: true },
+          ],
+        },
+      });
+      const badge = open();
+      expect(badge.textContent).toContain('Listed Knowledge scopes');
+      const entries = within(badge)
+        .getAllByRole('listitem')
+        .map(item => item.textContent);
+      expect(entries).toEqual(['site:mastra45 childrenPages synced from a website', 'thread:t1']);
+    });
+  });
+
+  describe('when knowledge_list lists the tree under a page, two levels deep', () => {
+    it('indents each level, shows each ref, and says when entries were left out', () => {
+      renderCard({
+        toolName: 'knowledge_list',
+        input: { from: 'site:mastra', depth: 2 },
+        output: {
+          from: 'site:mastra',
+          entries: [
+            { ref: 'site:mastra#customers', name: 'Customers', depth: 1, children: 1 },
+            { ref: 'site:mastra#customers/replit', name: 'Replit', depth: 2, children: 0 },
+          ],
+          nextCursor: 'p01M6',
+        },
+      });
+      const badge = open();
+      expect(badge.textContent).toContain('Listed pages');
+      const [customers, replit] = within(badge).getAllByRole('listitem');
+      expect(customers?.textContent).toBe('Customerssite:mastra#customers1 child');
+      expect(replit?.textContent).toBe('Replitsite:mastra#customers/replit');
+      expect(replit?.className).toContain('pl-4');
+      expect(customers?.className).not.toContain('pl-4');
+      expect(badge.textContent).toContain('More entries not shown');
+    });
+
+    it('says so when nothing is under the starting point', () => {
+      renderCard({ toolName: 'knowledge_list', input: { from: 'site:mastra#contact' }, output: { entries: [] } });
+      expect(open().textContent).toContain('No pages under it');
+    });
+  });
+
+  describe('when knowledge_list returns a shape it does not know', () => {
+    it('falls back to the plain tool row', () => {
+      renderCard({ toolName: 'knowledge_list', input: {}, output: { scopes: [] } });
+      expect(screen.queryByTestId('knowledge-tool-badge')).toBeNull();
+    });
+  });
+
   describe('when a note names a page the server did not resolve, called like an Object member', () => {
     it('shows the name as plain text with no link', () => {
       renderCard({
