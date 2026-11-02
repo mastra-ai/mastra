@@ -33,16 +33,10 @@
     "hf:zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4": [
+    "hf:moonshotai/Kimi-K3": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "hf:MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
     "hf:moonshotai/Kimi-K2.7-Code": [
@@ -51,10 +45,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "hf:moonshotai/Kimi-K3": [
+    "hf:openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "hf:Qwen/Qwen3.6-27B": [
@@ -75,6 +69,18 @@
         "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
+    "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "hf:MiniMaxAI/MiniMax-M3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "hf:zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
@@ -87,22 +93,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "hf:zai-org/GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh"]
-      }
-    ],
     "hf:zai-org/GLM-4.7-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "hf:openai/gpt-oss-120b": [
+    "hf:zai-org/GLM-5.2": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "high", "xhigh"]
       }
     ]
   }

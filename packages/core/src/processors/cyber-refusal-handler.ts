@@ -1,10 +1,39 @@
+import type { MessageList } from '../agent/message-list';
+import type { RequestContext } from '../request-context';
 import type {
   Processor,
   ProcessAPIErrorArgs,
   ProcessAPIErrorResult,
+  ProcessInputStepArgs,
+  ProcessInputStepResult,
   ProcessOutputStepArgs,
-  ProcessorMessageResult,
 } from './index';
+
+/** A model the handler can switch to after a refusal. */
+export type CyberRefusalFallbackModel = NonNullable<ProcessInputStepResult['model']>;
+
+export interface CyberRefusalFallbackContext {
+  /** 0 for the first fallback after the original model refused, 1 for the next, and so on. */
+  attempt: number;
+  requestContext?: RequestContext;
+}
+
+export interface CyberRefusalHandlerOptions {
+  /**
+   * Models to switch to when a refusal survives the `continue` nudge, tried in
+   * order. Pass a function to choose the model when the refusal happens; return
+   * `undefined` when there is none left. The switch lasts for the rest of the
+   * run, and the next run starts on the agent's own model again.
+   */
+  fallbackModels?:
+    | CyberRefusalFallbackModel[]
+    | ((
+        context: CyberRefusalFallbackContext,
+      ) => CyberRefusalFallbackModel | undefined | Promise<CyberRefusalFallbackModel | undefined>);
+}
+
+const FALLBACK_ATTEMPT_KEY = 'fallbackAttempt';
+const FALLBACK_MODEL_KEY = 'fallbackModel';
 
 const CYBER_POLICY_ERROR_CODE = 'cyber_policy';
 const CYBER_REFUSAL_MESSAGE = 'this content was flagged for possible cybersecurity risk';
@@ -104,17 +133,40 @@ function isCyberStopRefusal(finishReason: string | undefined, providerMetadata: 
  * error lane is, so set it explicitly or the Anthropic retry is treated as an
  * abort.
  *
+ * With `fallbackModels`, a refusal that survives the nudge switches the run to
+ * the next fallback model instead of ending it. The switch happens in
+ * `processInputStep`, so also register the same instance in `inputProcessors`.
+ *
  * @see https://developers.openai.com/api/docs/guides/safety-checks/cybersecurity
  */
 export class CyberRefusalHandler implements Processor<'cyber-refusal-handler'> {
   readonly id = 'cyber-refusal-handler' as const;
   readonly name = 'Cyber Refusal Handler';
 
-  async processAPIError({ error, retryCount, sendSignal }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
-    // Only handle on first attempt — a repeated refusal is treated as genuine
-    if (retryCount > 0) return;
+  readonly #fallbackModels: CyberRefusalHandlerOptions['fallbackModels'];
 
+  constructor(options: CyberRefusalHandlerOptions = {}) {
+    this.#fallbackModels = options.fallbackModels;
+  }
+
+  processInputStep({ state }: ProcessInputStepArgs): ProcessInputStepResult | undefined {
+    const model = state[FALLBACK_MODEL_KEY] as CyberRefusalFallbackModel | undefined;
+    return model ? { model } : undefined;
+  }
+
+  async processAPIError({
+    error,
+    retryCount,
+    sendSignal,
+    state,
+    requestContext,
+  }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
     if (!isCyberRefusalError(error)) return;
+
+    if (retryCount > 0) {
+      // A repeated refusal is genuine unless a fallback model can take over
+      return (await this.#switchToFallback(state, requestContext)) ? { retry: true } : undefined;
+    }
 
     await sendSignal?.({
       type: 'reactive',
@@ -131,12 +183,34 @@ export class CyberRefusalHandler implements Processor<'cyber-refusal-handler'> {
     retryCount,
     abort,
     messageList,
-  }: ProcessOutputStepArgs): ProcessorMessageResult {
-    if (retryCount > 0 || !isCyberStopRefusal(finishReason, providerMetadata)) return messageList;
+    state,
+    requestContext,
+  }: ProcessOutputStepArgs): MessageList | Promise<MessageList> {
+    if (!isCyberStopRefusal(finishReason, providerMetadata)) return messageList;
+    // A repeated refusal is genuine unless a fallback model can take over
+    if (retryCount > 0) {
+      if (!this.#fallbackModels) return messageList;
+      return this.#switchToFallback(state, requestContext).then(switched =>
+        switched ? abort('continue', { retry: true }) : messageList,
+      );
+    }
 
     // The abort reason is the nudge: the loop appends it as the retry's system reminder.
     // A signal is not sent here because output-step signals don't seal the response
     // message, which breaks the loop's rollback of a later rejected step in the same run.
     return abort('continue', { retry: true });
+  }
+
+  async #switchToFallback(state: Record<string, unknown>, requestContext?: RequestContext): Promise<boolean> {
+    const fallbacks = this.#fallbackModels;
+    if (!fallbacks) return false;
+
+    const attempt = (state[FALLBACK_ATTEMPT_KEY] as number | undefined) ?? 0;
+    const model = Array.isArray(fallbacks) ? fallbacks[attempt] : await fallbacks({ attempt, requestContext });
+    if (!model) return false;
+
+    state[FALLBACK_ATTEMPT_KEY] = attempt + 1;
+    state[FALLBACK_MODEL_KEY] = model;
+    return true;
   }
 }

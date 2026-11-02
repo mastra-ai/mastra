@@ -602,7 +602,23 @@ type InputShared_Type_16 =
   | 'tokens.cached.sum'
   | 'tokens.cached.avg'
   | 'cost.sum'
-  | 'cost.avg';
+  | 'cost.avg'
+  | 'timeToFirstToken.avg'
+  | 'timeToFirstToken.min'
+  | 'timeToFirstToken.max'
+  | 'timeToFirstToken.p50'
+  | 'timeToFirstToken.p90'
+  | 'timeToFirstToken.p95'
+  | 'timeToFirstToken.p99'
+  | 'timeToFirstToken.count'
+  | 'timeToFirstChunk.avg'
+  | 'timeToFirstChunk.min'
+  | 'timeToFirstChunk.max'
+  | 'timeToFirstChunk.p50'
+  | 'timeToFirstChunk.p90'
+  | 'timeToFirstChunk.p95'
+  | 'timeToFirstChunk.p99'
+  | 'timeToFirstChunk.count';
 
 type InputShared_Type_17 = {
   /** Filter by timestamp range */
@@ -3838,6 +3854,8 @@ type Shared_Type_67 = {
   spanQueryModelFields: boolean;
   /** `model` and `provider` in span aggregate `groupBy` and `countDistinct`. Treat a missing value as unavailable. */
   spanAggregateModelDimensions: boolean;
+  /** `timeToFirstToken.*` and `timeToFirstChunk.*` measures in trace and span aggregates. Treat a missing value as unavailable. */
+  aggregateTimeToFirstMeasures: boolean;
   /** `outcome` and `stopReason` predicates in span queries and span aggregates (including `groupBy` and `countDistinct`), and `outcome`, `stopReason` and `stopReasonContext` on span rows. Treat a missing value as unavailable. */
   spanQueryOutcomeFields: boolean;
   /** The root span's `outcome` and `stopReason` in trace-scope predicates and trace aggregates, both fields in `spans.some`/`spans.none` predicates and value discovery, and the root span's `outcome`, `stopReason` and `stopReasonContext` on trace rows. Treat a missing value as unavailable. */
@@ -10819,6 +10837,22 @@ export type PostObservabilityTracesAggregate_Response = {
             | 'tokens.cached.avg'
             | 'cost.sum'
             | 'cost.avg'
+            | 'timeToFirstToken.avg'
+            | 'timeToFirstToken.min'
+            | 'timeToFirstToken.max'
+            | 'timeToFirstToken.p50'
+            | 'timeToFirstToken.p90'
+            | 'timeToFirstToken.p95'
+            | 'timeToFirstToken.p99'
+            | 'timeToFirstToken.count'
+            | 'timeToFirstChunk.avg'
+            | 'timeToFirstChunk.min'
+            | 'timeToFirstChunk.max'
+            | 'timeToFirstChunk.p50'
+            | 'timeToFirstChunk.p90'
+            | 'timeToFirstChunk.p95'
+            | 'timeToFirstChunk.p99'
+            | 'timeToFirstChunk.count'
           )
         | `countDistinct.${string}`]?: number | null;
     };
@@ -11142,8 +11176,8 @@ export type PostObservabilityTracesQueryFields_Response = {
         }[];
         measures: {
           name: string;
-          kind: 'count' | 'duration' | 'error' | 'tokens' | 'cost';
-          statistic?: ('avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'sum') | undefined;
+          kind: 'count' | 'duration' | 'error' | 'tokens' | 'cost' | 'timeToFirstToken' | 'timeToFirstChunk';
+          statistic?: ('avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'sum' | 'count') | undefined;
           unit: 'count' | 'milliseconds' | 'ratio' | 'tokens' | 'currency';
           approximate: boolean;
         }[];

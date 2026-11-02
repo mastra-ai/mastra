@@ -1084,6 +1084,7 @@ describe('trace-query discovery routes', () => {
       'trace-query-root-span-fields',
       'trace-query-root-entity-id',
       'trace-query-outcome-fields',
+      'aggregate-time-to-first-measures',
     ]);
     const request = getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace' });
 
@@ -1095,6 +1096,20 @@ describe('trace-query discovery routes', () => {
     expect(response.aggregate?.dimensions).toContainEqual({ path: 'serviceName', valueKind: 'string' });
     expect(response.canonicalFields).not.toContainEqual(expect.objectContaining({ path: 'serviceName' }));
     expect(getTraceQueryFieldsResponseSchema.parse(response)).toEqual(response);
+  });
+
+  it('omits time-to-first measures from discovery on stores that cannot compile them', async () => {
+    const { mastra } = createHarness(['trace-query', 'trace-query-discovery', 'trace-aggregate']);
+    const request = getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace' });
+
+    const response = await GET_TRACE_QUERY_FIELDS.handler({ ...createTestServerContext({ mastra }), ...request });
+
+    const names = response.aggregate?.measures.map(measure => measure.name);
+    expect(names).toContain('duration.p95');
+    expect(names?.filter(name => name.startsWith('timeToFirst'))).toEqual([]);
+    expect(
+      getTraceAggregateMeasureDescriptors().filter(measure => measure.name.startsWith('timeToFirst')),
+    ).toHaveLength(16);
   });
 
   it('omits aggregation from discovery for other scopes and for stores without aggregation', async () => {
