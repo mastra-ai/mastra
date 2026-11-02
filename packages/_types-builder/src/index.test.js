@@ -85,6 +85,10 @@ describe('generateTypes', () => {
     const result = await promisify(execFile)(process.execPath, [tscBin, '-p', 'consumer/tsconfig.json'], {
       cwd: root,
     }).catch(error => error);
-    expect(result.stdout).toBe('');
+    expect({ exitCode: result.code ?? 0, stdout: result.stdout, stderr: result.stderr }).toEqual({
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    });
   }, 60_000);
 });
