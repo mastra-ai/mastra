@@ -432,7 +432,6 @@ export const FACTORY_API_ROUTE_METADATA = {
     "bodyParams": [
       "enabled",
       "expectedRevision",
-      "hold",
       "name",
       "target",
       "when"
@@ -675,7 +674,6 @@ export const FACTORY_API_ROUTE_METADATA = {
     "queryParams": [],
     "bodyParams": [
       "enabled",
-      "hold",
       "name",
       "target",
       "when"
@@ -2419,7 +2417,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "when": {
                 "anyOf": [
                   {
-                    "$ref": "#/$defs/__schema0"
+                    "type": "object",
+                    "properties": {
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "AND",
+                          "OR"
+                        ]
+                      },
+                      "conditions": {
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      }
+                    },
+                    "required": [
+                      "operator",
+                      "conditions"
+                    ],
+                    "additionalProperties": false
                   },
                   {
                     "type": "null"
@@ -2427,36 +2447,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 ]
               },
               "target": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "boardKey": {
-                        "type": "string"
-                      },
-                      "phaseKey": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "boardKey",
-                      "phaseKey"
-                    ]
+                "type": "object",
+                "properties": {
+                  "boardKey": {
+                    "type": "string"
                   },
-                  {
-                    "type": "null"
+                  "phaseKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
-                ]
-              },
-              "hold": {
-                "type": "string",
-                "enum": [
-                  "untrusted",
-                  "always",
-                  "never"
+                },
+                "required": [
+                  "boardKey",
+                  "phaseKey"
                 ]
               },
               "revision": {
@@ -2490,7 +2495,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "position",
               "when",
               "target",
-              "hold",
               "revision",
               "createdBy",
               "createdAt",
@@ -2499,58 +2503,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "problems"
             ]
           }
-        },
-        "fallback": {
-          "type": "object",
-          "properties": {
-            "hold": {
-              "type": "string",
-              "const": "untrusted"
-            },
-            "untrustedWhen": {
-              "$ref": "#/$defs/__schema0"
-            }
-          },
-          "required": [
-            "hold",
-            "untrustedWhen"
-          ]
         }
       },
       "required": [
-        "intakeRoutes",
-        "fallback"
+        "intakeRoutes"
       ],
       "$defs": {
         "__schema0": {
-          "type": "object",
-          "properties": {
-            "operator": {
-              "type": "string",
-              "enum": [
-                "AND",
-                "OR"
-              ]
-            },
-            "conditions": {
-              "minItems": 1,
-              "maxItems": 20,
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/__schema1"
-              }
-            }
-          },
-          "required": [
-            "operator",
-            "conditions"
-          ],
-          "additionalProperties": false
-        },
-        "__schema1": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema2"
+              "$ref": "#/$defs/__schema1"
             },
             {
               "type": "object",
@@ -2567,7 +2529,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "maxItems": 20,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema7"
+                    "$ref": "#/$defs/__schema6"
                   }
                 }
               },
@@ -2579,17 +2541,17 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema2": {
+        "__schema1": {
           "type": "object",
           "properties": {
             "field": {
-              "$ref": "#/$defs/__schema3"
+              "$ref": "#/$defs/__schema2"
             },
             "operator": {
-              "$ref": "#/$defs/__schema4"
+              "$ref": "#/$defs/__schema3"
             },
             "value": {
-              "$ref": "#/$defs/__schema5"
+              "$ref": "#/$defs/__schema4"
             }
           },
           "required": [
@@ -2598,7 +2560,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ],
           "additionalProperties": false
         },
-        "__schema3": {
+        "__schema2": {
           "type": "string",
           "enum": [
             "item.labels",
@@ -2609,7 +2571,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.integration"
           ]
         },
-        "__schema4": {
+        "__schema3": {
           "type": "string",
           "enum": [
             "equals",
@@ -2626,21 +2588,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "less_than_or_equal"
           ]
         },
-        "__schema5": {
+        "__schema4": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema6"
+              "$ref": "#/$defs/__schema5"
             },
             {
               "maxItems": 100,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema6"
+                "$ref": "#/$defs/__schema5"
               }
             }
           ]
         },
-        "__schema6": {
+        "__schema5": {
           "anyOf": [
             {
               "type": "string",
@@ -2654,10 +2616,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema7": {
+        "__schema6": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema2"
+              "$ref": "#/$defs/__schema1"
             },
             {
               "type": "object",
@@ -2674,7 +2636,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "maxItems": 20,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema2"
+                    "$ref": "#/$defs/__schema1"
                   }
                 }
               },
@@ -2766,36 +2728,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               ]
             },
             "target": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "boardKey": {
-                      "type": "string"
-                    },
-                    "phaseKey": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "boardKey",
-                    "phaseKey"
-                  ]
+              "type": "object",
+              "properties": {
+                "boardKey": {
+                  "type": "string"
                 },
-                {
-                  "type": "null"
+                "phaseKey": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
-              ]
-            },
-            "hold": {
-              "type": "string",
-              "enum": [
-                "untrusted",
-                "always",
-                "never"
+              },
+              "required": [
+                "boardKey",
+                "phaseKey"
               ]
             },
             "revision": {
@@ -2829,7 +2776,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "position",
             "when",
             "target",
-            "hold",
             "revision",
             "createdBy",
             "createdAt",
@@ -4377,11 +4323,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "target": {
           "$ref": "#/$defs/__schema10"
         },
-        "hold": {
-          "$ref": "#/$defs/__schema12"
-        },
         "expectedRevision": {
-          "$ref": "#/$defs/__schema13"
+          "$ref": "#/$defs/__schema12"
         }
       },
       "required": [
@@ -4569,33 +4512,26 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "__schema10": {
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "boardKey": {
+          "type": "object",
+          "properties": {
+            "boardKey": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "phaseKey": {
+              "anyOf": [
+                {
                   "$ref": "#/$defs/__schema11"
                 },
-                "phaseKey": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/$defs/__schema11"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                {
+                  "type": "null"
                 }
-              },
-              "required": [
-                "boardKey"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "null"
+              ]
             }
-          ]
+          },
+          "required": [
+            "boardKey"
+          ],
+          "additionalProperties": false
         },
         "__schema11": {
           "type": "string",
@@ -4603,14 +4539,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
         "__schema12": {
-          "type": "string",
-          "enum": [
-            "untrusted",
-            "always",
-            "never"
-          ]
-        },
-        "__schema13": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
@@ -4671,36 +4599,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               ]
             },
             "target": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "boardKey": {
-                      "type": "string"
-                    },
-                    "phaseKey": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "boardKey",
-                    "phaseKey"
-                  ]
+              "type": "object",
+              "properties": {
+                "boardKey": {
+                  "type": "string"
                 },
-                {
-                  "type": "null"
+                "phaseKey": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
-              ]
-            },
-            "hold": {
-              "type": "string",
-              "enum": [
-                "untrusted",
-                "always",
-                "never"
+              },
+              "required": [
+                "boardKey",
+                "phaseKey"
               ]
             },
             "revision": {
@@ -4734,7 +4647,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "position",
             "when",
             "target",
-            "hold",
             "revision",
             "createdBy",
             "createdAt",
@@ -6286,47 +6198,31 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ]
         },
         "target": {
-          "default": null,
-          "anyOf": [
-            {
-              "type": "object",
-              "properties": {
-                "boardKey": {
+          "type": "object",
+          "properties": {
+            "boardKey": {
+              "$ref": "#/$defs/__schema7"
+            },
+            "phaseKey": {
+              "anyOf": [
+                {
                   "$ref": "#/$defs/__schema7"
                 },
-                "phaseKey": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/$defs/__schema7"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                {
+                  "type": "null"
                 }
-              },
-              "required": [
-                "boardKey"
-              ],
-              "additionalProperties": false
-            },
-            {
-              "type": "null"
+              ]
             }
-          ]
-        },
-        "hold": {
-          "default": "untrusted",
-          "type": "string",
-          "enum": [
-            "untrusted",
-            "always",
-            "never"
-          ]
+          },
+          "required": [
+            "boardKey"
+          ],
+          "additionalProperties": false
         }
       },
       "required": [
-        "name"
+        "name",
+        "target"
       ],
       "additionalProperties": false,
       "$defs": {
@@ -6530,36 +6426,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               ]
             },
             "target": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "boardKey": {
-                      "type": "string"
-                    },
-                    "phaseKey": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "boardKey",
-                    "phaseKey"
-                  ]
+              "type": "object",
+              "properties": {
+                "boardKey": {
+                  "type": "string"
                 },
-                {
-                  "type": "null"
+                "phaseKey": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
                 }
-              ]
-            },
-            "hold": {
-              "type": "string",
-              "enum": [
-                "untrusted",
-                "always",
-                "never"
+              },
+              "required": [
+                "boardKey",
+                "phaseKey"
               ]
             },
             "revision": {
@@ -6593,7 +6474,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "position",
             "when",
             "target",
-            "hold",
             "revision",
             "createdBy",
             "createdAt",
@@ -6813,7 +6693,29 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "when": {
                 "anyOf": [
                   {
-                    "$ref": "#/$defs/__schema0"
+                    "type": "object",
+                    "properties": {
+                      "operator": {
+                        "type": "string",
+                        "enum": [
+                          "AND",
+                          "OR"
+                        ]
+                      },
+                      "conditions": {
+                        "minItems": 1,
+                        "maxItems": 20,
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/$defs/__schema0"
+                        }
+                      }
+                    },
+                    "required": [
+                      "operator",
+                      "conditions"
+                    ],
+                    "additionalProperties": false
                   },
                   {
                     "type": "null"
@@ -6821,36 +6723,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 ]
               },
               "target": {
-                "anyOf": [
-                  {
-                    "type": "object",
-                    "properties": {
-                      "boardKey": {
-                        "type": "string"
-                      },
-                      "phaseKey": {
-                        "type": [
-                          "string",
-                          "null"
-                        ]
-                      }
-                    },
-                    "required": [
-                      "boardKey",
-                      "phaseKey"
-                    ]
+                "type": "object",
+                "properties": {
+                  "boardKey": {
+                    "type": "string"
                   },
-                  {
-                    "type": "null"
+                  "phaseKey": {
+                    "type": [
+                      "string",
+                      "null"
+                    ]
                   }
-                ]
-              },
-              "hold": {
-                "type": "string",
-                "enum": [
-                  "untrusted",
-                  "always",
-                  "never"
+                },
+                "required": [
+                  "boardKey",
+                  "phaseKey"
                 ]
               },
               "revision": {
@@ -6884,7 +6771,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "position",
               "when",
               "target",
-              "hold",
               "revision",
               "createdBy",
               "createdAt",
@@ -6893,58 +6779,16 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "problems"
             ]
           }
-        },
-        "fallback": {
-          "type": "object",
-          "properties": {
-            "hold": {
-              "type": "string",
-              "const": "untrusted"
-            },
-            "untrustedWhen": {
-              "$ref": "#/$defs/__schema0"
-            }
-          },
-          "required": [
-            "hold",
-            "untrustedWhen"
-          ]
         }
       },
       "required": [
-        "intakeRoutes",
-        "fallback"
+        "intakeRoutes"
       ],
       "$defs": {
         "__schema0": {
-          "type": "object",
-          "properties": {
-            "operator": {
-              "type": "string",
-              "enum": [
-                "AND",
-                "OR"
-              ]
-            },
-            "conditions": {
-              "minItems": 1,
-              "maxItems": 20,
-              "type": "array",
-              "items": {
-                "$ref": "#/$defs/__schema1"
-              }
-            }
-          },
-          "required": [
-            "operator",
-            "conditions"
-          ],
-          "additionalProperties": false
-        },
-        "__schema1": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema2"
+              "$ref": "#/$defs/__schema1"
             },
             {
               "type": "object",
@@ -6961,7 +6805,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "maxItems": 20,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema7"
+                    "$ref": "#/$defs/__schema6"
                   }
                 }
               },
@@ -6973,17 +6817,17 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema2": {
+        "__schema1": {
           "type": "object",
           "properties": {
             "field": {
-              "$ref": "#/$defs/__schema3"
+              "$ref": "#/$defs/__schema2"
             },
             "operator": {
-              "$ref": "#/$defs/__schema4"
+              "$ref": "#/$defs/__schema3"
             },
             "value": {
-              "$ref": "#/$defs/__schema5"
+              "$ref": "#/$defs/__schema4"
             }
           },
           "required": [
@@ -6992,7 +6836,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           ],
           "additionalProperties": false
         },
-        "__schema3": {
+        "__schema2": {
           "type": "string",
           "enum": [
             "item.labels",
@@ -7003,7 +6847,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "source.integration"
           ]
         },
-        "__schema4": {
+        "__schema3": {
           "type": "string",
           "enum": [
             "equals",
@@ -7020,21 +6864,21 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "less_than_or_equal"
           ]
         },
-        "__schema5": {
+        "__schema4": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema6"
+              "$ref": "#/$defs/__schema5"
             },
             {
               "maxItems": 100,
               "type": "array",
               "items": {
-                "$ref": "#/$defs/__schema6"
+                "$ref": "#/$defs/__schema5"
               }
             }
           ]
         },
-        "__schema6": {
+        "__schema5": {
           "anyOf": [
             {
               "type": "string",
@@ -7048,10 +6892,10 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             }
           ]
         },
-        "__schema7": {
+        "__schema6": {
           "anyOf": [
             {
-              "$ref": "#/$defs/__schema2"
+              "$ref": "#/$defs/__schema1"
             },
             {
               "type": "object",
@@ -7068,7 +6912,7 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "maxItems": 20,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema2"
+                    "$ref": "#/$defs/__schema1"
                   }
                 }
               },

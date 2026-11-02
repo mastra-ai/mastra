@@ -3679,7 +3679,9 @@ describe('FactoryDecisionDispatcher', () => {
     expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 0 });
   });
 
-  it('keeps an externally authored card from self-starting, even armed with auto-run on', async () => {
+  // Trust decides only where a card arrives (the default intake route keeps outside work in Intake).
+  // Once a person has armed a card, its runs start like any other card's.
+  it('runs an externally authored card a person armed, with auto-run on', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (
       await storage.upsert({
@@ -3727,7 +3729,12 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+    // Not parked for a person: the dispatcher tries to start it, and retries only because this
+    // card has no review session bound.
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      lastError: 'No active Factory binding for role review.',
+    });
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
@@ -3794,9 +3801,9 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
-  it('fails closed on a GitHub card missing its trust stamp, even armed with auto-run on', async () => {
-    // Cards created before arrival stamps existed carry no `authorTrusted`;
-    // absence must not read as trust, or a pre-stamp external PR slips the gate.
+  it('runs a GitHub card missing its trust stamp a person armed, with auto-run on', async () => {
+    // Cards created before arrival stamps existed carry no `authorTrusted`; the default intake
+    // route treats that as untrusted at arrival, and a person's arming releases it like any card.
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = (
       await storage.upsert({
@@ -3842,7 +3849,12 @@ describe('FactoryDecisionDispatcher', () => {
 
     await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
 
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+    // Not parked for a person: the dispatcher tries to start it, and retries only because this
+    // card has no review session bound.
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      lastError: 'No active Factory binding for role review.',
+    });
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
@@ -7123,7 +7135,8 @@ describe('board phase automation', () => {
     }
   });
 
-  it('never auto-starts a phase for a card from outside the write-access circle', async () => {
+  // A phase that should wait for trusted authors says so in `autoStartWhen` (see above).
+  it('auto-starts a phase for a card from outside the write-access circle when its rule asks nothing of trust', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueBuild(storage, ['effort:low'], 'auto-start-outsider');
     await storage.update({
@@ -7142,7 +7155,7 @@ describe('board phase automation', () => {
       isAutoRunEnabled: async () => true,
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
 
   it("approves a phase's submit_plan only for the cards its rule matches", async () => {

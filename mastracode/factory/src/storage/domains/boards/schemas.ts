@@ -51,10 +51,7 @@ export const FACTORY_BOARD_PHASES_SCHEMA: CollectionSchema = {
   indexes: [{ name: 'factory_board_phases_project', columns: ['org_id', 'factory_project_id'] }],
 };
 
-/**
- * A project's ordered intake routes: where new cards matching `when_condition` land and whether
- * an agent may start them without a person.
- */
+/** A project's ordered intake routes: where new cards matching `when_condition` land. */
 export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
   name: 'factory_intake_routes',
   columns: {
@@ -66,10 +63,9 @@ export const FACTORY_INTAKE_ROUTES_SCHEMA: CollectionSchema = {
     position: { type: 'integer' },
     // A card RuleGroup; null matches every card. Not named `when`, which is an SQL keyword.
     when_condition: { type: 'json', nullable: true },
-    // Null leaves placement to the label routes, bindings and integration defaults.
-    board_key: { type: 'text', nullable: true },
+    board_key: { type: 'text' },
+    // Null lands the card in the board's first phase.
     phase_key: { type: 'text', nullable: true },
-    hold: { type: 'text' },
     // Rises on every write to the route, including a move; the compare-and-set token for edits.
     revision: { type: 'integer' },
     created_by: { type: 'text' },

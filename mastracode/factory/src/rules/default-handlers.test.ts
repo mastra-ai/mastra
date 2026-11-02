@@ -518,7 +518,7 @@ describe('built-in board and integration handlers', () => {
       const rule = defaultGithubRules[event];
       const decision = await rule?.({
         ...githubContext(event),
-        item: { ...item, source: 'github-issue' },
+        item: { ...item, source: 'github-issue', stages: ['triage'] },
         board: 'work',
         itemRevision: 3,
       });
@@ -531,7 +531,7 @@ describe('built-in board and integration handlers', () => {
     },
   );
 
-  it.each(['done', 'canceled'])('does not re-triage a GitHub issue whose card is %s', async stage => {
+  it.each(['intake', 'done', 'canceled'])('does not re-triage a GitHub issue whose card is %s', async stage => {
     const decision = await defaultGithubRules.issueCommentCreated?.({
       ...githubContext('issueCommentCreated'),
       item: { ...item, source: 'github-issue', stages: [stage] },

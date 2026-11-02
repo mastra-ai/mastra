@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { RuleGroup } from '../rules/rule-group.js';
 import { cardRuleFacts } from './card-facts.js';
 import { defineBoard } from './define-board.js';
-import { intakeHold, intakeTargetProblem, resolveIntakePlacement } from './intake-routing.js';
+import { intakeTargetProblem, resolveIntakePlacement } from './intake-routing.js';
 import { createBoardRegistry } from './registry.js';
 import { createTestBoard } from './test-utils.js';
 
@@ -14,13 +14,12 @@ const DOCS: RuleGroup = {
   conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }],
 };
 
-function route(overrides: Partial<Parameters<typeof intakeHold>[0][number]> = {}) {
+function route(overrides: Partial<Parameters<typeof resolveIntakePlacement>[0][number]> = {}) {
   return {
     id: 'route',
     enabled: true,
     when: null,
     target: { boardKey: 'work', phaseKey: 'triage' },
-    hold: 'untrusted',
     ...overrides,
   } as const;
 }
@@ -79,11 +78,11 @@ describe('resolveIntakePlacement', () => {
     expect(resolveIntakePlacement([], issue(), registry)).toBeUndefined();
   });
 
-  it('takes the first enabled route that matches and has a target', () => {
+  it('takes the first enabled route that matches and whose board is installed', () => {
     const routes = [
       route({ id: 'disabled', enabled: false, target: { boardKey: 'release', phaseKey: 'shipping' } }),
       route({ id: 'docs', when: DOCS, target: { boardKey: 'work', phaseKey: 'planning' } }),
-      route({ id: 'hold-only', target: null, hold: 'always' }),
+      route({ id: 'gone', target: { boardKey: 'gone', phaseKey: null } }),
       route({ id: 'release', target: { boardKey: 'release', phaseKey: null } }),
       route({ id: 'last' }),
     ];
@@ -119,22 +118,5 @@ describe('resolveIntakePlacement', () => {
     expect(
       resolveIntakePlacement([route({ target: { boardKey: 'review', phaseKey: 'review' } })], pullRequest, registry),
     ).toEqual({ board: 'review', phase: 'review', routeId: 'route' });
-  });
-});
-
-describe('intakeHold', () => {
-  it("is 'untrusted' without a matching route", () => {
-    expect(intakeHold([], issue())).toBe('untrusted');
-    expect(intakeHold([route({ when: DOCS, hold: 'never' })], issue())).toBe('untrusted');
-  });
-
-  it("is the first enabled matching route's hold, whether or not its target is usable", () => {
-    const routes = [
-      route({ enabled: false, hold: 'never' }),
-      route({ when: DOCS, target: { boardKey: 'gone', phaseKey: null }, hold: 'always' }),
-      route({ hold: 'never' }),
-    ];
-    expect(intakeHold(routes, issue(['docs']))).toBe('always');
-    expect(intakeHold(routes, issue())).toBe('never');
   });
 });

@@ -89,12 +89,6 @@ export interface StoredBoardSnapshot {
   boards: StoredBoardRecord[];
 }
 
-/**
- * Whether an agent may start a card the route matches without a person: `untrusted` holds cards
- * from outside the write-access circle, `always` holds every card, `never` holds none.
- */
-export type IntakeRouteHold = 'untrusted' | 'always' | 'never';
-
 export interface IntakeRouteTarget {
   boardKey: string;
   /** Unset lands the card in the board's first phase. */
@@ -107,9 +101,7 @@ export interface StoredIntakeRouteInput {
   enabled?: boolean;
   /** Null matches every card. */
   when?: RuleGroup | null;
-  /** Null leaves placement unchanged, so the route only decides `hold`. */
-  target?: IntakeRouteTarget | null;
-  hold?: IntakeRouteHold;
+  target: IntakeRouteTarget;
 }
 
 export interface StoredIntakeRouteRecord {
@@ -120,8 +112,7 @@ export interface StoredIntakeRouteRecord {
   enabled: boolean;
   position: number;
   when: RuleGroup | null;
-  target: { boardKey: string; phaseKey: string | null } | null;
-  hold: IntakeRouteHold;
+  target: { boardKey: string; phaseKey: string | null };
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -139,6 +130,26 @@ export type StoredBoardErrorCode =
 
 /** A project's most intake routes; a reorder names every one of them. */
 export const MAX_INTAKE_ROUTES = 100;
+
+/**
+ * The route every project starts with: a GitHub or GitLab card whose author is outside the
+ * write-access circle lands in Work › Intake, where nothing starts until a person moves it.
+ * It is a stored route like any other, so admins can see, edit, disable or delete it.
+ */
+export const DEFAULT_INTAKE_ROUTE: StoredIntakeRouteInput = {
+  name: 'Outside authors wait in Intake',
+  when: {
+    operator: 'AND',
+    conditions: [
+      { field: 'source.integration', operator: 'in', value: ['github', 'gitlab'] },
+      { field: 'author.trusted', operator: 'equals', value: false },
+    ],
+  },
+  target: { boardKey: 'work', phaseKey: 'intake' },
+};
+
+/** Who `DEFAULT_INTAKE_ROUTE` is created and last updated by. */
+export const DEFAULT_INTAKE_ROUTE_ACTOR = 'factory';
 
 export class StoredBoardError extends Error {
   override name = 'StoredBoardError';
@@ -190,9 +201,8 @@ interface IntakeRouteRow extends Record<string, unknown> {
   enabled: boolean;
   position: number;
   when_condition: RuleGroup | null;
-  board_key: string | null;
+  board_key: string;
   phase_key: string | null;
-  hold: IntakeRouteHold;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -351,8 +361,9 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     });
   }
 
-  /** The project's intake routes in the order they are tried. */
+  /** The project's intake routes in the order they are tried; a new project gets `DEFAULT_INTAKE_ROUTE` first. */
   async listIntakeRoutes(scope: StoredBoardScope): Promise<StoredIntakeRouteRecord[]> {
+    await this.#ensureIntakeRoutes(scope);
     return (await readIntakeRoutes(this.ops, scope)).map(toIntakeRouteRecord);
   }
 
@@ -368,7 +379,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     actor: string,
   ): Promise<StoredIntakeRouteRecord> {
     const id = randomUUID();
-    await ensureIntakeRouteLockRow(this.ops, scope);
+    await this.#ensureIntakeRoutes(scope);
     await this.#transact(async ops => {
       const rows = await lockIntakeRoutes(ops, scope);
       if (rows.length >= MAX_INTAKE_ROUTES) {
@@ -377,22 +388,11 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
           `A project can have at most ${MAX_INTAKE_ROUTES} intake routes; delete one first.`,
         );
       }
-      const now = new Date();
-      await ops.insertOne<IntakeRouteRow>(INTAKE_ROUTES, {
+      await insertIntakeRoute(ops, scope, {
         id,
-        ...scopeWhere(scope),
-        name: input.name,
-        enabled: input.enabled ?? true,
+        input,
         position: rows.reduce((max, row) => Math.max(max, row.position), -1) + 1,
-        when_condition: input.when ?? null,
-        board_key: input.target?.boardKey ?? null,
-        phase_key: input.target?.phaseKey ?? null,
-        hold: input.hold ?? 'untrusted',
-        revision: 1,
-        created_by: actor,
-        created_at: now,
-        updated_by: actor,
-        updated_at: now,
+        actor,
       });
     });
     return (await this.getIntakeRoute(scope, id))!;
@@ -413,10 +413,9 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
         ...(patch.enabled !== undefined && { enabled: patch.enabled }),
         ...(patch.when !== undefined && { when_condition: patch.when }),
         ...(patch.target !== undefined && {
-          board_key: patch.target?.boardKey ?? null,
-          phase_key: patch.target?.phaseKey ?? null,
+          board_key: patch.target.boardKey,
+          phase_key: patch.target.phaseKey ?? null,
         }),
-        ...(patch.hold !== undefined && { hold: patch.hold }),
         updated_by: options.actor,
       });
     });
@@ -425,7 +424,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
 
   /** Deletes a route; the routes after it move up one place. */
   async deleteIntakeRoute(scope: StoredBoardScope, id: string, options: { expectedRevision: number }): Promise<void> {
-    await ensureIntakeRouteLockRow(this.ops, scope);
+    await this.#ensureIntakeRoutes(scope);
     await this.#transact(async ops => {
       const rows = await lockIntakeRoutes(ops, scope);
       const row = rows.find(route => route.id === id);
@@ -443,7 +442,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
 
   /** Puts the project's routes in the order of `ids`, which must name every route exactly once. */
   async reorderIntakeRoutes(scope: StoredBoardScope, ids: string[], actor: string): Promise<StoredIntakeRouteRecord[]> {
-    await ensureIntakeRouteLockRow(this.ops, scope);
+    await this.#ensureIntakeRoutes(scope);
     await this.#transact(async ops => {
       const rows = await lockIntakeRoutes(ops, scope);
       const byId = new Map(rows.map(row => [row.id, row]));
@@ -460,6 +459,27 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
       );
     });
     return this.listIntakeRoutes(scope);
+  }
+
+  /**
+   * Creates the project's route lock row (see `FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA`) together with
+   * `DEFAULT_INTAKE_ROUTE`, once. The lock row marks the project's routes as set up, so a project
+   * whose admin deleted the default route doesn't get it back. Runs before, never inside, a write's
+   * transaction: the lock taken there must always be an update.
+   */
+  async #ensureIntakeRoutes(scope: StoredBoardScope): Promise<void> {
+    if (await this.ops.findOne(INTAKE_ROUTE_LOCKS, scopeWhere(scope))) return;
+    await this.#transact(async ops => {
+      // A racing first read inserted the lock row first: this retry finds it and stops.
+      if (await ops.findOne(INTAKE_ROUTE_LOCKS, scopeWhere(scope))) return;
+      await ops.insertOne(INTAKE_ROUTE_LOCKS, { ...scopeWhere(scope), locked_at: new Date() });
+      await insertIntakeRoute(ops, scope, {
+        id: randomUUID(),
+        input: DEFAULT_INTAKE_ROUTE,
+        position: 0,
+        actor: DEFAULT_INTAKE_ROUTE_ACTOR,
+      });
+    });
   }
 
   /**
@@ -634,8 +654,7 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     enabled: row.enabled,
     position: row.position,
     when: row.when_condition,
-    target: row.board_key ? { boardKey: row.board_key, phaseKey: row.phase_key } : null,
-    hold: row.hold,
+    target: { boardKey: row.board_key, phaseKey: row.phase_key },
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -684,18 +703,27 @@ async function updateIntakeRouteRow(
   return revision;
 }
 
-/**
- * Creates the project's route lock row (see `FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA`). Runs outside the
- * write's transaction: a racing insert would abort a Postgres transaction, and the lock taken
- * inside it must always be an update.
- */
-async function ensureIntakeRouteLockRow(ops: FactoryStorageOps, scope: StoredBoardScope): Promise<void> {
-  if (await ops.findOne(INTAKE_ROUTE_LOCKS, scopeWhere(scope))) return;
-  try {
-    await ops.insertOne(INTAKE_ROUTE_LOCKS, { ...scopeWhere(scope), locked_at: new Date() });
-  } catch (error) {
-    if (!(error instanceof UniqueViolationError)) throw error;
-  }
+async function insertIntakeRoute(
+  ops: FactoryStorageOps,
+  scope: StoredBoardScope,
+  route: { id: string; input: StoredIntakeRouteInput; position: number; actor: string },
+): Promise<void> {
+  const now = new Date();
+  await ops.insertOne<IntakeRouteRow>(INTAKE_ROUTES, {
+    id: route.id,
+    ...scopeWhere(scope),
+    name: route.input.name,
+    enabled: route.input.enabled ?? true,
+    position: route.position,
+    when_condition: route.input.when ?? null,
+    board_key: route.input.target.boardKey,
+    phase_key: route.input.target.phaseKey ?? null,
+    revision: 1,
+    created_by: route.actor,
+    created_at: now,
+    updated_by: route.actor,
+    updated_at: now,
+  });
 }
 
 /**

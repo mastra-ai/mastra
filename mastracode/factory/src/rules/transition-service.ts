@@ -1,6 +1,4 @@
 import type { BoardRegistry } from '../boards/index.js';
-import { heldForPerson } from '../boards/intake-routing.js';
-import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { autoApprovedExitTool } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -69,8 +67,6 @@ export interface FactoryTransitionServiceOptions {
   boards?: BoardRegistry | ProjectBoardSource;
   /** Every commit, accepted or rejected, lands here as `stage_moved` / `transition_rejected` under the request's actor. */
   audit?: AuditRecorder;
-  /** The project's intake routes; their hold says which cards an agent may not start. Without it, untrusted GitHub and GitLab cards are held. */
-  intakeRoutes?: IntakeRoutesReader;
   timeoutMs?: number;
   /**
    * Called after a transition commits into a phase the board declares
@@ -253,14 +249,12 @@ export class FactoryTransitionService {
   readonly #autoApprovePlans: FactoryTransitionServiceOptions['autoApprovePlans'];
   readonly #selfReviewEnabled: FactoryTransitionServiceOptions['selfReviewEnabled'];
   readonly #audit: AuditRecorder | undefined;
-  readonly #intakeRoutes: IntakeRoutesReader | undefined;
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#configVersion = options.configVersion;
     this.#boards = toBoardSource(options.boards);
     this.#storage = options.storage;
     this.#audit = options.audit;
-    this.#intakeRoutes = options.intakeRoutes;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
@@ -518,21 +512,6 @@ export class FactoryTransitionService {
           }
           if (policy?.accept && !isHumanTransition(request)) {
             throw new Error('Board policy requested unauthorized acceptance.');
-          }
-          // External content can steer a bound agent; board allowance cannot bypass this guard.
-          const held =
-            request.actor.type === 'agent' && !board.isWorking(fromStage) && entersWorking
-              ? await heldForPerson(this.#intakeRoutes, request, item)
-              : false;
-          if (held) {
-            return {
-              outcome: 'rejected' as const,
-              code: 'approval_required',
-              reason:
-                held === 'always'
-                  ? "This project's intake routes hold this card for a person; a person must resume it from the Factory board."
-                  : 'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
-            };
           }
           const selfReviewEnabled =
             request.board === 'work' && this.#selfReviewEnabled

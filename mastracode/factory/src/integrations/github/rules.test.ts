@@ -3636,8 +3636,11 @@ describe('GithubRules with intake routes', () => {
     conditions: [{ field: 'author.trusted', operator: 'equals', value: true }],
   } as const;
 
-  /** GitHub rules, a real dispatcher and transition service, the old label routes and the new intake routes. */
-  async function setupIntake(permission: string) {
+  /**
+   * GitHub rules, a real dispatcher and transition service, the old label routes and the new intake
+   * routes. The project's default route is removed unless a test asks for it.
+   */
+  async function setupIntake(permission: string, { withDefaultRoute = false } = {}) {
     const base = await setup(permission);
     const boards = createBoardRegistry({ boards: [createTestBoard()] });
     const configVersion = 'intake-routes';
@@ -3669,6 +3672,10 @@ describe('GithubRules with intake routes', () => {
       ownerId: 'worker-intake-routes',
     });
     const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
+    if (!withDefaultRoute) {
+      const [defaultRoute] = await base.boards.listIntakeRoutes(scope);
+      await base.boards.deleteIntakeRoute(scope, defaultRoute!.id, { expectedRevision: defaultRoute!.revision });
+    }
     await base.boards.createIntakeRoute(
       scope,
       { name: 'Trusted to triage', when: TRUSTED, target: { boardKey: 'work', phaseKey: 'triage' } },
@@ -3758,24 +3765,34 @@ describe('GithubRules with intake routes', () => {
     const { open } = await setupIntake('write');
     expect(await open('intake-over-label', ['release'])).toMatchObject({ board: 'work', stages: ['triage'] });
   });
+
+  it("keeps an outside author's labelled issue in Work › Intake by the default route, through later label changes", async () => {
+    const { open, relabel } = await setupIntake('read', { withDefaultRoute: true });
+    expect(await open('outsider-labelled', ['release'])).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      metadata: { authorTrusted: false, intakeRouteId: expect.any(String) },
+    });
+    expect(await relabel('outsider-relabelled', ['release', 'bug'])).toMatchObject({ board: 'work', stages: ['intake'] });
+  });
 });
 
-describe('GithubRules holding outside work for a person', () => {
+describe('GithubRules with outside work in Intake', () => {
   const AUTHORS = [
-    ['an outsider', { authorTrusted: false }, true],
-    ['an unstamped author', {}, true],
-    ['a maintainer', { authorTrusted: true }, false],
+    ['an outsider', { authorTrusted: false }],
+    ['an unstamped author', {}],
+    ['a maintainer', { authorTrusted: true }],
   ] as const;
 
   /** A card already on the board, real GitHub rules, and a dispatcher with auto-run on. */
-  async function setupHeld(input: {
+  async function setupCard(input: {
     permission: string;
     source: 'issue' | 'pull-request';
     stage: string;
     metadata: Record<string, unknown>;
   }) {
     const base = await setup(input.permission);
-    const configVersion = 'intake-hold';
+    const configVersion = 'outside-work';
     const boards = createBoardRegistry();
     const number = input.source === 'issue' ? 42 : 17;
     const card = (
@@ -3808,79 +3825,60 @@ describe('GithubRules holding outside work for a person', () => {
     });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: { getSession: vi.fn(async () => undefined) } as never,
-      transitionService: new FactoryTransitionService({
-        storage: base.workItems,
-        configVersion,
-        boards,
-        intakeRoutes: base.boards,
-      }),
+      transitionService: new FactoryTransitionService({ storage: base.workItems, configVersion, boards }),
       storage: base.workItems,
       boards,
       intakeRoutes: base.boards,
       isAutoRunEnabled: async () => true,
-      ownerId: 'worker-hold',
+      ownerId: 'worker-outside',
     });
     const deliver = async (ingress: Parameters<GithubRules['ingest']>[0]) => {
-      await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
+      await service.ingest(ingress);
       await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
-      const decisions = await base.workItems.listDeferredDecisions('org-1', base.project.id);
       return {
-        decisions,
+        decisions: await base.workItems.listDeferredDecisions('org-1', base.project.id),
         item: await base.workItems.get({ orgId: 'org-1', id: card.id }),
       };
     };
-    return { ...base, card, deliver, scope: { orgId: 'org-1', factoryProjectId: base.project.id } };
+    return { deliver };
   }
 
-  for (const [author, metadata, expected] of AUTHORS) {
-    it(`${expected ? 'holds' : 'starts'} the re-review a maintainer's push asks for on a pull request from ${author}`, async () => {
-      const { deliver } = await setupHeld({ permission: 'write', source: 'pull-request', stage: 'done', metadata });
+  for (const [author, metadata] of AUTHORS) {
+    it(`starts nothing when a maintainer pushes to ${author}'s pull request resting in Intake`, async () => {
+      const { deliver } = await setupCard({ permission: 'write', source: 'pull-request', stage: 'intake', metadata });
+      const { decisions, item } = await deliver(pullRequest('synchronize', 'delivery-push'));
+      expect(decisions).toEqual([]);
+      expect(item?.stages).toEqual(['intake']);
+    });
+
+    it(`starts nothing when someone comments on ${author}'s issue resting in Intake`, async () => {
+      const { deliver } = await setupCard({ permission: 'read', source: 'issue', stage: 'intake', metadata });
+      const { decisions, item } = await deliver(issueComment('created', 'delivery-comment', { body: 'Any update?' }));
+      expect(decisions).toEqual([]);
+      expect(item?.stages).toEqual(['intake']);
+    });
+
+    // Accepted change: trust decides only where a card arrives. Once a person has moved a card out of
+    // Intake, later input on it runs as on any card, whoever wrote it.
+    it(`re-reviews ${author}'s pull request a person finished when a maintainer pushes`, async () => {
+      const { deliver } = await setupCard({ permission: 'write', source: 'pull-request', stage: 'done', metadata });
       const { decisions, item } = await deliver(pullRequest('synchronize', 'delivery-push'));
       const [transition] = decisions.filter(entry => entry.decision.type === 'transition');
-      expect(transition?.decision).toMatchObject({ board: 'review', stage: 'review' });
-      if (expected) {
-        expect(transition?.status).toBe('proposed');
-        expect(item?.stages).toEqual(['done']);
-      } else {
-        expect(transition?.status).toBe('succeeded');
-        expect(item?.stages).toEqual(['review']);
-      }
+      expect(transition).toMatchObject({ status: 'succeeded', decision: { board: 'review', stage: 'review' } });
+      expect(item?.stages).toEqual(['review']);
     });
 
-    it(`${expected ? 'holds' : 'starts'} the re-triage an outside comment asks for on an issue from ${author}`, async () => {
-      const { deliver } = await setupHeld({ permission: 'read', source: 'issue', stage: 'triage', metadata });
+    it(`re-triages ${author}'s issue a person moved to Triage when someone comments`, async () => {
+      const { deliver } = await setupCard({ permission: 'read', source: 'issue', stage: 'triage', metadata });
       const { decisions } = await deliver(issueComment('created', 'delivery-comment', { body: 'Any update?' }));
       expect(decisions).toHaveLength(1);
-      expect(decisions[0]?.decision).toMatchObject({ type: 'invokeSkill', skillName: 'factory-triage' });
-      expect(decisions[0]?.status === 'proposed').toBe(expected);
+      expect(decisions[0]).toMatchObject({
+        decision: { type: 'invokeSkill', skillName: 'factory-triage' },
+        // Not parked for a person: the dispatcher tries to start it (and retries, as this harness has no sessions).
+        status: 'retry',
+      });
     });
   }
-
-  it("starts an outsider's re-triage only once an admin's route releases cards like it", async () => {
-    const { deliver, boards, scope } = await setupHeld({
-      permission: 'read',
-      source: 'issue',
-      stage: 'triage',
-      metadata: { authorTrusted: false, labels: ['docs'] },
-    });
-    expect((await deliver(issueComment('created', 'before-route'))).decisions[0]?.status).toBe('proposed');
-    await boards.createIntakeRoute(
-      scope,
-      {
-        name: 'Docs need no person',
-        when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] },
-        hold: 'never',
-      },
-      'admin',
-    );
-    const { decisions } = await deliver(issueComment('edited', 'after-route'));
-    expect(decisions).toHaveLength(2);
-    // The held proposal gives way to the newer re-triage, which the dispatcher now tries to run.
-    const status = Object.fromEntries(decisions.map(entry => [entry.idempotencyKey, entry.status]));
-    expect(status['7:before-route:factory-triage']).toBe('superseded');
-    // Not held: the dispatcher tries to start it (and retries, as this harness has no sessions).
-    expect(status['7:after-route:factory-triage']).toBe('retry');
-  });
 });
 
 describe('polledPullRequestEvent', () => {

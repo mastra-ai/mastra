@@ -68,7 +68,6 @@ const storedBoardResponseSchema = z.object({
 });
 const intakeRoutePathSchema = z.object({ id: uuidSchema, routeId: uuidSchema });
 const intakeRouteIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
-const intakeRouteHoldSchema = z.enum(['untrusted', 'always', 'never']);
 const intakeRouteTargetSchema = z
   .object({
     boardKey: intakeRouteIdentifierSchema,
@@ -81,21 +80,15 @@ const intakeRouteFields = {
   enabled: z.boolean(),
   /** Which new cards the route applies to; null matches every card. */
   when: cardRuleGroupSchema.nullable(),
-  /** Where matching new cards land; null leaves placement as is, so the route only decides `hold`. */
-  target: intakeRouteTargetSchema.nullable(),
-  /**
-   * When an agent may start work on a matching card without a person: `untrusted` holds GitHub and
-   * GitLab cards from outside the write-access circle, `always` holds every card, `never` holds none.
-   */
-  hold: intakeRouteHoldSchema,
+  /** Where matching new cards land. */
+  target: intakeRouteTargetSchema,
 };
 export const intakeRouteInputSchema = z
   .object({
     name: intakeRouteFields.name,
     enabled: intakeRouteFields.enabled.default(true),
     when: intakeRouteFields.when.default(null),
-    target: intakeRouteFields.target.default(null),
-    hold: intakeRouteFields.hold.default('untrusted'),
+    target: intakeRouteFields.target,
   })
   .strict();
 /** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
@@ -105,7 +98,6 @@ export const intakeRoutePatchSchema = z
     enabled: intakeRouteFields.enabled.optional(),
     when: intakeRouteFields.when.optional(),
     target: intakeRouteFields.target.optional(),
-    hold: intakeRouteFields.hold.optional(),
     expectedRevision: boardRevisionSchema,
   })
   .strict()
@@ -129,8 +121,7 @@ const intakeRouteSchema = z.object({
   /** 0 is evaluated first. */
   position: z.number().int(),
   when: cardRuleGroupSchema.nullable(),
-  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable() }).nullable(),
-  hold: intakeRouteHoldSchema,
+  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable() }),
   /** Send it back as `expectedRevision` when editing or deleting. */
   revision: z.number().int(),
   createdBy: z.string(),
@@ -141,11 +132,7 @@ const intakeRouteSchema = z.object({
   problems: z.array(z.string()),
 });
 const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
-const intakeRouteListResponseSchema = z.object({
-  intakeRoutes: z.array(intakeRouteSchema),
-  /** What applies to a card no enabled route matches: hold cards matching `untrustedWhen`. */
-  fallback: z.object({ hold: z.literal('untrusted'), untrustedWhen: cardRuleGroupSchema }),
-});
+const intakeRouteListResponseSchema = z.object({ intakeRoutes: z.array(intakeRouteSchema) });
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 

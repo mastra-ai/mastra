@@ -1,14 +1,13 @@
 import { evaluateRuleGroup } from '../rules/rule-group.js';
-import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
-import type { IntakeRouteHold, StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
+import type { RuleFacts } from '../rules/rule-group.js';
+import type { StoredBoardsStorage, StoredIntakeRouteRecord } from '../storage/domains/boards/base.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
-import { cardRuleFacts } from './card-facts.js';
-import type { BoardRegistry } from './registry.js';
+import type { BoardRegistry, InstalledBoard } from './registry.js';
 
 /** Reads a project's intake routes, in order. */
 export type IntakeRoutesReader = Pick<StoredBoardsStorage, 'listIntakeRoutes'>;
 
-type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target' | 'hold'>;
+type IntakeRoute = Pick<StoredIntakeRouteRecord, 'id' | 'enabled' | 'when' | 'target'>;
 
 /**
  * Card metadata naming the intake route that placed the card. Label routes, repository
@@ -20,18 +19,6 @@ export const INTAKE_ROUTE_METADATA_KEY = 'intakeRouteId';
 export function placedByIntakeRoute(item: Pick<WorkItemRow, 'metadata'>): boolean {
   return typeof item.metadata?.[INTAKE_ROUTE_METADATA_KEY] === 'string';
 }
-
-/**
- * The built-in "needs a person" condition: a GitHub or GitLab card whose author is not
- * trusted (no `authorTrusted` or `factoryAuthored` stamp). A missing stamp fails closed.
- */
-export const UNTRUSTED_AUTHOR_WHEN: RuleGroup = {
-  operator: 'AND',
-  conditions: [
-    { field: 'source.integration', operator: 'in', value: ['github', 'gitlab'] },
-    { field: 'author.trusted', operator: 'not_equals', value: true },
-  ],
-};
 
 export type IntakeTargetProblem = {
   code: 'unknown_board' | 'unknown_phase' | 'terminal_phase' | 'unreachable_phase';
@@ -89,38 +76,20 @@ export function resolveIntakePlacement(
   registry: BoardRegistry,
 ): { board: string; phase: string; routeId: string } | undefined {
   for (const route of routes) {
-    if (!route.enabled || !route.target || !evaluateRuleGroup(route.when, facts)) continue;
+    if (!route.enabled || !evaluateRuleGroup(route.when, facts)) continue;
     const board = registry.get(route.target.boardKey);
     if (!board || !boardTakesCard(board.id, facts)) continue;
-    const phase = route.target.phaseKey;
-    const usable =
-      phase &&
-      board.phaseKind(phase) !== undefined &&
-      !board.isTerminal(phase) &&
-      board.allowsTransition(board.initialPhase, phase);
-    return { board: board.id, phase: usable ? phase : board.initialPhase, routeId: route.id };
+    return { board: board.id, phase: landingPhase(board, route.target.phaseKey), routeId: route.id };
   }
   return undefined;
 }
 
-/** The hold of the first enabled route whose condition matches the card, else `'untrusted'`. */
-export function intakeHold(routes: readonly IntakeRoute[], facts: RuleFacts): IntakeRouteHold {
-  return routes.find(route => route.enabled && evaluateRuleGroup(route.when, facts))?.hold ?? 'untrusted';
-}
-
-/**
- * Whether only a person may start work on `item`: the hold of the project's first matching
- * route — `'untrusted'` (also when no route matches, or no reader is wired) holds a GitHub or
- * GitLab card whose author is not trusted. Read live, so route edits and a reconcile's trust
- * backfill take effect at once.
- */
-export async function heldForPerson(
-  reader: IntakeRoutesReader | undefined,
-  scope: { orgId: string; factoryProjectId: string },
-  item: Pick<WorkItemRow, 'title' | 'metadata' | 'externalSource'>,
-): Promise<IntakeRouteHold | false> {
-  const facts = cardRuleFacts(item);
-  const hold = intakeHold(reader ? await reader.listIntakeRoutes(scope) : [], facts);
-  if (hold === 'always') return hold;
-  return hold === 'untrusted' && evaluateRuleGroup(UNTRUSTED_AUTHOR_WHEN, facts) ? hold : false;
+/** The phase a route's card lands in: its named phase when new cards can reach it, else the board's first. */
+export function landingPhase(board: InstalledBoard, phase: string | null | undefined): string {
+  const usable =
+    phase &&
+    board.phaseKind(phase) !== undefined &&
+    !board.isTerminal(phase) &&
+    board.allowsTransition(board.initialPhase, phase);
+  return usable ? phase : board.initialPhase;
 }

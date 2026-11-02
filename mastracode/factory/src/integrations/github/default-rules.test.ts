@@ -15,7 +15,11 @@ describe('GitHub issue re-triage', () => {
     expect(defaultGithubRules.issueCommentCreated?.(comment([stage]))).toBeUndefined();
   });
 
-  it.each([['intake'], ['triage'], ['planning']])('re-triages a card in %s', stage => {
+  it('leaves a card resting in Intake for a person to move', () => {
+    expect(defaultGithubRules.issueCommentCreated?.(comment(['intake']))).toBeUndefined();
+  });
+
+  it.each([['triage'], ['planning']])('re-triages a card in %s', stage => {
     expect(defaultGithubRules.issueCommentCreated?.(comment([stage]))).toMatchObject({
       type: 'invokeSkill',
       skillName: 'factory-triage',

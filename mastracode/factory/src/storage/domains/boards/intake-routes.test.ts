@@ -7,7 +7,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
-import { MAX_INTAKE_ROUTES, StoredBoardsStorage } from './base.js';
+import { DEFAULT_INTAKE_ROUTE, MAX_INTAKE_ROUTES, StoredBoardsStorage } from './base.js';
 import type { StoredBoardScope, StoredIntakeRouteInput } from './base.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -18,7 +18,7 @@ const TRUSTED = {
 };
 
 function route(name: string, overrides: Partial<StoredIntakeRouteInput> = {}): StoredIntakeRouteInput {
-  return { name, ...overrides };
+  return { name, target: { boardKey: 'work' }, ...overrides };
 }
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes on %s', backend => {
@@ -34,7 +34,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     return boards;
   }
 
-  async function setup() {
+  /** A project with no routes: the default route it starts with, deleted. */
+  async function emptyProject(boards: StoredBoardsStorage, scope: StoredBoardScope) {
+    const [seeded] = await boards.listIntakeRoutes(scope);
+    await boards.deleteIntakeRoute(scope, seeded!.id, { expectedRevision: seeded!.revision });
+  }
+
+  async function setup({ seeded = false } = {}) {
     let url = ':memory:';
     if (backend === 'libsql') {
       const dir = mkdtempSync(join(tmpdir(), 'factory-intake-routes-'));
@@ -44,6 +50,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     const boards = await client(url);
     // The Postgres database is shared across runs, so every test gets its own org.
     const scope: StoredBoardScope = { orgId: `org-${randomUUID()}`, factoryProjectId: 'project-1' };
+    if (!seeded) await emptyProject(boards, scope);
     return { boards, scope, secondClient: () => client(url) };
   }
 
@@ -52,6 +59,47 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     expect(routes.map(row => row.position)).toEqual(routes.map((_, index) => index));
     return routes.map(row => row.name);
   }
+
+  it('gives a new project the default route, once, and never brings it back once deleted', async () => {
+    const { boards, scope } = await setup({ seeded: true });
+
+    const [seeded, ...rest] = await boards.listIntakeRoutes(scope);
+    expect(rest).toEqual([]);
+    expect(seeded).toMatchObject({
+      name: DEFAULT_INTAKE_ROUTE.name,
+      enabled: true,
+      position: 0,
+      when: DEFAULT_INTAKE_ROUTE.when,
+      target: { boardKey: 'work', phaseKey: 'intake' },
+      revision: 1,
+      createdBy: 'factory',
+    });
+    expect(await boards.listIntakeRoutes(scope)).toEqual([seeded]);
+
+    await boards.deleteIntakeRoute(scope, seeded!.id, { expectedRevision: 1 });
+    expect(await boards.listIntakeRoutes(scope)).toEqual([]);
+    expect(await boards.listIntakeRoutes(scope)).toEqual([]);
+  });
+
+  it("puts a new project's first route after the default route", async () => {
+    const { boards, scope } = await setup({ seeded: true });
+    await boards.createIntakeRoute(scope, route('Mine'), 'u');
+    expect(await names(boards, scope)).toEqual([DEFAULT_INTAKE_ROUTE.name, 'Mine']);
+  });
+
+  it('seeds the default route once when two clients read a new project at once', async () => {
+    const { boards, scope, secondClient } = await setup({ seeded: true });
+    const other = await secondClient();
+    const fresh = { ...scope, factoryProjectId: 'project-fresh' };
+
+    await Promise.all([
+      boards.listIntakeRoutes(fresh),
+      other.listIntakeRoutes(fresh),
+      other.createIntakeRoute(fresh, route('Mine'), 'u'),
+    ]);
+
+    expect(await names(boards, fresh)).toEqual([DEFAULT_INTAKE_ROUTE.name, 'Mine']);
+  });
 
   it('reads back every field of a route, and fills the defaults', async () => {
     const { boards, scope } = await setup();
@@ -62,7 +110,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
         enabled: false,
         when: TRUSTED,
         target: { boardKey: 'work', phaseKey: 'triage' },
-        hold: 'never',
       }),
       'user-1',
     );
@@ -76,21 +123,25 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       position: 0,
       when: TRUSTED,
       target: { boardKey: 'work', phaseKey: 'triage' },
-      hold: 'never',
       revision: 1,
       createdBy: 'user-1',
       updatedBy: 'user-1',
     });
     expect(full.createdAt).toBeInstanceOf(Date);
-    expect(bare).toMatchObject({ enabled: true, position: 1, when: null, target: null, hold: 'untrusted' });
+    expect(bare).toMatchObject({
+      enabled: true,
+      position: 1,
+      when: null,
+      target: { boardKey: 'work', phaseKey: null },
+    });
     expect(await boards.getIntakeRoute(scope, full.id)).toEqual(full);
     expect(await boards.listIntakeRoutes(scope)).toEqual([full, bare]);
   });
 
   it('refuses a route past the most a project may have', async () => {
     const { boards, scope } = await setup();
-    for (let i = 0; i < MAX_INTAKE_ROUTES; i += 1) await boards.createIntakeRoute(scope, { name: `r${i}` }, 'admin');
-    await expect(boards.createIntakeRoute(scope, { name: 'one more' }, 'admin')).rejects.toMatchObject({
+    for (let i = 0; i < MAX_INTAKE_ROUTES; i += 1) await boards.createIntakeRoute(scope, route(`r${i}`), 'admin');
+    await expect(boards.createIntakeRoute(scope, route('one more'), 'admin')).rejects.toMatchObject({
       code: 'intake_route_limit',
     });
     expect(await boards.listIntakeRoutes(scope)).toHaveLength(MAX_INTAKE_ROUTES);
@@ -105,6 +156,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
   it('keeps two projects apart', async () => {
     const { boards, scope } = await setup();
     const other = { ...scope, factoryProjectId: 'project-2' };
+    await emptyProject(boards, other);
     const mine = await boards.createIntakeRoute(scope, route('Mine'), 'u');
     await boards.createIntakeRoute(other, route('Theirs'), 'u');
 
@@ -127,12 +179,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     const renamed = await boards.updateIntakeRoute(
       scope,
       created.id,
-      { name: 'Renamed', hold: 'always' },
+      { name: 'Renamed' },
       { expectedRevision: 1, actor: 'user-2' },
     );
     expect(renamed).toMatchObject({
       name: 'Renamed',
-      hold: 'always',
       when: TRUSTED,
       target: { boardKey: 'work', phaseKey: 'triage' },
       revision: 2,
@@ -143,10 +194,16 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     const cleared = await boards.updateIntakeRoute(
       scope,
       created.id,
-      { when: null, target: null, enabled: false },
+      { when: null, target: { boardKey: 'docs' }, enabled: false },
       { expectedRevision: 2, actor: 'user-2' },
     );
-    expect(cleared).toMatchObject({ name: 'Renamed', when: null, target: null, enabled: false, revision: 3 });
+    expect(cleared).toMatchObject({
+      name: 'Renamed',
+      when: null,
+      target: { boardKey: 'docs', phaseKey: null },
+      enabled: false,
+      revision: 3,
+    });
   });
 
   it('refuses a stale update or delete from another client and changes nothing', async () => {
@@ -161,14 +218,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     );
 
     await expect(
-      boards.updateIntakeRoute(scope, created.id, { hold: 'never' }, { expectedRevision: 1, actor: 'user-1' }),
+      boards.updateIntakeRoute(scope, created.id, { enabled: false }, { expectedRevision: 1, actor: 'user-1' }),
     ).rejects.toMatchObject({ code: 'revision_mismatch' });
     await expect(boards.deleteIntakeRoute(scope, created.id, { expectedRevision: 1 })).rejects.toMatchObject({
       code: 'revision_mismatch',
     });
 
     expect(await boards.getIntakeRoute(scope, created.id)).toEqual(edited);
-    expect(edited.hold).toBe('untrusted');
+    expect(edited.enabled).toBe(true);
   });
 
   it('refuses to change a route that does not exist', async () => {

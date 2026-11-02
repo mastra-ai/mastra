@@ -1,9 +1,10 @@
 /**
  * Mastra `apiRoutes` for managing a project's intake routes: the ordered rules that place new
- * cards on a board and phase and decide whether an agent may start on them without a person.
+ * cards on a board and phase when they arrive.
  *
- * Reads need project membership; writes need an organization admin in tenant mode. A route's
- * target must be an installed board and a non-terminal phase when it is written; a target that
+ * Reads need a signed-in user of the project's organization; writes need an organization admin in
+ * tenant mode. A route's target must be an installed board and a phase new cards can reach when it
+ * is written; a target that
  * stops existing later is reported in `problems` and skipped when cards arrive.
  */
 
@@ -12,7 +13,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 import type { z } from 'zod';
 
-import { intakeTargetProblem, UNTRUSTED_AUTHOR_WHEN } from '../boards/intake-routing.js';
+import { intakeTargetProblem } from '../boards/intake-routing.js';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { BoardRegistry } from '../boards/registry.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
@@ -53,11 +54,9 @@ function issueMessage(issues: readonly z.core.$ZodIssue[]): string {
 
 function present(route: StoredIntakeRouteRecord, registry: BoardRegistry) {
   const { orgId: _orgId, factoryProjectId: _project, ...fields } = route;
-  const problem = route.target ? intakeTargetProblem(registry, route.target) : undefined;
+  const problem = intakeTargetProblem(registry, route.target);
   return { ...fields, problems: problem ? [problem.message] : [] };
 }
-
-const FALLBACK = { hold: 'untrusted', untrustedWhen: UNTRUSTED_AUTHOR_WHEN } as const;
 
 export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
   async #resolve(c: Context): Promise<Resolved> {
@@ -115,7 +114,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
   }
 
   /** Refuses a target that isn't an installed board and a phase new cards can land in. */
-  async #checkTarget(scope: Resolved, target: { boardKey: string; phaseKey?: string | null } | null | undefined) {
+  async #checkTarget(scope: Resolved, target: { boardKey: string; phaseKey?: string | null } | undefined) {
     if (!target) return;
     const problem = intakeTargetProblem(await this.#registry(scope), target);
     if (problem) throw new Refusal(422, { error: problem.code, message: problem.message });
@@ -124,7 +123,7 @@ export class IntakeRouteRoutes extends Route<IntakeRouteRoutesDeps> {
   async #list(c: Context, scope: Resolved, routes?: StoredIntakeRouteRecord[]) {
     const registry = await this.#registry(scope);
     routes ??= await this.deps.storage.listIntakeRoutes(scope);
-    return c.json({ intakeRoutes: routes.map(route => present(route, registry)), fallback: FALLBACK });
+    return c.json({ intakeRoutes: routes.map(route => present(route, registry)) });
   }
 
   async #respond(c: Context, scope: Resolved, route: StoredIntakeRouteRecord, status: 200 | 201 = 200) {

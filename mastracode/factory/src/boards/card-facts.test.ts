@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 
 import { evaluateRuleGroup } from '../rules/rule-group.js';
 import { externallyAuthoredWorkItem } from '../rules/types.js';
+import { DEFAULT_INTAKE_ROUTE } from '../storage/domains/boards/base.js';
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
-import { UNTRUSTED_AUTHOR_WHEN } from './intake-routing.js';
 
 const SOURCES: Record<string, ExternalWorkItemSource | null> = {
   manual: null,
@@ -50,24 +50,25 @@ describe('author.trusted', () => {
   });
 });
 
-describe('the built-in untrusted-author condition', () => {
+describe("the default intake route's condition", () => {
+  const OUTSIDE_AUTHOR = DEFAULT_INTAKE_ROUTE.when!;
   const cases = Object.keys(SOURCES).flatMap(source => Object.keys(STAMPS).map(stamps => [source, stamps] as const));
 
-  it.each(cases)('matches exactly the cards the old guard held: %s, %s', (source, stamps) => {
+  it.each(cases)('matches exactly the cards from outside the write-access circle: %s, %s', (source, stamps) => {
     const card = { title: 'Fix', metadata: STAMPS[stamps]!, externalSource: SOURCES[source]! };
-    expect(evaluateRuleGroup(UNTRUSTED_AUTHOR_WHEN, cardRuleFacts(card))).toBe(externallyAuthoredWorkItem(card));
+    expect(evaluateRuleGroup(OUTSIDE_AUTHOR, cardRuleFacts(card))).toBe(externallyAuthoredWorkItem(card));
   });
 
-  it('holds only GitHub and GitLab cards without a trust stamp', () => {
-    const held = cases
+  it('matches only GitHub and GitLab cards without a trust stamp', () => {
+    const matched = cases
       .filter(([source, stamps]) =>
         evaluateRuleGroup(
-          UNTRUSTED_AUTHOR_WHEN,
+          OUTSIDE_AUTHOR,
           cardRuleFacts({ title: 'Fix', metadata: STAMPS[stamps]!, externalSource: SOURCES[source]! }),
         ),
       )
       .map(([source, stamps]) => `${source}: ${stamps}`);
-    expect(held).toEqual(
+    expect(matched).toEqual(
       ['github issue', 'github pull request', 'gitlab issue', 'gitlab merge request'].flatMap(source =>
         ['no metadata', 'no stamp', 'authorTrusted false'].map(stamps => `${source}: ${stamps}`),
       ),

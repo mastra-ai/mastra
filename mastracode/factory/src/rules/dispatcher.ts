@@ -13,8 +13,8 @@ import {
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import {
-  heldForPerson,
   INTAKE_ROUTE_METADATA_KEY,
+  landingPhase,
   placedByIntakeRoute,
   resolveIntakePlacement,
 } from '../boards/intake-routing.js';
@@ -918,10 +918,6 @@ export class FactoryDecisionDispatcher {
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
     const item = record.workItemId ? await this.#storage.get({ orgId: record.orgId, id: record.workItemId }) : null;
-    // Neither arming nor auto-run is standing consent for a card the project's intake routes
-    // hold (by default, code from outside the write-access circle): only a run pre-approved by a
-    // person's gesture or its own agent's governed move passes.
-    if (item && (await heldForPerson(this.#intakeRoutes, record, item))) return true;
     if (item?.autonomyArmedAt != null) return false;
     if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
     if (item && startsInAutoPhase(boards, item, decision)) return false;
@@ -1358,9 +1354,10 @@ export class FactoryDecisionDispatcher {
     const boards = await this.#boards.load(record);
     // Intake routes place only a card this decision files (or is still filing,
     // on a retry); a card already on the board stays where it is.
-    const decision =
-      !existing || materializedHere
-        ? await this.#routeArrival(record, requested, boards)
+    const decision = !existing
+      ? await this.#routeArrival(record, requested, boards)
+      : materializedHere
+        ? await this.#resumeRoutedCard(record, existing, requested, boards)
         : this.#keepRoutedCard(existing, requested, boards);
     if (materializedHere) {
       for (const suffix of ['destination', 'initial-entry']) {
@@ -1525,6 +1522,9 @@ export class FactoryDecisionDispatcher {
   ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
     if (!this.#intakeRoutes || decision.skipRules === true) return decision;
     if (decision.stage !== boards.get(decision.board)?.initialPhase) return decision;
+    // A card another card's rule files (a board's child card) goes where that
+    // board put it; routes place only what arrives from outside.
+    if (record.workItemId !== null) return decision;
     const routes = await this.#intakeRoutes.listIntakeRoutes({
       orgId: record.orgId,
       factoryProjectId: record.factoryProjectId,
@@ -1551,6 +1551,34 @@ export class FactoryDecisionDispatcher {
    * on the card's board at its first phase, so it only backfills facts and moves nothing.
    * An explicit placement (`skipRules`) still wins.
    */
+  /**
+   * A retry of the decision that filed `existing` finishes the filing where it started: on the
+   * card's board, at the phase its route names now, or the board's first phase when the route was
+   * deleted, disabled or re-pointed since. Routes are not re-run, so an edit cannot send the card
+   * to a board it isn't on.
+   */
+  async #resumeRoutedCard(
+    record: FactoryDeferredDecisionRecord,
+    existing: WorkItemRow,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    boards: BoardRegistry,
+  ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
+    const routeId = existing.metadata?.[INTAKE_ROUTE_METADATA_KEY];
+    if (typeof routeId !== 'string') return decision;
+    const board = boards.get(boardForWorkItem(existing));
+    if (!board) return decision;
+    const routes = this.#intakeRoutes
+      ? await this.#intakeRoutes.listIntakeRoutes({ orgId: record.orgId, factoryProjectId: record.factoryProjectId })
+      : [];
+    const route = routes.find(entry => entry.id === routeId && entry.enabled && entry.target.boardKey === board.id);
+    return {
+      ...decision,
+      board: board.id,
+      stage: landingPhase(board, route?.target.phaseKey),
+      metadata: { ...decision.metadata, [INTAKE_ROUTE_METADATA_KEY]: routeId },
+    };
+  }
+
   #keepRoutedCard(
     existing: WorkItemRow,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,

@@ -8,13 +8,12 @@ import { PgFactoryStorage } from '@mastra/pg';
 import { Hono } from 'hono';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
-import { UNTRUSTED_AUTHOR_WHEN } from '../boards/intake-routing.js';
 import { ProjectBoardCache } from '../boards/project-boards.js';
 import { createBoardRegistry } from '../boards/registry.js';
 import { auditActionsInNamespaces } from '../storage/domains/audit/actions.js';
 import { AuditStorage } from '../storage/domains/audit/base.js';
 import { AuditDomain } from '../storage/domains/audit/domain.js';
-import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
+import { DEFAULT_INTAKE_ROUTE, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { BoardRoutes } from './boards.js';
@@ -29,6 +28,7 @@ const SIGNED_OUT = 'signed-out';
 
 const TRUSTED = { operator: 'AND', conditions: [{ field: 'author.trusted', operator: 'equals', value: true }] };
 const DOCS = { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'docs' }] };
+const WORK = { boardKey: 'work' };
 
 const docsBoard = {
   key: 'docs',
@@ -46,8 +46,7 @@ type Route = {
   enabled: boolean;
   position: number;
   when: unknown;
-  target: { boardKey: string; phaseKey: string | null } | null;
-  hold: string;
+  target: { boardKey: string; phaseKey: string | null };
   revision: number;
   createdBy: string;
   updatedBy: string;
@@ -120,7 +119,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     return { send };
   }
 
-  async function setup() {
+  /** Pass `seeded` to keep the default route every project starts with; tests otherwise start with none. */
+  async function setup({ seeded = false } = {}) {
     let url = ':memory:';
     if (backend === 'libsql') {
       const dir = mkdtempSync(join(tmpdir(), 'factory-intake-routes-'));
@@ -134,6 +134,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     const projectPath = `/web/factory/projects/${project.id}`;
     const base = `${projectPath}/intake-routes`;
     const scope = { orgId, factoryProjectId: project.id };
+    if (!seeded) {
+      const [route] = await a.boards.listIntakeRoutes(scope);
+      await a.boards.deleteIntakeRoute(scope, route!.id, { expectedRevision: route!.revision });
+    }
     return { a, b, orgId, scope, projectPath, base, replicaA: replica(a, orgId) };
   }
 
@@ -143,12 +147,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     return response.body.intakeRoutes;
   }
 
-  it('lists no routes on a new project and shows the built-in untrusted fallback', async () => {
-    const { base, replicaA } = await setup();
-    expect(await replicaA.send('GET', base, undefined, MEMBER)).toEqual({
-      status: 200,
-      body: { intakeRoutes: [], fallback: { hold: 'untrusted', untrustedWhen: UNTRUSTED_AUTHOR_WHEN } },
+  it('lists the default route a new project starts with, and lets an admin edit it like any other', async () => {
+    const { base, replicaA } = await setup({ seeded: true });
+    const [route, ...rest] = await list(replicaA.send, base, MEMBER);
+    expect(rest).toEqual([]);
+    expect(route).toMatchObject({
+      name: DEFAULT_INTAKE_ROUTE.name,
+      enabled: true,
+      position: 0,
+      when: DEFAULT_INTAKE_ROUTE.when,
+      target: { boardKey: 'work', phaseKey: 'intake' },
+      createdBy: 'factory',
+      problems: [],
     });
+    expect(
+      await replicaA.send('PATCH', `${base}/${route!.id}`, { enabled: false, expectedRevision: route!.revision }),
+    ).toMatchObject({ status: 200, body: { intakeRoute: { enabled: false, updatedBy: ADMIN } } });
   });
 
   it('creates, reads, changes and deletes a route, and records each change in the audit log', async () => {
@@ -167,7 +181,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       position: 0,
       when: TRUSTED,
       target: { boardKey: 'work', phaseKey: 'triage' },
-      hold: 'untrusted',
       revision: 1,
       createdBy: ADMIN,
       problems: [],
@@ -180,13 +193,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       body: { intakeRoute: { id: route.id, name: 'Trusted to triage' } },
     });
 
-    const changed = await replicaA.send('PATCH', `${base}/${route.id}`, { hold: 'always', expectedRevision: 1 });
+    const changed = await replicaA.send('PATCH', `${base}/${route.id}`, { enabled: false, expectedRevision: 1 });
     expect(changed).toMatchObject({
       status: 200,
-      body: { intakeRoute: { hold: 'always', revision: 2, when: TRUSTED, target: { boardKey: 'work' } } },
+      body: { intakeRoute: { enabled: false, revision: 2, when: TRUSTED, target: { boardKey: 'work' } } },
     });
-    const cleared = await replicaA.send('PATCH', `${base}/${route.id}`, { target: null, expectedRevision: 2 });
-    expect(cleared.body.intakeRoute).toMatchObject({ target: null, revision: 3 });
+    const cleared = await replicaA.send('PATCH', `${base}/${route.id}`, { when: null, expectedRevision: 2 });
+    expect(cleared.body.intakeRoute).toMatchObject({ when: null, target: { boardKey: 'work' }, revision: 3 });
 
     expect((await replicaA.send('DELETE', `${base}/${route.id}?expectedRevision=3`)).status).toBe(204);
     expect(await list(replicaA.send, base)).toEqual([]);
@@ -207,11 +220,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
   it('refuses route changes from a member who is not an admin, and leaves the routes as they were', async () => {
     const { base, replicaA } = await setup();
-    const route = (await replicaA.send('POST', base, { name: 'Docs', when: DOCS })).body.intakeRoute as Route;
+    const route = (await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: WORK })).body
+      .intakeRoute as Route;
 
-    const create = await replicaA.send('POST', base, { name: 'Sneaky', hold: 'never' }, MEMBER);
+    const create = await replicaA.send('POST', base, { name: 'Sneaky', target: WORK }, MEMBER);
     expect(create).toMatchObject({ status: 403, body: { error: 'organization_admin_required' } });
-    const patch = await replicaA.send('PATCH', `${base}/${route.id}`, { hold: 'never', expectedRevision: 1 }, MEMBER);
+    const patch = await replicaA.send('PATCH', `${base}/${route.id}`, { enabled: false, expectedRevision: 1 }, MEMBER);
     expect(patch.status).toBe(403);
     expect((await replicaA.send('POST', `${base}/reorder`, { ids: [route.id] }, MEMBER)).status).toBe(403);
     expect((await replicaA.send('DELETE', `${base}/${route.id}?expectedRevision=1`, undefined, MEMBER)).status).toBe(
@@ -219,17 +233,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     );
 
     expect(await list(replicaA.send, base, MEMBER)).toEqual([
-      expect.objectContaining({ id: route.id, name: 'Docs', hold: 'untrusted', revision: 1 }),
+      expect.objectContaining({ id: route.id, name: 'Docs', enabled: true, revision: 1 }),
     ]);
   });
 
   it("hides another organization's project and refuses a signed-out request", async () => {
     const { a, base, replicaA } = await setup();
-    await replicaA.send('POST', base, { name: 'Docs', when: DOCS });
+    await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: WORK });
 
     const outsider = replica(a, `org-${randomUUID()}`);
     expect(await outsider.send('GET', base)).toMatchObject({ status: 404, body: { error: 'Project not found' } });
-    expect((await outsider.send('POST', base, { name: 'Mine' })).status).toBe(404);
+    expect((await outsider.send('POST', base, { name: 'Mine', target: WORK })).status).toBe(404);
     expect((await replicaA.send('GET', base, undefined, SIGNED_OUT)).status).toBe(401);
     expect(await list(replicaA.send, base)).toHaveLength(1);
   });
@@ -239,7 +253,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     const local = replica(a, orgId, {
       auth: fakeRouteAuth({ enabled: false, isOrganizationAdmin: async () => false }),
     });
-    expect((await local.send('POST', base, { name: 'Docs' }, MEMBER)).status).toBe(201);
+    expect((await local.send('POST', base, { name: 'Docs', target: WORK }, MEMBER)).status).toBe(201);
   });
 
   it('refuses a target that is not an installed board or a phase new cards can land in', async () => {
@@ -290,7 +304,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       { name: 'x'.repeat(121) },
       { name: 'Bad field', when: { operator: 'AND', conditions: [{ field: 'item.body', operator: 'exists' }] } },
       { name: 'Too deep', when: deep },
-      { name: 'Bad hold', hold: 'sometimes' },
+      { name: 'No target' },
+      { name: 'Null target', target: null },
+      { name: 'Hold', target: WORK, hold: 'never' },
       { name: 'Phase only', target: { phaseKey: 'triage' } },
       { name: 'Bad key', target: { boardKey: 'work board' } },
       { name: 'Extra', position: 3 },
@@ -302,9 +318,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       });
     }
     expect((await replicaA.send('POST', base, 'not json')).status).toBe(422);
-    const route = (await replicaA.send('POST', base, { name: 'Ok' })).body.intakeRoute as Route;
+    const route = (await replicaA.send('POST', base, { name: 'Ok', target: WORK })).body.intakeRoute as Route;
     expect((await replicaA.send('PATCH', `${base}/${route.id}`, { expectedRevision: 1 })).status).toBe(422);
     expect((await replicaA.send('PATCH', `${base}/${route.id}`, { name: 'No revision' })).status).toBe(422);
+    expect((await replicaA.send('PATCH', `${base}/${route.id}`, { target: null, expectedRevision: 1 })).status).toBe(
+      422,
+    );
     expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ name: 'Ok' })]);
   });
 
@@ -324,11 +343,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
 
   it('refuses a stale change or delete and leaves the route as it was', async () => {
     const { a, orgId, base, replicaA } = await setup();
-    const route = (await replicaA.send('POST', base, { name: 'Docs', when: DOCS })).body.intakeRoute as Route;
+    const route = (await replicaA.send('POST', base, { name: 'Docs', when: DOCS, target: WORK })).body
+      .intakeRoute as Route;
     const replicaB = replica(a, orgId);
     expect((await replicaB.send('PATCH', `${base}/${route.id}`, { name: 'B', expectedRevision: 1 })).status).toBe(200);
 
-    expect(await replicaA.send('PATCH', `${base}/${route.id}`, { hold: 'never', expectedRevision: 1 })).toMatchObject({
+    expect(await replicaA.send('PATCH', `${base}/${route.id}`, { enabled: false, expectedRevision: 1 })).toMatchObject({
       status: 409,
       body: { error: 'revision_mismatch' },
     });
@@ -338,7 +358,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     });
     expect((await replicaA.send('DELETE', `${base}/${route.id}`)).status).toBe(422);
     expect(await list(replicaA.send, base)).toEqual([
-      expect.objectContaining({ name: 'B', hold: 'untrusted', revision: 2 }),
+      expect.objectContaining({ name: 'B', enabled: true, revision: 2 }),
     ]);
   });
 
@@ -346,7 +366,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     const { a, orgId, base, replicaA } = await setup();
     const ids: string[] = [];
     for (const name of ['first', 'second', 'third']) {
-      ids.push(((await replicaA.send('POST', base, { name })).body.intakeRoute as Route).id);
+      ids.push(((await replicaA.send('POST', base, { name, target: WORK })).body.intakeRoute as Route).id);
     }
     const [first, second, third] = ids as [string, string, string];
 
@@ -357,7 +377,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       ['first', 1],
       ['second', 2],
     ]);
-    expect(reordered.body.fallback.hold).toBe('untrusted');
 
     for (const body of [{ ids: [third, first] }, { ids: [third, first, second, randomUUID()] }]) {
       expect(await replicaA.send('POST', `${base}/reorder`, body)).toMatchObject({
@@ -388,7 +407,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     const replicaB = replica(b, orgId);
     const created = await Promise.all(
       Array.from({ length: 6 }, (_, index) =>
-        (index % 2 ? replicaB : replicaA).send('POST', base, { name: `route-${index}` }),
+        (index % 2 ? replicaB : replicaA).send('POST', base, { name: `route-${index}`, target: WORK }),
       ),
     );
     expect(created.map(response => response.status)).toEqual(Array(6).fill(201));
