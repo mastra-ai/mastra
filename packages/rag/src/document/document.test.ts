@@ -4236,6 +4236,19 @@ describe('MDocument.chunk tracing', () => {
 describe('regex separators with capture groups', () => {
   const text = ', alpha; beta,; gamma;';
 
+  // Separators attach to the preceding piece for 'end' and the following piece for 'start'.
+  // The character strategy keeps each split; the recursive strategy merges splits up to maxSize.
+  const expectedChunks = {
+    character: {
+      start: [', alpha', '; beta', ',', '; gamma', ';'],
+      end: [', ', 'alpha; ', 'beta,', '; ', 'gamma;'],
+    },
+    recursive: {
+      start: [', alpha', '; beta,', '; gamma;'],
+      end: [', alpha; ', 'beta,; ', 'gamma;'],
+    },
+  } as const;
+
   async function chunkText(input: string, options: Parameters<MDocument['chunk']>[0]) {
     const doc = MDocument.fromText(input);
     await doc.chunk(options);
@@ -4256,6 +4269,7 @@ describe('regex separators with capture groups', () => {
           stripWhitespace: false,
         } as Parameters<MDocument['chunk']>[0]);
 
+        expect(chunks).toEqual(expectedChunks[strategy][separatorPosition]);
         expect(chunks.join('')).toBe(text);
         expect(chunks.every(chunk => chunk.length > 0)).toBe(true);
       });
