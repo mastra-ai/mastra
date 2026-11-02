@@ -13,7 +13,7 @@ import {
 } from './client.js';
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import { MastraConnectError } from './errors.js';
-import { invalidateResourceConnection } from './tools.js';
+import { invalidateConnection } from './tools.js';
 import { renderConnectPage } from './user-connect-page.js';
 
 /**
@@ -431,12 +431,13 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
         // project's, or nonexistent) is indistinguishable from an unknown id.
         if (!connection) return notFound(c, 'connection_not_found', 'Connection not found.');
         // Polling is how the end user's browser learns the flow settled, so it
-        // is also when this process learns: tool resolutions for this user
-        // pick the change up immediately instead of after the snapshot TTL.
-        if (connection.status !== 'pending' && connectionScope(connection) === 'user') {
-          invalidateResourceConnection({
+        // is also when this process learns: tool resolutions pick the change up
+        // immediately instead of after the snapshot TTL. A global connection
+        // serves every user, so its change reaches every scope.
+        if (connection.status !== 'pending') {
+          invalidateConnection({
             projectId,
-            resourceId,
+            ...(connectionScope(connection) === 'user' ? { resourceId } : {}),
             connectionId: connection.id,
             active: connection.status === 'active',
           });
@@ -460,7 +461,7 @@ export function userConnectRoutes(options: UserConnectRoutesOptions): ApiRoute[]
           });
         }
         await disconnectConnection(client, connection.id);
-        invalidateResourceConnection({ projectId, resourceId, connectionId: connection.id, active: false });
+        invalidateConnection({ projectId, resourceId, connectionId: connection.id, active: false });
         return c.body(null, 204);
       }),
     },

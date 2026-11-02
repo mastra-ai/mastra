@@ -217,6 +217,39 @@ describe('connection freshness between the connect routes and the tool resolver'
     });
   });
 
+  describe('when a connection comes back after it left the snapshot unreported', () => {
+    it('picks the reactivation up on the next resolution', async () => {
+      const { platform, resolver, status } = setup();
+      await resolver();
+      platform.connections.push(makeConnection({ id: 'c_new1' }));
+      await status('c_new1');
+      expect(Object.keys(await resolver())).toContain('linear_fake_tool');
+
+      // Removed outside these routes (e.g. the platform dashboard): only the TTL refresh notices.
+      platform.connections.length = 0;
+      vi.useFakeTimers({ now: Date.now() + 60_000, toFake: ['Date'] });
+      await resolver();
+      await vi.waitFor(async () => expect(Object.keys(await resolver())).not.toContain('linear_fake_tool'));
+
+      platform.connections.push(makeConnection({ id: 'c_new1' }));
+      await status('c_new1');
+
+      expect(Object.keys(await resolver())).toContain('linear_fake_tool');
+    });
+  });
+
+  describe('when a global connection activates and a user polls it', () => {
+    it('resolves its tools for that user on the next resolution', async () => {
+      const { platform, resolver, status } = setup();
+      expect(Object.keys(await resolver())).toEqual(['request_connection']);
+
+      platform.connections.push(makeConnection({ id: 'c_global1', resourceId: null }));
+      await status('c_global1');
+
+      expect(Object.keys(await resolver()).sort()).toEqual(['linear_fake_tool', 'request_connection']);
+    });
+  });
+
   describe('when the user disconnects a connection through the routes', () => {
     it('drops its provider tools on the next resolution', async () => {
       const { platform, resolver, disconnect } = setup();

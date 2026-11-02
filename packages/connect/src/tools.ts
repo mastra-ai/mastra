@@ -242,19 +242,23 @@ interface SnapshotScope {
   };
   /**
    * Bumped when a connection change makes the snapshot wrong before its TTL
-   * (see {@link invalidateResourceConnection}). A cache from an older
+   * (see {@link invalidateConnection}). A cache from an older
    * generation is never served fresh.
    */
   generation: number;
   inflight?: Promise<ResolvedToolsRecord>;
   /** Generation the in-flight fetch started under. */
   inflightGeneration?: number;
+  /** Fetches started for this scope so far; numbers each fetch. */
+  fetches: number;
+  /** Number of the in-flight fetch. */
+  inflightFetch?: number;
   /**
-   * Last reported state per connection, with the generation the report set.
-   * Every fetch under that generation started after the report, so repeating
-   * it while the generation is unchanged needs no new invalidation.
+   * Last state reported per connection that invalidated this scope, with the
+   * number of fetches started before it. A fetch numbered higher started
+   * after the report, so it already reflects that state.
    */
-  reported: Map<string, { active: boolean; generation: number }>;
+  reported: Map<string, { active: boolean; afterFetch: number }>;
   lastFailureAt?: number;
   /** LRU clock for resource-scope eviction. The global scope is never evicted. */
   lastUsedAt: number;
@@ -409,35 +413,42 @@ function scopeKey(resourceId: string | undefined): string {
 }
 
 /**
- * Tells every resolver serving `resourceId` in `projectId` that a connection
- * changed (activated, or stopped being active or was removed), so the next
- * resolution fetches fresh instead of serving a snapshot that is wrong until
- * its TTL runs out. The end-user connect routes call this when they observe
- * the change. A snapshot that already agrees with the change is left alone,
- * and so is a refresh that started after the same change was reported, so
- * repeated status polls of a settled connection cost nothing.
+ * Tells the resolvers in `projectId` that a connection changed (activated, or
+ * stopped being active or was removed), so the next resolution fetches fresh
+ * instead of serving a snapshot that is wrong until its TTL runs out. A
+ * change to `resourceId`'s own connection reaches that resource's scope; a
+ * global connection (no `resourceId`) appears in every scope, so it reaches
+ * all of them. The end-user connect routes call this when they observe the
+ * change. A settled snapshot that already agrees is left alone, and so is a
+ * fetch that started after the same change was reported, so repeated status
+ * polls cost nothing.
  */
-export function invalidateResourceConnection({
+export function invalidateConnection({
   projectId,
   resourceId,
   connectionId,
   active,
 }: {
   projectId: string;
-  resourceId: string;
+  resourceId?: string;
   connectionId: string;
   active: boolean;
 }): void {
-  const key = scopeKey(resourceId);
   for (const state of sharedStates.values()) {
     if (state.projectId !== projectId) continue;
-    const scope = state.scopes.get(key);
-    if (!scope) continue;
-    const reported = scope.reported.get(connectionId);
-    if (reported?.active === active && reported.generation === scope.generation) continue;
-    if (scope.cache && !scope.inflight && scope.cache.activeConnectionIds.has(connectionId) === active) continue;
-    scope.generation += 1;
-    scope.reported.set(connectionId, { active, generation: scope.generation });
+    const scopes =
+      resourceId === undefined ? Array.from(state.scopes.values()) : [state.scopes.get(scopeKey(resourceId))];
+    for (const scope of scopes) {
+      if (!scope) continue;
+      if (scope.inflight) {
+        const reported = scope.reported.get(connectionId);
+        if (reported?.active === active && (scope.inflightFetch ?? 0) > reported.afterFetch) continue;
+      } else if (scope.cache?.activeConnectionIds.has(connectionId) === active) {
+        continue;
+      }
+      scope.generation += 1;
+      scope.reported.set(connectionId, { active, afterFetch: scope.fetches });
+    }
   }
 }
 
@@ -454,6 +465,7 @@ function acquireScope(state: SharedToolsState, resourceId: string | undefined): 
         ...(resourceId === undefined ? {} : { resourceId }),
       }),
       generation: 0,
+      fetches: 0,
       reported: new Map(),
       lastUsedAt: Date.now(),
     };
@@ -578,6 +590,8 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
   if (!scope.inflight) {
     const generation = scope.generation;
     scope.inflightGeneration = generation;
+    scope.fetches += 1;
+    scope.inflightFetch = scope.fetches;
     scope.inflight = (async () => {
       try {
         const { connections, catalog, catalogAvailable } = await loadSnapshotInputs(state, scope.client);
@@ -630,6 +644,7 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
       } finally {
         scope.inflight = undefined;
         scope.inflightGeneration = undefined;
+        scope.inflightFetch = undefined;
       }
     })();
   }
