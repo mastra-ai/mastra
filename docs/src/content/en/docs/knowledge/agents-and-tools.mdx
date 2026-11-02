@@ -71,13 +71,13 @@ Knowledge page "org:acme#policies/escalation" not found.
 
 Reading a scope address, such as `{ "page": "org:acme" }`, lists the pages in that scope and the scopes placed under it. Called with no `page`, it lists the scopes the run holds, which is how the model finds where to start.
 
-`knowledge_list` shows how a scope or section is organized, up to three levels deep. Each entry has the `ref` to read it by, its name, description and number of children:
+`knowledge_list` shows how a scope or section is organized, up to three levels deep. Each entry has the `ref` to read it by, its name and its number of children. Pass `descriptions: true` to add page descriptions:
 
 ```json
 { "from": "org:acme#policies", "depth": 2 }
 ```
 
-A long page doesn't come back whole. A read returns at most 5,000 tokens of body, and `more` says how to get the rest. For a long page, the agent can read the body's `outline` of headings with their sizes, then one `section`, or only the sections that `match` a term:
+A long page doesn't come back whole. A read returns at most 1,000 tokens of body, and `more` says how to get the rest. For a long page, the agent can read the body's `outline` of headings with their sizes, then one `section`, or only the sections that `match` a term:
 
 ```json
 { "page": "org:acme#policies/refund", "section": "Damaged items" }
