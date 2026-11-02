@@ -265,9 +265,16 @@ export class ObservationStep {
     // In the threshold→blockAfter band nothing may block: run the threshold pipeline only to
     // activate an already-buffered chunk (activate() doesn't wait on an in-flight buffer op in
     // the band). Without a ready chunk, defer to a later step.
-    const measuredPressure = contextPressure !== undefined && contextPressure >= statusSnapshot.threshold;
+    // Measured pressure follows the same bands as the estimate: with async observation on, it forces
+    // a blocking observation only at blockAfter; between the threshold and blockAfter nothing blocks.
+    const measuredAtThreshold = contextPressure !== undefined && contextPressure >= statusSnapshot.threshold;
+    const measuredBlocks =
+      measuredAtThreshold &&
+      (statusSnapshot.observationBlockAfter === undefined || contextPressure! >= statusSnapshot.observationBlockAfter);
+    const measuredInBand = measuredAtThreshold && !measuredBlocks;
+    const measuredPressure = measuredBlocks;
     const bandDefersObservation =
-      !measuredPressure && statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate;
+      !measuredPressure && (statusSnapshot.inAsyncObservationBand || measuredInBand) && !statusSnapshot.canActivate;
     const willObserveNow =
       (statusSnapshot.shouldObserve || measuredPressure) && !hasIncompleteToolCalls && !bandDefersObservation;
     /**

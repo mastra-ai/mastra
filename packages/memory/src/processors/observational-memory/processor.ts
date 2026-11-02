@@ -18,7 +18,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { isContextOverflowError } from './context-overflow';
-import { contextPressure, countToolDefinitions, snapshotContextRequest } from './context-pressure';
+import { contextPressure, snapshotContextRequest } from './context-pressure';
 import type { ContextRequest, ContextUsageAnchor } from './context-pressure';
 import { omDebug } from './debug';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
@@ -415,7 +415,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             `${model.provider}/${model.modelId}`,
             counter,
           );
-          state.__omToolTokens = countToolDefinitions(args.tools, counter);
           const pressure = contextPressure(
             state.__omContextAnchor as ContextUsageAnchor | undefined,
             current,
@@ -519,7 +518,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       args.stepNumber,
       `${args.model.provider}/${args.model.modelId}`,
       this.engine.getTokenCounter(),
-      (args.state.__omToolTokens as number | undefined) ?? 0,
     );
   }
 
@@ -540,8 +538,16 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       outputTokens < 0
     )
       return args.messageList;
+    // The minimum only holds while the non-message prompt is unchanged: new observations or a
+    // model switch change the overhead, so start over from this request.
+    const previous = args.state.__omOverhead as { system: string; model: string; tokens: number } | undefined;
+    const residual = Math.max(0, inputTokens - request.messageEstimate);
+    const sameBasis = previous?.system === request.system && previous.model === request.model;
+    const overheadTokens = sameBasis ? Math.min(previous.tokens, residual) : residual;
+    args.state.__omOverhead = { system: request.system, model: request.model, tokens: overheadTokens };
     const anchor: ContextUsageAnchor = {
       request,
+      overheadTokens,
       inputTokens,
       outputTokens,
       outputEstimate: await this.engine.getTokenCounter().countMessagesAsync(args.messageList.get.all.db()),
