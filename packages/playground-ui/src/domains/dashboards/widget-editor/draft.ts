@@ -105,6 +105,14 @@ export const emptyWidget = (title: string): WidgetDraft => ({
   views: [emptyView(DEFAULT_VIEW_LABEL)],
 });
 
+/** "<label> copy", then "<label> copy 2"…, whichever no other view uses. */
+export function copyLabel(label: string, views: readonly ViewDraft[]) {
+  const used = new Set(views.map(v => v.label));
+  let name = `${label} copy`;
+  for (let n = 2; used.has(name); n++) name = `${label} copy ${n}`;
+  return name;
+}
+
 /** "View N" with the first N no other view uses. */
 export function nextViewLabel(views: readonly ViewDraft[]) {
   const used = new Set(views.map(v => v.label));

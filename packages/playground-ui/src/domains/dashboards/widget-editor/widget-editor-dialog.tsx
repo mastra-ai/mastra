@@ -10,7 +10,7 @@ import type { Scorer } from '../lib/scores';
 import { EDITOR_KINDS, findEntry, isTimeseriesKind } from './catalogue';
 import type { EditorKind } from './catalogue';
 import { draftToWidget, widgetToDraft } from './codec';
-import { defaultSpan, emptyView, emptyWidget, newWidgetTitle, nextViewLabel, suggestKind } from './draft';
+import { copyLabel, defaultSpan, emptyView, emptyWidget, newWidgetTitle, nextViewLabel, suggestKind } from './draft';
 import type { WidgetDraft } from './draft';
 import { TitleInput } from './title-input';
 import { ViewEditor } from './view-editor';
@@ -191,6 +191,14 @@ function WidgetEditorForm({ initial, creating, takenIds, scorers, scope, onSave 
                     setActive(views.length);
                   }}
                   onRename={(index, label) => setViews(views.map((v, i) => (i === index ? { ...v, label } : v)))}
+                  onDuplicate={index => {
+                    const source = views[index];
+                    if (!source) return;
+                    // Metric keys only need to be unique within a view, so the copy keeps them.
+                    const copy = { ...structuredClone(source), label: copyLabel(source.label, views) };
+                    setViews([...views.slice(0, index + 1), copy, ...views.slice(index + 1)]);
+                    setActive(index + 1);
+                  }}
                   onDelete={index => {
                     setViews(views.filter((_, i) => i !== index));
                     setActive(Math.max(0, Math.min(active, views.length - 2)));
