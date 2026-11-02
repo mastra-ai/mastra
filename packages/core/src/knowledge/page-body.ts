@@ -109,8 +109,9 @@ function matchingParagraphs(text: string, base: number, needle: string, heading:
   paragraphs.push({ start, end: text.length });
   const keep = new Set<number>();
   paragraphs.forEach((paragraph, i) => {
+    if (heading && i === 0) return;
     if (!text.slice(paragraph.start, paragraph.end).toLowerCase().includes(needle)) return;
-    for (const j of [i - 1, i, i + 1]) if (j >= 0 && j < paragraphs.length) keep.add(j);
+    for (const j of [i - 1, i, i + 1]) if (j >= (heading ? 1 : 0) && j < paragraphs.length) keep.add(j);
   });
   const out: string[] = heading ? [heading.trimEnd()] : [];
   let previous = -2;

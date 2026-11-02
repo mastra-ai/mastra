@@ -149,6 +149,13 @@ describe('knowledge_read on long pages', () => {
     expect(result.more).toBeUndefined();
     const from = await call('knowledge_read', { page: 'docs:acme#podcast', bodyOffset: at });
     expect(from.page.body.startsWith(lines[299]!)).toBe(true);
+    const fromMatch = await call('knowledge_read', { page: 'docs:acme#podcast', match: 'steinberger', bodyOffset: at });
+    expect(fromMatch.page.body).toBe(from.page.body);
+
+    const heading = `# Page\n\n## Zebraword notes\n\n${lines.join('\n\n')}`;
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'heading', name: 'Heading', body: heading });
+    const inHeading = await call('knowledge_read', { page: 'docs:acme#heading', match: 'zebraword' });
+    expect(inHeading.page.body).toBe('## Zebraword notes');
   });
 
   it('pulls only the sections that match a term, each with its heading', async () => {

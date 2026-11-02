@@ -326,9 +326,14 @@ function bodyView(
       more.push(`match: no section contains ${JSON.stringify(input.match)}.`);
       return { sections: [] };
     }
-    text = found.text;
-    sections = found.sections;
-    again = `match: ${JSON.stringify(input.match)}, `;
+    // Match extracts mark where they sit in the whole body; an offset past the extract is one of those.
+    if (input.bodyOffset > found.text.length) {
+      text = body;
+    } else {
+      text = found.text;
+      sections = found.sections;
+      again = `match: ${JSON.stringify(input.match)}, `;
+    }
   }
   const window = knowledgeBodyWindow(text, input.bodyOffset);
   if (window.remainingTokens > 0) {
