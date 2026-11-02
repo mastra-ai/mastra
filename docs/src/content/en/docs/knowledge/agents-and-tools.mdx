@@ -122,6 +122,26 @@ Edit a page's name, description or body:
 
 Editing needs `editor` on the page's scope. Pass the `version` from the last read as `expectedVersion`, and the write is refused if someone changed the page since.
 
+A `body` replaces the whole body, so it only works on a page short enough to come back in one read. On a longer page, edit one part at a time. A read that returns part of a body (a `section`, a `bodyOffset` window or a truncated whole read) also returns that part's `bodyRange`. Pass it back unchanged with the new text, and only that part is replaced:
+
+```json
+{
+  "op": "write",
+  "page": "org:acme#policies/refund",
+  "body": "## Damaged items\n\nDamaged items always get a full refund and a prepaid return label.\n\n",
+  "bodyRange": { "start": 25, "end": 84, "of": 62342 },
+  "expectedVersion": 1
+}
+```
+
+The range covers the text exactly as the read returned it, including the blank line after a section. Keep that blank line in the new text, or the next heading joins the end of it.
+
+Writing a whole `body` to a long page is refused, because the writer can only have seen part of it:
+
+```text
+This page's body is 62367 characters, more than one knowledge_read returns, and a body write replaces all of it. Write back only the part you read, with the bodyRange that read returned and its expectedVersion; read other parts with bodyOffset or section and write each back with its own bodyRange.
+```
+
 ## Move, merge and delete pages
 
 `op: "move"` moves a page under `parent`, or to the top of `scope`:
