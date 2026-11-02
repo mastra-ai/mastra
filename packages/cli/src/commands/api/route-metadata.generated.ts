@@ -3064,6 +3064,110 @@ export const API_ROUTE_METADATA = {
       "listProperty": "embedders"
     }
   },
+  "GET /knowledge": {
+    "method": "GET",
+    "path": "/knowledge",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "instances"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/tree": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/tree",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "cursor",
+      "limit",
+      "parentId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/pages/:pageId": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/pages/:pageId",
+    "pathParams": [
+      "knowledgeKey",
+      "pageId"
+    ],
+    "queryParams": [
+      "noteCursor",
+      "noteLimit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/graph": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/graph",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "maxPages",
+      "rootId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/search": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/search",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "limit",
+      "q",
+      "scopeId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "results"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/activity": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/activity",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "cursor",
+      "limit",
+      "pageId",
+      "scopeId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
   "GET /workspaces": {
     "method": "GET",
     "path": "/workspaces",

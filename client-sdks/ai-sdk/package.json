@@ -1,6 +1,6 @@
 {
   "name": "@mastra/ai-sdk",
-  "version": "1.11.2",
+  "version": "1.11.3",
   "description": "Adds custom API routes to be compatible with the AI SDK UI parts",
   "type": "module",
   "main": "dist/index.js",
@@ -36,7 +36,7 @@
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v7": "npm:@ai-sdk/openai@4.0.97",
+    "@ai-sdk/openai-v7": "npm:@ai-sdk/openai@4.0.103",
     "@ai-sdk/provider": "^2.0.5",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
@@ -49,7 +49,7 @@
     "@mastra/core": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@rspack/core": "^1.7.12",
+    "@rspack/core": "^2.3.0",
     "@types/json-schema": "^7.0.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",

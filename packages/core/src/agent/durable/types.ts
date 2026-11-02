@@ -48,6 +48,7 @@ import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from
 import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
+import type { ResponseRecord } from './workflows/shared/schemas';
 
 /**
  * Metadata about a tool that can be serialized (without the execute function)
@@ -307,6 +308,8 @@ export interface SerializableDurableOptions {
    * observability and cross-process engines.
    */
   isTaskComplete?: {
+    fromAgentDefaults?: boolean;
+    scorerIds?: string[];
     scorerNames?: string[];
     strategy?: 'all' | 'any';
     timeout?: number;
@@ -406,6 +409,8 @@ export interface DurableLLMStepOutput {
     headers?: Record<string, string>;
     request?: LanguageModelRequestMetadata;
   };
+  /** Provider id and serving model of this step's response; absent when the provider sent none */
+  response?: ResponseRecord;
   /** Processor retry count */
   processorRetryCount?: number;
   /** Processor retry feedback message */
@@ -590,6 +595,8 @@ export interface DurableAgenticExecutionOutput {
   completionStartTime?: Date;
   /** Time to first token of the inference that streamed this iteration's first chunk */
   timeToFirstTokenMs?: number;
+  /** Provider id and model of this iteration's response */
+  response?: ResponseRecord;
 }
 
 /**

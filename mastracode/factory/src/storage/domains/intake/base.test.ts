@@ -5,13 +5,31 @@ import { join } from 'node:path';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
+import { FactoryProjectsStorage } from '../projects/base.js';
 import { DEFAULT_INTAKE_CONFIG, IntakeStorage, resolveIntakeLabelRoute } from './base.js';
 
-async function makeStorage(url: string = ':memory:'): Promise<IntakeStorage> {
+async function makeStorage(
+  url: string = ':memory:',
+  projectIdsByOrg: Record<string, string[]> = {},
+): Promise<IntakeStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'intake-test', url });
+  backend.registerDomain(new FactoryProjectsStorage());
   const domain = backend.registerDomain(new IntakeStorage());
   await backend.init();
   onTestFinished(() => backend.close());
+  const now = new Date();
+  for (const [orgId, ids] of Object.entries(projectIdsByOrg)) {
+    for (const id of ids) {
+      await backend.ops.insertOne('factory_projects', {
+        id,
+        org_id: orgId,
+        created_by: 'user1',
+        name: id,
+        created_at: now,
+        updated_at: now,
+      });
+    }
+  }
   return domain;
 }
 
@@ -141,7 +159,7 @@ describe('IntakeStorage', () => {
 
   describe('source bindings', () => {
     it('scopes bound source ids to one org and Factory project', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'], org2: ['proj-9'] });
       await storage.setBinding({
         orgId: 'org1',
         integrationId: 'linear',
@@ -159,7 +177,7 @@ describe('IntakeStorage', () => {
         orgId: 'org2',
         integrationId: 'linear',
         sourceId: 'src-c',
-        factoryProjectId: 'proj-1',
+        factoryProjectId: 'proj-9',
       });
 
       const scope = { orgId: 'org1', integrationId: 'linear' };
@@ -171,7 +189,7 @@ describe('IntakeStorage', () => {
     });
 
     it('moves a source to another project instead of binding it twice', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'] });
       const binding = { orgId: 'org1', integrationId: 'linear', sourceId: 'src-a' };
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1' });
@@ -191,7 +209,7 @@ describe('IntakeStorage', () => {
     });
 
     it('persists the bound board and resets it when rebound without one', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1'] });
       const binding = { orgId: 'org1', integrationId: 'linear', sourceId: 'src-a' };
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1', board: 'release' });
@@ -210,7 +228,7 @@ describe('IntakeStorage', () => {
     });
 
     it('clears a binding and returns its project', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1'] });
       const binding = { orgId: 'org1', integrationId: 'linear', sourceId: 'src-a' };
 
       await storage.setBinding({ ...binding, factoryProjectId: 'proj-1' });
@@ -228,7 +246,7 @@ describe('IntakeStorage', () => {
     });
 
     it('converges concurrent first bindings onto one row', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'] });
       const binding = { orgId: 'org1', integrationId: 'linear', sourceId: 'src-a' };
 
       await Promise.all([
@@ -242,7 +260,7 @@ describe('IntakeStorage', () => {
     });
 
     it('atomically migrates and deduplicates equivalent source selections and bindings', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1'] });
       await storage.saveConfig({
         orgId: 'org1',
         config: { gitlab: { enabled: true, sourceIds: ['legacy-a', 'legacy-b', 'canonical'] } },
@@ -283,7 +301,7 @@ describe('IntakeStorage', () => {
     });
 
     it('rejects conflicting canonical routes without changing selection or bindings', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['proj-1', 'proj-2'] });
       const config = { gitlab: { enabled: true, sourceIds: ['legacy', 'canonical'] } };
       await storage.saveConfig({ orgId: 'org1', config });
       await storage.setBinding({
@@ -317,7 +335,7 @@ describe('IntakeStorage', () => {
     const source = { orgId: 'org1', integrationId: 'jira', sourceId: 'OPS' };
 
     it('lets several factories share a source with disjoint label filters', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['A', 'B', 'C'] });
       await expect(
         storage.setSharedBinding({ ...source, factoryProjectId: 'A', board: 'work', labels: null }),
       ).resolves.toEqual({
@@ -345,7 +363,7 @@ describe('IntakeStorage', () => {
     });
 
     it('rejects a second all-issues binding and overlapping labels without saving them', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['A', 'B', 'C'] });
       await storage.setSharedBinding({ ...source, factoryProjectId: 'A', labels: null });
       await storage.setSharedBinding({ ...source, factoryProjectId: 'B', labels: ['payments', 'billing'] });
 
@@ -366,7 +384,7 @@ describe('IntakeStorage', () => {
     });
 
     it("edits a factory's own binding in place and keeps its precedence", async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['B', 'C'] });
       await storage.setSharedBinding({ ...source, factoryProjectId: 'B', labels: ['payments'] });
       const created = (await storage.getBinding({ ...source, factoryProjectId: 'B' }))!.createdAt;
       await storage.setSharedBinding({ ...source, factoryProjectId: 'C', labels: ['mobile'] });
@@ -385,7 +403,7 @@ describe('IntakeStorage', () => {
     });
 
     it('lets only one of two concurrent conflicting saves win', async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['A', 'B', 'C', 'D'] });
       const results = await Promise.all([
         storage.setSharedBinding({ ...source, factoryProjectId: 'A', labels: null }),
         storage.setSharedBinding({ ...source, factoryProjectId: 'B', labels: null }),
@@ -400,7 +418,7 @@ describe('IntakeStorage', () => {
     });
 
     it("removes one factory's binding and leaves the others", async () => {
-      const storage = await makeStorage();
+      const storage = await makeStorage(undefined, { org1: ['A', 'B'] });
       await storage.setSharedBinding({ ...source, factoryProjectId: 'A', labels: null });
       await storage.setSharedBinding({ ...source, factoryProjectId: 'B', labels: ['payments'] });
 
@@ -494,7 +512,7 @@ describe('IntakeStorage', () => {
       await seedLegacyBindings(url);
       const before = await legacyRows(url);
 
-      const firstBoot = await makeStorage(url);
+      const firstBoot = await makeStorage(url, { org1: ['proj-3', 'proj-4'] });
       await firstBoot.clearBinding({
         orgId: 'org1',
         integrationId: 'jira',

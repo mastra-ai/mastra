@@ -4,7 +4,12 @@ import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/er
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { boardForWorkItem, resolvePhaseSemantics, workItemPhaseSemantics } from '../boards/index.js';
+import {
+  boardForWorkItem,
+  isTerminalWorkItem,
+  resolvePhaseSemantics,
+  workItemPhaseSemantics,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -24,7 +29,7 @@ import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
-import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemClaimConflictError } from '../storage/domains/work-items/base.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryDispatchFailureCode,
@@ -408,6 +413,8 @@ export interface FactoryDecisionDispatcherOptions {
     factoryProjectId: string;
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>;
   }) => Promise<string | null>;
+  /** `false` spends a linked-card decision unfiled: its Factory project was deleted after the decision committed. */
+  factoryProjectExists?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   maxInFlight?: number;
   /** How often the stale-binding sweep runs. Defaults to 10 minutes. */
   staleBindingSweepIntervalMs?: number;
@@ -595,6 +602,7 @@ export class FactoryDecisionDispatcher {
   readonly #feedReader?: FactoryFeedReader;
   readonly #dismissStaleReviews?: FactoryDecisionDispatcherOptions['dismissStaleReviews'];
   readonly #resolveLinkedWorkItemParentId?: FactoryDecisionDispatcherOptions['resolveLinkedWorkItemParentId'];
+  readonly #factoryProjectExists?: FactoryDecisionDispatcherOptions['factoryProjectExists'];
   readonly #maxInFlight: number;
   readonly #staleBindingSweepIntervalMs: number;
   readonly #staleBindingTtlMs: number;
@@ -629,6 +637,7 @@ export class FactoryDecisionDispatcher {
     this.#feedReader = options.feedReader;
     this.#dismissStaleReviews = options.dismissStaleReviews;
     this.#resolveLinkedWorkItemParentId = options.resolveLinkedWorkItemParentId;
+    this.#factoryProjectExists = options.factoryProjectExists;
     const maxInFlight = options.maxInFlight ?? MAX_IN_FLIGHT;
     this.#maxInFlight = Number.isFinite(maxInFlight) && maxInFlight > 0 ? Math.floor(maxInFlight) : MAX_IN_FLIGHT;
     this.#staleBindingSweepIntervalMs = positiveMs(
@@ -1292,11 +1301,35 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  /**
+   * The project's card for a Linear issue by its stable id, wherever its identifier now points.
+   * A live card wins over finished ones, as in the Linear rules and issue detail route.
+   */
+  async #linearCardByIssueId(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    boards: BoardRegistry,
+  ) {
+    const issueId = decision.metadata?.linearIssueId;
+    if (decision.source !== 'linear-issue' || typeof issueId !== 'string') return null;
+    const items = await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
+    const cards = items.filter(
+      item => item.externalSource?.integrationId === 'linear' && item.metadata?.linearIssueId === issueId,
+    );
+    return cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0] ?? null;
+  }
+
   async #upsertLinkedItem(
     record: FactoryDeferredDecisionRecord,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     causalChain: FactoryRuleCausalEntry[],
   ): Promise<void> {
+    if (
+      this.#factoryProjectExists &&
+      !(await this.#factoryProjectExists({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }))
+    ) {
+      return;
+    }
     // A lost completion acknowledgement must not reinterpret a committed
     // materialization against a replacement installation.
     const existing = await this.#storage.getByProjectSource({
@@ -1337,40 +1370,30 @@ export class FactoryDecisionDispatcher {
         decision,
       })) ??
       null;
-    let result: UpsertWorkItemResult;
-    try {
-      result = await this.#storage.upsert({
-        orgId: record.orgId,
-        userId: 'factory-rule-dispatcher',
-        factoryProjectId: record.factoryProjectId,
-        input: {
-          externalSource: externalSourceForDecision(decision),
-          ...(decision.claimKey ? { claimKey: decision.claimKey } : {}),
-          parentWorkItemId,
-          title: decision.title,
-          board: decision.board,
-          stages: [entryStage],
-          sessions: {},
-          metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
-        },
-        reuseMode: 'preserve',
-      });
-    } catch (error) {
-      // Another Factory project in the org holds the live card for this record.
-      // The decision is spent, not failed: retrying would only be refused again.
-      if (error instanceof WorkItemClaimConflictError) return;
-      throw error;
-    }
-    if (!result.created && decision.claimKey && !result.item.claimKey) {
-      // A card filed before claims existed adopts the claim now; a refusal means
-      // another project already owns the record, and this card stays as it is.
-      const claimed = await this.#storage.claimWorkItem({
-        orgId: record.orgId,
-        id: result.item.id,
-        claimKey: decision.claimKey,
-      });
-      if (claimed) result = { ...result, item: claimed };
-    }
+    // A Linear identifier changes when its issue moves teams; the card filed
+    // under the old one is still this issue's card.
+    const renamed = existing ? null : await this.#linearCardByIssueId(record, decision, boards);
+    let result: UpsertWorkItemResult = renamed
+      ? {
+          created: false,
+          item: renamed,
+          previous: { stages: renamed.stages, sessionRoles: Object.keys(renamed.sessions) },
+        }
+      : await this.#storage.upsert({
+          orgId: record.orgId,
+          userId: 'factory-rule-dispatcher',
+          factoryProjectId: record.factoryProjectId,
+          input: {
+            externalSource: externalSourceForDecision(decision),
+            parentWorkItemId,
+            title: decision.title,
+            board: decision.board,
+            stages: [entryStage],
+            sessions: {},
+            metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
+          },
+          reuseMode: 'preserve',
+        });
     const itemBoard = boardForWorkItem(result.item);
     if (!skipRules && itemBoard !== decision.board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);

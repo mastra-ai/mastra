@@ -92,7 +92,7 @@ export const Default: Story = {
             </Txt>
           )}
         />
-        <SavedViewEditor views={views}>
+        <SavedViewEditor views={views} saveCaption="Saved in this browser">
           <FilterBar fields={FIELDS} operators={DEFAULT_FILTER_OPERATORS} value={filters} onValueChange={setFilters}>
             <FilterBar.Chips />
             <FilterBar.Input placeholder="Filter issues…" />

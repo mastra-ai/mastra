@@ -35,16 +35,6 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "Qwen/Qwen3.8-Flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-Max": [
-      {
-        "type": "toggle"
-      }
-    ],
     "anthropic/claude-opus-4.6": [
       {
         "type": "budget_tokens",
@@ -77,7 +67,12 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "MiniMaxAI/MiniMax-M3": [
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-Max": [
       {
         "type": "toggle"
       }
@@ -86,6 +81,11 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3": [
+      {
+        "type": "toggle"
       }
     ]
   }

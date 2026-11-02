@@ -1,26 +1,35 @@
 ---
-title: 'Reference: Advanced trace queries | Observability'
-description: 'Find, count, and measure completed traces and spans with structured predicates. List matching traces, aggregate traces or spans into grouped measures, paginate, poll, and discover query fields.'
+title: 'Reference: Query traces and spans | Observability'
+description: 'Find, count, and measure completed traces and spans with structured predicates. List matching traces or spans, aggregate them into grouped measures, paginate, poll, and discover query fields.'
 packages:
   - '@mastra/client-js'
   - '@mastra/server'
 ---
 
-# Advanced trace queries
+# Query traces and spans
 
-Advanced trace queries select completed traces with a structured time range and predicate, then either list or aggregate the matching traces:
+Query completed traces or spans with structured filters, or aggregate them into counts, error rates, latency percentiles, tokens, and cost. Each operation is available through the client SDK, HTTP API, and CLI:
 
-| API | Use it to | Client SDK | HTTP endpoint |
+| Operation | Use it to | Client SDK | HTTP endpoint | CLI command |
+| - | - | - | - | - |
+| [Query traces](#query-traces) | List traces matching root-span fields or conditions on related spans. | `queryTraces()` | `POST /api/observability/traces/query` | `mastra api trace query` |
+| [Query spans](#query-spans) | List individual spans across traces, including nested agent runs and tool calls. | `querySpans()` | `POST /api/observability/spans/query` | `mastra api span query` |
+| [Aggregate traces](#aggregate-traces) | Compute measures over matching traces, optionally grouped or bucketed by time. | `aggregateTraces()` | `POST /api/observability/traces/aggregate` | `mastra api trace aggregate` |
+| [Aggregate spans](#aggregate-spans) | Compute measures over individual matching spans at any depth. | `aggregateSpans()` | `POST /api/observability/spans/aggregate` | `mastra api span aggregate` |
+
+The trace operations share a [trace selection](#select-traces): root-span predicates and `spans.some` / `spans.none` clauses. The span operations share a direct span predicate, without nested `spans` clauses. Reuse a selection between the query and aggregate operations for the same record type.
+
+| Option | Query traces | Query spans | Aggregate traces or spans |
 | - | - | - | - |
-| Query traces | List matching traces, paginate through them, and poll for new ones. | `queryTraces()` | `POST /api/observability/traces/query` |
-| Aggregate traces | Count matching traces and compute measures, such as error rate, latency percentiles, tokens, and cost, optionally grouped by dimensions and time buckets. | `aggregateTraces()` | `POST /api/observability/traces/aggregate` |
-| Aggregate spans | Compute the same measures over individual spans, such as every agent run including nested ones, grouped by span dimensions. | `aggregateSpans()` | `POST /api/observability/spans/aggregate` |
+| Maximum time-range duration | No maximum | No maximum | 365 days |
+| Pagination | Keyset, numbered pages, or delta polling | Keyset only | No pagination; `limit` selects groups |
+| `orderBy` shape | One-item array | One-item array | One object |
 
-The trace APIs accept the same [trace selection](#select-traces). The filters, operators, and limits on this page apply to each. Use the aggregate API to find the group that needs attention, such as an agent with a high error rate, then send the same predicate plus the group's dimensions to the query API to list the traces behind it. Each query result represents a trace. Use its `traceId` to [retrieve the full trace](/reference/client-js/observability#getting-a-specific-trace).
+CLI commands take filters and request options together as one JSON argument and wrap the response in `data`. To inspect a query result, use its `traceId` to [retrieve the full trace](/reference/client-js/observability#getting-a-specific-trace), or call `getSpan(traceId, spanId)` to retrieve one span.
 
 The endpoints use the same authentication as other observability routes and require the `observability:read` permission. Every request requires a time range.
 
-For hosted traces, see [Query observability data on Mastra Platform](/docs/mastra-platform/observability#query-observability-data) for project credentials and regional endpoints.
+These API time-range limits are separate from data retention. For hosted traces, your Platform plan's retention period applies. See [Query observability data on Mastra Platform](/docs/mastra-platform/observability#query-observability-data) for retention, project credentials, and regional endpoints.
 
 ## Check capabilities
 
@@ -29,6 +38,9 @@ The configured observability store must support each API. Call `getObservability
 | Capability | Store feature | Enables |
 | - | - | - |
 | `traceQuery` | `trace-query` | `queryTraces()` |
+| `spanQuery` | `span-query` | `querySpans()` |
+| `spanQueryContextFields` | `span-query-context-fields` | Additional identity, context, and parent/root entity predicates in span queries and aggregates |
+| `spanQueryModelFields` | `span-query-model-fields` | `model` and `provider` predicates in span queries and aggregates |
 | `traceAggregate` | `trace-aggregate` | `aggregateTraces()` |
 | `spanAggregate` | `span-aggregate` | `aggregateSpans()` |
 | `traceQueryRootDuration` | `trace-query-root-duration` | Trace-scope `durationMs` predicates |
@@ -44,7 +56,7 @@ The configured observability store must support each API. Call `getObservability
 | `traceQueryDiscovery` | `trace-query-discovery` | [Field and value discovery](#discover-fields-and-values) |
 | `traceQueryTenantScope` | `trace-query-tenant-scope` | [Trusted tenant scope](#trusted-tenant-scope) |
 
-A missing `traceAggregate` value means the server doesn't support aggregation. Servers without the aggregate route return `404`, and stores without the feature return `501 TRACE_AGGREGATE_UNSUPPORTED`. A missing `spanAggregate` value means the same for span aggregation, and stores without the feature return `501 SPAN_AGGREGATE_UNSUPPORTED`. Against a store without a sub-feature, a request that uses a gated field returns `501` before storage runs. Root span `name`, `spanType`, and `entityId` are the exception and return `422` with a `field_not_allowed` issue.
+A missing `traceAggregate` value means the server doesn't support aggregation. Servers without the aggregate route return `404`, and stores without the feature return `501 TRACE_AGGREGATE_UNSUPPORTED`. A missing `spanAggregate` value means the same for span aggregation, and stores without the feature return `501 SPAN_AGGREGATE_UNSUPPORTED`. Against a store without a sub-feature, a request that uses a gated field returns `501` before storage runs. Unsupported root span `name`, `spanType`, and `entityId`, and span predicates requiring `spanQueryContextFields`, return `422` with a `field_not_allowed` issue instead. A store without `spanQuery` returns `501 SPAN_QUERY_UNSUPPORTED`.
 
 ## Select traces
 
@@ -178,7 +190,7 @@ const hitALimit = {
 
 Spans written by an SDK that predates these fields, or a root span that's still running, have no outcome. A missing outcome means "not recorded", never success. Select those spans with `{ op: 'notExists', path: 'outcome' }`. As with other optional string fields, `ne` and `notIn` match spans with no value.
 
-Both fields support `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`, group trace and span aggregates, and return values from value discovery. They can't be used in `orderBy`. Results also return `stopReasonContext`, an object with details about the stop reason such as `{ maxSteps: 5 }`. `stopReasonContext` is returned only and can't be filtered, grouped, or sorted.
+Both fields support `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`, group trace and span aggregates, and return values from value discovery. They can't sort individual trace or span query results. In aggregates, either field can be used in `orderBy` when it's included in `groupBy`. Results also return `stopReasonContext`, an object with details about the stop reason such as `{ maxSteps: 5 }`. `stopReasonContext` is returned only and can't be filtered, grouped, or sorted.
 
 Stores advertise support through the `trace-query-outcome-fields` feature for trace queries and aggregates, and the `span-query-outcome-fields` feature for span queries and aggregates. The server reports them as the `traceQueryOutcomeFields` and `spanQueryOutcomeFields` capabilities. Against an older store, results omit the fields, and a request that uses them returns `501` before storage runs.
 
@@ -512,6 +524,14 @@ A query using keyset pagination returns lightweight completed traces and a curso
     {
       "traceId": "trace-123",
       "rootSpanId": "span-123",
+      "name": "agent run: support-agent",
+      "entityId": "support-agent",
+      "parentSpanId": null,
+      "createdAt": "2026-08-03T10:00:00.000Z",
+      "metadata": null,
+      "inputPreview": "Where is my order?",
+      "outputPreview": "Your order arrives tomorrow.",
+      "errorPreview": null,
       "threadId": "thread-123",
       "resourceId": "resource-123",
       "startedAt": "2026-08-03T10:00:00.000Z",
@@ -530,6 +550,8 @@ A query using keyset pagination returns lightweight completed traces and a curso
   "page": { "next": null }
 }
 ```
+
+The response includes `name`, `createdAt`, identity fields, `metadata`, and input/output/error previews. Supported nullable fields remain present with `null` when no value was recorded. Fields that require an optional store feature are omitted when the store lacks that feature. Previews summarize payloads; retrieve the full trace for complete input, output, and error details.
 
 `timeToFirstChunkMs` and `timeToFirstTokenMs` are present only when the configured store supports them. See [Filter by time to first chunk](#filter-by-time-to-first-chunk) and [Filter and sort by time to first token](#filter-and-sort-by-time-to-first-token). `outcome`, `stopReason`, and `stopReasonContext` read the root span and are present only when the store supports the `traceQueryOutcomeFields` capability. They're `null` when the root span didn't record them. See [Filter by outcome](#filter-by-outcome).
 
@@ -628,7 +650,7 @@ Numbered-page handoff cursors and delta cursors also bind the authorization stat
 
 Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
 
-PostgreSQL and ClickHouse stop trace queries after 15 seconds by default and return `504` when the database timeout is exceeded. Set `traceQueryTimeoutMs` in the store's vNext observability configuration to an integer from 1 through 300,000 milliseconds to change the timeout. DuckDB doesn't currently provide query-scoped timeout or cancellation through its driver wrapper, so this `504` guarantee doesn't apply to DuckDB.
+PostgreSQL and ClickHouse stop trace queries after 15 seconds by default and return `504` when the database timeout is exceeded. Set `observability.traceQueryTimeoutMs` on `PostgresStoreVNext`, or `observability.traceQuery.timeoutMs` on `ClickhouseStoreVNext`, to an integer from 1 through 300,000 milliseconds to change the timeout. DuckDB doesn't currently provide query-scoped timeout or cancellation through its driver wrapper, so this `504` guarantee doesn't apply to DuckDB.
 
 | Status | Meaning |
 | - | - |
@@ -639,6 +661,73 @@ PostgreSQL and ClickHouse stop trace queries after 15 seconds by default and ret
 | `501` | The installed Core or configured observability store doesn't support the requested operation. Discovery returns `TRACE_QUERY_DISCOVERY_UNSUPPORTED` unless Core provides the discovery contract and the store implements both field and value discovery. |
 | `503` | Discovery exceeded a backend memory or resource budget and returned `TRACE_QUERY_RESOURCE_LIMIT`. |
 | `504` | A PostgreSQL or ClickHouse query exceeded its configured database execution timeout. Discovery returns `TRACE_QUERY_EXECUTION_TIMEOUT`. |
+
+## Query spans
+
+Use `querySpans()`, `mastra api span query`, or `POST /api/observability/spans/query` to return completed span summaries across traces. It requires a positive ISO timestamp range over span start time and supports cursor pagination. This example finds tool calls that took at least one second:
+
+```typescript
+const result = await mastraClient.querySpans({
+  timeRange: {
+    from: '2026-10-01T00:00:00.000Z',
+    to: '2026-10-02T00:00:00.000Z',
+  },
+  where: {
+    op: 'and',
+    args: [
+      { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+      { op: 'gte', left: { path: 'durationMs' }, right: { literal: 1000 } },
+    ],
+  },
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 100 },
+})
+
+// Pass result.page.next as page.after to continue with the same filters and ordering.
+console.log(result.spans)
+```
+
+Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, `timeToFirstChunkMs`, or `timeToFirstTokenMs`, ascending or descending, and defaults to descending start time. Spans without a value for the `timeToFirstChunkMs` or `timeToFirstTokenMs` sort field sort last in both directions.
+
+| Fields | Operators |
+| - | - |
+| `traceId`, `spanId`, `parentSpanId`, `threadId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| `organizationId`, `resourceId`, `runId`, `sessionId`, `userId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
+| Entity, parent entity and root entity `Type`, `Id`, `Name`, `VersionId` fields, such as `parentEntityId` | Same string operators |
+| `name`, `spanType`, `status` | Same string operators; `name` also accepts `matches` / `notMatches` for normalized whole words and phrases |
+| `model`, `provider`, `outcome`, `stopReason` | Same string operators |
+| `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | Comparisons, membership and presence |
+| `error` | `exists`, `notExists` |
+
+Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
+
+Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews.
+
+Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before filtering on `traceId`, `spanId`, `parentSpanId`, `threadId`, `resourceId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource`, or the parent/root entity `Type`, `Id`, and `Name` fields. If this capability is missing or false, requests using these filters return a structured `422` error. It doesn't gate `runId`, `sessionId`, `userId`, `organizationId`, or entity `VersionId` filters.
+
+Check `capabilities.spanQueryModelFields` before filtering on `model` or `provider`. These filters read only the span's `model` and `provider` columns. `@mastra/observability` fills the columns only when a span has both a `model` and a `provider`, and versions before it filled them left them empty. Filters treat empty columns as missing, so `eq`, `in` and `exists` don't match those spans while `ne`, `notIn` and `notExists` do. Results still return `model` and `provider` for them from the span's attributes. Trace query `spans.some` filters fall back to the attributes and do match those spans. With an older adapter, requests using these filters return `501`.
+
+Check `capabilities.spanQueryOutcomeFields` before filtering or grouping spans by `outcome` and `stopReason`. Rows then also include `outcome`, `stopReason` and `stopReasonContext`. These record how the span ended, separately from `status`, and are `null` when the span didn't record them. A missing outcome means "not recorded", not success. `stopReasonContext` can't be used in filters and is omitted when the store lacks `span-query-outcome-fields`. For traces, `capabilities.traceQueryOutcomeFields` enables the same fields on `queryTraces()` and `aggregateTraces()`, where they read the root span. With an older adapter, requests using these fields return `501`:
+
+```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.spanQueryOutcomeFields) {
+  const limited = await mastraClient.querySpans({
+    timeRange: { from: '2026-10-01T00:00:00.000Z', to: '2026-10-02T00:00:00.000Z' },
+    where: { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+  })
+  console.log(limited.spans.map(span => [span.stopReason, span.stopReasonContext]))
+}
+```
+
+See [Filter by outcome](/reference/observability/tracing/advanced-queries#filter-by-outcome) for trace-scope and `spans.some` semantics.
+
+DuckDB returns `null` for parent/root entity type, ID and name on spans written before `@mastra/duckdb` stored them. Equality filters on these fields don't match those spans.
+
+The CLI returns the same response under `data`: read `data.spans` and pass `data.page.next` as `page.after`. Span queries support only keyset pagination, so reuse the same time range, predicate, and ordering when following the cursor. A malformed cursor returns `400`, while a cursor that doesn't match the query or scope returns `409`.
+
+Use `mastra api trace span <traceId> <spanId>` or `getSpan(traceId, spanId)` to retrieve a selected span's full details.
 
 ## Aggregate traces
 
@@ -701,7 +790,7 @@ curl --request POST \
 | `timeRange` | Yes | Trace start-time boundary, as in [Select traces](#select-traces). The range can span up to 365 days. |
 | `where` | No | Trace predicate, as in [Select traces](#select-traces). |
 | `measures` | Yes | One or more distinct [measure names](#measures). |
-| `groupBy` | No | Up to two distinct [dimensions](#dimensions). Defaults to `[]`, which returns one row for all selected traces. |
+| `groupBy` | No | Up to two distinct [dimensions](#dimensions). Defaults to `[]`, which treats all selected traces as one group. With `interval`, that group has one row per non-empty bucket. No matching traces returns no rows. |
 | `interval` | No | Bucket width: `'1m'`, `'5m'`, `'15m'`, `'1h'`, or `'1d'`. See [Time buckets](#time-buckets). |
 | `having` | No | Scalar predicate over measures that removes groups after grouping. See [Filter and order groups](#filter-and-order-groups). |
 | `orderBy` | No | `{ field, direction }`. `field` is a requested measure, `count`, or a `groupBy` dimension, and `direction` is `asc` or `desc`. Defaults to `count desc`. |
@@ -722,7 +811,7 @@ Dimensions read the current root span of each selected trace:
 | `outcome`, `stopReason` | How the root span ended and why. Traces whose root span didn't record a value group as `null`. Requires the `traceQueryOutcomeFields` capability. |
 | `metadata.<key>` | One non-empty top-level metadata key. Values are trimmed. Missing, empty, and non-string values group as `null`. |
 
-Every dimension except `serviceName`, `executionSource`, and `experimentId` is also a trace-scope `where` field, so you can drill into a group by adding its values to the predicate. `traceId`, `spanId`, `runId`, and `requestId` aren't groupable. Traces with no value for a dimension form their own group with a `null` value.
+Every dimension except `serviceName`, `executionSource`, and `experimentId` is also a trace-scope `where` field, so you can drill into a group by adding its values to the predicate. `traceId`, `spanId`, `runId`, and `requestId` aren't groupable. Traces with no value for a dimension form their own group with a `null` value. To select that group in a query, use `notExists` for the dimension instead of `eq` with `literal: null`.
 
 ### Measures
 
@@ -842,13 +931,13 @@ const dailyCost = await mastraClient.aggregateTraces({
 
 Predicate limits from [Query limits](#query-limits) apply to both `where` and `having`, and the request body is limited to 256 KiB. A time range that doesn't start on a bucket boundary touches one more bucket than its length divided by the interval. If the range has too many buckets, choose a wider `interval`. If `limit` × buckets exceeds 10,000, reduce `limit` or widen the interval.
 
-PostgreSQL and ClickHouse stop aggregations after the same `traceQueryTimeoutMs` timeout as trace queries, which defaults to 15 seconds. The timeout doesn't apply to DuckDB.
+PostgreSQL and ClickHouse use the same [execution timeout](#keyset-ordering-and-errors) for aggregations as for trace queries, defaulting to 15 seconds. The timeout doesn't apply to DuckDB.
 
 | Status | Meaning |
 | - | - |
 | `400` | Malformed JSON. |
 | `413` | The request body exceeds 256 KiB. |
-| `422` | The request is invalid and returns `TRACE_QUERY_INVALID` with issues. Issue codes include `time_range_too_large`, `too_many_buckets`, `too_many_rows`, `field_not_allowed`, `invalid_metadata_key`, and `operator_not_allowed`. |
+| `422` | The request is invalid and returns `TRACE_QUERY_INVALID` with issues. A time range exceeding 365 days produces an `invalid_request` issue. Other issue codes include `too_many_buckets`, `too_many_rows`, `field_not_allowed`, `invalid_metadata_key`, and `operator_not_allowed`. |
 | `501` | The installed Core or configured observability store doesn't support aggregation or a requested field. Returns `TRACE_AGGREGATE_UNSUPPORTED`. |
 | `504` | A PostgreSQL or ClickHouse aggregation exceeded its execution timeout. Returns `TRACE_QUERY_EXECUTION_TIMEOUT` without partial results. |
 
@@ -856,7 +945,7 @@ PostgreSQL and ClickHouse stop aggregations after the same `traceQueryTimeoutMs`
 
 Use `aggregateSpans()` or `POST /api/observability/spans/aggregate` to compute measures over individual spans instead of traces. Trace aggregation only sees each trace's root span, so an agent run nested inside a workflow isn't counted. Span aggregation counts every span that matches, at any depth.
 
-The request has the same shape as [`aggregateTraces()`](#aggregate-request-fields), with the same measures, `having`, `orderBy`, `interval`, limits, and errors. The differences are in which records are selected and which dimensions are available.
+The request has the same shape as [`aggregateTraces()`](#aggregate-request-fields), with the same fixed measures, `having`, `orderBy`, `interval`, and shared limits. Its `where`, dimensions, and `countDistinct` fields follow the span contract below. Unsupported span aggregation returns `501 SPAN_AGGREGATE_UNSUPPORTED`.
 
 ### Aggregate spans with the client SDK
 
@@ -883,18 +972,18 @@ Send the same body to `POST /api/observability/spans/aggregate` to use HTTP dire
 
 ### Span selection
 
-Aggregation selects the spans that [`querySpans()`](/reference/client-js/observability#querying-spans) would return for the same `timeRange` and `where`:
+Aggregation uses the same span predicates as [`querySpans()`](#query-spans), with the ClickHouse selection differences described below:
 
 - `timeRange` bounds each span's `startedAt`, and can span up to 365 days.
 - `where` accepts the `querySpans()` fields and operators, such as `spanType`, `name`, `status`, `durationMs`, `model`, `provider`, entity and parent/root entity fields, and context identifiers. Like `querySpans()`, `model` and `provider` filters read only the span's columns, not its attributes.
 - Only completed spans count. When a span was exported more than once, only its latest copy counts.
 
-`count` equals the number of spans `querySpans()` pages through for the same request. Buckets use each span's `startedAt`. `duration.*` measures read the span's own duration, and `errorCount` and `errorRate` read whether the span itself recorded an error.
+`count` counts selected spans in each group or time bucket. Buckets use each span's `startedAt`. `duration.*` measures read the span's own duration, and `errorCount` and `errorRate` read whether the span itself recorded an error.
 
-On ClickHouse, a request whose `where` limits `spanType` to agent, workflow, processor, or scorer runs, RAG ingestion, or tool calls reads the smaller branch table instead of every span. That path can differ from `querySpans()`:
+On ClickHouse, a direct `spanType` `eq` or `in` predicate, or one immediately inside an `and`, can select the smaller branch table. All selected types must be branch types: `agent_run`, `workflow_run`, `processor_run`, `scorer_run`, `rag_ingestion`, `tool_call`, or `mcp_tool_call`. Every requested field must be available in that table. An equivalent `or` predicate doesn't select this optimization. The branch path can differ from `querySpans()`:
 
 - Spans written before an upgrade from `@mastra/clickhouse` 1.4, 1.5, or 1.6 aren't in the branch table, so older windows can count fewer spans.
-- After ClickHouse merges the copies of a span exported more than once, the branch table keeps the copy written last, not the one that ended last. Counts don't change, but the `status` and duration of a retried span can.
+- After ClickHouse merges the copies of a span exported more than once, the branch table keeps the copy written last, not the one that ended last. The retained version's status and duration can differ. This can change filtered counts and group membership even though the span identity is unchanged.
 
 ### Span dimensions
 
@@ -906,8 +995,13 @@ On ClickHouse, a request whose `where` limits `spanType` to agent, workflow, pro
 | `parentEntityType`, `parentEntityName`, `rootEntityType`, `rootEntityName` | The calling entity and the trace's root entity, such as the agent that made a model call. |
 | `environment`, `serviceName`, `executionSource` | Deployment attributes recorded on the span. |
 | `threadId`, `resourceId`, `userId`, `sessionId`, `organizationId`, `experimentId` | Context identifiers recorded on the span. |
+| `model`, `provider` | The model and provider recorded on the span's `model` and `provider` columns, such as `__AI_SDK_ANTHROPIC_MODEL_SONNET__` and `anthropic`. Requires the `spanAggregateModelDimensions` capability. |
 
-`countDistinct.<field>` accepts these dimensions and `traceId`, so `countDistinct.traceId` counts the traces the selected spans belong to. Span aggregation can't group by `metadata.<key>`, identity fields such as `traceId`, `spanId`, or `runId`, or by model and provider.
+`countDistinct.<field>` accepts these dimensions and `traceId`, so `countDistinct.traceId` counts the traces the selected spans belong to. Span aggregation can't group by `metadata.<key>` or identity fields such as `traceId`, `spanId`, or `runId`.
+
+Like the `model` and `provider` filters, the `model` and `provider` dimensions read only the span's columns, not its attributes. Existing spans aren't backfilled, so spans exported before `@mastra/observability` filled the columns group under `null`, and `countDistinct.model` doesn't count them.
+
+Stores advertise support through the `span-aggregate-model-dimensions` feature, and the server reports it as the `spanAggregateModelDimensions` capability. Against an older store, a request that groups by `model` or `provider` or counts their distinct values returns `501` before storage runs.
 
 ### Span tokens and cost
 
@@ -928,9 +1022,28 @@ const tokensByAgent = await mastraClient.aggregateSpans({
 })
 ```
 
+To compare models instead, group the same spans by `model`:
+
+```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.spanAggregateModelDimensions) {
+  const { rows } = await mastraClient.aggregateSpans({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+    groupBy: ['provider', 'model'],
+    measures: ['count', 'tokens.total.sum', 'cost.sum'],
+  })
+  // rows[0]: { dimensions: { provider: 'anthropic', model: '__AI_SDK_ANTHROPIC_MODEL_SONNET__' }, measures: { ... } }
+}
+```
+
 ### List the spans behind a group
 
-Aggregation never returns span records. To inspect a group, send the same `timeRange` and `where` to `querySpans()`, and add the group's dimension values as `eq` conditions. For example, add `{ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }` to list the failed agent runs from the first example.
+Aggregation never returns span records. To inspect a group, send the same `timeRange` and `where` to `querySpans()`, and add non-null dimension values as `eq` conditions. For a null dimension, use `notExists`, such as `{ op: 'notExists', path: 'entityName' }`. `eq` with `literal: null` is rejected. For example, add `{ op: 'eq', left: { path: 'status' }, right: { literal: 'error' } }` to list the failed agent runs from the first example.
 
 ## Trusted tenant scope
 
@@ -1050,10 +1163,10 @@ Value suggestions are available for these canonical fields:
 
 | Scope | Fields |
 | - | - |
-| Trace | `entityName`, `entityType`, `name`, `spanType`, `environment`, `status`, `tags` |
-| Spans | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityName` |
+| Trace | `entityName`, `entityType`, `name`, `spanType`, `environment`, `status`, `outcome`, `stopReason`, `tags` |
+| Spans | `name`, `spanType`, `model`, `provider`, `status`, `outcome`, `stopReason`, `entityType`, `entityName` |
 
-Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, time to first chunk, time to first token, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
+`outcome` and `stopReason` suggestions require the `traceQueryOutcomeFields` capability. Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, time to first chunk, time to first token, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
 
 Both discovery requests require a half-open time range. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
 

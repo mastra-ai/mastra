@@ -6,7 +6,7 @@ import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-i
 import { RequestContext } from '@mastra/core/request-context';
 import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
 import type { FactorySandboxContext, LocalFilesystem } from '@mastra/core/workspace';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   /** Whether the mock VM already carries a matching setup marker (warm template image). */
@@ -149,6 +149,8 @@ import {
   peekSessionEnvironment,
   peekSessionEnvironmentTeardown,
 } from './session/environment-state-processor.js';
+import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
+import { createFactoryStorageForTests } from './storage/test-utils.js';
 import {
   createWorkspaceFactory,
   FactorySkillSource,
@@ -345,7 +347,7 @@ function fakeGithubIntegration() {
           return project
             ? {
                 id: project.id,
-                connectionId: 'connection-1',
+                connectionId: project.id === 'project-1' ? 'connection-1' : `connection-${project.id}`,
                 repositoryId: 'repository-1',
                 branch: project.defaultBranch,
                 sandboxWorkdir: project.sandboxWorkdir,
@@ -357,10 +359,10 @@ function fakeGithubIntegration() {
         setBuildStatus: vi.fn(async () => null),
       },
       connections: {
-        get: vi.fn(async () => ({
-          id: 'connection-1',
+        get: vi.fn(async ({ id }: { id: string }) => ({
+          id,
           installationId: 'installation-1',
-          factoryProjectId: 'project-1',
+          factoryProjectId: id === 'connection-1' ? 'project-1' : id.replace(/^connection-/, ''),
         })),
       },
       repositories: {
@@ -1043,6 +1045,7 @@ describe('GitHub session workspace preparation', () => {
   async function createLocalFactory(
     rootPrefix = 'mastracode-web-local-sessions-',
     workspaceRegistry?: FactoryWorkspaceRegistry,
+    skillOverrides?: SkillOverridesStorage,
   ) {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), rootPrefix));
     tempDirs.push(root);
@@ -1056,6 +1059,7 @@ describe('GitHub session workspace preparation', () => {
         hasRunBindingForSession: mocks.hasRunBindingForSession,
       } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
+      ...(skillOverrides ? { skillOverrides } : {}),
     });
     return {
       root,
@@ -1434,6 +1438,179 @@ describe('GitHub session workspace preparation', () => {
     expect(reused).toBe(workspace);
     expect(await workspace.skills?.get('factory-review')).toBeFalsy();
     expect((await workspace.skills?.list())?.map(skill => skill.name)).not.toContain('factory-review');
+  });
+
+  describe('project skill edits', () => {
+    const editedPlan = (body: string) =>
+      `---\nname: factory-plan\ndescription: Plan the way this project plans\n---\n\n# ${body}\n`;
+    const save = (overrides: SkillOverridesStorage, projectId: string, skillName: string, content: string) =>
+      overrides.upsert({ orgId: 'org-1', projectId, skillName, content, baseHash: 'base', updatedBy: 'admin-1' });
+    const planOf = async (workspace: Awaited<ReturnType<ReturnType<typeof createWorkspaceFactory>>>) => {
+      await workspace!.skills?.maybeRefresh();
+      return (await workspace!.skills?.get('factory-plan'))?.instructions;
+    };
+
+    it('gives sessions in the edited project the edited skill while another project keeps the original', async () => {
+      const { skillOverrides } = await createFactoryStorageForTests();
+      const { resolver } = await createLocalFactory(undefined, undefined, skillOverrides);
+      addProject();
+      addProject({ id: 'project-2', repoFullName: 'octocat/other' });
+      addSession({ id: 'session-a' });
+      addSession({ id: 'session-b', projectRepositoryId: 'project-2' });
+      await save(skillOverrides, 'project-1', 'factory-plan', editedPlan('Plan for project one'));
+
+      const inEdited = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const inOther = await resolver({ requestContext: createGithubRequestContext('project-2', 'session-b') });
+
+      expect(await planOf(inEdited)).toContain('# Plan for project one');
+      expect(await planOf(inOther)).toContain('# Factory Plan');
+      expect(await planOf(inOther)).not.toContain('Plan for project one');
+      expect((await inEdited!.skills?.get('factory-plan'))?.description).toBe('Plan the way this project plans');
+    });
+
+    it('keeps an edited review skill out of a work-role session and serves the edit to a review session', async () => {
+      const { skillOverrides } = await createFactoryStorageForTests();
+      const { resolver } = await createLocalFactory(undefined, undefined, skillOverrides);
+      addProject();
+      addSession({ id: 'session-work' });
+      addSession({ id: 'session-review' });
+      await save(
+        skillOverrides,
+        'project-1',
+        'factory-review',
+        '---\nname: factory-review\ndescription: Review our way\n---\n\n# Edited review\n',
+      );
+
+      mocks.runBindingRole = 'work';
+      const work = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-work') }))!;
+      await work.skills?.maybeRefresh();
+      expect(await work.skills?.get('factory-review')).toBeFalsy();
+      expect((await work.skills?.list())?.map(skill => skill.name)).not.toContain('factory-review');
+
+      mocks.runBindingRole = 'review';
+      const review = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-review') }))!;
+      await review.skills?.maybeRefresh();
+      expect((await review.skills?.get('factory-review'))?.instructions).toContain('# Edited review');
+    });
+
+    it('picks up a save, a revert, and a second save on the next session and on a reused workspace', async () => {
+      const { skillOverrides } = await createFactoryStorageForTests();
+      const { resolver } = await createLocalFactory(undefined, undefined, skillOverrides);
+      addProject();
+      for (const id of ['session-reused', 'session-1', 'session-2', 'session-3']) addSession({ id });
+      const reusedContext = createGithubRequestContext('project-1', 'session-reused');
+      const reused = (await resolver({ requestContext: reusedContext }))!;
+      expect(await planOf(reused)).toContain('# Factory Plan');
+      // Prime the reuse record, as a session's first turn does.
+      await resolver({ requestContext: reusedContext });
+      const nextSession = async (id: string) =>
+        planOf(await resolver({ requestContext: createGithubRequestContext('project-1', id) }));
+      const reuse = async () => {
+        expect(await resolver({ requestContext: reusedContext })).toBe(reused);
+        return (await reused.skills?.get('factory-plan'))?.instructions;
+      };
+
+      await save(skillOverrides, 'project-1', 'factory-plan', editedPlan('First edit'));
+      expect(await nextSession('session-1')).toContain('# First edit');
+      expect(await reuse()).toContain('# First edit');
+
+      expect(await skillOverrides.delete({ orgId: 'org-1', projectId: 'project-1', skillName: 'factory-plan' })).toBe(
+        true,
+      );
+      expect(await nextSession('session-2')).toContain('# Factory Plan');
+      expect(await reuse()).toContain('# Factory Plan');
+
+      await save(skillOverrides, 'project-1', 'factory-plan', editedPlan('Second edit'));
+      expect(await nextSession('session-3')).toContain('# Second edit');
+      expect(await reuse()).toContain('# Second edit');
+    });
+
+    it('ignores an edit whose skill no longer exists', async () => {
+      const { skillOverrides } = await createFactoryStorageForTests();
+      const { resolver } = await createLocalFactory(undefined, undefined, skillOverrides);
+      addProject();
+      addSession({ id: 'session-a' });
+      await save(
+        skillOverrides,
+        'project-1',
+        'removed-app-skill',
+        '---\nname: removed-app-skill\ndescription: Gone\n---\n\n# Gone\n',
+      );
+
+      const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+      await workspace.skills?.maybeRefresh();
+      expect(await workspace.skills?.get('removed-app-skill')).toBeFalsy();
+    });
+
+    it('serves the original skills while edits cannot be read, and the edit once they can', async () => {
+      const { skillOverrides } = await createFactoryStorageForTests();
+      const { resolver } = await createLocalFactory(undefined, undefined, skillOverrides);
+      addProject();
+      addSession({ id: 'session-a' });
+      await save(skillOverrides, 'project-1', 'factory-plan', editedPlan('Edited plan'));
+      // The skill-overrides table is missing, as when its domain failed to initialize.
+      let unreadable = true;
+      const missingTable = () => new Error("unknown collection 'factory_skill_overrides'");
+      for (const method of ['revision', 'snapshot'] as const) {
+        const read = skillOverrides[method].bind(skillOverrides) as (...args: never[]) => Promise<unknown>;
+        vi.spyOn(skillOverrides, method).mockImplementation(((...args: never[]) =>
+          unreadable ? Promise.reject(missingTable()) : read(...args)) as never);
+      }
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      onTestFinished(() => warn.mockRestore());
+      mocks.runBindingRole = 'review';
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+      const workspace = (await resolver({ requestContext }))!;
+      await workspace.skills?.maybeRefresh();
+      expect((await workspace.skills?.get('factory-triage'))?.instructions).toContain('# Factory Triage');
+      expect(await planOf(workspace)).toContain('# Factory Plan');
+      expect((await workspace.skills?.get('factory-review'))?.instructions).toContain('# Factory Review');
+      expect(warn).toHaveBeenCalledWith(
+        '[Mastra Factory] Could not read project skill edits; serving the original skills',
+        expect.objectContaining({ factoryProjectId: 'project-1' }),
+      );
+
+      expect(await resolver({ requestContext })).toBe(workspace);
+      expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+
+      unreadable = false;
+      expect(await resolver({ requestContext })).toBe(workspace);
+      expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Edited plan');
+    });
+
+    it('returns a reused workspace with the original skills while only the snapshot read fails', async () => {
+      const { skillOverrides } = await createFactoryStorageForTests();
+      const { resolver } = await createLocalFactory(undefined, undefined, skillOverrides);
+      addProject();
+      addSession({ id: 'session-a' });
+      await save(skillOverrides, 'project-1', 'factory-plan', editedPlan('Edited plan'));
+      let unreadable = true;
+      const read = skillOverrides.snapshot.bind(skillOverrides) as (...args: never[]) => Promise<unknown>;
+      const reads = vi
+        .spyOn(skillOverrides, 'snapshot')
+        .mockImplementation(((...args: never[]) =>
+          unreadable ? Promise.reject(new Error('connection reset')) : read(...args)) as never);
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      onTestFinished(() => warn.mockRestore());
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+      const workspace = (await resolver({ requestContext }))!;
+      expect(await planOf(workspace)).toContain('# Factory Plan');
+
+      reads.mockClear();
+      const reused = await Promise.race([
+        resolver({ requestContext }),
+        new Promise(resolve => setTimeout(() => resolve('still resolving'), 2_000)),
+      ]);
+      expect(reused).toBe(workspace);
+      expect(reads.mock.calls.length).toBeLessThanOrEqual(3);
+      expect(await planOf(workspace)).toContain('# Factory Plan');
+
+      unreadable = false;
+      expect(await resolver({ requestContext })).toBe(workspace);
+      expect(await planOf(workspace)).toContain('# Edited plan');
+    });
   });
 
   it('drops cached review skills when a reused workspace leaves the review role', async () => {

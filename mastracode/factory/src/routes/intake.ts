@@ -10,6 +10,7 @@ import { cardLabels, moveCardToBoard } from '../boards/relocate.js';
 import type { Intake, IntakeItem } from '../capabilities/intake.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import {
+  FactoryProjectNotFoundError,
   normalizeBindingLabels,
   normalizeIntakeLabel,
   resolveIntakeLabelRoute,
@@ -623,18 +624,25 @@ export class IntakeRoutes extends Route<IntakeRoutesDeps> {
               factoryProjectId: binding.factoryProjectId,
               board: binding.board,
             };
-            if (shared) {
-              // Omitted labels keep the filter, so changing only the board never widens what the binding takes.
-              labels = binding.labels === undefined ? (previousBinding?.labels ?? null) : binding.labels;
-              const { conflicts } = await intake.setSharedBinding({ ...target, labels });
-              if (conflicts.length > 0) {
-                return c.json(
-                  { error: 'binding_conflict', message: bindingConflictMessage(conflicts), conflicts },
-                  409,
-                );
+            try {
+              if (shared) {
+                // Omitted labels keep the filter, so changing only the board never widens what the binding takes.
+                labels = binding.labels === undefined ? (previousBinding?.labels ?? null) : binding.labels;
+                const { conflicts } = await intake.setSharedBinding({ ...target, labels });
+                if (conflicts.length > 0) {
+                  return c.json(
+                    { error: 'binding_conflict', message: bindingConflictMessage(conflicts), conflicts },
+                    409,
+                  );
+                }
+              } else {
+                await intake.setBinding(target);
               }
-            } else {
-              await intake.setBinding(target);
+            } catch (error) {
+              if (error instanceof FactoryProjectNotFoundError) {
+                return c.json({ error: 'factory_project_not_found' }, 404);
+              }
+              throw error;
             }
             // A source that stays in the same project but is pointed at a different board
             // takes its resting cards along. Bindings that predate persisted boards have a

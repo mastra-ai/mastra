@@ -10,6 +10,7 @@ import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.js';
+import { ProjectRoutes } from './projects.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 const auditEvents: Array<Record<string, unknown>> = [];
@@ -604,6 +605,45 @@ describe('intake configuration', () => {
       expect(allIssues.status).toBe(409);
       expect(await allIssues.json()).toMatchObject({ conflicts: [{ factoryProjectId: platform.id, labels: null }] });
       expect(await seed.intake.listBindings({ orgId: 'org1', integrationId: 'jira' })).toHaveLength(2);
+    });
+
+    it('refuses a binding whose factory is deleted while the request is in flight, so its successor can bind', async () => {
+      const { platform, payments } = await factories();
+      const projectsApp = new Hono();
+      projectsApp.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, orgUser as never);
+        await next();
+      });
+      mountApiRoutes(
+        projectsApp,
+        new ProjectRoutes({
+          auth: fakeRouteAuth(),
+          projects: seed.projects,
+          sourceControl: seed.sourceControl,
+          intake: seed.intake,
+        }).routes(),
+      );
+      const write = seed.intake.setSharedBinding.bind(seed.intake);
+      const { promise: writing, resolve: startWriting } = Promise.withResolvers<void>();
+      const { promise: deleted, resolve: finishDelete } = Promise.withResolvers<void>();
+      vi.spyOn(seed.intake, 'setSharedBinding').mockImplementationOnce(async input => {
+        startWriting();
+        await deleted;
+        return write(input);
+      });
+
+      const inFlight = put({ ...ops, factoryProjectId: platform.id, board: 'release' });
+      await writing;
+      expect((await projectsApp.request(`/web/factory/projects/${platform.id}`, { method: 'DELETE' })).status).toBe(
+        204,
+      );
+      finishDelete();
+
+      expect((await inFlight).status).toBe(404);
+      expect((await put({ ...ops, factoryProjectId: payments.id, board: 'release' })).status).toBe(200);
+      expect(summary(await seed.intake.listBindings({ orgId: 'org1', integrationId: 'jira' }))).toEqual([
+        { factoryProjectId: payments.id, labels: null },
+      ]);
     });
 
     it('keeps the label filter when only the board changes, and clears it with labels: null', async () => {

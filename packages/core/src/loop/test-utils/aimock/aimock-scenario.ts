@@ -164,6 +164,7 @@ async function buildScenarioAgent({
   pubsub,
   cache,
   observability,
+  server,
   engine,
   inputProcessors,
   fsRouted,
@@ -190,6 +191,7 @@ async function buildScenarioAgent({
   | 'pubsub'
   | 'cache'
   | 'observability'
+  | 'server'
   | 'engine'
   | 'inputProcessors'
   | 'fsRouted'
@@ -315,6 +317,7 @@ async function buildScenarioAgent({
     ...(eventedPubsub ? { pubsub: eventedPubsub } : pubsub ? { pubsub } : {}),
     ...(cache ? { cache } : {}),
     ...(observability ? { observability } : {}),
+    ...(server ? { server } : {}),
   });
 
   if (isFs) {
@@ -404,6 +407,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     pubsub,
     cache,
     observability,
+    server,
     engine = 'normal',
     fsRouted,
   } = opts;
@@ -460,6 +464,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       pubsub,
       cache,
       observability,
+      server,
       engine,
       inputProcessors,
       fsRouted,

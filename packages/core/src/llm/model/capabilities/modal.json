@@ -32,7 +32,13 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "nvidia/GLM-5.3-Flash-NVFP4": [
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -44,13 +50,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3": [
+    "nvidia/GLM-5.3-Flash-NVFP4": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

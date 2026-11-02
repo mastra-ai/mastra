@@ -72,7 +72,8 @@ export function evaluateSpanAggregateRequest(
 //
 // Model and provider columns: t1-model (both copies) gpt-4o / openai; t3-model claude-sonnet-5-5 /
 // anthropic. t2-model carries its model only in attributes, as spans exported before the columns
-// were filled do, so span filters on model and provider must not match it.
+// were filled do, so span filters on model and provider must not match it and grouping by them puts
+// it under null (no backfill).
 //
 // The older t1-model copy is written first and also ends first, so every store's version rule
 // (latest end time or latest write) picks the 2 s copy; without the collapse, llm counts 4 spans.
@@ -508,5 +509,79 @@ export const SPAN_AGGREGATE_CONFORMANCE_CASES: SpanAggregateConformanceCase[] = 
       measures: ['count', 'countDistinct.traceId'],
     },
     expected: { rows: [{ measures: { count: 2, 'countDistinct.traceId': 2 } }], truncated: false },
+  },
+  {
+    // No backfill: t2-model has its model only in attributes, so it groups under null. The retried
+    // t1-model counts once, with its tokens counted once.
+    name: 'groups model calls by the model column, with attribute-only spans under null',
+    request: {
+      timeRange: spanRange,
+      where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+      groupBy: ['model'],
+      measures: ['count', 'tokens.total.sum'],
+    },
+    expected: {
+      rows: [
+        { dimensions: { model: 'claude-sonnet-5-5' }, measures: { count: 1, 'tokens.total.sum': 50 } },
+        { dimensions: { model: 'gpt-4o' }, measures: { count: 1, 'tokens.total.sum': 150 } },
+        { dimensions: { model: null }, measures: { count: 1, 'tokens.total.sum': 280 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'groups by provider and model across spans with and without model columns',
+    request: { timeRange: spanRange, groupBy: ['provider', 'model'], measures: ['count'] },
+    expected: {
+      rows: [
+        { dimensions: { provider: null, model: null }, measures: { count: 6 } },
+        { dimensions: { provider: 'anthropic', model: 'claude-sonnet-5-5' }, measures: { count: 1 } },
+        { dimensions: { provider: 'openai', model: 'gpt-4o' }, measures: { count: 1 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'filters and groups on the model columns together',
+    request: {
+      timeRange: spanRange,
+      where: { op: 'in', value: { path: 'provider' }, set: ['openai', 'anthropic'] },
+      groupBy: ['model'],
+      measures: ['count', 'tokens.total.sum'],
+      orderBy: { field: 'tokens.total.sum', direction: 'desc' },
+    },
+    expected: {
+      rows: [
+        { dimensions: { model: 'gpt-4o' }, measures: { count: 1, 'tokens.total.sum': 150 } },
+        { dimensions: { model: 'claude-sonnet-5-5' }, measures: { count: 1, 'tokens.total.sum': 50 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    // Spans without a model column don't count as a distinct model, so billing has none.
+    name: 'counts distinct models and providers per root entity',
+    request: {
+      timeRange: spanRange,
+      groupBy: ['rootEntityName'],
+      measures: ['count', 'countDistinct.model', 'countDistinct.provider'],
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: { rootEntityName: 'billing' },
+          measures: { count: 3, 'countDistinct.model': 0, 'countDistinct.provider': 0 },
+        },
+        {
+          dimensions: { rootEntityName: 'support' },
+          measures: { count: 3, 'countDistinct.model': 1, 'countDistinct.provider': 1 },
+        },
+        {
+          dimensions: { rootEntityName: 'nightly' },
+          measures: { count: 2, 'countDistinct.model': 1, 'countDistinct.provider': 1 },
+        },
+      ],
+      truncated: false,
+    },
   },
 ];

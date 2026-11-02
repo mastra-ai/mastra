@@ -253,18 +253,28 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const first = await boot(newStorage, orgId);
       const projectId = await createProject(first, 'Restarted project');
       await addBugs(first, orgId, projectId);
-      const { item: card } = await first.workItems.upsert({
+      const { item: card, binding } = await first.workItems.prepareRunStart({
         orgId,
         userId: 'admin-user',
         factoryProjectId: projectId,
-        input: {
-          board: 'bugs',
-          title: 'Close me',
-          claimKey: `claim-${randomUUID()}`,
-          externalSource: { integrationId: 'github', type: 'issue', externalId: `issue-${randomUUID()}` },
+        workItem: {
+          input: {
+            board: 'bugs',
+            title: 'Close me',
+            stages: ['reported'],
+            externalSource: { integrationId: 'github', type: 'issue', externalId: `issue-${randomUUID()}` },
+          },
         },
+        role: 'work',
+        session: {
+          sessionId: `session-${randomUUID()}`,
+          branch: 'factory/close-me',
+          threadId: `thread-${randomUUID()}`,
+        },
+        resourceId: 'resource-1',
+        kickoffKey: `kickoff-${randomUUID()}`,
+        kickoffMessage: null,
       });
-      expect(card.claimKey).not.toBeNull();
 
       // A replica that just booted, moving the card the way a reconciler does: straight through storage,
       // with no request having loaded the project first.
@@ -275,8 +285,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         userId: 'admin-user',
         patch: { stages: ['wontfix'] },
       });
+      expect(moved?.item.stages).toEqual(['wontfix']);
 
-      expect(moved?.item).toMatchObject({ stages: ['wontfix'], claimKey: null });
+      // The binding is young, so only a finished card makes the sweep revoke it.
+      await restarted.workItems.revokeStaleRunBindings({ olderThan: new Date(0), now: new Date() });
+      expect((await restarted.workItems.listActiveRunBindings()).map(active => active.id)).not.toContain(binding.id);
     }, 30_000);
   },
 );
