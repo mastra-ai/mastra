@@ -227,9 +227,6 @@ const sidebars = {
             type: 'doc',
             id: 'knowledge/overview',
           },
-          customProps: {
-            tags: ['alpha'],
-          },
           items: [
             {
               type: 'doc',
