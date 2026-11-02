@@ -106,29 +106,28 @@ function Kpis({ isLoading }: { isLoading: boolean }) {
  */
 function Card({
   title,
-  description,
-  summary,
+  total,
   isLoading,
   children,
 }: {
-  title: string;
-  description: string;
-  summary: { value: string; label: string };
+  /** The title, or a `MetricsCard.TitleMenu` for a card with several views. */
+  title: ReactNode;
+  total: string;
   isLoading: boolean;
   children: ReactNode;
 }) {
   return (
     <MetricsCard className="min-h-0! min-w-0!">
       <MetricsCard.TopBar>
-        <MetricsCard.TitleAndDescription title={title} description={description} />
-        <MetricsCard.Summary value={summary.value} label={summary.label} isLoading={isLoading} />
+        {typeof title === 'string' ? <MetricsCard.Title>{title}</MetricsCard.Title> : title}
+        <MetricsCard.Total value={total} isLoading={isLoading} />
       </MetricsCard.TopBar>
       <MetricsCard.Content className="flex h-full flex-col gap-4 overflow-visible">{children}</MetricsCard.Content>
     </MetricsCard>
   );
 }
 
-/* Routes: one question per tab, a share strip over the ranked routes. */
+/* Routes: one question per view, a share column over the ranked routes. */
 
 type Lens = 'busiest' | 'slowest' | 'failing';
 
@@ -151,23 +150,28 @@ const COLUMNS = {
  * Per lens: the measure the table ranks by and its column, and the supporting columns. "Time
  * spent" ranks by requests x latency, so the share column still adds up to a total.
  */
-const LENSES: Record<Lens, { value: Column; columns: Column[]; empty: string }> = {
+const LENSES: Record<Lens, { title: string; value: Column; columns: Column[]; empty: string }> = {
   busiest: {
+    title: 'Busiest routes',
     value: COLUMNS.requests,
     columns: [COLUMNS.rate, COLUMNS.p50, COLUMNS.p95],
     empty: 'No requests in this range.',
   },
   slowest: {
+    title: 'Routes by time spent',
     value: { id: 'time', header: 'Time spent', cell: r => duration(r.timeSpentMs), sort: r => r.timeSpentMs },
     columns: [COLUMNS.requests, COLUMNS.p50, COLUMNS.p95],
     empty: 'No requests in this range.',
   },
   failing: {
+    title: 'Failing routes',
     value: { id: 'e5xx', header: '5xx', cell: r => count(r.e5xx), sort: r => r.e5xx },
     columns: [COLUMNS.requests, COLUMNS.c4xx, COLUMNS.rate],
     empty: 'No 5xx responses in this range.',
   },
 };
+
+const LENS_OPTIONS = (Object.keys(LENSES) as Lens[]).map(value => ({ value, label: LENSES[value].title }));
 
 const routeKey = (r: RouteStat) => `${r.method} ${r.path}`;
 
@@ -210,18 +214,12 @@ function RoutesCard({ isLoading }: { isLoading: boolean }) {
   ];
   return (
     <Card
-      title="Routes"
-      description="Grouped by method and route. Click a row to filter the page."
-      summary={{ value: String(routeStats.length), label: 'routes' }}
+      title={
+        <MetricsCard.TitleMenu<Lens> title={spec.title} value={lens} onValueChange={setLens} options={LENS_OPTIONS} />
+      }
+      total={String(routeStats.length)}
       isLoading={isLoading}
     >
-      <MetricsCard.Toolbar>
-        <MetricsCard.Tabs<Lens> value={lens} onValueChange={setLens}>
-          <MetricsCard.Tab value="busiest">Busiest</MetricsCard.Tab>
-          <MetricsCard.Tab value="slowest">Time spent</MetricsCard.Tab>
-          <MetricsCard.Tab value="failing">Failing</MetricsCard.Tab>
-        </MetricsCard.Tabs>
-      </MetricsCard.Toolbar>
       {/* Remount per lens, so sort and page reset with the question. */}
       <MetricsTable
         key={lens}
@@ -258,44 +256,24 @@ function RequestsPage({ isLoading = false }: { isLoading?: boolean }) {
       <Kpis isLoading={isLoading} />
       <div className="@container">
         <div className="grid gap-4 @2xl:grid-cols-2">
-          <Card
-            title="Requests"
-            description="Requests per hour, against the previous period"
-            summary={{ value: count(totals.requests), label: 'requests' }}
-            isLoading={isLoading}
-          >
+          <Card title="Requests" total={count(totals.requests)} isLoading={isLoading}>
             <MetricsLineChart {...small} series={requestsVsPreviousSeries} valueFormatter={count} />
           </Card>
-          <Card
-            title="Error rate"
-            description="Share of requests that failed"
-            summary={{ value: percent(totals.errorRate), label: '5xx rate' }}
-            isLoading={isLoading}
-          >
+          <Card title="Error rate" total={percent(totals.errorRate)} isLoading={isLoading}>
             <MetricsLineChart
               {...small}
               series={errorRateSeries.map(s => ({ ...s, emphasis: s.dataKey === 'errorRate' }))}
               valueFormatter={percent}
             />
           </Card>
-          <Card
-            title="Latency"
-            description="Edge duration percentiles"
-            summary={{ value: ms(mean('p95')), label: 'P95' }}
-            isLoading={isLoading}
-          >
+          <Card title="Latency" total={ms(mean('p95'))} isLoading={isLoading}>
             <MetricsLineChart
               {...small}
               series={percentileSeries.map(s => ({ ...s, emphasis: s.dataKey === 'p95' }))}
               valueFormatter={ms}
             />
           </Card>
-          <Card
-            title="Cold starts"
-            description="Requests that woke a stopped app"
-            summary={{ value: String(totals.coldStarts), label: 'cold starts' }}
-            isLoading={isLoading}
-          >
+          <Card title="Cold starts" total={String(totals.coldStarts)} isLoading={isLoading}>
             <MetricsStackedBarChart
               {...small}
               series={coldStartSeries}
@@ -313,5 +291,5 @@ function RequestsPage({ isLoading = false }: { isLoading?: boolean }) {
 /** The final Requests page composition. Resize the canvas: the charts go 2x2 to one column. */
 export const RequestsOverview: Story = { render: () => <RequestsPage /> };
 
-/** The same page while every query loads: KPI, summary, chart and list skeletons in place. */
+/** The same page while every query loads: KPI, total, chart and list skeletons in place. */
 export const Loading: Story = { render: () => <RequestsPage isLoading /> };

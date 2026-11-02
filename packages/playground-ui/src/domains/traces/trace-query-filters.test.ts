@@ -540,6 +540,46 @@ describe('buildTraceQueryRequest', () => {
     });
   });
 
+  describe.each([
+    ['timeToFirstChunkMs', 'time to first chunk'],
+    ['timeToFirstTokenMs', 'time to first token'],
+  ])('when a root %s token is set', (path, name) => {
+    it(`emits a top-level range predicate on the root ${name}`, () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: path, value: '400', operatorId: 'lte' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ op: 'lte', left: { path }, right: { literal: 400 } }] });
+    });
+
+    it('also matches traces that never streamed when excluding a value', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: path, value: '400', operatorId: 'isNot' }], now }).where,
+      ).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'ne', left: { path }, right: { literal: 400 } },
+              { op: 'notExists', path },
+            ],
+          },
+        ],
+      });
+    });
+
+    it(`emits a spans.some predicate for the span ${name}`, () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: `spans.${path}`, value: '250', operatorId: 'gt' }], now }).where,
+      ).toEqual({ op: 'and', args: [{ spans: { some: { op: 'gt', left: { path }, right: { literal: 250 } } } }] });
+    });
+
+    it('drops a non-numeric value', () => {
+      expect(
+        buildTraceQueryRequest({ tokens: [{ fieldId: path, value: 'fast', operatorId: 'gt' }], now }).where,
+      ).toBeUndefined();
+    });
+  });
+
   describe('when root and span duration tokens are combined', () => {
     it('emits two independent predicates', () => {
       expect(

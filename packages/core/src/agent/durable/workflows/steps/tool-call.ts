@@ -894,6 +894,8 @@ export function createDurableToolCallStep() {
         resumeSchema?: string;
         suspendPayload?: unknown;
         delegatedRunId?: string;
+        delegatedToolCallId?: string;
+        delegatedToolName?: string;
         approvalToolName?: string;
         approvalArgs?: unknown;
       }) => {
@@ -912,6 +914,9 @@ export function createDurableToolCallStep() {
           // (mirrors the regular engine's tool-call-step metadata shape).
           runId,
           ...(opts.delegatedRunId && opts.delegatedRunId !== runId ? { delegatedRunId: opts.delegatedRunId } : {}),
+          // The delegate's own tool call that paused. Resume stays keyed on `toolCallId`.
+          ...(opts.delegatedToolCallId ? { delegatedToolCallId: opts.delegatedToolCallId } : {}),
+          ...(opts.delegatedToolName ? { delegatedToolName: opts.delegatedToolName } : {}),
           ...(opts.type === 'suspension' ? { suspendPayload: opts.suspendPayload } : {}),
           ...(opts.resumeSchema ? { resumeSchema: opts.resumeSchema } : {}),
         };
@@ -1051,6 +1056,12 @@ export function createDurableToolCallStep() {
               toolName: matchedEntry.toolName ?? toolName,
               kind: type,
               args: displayed.payload.args,
+              ...(typeof matchedEntry.delegatedToolCallId === 'string'
+                ? { delegatedToolCallId: matchedEntry.delegatedToolCallId }
+                : {}),
+              ...(typeof matchedEntry.delegatedToolName === 'string'
+                ? { delegatedToolName: matchedEntry.delegatedToolName }
+                : {}),
               ...(type === 'suspension' ? { suspendPayload: (displayed.payload as any).suspendPayload } : {}),
               resumeSchema: displayed.payload.resumeSchema,
             },
@@ -1458,6 +1469,18 @@ export function createDurableToolCallStep() {
             typeof suspendOptions?.runId === 'string' && suspendOptions.runId !== runId
               ? suspendOptions.runId
               : undefined;
+          // Set by the agent-tool wrapper when a delegated sub-agent paused: the sub-agent's own
+          // tool call. Carried alongside the delegation call, which stays the resume key. Ignored
+          // unless the wrapper raised the pause, so a plain tool's suspend options can't set it.
+          const fromDelegate = suspendOptions?.isAgentSuspend === true;
+          const delegatedToolCallId =
+            fromDelegate && typeof suspendOptions?.delegatedToolCallId === 'string'
+              ? suspendOptions.delegatedToolCallId
+              : undefined;
+          const delegatedToolName =
+            fromDelegate && typeof suspendOptions?.delegatedToolName === 'string'
+              ? suspendOptions.delegatedToolName
+              : undefined;
           if (suspendOptions?.requireToolApproval) {
             const innerApproval =
               typeof suspendOptions.requireToolApproval === 'object' && suspendOptions.requireToolApproval
@@ -1477,6 +1500,8 @@ export function createDurableToolCallStep() {
               type: 'approval',
               resumeSchema: approvalResumeSchema,
               delegatedRunId,
+              delegatedToolCallId,
+              delegatedToolName,
               ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
             });
 
@@ -1492,6 +1517,8 @@ export function createDurableToolCallStep() {
                     toolCallId,
                     toolName: approvalToolName,
                     args: approvalArgs,
+                    ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+                    ...(delegatedToolName ? { delegatedToolName } : {}),
                     resumeSchema: approvalResumeSchema,
                     updatedAt: Date.now(),
                     usage: typedInput.stepUsage,
@@ -1548,6 +1575,8 @@ export function createDurableToolCallStep() {
             suspendPayload,
             resumeSchema: suspendOptions?.resumeSchema,
             delegatedRunId,
+            delegatedToolCallId,
+            delegatedToolName,
           });
 
           await doFlush();
@@ -1561,6 +1590,8 @@ export function createDurableToolCallStep() {
                 payload: {
                   toolCallId,
                   toolName,
+                  ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+                  ...(delegatedToolName ? { delegatedToolName } : {}),
                   suspendPayload,
                   args,
                   resumeSchema: suspendOptions?.resumeSchema,

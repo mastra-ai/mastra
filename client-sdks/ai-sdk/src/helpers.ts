@@ -292,6 +292,8 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
+          ...(chunk.payload.delegatedToolCallId ? { delegatedToolCallId: chunk.payload.delegatedToolCallId } : {}),
+          ...(chunk.payload.delegatedToolName ? { delegatedToolName: chunk.payload.delegatedToolName } : {}),
           args: hasTransformedToolPayload(displayApprovalTransform)
             ? displayApprovalTransform.transformed
             : chunk.payload.args,
@@ -307,6 +309,8 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
+          ...(chunk.payload.delegatedToolCallId ? { delegatedToolCallId: chunk.payload.delegatedToolCallId } : {}),
+          ...(chunk.payload.delegatedToolName ? { delegatedToolName: chunk.payload.delegatedToolName } : {}),
           suspendPayload: hasTransformedToolPayload(displaySuspendTransform)
             ? displaySuspendTransform.transformed
             : chunk.payload.suspendPayload,
@@ -323,6 +327,8 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
             runId: chunk.runId,
             toolCallId: chunk.payload.toolCallId,
             toolName: chunk.payload.toolName,
+            ...(chunk.payload.delegatedToolCallId ? { delegatedToolCallId: chunk.payload.delegatedToolCallId } : {}),
+            ...(chunk.payload.delegatedToolName ? { delegatedToolName: chunk.payload.delegatedToolName } : {}),
             args: hasTransformedToolPayload(displayApprovalTransform)
               ? displayApprovalTransform.transformed
               : chunk.payload.args,
@@ -339,6 +345,8 @@ export function convertMastraChunkToAISDKBase<OUTPUT = undefined>({
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
+          ...(chunk.payload.delegatedToolCallId ? { delegatedToolCallId: chunk.payload.delegatedToolCallId } : {}),
+          ...(chunk.payload.delegatedToolName ? { delegatedToolName: chunk.payload.delegatedToolName } : {}),
           suspendPayload: hasTransformedToolPayload(displaySuspendTransform)
             ? displaySuspendTransform.transformed
             : chunk.payload.suspendPayload,
@@ -595,6 +603,8 @@ export function convertMastraChunkToAISDKv6<OUTPUT = undefined>({
           runId: chunk.runId,
           toolCallId: chunk.payload.toolCallId,
           toolName: chunk.payload.toolName,
+          ...(chunk.payload.delegatedToolCallId ? { delegatedToolCallId: chunk.payload.delegatedToolCallId } : {}),
+          ...(chunk.payload.delegatedToolName ? { delegatedToolName: chunk.payload.delegatedToolName } : {}),
           args: hasTransformedToolPayload(displayTransform) ? displayTransform.transformed : chunk.payload.args,
           resumeSchema: chunk.payload.resumeSchema,
         },

@@ -1,5 +1,11 @@
 # @internal/core
 
+## 0.1.4
+
+### Patch Changes
+
+- Added a shared no-op logger and the shared agent filesystem-routing nesting limit. ([#28428](https://github.com/mastra-ai/mastra/pull/28428))
+
 ## 0.1.4-alpha.0
 
 ### Patch Changes

@@ -63,6 +63,8 @@ Provider responses that carry credentials an agent never needs, such as webhook 
 
 Templates that read `connection.credentials` get their `getConnection()` calls rewritten to `getConnectionWithCredentials()`, which fetches the raw credential from the platform's credential endpoint (the same one `credential()` uses). Every other exec receives a connection context without credentials, so only actions that genuinely need the secret ever see it.
 
+Some templates follow an input value as a raw proxy endpoint, such as a Microsoft Graph `@odata.nextLink` cursor. List those fields per action in `INPUT_FIELD_PATTERNS` in `generate-provider.ts`, keyed by `<providerId>/<actionSlug>`, with the pattern a legitimate value must match. The generated tool re-declares each field as `z.string().regex(...)`, so the constraint appears in the JSON schema the model sees and a value for any other endpoint fails validation before the proxy is called. `src/__tests__/microsoft-excel-cursors.test.ts` covers the Excel cursors.
+
 Generated code never references the upstream SDK: exec bodies receive a `platformProxy` context (`PlatformProxy` in `src/runtime/platform-proxy.ts`) that routes every request through the Mastra platform's `/v2/proxy` endpoint. Provider-specific generator overrides can also attach model-output adapters when raw provider output needs a safer model-facing representation, such as image data that should be sent as multimodal content instead of JSON text.
 
 ## Remove a provider

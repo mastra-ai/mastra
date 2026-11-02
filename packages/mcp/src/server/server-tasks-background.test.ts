@@ -5,12 +5,14 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/background-tasks';
 import { Mastra } from '@mastra/core/mastra';
 import type { SpanRecord } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { LibSQLStore } from '@mastra/libsql';
 import { DefaultExporter, Observability } from '@mastra/observability';
 import type { Client } from '@modelcontextprotocol/client';
@@ -19,7 +21,7 @@ import { z } from 'zod/v4';
 import { TaskRequester } from '../client/tasks/requester';
 import { taskKeyOf, tasksCapabilityEntry } from '../shared/tasks';
 import type { MCPDetailedTask } from '../shared/tasks';
-import { authFor, makeCrashy, runsIn } from './__tests__/background-tasks.mock';
+import { authFor, makeCrashy, makeNightly, runsIn, stepsIn } from './__tests__/background-tasks.mock';
 import { connectClient, rawRequest, serveHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
 import type { MCPServerConfig } from './server';
@@ -38,6 +40,85 @@ class User {
 
 interface Probe {
   runs: Array<{ tool: string; resumeData: unknown }>;
+}
+
+/** A release: `prepare` (a side effect), then `ask` who approves. Records every step start in `probe`. */
+function makeApproval(probe: Probe) {
+  return createWorkflow({
+    id: 'approval',
+    description: 'Prepares a release, then asks who approves it',
+    inputSchema: z.object({ release: z.string() }),
+    outputSchema: z.object({ outcome: z.string() }),
+  })
+    .then(
+      createStep({
+        id: 'prepare',
+        inputSchema: z.object({ release: z.string() }),
+        outputSchema: z.object({ release: z.string() }),
+        execute: async ({ inputData }) => {
+          probe.runs.push({ tool: 'prepare', resumeData: undefined });
+          return inputData;
+        },
+      }),
+    )
+    .then(
+      createStep({
+        id: 'ask',
+        inputSchema: z.object({ release: z.string() }),
+        outputSchema: z.object({ outcome: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ approver: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          probe.runs.push({ tool: 'ask', resumeData });
+          if (!resumeData) return suspend({ message: `Who approves ${inputData.release}?` });
+          return { outcome: `${inputData.release} approved by ${resumeData.approver}` };
+        },
+      }),
+    )
+    .commit();
+}
+
+/** Runs one step for a while, unless aborted. */
+function makeSlow(probe: Probe) {
+  return createWorkflow({
+    id: 'slow',
+    description: 'Runs one long step',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+  })
+    .then(
+      createStep({
+        id: 'long',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ abortSignal }) => {
+          await new Promise<void>(resolve => {
+            const timer = setTimeout(resolve, LEASE_MS * 1.5);
+            abortSignal.addEventListener('abort', () => (clearTimeout(timer), resolve()), { once: true });
+          });
+          probe.runs.push({ tool: 'long', resumeData: abortSignal.aborted ? 'aborted' : 'done' });
+          return {};
+        },
+      }),
+    )
+    .commit();
+}
+
+function makeResearcher() {
+  return new Agent({
+    id: 'researcher',
+    name: 'researcher',
+    description: 'Researches a topic',
+    instructions: 'Research',
+    model: new MockLanguageModelV2({
+      doGenerate: async () => ({
+        content: [{ type: 'text', text: 'found it' }],
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        warnings: [],
+      }),
+    }),
+  });
 }
 
 function makeTools(probe: Probe, counterFile: string) {
@@ -510,34 +591,34 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     expect(runsIn(counterFile)).toBe(2);
   });
 
+  /** Spans go to the shared storage, as Studio reads them. */
+  const traced = () => ({
+    mastraExtra: {
+      observability: new Observability({
+        configs: { default: { serviceName: 'tasks', exporters: [new DefaultExporter({ maxBatchWaitMs: 20 })] } },
+      }),
+    },
+  });
+
+  /** Every stored span of every trace storage lists. */
+  async function storedSpans(mastra: Mastra): Promise<SpanRecord[]> {
+    const store = (await mastra.getStorage()!.getStore('observability'))!;
+    await mastra.observability.getSelectedInstance({})?.flush();
+    const { spans: roots } = await store.listTraces({ pagination: { page: 0, perPage: 100 } });
+    const traces = await Promise.all(roots.map(root => store.getTrace({ traceId: root.traceId })));
+    return traces.flatMap(trace => trace?.spans ?? []);
+  }
+
+  async function spanNamed(mastra: Mastra, name: string) {
+    for (let i = 0; i < 100; i++) {
+      const span = (await storedSpans(mastra)).find(span => span.name === name && span.endedAt);
+      if (span) return span;
+      await sleep(50);
+    }
+    throw new Error(`no stored span "${name}"`);
+  }
+
   describe('tracing', () => {
-    /** Spans go to the shared storage, as Studio reads them. */
-    const traced = () => ({
-      mastraExtra: {
-        observability: new Observability({
-          configs: { default: { serviceName: 'tasks', exporters: [new DefaultExporter({ maxBatchWaitMs: 20 })] } },
-        }),
-      },
-    });
-
-    /** Every stored span of every trace storage lists. */
-    async function storedSpans(mastra: Mastra): Promise<SpanRecord[]> {
-      const store = (await mastra.getStorage()!.getStore('observability'))!;
-      await mastra.observability.getSelectedInstance({})?.flush();
-      const { spans: roots } = await store.listTraces({ pagination: { page: 0, perPage: 100 } });
-      const traces = await Promise.all(roots.map(root => store.getTrace({ traceId: root.traceId })));
-      return traces.flatMap(trace => trace?.spans ?? []);
-    }
-
-    async function spanNamed(mastra: Mastra, name: string) {
-      for (let i = 0; i < 100; i++) {
-        const span = (await storedSpans(mastra)).find(span => span.name === name && span.endedAt);
-        if (span) return span;
-        await sleep(50);
-      }
-      throw new Error(`no stored span "${name}"`);
-    }
-
     it('keeps an attempt recovered on a peer in the trace of the call that created the task', async () => {
       const tasks = { tools: { crashy: { mode: 'always' as const, recover: true } } };
       const b = await instance(tasks, traced());
@@ -891,21 +972,40 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
   });
 
   it("stores neither the task id, the bearer token nor the caller's principal, and still serves the task to that caller alone", async () => {
-    const a = await instance({ tools: { approve: 'always' } });
-    const b = await instance({ tools: { approve: 'always' } });
+    const tasks = { tools: { approve: 'always' as const }, workflows: { approval: 'always' as const } };
+    const extra = { workflows: { approval: makeApproval(probe) }, agents: { researcher: makeResearcher() } };
+    const a = await instance({ ...tasks, agents: { researcher: 'always' } }, { extra });
+    const b = await instance({ ...tasks, agents: { researcher: 'always' } }, { extra });
     const taskId = await call(a.url, 'approve', { item: 'invoice' });
     const waiting = await waitFor(await requester(b.url), taskId, 'input_required');
+    const workflowTask = await call(a.url, 'run_approval', { release: 'v6' });
+    await waitFor(await requester(b.url), workflowTask, 'input_required');
+    const agentTask = await call(a.url, 'ask_researcher', { message: 'look' });
+    await waitFor(await requester(b.url), agentTask, 'completed');
 
     // What `principalOf` resolves for alice's token (no subject, no user).
     const principal = `alice:token:${createHash('sha256').update('alice-token').digest('base64url')}`;
-    const [row] = await rows(a.mastra);
-    expect(row!.resourceId).toMatch(/^mcp-server:tasks:/);
-    for (const stored of [row!.resourceId, row!.metadata, row!.args, row]) {
-      const text = JSON.stringify(stored);
-      expect(text).not.toContain(taskId);
-      expect(text).not.toContain('alice-token');
-      expect(text).not.toContain(principal);
+    const all = await rows(a.mastra);
+    expect(all.map(row => row.toolName).sort()).toEqual([
+      'mcp-server:tasks:approve',
+      'mcp-server:tasks:ask_researcher',
+      'mcp-server:tasks:run_approval',
+    ]);
+    for (const row of all) {
+      expect(row.resourceId).toMatch(/^mcp-server:tasks:/);
+      for (const stored of [row.resourceId, row.metadata, row.args, row]) {
+        const text = JSON.stringify(stored);
+        for (const id of [taskId, workflowTask, agentTask]) expect(text).not.toContain(id);
+        expect(text).not.toContain('alice-token');
+        expect(text).not.toContain(principal);
+      }
     }
+    // Cancelling the workflow task by its hashed row still reaches the run waiting for input.
+    await (await requester(b.url)).cancel(workflowTask);
+    await vi.waitFor(async () => {
+      const { runs } = await a.mastra.getWorkflow('approval').listWorkflowRuns();
+      expect((await a.mastra.getWorkflow('approval').getWorkflowRunById(runs[0]!.runId))!.status).toBe('canceled');
+    });
 
     // Another caller gets the same "not found" from either instance, and can't answer or cancel.
     const [key] = Object.keys(waiting.inputRequests ?? {});
@@ -930,22 +1030,33 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     },
   ])('labels the row with the client that sent the task ($form)', async ({ headers, label, mapsUser }) => {
     const a = await instance(
-      { tools: { echo: 'always' } },
-      mapsUser
-        ? {
-            extra: {
-              mapAuthInfoToUser: ({ authInfo }: { authInfo: { clientId: string } }) => ({
-                id: `user-${authInfo.clientId}`,
-              }),
-            },
-          }
-        : {},
+      { tools: { echo: 'always' }, workflows: { approval: 'always' }, agents: { researcher: 'always' } },
+      {
+        extra: {
+          workflows: { approval: makeApproval(probe) },
+          agents: { researcher: makeResearcher() },
+          ...(mapsUser && {
+            mapAuthInfoToUser: ({ authInfo }: { authInfo: { clientId: string } }) => ({
+              id: `user-${authInfo.clientId}`,
+            }),
+          }),
+        },
+      },
     );
-    const taskId = await call(a.url, 'echo', { text: 'hi' }, headers);
-    await waitFor(await requester(a.url, 'alice', headers), taskId, 'completed');
-    const [row] = await rows(a.mastra);
-    expect(row!.metadata).toMatchObject({ clientLabel: label });
-    expect(JSON.stringify(row)).not.toContain('alice-token');
+    const tasks = await requester(a.url, 'alice', headers);
+    await waitFor(tasks, await call(a.url, 'echo', { text: 'hi' }, headers), 'completed');
+    await waitFor(tasks, await call(a.url, 'run_approval', { release: 'v7' }, headers), 'input_required');
+    await waitFor(tasks, await call(a.url, 'ask_researcher', { message: 'look' }, headers), 'completed');
+    const all = await rows(a.mastra);
+    expect(all.map(row => row.toolName).sort()).toEqual([
+      'mcp-server:tasks:ask_researcher',
+      'mcp-server:tasks:echo',
+      'mcp-server:tasks:run_approval',
+    ]);
+    for (const row of all) {
+      expect(row.metadata).toMatchObject({ clientLabel: label });
+      expect(JSON.stringify(row)).not.toContain('alice-token');
+    }
   });
 
   /**
@@ -1099,5 +1210,232 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     await waitFor(await requester(a.url), taskId, 'completed');
     expect(await rows(a.mastra)).toEqual([]);
     store.close();
+  });
+
+  describe('workflow tasks', () => {
+    const tasks = { workflows: { approval: 'always' as const, nightly: 'always' as const, slow: 'always' as const } };
+    const workflowInstance = (options: { mastraExtra?: Record<string, unknown> } = {}) =>
+      instance(tasks, {
+        ...options,
+        extra: {
+          workflows: {
+            approval: makeApproval(probe),
+            nightly: makeNightly(`${counterFile}.nightly`),
+            slow: makeSlow(probe),
+          },
+        },
+      });
+    const stepRuns = (step: string) => probe.runs.filter(run => run.tool === step);
+
+    async function onlyRun(mastra: Mastra, key: string) {
+      const workflow = mastra.getWorkflow(key);
+      const { runs, total } = await workflow.listWorkflowRuns();
+      expect(total).toBe(1);
+      return (await workflow.getWorkflowRunById(runs[0]!.runId))!;
+    }
+
+    // B leaves a running run alone, since a `canceled` written from B would only be overwritten by
+    // A's run. Core aborts A's attempt once its row reads cancelled, and A then cancels its own run.
+    it('stops a running run on one instance when another instance cancels its task', async () => {
+      const a = await workflowInstance();
+      const b = await workflowInstance();
+      const taskId = await call(a.url, 'run_slow');
+      const onB = await requester(b.url);
+      await vi.waitFor(async () => expect((await onlyRun(a.mastra, 'slow')).status).toBe('running'));
+      await onB.cancel(taskId);
+      expect(await onB.get(taskId)).toMatchObject({ status: 'cancelled' });
+      await sleep(LEASE_MS * 2);
+      expect(stepRuns('long')).toEqual([{ tool: 'long', resumeData: 'aborted' }]);
+      expect((await onlyRun(a.mastra, 'slow')).status).toBe('canceled');
+    });
+
+    /** The stored spans of one trace. */
+    async function traceOf(mastra: Mastra, traceId: string) {
+      const store = (await mastra.getStorage()!.getStore('observability'))!;
+      return (await store.getTrace({ traceId }))?.spans ?? [];
+    }
+
+    it('keeps a workflow task answered on a peer in one trace: the run, tasks/update, and the run resumed there', async () => {
+      const a = await workflowInstance(traced());
+      const b = await workflowInstance(traced());
+      const taskId = await call(a.url, 'run_approval', { release: 'v6' });
+      const onB = await requester(b.url);
+      const waiting = await waitFor(onB, taskId, 'input_required');
+      const [key] = Object.keys(waiting.inputRequests!);
+      await onB.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+      await waitFor(onB, taskId, 'completed');
+
+      const root = await spanNamed(b.mastra, 'tools/call run_approval');
+      const resumedOnB = await spanNamed(b.mastra, 'task attempt run_approval #2');
+      const resumedRun = await spanNamed(b.mastra, "workflow run: 'approval' (resumed)");
+      await a.mastra.observability.getSelectedInstance({})?.flush();
+      const run = await spanNamed(a.mastra, "workflow run: 'approval'");
+      const update = await spanNamed(b.mastra, 'tasks/update');
+      expect(root).toMatchObject({ parentSpanId: null, metadata: { mcpTaskKey: taskKeyOf(taskId) } });
+      expect(run).toMatchObject({ traceId: root.traceId });
+      expect(update).toMatchObject({ traceId: root.traceId, parentSpanId: root.spanId });
+      expect(resumedOnB).toMatchObject({
+        traceId: root.traceId,
+        parentSpanId: root.spanId,
+        metadata: { attempt: 2, resumed: true, mcpTaskStatus: 'completed' },
+      });
+      expect(resumedRun).toMatchObject({ traceId: root.traceId, parentSpanId: resumedOnB.spanId });
+      // One trace for the whole task, and the task id in none of its spans.
+      expect((await storedSpans(b.mastra)).filter(span => span.traceId !== root.traceId)).toEqual([]);
+      expect(JSON.stringify(await traceOf(b.mastra, root.traceId))).not.toContain(taskId);
+    });
+
+    it('leaves a run alone when its server shuts down mid-step, so the task completes with it on a peer', async () => {
+      const a = await workflowInstance(traced());
+      const b = await workflowInstance(traced());
+      const taskId = await call(a.url, 'run_slow');
+      await vi.waitFor(async () => expect((await onlyRun(b.mastra, 'slow')).status).toBe('running'));
+      // A shuts down its background tasks (as `mastra.shutdown()` does first): that aborts A's
+      // attempt and releases its lease, which is not a cancel, so the run must go on.
+      await a.mastra.backgroundTaskManager!.shutdown();
+      // As the deployer does on boot: continues the run once A's run lease lapses.
+      await b.mastra.restartAllActiveWorkflowRuns();
+      const done = await waitFor(await requester(b.url), taskId, 'completed', 60_000);
+      expect(done.result).toMatchObject({ isError: false });
+      expect((await onlyRun(b.mastra, 'slow')).status).toBe('success');
+
+      // The peer follows the run in the task's trace, which the run itself never left.
+      const root = await spanNamed(b.mastra, 'tools/call run_slow');
+      const followed = await spanNamed(b.mastra, 'task attempt run_slow #2');
+      await a.mastra.observability.getSelectedInstance({})?.flush();
+      const run = await spanNamed(a.mastra, "workflow run: 'slow'");
+      expect(followed).toMatchObject({
+        traceId: root.traceId,
+        parentSpanId: root.spanId,
+        metadata: { attempt: 2, recovered: true, mcpTaskStatus: 'completed' },
+      });
+      expect(run).toMatchObject({ traceId: root.traceId });
+    }, 90_000);
+
+    it('leaves a run alone when its server loses the task to another worker, so the task still completes', async () => {
+      const a = await workflowInstance();
+      const taskId = await call(a.url, 'run_slow');
+      await vi.waitFor(async () => expect((await onlyRun(a.mastra, 'slow')).status).toBe('running'));
+      // Another worker takes the row over: A's heartbeat aborts A's attempt as superseded.
+      const [row] = (await rows(a.mastra)).filter(r => r.toolName === 'mcp-server:tasks:run_slow');
+      const storage = await a.mastra.backgroundTaskManager!.getStorage();
+      await storage.updateTask(row!.id, { ownerId: 'someone-else', leaseExpiresAt: new Date(Date.now() + LEASE_MS) });
+
+      // That worker never renews, so the row is reclaimed and the task follows the run again.
+      const done = await waitFor(await requester(a.url), taskId, 'completed', 30_000);
+      expect(done.result).toMatchObject({ isError: false });
+      expect((await onlyRun(a.mastra, 'slow')).status).toBe('success');
+      expect(stepRuns('long')).toEqual([{ tool: 'long', resumeData: 'done' }]);
+    });
+
+    it('asks on one instance for a run another started, and resumes that run once with the answer', async () => {
+      const a = await workflowInstance();
+      const b = await workflowInstance();
+      const taskId = await call(a.url, 'run_approval', { release: 'v2' });
+      const onB = await requester(b.url);
+      const waiting = await waitFor(onB, taskId, 'input_required');
+      const [key] = Object.keys(waiting.inputRequests ?? {});
+      await onB.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+
+      const done = await waitFor(await requester(a.url), taskId, 'completed');
+      expect(JSON.parse((done.result as any).content[0].text)).toMatchObject({
+        status: 'success',
+        result: { outcome: 'v2 approved by bob' },
+      });
+      expect(stepRuns('prepare')).toHaveLength(1);
+      expect(stepRuns('ask').map(run => run.resumeData)).toEqual([undefined, { approver: 'bob' }]);
+      expect((await onlyRun(b.mastra, 'approval')).status).toBe('success');
+    });
+
+    it('resumes the run once when two instances take the same answer at once', async () => {
+      const a = await workflowInstance();
+      const b = await workflowInstance();
+      const onA = await requester(a.url);
+      const onB = await requester(b.url);
+      const taskId = await call(a.url, 'run_approval', { release: 'v3' });
+      const [key] = Object.keys((await waitFor(onA, taskId, 'input_required')).inputRequests ?? {});
+      const answer = { [key!]: { action: 'accept' as const, content: { approver: 'bob' } } };
+      await Promise.allSettled([onA.update(taskId, answer), onB.update(taskId, answer)]);
+
+      const done = await waitFor(onA, taskId, 'completed');
+      // The losing resume follows the winner's run instead of failing the task.
+      expect(JSON.parse((done.result as any).content[0].text)).toMatchObject({
+        status: 'success',
+        result: { outcome: 'v3 approved by bob' },
+      });
+      expect(stepRuns('ask').map(run => run.resumeData)).toEqual([undefined, { approver: 'bob' }]);
+      expect(stepRuns('prepare')).toHaveLength(1);
+    });
+
+    it('follows a run resumed outside MCP instead of resuming it again when the answer arrives', async () => {
+      const a = await workflowInstance();
+      const onA = await requester(a.url);
+      const taskId = await call(a.url, 'run_approval', { release: 'v5' });
+      const [key] = Object.keys((await waitFor(onA, taskId, 'input_required')).inputRequests ?? {});
+      // Someone answers in Studio first.
+      const { runs } = await a.mastra.getWorkflow('approval').listWorkflowRuns();
+      const run = await a.mastra.getWorkflow('approval').createRun({ runId: runs[0]!.runId });
+      await run.resume({ step: 'ask', resumeData: { approver: 'studio' } });
+
+      await onA.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+      const done = await waitFor(onA, taskId, 'completed');
+      expect(done.result).toMatchObject({ isError: false });
+      expect(JSON.parse((done.result as any).content[0].text)).toMatchObject({
+        status: 'success',
+        result: { outcome: 'v5 approved by studio' },
+      });
+      expect(stepRuns('ask').map(r => r.resumeData)).toEqual([undefined, { approver: 'studio' }]);
+    });
+
+    it('cancels a run waiting for input from the instance that did not start it', async () => {
+      const a = await workflowInstance();
+      const b = await workflowInstance();
+      const taskId = await call(a.url, 'run_approval', { release: 'v4' });
+      const onB = await requester(b.url);
+      await waitFor(onB, taskId, 'input_required');
+      await onB.cancel(taskId);
+      expect((await onB.get(taskId)).status).toBe('cancelled');
+      await vi.waitFor(async () => expect((await onlyRun(a.mastra, 'approval')).status).toBe('canceled'));
+    });
+
+    // The boot sweep restarts a crashed run as a trace of its own, by design (durable workflows cover
+    // tracing across a crash); the task's attempt that follows the run stays in the task's trace.
+    it('keeps the attempt following a run that workflow recovery restarted in the task trace', async () => {
+      const stepsFile = `${counterFile}.nightly`;
+      const dying = await child(false, 'default', 'always', true);
+      const taskId = await call(dying.url, 'run_nightly', { day: 'tuesday' });
+      await until(() => stepsIn(stepsFile).includes('crunch'));
+      dying.process.kill('SIGKILL');
+
+      const survivor = await workflowInstance(traced());
+      void survivor.mastra.restartAllActiveWorkflowRuns();
+      await waitFor(await requester(survivor.url), taskId, 'completed', 50_000);
+      const root = await spanNamed(survivor.mastra, 'tools/call run_nightly');
+      const followed = await spanNamed(survivor.mastra, 'task attempt run_nightly #2');
+      expect(followed).toMatchObject({ traceId: root.traceId, metadata: { recovered: true } });
+      // Any trace the restarted run records is its own, so only check that it was recorded.
+      await spanNamed(survivor.mastra, "workflow run: 'nightly'");
+    }, 90_000);
+
+    it('completes a run whose server died mid-step once workflow recovery continues it, without running it twice', async () => {
+      const stepsFile = `${counterFile}.nightly`;
+      const dying = await child(false);
+      const taskId = await call(dying.url, 'run_nightly', { day: 'monday' });
+      await until(() => stepsIn(stepsFile).includes('crunch'));
+      dying.process.kill('SIGKILL');
+
+      // The next instance boots like a deployed server: Mastra recovers the workflow runs it finds.
+      const survivor = await workflowInstance();
+      void survivor.mastra.restartAllActiveWorkflowRuns();
+      const done = await waitFor(await requester(survivor.url), taskId, 'completed', 50_000);
+      expect(done.result).toMatchObject({ isError: false });
+      expect(JSON.parse((done.result as any).content[0].text)).toMatchObject({
+        status: 'success',
+        result: { summary: 'crunched monday' },
+      });
+      expect((await onlyRun(survivor.mastra, 'nightly')).status).toBe('success');
+      // `fetch` finished before the crash and is not run again; the interrupted step runs again.
+      expect(stepsIn(stepsFile)).toEqual(['fetch', 'crunch', 'crunch']);
+    }, 90_000);
   });
 });

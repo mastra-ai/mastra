@@ -606,6 +606,43 @@ console.log(errors, errorDetails, durations)
 
 When called without options, the method omits only `durations`; `toolsets`, `errors`, and `errorDetails` are always returned.
 
+#### Report each server as it settles
+
+The returned promise resolves only after every server finishes, so one slow server delays the whole result. Pass `onServerSettled` to handle each server as soon as its discovery succeeds, fails, or times out. The callback receives the server name and either `value` (that server's tools, keyed by the server's own tool names) or `error`, plus `duration` in milliseconds. This option is also available on `listToolsWithErrors()` and `listToolDefinitionsWithErrors()`.
+
+```typescript
+await mcp.listToolsetsWithErrors({
+  perServerTimeoutMs: 60_000,
+  onServerSettled: (serverName, { value, error, duration }) => {
+    if (error) {
+      console.error(`${serverName} failed after ${duration}ms: ${error.message}`)
+    } else {
+      console.log(`${serverName} ready with ${Object.keys(value).length} tools`)
+    }
+  },
+})
+```
+
+Errors thrown by the callback are logged and don't affect discovery. The same is true for an `async` callback that rejects: the rejection is logged and never becomes an unhandled rejection.
+
+#### Discover only some servers
+
+Pass `serverNames` to discover only the named servers, for example to retry the ones that timed out without starting every other server again. Names that aren't configured are ignored. This option is also available on `listToolsWithErrors()` and `listToolDefinitionsWithErrors()`.
+
+```typescript
+const { errorDetails } = await mcp.listToolsetsWithErrors({ perServerTimeoutMs: 3_000 })
+
+// Only servers that timed out are worth retrying. A server that failed for
+// another reason (bad config, auth refused) will just fail again.
+const timedOut = Object.entries(errorDetails)
+  .filter(([, details]) => details.code === MCP_DISCOVERY_TIMEOUT_CODE)
+  .map(([serverName]) => serverName)
+
+const retry = await mcp.listToolsetsWithErrors({ serverNames: timedOut })
+```
+
+`MCP_DISCOVERY_TIMEOUT_CODE` is exported from `@mastra/mcp`. It marks the errors that `perServerTimeoutMs` produced, so you can tell a slow server apart from a broken one.
+
 ### `listToolDefinitions()`
 
 Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).
@@ -1474,6 +1511,7 @@ When a tool call returns a task, the tool keeps its usual shape:
 - The tool call span gets `mcpTaskKey` metadata: a SHA-256 hash of the task id. A Mastra server tags its spans for the task with the same key, so you can match both sides and the task id stays out of both traces.
 - A tool error inside a finished task is handled like a direct tool error, following `onToolError`. A task the server cancelled fails with `MCP_CLIENT_TOOL_TASK_CANCELLED`, and a task the server marked `failed` fails with `MCP_CLIENT_TOOL_TASK_FAILED`.
 - A call that returned a task is never retried, because a retry would start a second task.
+- When the call continues as a task, and whenever the task's status changes, the tool writes an `MCPTaskProgress` entry (`{ type: 'mcp-task', taskId, status, createdAt, serverName }`) to its output stream. Studio's tool-call card uses it to show the task's status, elapsed time and MCP task id while it runs. Tool output isn't saved with the thread. After a reload, the card shows only the result.
 
 On an agent with [background tasks](/docs/harness/background-tasks) enabled, tools from a server with `tasks` set run as deferred background tasks with no retries. The agent keeps working while the remote task runs, and cancelling the background task cancels the remote task. Override this per tool with the agent's `backgroundTasks.tools`.
 

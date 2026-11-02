@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.16.1-alpha.1",
+  "version": "1.18.0-alpha.0",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -57,7 +57,7 @@
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.21.1",
-    "@ai-sdk/amazon-bedrock": "^5.0.124",
+    "@ai-sdk/amazon-bedrock": "^5.0.125",
     "@ai-sdk/anthropic": "4.0.82",
     "@ai-sdk/openai": "4.0.96",
     "@ai-sdk/openai-compatible": "3.0.71",

@@ -12,6 +12,12 @@ When you configure [authentication](/docs/auth/overview) on your Mastra server, 
 Without authentication, Studio and all API routes are publicly accessible.
 
 :::note
+
+In production, the Studio sign-in screen with a third-party provider, role-based access control (RBAC), and fine-grained authorization (FGA) require a Mastra Enterprise Edition (EE) license. Simple Auth, JWT, and authentication on API routes don't. Every feature works without a license in development. See [what requires an EE license](/docs/license#what-requires-an-ee-license). [Contact sales](https://mastra.ai/contact) for more information.
+
+:::
+
+:::note
 Studio deployed on Mastra platform works differently. By default, the platform injects its own auth so only your organization members can sign in, and your `server.auth` applies to API routes only. Set `MASTRA_PLATFORM_STUDIO_AUTH=disabled` to opt out. See [Authentication on Mastra platform](/docs/mastra-platform/studio#authentication).
 :::
 
@@ -159,10 +165,6 @@ Studio adapts its login screen based on the auth provider:
 | Both | SSO button and email/password form |
 
 Sign-up can be enabled or disabled per provider. When disabled, Studio hides the sign-up link and forces the sign-in form.
-
-## EE licensing
-
-Studio Auth features (SSO login, RBAC, permission-based UI) are part of the Mastra Enterprise Edition. A license is optional when using Simple Auth or running locally. Production deployments with third-party providers require a valid EE license from [Mastra sales](https://mastra.ai/contact).
 
 ## Related
 

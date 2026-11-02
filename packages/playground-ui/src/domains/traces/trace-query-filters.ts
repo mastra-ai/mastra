@@ -66,7 +66,11 @@ const TRACE_FILTER_OPERATOR_TO_QUERY_OP = {
 /** Fields whose values must be sent as numbers. Non-numeric input is dropped. */
 export const TRACE_QUERY_NUMERIC_FIELD_IDS = new Set([
   'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
   'spans.durationMs',
+  'spans.timeToFirstChunkMs',
+  'spans.timeToFirstTokenMs',
   'scores.score',
   'feedback.value',
 ]);
@@ -80,6 +84,8 @@ const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
   'threadId',
   'resourceId',
   'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
   'outcome',
   'stopReason',
 ]);
@@ -91,6 +97,8 @@ export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set([
   'resourceId',
   'environment',
   'durationMs',
+  'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
   'outcome',
   'stopReason',
 ]);

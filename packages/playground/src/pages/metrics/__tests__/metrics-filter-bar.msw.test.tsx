@@ -78,7 +78,7 @@ const renderPage = (path = '/metrics') =>
 
 const renderSettledPage = async (path?: string) => {
   const result = renderPage(path);
-  await screen.findByRole('heading', { name: 'Agent runs' });
+  await screen.findByRole('button', { name: 'Token usage' });
   await waitFor(() => expect(result.queryClient.isFetching()).toBe(0));
   return result;
 };

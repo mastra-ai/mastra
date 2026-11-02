@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
-import { deriveAgentRunRequestContext, resolveAgentScopes, withoutIdentityAgentScopes } from '../scopes';
+import {
+  applyAgentScopesConfig,
+  deriveAgentRunRequestContext,
+  incomingAgentScopes,
+  resolveAgentScopes,
+  withoutIdentityAgentScopes,
+} from '../scopes';
 
 function contextWith(entries: Record<string, unknown>) {
   return new RequestContext(Object.entries(entries));
@@ -16,14 +22,48 @@ function conflict(fn: () => unknown) {
 }
 
 describe('resolveAgentScopes', () => {
-  describe('union', () => {
-    it('unions reserved key, Agent config and call scopes, de-duped in source order', () => {
-      const result = resolveAgentScopes({
-        requestContext: contextWith({ [MASTRA_SCOPES_KEY]: ['org:acme', 'team:core'] }),
-        agentScopes: ['team:core', 'region:eu'],
-        callScopes: ['org:acme', 'project:p1'],
+  describe('incoming scopes and the Agent scopes option', () => {
+    const requestContext = contextWith({ [MASTRA_SCOPES_KEY]: ['org:acme', 'team:core'] });
+    const incoming = () => incomingAgentScopes({ requestContext, callScopes: ['org:acme', 'project:p1'] });
+
+    it('unions the reserved key and call scopes, de-duped in source order, with no Agent option', async () => {
+      const agentScopes = await applyAgentScopesConfig(undefined, { scopes: incoming(), requestContext });
+      const result = resolveAgentScopes({ requestContext, agentScopes, callScopes: ['org:acme', 'project:p1'] });
+      expect(result.scopes).toEqual(['org:acme', 'team:core', 'project:p1']);
+    });
+
+    it('adds a static list to the incoming scopes', async () => {
+      const agentScopes = await applyAgentScopesConfig(['team:core', 'region:eu'], {
+        scopes: incoming(),
+        requestContext,
       });
-      expect(result.scopes).toEqual(['org:acme', 'team:core', 'region:eu', 'project:p1']);
+      const result = resolveAgentScopes({ requestContext, agentScopes, callScopes: ['org:acme', 'project:p1'] });
+      expect(result.scopes).toEqual(['org:acme', 'team:core', 'project:p1', 'region:eu']);
+    });
+
+    it('replaces the incoming scopes with what a function returns', async () => {
+      let seen: unknown;
+      const agentScopes = await applyAgentScopesConfig(
+        ({ scopes }) => {
+          seen = scopes;
+          return ['audience:acme:public'];
+        },
+        { scopes: incoming(), requestContext },
+      );
+      expect(seen).toEqual(['org:acme', 'team:core', 'project:p1']);
+      const result = resolveAgentScopes({ requestContext, agentScopes, callScopes: ['org:acme', 'project:p1'] });
+      expect(result.scopes).toEqual(['audience:acme:public']);
+    });
+
+    it('refuses a function result that drops a resource: or thread: scope it was given', () => {
+      for (const scope of ['resource:u1', 'thread:t1']) {
+        expect(
+          conflict(() => resolveAgentScopes({ agentScopes: ['org:acme'], callScopes: [scope, 'org:acme'] })),
+        ).toMatchObject({ id: 'AGENT_SCOPES_INVALID', status: 400 });
+      }
+      expect(
+        resolveAgentScopes({ agentScopes: ['resource:u1'], callScopes: ['resource:u1', 'org:acme'] }).scopes,
+      ).toEqual(['resource:u1']);
     });
 
     it('accepts arbitrary scope types and resource/thread-only sets', () => {
@@ -70,7 +110,7 @@ describe('resolveAgentScopes', () => {
       expect(
         conflict(() =>
           resolveAgentScopes({
-            agentScopes: ['thread:a'],
+            callScopes: ['thread:a'],
             requestContext: contextWith({ [MASTRA_SCOPES_KEY]: ['thread:b'] }),
           }),
         ),
@@ -172,7 +212,11 @@ describe('resolveAgentScopes', () => {
         memory: { resource: 'mem-r' },
         callScopes: ['org:acme'],
       });
-      expect(result).toEqual({ scopes: ['org:acme'], resourceId: 'ctx-r', threadId: undefined });
+      expect(result).toEqual({
+        scopes: ['org:acme'],
+        resourceId: 'ctx-r',
+        threadId: undefined,
+      });
     });
   });
 
@@ -180,7 +224,11 @@ describe('resolveAgentScopes', () => {
     const snapshot = { resourceId: 'u1', threadId: 't1', scopes: ['org:a', 'resource:u1', 'thread:t1', 'team:core'] };
 
     it('uses the snapshot set when nothing is re-supplied', () => {
-      expect(resolveAgentScopes({ snapshot })).toEqual({ scopes: snapshot.scopes, resourceId: 'u1', threadId: 't1' });
+      expect(resolveAgentScopes({ snapshot })).toEqual({
+        scopes: snapshot.scopes,
+        resourceId: 'u1',
+        threadId: 't1',
+      });
     });
 
     it('accepts a re-supplied subset and keeps the full snapshot set', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { chartYTickCount, labelWidth, niceYTicks, pickTimeTicks } from './chart-axes';
+import { chartYTickCount, edgeDateLabels, labelWidth, niceYTicks, pickTimeTicks } from './chart-axes';
 
 const HOUR = 3_600_000;
 const start = new Date(2026, 9, 5, 14).getTime();
@@ -205,5 +205,34 @@ describe('niceYTicks', () => {
     expect(niceYTicks(0, 5)).toBeUndefined();
     expect(niceYTicks(-3, 5)).toBeUndefined();
     expect(niceYTicks(Number.NaN, 5)).toBeUndefined();
+  });
+});
+
+describe('edgeDateLabels', () => {
+  const HOUR = 3_600_000;
+  /** Hourly buckets from `start` (local time), `count` of them. */
+  const hourly = (start: Date, count: number) => Array.from({ length: count }, (_, i) => start.getTime() + i * HOUR);
+
+  it('labels the ends by date alone when a rolling range starts and ends at the same hour', () => {
+    // Last 24 hours at 5 PM: 25 hourly buckets, Oct 28 5 PM to Oct 29 5 PM.
+    const labels = edgeDateLabels(hourly(new Date(2026, 9, 28, 17), 25), 'edges');
+    expect([...labels]).toEqual([
+      [0, 'Oct 28'],
+      [24, 'Oct 29'],
+    ]);
+  });
+
+  it('keeps the hours when the ends fall on the same day', () => {
+    expect(edgeDateLabels(hourly(new Date(2026, 9, 29, 9), 7), 'edges').size).toBe(0);
+  });
+
+  it('keeps the hours when the ends fall at different hours', () => {
+    expect(edgeDateLabels(hourly(new Date(2026, 9, 28, 9), 31), 'edges').size).toBe(0);
+  });
+
+  it('leaves daily buckets and auto labels alone', () => {
+    const daily = Array.from({ length: 7 }, (_, i) => new Date(2026, 9, 22 + i).getTime());
+    expect(edgeDateLabels(daily, 'edges').size).toBe(0);
+    expect(edgeDateLabels(hourly(new Date(2026, 9, 28, 17), 25), 'auto').size).toBe(0);
   });
 });

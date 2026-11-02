@@ -12,7 +12,9 @@ import {
   TRACE_STRING_OPERATORS,
   traceFilterFieldColor,
   traceFilterFieldIcon,
+  withoutUnrecordedStreamingTimings,
 } from '../traces/trace-filters';
+import type { StreamingTimingSupport } from '../traces/trace-filters';
 import { isTraceFilterGroup, scalarPredicate } from '../traces/trace-query-filters';
 import type { TraceFilterGroup, TraceFilterOperatorId, TraceFilterToken } from '../traces/trace-query-filters';
 import type { FilterBarField, FilterBarOption } from '@/ds/components/FilterBar/types';
@@ -22,6 +24,7 @@ export const THREAD_FILTER_FIELD_IDS = [
   'status',
   'traceCount',
   'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
   'entityType',
   'entityId',
   'entityName',
@@ -40,7 +43,7 @@ export const THREAD_FILTER_FIELD_IDS = [
 ] as const;
 
 const FIELD_IDS: ReadonlySet<string> = new Set(THREAD_FILTER_FIELD_IDS);
-const NUMBER_FIELD_IDS: ReadonlySet<string> = new Set(['traceCount', 'timeToFirstChunkMs']);
+const NUMBER_FIELD_IDS: ReadonlySet<string> = new Set(['traceCount', 'timeToFirstChunkMs', 'timeToFirstTokenMs']);
 /** Fields every thread row carries. On any other field, "is not X" must also keep threads where it is missing. */
 const REQUIRED_FIELD_IDS: ReadonlySet<string> = new Set(['threadId', 'status', 'traceCount']);
 /** The thread query compares `traceCount` but has no set membership or presence check for it. */
@@ -50,6 +53,7 @@ const THREAD_FILTER_BAR_LABELS: Record<string, string> = {
   ...TRACE_FILTER_BAR_LABELS,
   traceCount: 'Messages',
   timeToFirstChunkMs: 'Time to first chunk (ms)',
+  timeToFirstTokenMs: 'Time to first token (ms)',
   executionSource: 'Execution source',
   entityType: 'Primitive type',
   entityVersionId: 'Primitive version ID',
@@ -58,6 +62,7 @@ const THREAD_FILTER_BAR_LABELS: Record<string, string> = {
 /** Thread fields without their own trace icon borrow the icon of the closest trace field. */
 const THREAD_ICON_FIELD_ALIASES: Record<string, string> = {
   timeToFirstChunkMs: 'durationMs',
+  timeToFirstTokenMs: 'durationMs',
   executionSource: 'runId',
   entityType: 'rootEntityType',
   entityVersionId: 'entityId',
@@ -94,9 +99,11 @@ const STATUS_OPTIONS: FilterBarOption[] = TRACE_STATUS_OPTIONS.filter(option => 
 
 /** FilterBar fields for the threads page: only paths and operators `queryTraceThreads()` accepts. */
 export function createThreadFilterBarFields({
+  withTimeToFirstChunk,
+  withTimeToFirstToken,
   entityNames,
   environments,
-}: {
+}: StreamingTimingSupport & {
   entityNames: readonly string[];
   environments: readonly string[];
 }): FilterBarField[] {
@@ -125,6 +132,7 @@ export function createThreadFilterBarFields({
       case 'traceCount':
         return { ...threadFieldBase(id), type: 'number', operators: TRACE_COUNT_OPERATORS };
       case 'timeToFirstChunkMs':
+      case 'timeToFirstTokenMs':
         return { ...threadFieldBase(id), type: 'number', operators: TRACE_NUMBER_OPERATORS };
       case 'threadId':
         return { ...threadFieldBase(id), operators: TRACE_REQUIRED_STRING_OPERATORS };
@@ -133,12 +141,18 @@ export function createThreadFilterBarFields({
     }
   };
 
-  return THREAD_FILTER_FIELD_IDS.map(field).sort((a, b) => a.label.localeCompare(b.label));
+  const offered = withoutUnrecordedStreamingTimings(FIELD_IDS, { withTimeToFirstChunk, withTimeToFirstToken });
+  return THREAD_FILTER_FIELD_IDS.filter(id => offered.has(id))
+    .map(field)
+    .sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function tokenToThreadQueryPredicate(token: TraceFilterToken): TraceQueryScalarPredicate | undefined {
+function tokenToThreadQueryPredicate(
+  token: TraceFilterToken,
+  allowedFieldIds: ReadonlySet<string>,
+): TraceQueryScalarPredicate | undefined {
   const { fieldId } = token;
-  if (!FIELD_IDS.has(fieldId)) return undefined;
+  if (!allowedFieldIds.has(fieldId)) return undefined;
   const operatorId = token.operatorId ?? 'is';
   const isPresence = operatorId === 'exists' || operatorId === 'notExists';
 
@@ -165,9 +179,16 @@ function tokenToThreadQueryPredicate(token: TraceFilterToken): TraceQueryScalarP
   return predicate;
 }
 
-function groupToThreadQueryPredicate(group: TraceFilterGroup): TraceQueryScalarPredicate | undefined {
+function groupToThreadQueryPredicate(
+  group: TraceFilterGroup,
+  allowedFieldIds: ReadonlySet<string>,
+): TraceQueryScalarPredicate | undefined {
   const args = group.nodes
-    .map(node => (isTraceFilterGroup(node) ? groupToThreadQueryPredicate(node) : tokenToThreadQueryPredicate(node)))
+    .map(node =>
+      isTraceFilterGroup(node)
+        ? groupToThreadQueryPredicate(node, allowedFieldIds)
+        : tokenToThreadQueryPredicate(node, allowedFieldIds),
+    )
     .filter((predicate): predicate is TraceQueryScalarPredicate => Boolean(predicate));
   if (args.length === 0) return undefined;
   return args.length === 1 ? args[0] : { op: group.logic, args };
@@ -175,15 +196,18 @@ function groupToThreadQueryPredicate(group: TraceFilterGroup): TraceQueryScalarP
 
 /**
  * The thread query `where` for the filter bar's tokens and groups, or `undefined` when nothing applies.
- * Conditions the thread query can't run (unknown fields, unusable values) are left out instead of
- * failing the request.
+ * Conditions the thread query can't run (unknown fields, streaming timings the store doesn't record,
+ * unusable values) are left out instead of failing the request.
  */
 export function buildThreadQueryWhere(
   tokens: TraceFilterToken[],
   groups: TraceFilterGroup[],
+  support: StreamingTimingSupport,
 ): TraceQueryScalarPredicate | undefined {
-  const args = [...tokens.map(tokenToThreadQueryPredicate), ...groups.map(groupToThreadQueryPredicate)].filter(
-    (predicate): predicate is TraceQueryScalarPredicate => Boolean(predicate),
-  );
+  const allowedFieldIds = withoutUnrecordedStreamingTimings(FIELD_IDS, support);
+  const args = [
+    ...tokens.map(token => tokenToThreadQueryPredicate(token, allowedFieldIds)),
+    ...groups.map(group => groupToThreadQueryPredicate(group, allowedFieldIds)),
+  ].filter((predicate): predicate is TraceQueryScalarPredicate => Boolean(predicate));
   return args.length ? { op: 'and', args } : undefined;
 }

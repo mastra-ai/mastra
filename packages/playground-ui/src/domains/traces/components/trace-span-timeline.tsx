@@ -2,13 +2,18 @@ import type { Dispatch, ReactNode, SetStateAction } from 'react';
 import type { UISpan } from '../types';
 import { TIMELINE_TICKS, TIMELINE_TRACK_PADDING } from '../utils/span-timeline';
 import { getOverallLatency } from '../utils/span-timing';
+import { getTimelineMarkersLayout } from '../utils/timeline-markers';
+import type { TraceStreamingTimings } from '../utils/timeline-markers';
 import { SpanRows } from './span-rows';
 import { SpanTimelineRow, TimelineGridlines } from './span-timeline-row';
+import { TimelineTimingRows } from './trace-span-timeline-markers';
 import { TraceSpanTreeLoading } from './trace-span-tree';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
 
 /** Axis ticks are approximate gridline marks, so two decimals are enough: `250 ms`, `3.74 s`. */
+export type { TraceStreamingTimings };
+
 function formatTick(durationMs: number) {
   return durationMs < 1_000 ? `${Math.round(durationMs)} ms` : `${(durationMs / 1_000).toFixed(2)} s`;
 }
@@ -26,6 +31,8 @@ export type TraceSpanTimelineProps = {
   revealSpanId?: string;
   /** Rendered full-width above the span rows. */
   leadingSlot?: ReactNode;
+  /** Adds a collapsed "Metrics" row above the spans, revealing a row per streaming timing. */
+  streamingTimings?: TraceStreamingTimings;
 };
 
 /**
@@ -44,10 +51,12 @@ export function TraceSpanTimeline({
   featuredSpanIds,
   revealSpanId,
   leadingSlot,
+  streamingTimings,
 }: TraceSpanTimelineProps) {
   if (isLoading) return <TraceSpanTreeLoading />;
 
   const overallLatency = getOverallLatency(hierarchicalSpans);
+  const markers = getTimelineMarkersLayout(hierarchicalSpans, overallLatency, streamingTimings);
 
   return (
     <>
@@ -55,8 +64,8 @@ export function TraceSpanTimeline({
       <div className="grid grid-cols-[minmax(12rem,2fr)_minmax(12rem,3fr)] content-start gap-y-px overflow-hidden py-1">
         {/* Header row: empty name cell, then the axis on the same track as the bars. */}
         <div />
-        <div aria-label="Trace time axis" className={cn('flex', TIMELINE_TRACK_PADDING)}>
-          <div className="relative h-6 flex-1 tabular-nums">
+        <div className={TIMELINE_TRACK_PADDING}>
+          <div aria-label="Trace time axis" className="relative h-6 tabular-nums">
             <TimelineGridlines />
             {TIMELINE_TICKS.map((tick, index) => (
               <Txt
@@ -76,6 +85,7 @@ export function TraceSpanTimeline({
             ))}
           </div>
         </div>
+        {markers && <TimelineTimingRows layout={markers} />}
         <SpanRows
           spans={hierarchicalSpans}
           onSpanClick={onSpanClick}

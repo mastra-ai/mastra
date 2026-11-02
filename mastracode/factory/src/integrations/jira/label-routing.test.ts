@@ -215,7 +215,21 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     (await seed.workItems.listDeferredDecisions('org1', factoryProjectId))
       .map(entry => (entry.decision as { metadata?: { identifier?: string } }).metadata?.identifier)
       .sort();
-  const fileProposedCards = async () => {
+  const takeOverWithGrowth = async () => {
+    const growth = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'growth' } })).id;
+    await seed.intake.setSharedBinding({
+      orgId: 'org1',
+      integrationId: 'jira',
+      sourceId: path.sourceId,
+      factoryProjectId: growth,
+      board: 'work',
+      labels: null,
+    });
+    return growth;
+  };
+  const projectExists = async ({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }) =>
+    (await seed.projects.get({ orgId, id: factoryProjectId })) !== null;
+  const fileProposedCards = async (factoryProjectExists = projectExists) => {
     const boards = createBoardRegistry();
     await new FactoryDecisionDispatcher({
       controller: {} as never,
@@ -227,6 +241,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
         configVersion: 'factory-config-v1',
       }),
       isAutoRunEnabled: async () => false,
+      factoryProjectExists,
       ownerId: 'label-routing-test',
     }).runOnce(new Date(Date.now() + 1_000));
   };
@@ -247,7 +262,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     }
   });
 
-  it('leaves labels with the all-issues factory until the label factory has a board, and keeps its cards there', async () => {
+  it('leaves labels with the all-issues factory until the label factory has a board, then both hold a card', async () => {
     const triage = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'triage' } })).id;
     const bindTriage = (board: string | null) =>
       seed.intake.setSharedBinding({
@@ -273,28 +288,66 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     expect(await poll(factories.platform)).not.toContain('OPS-2');
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
     expect(await poll(triage)).toEqual(['OPS-2']);
-    expect(await filed(triage)).toEqual([]);
+    expect(await filed(triage)).toEqual(['OPS-2']);
+    await fileProposedCards();
+    for (const factoryProjectId of [factories.platform, triage]) {
+      const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId });
+      expect(cards.filter(card => card.title.startsWith('OPS-2'))).toHaveLength(1);
+    }
   });
 
   it("hands a deleted factory's filed issues to the factory that takes over its Jira project", async () => {
     expect(await poll(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
     await fileProposedCards();
     expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(204);
-    const growth = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'growth' } })).id;
-    await seed.intake.setSharedBinding({
-      orgId: 'org1',
-      integrationId: 'jira',
-      sourceId: path.sourceId,
-      factoryProjectId: growth,
-      board: 'work',
-      labels: null,
-    });
+    const growth = await takeOverWithGrowth();
 
     expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
     expect(await filed(growth)).toEqual(['OPS-1', 'OPS-2']);
     await fileProposedCards();
 
     const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId: growth });
+    expect(cards.map(card => card.title).sort()).toEqual([
+      expect.stringMatching(/^OPS-1\b/),
+      expect.stringMatching(/^OPS-2\b/),
+    ]);
+  });
+
+  it('files issues in the factory that takes over a Jira project when the deleted factory polled them but never filed them', async () => {
+    expect(await poll(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
+    expect((await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status).toBe(204);
+    const growth = await takeOverWithGrowth();
+
+    expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
+    await fileProposedCards();
+
+    expect(await seed.workItems.list({ orgId: 'org1', factoryProjectId: factories.platform })).toEqual([]);
+    const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId: growth });
+    expect(cards.map(card => card.title).sort()).toEqual([
+      expect.stringMatching(/^OPS-1\b/),
+      expect.stringMatching(/^OPS-2\b/),
+    ]);
+  });
+
+  it('files issues in the factory that takes over a Jira project when the deleted factory files them mid-takeover', async () => {
+    expect(await poll(factories.platform)).toEqual(['OPS-1', 'OPS-2']);
+    let takeover: Promise<string> | undefined;
+    await fileProposedCards(async tenant => {
+      if (tenant.factoryProjectId !== factories.platform || takeover) return projectExists(tenant);
+      takeover = (async () => {
+        expect(
+          (await app.request(`/web/factory/projects/${factories.platform}`, { method: 'DELETE' })).status,
+        ).toBe(204);
+        const growth = await takeOverWithGrowth();
+        expect(await poll(growth)).toEqual(['OPS-1', 'OPS-2']);
+        return growth;
+      })();
+      await takeover;
+      return true;
+    });
+    await fileProposedCards();
+
+    const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId: await takeover! });
     expect(cards.map(card => card.title).sort()).toEqual([
       expect.stringMatching(/^OPS-1\b/),
       expect.stringMatching(/^OPS-2\b/),

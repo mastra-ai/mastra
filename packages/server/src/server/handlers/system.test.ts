@@ -37,6 +37,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   spanQueryModelFields: false,
   spanQueryOutcomeFields: false,
   spanAggregate: false,
+  spanAggregateModelDimensions: false,
   feedback: false,
 };
 
@@ -691,6 +692,25 @@ describe('System Handlers', () => {
 
           expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
             spanQueryModelFields: supported,
+          });
+        },
+      );
+
+      it.each([
+        { features: ['span-aggregate', 'span-aggregate-model-dimensions'], supported: true },
+        { features: ['span-aggregate', 'span-query-model-fields'], supported: false },
+        { features: ['span-aggregate-model-dimensions'], supported: false },
+      ] as const)(
+        'reports model and provider span aggregate dimensions for $features as $supported',
+        async ({ features, supported }) => {
+          class SpanAggregateStore extends BaseObservabilityStore {
+            getFeatures() {
+              return features;
+            }
+          }
+
+          expect(await capabilitiesFor(new SpanAggregateStore())).toMatchObject({
+            spanAggregateModelDimensions: supported,
           });
         },
       );

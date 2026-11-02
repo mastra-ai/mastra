@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { getSpanTimingLayout } from '../../utils/span-timing';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTimeline } from '../trace-span-timeline';
+import type { TraceStreamingTimings } from '../trace-span-timeline';
 import { nestedSpanFixture } from './fixtures/trace-data-panel-view';
 import { formatDuration } from '@/utils/duration';
 
@@ -30,11 +31,13 @@ function Harness({
   onSpanClick = () => {},
   revealSpanId,
   featuredSpanIds,
+  streamingTimings,
 }: {
   initialExpanded?: string[];
   onSpanClick?: (id: string) => void;
   revealSpanId?: string;
   featuredSpanIds?: string[];
+  streamingTimings?: TraceStreamingTimings;
 }) {
   const [expandedSpanIds, setExpandedSpanIds] = useState<string[]>(initialExpanded);
   return (
@@ -45,6 +48,7 @@ function Harness({
       setExpandedSpanIds={setExpandedSpanIds}
       revealSpanId={revealSpanId}
       featuredSpanIds={featuredSpanIds}
+      streamingTimings={streamingTimings}
     />
   );
 }
@@ -147,5 +151,69 @@ describe('TraceSpanTimeline', () => {
     render(<Harness />);
     const axis = screen.getByLabelText('Trace time axis');
     expect(axis.textContent).toBe('0 ms250 ms500 ms750 ms1.00 s');
+  });
+
+  describe('when the trace streamed', () => {
+    // The root runs for 1s, so each millisecond is a tenth of a percent of the axis.
+    const startedAt = '2026-06-01T10:00:00.000Z';
+    const streamed = { startedAt, timeToFirstChunkMs: 400, timeToFirstTokenMs: 150 };
+    const timingRow = (name: string) => screen.queryByRole('group', { name });
+    const barOf = (row: HTMLElement | null) => {
+      const bar = row?.querySelector<HTMLElement>('[data-testid="streaming-timing-bar"]');
+      return [bar?.style.left, bar?.style.width];
+    };
+    const openMetrics = () => fireEvent.click(screen.getByRole('button', { name: 'Metrics' }));
+
+    it('keeps the timings folded under Metrics until the user opens it', () => {
+      render(<Harness streamingTimings={streamed} />);
+
+      const metrics = screen.getByRole('button', { name: 'Metrics' });
+      expect(metrics.getAttribute('aria-expanded')).toBe('false');
+      expect(timingRow('Time to first chunk')).toBeNull();
+      expect(timingRow('Time to first token')).toBeNull();
+    });
+
+    it('shows each timing as its own dashed row above the spans once Metrics is open', () => {
+      render(<Harness initialExpanded={['root']} streamingTimings={streamed} />);
+      openMetrics();
+
+      const firstChunk = screen.getByRole('group', { name: 'Time to first chunk' });
+      const firstToken = screen.getByRole('group', { name: 'Time to first token' });
+      expect(firstChunk.textContent).toBe('Time to first chunk400ms');
+      expect(firstToken.textContent).toBe('Time to first token150ms');
+      expect(barOf(firstChunk)).toEqual(['0%', '40%']);
+      expect(barOf(firstToken)).toEqual(['25%', '15%']);
+
+      const [firstSpanRow] = screen.getAllByLabelText(/^View details for span/);
+      expect(firstToken.compareDocumentPosition(firstSpanRow) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('folds the timings away again when Metrics is closed', async () => {
+      render(<Harness streamingTimings={streamed} />);
+      openMetrics();
+      openMetrics();
+
+      await waitFor(() => expect(timingRow('Time to first chunk')).toBeNull());
+    });
+
+    it('shows only the time to first chunk when no time to first token was recorded', () => {
+      render(<Harness streamingTimings={{ startedAt, timeToFirstChunkMs: 400, timeToFirstTokenMs: null }} />);
+      openMetrics();
+
+      expect(timingRow('Time to first chunk')?.textContent).toBe('Time to first chunk400ms');
+      expect(timingRow('Time to first token')).toBeNull();
+    });
+
+    it('offers no Metrics when the trace has no time to first chunk', () => {
+      render(<Harness streamingTimings={{ startedAt, timeToFirstChunkMs: null, timeToFirstTokenMs: null }} />);
+
+      expect(screen.queryByRole('button', { name: 'Metrics' })).toBeNull();
+    });
+  });
+
+  it('offers no Metrics without streaming timings', () => {
+    render(<Harness initialExpanded={['root']} />);
+
+    expect(screen.queryByRole('button', { name: 'Metrics' })).toBeNull();
   });
 });
