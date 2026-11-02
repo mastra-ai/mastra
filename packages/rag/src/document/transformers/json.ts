@@ -3,13 +3,11 @@ import type { JsonChunkOptions } from '../types';
 
 export class RecursiveJsonTransformer {
   private maxSize: number;
-  private minSize: number;
   private ensureAscii: boolean;
   private convertLists: boolean;
 
-  constructor({ maxSize = 2000, minSize, ensureAscii = false, convertLists = true }: JsonChunkOptions) {
+  constructor({ maxSize = 2000, ensureAscii = false, convertLists = true }: JsonChunkOptions) {
     this.maxSize = maxSize;
-    this.minSize = minSize ?? Math.max(maxSize - 200, 50);
     this.ensureAscii = ensureAscii;
     this.convertLists = convertLists;
   }
@@ -202,15 +200,12 @@ export class RecursiveJsonTransformer {
 
     const saveCurrentGroup = () => {
       if (currentGroup.length > 0) {
-        const groupChunk = this.createChunk(currentGroup, path);
-        if (RecursiveJsonTransformer.jsonSize(groupChunk) >= this.minSize) {
-          chunks.push(groupChunk);
-          currentGroup = [];
-        }
+        chunks.push(this.createChunk(currentGroup, path));
+        currentGroup = [];
       }
     };
 
-    for (const item of value) {
+    for (const [itemIndex, item] of value.entries()) {
       // Try adding item to current group
       const testGroup = [...currentGroup, item];
       const testChunk = this.createChunk(testGroup, path);
@@ -231,7 +226,7 @@ export class RecursiveJsonTransformer {
         if (this.isWithinSizeLimit(singleItemChunk)) {
           currentGroup = singleItemArray;
         } else {
-          const itemPath = [...path, String(chunks.length)];
+          const itemPath = [...path, String(itemIndex)];
           const nestedChunks = this.handleNestedObject(item, itemPath, depth + 1, maxDepth);
           chunks.push(...nestedChunks);
         }
@@ -273,11 +268,8 @@ export class RecursiveJsonTransformer {
 
     const saveCurrentChunk = () => {
       if (Object.keys(currentChunk).length > 0) {
-        const objChunk = this.createChunk(currentChunk, path);
-        if (RecursiveJsonTransformer.jsonSize(objChunk) >= this.minSize) {
-          chunks.push(objChunk);
-          currentChunk = {};
-        }
+        chunks.push(this.createChunk(currentChunk, path));
+        currentChunk = {};
       }
     };
 
