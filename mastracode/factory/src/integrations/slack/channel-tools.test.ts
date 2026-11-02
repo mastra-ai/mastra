@@ -8,6 +8,9 @@ import { FactoryChannelSessionLinkProcessor } from './channel-session-link-proce
 import { SlackIntegration } from './integration.js';
 import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
 import { FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool.js';
+import { SLACK_READ_TOOL_NAME, SLACK_SEARCH_TOOL_NAME, SLACK_SEND_TOOL_NAME } from './workspace-tools.js';
+
+const WORKSPACE_TOOLS = [SLACK_READ_TOOL_NAME, SLACK_SEARCH_TOOL_NAME, SLACK_SEND_TOOL_NAME];
 
 type Execute = { execute: (input: Record<string, unknown>, ctx: Record<string, unknown>) => Promise<unknown> };
 
@@ -16,10 +19,7 @@ type Execute = { execute: (input: Record<string, unknown>, ctx: Record<string, u
  * from storage, the way a web prompt or a woken run finds its Slack thread.
  */
 async function factoryWithSlack({
-  threadMetadata = { channel_platform: 'slack', channel_externalThreadId: 'slack:C1:171.1' } as Record<
-    string,
-    unknown
-  >,
+  threadMetadata = { channel_platform: 'slack', channel_externalThreadId: 'slack:C1:171.1' } as Record<string, unknown>,
   textDisplay,
   bindChannels = true,
 }: { threadMetadata?: Record<string, unknown>; textDisplay?: 'show' | 'hidden'; bindChannels?: boolean } = {}) {
@@ -70,7 +70,7 @@ describe('Slack channel tools', () => {
     const { slack, requestContext, post } = await factoryWithSlack();
 
     const tools = await slack.agentTools({ requestContext });
-    expect(Object.keys(tools).sort()).toEqual(['attach_file', REPLY_TOOL_NAME]);
+    expect(Object.keys(tools).sort()).toEqual(['attach_file', REPLY_TOOL_NAME, ...WORKSPACE_TOOLS].sort());
 
     await (tools[REPLY_TOOL_NAME] as unknown as Execute).execute({ text: 'Done: tests pass.' }, {});
     expect(post).toHaveBeenCalledWith({ markdown: 'Done: tests pass.' });
@@ -88,7 +88,7 @@ describe('Slack channel tools', () => {
     const fromSlack = await factoryWithSlack();
     fromSlack.requestContext.set('channel', { platform: 'slack', isDM: false });
     const tools = await fromSlack.slack.agentTools({ requestContext: fromSlack.requestContext });
-    expect(Object.keys(tools).sort()).toEqual(['attach_file', REPLY_TOOL_NAME]);
+    expect(Object.keys(tools).sort()).toEqual(['attach_file', REPLY_TOOL_NAME, ...WORKSPACE_TOOLS].sort());
     expect(fromSlack.getThreadById).not.toHaveBeenCalled();
   });
 
@@ -103,7 +103,9 @@ describe('Slack channel tools', () => {
   it('leaves out the reply tool, its reminder and its streaming when reply text is shown', async () => {
     const { slack, requestContext } = await factoryWithSlack({ textDisplay: 'show' });
 
-    expect(Object.keys(await slack.agentTools({ requestContext }))).toEqual(['attach_file']);
+    expect(Object.keys(await slack.agentTools({ requestContext })).sort()).toEqual(
+      ['attach_file', ...WORKSPACE_TOOLS].sort(),
+    );
     expect(slack.processors.input.map(p => p.constructor)).toEqual([FactoryChannelReplyProcessor]);
     expect(slack.processors.output.map(p => p.constructor)).toEqual([FactoryChannelSessionLinkProcessor]);
   });

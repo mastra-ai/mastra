@@ -38,6 +38,7 @@ import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from '.
 import { createShareFileTool, isSlackThread } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
+import { createSlackWorkspaceTools } from './workspace-tools.js';
 
 /** Slack app credentials, read from env ONCE by the deploy entry. */
 export interface SlackIntegrationConfig {
@@ -216,8 +217,9 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   /**
-   * `attach_file`, and `reply_in_thread` when reply text is hidden, on runs
-   * whose session is linked to a Slack thread. The tools find the thread to
+   * `attach_file`, `reply_in_thread` when reply text is hidden, and
+   * `slack_search`/`slack_read`/`slack_send` on runs whose session is linked
+   * to a Slack thread. The tools find the thread to
    * post into when they are called.
    */
   async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
@@ -225,6 +227,7 @@ export class SlackIntegration implements FactoryIntegration {
     return {
       ...createShareFileTool(requestContext, this.#deps),
       ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
+      ...createSlackWorkspaceTools(requestContext, this.#deps),
     };
   }
 
