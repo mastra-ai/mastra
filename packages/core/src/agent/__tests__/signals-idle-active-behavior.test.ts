@@ -134,6 +134,48 @@ describe('Agent signals: idle and active behaviors', () => {
     await expect(result.accepted).resolves.toMatchObject({ action: 'wake' });
   });
 
+  // The idle wake and the queued run each generated their own id, dropping `ifIdle.streamOptions.runId` (#29135).
+  it('starts woken and queued runs under the runId the caller passes in ifIdle.streamOptions (#29135)', async () => {
+    const resourceId = 'caller-run-id-user';
+    const threadId = 'caller-run-id-thread';
+    const { model, releaseFirst } = createBlockingFirstTextStreamModel('woken response', 'queued response');
+    const agent = new Agent({
+      id: 'caller-run-id-agent',
+      name: 'Caller Run Id Agent',
+      instructions: 'Test',
+      model,
+      memory: new MockMemory(),
+    });
+    const subscription = await agent.subscribeToThread({ resourceId, threadId });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+
+    try {
+      const woken = agent.sendSignal(
+        { type: 'user-message', contents: 'wake' },
+        { resourceId, threadId, ifIdle: { streamOptions: { runId: 'caller-wake-run' } } },
+      );
+      const wake = await woken.accepted;
+      expect(wake).toMatchObject({ action: 'wake', runId: 'caller-wake-run' });
+      expect(wake.action === 'wake' && wake.output.runId).toBe('caller-wake-run');
+
+      // The woken run is still blocked on the model, so this one waits behind it.
+      const queued = agent.queueSignal(
+        { type: 'user-message', contents: 'queued' },
+        { resourceId, threadId, ifIdle: { streamOptions: { runId: 'caller-queued-run' } } },
+      );
+      await expect(queued.accepted).resolves.toEqual({ action: 'deliver', runId: 'caller-queued-run' });
+
+      releaseFirst();
+      const firstRun = await withTimeout(readNextRunWithParts(iterator), 'woken run did not finish', 2000);
+      const secondRun = await withTimeout(readNextRunWithParts(iterator), 'queued run did not finish', 2000);
+      expect(firstRun.value).toMatchObject({ runId: 'caller-wake-run', text: 'woken response' });
+      expect(secondRun.value).toMatchObject({ runId: 'caller-queued-run', text: 'queued response' });
+    } finally {
+      await iterator.return?.();
+      subscription.unsubscribe();
+    }
+  });
+
   it('reports the reserved runId as active before registerRun populates the stream record', async () => {
     const runtime = new AgentThreadStreamRuntime();
     const threadId = 'reservation-gap-thread';

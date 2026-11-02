@@ -7221,7 +7221,8 @@ export class AgentThreadStreamRuntime {
       id: signalInput.id ?? this.#generateSignalMessageId(agent, { resourceId, threadId }),
       acceptedAt,
     });
-    const queuedRunId = globalThis.crypto.randomUUID();
+    // Read the id from the caller's options only: the fallback below copies the active run's options, runId included.
+    const queuedRunId = target.ifIdle?.streamOptions?.runId ?? globalThis.crypto.randomUUID();
     // Preserve explicit cancellation, but don't inherit the active run's signal.
     const baseQueuedStreamOptions = target.ifIdle?.streamOptions ?? {
       ...activeRecord?.streamOptions,
@@ -7645,6 +7646,9 @@ export class AgentThreadStreamRuntime {
         accepted: Promise.resolve({ action: 'discard' as const }),
       };
     }
+    // A wake runs under the caller's `streamOptions.runId`, as `agent.stream()` does. The reservation,
+    // lease and stream below all key off this id, so pick it here rather than in the stream call.
+    runId = target.ifIdle?.streamOptions?.runId ?? runId;
 
     if (state.activeThreadRunIds.has(key)) {
       const blockingRunId = state.activeThreadRunIds.get(key)!;

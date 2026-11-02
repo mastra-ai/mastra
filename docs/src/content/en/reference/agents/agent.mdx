@@ -283,7 +283,7 @@ Sends a user message to an active run or memory thread. Use this when the active
                     type: 'AgentExecutionOptions',
                     isOptional: true,
                     description:
-                      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+                      "Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context. A `runId` here names the run that starts. When a run that's already active takes the input instead, `accepted` reports that run's id.",
                   },
                   {
                     name: 'attributes',
@@ -483,7 +483,7 @@ Sends a signal to an active run or memory thread.
                     type: 'AgentExecutionOptions',
                     isOptional: true,
                     description:
-                      'Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context.',
+                      "Options for the stream that starts when `ifIdle.behavior` is `wake`. Mastra uses the top-level `resourceId` and `threadId` for memory context. A `runId` here names the run that starts. When a run that's already active takes the input instead, `accepted` reports that run's id.",
                   },
                   {
                     name: 'attributes',

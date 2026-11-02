@@ -336,7 +336,8 @@ Returns `{ accepted: true, runId: string }`.
     name: 'ifIdle.streamOptions',
     type: "Omit<AgentExecutionOptions, 'messages'>",
     isOptional: true,
-    description: 'Options for the stream that starts when `ifIdle.behavior` is `wake`.',
+    description:
+      "Options for the stream that starts when `ifIdle.behavior` is `wake`. A `runId` here names the run that starts. When a run that's already active takes the signal instead, the returned `runId` is that run's id.",
   },
   {
     name: 'ifIdle.attributes',
