@@ -118,7 +118,9 @@ describe('KnowledgePageExplorer scope focus', () => {
     expect(focus.textContent).toContain('team:support');
     await waitFor(() => expect(within(tree()).queryByText('Refunds')).toBeNull());
     expect(within(tree()).getByText('Macros')).toBeTruthy();
-    const graphIds = () => screen.getAllByTestId('knowledge-page-node').map(node => node.getAttribute('data-page-id'));
+    // Labelled circles and dots alike.
+    const graphIds = () =>
+      [...document.querySelectorAll('.react-flow__node [data-page-id]')].map(node => node.getAttribute('data-page-id'));
     await waitFor(() => expect(graphIds().sort()).toEqual(['macros', 'team']));
 
     fireEvent.click(within(focus).getByRole('button', { name: 'All scopes' }));
@@ -133,6 +135,8 @@ describe('KnowledgePageExplorer mention popup', () => {
   it('lists the notes that make a mention when its line is clicked, without leaving the graph', async () => {
     const { container } = renderWithProviders(<Host />);
     await screen.findAllByTestId('knowledge-page-node');
+    // Lines between pages other than the selected one are drawn once all links are on.
+    fireEvent.click(screen.getByRole('button', { name: 'All links' }));
     const line = container.querySelector('[data-id="mention:refunds->roadmap"]');
     if (!line) throw new Error('mention line not drawn');
     fireEvent.click(line);
@@ -149,6 +153,8 @@ describe('KnowledgePageExplorer mention popup', () => {
   it('closes when empty canvas is clicked', async () => {
     const { container } = renderWithProviders(<Host />);
     await screen.findAllByTestId('knowledge-page-node');
+    // Lines between pages other than the selected one are drawn once all links are on.
+    fireEvent.click(screen.getByRole('button', { name: 'All links' }));
     const line = container.querySelector('[data-id="mention:refunds->roadmap"]');
     if (!line) throw new Error('mention line not drawn');
     fireEvent.click(line);
@@ -164,6 +170,8 @@ describe('KnowledgePageExplorer mention popup', () => {
   it('opens the mentioning page from the popup', async () => {
     const { container } = renderWithProviders(<Host />);
     await screen.findAllByTestId('knowledge-page-node');
+    // Lines between pages other than the selected one are drawn once all links are on.
+    fireEvent.click(screen.getByRole('button', { name: 'All links' }));
     const line = container.querySelector('[data-id="mention:refunds->roadmap"]');
     if (!line) throw new Error('mention line not drawn');
     fireEvent.click(line);

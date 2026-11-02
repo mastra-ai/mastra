@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { beforeAll, describe, expect, it } from 'vitest';
 
@@ -262,12 +262,15 @@ describe('KnowledgePageExplorer page view', () => {
   });
 
   describe('when a page is clicked in the graph', () => {
-    const escalationNode = async () => {
-      const nodes = await screen.findAllByTestId('knowledge-page-node');
-      const node = nodes.find(n => n.textContent?.includes('Escalation Process'));
-      if (!node) throw new Error('no Escalation Process node');
-      return node;
-    };
+    // Escalation sits two links from the scope at the centre, so it starts as a dot and grows into a
+    // labelled circle once focused.
+    const escalationNode = () =>
+      waitFor(() => {
+        const node = document.querySelector<HTMLElement>('.react-flow__node [data-page-id="escalation"]');
+        if (!node) throw new Error('no Escalation Process node');
+        return node;
+      });
+    const graphNodes = () => [...document.querySelectorAll<HTMLElement>('.react-flow__node [data-page-id]')];
 
     it('selects it on the first click and stays on the graph', async () => {
       renderWithProviders(<Host />);
@@ -289,16 +292,17 @@ describe('KnowledgePageExplorer page view', () => {
     it('clears the selection on a click on empty canvas', async () => {
       const { container } = renderWithProviders(<Host />);
       fireEvent.click(await escalationNode());
-      expect(screen.getAllByTestId('knowledge-page-node').some(node => node.style.opacity === '0.35')).toBe(true);
+      expect(graphNodes().some(node => node.style.opacity === '0.35')).toBe(true);
 
       const pane = container.querySelector('.react-flow__pane');
       if (!pane) throw new Error('no graph pane');
       fireEvent.pointerDown(pane, { clientX: 40, clientY: 40 });
       fireEvent.click(pane, { clientX: 40, clientY: 40 });
 
-      expect((await escalationNode()).querySelector('.knowledge-circle')?.hasAttribute('data-selected')).toBe(false);
+      // Unfocused again, it may shrink back to a dot; either way nothing marks it selected.
+      expect((await escalationNode()).querySelector('[data-selected]')).toBeNull();
       expect(screen.queryByRole('treeitem', { selected: true })).toBeNull();
-      expect(screen.getAllByTestId('knowledge-page-node').every(node => node.style.opacity === '1')).toBe(true);
+      expect(graphNodes().every(node => node.style.opacity === '1')).toBe(true);
       expect(screen.getByTestId('view').textContent).toBe('graph');
     });
 

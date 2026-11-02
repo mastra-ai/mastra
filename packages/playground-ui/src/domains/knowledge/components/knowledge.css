@@ -9,3 +9,13 @@
   outline: 2px solid var(--knowledge-color);
   outline-offset: 5px;
 }
+
+/* A refocus moves every circle to its new ring: glide there instead of jumping. */
+.knowledge-graph .react-flow__node {
+  transition: transform var(--duration-normal, 300ms) var(--ease-out-custom, ease-out);
+}
+
+/* A hovered dot's tooltip sits above every other circle. */
+.knowledge-graph .react-flow__node:hover {
+  z-index: 1000 !important;
+}

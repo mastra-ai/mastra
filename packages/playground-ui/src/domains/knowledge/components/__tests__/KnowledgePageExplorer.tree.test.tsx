@@ -149,12 +149,13 @@ describe('KnowledgePageExplorer tree with child counts', () => {
   });
 
   describe('when a page outside the loaded graph is clicked in the graph view', () => {
-    it('opens it as a page instead of selecting nothing visible', () => {
+    it('focuses it in the graph, which loads around whatever is focused', () => {
       renderWithProviders(<Host requested={[]} />);
       fireEvent.click(row('Articles'));
       fireEvent.click(row('Second article'));
-      expect(screen.getByTestId('view').textContent).toBe('page');
-      expect(within(screen.getByRole('region', { name: 'Selected page' })).getByText('Second article')).toBeTruthy();
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+      const node = document.querySelector('.react-flow__node [data-page-id="second"]');
+      expect(node?.querySelector('.knowledge-circle')?.hasAttribute('data-selected')).toBe(true);
     });
 
     it('stays on the graph for a page the graph has', () => {
@@ -191,25 +192,51 @@ describe('KnowledgePageExplorer tree with child counts', () => {
         .filter(id => id?.startsWith('parent:'))
         .sort();
 
-    it('adds the children the graph had not loaded, joined to it', () => {
-      const { container } = renderWithProviders(<Host requested={[]} />);
-      expect(parentLines(container)).toEqual(['parent:site->pricing']);
-      fireEvent.click(row('site:mastra'));
-      expect(parentLines(container)).toEqual(['parent:site->articles', 'parent:site->pricing']);
-      expect(screen.getByTestId('view').textContent).toBe('graph');
-    });
+    const graphNode = (id: string) => {
+      const node = document.querySelector<HTMLElement>(`.react-flow__node [data-page-id="${id}"]`);
+      if (!node) throw new Error(`no ${id} in the graph`);
+      return node;
+    };
+    const standIns = (container: HTMLElement) => container.querySelectorAll('[data-page-type="stand-in"]');
 
-    it('keeps going down: focusing an added child adds its children too', () => {
+    it('starts from the root scope and its first level, as the tree does, with a count where children wait', () => {
       const { container } = renderWithProviders(<Host requested={[]} />);
-      fireEvent.click(row('site:mastra'));
-      fireEvent.click(row('Articles'));
-      expect(parentLines(container)).toEqual([
-        'parent:articles->first',
-        'parent:articles->second',
+      expect(parentLines(container).filter(id => !id?.includes('more:'))).toEqual([
         'parent:site->articles',
         'parent:site->pricing',
       ]);
+      expect(within(graphNode('articles')).getByTestId('knowledge-child-count-badge').textContent).toBe('2');
+      expect(standIns(container)).toHaveLength(2);
+      expect(within(graphNode('pricing')).queryByTestId('knowledge-child-count-badge')).toBeNull();
+    });
+
+    it('keeps counting a parent whose children are only partly drawn', () => {
+      renderWithProviders(<Host requested={[]} siteChildCount={5} />);
+      expect(within(graphNode('site')).getByTestId('knowledge-child-count-badge').textContent).toBe('5');
+    });
+
+    it('counts a capped parent as a lower bound', () => {
+      renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
+      expect(within(graphNode('site')).getByTestId('knowledge-child-count-badge').textContent).toBe('1000+');
+    });
+
+    it("loads a page's children when the pointer rests on the dots standing in for them", () => {
+      const { container } = renderWithProviders(<Host requested={[]} />);
+      const standIn = standIns(container)[0]?.closest('.react-flow__node');
+      if (!standIn) throw new Error('no stand-in dot');
+      fireEvent.mouseEnter(standIn);
+      expect(parentLines(container)).toContain('parent:articles->first');
+      expect(parentLines(container)).toContain('parent:articles->second');
+      expect(standIns(container)).toHaveLength(0);
+    });
+
+    it('grows a dot into a labelled circle when it is focused', () => {
+      const { container } = renderWithProviders(<Host requested={[]} />);
+      fireEvent.click(row('Articles'));
       expect(screen.getByTestId('view').textContent).toBe('graph');
+      expect(parentLines(container)).toContain('parent:articles->first');
+      expect(graphNode('first').getAttribute('data-testid')).toBe('knowledge-page-node');
+      expect(graphNode('first').textContent).toContain('First article');
     });
 
     it('counts the children it still does not draw', () => {

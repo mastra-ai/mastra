@@ -154,13 +154,24 @@ describe('KnowledgePageExplorer body links', () => {
   });
 
   describe('when the graph shows pages whose bodies link each other', () => {
-    it('draws a body-link line from the linking page to each page it links', () => {
-      const { container } = renderWithProviders(<Host initial={null} initialView="graph" />);
-      const lines = [...container.querySelectorAll('.react-flow__edge')]
+    const linkLines = (container: HTMLElement) =>
+      [...container.querySelectorAll('.react-flow__edge')]
         .map(edge => edge.getAttribute('data-id'))
         .filter(id => id?.startsWith('link:'))
         .sort();
-      expect(lines).toEqual(['link:overview->suspend', 'link:overview->workflows']);
+
+    it('draws none of them until all links are turned on, but counts them on each circle', () => {
+      const { container } = renderWithProviders(<Host initial={null} initialView="graph" />);
+      expect(linkLines(container)).toEqual([]);
+      expect(screen.getByRole('button', { name: 'All links' }).getAttribute('aria-pressed')).toBe('false');
+      const overview = container.querySelector('.react-flow__node [data-page-id="overview"]');
+      expect(overview?.querySelector('[data-testid="knowledge-hidden-links"]')?.textContent).toBe('↑2');
+    });
+
+    it('draws a body-link line from the linking page to each page it links once all links are on', () => {
+      const { container } = renderWithProviders(<Host initial={null} initialView="graph" />);
+      fireEvent.click(screen.getByRole('button', { name: 'All links' }));
+      expect(linkLines(container)).toEqual(['link:overview->suspend', 'link:overview->workflows']);
       expect(screen.getByTestId('knowledge-legend-link')).toBeTruthy();
     });
   });

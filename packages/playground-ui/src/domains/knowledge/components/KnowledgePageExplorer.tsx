@@ -1,8 +1,8 @@
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
-import { graphWithChildren } from '../lib/pageGraph';
-import { bodyLinkEdges } from '../lib/pageRefs';
+import { isChildPlaceholder, isScopeGroup, lazyGraph } from '../lib/graphShape';
+import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
 import { childCountLabel } from '../lib/pageTree';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
 
@@ -99,6 +99,71 @@ export interface KnowledgePageExplorerProps {
 }
 
 const MIN_SEARCH_LENGTH = 2;
+/** Links of the selected page drawn at most in each direction; the rest are counted. */
+export const FOCUS_LINK_CAP = 20;
+
+function edgeKey(edge: KnowledgePageEdge) {
+  return `${edge.kind}\u0000${edge.source}\u0000${edge.target}`;
+}
+
+/**
+ * The links to draw, and per page how many of its links (into it, out of it) go undrawn. With all links
+ * on, every link between drawn pages shows. Otherwise only the selected page's, up to
+ * {@link FOCUS_LINK_CAP} each way; with nothing selected, none.
+ */
+function visibleLinks(
+  known: KnowledgePageEdge[],
+  drawn: ReadonlyMap<string, KnowledgePagePayload>,
+  selectedId: string | null,
+  all: boolean,
+): { edges: KnowledgePageEdge[]; hidden: Map<string, { in: number; out: number }>; more: { in: number; out: number } } {
+  const unique = new Map<string, KnowledgePageEdge>();
+  for (const edge of known)
+    if (edge.source !== edge.target && !unique.has(edgeKey(edge))) unique.set(edgeKey(edge), edge);
+  // One link per pair and direction for counting, whether a note or a body makes it.
+  const pairs = new Map<string, KnowledgePageEdge>();
+  for (const edge of unique.values()) pairs.set(`${edge.source}\u0000${edge.target}`, edge);
+  const shown = new Set<string>();
+  const more = { in: 0, out: 0 };
+  if (all) {
+    for (const [key, edge] of unique) if (drawn.has(edge.source) && drawn.has(edge.target)) shown.add(key);
+  } else if (selectedId) {
+    let ins = 0;
+    let outs = 0;
+    for (const [key, edge] of unique) {
+      if (!drawn.has(edge.source) || !drawn.has(edge.target)) continue;
+      const side = edge.source === selectedId ? 'out' : edge.target === selectedId ? 'in' : null;
+      if (!side) continue;
+      const count = side === 'out' ? outs : ins;
+      if (count >= FOCUS_LINK_CAP) {
+        more[side]++;
+        continue;
+      }
+      shown.add(key);
+      if (side === 'out') outs++;
+      else ins++;
+    }
+  }
+  const drawnPairs = new Set(
+    [...shown].map(key => {
+      const edge = unique.get(key) as KnowledgePageEdge;
+      return `${edge.source}\u0000${edge.target}`;
+    }),
+  );
+  const hidden = new Map<string, { in: number; out: number }>();
+  const bump = (id: string, side: 'in' | 'out') => {
+    if (!drawn.has(id)) return;
+    const counts = hidden.get(id) ?? { in: 0, out: 0 };
+    counts[side]++;
+    hidden.set(id, counts);
+  };
+  for (const [pair, edge] of pairs) {
+    if (drawnPairs.has(pair)) continue;
+    bump(edge.source, 'out');
+    bump(edge.target, 'in');
+  }
+  return { edges: [...unique.values()].filter(edge => shown.has(edgeKey(edge))), hidden, more };
+}
 const noTreeLevels = () => [];
 const noActivity = (): KnowledgeExplorerQueryState<KnowledgeExplorerActivity> => ({
   isPending: false,
@@ -524,26 +589,80 @@ export function KnowledgePageExplorer({
   onViewChange,
 }: KnowledgePageExplorerProps) {
   const selected = source.usePage(selectedPageId);
-  // Pages focused in the graph, in order. Each one's first children load and join the graph (capped),
-  // so a page the initial graph left out appears under its parent without reloading the graph.
+  const lazyMode = !!source.useTreeLevels;
+  // Parents whose next level the graph loads: the focus and its parent (or the root scopes), plus any
+  // page whose stand-in dots the pointer rested on.
   const [graphOpened, setGraphOpened] = useState<readonly string[]>([]);
+  const [previewed, setPreviewed] = useState<readonly string[]>([]);
+  const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
+  const [allLinks, setAllLinks] = useState(false);
   const lazy = useLazyTree(source, graph, selected.data, graphOpened);
-  const drawn = useMemo(
-    () => graphWithChildren(graph.pages, graphOpened, lazy.pages, lazy.loaded),
-    [graph.pages, graphOpened, lazy.pages, lazy.loaded],
+  // With tree levels the graph loads like the tree: the focus (or the root scopes) and what sits around
+  // it, never the whole instance. Without them it draws the host's bounded graph as it is.
+  const drawnGraph = useMemo(
+    () =>
+      lazyMode
+        ? lazyGraph({
+            // The host's bounded graph fills in pages a level's first chunk didn't reach; tree levels win.
+            pages: [...new Map([...graph.pages, ...lazy.pages].map(page => [page.id, page])).values()],
+            loadedParents: lazy.loaded,
+            rootKey: KNOWLEDGE_TREE_ROOT,
+            focusId: selectedPageId,
+            openGroups,
+          })
+        : { pages: graph.pages, hiddenChildren: new Map<string, { hidden: number; drawn: number }>(), wanted: [] },
+    [lazyMode, lazy.pages, lazy.loaded, selectedPageId, openGroups, graph.pages],
   );
-  const pagesById = useMemo(() => new Map(drawn.pages.map(page => [page.id, page])), [drawn.pages]);
   useEffect(() => {
-    if (view !== 'graph' || !selectedPageId || !pagesById.has(selectedPageId)) return;
-    setGraphOpened(current => (current.includes(selectedPageId) ? current : [...current, selectedPageId]));
-  }, [view, selectedPageId, pagesById]);
+    if (!lazyMode || view === 'page') return;
+    const next = [...new Set([...drawnGraph.wanted, ...previewed])];
+    setGraphOpened(current =>
+      current.length === next.length && current.every((id, index) => id === next[index]) ? current : next,
+    );
+  }, [lazyMode, view, drawnGraph.wanted, previewed]);
+
+  // The selected page's own links, from its notes' mentions, notes elsewhere that mention it, and
+  // `[[links]]` in its body. Pages they reach that the graph doesn't hold join it, as dots.
+  const focusLinks = useMemo(() => {
+    const detail = selected.data;
+    if (!detail || detail.page.id !== selectedPageId) return { edges: [], pages: [] };
+    const known = new Map([...lazy.pages, ...detail.ancestors, ...detail.related].map(page => [page.id, page]));
+    const index = knowledgePageRefIndex(known.values());
+    const id = detail.page.id;
+    const edges: KnowledgePageEdge[] = [
+      ...detail.notes.flatMap(note => note.mentions.map(target => ({ source: id, target, kind: 'mention' as const }))),
+      ...(detail.mentionedBy ?? []).map(note => ({ source: note.pageId, target: id, kind: 'mention' as const })),
+      ...bodyLinkRefs(detail.page.body ?? '').flatMap(ref => {
+        const target = index.resolve(ref);
+        return target ? [{ source: id, target: target.id, kind: 'link' as const }] : [];
+      }),
+    ].filter(edge => edge.source !== edge.target);
+    const ends = new Set(edges.flatMap(edge => [edge.source, edge.target]));
+    return { edges, pages: [...ends].flatMap(end => known.get(end) ?? []) };
+  }, [selected.data, selectedPageId, lazy.pages]);
+
+  const drawn = useMemo(() => {
+    const ids = new Set(drawnGraph.pages.map(page => page.id));
+    const extra = focusLinks.pages.filter(page => !ids.has(page.id));
+    return { ...drawnGraph, pages: extra.length ? [...drawnGraph.pages, ...extra] : drawnGraph.pages };
+  }, [drawnGraph, focusLinks.pages]);
+  const pagesById = useMemo(() => new Map(drawn.pages.map(page => [page.id, page])), [drawn.pages]);
+  const previewParent = (parentId: string) =>
+    // The last few only, so hovering around the graph never keeps an unbounded set of levels loading.
+    setPreviewed(current => (current.includes(parentId) ? current : [...current, parentId].slice(-8)));
   // A scope picked in the tree narrows the tree and the graph to that scope and what sits under it.
   const [focusScopeId, setFocusScopeId] = useState<string | null>(null);
-  // Lines between pages: mentions the server found in notes, and `[[links]]` in the drawn pages' bodies.
-  const linkEdges = useMemo(
-    () => [...graph.edges.filter(edge => edge.kind === 'mention'), ...bodyLinkEdges(drawn.pages)],
-    [graph.edges, drawn.pages],
+  // Every link the explorer knows of: mentions the host's graph found, `[[links]]` in loaded bodies,
+  // and the selected page's own. Only the selected page's are drawn (capped) unless all links are on.
+  const knownLinks = useMemo(
+    () => [...graph.edges.filter(edge => edge.kind === 'mention'), ...bodyLinkEdges(drawn.pages), ...focusLinks.edges],
+    [graph.edges, drawn.pages, focusLinks.edges],
   );
+  const linkView = useMemo(
+    () => visibleLinks(knownLinks, pagesById, selectedPageId, allLinks),
+    [knownLinks, pagesById, selectedPageId, allLinks],
+  );
+  const linkEdges = linkView.edges;
   // A clicked mention line shows the notes that make the mention; opening the page from there marks them.
   const [mention, setMention] = useState<MentionSelection | null>(null);
   const [marked, setMarked] = useState<{ source: string; target: string } | null>(null);
@@ -559,11 +678,11 @@ export function KnowledgePageExplorer({
     onViewChange('page');
   };
   // From the tree: in the graph, a first click frames the page there and a second click on the same
-  // page opens it, like clicking a node. Elsewhere it opens. A page the graph didn't load has nothing to
-  // frame there, so it opens as a page.
+  // page opens it, like clicking a node. Elsewhere it opens. A lazily loaded graph loads around whatever
+  // is focused; a host's fixed graph that lacks the page has nothing to frame, so it opens as a page.
   const selectFromTree = (page: KnowledgePagePayload) => {
     if (page.isScope) setFocusScopeId(page.id);
-    if (view === 'graph' && pagesById.has(page.id) && page.id !== selectedPageId) onSelect(page.id);
+    if (view === 'graph' && (lazyMode || pagesById.has(page.id)) && page.id !== selectedPageId) onSelect(page.id);
     else openPage(page.id);
   };
   // Pages reached from outside the tree (search, links, mentions) clear a focus they fall outside of.
@@ -593,6 +712,18 @@ export function KnowledgePageExplorer({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <SearchBox source={source} onSelect={openAnywhere} />
+        {!showPage ? (
+          <button
+            type="button"
+            aria-pressed={allLinks}
+            data-testid="knowledge-graph-all-links"
+            title="Draw every link between the pages in the graph, not only the selected page's"
+            className="text-ui-md rounded border border-border px-3 py-1 aria-pressed:bg-muted"
+            onClick={() => setAllLinks(current => !current)}
+          >
+            All links
+          </button>
+        ) : null}
         <div role="group" aria-label="View" className="flex rounded border border-border">
           {views.map(option => (
             <button
@@ -614,9 +745,15 @@ export function KnowledgePageExplorer({
           ))}
         </div>
       </div>
-      {graph.truncated && !showPage ? (
+      {!lazyMode && graph.truncated && !showPage ? (
         <p className="text-ui-sm text-muted-foreground">
           The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
+        </p>
+      ) : null}
+      {!showPage && (linkView.more.in > 0 || linkView.more.out > 0) ? (
+        <p className="text-ui-sm text-muted-foreground" data-testid="knowledge-graph-more-links">
+          +{linkView.more.in + linkView.more.out} more links of this page not drawn ({linkView.more.in} in,{' '}
+          {linkView.more.out} out).
         </p>
       ) : null}
       {focusedInGraph && children && (children.hidden > 0 || focusedInGraph.childCountCapped) ? (
@@ -705,7 +842,14 @@ export function KnowledgePageExplorer({
                 pinnedIds={graph.pinnedIds}
                 grants={graph.grants}
                 selectedPageId={selectedPageId}
+                hiddenLinks={linkView.hidden}
+                onPreview={page => {
+                  if (isChildPlaceholder(page) && page.parentId) previewParent(page.parentId);
+                }}
                 onSelect={page => {
+                  // A stand-in loads its parent's children; a scope group opens into its scopes.
+                  if (isChildPlaceholder(page)) return page.parentId ? previewParent(page.parentId) : undefined;
+                  if (isScopeGroup(page)) return setOpenGroups(current => new Set(current).add(page.id));
                   onSelect(page.id);
                   // Hosts resolve a `?page=` with no view to the page view, so say graph outright.
                   if (view !== 'graph') onViewChange('graph');

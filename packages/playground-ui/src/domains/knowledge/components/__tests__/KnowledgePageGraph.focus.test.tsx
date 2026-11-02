@@ -56,8 +56,8 @@ const mentions: KnowledgePageEdge[] = [{ source: 'refunds', target: 'billing', k
 function screenBox(ids: string[]) {
   const viewport = setViewport.mock.calls.at(-1)?.[0];
   if (!viewport) throw new Error('no viewport was set');
-  const boxes = screen
-    .getAllByTestId('knowledge-page-node')
+  // Labelled circles and dots alike.
+  const boxes = [...document.querySelectorAll<HTMLElement>('.react-flow__node [data-page-id]')]
     .filter(element => ids.includes(element.dataset.pageId ?? ''))
     .map(element => {
       const node = element.closest<HTMLElement>('.react-flow__node');

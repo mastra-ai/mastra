@@ -15,13 +15,22 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Maximize, Pin } from 'lucide-react';
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef } from 'react';
+import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
+import {
+  KNOWLEDGE_DOT_SIZE,
+  branchColors,
+  graphShape,
+  isChildPlaceholder,
+  isScopeGroup,
+  radialLayout,
+} from '../lib/graphShape';
+import type { GraphNodeForm } from '../lib/graphShape';
+import { runLayout } from '../lib/layout';
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
 import { grantGraph, pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
-import { layoutPageGraph } from '../lib/pageLayout';
-import type { PageLayout } from '../lib/pageLayout';
+import { childCountLabel } from '../lib/pageTree';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 
 import { Txt } from '@/ds/components/Txt';
@@ -57,6 +66,17 @@ const GRANT_ARROW = { type: MarkerType.ArrowClosed, color: GRANT_EDGE_COLOR, wid
 const LINK_EDGE_COLOR = 'var(--chart-green)';
 const LINK_EDGE_STYLE = { stroke: LINK_EDGE_COLOR, strokeWidth: 1.25 };
 const LINK_ARROW = { type: MarkerType.ArrowClosed, color: LINK_EDGE_COLOR, width: 12, height: 12 };
+// Links of the selected page, by direction: green out of it, orange and dashed into it.
+const DIRECTION_EDGE_STYLE = {
+  out: { stroke: LINK_EDGE_COLOR },
+  in: { stroke: 'var(--chart-orange)', strokeDasharray: '6 3' },
+} as const;
+const DIRECTION_ARROW = {
+  out: LINK_ARROW,
+  in: { type: MarkerType.ArrowClosed, color: 'var(--chart-orange)', width: 12, height: 12 },
+};
+// A parent line out to a dot: thin and faint, with no head, so rings of dots don't turn into a thicket.
+const DOT_PARENT_EDGE_STYLE = { stroke: 'var(--foreground)', strokeOpacity: 0.2, strokeWidth: 1 };
 const PLACEHOLDER_STYLE = {
   background: 'var(--card)',
   borderColor: 'var(--chart-purple)',
@@ -75,26 +95,102 @@ function pinBadgeStyle(size: number) {
   };
 }
 
-type PageNodeData = PageFlowNode['data'] & { pinned: boolean; dimmed: boolean };
+type PageNodeData = PageFlowNode['data'] & {
+  pinned: boolean;
+  dimmed: boolean;
+  form: GraphNodeForm;
+  /** A dot's colour: its branch around the focus. */
+  color?: string;
+  /** Child count on a page whose children aren't drawn yet, e.g. `281` or `1000+`. */
+  badge?: string;
+  /** Where the page sits, from its root scope down, for a dot's tooltip. */
+  path: string;
+  /** Links into and out of the page that aren't drawn. */
+  hiddenLinks?: { in: number; out: number };
+};
 
-/** A scope or page: its kind on top, its name below, both inside the circle. */
+/** A page far from the focus: a small coloured dot that names itself on hover. */
+function DotNode({ data }: { data: PageNodeData }) {
+  const { page, size, dimmed, color, path } = data;
+  const [hover, setHover] = useState(false);
+  const standIn = isChildPlaceholder(page);
+  const children = page.childCount ? `${childCountLabel(page)} ${page.childCount === 1 ? 'child' : 'children'}` : null;
+  const label = standIn
+    ? `${page.name}: hover or click to load them`
+    : [page.name, path, children].filter(Boolean).join(' · ');
+  return (
+    <div
+      data-testid="knowledge-page-dot"
+      data-page-id={page.id}
+      data-page-type={standIn ? 'stand-in' : page.isScope ? 'scope' : 'page'}
+      aria-label={label}
+      className="relative cursor-pointer transition-opacity"
+      style={{ width: size, height: size, opacity: dimmed ? 0.35 : standIn ? 0.5 : 1 }}
+      onPointerEnter={() => setHover(true)}
+      onPointerLeave={() => setHover(false)}
+    >
+      <div
+        className="size-full rounded-full border"
+        style={{
+          background: standIn ? 'transparent' : (color ?? 'var(--muted-foreground)'),
+          borderColor: color ?? 'var(--muted-foreground)',
+          borderStyle: standIn ? 'dashed' : 'solid',
+        }}
+      />
+      {hover ? (
+        <div
+          role="tooltip"
+          className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex w-max max-w-72 -translate-x-1/2 flex-col rounded-md border border-border bg-surface-overlay-strong px-2 py-1 shadow-overlay"
+        >
+          <Txt as="span" variant="label" tone="ink">
+            {standIn ? page.name : page.name}
+          </Txt>
+          {standIn ? (
+            <Txt as="span" variant="meta" tone="muted">
+              Hover or click to load them
+            </Txt>
+          ) : (
+            <>
+              <Txt as="span" variant="meta" tone="muted">
+                {path}
+              </Txt>
+              {children ? (
+                <Txt as="span" variant="meta" tone="muted">
+                  {children}
+                </Txt>
+              ) : null}
+            </>
+          )}
+        </div>
+      ) : null}
+      <Handle type="target" position={Position.Top} className="!invisible" />
+      <Handle type="source" position={Position.Bottom} className="!invisible" />
+    </div>
+  );
+}
+
+/** A scope or page: its kind on top, its name below, both inside the circle; far pages draw as dots. */
 function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeData }>) {
-  const { page, size, selected, pinned, dimmed } = data;
+  if (data.form === 'dot') return <DotNode data={data} />;
+  const { page, size, selected, pinned, dimmed, badge } = data;
+  const group = isScopeGroup(page);
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
   const placeholder = isPlaceholder(page);
   return (
     <div
       data-testid="knowledge-page-node"
       data-page-id={page.id}
-      data-page-type={placeholder ? 'placeholder' : page.isScope ? 'scope' : 'page'}
+      data-page-type={placeholder ? 'placeholder' : group ? 'group' : page.isScope ? 'scope' : 'page'}
       className={`relative transition-opacity ${placeholder ? 'cursor-default' : 'cursor-pointer'}`}
       style={{ width: size, height: size, opacity: dimmed ? 0.35 : 1 }}
       title={
         placeholder
           ? `${kind} · ${page.address} · nothing written to it yet`
-          : page.isScope && page.address
-            ? `${kind} · ${page.address}`
-            : page.name
+          : group
+            ? `${page.name}: click to show them`
+            : page.isScope && page.address
+              ? `${kind} · ${page.address}`
+              : page.name
       }
     >
       <div
@@ -113,14 +209,55 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
           {kind}
         </Txt>
         <Txt as="span" variant="label" tone="ink" className="pointer-events-none line-clamp-3 max-w-full break-words">
-          {page.isScope && page.address ? <BreakAtColons text={page.address} /> : page.name}
+          {page.isScope && page.address && !group ? <BreakAtColons text={page.address} /> : page.name}
         </Txt>
       </div>
       {pinned ? <PinBadge size={size} /> : null}
+      {data.hiddenLinks && (data.hiddenLinks.in > 0 || data.hiddenLinks.out > 0) ? (
+        <span
+          data-testid="knowledge-hidden-links"
+          title={`${data.hiddenLinks.in} ${data.hiddenLinks.in === 1 ? 'link' : 'links'} in and ${data.hiddenLinks.out} out not drawn`}
+          className="absolute top-0 left-1/2 flex -translate-x-1/2 -translate-y-1/3 gap-1 rounded-full border border-border bg-surface-overlay-strong px-1.5 shadow-raised"
+        >
+          {data.hiddenLinks.in > 0 ? (
+            <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
+              ↓{data.hiddenLinks.in}
+            </Txt>
+          ) : null}
+          {data.hiddenLinks.out > 0 ? (
+            <Txt as="span" variant="meta" style={{ color: LINK_EDGE_COLOR }}>
+              ↑{data.hiddenLinks.out}
+            </Txt>
+          ) : null}
+        </span>
+      ) : null}
+      {badge ? (
+        <span
+          data-testid="knowledge-child-count-badge"
+          aria-label={`${badge} children, not all drawn`}
+          className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/3 rounded-full border border-border bg-surface-overlay-strong px-1.5 shadow-raised"
+        >
+          <Txt as="span" variant="meta" tone="ink">
+            {badge}
+          </Txt>
+        </span>
+      ) : null}
       <Handle type="target" position={Position.Top} className="!invisible" />
       <Handle type="source" position={Position.Bottom} className="!invisible" />
     </div>
   );
+}
+
+/** The page's place from its root scope down, through the pages the graph holds. */
+function pagePath(page: KnowledgePagePayload, byId: ReadonlyMap<string, KnowledgePagePayload>): string {
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (let up = page.parentId ? byId.get(page.parentId) : undefined; up && !seen.has(up.id);) {
+    seen.add(up.id);
+    names.unshift(up.isScope && up.address ? up.address : up.name);
+    up = up.parentId ? byId.get(up.parentId) : undefined;
+  }
+  return names.join(' › ');
 }
 
 function isPlaceholder(page: KnowledgePagePayload): boolean {
@@ -237,7 +374,17 @@ function graphBounds(nodes: Array<{ position: { x: number; y: number }; width?: 
 const LEGEND_SWATCH = 'knowledge-circle inline-block size-3 shrink-0 rounded-full border-2';
 
 /** What the circles, lines and badge mean. */
-function GraphLegend({ grants, links }: { grants: boolean; links: boolean }) {
+function GraphLegend({
+  grants,
+  links,
+  directions,
+  dots,
+}: {
+  grants: boolean;
+  links: boolean;
+  directions: boolean;
+  dots: boolean;
+}) {
   return (
     <ul
       aria-label="Legend"
@@ -255,6 +402,36 @@ function GraphLegend({ grants, links }: { grants: boolean; links: boolean }) {
           Page
         </Txt>
       </li>
+      {dots ? (
+        <li className="flex items-center gap-2" data-testid="knowledge-legend-dot">
+          <span className="inline-block size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
+          <Txt as="span" variant="meta" tone="muted">
+            Farther page (hover to name it)
+          </Txt>
+        </li>
+      ) : null}
+      {directions ? (
+        <>
+          <li className="flex items-center gap-2" data-testid="knowledge-legend-out">
+            <svg width="16" height="8" aria-hidden className="shrink-0">
+              <line x1="0" y1="4" x2="12" y2="4" stroke={LINK_EDGE_COLOR} strokeWidth="1.5" />
+              <polygon points="11,1 16,4 11,7" fill={LINK_EDGE_COLOR} />
+            </svg>
+            <Txt as="span" variant="meta" tone="muted">
+              Links out of the selected page
+            </Txt>
+          </li>
+          <li className="flex items-center gap-2" data-testid="knowledge-legend-in">
+            <svg width="16" height="8" aria-hidden className="shrink-0">
+              <line x1="0" y1="4" x2="12" y2="4" stroke="var(--chart-orange)" strokeWidth="1.5" strokeDasharray="3 2" />
+              <polygon points="11,1 16,4 11,7" fill="var(--chart-orange)" />
+            </svg>
+            <Txt as="span" variant="meta" tone="muted">
+              Links into it
+            </Txt>
+          </li>
+        </>
+      ) : null}
       <li className="flex items-center gap-2">
         <svg width="12" height="4" aria-hidden className="shrink-0">
           <line x1="0" y1="2" x2="12" y2="2" stroke={MENTION_EDGE_COLOR} strokeWidth="2" />
@@ -327,6 +504,10 @@ export interface KnowledgePageGraphProps {
   /** Access grants between scopes, drawn from each principal scope to the scope it reaches. */
   grants?: readonly KnowledgeScopeGrantPayload[];
   selectedPageId?: string | null;
+  /** Per page, links into and out of it that the graph doesn't draw; shown as ↓in ↑out on full circles. */
+  hiddenLinks?: ReadonlyMap<string, { in: number; out: number }>;
+  /** The pointer rests on a dot or stand-in: a host can load what it stands for. */
+  onPreview?: (page: KnowledgePagePayload) => void;
   /** A page that wasn't selected was clicked, tapped, or activated with Enter or Space: select it. */
   onSelect: (page: KnowledgePagePayload) => void;
   /** The already-selected page was clicked, tapped, or activated again: open it. Without it, that only reselects. */
@@ -361,6 +542,8 @@ function KnowledgePageGraphInner({
   pinnedIds = [],
   grants,
   selectedPageId,
+  hiddenLinks,
+  onPreview,
   onSelect,
   onOpen,
   onClearSelection,
@@ -372,20 +555,48 @@ function KnowledgePageGraphInner({
     const withPlaceholders = granted.placeholders.length ? [...pages, ...granted.placeholders] : pages;
     return { graphPages: withPlaceholders, allEdges: [...pageGraphEdges(pages, edges), ...granted.edges] };
   }, [pages, edges, grants]);
-  // The last layout: a refetch or live update starts from it, so placed pages stay put.
-  const lastLayout = useRef<PageLayout | undefined>(undefined);
+  // The focused page sits at the centre with its parent and children around it as full circles; pages
+  // farther out are dots on outer rings, inside their branch's slice. A last overlap pass is the only force.
   const laidOut = useMemo(() => {
+    const shape = graphShape(graphPages, selectedPageId ?? null);
+    const colors = branchColors(graphPages, shape);
     const flow = toPageFlow(graphPages, allEdges);
-    const layout = layoutPageGraph(
-      lastLayout.current,
-      flow.nodes.map(node => ({ id: node.id, size: node.data.size })),
-      flow.edges.map(edge => ({ source: edge.source, target: edge.target })),
+    for (const node of flow.nodes) {
+      if (shape.form.get(node.id) === 'dot') node.data.size = KNOWLEDGE_DOT_SIZE;
+    }
+    const sizes = new Map(flow.nodes.map(node => [node.id, node.data.size]));
+    const radial = radialLayout(graphPages, shape, page => sizes.get(page.id) ?? KNOWLEDGE_DOT_SIZE);
+    const positions = runLayout(
+      flow.nodes.map(node => ({
+        id: node.id,
+        size: node.data.size,
+        padding: node.data.size === KNOWLEDGE_DOT_SIZE ? 4 : 24,
+        initial: radial.get(node.id),
+      })),
+      [],
+      { ticks: 0 },
     );
-    lastLayout.current = layout;
-    return { nodes: flow.nodes, edges: flow.edges, positions: layout.positions };
-  }, [graphPages, allEdges]);
+    return { nodes: flow.nodes, edges: flow.edges, positions, shape, colors };
+  }, [graphPages, allEdges, selectedPageId]);
+  const pageById = useMemo(() => new Map(graphPages.map(page => [page.id, page])), [graphPages]);
 
   const pinned = useMemo(() => new Set(pinnedIds), [pinnedIds]);
+  // Pages with children none of which is drawn yet (stand-ins don't count) carry their child count.
+  // A circle counts its children whenever some of them are not drawn, as the tree does, so a parent
+  // with 281 pages says so even with its first few laid around it.
+  const childrenUndrawn = useMemo(() => {
+    const drawn = new Map<string, number>();
+    for (const page of graphPages) {
+      if (page.parentId && !isChildPlaceholder(page)) drawn.set(page.parentId, (drawn.get(page.parentId) ?? 0) + 1);
+    }
+    return new Set(
+      graphPages
+        .filter(
+          page => !isScopeGroup(page) && (page.childCountCapped || (page.childCount ?? 0) > (drawn.get(page.id) ?? 0)),
+        )
+        .map(page => page.id),
+    );
+  }, [graphPages]);
   // With a page selected, everything more than one line away fades so its neighbourhood reads at a glance.
   const neighbours = useMemo(
     () => (selectedPageId && laidOut.positions.has(selectedPageId) ? pageNeighbourIds(selectedPageId, allEdges) : null),
@@ -421,10 +632,15 @@ function KnowledgePageGraphInner({
             selected: node.id === selectedPageId,
             pinned: pinned.has(node.id),
             dimmed: !!neighbours && !neighbours.has(node.id),
+            form: laidOut.shape.form.get(node.id) ?? 'full',
+            color: laidOut.colors.get(laidOut.shape.branch.get(node.id) ?? ''),
+            badge: childrenUndrawn.has(node.id) ? childCountLabel(node.data.page) : undefined,
+            path: pagePath(node.data.page, pageById),
+            hiddenLinks: laidOut.shape.form.get(node.id) === 'full' ? hiddenLinks?.get(node.id) : undefined,
           },
         };
       }),
-    [laidOut, selectedPageId, pinned, neighbours],
+    [laidOut, selectedPageId, pinned, neighbours, childrenUndrawn, pageById, hiddenLinks],
   );
   const flowEdges = useMemo(() => {
     const sizes = new Map(laidOut.nodes.map(node => [node.id, node.data.size]));
@@ -437,6 +653,16 @@ function KnowledgePageGraphInner({
       const grant = edge.data?.kind === 'grant';
       const link = edge.data?.kind === 'link';
       const dimmed = !!neighbours && !(neighbours.has(edge.source) && neighbours.has(edge.target));
+      const toDot = laidOut.shape.form.get(edge.target) === 'dot';
+      // A link touching the selected page reads by direction: out of it or into it.
+      const direction =
+        (mention || link) && selectedPageId
+          ? edge.source === selectedPageId
+            ? 'out'
+            : edge.target === selectedPageId
+              ? 'in'
+              : undefined
+          : undefined;
       return {
         ...edge,
         type: 'rim',
@@ -449,23 +675,31 @@ function KnowledgePageGraphInner({
           dimmed,
         },
         ...(mention && onMentionSelect ? { className: 'cursor-pointer' } : {}),
-        style: mention
-          ? { stroke: MENTION_EDGE_COLOR, strokeWidth: Math.min(1.5 + (edge.data?.count ?? 1) * 0.5, 4) }
-          : grant
-            ? GRANT_EDGE_STYLE
-            : link
-              ? LINK_EDGE_STYLE
-              : PARENT_EDGE_STYLE,
-        markerEnd: mention
-          ? { type: MarkerType.ArrowClosed, color: MENTION_EDGE_COLOR, width: 14, height: 14 }
-          : grant
-            ? GRANT_ARROW
-            : link
-              ? LINK_ARROW
-              : PARENT_ARROW,
+        style: direction
+          ? { ...DIRECTION_EDGE_STYLE[direction], strokeWidth: mention ? 2 : 1.5 }
+          : mention
+            ? { stroke: MENTION_EDGE_COLOR, strokeWidth: Math.min(1.5 + (edge.data?.count ?? 1) * 0.5, 4) }
+            : grant
+              ? GRANT_EDGE_STYLE
+              : link
+                ? LINK_EDGE_STYLE
+                : toDot
+                  ? DOT_PARENT_EDGE_STYLE
+                  : PARENT_EDGE_STYLE,
+        markerEnd: direction
+          ? DIRECTION_ARROW[direction]
+          : mention
+            ? { type: MarkerType.ArrowClosed, color: MENTION_EDGE_COLOR, width: 14, height: 14 }
+            : grant
+              ? GRANT_ARROW
+              : link
+                ? LINK_ARROW
+                : toDot
+                  ? undefined
+                  : PARENT_ARROW,
       };
     });
-  }, [laidOut, onMentionSelect, neighbours]);
+  }, [laidOut, onMentionSelect, neighbours, selectedPageId]);
   const pagesById = useMemo(() => new Map(pages.map(page => [page.id, page])), [pages]);
   const reactFlow = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -538,6 +772,8 @@ function KnowledgePageGraphInner({
 
   // First click selects; a click on the page that is already selected opens it. A double-click is the two.
   const activate = (page: KnowledgePagePayload) => {
+    // A stand-in or a scope group isn't a page: the host loads or opens what it stands for.
+    if (isChildPlaceholder(page) || isScopeGroup(page)) return onSelect(page);
     if (page.id === selectedPageId && onOpen) return onOpen(page);
     selectedHere.current = page.id;
     onSelect(page);
@@ -573,7 +809,7 @@ function KnowledgePageGraphInner({
   return (
     <div
       ref={containerRef}
-      className="relative size-full"
+      className="knowledge-graph relative size-full"
       data-testid="knowledge-page-graph"
       onKeyDown={onKeyDown}
       onPointerDownCapture={event => {
@@ -581,8 +817,17 @@ function KnowledgePageGraphInner({
       }}
     >
       <GraphLegend
+        dots={[...laidOut.shape.form.values()].includes('dot')}
         grants={allEdges.some(edge => edge.kind === 'grant')}
         links={allEdges.some(edge => edge.kind === 'link')}
+        directions={
+          !!selectedPageId &&
+          allEdges.some(
+            edge =>
+              (edge.kind === 'link' || edge.kind === 'mention') &&
+              (edge.source === selectedPageId || edge.target === selectedPageId),
+          )
+        }
       />
       <ReactFlow
         nodes={nodes}
@@ -598,6 +843,9 @@ function KnowledgePageGraphInner({
         nodesConnectable={false}
         nodesDraggable={false}
         onPaneClick={onPaneClick}
+        onNodeMouseEnter={(_: unknown, node: PageFlowNode) => {
+          if (laidOut.shape.form.get(node.id) === 'dot') onPreview?.(node.data.page);
+        }}
         onNodeClick={(_: unknown, node: PageFlowNode) => {
           if (!isPlaceholder(node.data.page)) activate(node.data.page);
         }}
