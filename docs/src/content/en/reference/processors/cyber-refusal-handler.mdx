@@ -62,7 +62,7 @@ Output-step retries count against `maxProcessorRetries`, and unlike the error la
 A refusal that survives the retry ends the step unless the handler has a model to switch to. By default (`fallbackModels: 'auto'`) it switches once to the model the provider itself sends that model's cyber refusals to, through the model router on the same provider:
 
 | Refused model | Auto fallback | Source |
-| --- | --- | --- |
+| - | - | - |
 | `anthropic/claude-fable-5`, `anthropic/claude-fable-5-1` | `anthropic/claude-opus-4-8` | [Claude Fable 5 announcement](https://www.anthropic.com/news/claude-fable-5-mythos-5) |
 | `anthropic/claude-opus-5-5` | `anthropic/claude-opus-4-8` | [Claude Opus 5.5 announcement](https://www.anthropic.com/news/claude-opus-5-5) |
 | `anthropic/claude-sonnet-5-5` | `anthropic/claude-sonnet-5` | [Claude Sonnet 5.5 announcement](https://www.anthropic.com/news/claude-sonnet-5-5) |
@@ -112,9 +112,9 @@ Each switch is a processor retry, so it counts against `maxProcessorRetries`.
   content={[
   {
     name: 'fallbackModels',
-    type: "'auto' | CyberRefusalFallbackModel[] | ((context: { attempt: number; requestContext?: RequestContext }) => CyberRefusalFallbackModel | undefined | Promise<CyberRefusalFallbackModel | undefined>)',
+    type: "'auto' | CyberRefusalFallbackModel[] | ((context: { attempt: number; requestContext?: RequestContext }) => CyberRefusalFallbackModel | undefined | Promise<CyberRefusalFallbackModel | undefined>)",
     description:
-      'Models to switch to when a refusal survives the retry, in order, or a function that picks one when the refusal happens. Each entry takes anything an agent `model` accepts: a model router string, a provider model instance, or `{ id, model }`. The fallback lasts for the rest of the run. `'auto'` uses the provider fallbacks listed above. Requires the handler in `inputProcessors` too.',
+      'Models to switch to when a refusal survives the retry, in order, or a function that picks one when the refusal happens. Each entry takes anything an agent `model` accepts: a model router string, a provider model instance, or `{ id, model }`. The fallback lasts for the rest of the run. `auto` uses the provider fallbacks listed above. Requires the handler in `inputProcessors` too.',
     isOptional: true,
     defaultValue: "'auto'",
   },
