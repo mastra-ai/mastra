@@ -42,7 +42,7 @@ await run.cancel()
     name: 'result',
     type: 'Promise<void>',
     description:
-      'A promise that resolves once cancellation is requested and, if storage is configured, the status update to canceled has been attempted. It does not wait for running steps to stop. Calling cancel() on a run that already finished leaves its status unchanged, except with the Inngest engine. Rejects if a suspended nested workflow run cannot be read or updated in storage.',
+      'A promise that resolves once cancellation is requested and, if storage is configured, the status update to canceled has been attempted. It does not wait for running steps to stop. Calling cancel() on a run that already finished leaves its status unchanged, except with the Inngest engine. Rejects if storage fails while canceling suspended nested workflow runs.',
   },
 ]}
 />

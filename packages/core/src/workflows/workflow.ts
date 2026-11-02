@@ -4068,7 +4068,7 @@ export class Run<
 
   /**
    * Cancels a canceled run's suspended nested runs. Running nested runs are canceled through the abort signal.
-   * @throws When reading or updating a nested run's snapshot fails.
+   * @throws When reading this run's snapshot, or reading or updating a nested run's snapshot, fails.
    */
   protected async cancelSuspendedNestedRuns(): Promise<void> {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -4117,6 +4117,8 @@ export class Run<
     } catch {
       // Storage errors should not prevent cancellation from succeeding
       // The abort signal and in-memory status are already updated
+      // Nested runs are only canceled under a run stored as canceled, so there is nothing more to do
+      return;
     }
 
     await this.cancelSuspendedNestedRuns();
