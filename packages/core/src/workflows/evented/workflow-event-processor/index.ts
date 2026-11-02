@@ -91,7 +91,7 @@ export type ProcessorArgs = {
   resourceId?: string;
 };
 
-type StoredParentWorkflow = Omit<ParentWorkflow, 'stepGraph' | 'parentWorkflow'> &
+type StoredParentWorkflow = Omit<ParentWorkflow, 'stepGraph' | 'stepResults' | 'input' | 'parentWorkflow'> &
   NestedWorkflowParent & { parentWorkflow?: StoredParentWorkflow };
 
 export type ParentWorkflow = {
@@ -716,15 +716,15 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   private serializeParentWorkflow(parent: ParentWorkflow): StoredParentWorkflow {
-    const { stepGraph, parentWorkflow, ...continuation } = parent;
+    const { stepGraph, stepResults: _, input: __, parentWorkflow, ...continuation } = parent;
     return {
       ...continuation,
       parentWorkflow: parentWorkflow ? this.serializeParentWorkflow(parentWorkflow) : undefined,
     };
   }
 
-  restoreParentWorkflow(parent: NestedWorkflowParent): ParentWorkflow {
-    if (!('executionPath' in parent) || !('stepResults' in parent)) {
+  async restoreParentWorkflow(parent: NestedWorkflowParent): Promise<ParentWorkflow> {
+    if (!('executionPath' in parent)) {
       throw new Error(`Missing continuation for parent workflow ${parent.workflowId}`);
     }
     const continuation = parent as StoredParentWorkflow;
@@ -733,10 +733,25 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (!live) {
       throw new Error(`Cannot restore parent workflow ${parent.workflowId} for nested resume`);
     }
+    const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+      workflowName: parent.workflowId,
+      runId: parent.runId,
+    });
+    if (!snapshot || typeof snapshot === 'string') {
+      throw new Error(`Cannot load parent workflow ${parent.workflowId} for nested resume`);
+    }
     return {
       ...continuation,
+      stepResults: snapshot.context,
+      input: {
+        status: 'success',
+        output: snapshot.context[parent.stepId]?.payload,
+      },
       stepGraph: live.stepGraph,
-      parentWorkflow: continuation.parentWorkflow ? this.restoreParentWorkflow(continuation.parentWorkflow) : undefined,
+      parentWorkflow: continuation.parentWorkflow
+        ? await this.restoreParentWorkflow(continuation.parentWorkflow)
+        : undefined,
     };
   }
 

@@ -177,6 +177,8 @@ describe('evented concurrent resume', () => {
           stepId: childWorkflow.id,
         });
         expect(childSnapshot?.parentWorkflow).not.toHaveProperty('stepGraph');
+        expect(childSnapshot?.parentWorkflow).not.toHaveProperty('stepResults');
+        expect(childSnapshot?.parentWorkflow).not.toHaveProperty('input');
         expect(structuredClone(childSnapshot?.parentWorkflow)).toEqual(childSnapshot?.parentWorkflow);
       }
 
