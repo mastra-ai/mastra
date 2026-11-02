@@ -21,6 +21,7 @@ describe('account-switch module is browser-safe', () => {
     it(`${file} has no imports or requires`, () => {
       const source = readFileSync(new URL(`./${file}`, import.meta.url), 'utf8');
       expect(source).not.toMatch(/^\s*(import|export)\s[^;]*\sfrom\s/m);
+      expect(source).not.toMatch(/^\s*import\s*['"]/m);
       expect(source).not.toMatch(/\bimport\s*\(/);
       expect(source).not.toMatch(/\brequire\s*\(/);
       expect(source).not.toMatch(/\bnode:/);

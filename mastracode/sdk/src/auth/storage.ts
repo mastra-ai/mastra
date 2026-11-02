@@ -865,15 +865,7 @@ export class AuthStorage {
     const slot = this.data[providerId];
     let credential: OAuthCredentials | undefined;
     if (selectedEntry) {
-      const {
-        type: _type,
-        id: _id,
-        label: _label,
-        addedAt: _addedAt,
-        active: _active,
-        ...accountCredential
-      } = selectedEntry;
-      credential = accountCredential;
+      credential = credentialFieldsOf(selectedEntry);
       // The active account's credentials live in both the legacy slot and its
       // registry entry, and a legacy writer (older build, another worktree) can
       // refresh the slot without rotating the refresh token. `migrate()` only
@@ -958,15 +950,7 @@ export class AuthStorage {
     const slot = this.get(providerId);
     let cred: OAuthCredentials | undefined;
     if (selectedEntry) {
-      const {
-        type: _type,
-        id: _id,
-        label: _label,
-        addedAt: _addedAt,
-        active: _active,
-        ...accountCredential
-      } = selectedEntry;
-      cred = accountCredential;
+      cred = credentialFieldsOf(selectedEntry);
     } else if (!accountInstanceId && slot?.type === 'oauth') {
       cred = slot;
     }

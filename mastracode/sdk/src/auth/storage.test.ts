@@ -965,6 +965,35 @@ describe('AuthStorage multi-account registry', () => {
     });
   });
 
+  it('keeps registry metadata out of credential snapshots and refresh payloads', async () => {
+    const entry1 = { ...accountRecord('r1', 'a1', { active: true }), identity: 'org-1', priority: 0 };
+    const entry2 = { ...accountRecord('r2', 'a2', { expires: PAST }), identity: 'org-2', priority: 1 };
+    const { storage } = makeStorage({
+      [PROVIDER]: oauthCred('r1', 'a1'),
+      [`accounts:${entry1.id}`]: entry1,
+      [`accounts:${entry2.id}`]: entry2,
+    });
+    const refreshMock = vi
+      .spyOn(anthropicOAuthProvider, 'refreshToken')
+      .mockResolvedValue({ refresh: 'r-fresh', access: 'a-fresh', expires: FUTURE });
+
+    const unexpired = await storage.getOAuthCredential(PROVIDER, entry1.id);
+    expect(unexpired).toEqual({
+      type: 'oauth',
+      refresh: 'r1',
+      access: 'a1',
+      expires: FUTURE,
+      accountInstanceId: entry1.id,
+    });
+
+    await storage.getOAuthCredential(PROVIDER, entry2.id);
+    await storage.forceRefreshActiveAccount(PROVIDER);
+    expect(refreshMock.mock.calls.map(([creds]) => creds)).toEqual([
+      { refresh: 'r2', access: 'a2', expires: PAST },
+      { refresh: 'r1', access: 'a1', expires: FUTURE },
+    ]);
+  });
+
   it('logout removes the slot and every registered account', async () => {
     const { storage, authPath } = makeStorage();
     await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE });
