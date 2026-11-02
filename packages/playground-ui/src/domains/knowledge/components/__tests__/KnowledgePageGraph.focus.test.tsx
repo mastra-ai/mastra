@@ -135,4 +135,26 @@ describe('KnowledgePageGraph focus on the selected page', () => {
       expect(setViewport).not.toHaveBeenCalled();
     });
   });
+
+  describe('when the graph is too big to fit at a readable zoom', () => {
+    const crowd = [
+      page('hub', null),
+      ...Array.from({ length: 45 }, (_, index) => ({
+        ...page(`c${index}`, 'hub'),
+        position: `a${String(index).padStart(2, '0')}`,
+      })),
+    ];
+
+    it('stops at the readable zoom and centres the page it is built around, cropping the edge instead', async () => {
+      renderWithProviders(
+        <KnowledgePageGraph pages={crowd} edges={[]} selectedPageId={null} centerId="hub" onSelect={() => {}} />,
+      );
+      await screen.findAllByTestId('knowledge-page-node');
+      const viewport = setViewport.mock.calls.at(-1)?.[0];
+      expect(viewport?.zoom).toBe(0.7);
+      const box = screenBox(['hub']);
+      expect((box.left + box.right) / 2).toBeCloseTo(WIDTH / 2, 0);
+      expect((box.top + box.bottom) / 2).toBeCloseTo(HEIGHT / 2, 0);
+    });
+  });
 });

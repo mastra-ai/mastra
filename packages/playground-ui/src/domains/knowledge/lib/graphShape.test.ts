@@ -420,7 +420,7 @@ describe('crowdScale', () => {
 });
 
 describe('readable framing', () => {
-  it('draws 16 children at full size and counts the rest, rather than shrinking dozens of circles to fit', () => {
+  it('draws up to 48 children as circles and counts the rest', () => {
     const many = Array.from({ length: 60 }, (_, index) => page(`p${String(index).padStart(2, '0')}`, 'blog'));
     const graph = lazyGraph({
       rootKey: '',
@@ -430,9 +430,25 @@ describe('readable framing', () => {
       focusId: 'blog',
     });
     const circles = graph.pages.filter(candidate => candidate.parentId === 'blog' && !isRestCircle(candidate));
-    expect(circles).toHaveLength(16);
-    expect(graph.pages.find(isRestCircle)?.name).toBe('+44 more');
-    expect(crowdScale(circles.length)).toBe(1);
+    expect(circles).toHaveLength(GRAPH_CHILD_CAP);
+    expect(graph.pages.find(isRestCircle)?.name).toBe(`+${60 - GRAPH_CHILD_CAP} more`);
+  });
+
+  it('staggers 45 circles over rows so all of them stay within reach of the centre at the readable zoom', () => {
+    const kids = Array.from({ length: 45 }, (_, index) =>
+      page(`c${index}`, 'hub', { position: `a${String(index).padStart(2, '0')}` }),
+    );
+    const all = [page('hub', null), ...kids];
+    const positions = radialLayout(all, graphShape(all, 'hub'), () => 76);
+    const farthest = Math.max(
+      ...kids.map(kid => Math.hypot(positions.get(kid.id)?.x ?? 0, positions.get(kid.id)?.y ?? 0)),
+    );
+    // A pane 900px tall shows 450 / READABLE_MIN_ZOOM of the graph either side of the centre.
+    expect(farthest + 76 / 2).toBeLessThan(450 / READABLE_MIN_ZOOM);
+    const rings = new Set(
+      kids.map(kid => Math.round(Math.hypot(positions.get(kid.id)?.x ?? 0, positions.get(kid.id)?.y ?? 0))),
+    );
+    expect(rings.size).toBeGreaterThan(1);
   });
 
   it('never frames the graph below a zoom at which circle names can be read', () => {

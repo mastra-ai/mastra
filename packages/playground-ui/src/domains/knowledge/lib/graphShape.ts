@@ -171,6 +171,8 @@ type Point = { x: number; y: number };
 
 /** Radius of the first ring: at least this, more when its full circles need the room. */
 const FIRST_RING = 230;
+/** Widest the first ring of full circles grows before they stagger over more rows. */
+const MAX_CIRCLE_RING = 300;
 /** Gap from the full-circle ring out to the first ring of dots. */
 const FIRST_DOT_RING_GAP = 150;
 /** Gap between rings of dots. */
@@ -217,16 +219,26 @@ export function radialLayout(
     if (!page || id === shape.center || shape.form.get(id) !== 'full') continue;
     circleWidth.set(at, (circleWidth.get(at) ?? 0) + sizeOf(page) + 30);
   }
-  const radii = [0, Math.max(FIRST_RING, (circleWidth.get(1) ?? 0) / (2 * Math.PI))];
+  // Circles that would need a huge ring to sit side by side stagger over a few rows instead, so the
+  // whole first level stays within reach of the centre at a readable zoom.
+  const firstWidth = circleWidth.get(1) ?? 0;
+  const ringRows = Math.max(1, Math.ceil(firstWidth / (2 * Math.PI * MAX_CIRCLE_RING)));
+  const fullCount = [...shape.depth].filter(
+    ([id, at]) => at === 1 && id !== shape.center && shape.form.get(id) === 'full' && byId.has(id),
+  ).length;
+  const rowStep = fullCount ? firstWidth / fullCount : 0;
+  const radii = [0, Math.max(FIRST_RING, firstWidth / ringRows / (2 * Math.PI))];
   const radius = (at: number) => {
     while (radii.length <= at) {
       const next = radii.length;
       const last = radii[next - 1] as number;
       const gap = circleWidth.has(next - 1) && next > 1 ? FIRST_DOT_RING_GAP : DOT_RING_GAP;
-      radii.push(Math.max(last + gap, (circleWidth.get(next) ?? 0) / (2 * Math.PI)));
+      const outer = next === 2 ? (ringRows - 1) * rowStep : 0;
+      radii.push(Math.max(last + gap + outer, (circleWidth.get(next) ?? 0) / (2 * Math.PI)));
     }
     return radii[at] as number;
   };
+  let circleIndex = 0;
 
   const positions = new Map<string, Point>();
   if (shape.center) positions.set(shape.center, { x: 0, y: 0 });
@@ -244,7 +256,7 @@ export function radialLayout(
       const full = shape.form.get(id) === 'full';
       const row = full || dots <= perRow ? 0 : dotIndex % Math.ceil(dots / perRow);
       if (!full) dotIndex++;
-      const r = radius(at) + row * DOT_SPACING;
+      const r = radius(at) + (full && at === 1 ? (circleIndex++ % ringRows) * rowStep : row * DOT_SPACING);
       positions.set(id, { x: Math.cos(middle) * r, y: Math.sin(middle) * r });
       place(kids.get(id) ?? [], at + 1, angle, share);
       angle += share;
@@ -294,11 +306,11 @@ export function branchColors(pages: readonly KnowledgePagePayload[], shape: Grap
 /** Framing never zooms out past this, so circle names stay readable; a bigger graph is panned, not shrunk. */
 export const READABLE_MIN_ZOOM = 0.7;
 /** Children a drawn page shows at most; the rest are counted, not drawn. */
-export const GRAPH_CHILD_CAP = 16;
+export const GRAPH_CHILD_CAP = 48;
 /** Stand-in dots drawn at most for a page whose children haven't loaded yet. */
 export const PLACEHOLDER_CAP = 8;
 /** Most circles whose children are loaded just to draw them as dots around it. */
-export const WANTED_CIRCLE_CAP = 12;
+export const WANTED_CIRCLE_CAP = 24;
 /** Roots drawn beside the root at the centre when nothing is focused. */
 export const SIBLING_ROOT_CAP = 8;
 /** Children around a page that fit at full size; past this the circles shrink to make room. */

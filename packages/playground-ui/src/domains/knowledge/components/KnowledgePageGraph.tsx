@@ -1174,8 +1174,8 @@ function KnowledgePageGraphInner({
   // moved. State is read through a ref so a refetch with the same selection never moves the view.
   // Pages that just left the view stay a moment, fading, so a refocus reads as a change and not a cut.
   const drawnNodes = useLeavingNodes(nodes, prefersMotion());
-  const fitState = useRef({ nodes, allEdges, selectedPageId, reactFlow });
-  fitState.current = { nodes, allEdges, selectedPageId, reactFlow };
+  const fitState = useRef({ nodes, allEdges, selectedPageId, centerId, reactFlow });
+  fitState.current = { nodes, allEdges, selectedPageId, centerId, reactFlow };
   // Set when a fit found the pane 0×0, so the next non-zero size fits even if it matches the last one seen.
   const fitPending = useRef(false);
   const fit = useCallback((focusSelection: boolean, duration?: number) => {
@@ -1187,12 +1187,27 @@ function KnowledgePageGraphInner({
       return;
     }
     fitPending.current = false;
-    const { nodes: current, allEdges: edgesNow, selectedPageId: selected, reactFlow: flow } = fitState.current;
+    const {
+      nodes: current,
+      allEdges: edgesNow,
+      selectedPageId: selected,
+      centerId: centre,
+      reactFlow: flow,
+    } = fitState.current;
     const focus = focusSelection && selected ? pageNeighbourIds(selected, edgesNow) : null;
     const targets = focus ? current.filter(node => focus.has(node.id)) : current;
     const bounds = graphBounds(targets);
     if (!bounds) return;
     const viewport = getViewportForBounds(bounds, width, height, READABLE_MIN_ZOOM, focus ? 1.5 : 2, focus ? 0.3 : 0.1);
+    // When the floor stops the graph shrinking to fit, what is cropped is the edge, not the page being
+    // looked at: the view centres on the focused page, or the layout's centre when nothing is focused.
+    const anchor = current.find(node => node.id === (selected ?? centre));
+    if (anchor && viewport.zoom <= READABLE_MIN_ZOOM) {
+      const cx = anchor.position.x + (anchor.width ?? 0) / 2;
+      const cy = anchor.position.y + (anchor.height ?? 0) / 2;
+      viewport.x = width / 2 - cx * viewport.zoom;
+      viewport.y = height / 2 - cy * viewport.zoom;
+    }
     void flow.setViewport(viewport, duration ? { duration } : undefined);
   }, []);
 
