@@ -140,6 +140,34 @@ describe('writing back a long page read in part', () => {
     expect(whole).toBe(body);
   });
 
+  it('refuses a range even one character wider than the read it claims to come from', async () => {
+    const { knowledge, call } = setup();
+    const body = referenceBody();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
+    const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
+    const second = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: read.page.bodyRange.end });
+    // From offset 5 the read window is one character short of the token estimate's limit.
+    const shifted = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: 5 });
+    for (const [start, end] of [
+      [0, read.page.bodyRange.end + 1],
+      [5, shifted.page.bodyRange.end + 1],
+      [0, body.length - 1],
+      [0, second.page.bodyRange.end],
+    ]) {
+      await expect(
+        call('knowledge_page', {
+          op: 'write',
+          page: 'docs:acme#anthropic',
+          body: read.page.body,
+          bodyRange: { start, end, of: body.length },
+          expectedVersion: read.page.version,
+        }),
+      ).rejects.toThrow(/wider than one knowledge_read/);
+    }
+    const after = await call('knowledge_read', { page: 'docs:acme#anthropic' });
+    expect(after.page.version).toBe(read.page.version);
+  });
+
   it('writes just the part a read returned when the write echoes its bodyRange', async () => {
     const { knowledge, call } = setup();
     const body = referenceBody();
