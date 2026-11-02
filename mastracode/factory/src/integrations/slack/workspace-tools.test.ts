@@ -22,6 +22,9 @@ function fakeSlack() {
     UNIK: { id: 'UNIK', team_id: TEAM, profile: { display_name: 'nik' } },
     UOUTSIDE: { id: 'UOUTSIDE', team_id: 'T2', profile: { display_name: 'vendor' } },
     UBOT: { id: 'UBOT', team_id: TEAM, is_bot: true, name: 'otherbot' },
+    UGUEST: { id: 'UGUEST', team_id: TEAM, is_restricted: true, profile: { display_name: 'guest' } },
+    USINGLE: { id: 'USINGLE', team_id: TEAM, is_ultra_restricted: true, profile: { display_name: 'single' } },
+    USTRANGER: { id: 'USTRANGER', team_id: TEAM, is_stranger: true, profile: { display_name: 'stranger' } },
   };
   const channels: Record<string, Record<string, unknown>> = {
     C1: { id: 'C1', name: 'factory' },
@@ -30,8 +33,16 @@ function fakeSlack() {
     GTEAM: { id: 'GTEAM', name: 'team', is_private: true },
     CSHARED: { id: 'CSHARED', name: 'vendor-connect', is_ext_shared: true },
     DOTHER: { id: 'DOTHER', is_im: true },
+    GBIG: { id: 'GBIG', name: 'big', is_private: true },
+    CGUESTS: { id: 'CGUESTS', name: 'guests' },
   };
-  const members: Record<string, string[]> = { GSECRET: ['UNIK'], GTEAM: ['UDUSTIN', 'UNIK'] };
+  const members: Record<string, string[]> = {
+    GSECRET: ['UNIK'],
+    GTEAM: ['UDUSTIN', 'UNIK'],
+    // Over two pages; UDUSTIN is only on the second.
+    GBIG: [...Array.from({ length: 1000 }, (_, i) => `UFILL${i}`), 'UDUSTIN'],
+    CGUESTS: ['UGUEST', 'USINGLE', 'USTRANGER', 'UOUTSIDE'],
+  };
   const history: Record<string, Array<Record<string, unknown>>> = {
     // Newest first, as Slack returns it.
     C2: [
@@ -64,8 +75,16 @@ function fakeSlack() {
         if (!channel) throw notFound('channel_not_found');
         return { ok: true, channel };
       }
-      case 'conversations.members':
-        return { ok: true, members: members[args.channel] ?? [] };
+      case 'conversations.members': {
+        const all = members[args.channel] ?? [];
+        const start = Number(args.cursor ?? 0);
+        const end = start + (args.limit ?? 100);
+        return {
+          ok: true,
+          members: all.slice(start, end),
+          response_metadata: { next_cursor: end < all.length ? String(end) : '' },
+        };
+      }
       case 'conversations.history':
         return { ok: true, messages: (history[args.channel] ?? []).slice(0, args.limit), has_more: false };
       case 'conversations.replies':
@@ -82,8 +101,12 @@ function fakeSlack() {
   return { apiCall, postMessage };
 }
 
-/** A Slack-started run in thread C1/171.1, working for UDUSTIN. */
-async function slackSession() {
+/**
+ * A run in thread C1/171.1. By default it started from a Slack message by
+ * UDUSTIN; with `woken` it has no channel context and falls back to the
+ * thread's stored last sender (or none).
+ */
+async function slackSession({ requester = 'UDUSTIN', woken = false }: { requester?: string; woken?: boolean } = {}) {
   const storage = new InMemoryStore();
   const memory = await storage.getStore('memory');
   await memory!.saveThread({
@@ -93,7 +116,11 @@ async function slackSession() {
       title: 'session',
       createdAt: new Date(),
       updatedAt: new Date(),
-      metadata: { channel_platform: 'slack', channel_externalThreadId: 'slack:C1:171.1' },
+      metadata: {
+        channel_platform: 'slack',
+        channel_externalThreadId: 'slack:C1:171.1',
+        ...(woken && requester ? { channel_lastSender: { author: { userId: requester, userName: requester } } } : {}),
+      },
     },
   });
   const slackApi = fakeSlack();
@@ -112,7 +139,8 @@ async function slackSession() {
 
   const requestContext = new RequestContext();
   requestContext.set('controller', { threadId: 'thread-1', sessionId: 'session-1', resourceId: 'resource-1' });
-  requestContext.set('channel', { platform: 'slack', eventType: 'mention', userId: 'UDUSTIN', channelId: 'C1' });
+  if (!woken)
+    requestContext.set('channel', { platform: 'slack', eventType: 'mention', userId: requester, channelId: 'C1' });
   const tools = await slack.agentTools({ requestContext });
   const run = (name: string, input: Record<string, unknown>) => (tools[name] as unknown as Execute).execute(input, {});
   return { run, ...slackApi };
@@ -183,6 +211,38 @@ describe('Slack workspace tools', () => {
     await expect(run(SLACK_READ_TOOL_NAME, { target: 'DOTHER' })).rejects.toThrow(/someone else's direct message/);
     const team = await run(SLACK_READ_TOOL_NAME, { target: 'GTEAM' });
     expect(team.messages.map((m: any) => m.text)).toEqual(['team deploy notes']);
+  });
+
+  it('checks membership past the first page of a large private channel', async () => {
+    const { run } = await slackSession();
+    await expect(run(SLACK_READ_TOOL_NAME, { target: 'GBIG' })).resolves.toMatchObject({ channel: { id: 'GBIG' } });
+  });
+
+  it.each(['UGUEST', 'USINGLE', 'USTRANGER', 'UOUTSIDE'])(
+    'limits a %s requester to conversations they are in',
+    async requester => {
+      const { run, postMessage } = await slackSession({ requester });
+      await expect(run(SLACK_READ_TOOL_NAME, { target: 'C2' })).rejects.toThrow(/guest or outside this workspace/);
+      await expect(run(SLACK_SEARCH_TOOL_NAME, { query: 'deploy', channels: ['C2'] })).rejects.toThrow(
+        /guest or outside this workspace/,
+      );
+      await expect(run(SLACK_SEND_TOOL_NAME, { to: 'C2', text: 'x' })).rejects.toThrow(/guest or outside/);
+      await expect(run(SLACK_SEND_TOOL_NAME, { to: '<@UNIK>', text: 'x' })).rejects.toThrow(/guest or outside/);
+      expect(postMessage).not.toHaveBeenCalled();
+      // Their own thread's channel, and channels they are in, still work.
+      await expect(run(SLACK_READ_TOOL_NAME, {})).resolves.toBeDefined();
+      await expect(run(SLACK_READ_TOOL_NAME, { target: 'CGUESTS' })).resolves.toBeDefined();
+    },
+  );
+
+  it("on a woken run, checks private access for the thread's stored last sender", async () => {
+    const member = await slackSession({ requester: 'UDUSTIN', woken: true });
+    await expect(member.run(SLACK_READ_TOOL_NAME, { target: 'GTEAM' })).resolves.toBeDefined();
+    await expect(member.run(SLACK_READ_TOOL_NAME, { target: 'GSECRET' })).rejects.toThrow(/not in/);
+
+    const nobody = await slackSession({ requester: '', woken: true });
+    await expect(nobody.run(SLACK_READ_TOOL_NAME, { target: 'GTEAM' })).rejects.toThrow(/no requester/);
+    await expect(nobody.run(SLACK_READ_TOOL_NAME, { target: 'C2' })).resolves.toBeDefined();
   });
 
   it('DMs a teammate', async () => {

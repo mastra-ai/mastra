@@ -78,6 +78,12 @@ interface SlackSession {
   requester?: string;
   auth(): Promise<{ teamId?: string; url?: string }>;
   userName(id: string): Promise<string>;
+  /**
+   * Whether the requester is a full member of this workspace. Guests, people
+   * from another organization and deactivated accounts are limited to
+   * conversations they are in.
+   */
+  requesterIsLimited(): Promise<boolean>;
   /** Rejects reading or posting into a conversation the requester could not see themselves. */
   assertVisible(channel: string, action: string): Promise<SlackResponse>;
 }
@@ -113,17 +119,45 @@ async function openSession(requestContext: RequestContext, deps: ShareFileToolDe
   let auth: Promise<{ teamId?: string; url?: string }> | undefined;
   const names = new Map<string, Promise<string>>();
   const visible = new Map<string, Promise<SlackResponse>>();
+  let limited: Promise<boolean> | undefined;
+
+  const getAuth = () =>
+    (auth ??= call('auth.test', {}, 'identify the workspace').then(r => ({
+      teamId: r.team_id,
+      url: r.url,
+    })));
+
+  const isMember = async (channel: string, user: string, action: string) => {
+    let cursor: string | undefined;
+    do {
+      const page = await call('conversations.members', { channel, limit: 1000, ...(cursor ? { cursor } : {}) }, action);
+      if ((page.members as string[] | undefined)?.includes(user)) return true;
+      cursor = page.response_metadata?.next_cursor || undefined;
+    } while (cursor);
+    return false;
+  };
+
+  const requesterIsLimited = () =>
+    (limited ??= (async () => {
+      if (!requester) return false;
+      const user = (await call('users.info', { user: requester }, 'look up the person you are working for')).user ?? {};
+      const { teamId } = await getAuth();
+      return Boolean(
+        user.deleted ||
+        user.is_restricted ||
+        user.is_ultra_restricted ||
+        user.is_stranger ||
+        (teamId && user.team_id && user.team_id !== teamId),
+      );
+    })());
 
   const session: SlackSession = {
     adapter,
     call,
     origin,
     ...(requester ? { requester } : {}),
-    auth: () =>
-      (auth ??= call('auth.test', {}, 'identify the workspace').then(r => ({
-        teamId: r.team_id,
-        url: r.url,
-      }))),
+    auth: getAuth,
+    requesterIsLimited,
     userName: id => {
       let name = names.get(id);
       if (!name) {
@@ -144,14 +178,16 @@ async function openSession(requestContext: RequestContext, deps: ShareFileToolDe
           if (info.is_im) {
             throw new Error(`Cannot ${action}: that is someone else's direct message with the app.`);
           }
-          if (info.is_private || info.is_mpim || channel.startsWith('G')) {
+          const isPrivate = Boolean(info.is_private || info.is_mpim || channel.startsWith('G'));
+          if (isPrivate || (await requesterIsLimited())) {
             if (!requester) {
               throw new Error(`Cannot ${action}: it is private and this session has no requester to check access for.`);
             }
-            const members = await call('conversations.members', { channel, limit: 1000 }, action);
-            if (!(members.members as string[] | undefined)?.includes(requester)) {
+            if (!(await isMember(channel, requester, action))) {
               throw new Error(
-                `Cannot ${action}: it is a private conversation the person you are working for is not in.`,
+                isPrivate
+                  ? `Cannot ${action}: it is a private conversation the person you are working for is not in.`
+                  : `Cannot ${action}: the person you are working for is a guest or outside this workspace, and is not in that channel.`,
               );
             }
           }
@@ -200,7 +236,9 @@ const targetDescription =
  *
  * They act with the app's bot token, so they only see conversations the app
  * is in. Private conversations other than the session's own are refused unless
- * the person the session works for is a member, and posting refuses Slack
+ * the person the session works for is a member. When that person is a guest
+ * or from another organization, every other conversation needs their
+ * membership and direct messages are refused. Posting refuses Slack
  * Connect channels, people outside the workspace, bots, and the session's own
  * thread (which `reply_in_thread` already covers).
  */
@@ -329,6 +367,11 @@ export function createSlackWorkspaceTools(
         let channel: string;
         let threadTs = '';
         if (target.kind === 'user') {
+          if (await s.requesterIsLimited()) {
+            throw new Error(
+              'Cannot message that person: the person you are working for is a guest or outside this workspace.',
+            );
+          }
           const user = (await s.call('users.info', { user: target.user }, 'message that person')).user ?? {};
           const { teamId } = await s.auth();
           if (user.deleted) throw new Error(`${to} is a deactivated account.`);
