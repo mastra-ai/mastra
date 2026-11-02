@@ -1,4 +1,4 @@
-import { format, isValid, parse, startOfDay } from 'date-fns';
+import { isValid, parse, startOfDay } from 'date-fns';
 import { Check } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
@@ -66,7 +66,7 @@ export function CustomRangeEditor({
   if (applyAttempted && rangeReversed) error = 'Start date/time must be before end date/time';
   else if (applyAttempted && rangeTooWide) error = `Range cannot be longer than ${formatDays(maxRangeMs ?? 0)}`;
   else if (applyAttempted && firstDay && rangeTooEarly)
-    error = `Range cannot start before ${format(firstDay, 'MMM d, yyyy')}`;
+    error = `Range cannot start before ${firstDay.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}`;
 
   const apply = () => {
     if (rangeInvalid) {

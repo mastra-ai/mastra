@@ -73,7 +73,7 @@ export const SinglePoint: Story = {
 
 // 30 daily buckets, as the latency card renders for the 30d preset.
 const latencyData: Record<string, unknown>[] = Array.from({ length: 30 }, (_, i) => ({
-  time: new Date(2026, 7, 26 + i).toLocaleDateString('en-US', { month: 'short', day: '2-digit' }),
+  time: new Date(2026, 7, 26 + i).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }),
   p50: Math.round(130 + 25 * Math.sin(i / 2.5)),
   p95: Math.round(550 + 160 * Math.sin(i / 3.5 + 1)),
 }));

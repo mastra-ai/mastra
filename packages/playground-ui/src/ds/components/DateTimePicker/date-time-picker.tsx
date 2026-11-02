@@ -1,4 +1,4 @@
-import { format, formatDate, isValid } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import { CalendarIcon, Check, X } from 'lucide-react';
 import * as React from 'react';
 import type { DayPickerSingleProps } from 'react-day-picker';
@@ -14,6 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover
 import { controlTriggerOpenStateFor } from '@/ds/primitives/control-size';
 import { fieldTriggerStyle } from '@/ds/primitives/form-element';
 import { cn } from '@/lib/utils';
+import { formatDate } from '@/utils/date-format';
 
 type CommonProps = Omit<DayPickerSingleProps, 'mode' | 'selected' | 'onSelect'> & {
   value: Date | undefined | null;
@@ -118,6 +119,7 @@ export const DateTimePickerContent = ({
 }) => {
   const [localErrorMsg, setLocalErrorMsg] = React.useState<string | null>(null);
   const [dateInputValue, setDateInputValue] = React.useState<string>(
+    // oxlint-disable-next-line playground-ui/date-locale -- typed text is read back with `new Date()`, which only parses English
     value ? format(getCompoundDate({ date: value, timeStr: defaultTimeStrValue }) || '', 'PP p') : '',
   );
   const [timeStrValue, setTimeStrValue] = React.useState<string>(defaultTimeStrValue || '');
@@ -140,12 +142,13 @@ export const DateTimePickerContent = ({
   const updateInputValue = (date: Date | string) => {
     if (isValid(date)) {
       if (maxValue && date > maxValue) {
-        setLocalErrorMsg(`The selected date should be before ${format(maxValue, 'PP p')}`);
+        setLocalErrorMsg(`The selected date should be before ${formatDate(maxValue, 'date-time')}`);
         setDateInputValue('');
       } else if (minValue && date < minValue) {
-        setLocalErrorMsg(`The selected date should be after ${format(minValue, 'PP p')}`);
+        setLocalErrorMsg(`The selected date should be after ${formatDate(minValue, 'date-time')}`);
         setDateInputValue('');
       } else {
+        // oxlint-disable-next-line playground-ui/date-locale -- typed text is read back with `new Date()`, which only parses English
         setDateInputValue(format(date, 'PP p'));
         setLocalErrorMsg('');
       }
@@ -236,7 +239,8 @@ export const DateTimePickerContent = ({
       <TimePicker
         onValueChange={handleTimeStrChange}
         className="m-4 mt-0 w-auto"
-        defaultValue={value ? formatDate(new Date(value), 'hh:mm a') : defaultTimeStrValue}
+        // oxlint-disable-next-line playground-ui/date-locale -- TimePicker is a 12-hour picker that parses `hh:mm a`
+        defaultValue={value ? format(new Date(value), 'hh:mm a') : defaultTimeStrValue}
       />
 
       <div className="m-4 mt-0 grid grid-cols-[1fr_2fr] gap-2">
@@ -285,7 +289,7 @@ export const DefaultTrigger = React.forwardRef<HTMLButtonElement, DefaultButtonP
         {...props}
       >
         {value ? (
-          <span className="text-foreground">{format(value, 'PP p')}</span>
+          <span className="text-foreground">{formatDate(value, 'date-time')}</span>
         ) : (
           <span className="text-muted-foreground">{placeholder ?? 'Pick a date'}</span>
         )}

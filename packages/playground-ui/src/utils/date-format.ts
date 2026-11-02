@@ -49,11 +49,22 @@ type FormatterKey = keyof typeof PRESET_OPTIONS;
 
 const formatters = new Map<string, Intl.DateTimeFormat>();
 
+/** Whether the locale (the browser's by default) reads time on a 12-hour clock, with AM and PM. */
+export function usesTwelveHourClock(locale?: string) {
+  return /^h1[12]$/.test(new Intl.DateTimeFormat(locale, { hour: 'numeric' }).resolvedOptions().hourCycle ?? '');
+}
+
+/** A 24-hour clock pads the hour (`00:05`, `08:30`), where `numeric` alone would print `0:05`. */
+function createFormatter(locale: string | undefined, options: Intl.DateTimeFormatOptions) {
+  const padHour = options.hour === 'numeric' && !usesTwelveHourClock(locale);
+  return new Intl.DateTimeFormat(locale, padHour ? { ...options, hour: '2-digit' } : options);
+}
+
 function getFormatter(key: FormatterKey, locale?: string, timeZone?: string) {
   const cacheKey = `${locale ?? ''}|${timeZone ?? ''}|${key}`;
   let formatter = formatters.get(cacheKey);
   if (!formatter) {
-    formatter = new Intl.DateTimeFormat(locale, { ...PRESET_OPTIONS[key], timeZone });
+    formatter = createFormatter(locale, { ...PRESET_OPTIONS[key], timeZone });
     formatters.set(cacheKey, formatter);
   }
   return formatter;
@@ -76,6 +87,20 @@ export function formatShortDate(value: DateInput, { locale, now, timeZone }: For
   const key =
     calendarDate(date, timeZone).year === calendarDate(reference, timeZone).year ? 'dayMonth' : 'dayMonthYear';
   return getFormatter(key, locale, timeZone).format(date);
+}
+
+/**
+ * Clock time for chart labels, kept short: `2 PM` and `2:05 PM` on a 12-hour clock, `14:00` and
+ * `14:05` on a 24-hour one, where a bare `14` wouldn't read as a time.
+ */
+export function formatClock(value: DateInput, { locale, timeZone }: Omit<FormatOptions, 'now'> = {}) {
+  const date = toDate(value);
+  if (!date) return undefined;
+  // Built per call, unlike the cached presets: a cached formatter keeps the time zone it was made in.
+  const time = createFormatter(locale, { ...PRESET_OPTIONS.time, timeZone });
+  const onTheHour = time.formatToParts(date).find(part => part.type === 'minute')?.value === '00';
+  if (!onTheHour || !usesTwelveHourClock(locale)) return time.format(date);
+  return new Intl.DateTimeFormat(locale, { hour: 'numeric', timeZone }).format(date);
 }
 
 const LONG_RELATIVE_UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
