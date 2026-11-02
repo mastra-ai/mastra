@@ -19,14 +19,14 @@ describe('DateTimeRangePicker (custom range popover)', () => {
   // The calendar names each day button by its full date, e.g. "Monday, September 14th, 2026".
   const day = (name: string) => screen.getByRole('button', { name: new RegExp(name) });
 
-  it('renders the Back link as a ghost design-system Button', () => {
+  it('renders the Presets link as a ghost design-system Button', () => {
     renderCustom();
 
-    const back = screen.getByRole('button', { name: 'Back' });
-    expect(back.tagName).toBe('BUTTON');
-    expect(back.getAttribute('data-variant')).toBe('ghost');
+    const presets = screen.getByRole('button', { name: 'Presets' });
+    expect(presets.tagName).toBe('BUTTON');
+    expect(presets.getAttribute('data-variant')).toBe('ghost');
     // the recipe's aria-disabled:pointer-events-none would satisfy a substring match
-    expect(back.className).not.toMatch(/(^|\s)pointer-events-none(\s|$)/);
+    expect(presets.className).not.toMatch(/(^|\s)pointer-events-none(\s|$)/);
   });
 
   it('keeps an applied custom range when going back to Presets, with Custom range checked', () => {
@@ -36,7 +36,7 @@ describe('DateTimeRangePicker (custom range popover)', () => {
       presets: TRACE_PRESETS,
     });
 
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Presets' }));
 
     expect(onPresetChange).not.toHaveBeenCalled();
     expect(checkedPreset()).toBe('Custom range...');
@@ -270,7 +270,7 @@ describe('DateTimeRangePicker (presets)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Last 3 days' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Custom range...' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Presets' }));
 
     expect(screen.getByRole('button', { name: 'Last 3 days' })).toBeTruthy();
     expect(checkedPreset()).toBe('Last 3 days');
@@ -296,7 +296,7 @@ describe('DateTimeRangePicker (presets restored by a slow parent)', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Last 3 days' }));
     fireEvent.click(screen.getByRole('menuitemradio', { name: 'Custom range...' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Presets' }));
 
     expect(onPendingPreset).toHaveBeenCalledWith('last-3d');
     expect(screen.getByRole('button', { name: 'Last 3 days' })).toBeTruthy();

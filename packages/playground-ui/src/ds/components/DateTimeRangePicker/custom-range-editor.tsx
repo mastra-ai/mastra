@@ -143,7 +143,7 @@ export function CustomRangeEditor({
       </Field>
       <div className="flex items-center gap-2 border-t border-border px-3 py-2">
         <Button icon={<ChevronLeft />} variant="ghost" size="sm" disabled={disabled} onClick={onShowPresets}>
-          Back
+          Presets
         </Button>
         <Button className="ml-auto" icon={<Check />} variant="primary" size="sm" onClick={apply} disabled={disabled}>
           Apply
