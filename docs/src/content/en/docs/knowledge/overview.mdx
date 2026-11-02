@@ -9,7 +9,9 @@ packages:
 
 # Knowledge
 
-Knowledge is a store of **pages** and **notes** that agents read and write across conversations. A page is a curated topic with a body. A note is a short, attributed fact added to a page. Pages live in **scopes**, such as `org:acme` or `team:acme:support`, and the scope types you declare decide who can read and write each one. The model never picks its own identity or what it can reach.
+Knowledge is a graph context system for agents. It works directly with [signals](/docs/signals/overview), Mastra's context engineering primitive. Signals bring the right knowledge into an agent's context and keep it current while the agent runs.
+
+Knowledge holds **pages** and **notes** that agents read and write across conversations. A page is a curated topic with a body. A note is a short, attributed fact added to a page. Pages live in **scopes**, such as `org:acme` or `team:acme:support`, and the scope types you declare decide who can read and write each one. The model never picks its own identity or what it can reach.
 
 :::alpha
 
