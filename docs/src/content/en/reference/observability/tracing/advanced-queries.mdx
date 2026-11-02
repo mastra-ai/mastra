@@ -50,6 +50,7 @@ The configured observability store must support each API. Call `getObservability
 | `traceQueryTimeToFirstTokenSort` | `trace-query-time-to-first-token-sort` | `orderBy` on `timeToFirstTokenMs` |
 | `aggregateTimeToFirstMeasures` | `aggregate-time-to-first-measures` | `timeToFirstToken.*` and `timeToFirstChunk.*` measures in `aggregateTraces()` and `aggregateSpans()` |
 | `traceQueryContextIds` | `trace-query-context-ids` | `runId`, `sessionId`, `userId`, and `organizationId` predicates |
+| `traceQueryContextFields` | `trace-query-context-fields` | `requestId`, `serviceName`, and `experimentId` predicates |
 | `traceQueryRootSpanFields` | `trace-query-root-span-fields` | Trace-scope `name` and `spanType` predicates, dimensions, and `countDistinct` measures |
 | `traceQueryRootEntityId` | `trace-query-root-entity-id` | Trace-scope `entityId` predicates, dimensions, and `countDistinct` measures |
 | `traceQueryOutcomeFields` | `trace-query-outcome-fields` | `outcome` and `stopReason` in trace and `spans.some` / `spans.none` predicates, trace dimensions, and value discovery, plus the root span's outcome fields on trace results |
@@ -100,12 +101,12 @@ Span clauses examine the current root span and current child spans. The root `ti
 
 | Predicate context | Fields | Operators |
 | - | - | - |
-| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityId`, `entityName`, `entityType`, `name`, `spanType`, `environment`, `status`, `outcome`, `stopReason` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `requestId`, `serviceName`, `experimentId`, `entityId`, `entityName`, `entityType`, `name`, `spanType`, `environment`, `status`, `outcome`, `stopReason` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Trace | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
 | Span | `name` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists`, `matches`, `notMatches` |
-| Span | `spanType`, `model`, `provider`, `status`, `outcome`, `stopReason`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId`, `runId`, `sessionId`, `userId`, `organizationId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `spanType`, `model`, `provider`, `status`, `outcome`, `stopReason`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId`, `runId`, `sessionId`, `userId`, `organizationId`, `requestId`, `serviceName`, `experimentId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
 | Span | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
 | Span | `error` | `exists`, `notExists` |
 
@@ -215,6 +216,25 @@ const sessionTracesWithRun = {
 ```
 
 These identifiers support `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. Field discovery lists them, but value discovery doesn't return their recorded values. Stores advertise support through the `trace-query-context-ids` feature. A predicate on one of these fields against an older store returns `501` before storage runs, and field discovery omits them for that store.
+
+`requestId`, `serviceName`, and `experimentId` work the same way, at trace scope and inside `spans.some` / `spans.none`. This predicate finds checkout requests that reached the `payments` service on a child span:
+
+```typescript
+const checkoutRequestsThroughPayments = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'checkout' } },
+    { op: 'exists', path: 'requestId' },
+    {
+      spans: {
+        some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'payments' } },
+      },
+    },
+  ],
+}
+```
+
+Stores advertise support for these three fields through the `trace-query-context-fields` feature, reported as the `traceQueryContextFields` capability. Against an older store, a predicate on one of them returns `501` before storage runs, and field discovery omits them.
 
 #### Filter by span properties
 
@@ -812,7 +832,7 @@ Dimensions read the current root span of each selected trace:
 | `outcome`, `stopReason` | How the root span ended and why. Traces whose root span didn't record a value group as `null`. Requires the `traceQueryOutcomeFields` capability. |
 | `metadata.<key>` | One non-empty top-level metadata key. Values are trimmed. Missing, empty, and non-string values group as `null`. |
 
-Every dimension except `serviceName`, `executionSource`, and `experimentId` is also a trace-scope `where` field, so you can drill into a group by adding its values to the predicate. `traceId`, `spanId`, `runId`, and `requestId` aren't groupable. Traces with no value for a dimension form their own group with a `null` value. To select that group in a query, use `notExists` for the dimension instead of `eq` with `literal: null`.
+Every dimension except `executionSource` is also a trace-scope `where` field, so you can drill into a group by adding its values to the predicate. `traceId`, `spanId`, `runId`, and `requestId` aren't groupable. Traces with no value for a dimension form their own group with a `null` value. To select that group in a query, use `notExists` for the dimension instead of `eq` with `literal: null`.
 
 ### Measures
 
