@@ -41,3 +41,26 @@ export const providerFactsCard: Card = {
   },
   metadata: { authorTrusted: true, author: 'stale-author', labels: ['stale-label'], state: 'open' },
 };
+
+export const nativeFactsCard: Card = {
+  ...providerFactsCard,
+  id: 'native-facts-card',
+  workItemId: 'work-native-facts',
+  title: 'Write the guide',
+  externalSource: null,
+  workItem: {
+    ...providerFactsCard.workItem,
+    id: 'work-native-facts',
+    provider: 'factory',
+    sources: [],
+    externalId: 'native-facts-card',
+    key: null,
+    url: null,
+    title: 'Write the guide',
+    state: null,
+    labels: [],
+    author: null,
+    metadata: null,
+  },
+  metadata: { labels: ['docs'], author: 'writer' },
+};

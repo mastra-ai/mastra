@@ -23,9 +23,9 @@ export function hasLabel(labels: readonly string[], label: string): boolean {
   return labels.some(item => item.toLowerCase() === label);
 }
 
-/** Persisted cards have normalized facts; unfiled candidates still carry provider metadata. */
+/** Native cards and unfiled candidates keep their facts in placement metadata. */
 export function sourceMetadata(item: Pick<WorkItem, 'metadata' | 'workItem'>): Record<string, unknown> {
-  if (!item.workItem) return item.metadata;
+  if (!item.workItem || item.workItem.provider === 'factory') return item.metadata;
   return {
     ...item.workItem.metadata,
     labels: item.workItem.labels,

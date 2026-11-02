@@ -2,12 +2,44 @@ import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
-import { providerFactsCard } from './fixtures/providerFactsCard';
+import { nativeFactsCard, providerFactsCard } from './fixtures/providerFactsCard';
+import { stubWorkBoard } from './workBoardStubs';
+
+describe('native card facts', () => {
+  describe('when a label filter matches a persisted native card', () => {
+    it.each(['board', 'list'])('keeps its label visible in the filtered %s', async layout => {
+      stubWorkBoard();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () =>
+          HttpResponse.json({
+            workItems: [
+              nativeFactsCard,
+              {
+                ...providerFactsCard,
+                metadata: { labels: ['docs'] },
+                workItem: { ...providerFactsCard.workItem, labels: [] },
+              },
+            ],
+          }),
+        ),
+      );
+      const router = createMemoryRouter(createAppRoutes(), {
+        initialEntries: [`/factories/fp-1/work?layout=${layout}&label=docs`],
+      });
+      renderWithProviders(<RouterProvider router={router} />);
+
+      const card = await screen.findByTestId('work-item-card');
+      expect(card).toHaveTextContent('Write the guide');
+      expect(within(card).getByText('docs')).toBeVisible();
+      expect(screen.queryByText('Repair source facts')).not.toBeInTheDocument();
+    });
+  });
+});
 
 it.each(['board', 'list'])(
   'shows source facts in %s and details without provider lookups beyond routine intake browsing',
