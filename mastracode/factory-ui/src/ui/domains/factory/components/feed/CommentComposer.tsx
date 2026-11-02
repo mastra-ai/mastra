@@ -113,7 +113,7 @@ export function CommentComposer({
         <ComposerInput
           ref={textareaRef}
           value={draft}
-          placeholder="Add a comment…"
+          placeholder="Add a comment"
           aria-label="Comment"
           aria-autocomplete="list"
           aria-controls={suggestionItems.length > 0 ? suggestionsId : undefined}

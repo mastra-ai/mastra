@@ -27,7 +27,7 @@ test.describe('Composer ring', () => {
       const ring = page.locator('[data-slot="composer-ring"]');
       await expect(ring).toBeVisible();
 
-      await page.getByPlaceholder('Enter your message...').focus();
+      await page.getByPlaceholder('Enter your message').focus();
       await page.mouse.move(0, 0);
       await expect.poll(() => arcStrength(ring)).toBe('0');
 

@@ -236,7 +236,7 @@ export const AllToolbars: StoryObj = {
               <Bar
                 items={[FILTER_BAR_TIME_RANGE_ITEM, ENVIRONMENT, PRIMITIVE]}
                 timeRange={<TimeRange initial="custom" withReset />}
-                placeholder="Filter traces…"
+                placeholder="Filter traces"
               />
             </ActionRow.Start>
             <ActionRow.End>
@@ -250,7 +250,7 @@ export const AllToolbars: StoryObj = {
               <Bar
                 items={[FILTER_BAR_TIME_RANGE_ITEM]}
                 timeRange={<TimeRange initial="last-7d" withReset />}
-                placeholder="Filter traces…"
+                placeholder="Filter traces"
               />
             </ActionRow.Start>
             <ActionRow.End>
@@ -264,7 +264,7 @@ export const AllToolbars: StoryObj = {
               <Bar
                 items={[FILTER_BAR_TIME_RANGE_ITEM]}
                 timeRange={<TimeRange initial="last-24h" />}
-                placeholder="Filter metrics…"
+                placeholder="Filter metrics"
               />
             </ActionRow.Start>
           </ActionRow>
@@ -282,7 +282,7 @@ export const AllToolbars: StoryObj = {
         <Case name="Datasets" source="datasets-filter-bar.tsx:105">
           <ActionRow>
             <ActionRow.Start>
-              <Bar items={[]} placeholder="Filter datasets…" />
+              <Bar items={[]} placeholder="Filter datasets" />
             </ActionRow.Start>
           </ActionRow>
         </Case>
@@ -339,7 +339,7 @@ export const AllToolbars: StoryObj = {
               <Bar
                 items={[FILTER_BAR_TIME_RANGE_ITEM]}
                 timeRange={<TimeRange initial="last-7d" />}
-                placeholder="Filter…"
+                placeholder="Filter"
                 leading={
                   <div className="flex items-center gap-1.5">
                     <GatewayMetric />
@@ -362,7 +362,7 @@ export const AllToolbars: StoryObj = {
               <Bar
                 items={[FILTER_BAR_TIME_RANGE_ITEM, PROJECT]}
                 timeRange={<TimeRange initial="last-24h" />}
-                placeholder="Filter logs…"
+                placeholder="Filter logs"
               />
             </ActionRow.Start>
             <ActionRow.End>
@@ -378,7 +378,7 @@ export const AllToolbars: StoryObj = {
               <Bar
                 items={[FILTER_BAR_TIME_RANGE_ITEM, PROJECT]}
                 timeRange={<TimeRange initial="last-24h" withReset />}
-                placeholder="Filter traces…"
+                placeholder="Filter traces"
               />
             </ActionRow.Start>
             <ActionRow.End>
@@ -401,7 +401,7 @@ export const AllToolbars: StoryObj = {
           <div className="flex items-center gap-1.5">
             <SearchInput
               label="Search projects"
-              placeholder="Search projects…"
+              placeholder="Search projects"
               size="sm"
               value=""
               onValueChange={() => {}}
@@ -414,8 +414,8 @@ export const AllToolbars: StoryObj = {
       <Group title="Search icon inset">
         <Case name="FilterBar input vs SearchInput" source="filter-bar-input.tsx:347, search-input.tsx:45">
           <div className="flex items-center gap-2">
-            <Bar items={[]} placeholder="Filter datasets…" />
-            <SearchInput label="Search" placeholder="Search…" value="" onValueChange={() => {}} size="sm" />
+            <Bar items={[]} placeholder="Filter datasets" />
+            <SearchInput label="Search" placeholder="Search" value="" onValueChange={() => {}} size="sm" />
           </div>
         </Case>
       </Group>

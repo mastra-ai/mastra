@@ -64,7 +64,7 @@ export function FilterBarInput(props: FilterBarInputProps) {
 }
 
 function FilterBarInputImpl({
-  placeholder = 'Filter…',
+  placeholder = 'Filter',
   className,
   'aria-label': ariaLabel = 'Add filter',
   groupId,
@@ -285,12 +285,12 @@ function FilterBarInputImpl({
     step === 'field'
       ? placeholder
       : step === 'operator'
-        ? 'Operator…'
+        ? 'Operator'
         : valueStep.hasSuggestions && valueStep.allowFreeText
-          ? 'Search or type a value…'
+          ? 'Search or type a value'
           : field?.type === 'number'
-            ? 'Number…'
-            : 'Value…';
+            ? 'Number'
+            : 'Value';
 
   return (
     <>

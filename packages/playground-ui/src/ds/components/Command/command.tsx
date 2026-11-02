@@ -295,7 +295,8 @@ const CommandItem = React.forwardRef<
       'data-[disabled=true]:pointer-events-none data-[disabled=true]:opacity-50',
       '[&_svg]:pointer-events-none [&>svg]:size-4 [&>svg]:shrink-0',
       controlIconState,
-      'data-[selected=true]:[--control-icon:var(--control-icon-hover)]',
+      // A selected row brightens its icon with its label, like a highlighted menu row.
+      '[--control-icon-hover:var(--foreground)] data-[selected=true]:[--control-icon:var(--control-icon-hover)]',
       className,
     )}
     {...props}

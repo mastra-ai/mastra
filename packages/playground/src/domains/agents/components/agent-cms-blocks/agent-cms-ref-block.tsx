@@ -278,7 +278,7 @@ const RefBlockContent = ({
             <CodeEditor
               value={localContent}
               onChange={handleContentChange}
-              placeholder="Referenced block is empty..."
+              placeholder="Referenced block is empty"
               variant="embedded"
               className="min-h-12"
               language="markdown"

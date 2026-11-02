@@ -39,7 +39,7 @@ export function MetricsFilterBar({ fields }: { fields: FilterBarField[] }) {
       <FilterBar.Chips
         renderChip={item => (isTimeRangeItem(item) ? <MetricsTimeRangeChip /> : <FilterBar.Chip item={item} />)}
       />
-      <FilterBar.Input placeholder="Filter metrics…" />
+      <FilterBar.Input placeholder="Filter metrics" />
     </FilterBar>
   );
 }
