@@ -628,6 +628,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
   }
 
+  /** Read at export time, not from the cached correlation context, so a service name set on update or end wins over the config. */
+  private resolveServiceName(): string | undefined {
+    const value = this.metadata?.serviceName;
+    return typeof value === 'string' ? value : this.observabilityInstance.getConfig().serviceName;
+  }
+
   /**
    * Build and cache the canonical correlation context for this live span.
    *
@@ -642,12 +648,6 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * survive in the restored lineage, so it supplies the root and, when no live
    * ancestor qualifies, the parent.
    */
-  /** Read at export time, not from the cached correlation context, so a service name set on update or end wins over the config. */
-  private resolveServiceName(): string | undefined {
-    const value = this.metadata?.serviceName;
-    return typeof value === 'string' ? value : this.observabilityInstance.getConfig().serviceName;
-  }
-
   public getCorrelationContext(): CorrelationContext {
     if (this.correlationContext) {
       return this.correlationContext;
