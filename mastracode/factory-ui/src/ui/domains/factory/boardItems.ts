@@ -235,7 +235,7 @@ export function cardMatchesSearch(
  * worktree.
  */
 export function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: string } {
-  const input = { ...item, metadata: item.workItem?.metadata ?? item.metadata };
+  const input = { ...item, metadata: { ...item.metadata, ...sourceMetadata(item) } };
   return { branch: workItemBranch(input), threadTitle: workItemThreadTitle(input) };
 }
 

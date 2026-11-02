@@ -60,17 +60,17 @@ Each work item has one board item. Factory's card-to-card parent link is `parent
 
 #### Migration and dry run
 
-Factory migrates existing cards before the work-items storage domain becomes ready. It keeps the legacy `work_items` table, copies each card into the new tables, and checks again on every startup. Unchanged legacy rows are no-ops; newer legacy rows are recopied. Deleted board items have tombstones so a later startup doesn't resurrect them. A legacy row whose source or claim conflicts with another card ID is skipped and logged rather than preventing startup. Review the `skipped` entries in the boot log and reconcile those card IDs before retiring the legacy data; comments and subscriptions linked to a skipped ID won't have a visible card until the conflict is resolved.
+Factory migrates existing cards before the work-items storage domain becomes ready. It keeps the legacy `work_items` table, copies each card into the new tables, and checks again on every startup. Unchanged legacy rows are no-ops; newer legacy rows are recopied. Deleted board items have tombstones so a later startup doesn't resurrect them. A legacy row whose source conflicts with another card ID is skipped and logged rather than preventing startup. Review the `skipped` entries in the boot log and reconcile those card IDs before retiring the legacy data; comments and subscriptions linked to a skipped ID won't have a visible card until the conflict is resolved.
 
-To inspect the migration without switching storage, set this environment variable before starting Factory:
+For a database that has not cut over yet, inspect the migration without switching storage by setting this environment variable before starting Factory:
 
 ```bash
 MASTRA_FACTORY_WORK_ITEM_SPLIT=dry-run
 ```
 
-Dry-run mode logs the planned copies and keeps reads and writes on the legacy table. Remove the variable and restart to perform the migration and switch to the new tables. Normal operation doesn't write back to the legacy table, so rolling back to an older Factory version hides cards and changes created after cutover.
+Dry-run mode is only for pre-cutover databases. Once any split board items exist, startup fails in dry-run mode rather than serving stale legacy rows. Before cutover, dry-run mode logs the planned copies and keeps reads and writes on the legacy table. Remove the variable and restart to perform the migration and switch to the new tables. Normal operation doesn't write back to the legacy table, so rolling back to an older Factory version hides cards and changes created after cutover.
 
-During mixed-version deployments, a changed legacy row is recopied only while its split records still match the migration baseline. Conflicting split-side edits are skipped and logged rather than overwritten. Released legacy claims are recopied before new owners, across all projects and pages. Avoid simultaneous writes from old and new versions during the cutover.
+During mixed-version deployments, a changed legacy row is recopied only while its split records still match the migration baseline. Conflicting split-side edits are skipped and logged rather than overwritten. Legacy claim values remain inert and are not copied into split storage. Avoid simultaneous writes from old and new versions during the cutover.
 
 ### Product telemetry
 
