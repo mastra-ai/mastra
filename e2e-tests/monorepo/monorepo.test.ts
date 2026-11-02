@@ -1045,6 +1045,8 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
 
       // An ordinary workspace package still gets bundled and remains usable by the built server.
       expect(output).not.toMatch(/from ["']@inner\/hello-world(?:\/|["'])/);
+      // Bundled workspace packages must not also be packed and installed with their dependencies (#28303).
+      expect(await readdir(join(outputDir, 'workspace-module'))).toEqual(['inner-subpath-only-1.0.0.tgz']);
       const agentResponse = await fetch(`http://localhost:${port}/api/agents/my-agent`);
       expect(agentResponse.status).toBe(200);
       expect((await agentResponse.json()).name).toBe('My Agent');

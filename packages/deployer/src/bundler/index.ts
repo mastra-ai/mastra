@@ -699,8 +699,10 @@ export abstract class Bundler extends MastraBase implements IBundler {
       dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
     }
 
+    // Workspace packages in `analyzedBundleInfo.dependencies` are compiled into the bundle, so only
+    // the ones still imported at runtime need a tarball and an install (#28303).
     const initialWorkspaceDependencies = new Set<string>();
-    for (const dep of [...analyzedBundleInfo.dependencies.keys(), ...analyzedBundleInfo.externalDependencies.keys()]) {
+    for (const dep of analyzedBundleInfo.externalDependencies.keys()) {
       const pkgName = getPackageName(dep);
       if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
         initialWorkspaceDependencies.add(pkgName);
