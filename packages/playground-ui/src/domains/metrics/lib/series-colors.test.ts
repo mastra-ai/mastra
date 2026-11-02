@@ -50,6 +50,23 @@ describe('seriesColors', () => {
     expect(colors.get('Staging')).toBe('var(--chart-series-green)');
   });
 
+  it('gives a lab without a hue of its own one free hue for all its series', () => {
+    const colors = seriesColors([
+      { key: 'command-a-2', provider: 'cohere', model: 'command-a-2' },
+      { key: 'Production' },
+      { key: 'command-r', provider: 'cohere', model: 'command-r' },
+    ]);
+    expect(colors.get('command-a-2')).toBe('var(--chart-series-blue)');
+    expect(colors.get('Production')).toBe('var(--chart-series-orange)');
+    expect(colors.get('command-r')).toBe(seriesColor('blue', 1));
+  });
+
+  it("never repeats a color within a lab's first ten series", () => {
+    const claudes = Array.from({ length: 10 }, (_, i) => `claude-${i}`);
+    const colors = seriesColors(ranked(...claudes));
+    expect(new Set(claudes.map(c => colors.get(c))).size).toBe(10);
+  });
+
   it('hands out shades once every hue is taken', () => {
     const keys = Array.from({ length: 12 }, (_, i) => ({ key: `key-${i}` }));
     const colors = seriesColors(keys);

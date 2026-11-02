@@ -96,8 +96,9 @@ export function seriesLab(provider?: string | null, model?: string | null): stri
 
 /**
  * Shades of a hue handed out more than once: a little lighter, then darker, then further, each
- * nudged warmer or cooler. The nudge stays under a third of the gap between hues, so a shade never
- * reads as the next lab's color. `[lightness, hue in degrees, chroma factor]`.
+ * nudged warmer or cooler. The nudge stays under half the gap between hues, so a shade never reads
+ * as the next lab's color. Ten in all, as many as a chart names; past that they repeat.
+ * `[lightness, hue in degrees, chroma factor]`.
  */
 const SHADES: [number, number, number][] = [
   [0, 0, 1],
@@ -105,6 +106,11 @@ const SHADES: [number, number, number][] = [
   [-0.08, -10, 1],
   [0.15, -10, 0.75],
   [-0.15, 10, 1],
+  [0.22, 0, 0.65],
+  [-0.22, 0, 1],
+  [0.04, -12, 0.9],
+  [-0.04, 12, 1],
+  [0.11, 0, 0.8],
 ];
 
 /** A hue's color, or its nth shade. */
@@ -141,7 +147,7 @@ export type SeriesColorItem = {
  * Colors for a page's series, keyed by `item.key`. Pass every series the page shows, ranked largest
  * first, once per page, so a model keeps its color on every chart.
  *
- * - Each lab's largest series takes the lab's hue.
+ * - Each lab's largest series takes the lab's hue; labs without one claim a free hue.
  * - The lab's other series take shifted shades of it, in rank order.
  * - Series with no lab take the hues no lab on the page uses, then shades once those run out.
  */
@@ -154,30 +160,34 @@ export function seriesColors(items: SeriesColorItem[]) {
     used.set(hue, shade + 1);
     colors.set(key, seriesColor(hue, shade));
   };
+  /** The next hue for a series or lab with none: unused first, then the least used. */
+  const nextFree = () => {
+    const unused = FREE_ORDER.filter(h => !used.has(h));
+    if (unused.length) return unused[0] ?? 'blue';
+    const least = Math.min(...FREE_ORDER.map(h => used.get(h) ?? 0));
+    return FREE_ORDER.find(h => (used.get(h) ?? 0) === least) ?? 'blue';
+  };
 
-  const hues = items.map(it => {
-    const lab = seriesLab(it.provider, it.model);
-    return lab ? LAB_HUES[lab] : undefined;
-  });
+  const labs = items.map(it => seriesLab(it.provider, it.model));
+  const labHue = new Map<string, SeriesHue>();
 
-  // Labs reserve their hue first, so a lab's largest series always gets the pure color.
-  const leads = new Set<SeriesHue>();
+  // Labs with a hue reserve it first, so a lab's largest series always gets the pure color.
   items.forEach((it, i) => {
-    const hue = hues[i];
-    if (hue && !leads.has(hue)) {
-      leads.add(hue);
+    const lab = labs[i];
+    const hue = lab ? LAB_HUES[lab] : undefined;
+    if (lab && hue && !labHue.has(lab)) {
+      labHue.set(lab, hue);
       take(it.key, hue);
     }
   });
 
   items.forEach((it, i) => {
     if (colors.has(it.key)) return;
-    const hue = hues[i];
-    if (hue) return take(it.key, hue);
-    const free = FREE_ORDER.filter(h => !used.has(h));
-    const least = Math.min(...FREE_ORDER.map(h => used.get(h) ?? 0));
-    const [next = 'blue'] = free.length ? free : FREE_ORDER.filter(h => (used.get(h) ?? 0) === least);
-    take(it.key, next);
+    const lab = labs[i];
+    if (!lab) return take(it.key, nextFree());
+    const hue = labHue.get(lab) ?? nextFree();
+    labHue.set(lab, hue);
+    take(it.key, hue);
   });
   return colors;
 }
