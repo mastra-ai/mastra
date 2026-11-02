@@ -2827,7 +2827,9 @@ export class EventedRun<
   }
 
   async cancel() {
-    if (await this.hasReachedTerminalStatus()) return;
+    if (await this.hasReachedTerminalStatus()) {
+      return this.cancelSuspendedNestedRuns();
+    }
 
     // Publish directly instead of relying on the abort handler: a handle created on another
     // instance (or via startAsync) never registered one, so abort() alone would reach no processor.
@@ -2860,5 +2862,7 @@ export class EventedRun<
       stopReasonContext: null,
       attributes: { status: 'canceled' },
     });
+
+    await this.cancelSuspendedNestedRuns();
   }
 }
