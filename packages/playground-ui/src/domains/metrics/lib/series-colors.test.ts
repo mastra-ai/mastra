@@ -12,6 +12,10 @@ describe('seriesLab', () => {
     expect(seriesLab('groq', 'llama-4-maverick')).toBe('meta');
     expect(seriesLab('amazon-bedrock', 'claude-sonnet-5-5')).toBe('anthropic');
     expect(seriesLab('google-vertex', 'gemini-3.5-pro')).toBe('google');
+    expect(seriesLab('amazon-bedrock', 'us.anthropic.claude-opus-4-6-v1')).toBe('anthropic');
+    expect(seriesLab('amazon-bedrock', 'meta.llama3-70b-instruct-v1:0')).toBe('meta');
+    expect(seriesLab('fireworks', 'accounts/fireworks/models/llama-v3p3-70b-instruct')).toBe('meta');
+    expect(seriesLab(undefined, 'gpt-5.5')).toBe('openai');
     expect(seriesLab('openrouter', 'meta-llama/llama-4-scout')).toBe('meta');
     expect(seriesLab('openrouter', 'gpt-5-mini')).toBe('openai');
     expect(seriesLab(undefined, 'gemini-3.5-pro')).toBe('google');

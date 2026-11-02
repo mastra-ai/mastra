@@ -92,6 +92,11 @@ const HOSTS = new Set([
   'vertex',
 ]);
 
+/** Segments of a hosted model's resource path that aren't a lab. */
+const PATH_WORDS = new Set(['models', 'accounts', 'projects', 'deployments']);
+
+const MODEL_LAB_IDS = new Set(MODEL_LABS.map(([, lab]) => lab));
+
 const cleanLab = (id: string) => {
   const [v = id] = id.toLowerCase().split('.');
   return LAB_ALIASES[v] ?? v;
@@ -112,8 +117,13 @@ export function seriesLab(provider?: string | null, model?: string | null): stri
   if (!model) return lab;
   const parts = model.toLowerCase().split('/');
   const name = parts.pop() ?? '';
+  // `lab/model`, unless the segment is a host or part of a resource path (`accounts/x/models/y`).
   const prefix = parts.pop();
-  if (prefix && !HOSTS.has(cleanLab(prefix))) return cleanLab(prefix);
+  if (prefix && !HOSTS.has(cleanLab(prefix)) && !PATH_WORDS.has(prefix)) return cleanLab(prefix);
+  // Dotted ids name the lab inside (`us.anthropic.claude-…`, `meta.llama3-…` on Bedrock).
+  const dotted = name.split('.').map(cleanLab);
+  const known = dotted.find(seg => seg in LAB_HUES || MODEL_LAB_IDS.has(seg));
+  if (known) return known;
   return MODEL_LABS.find(([re]) => re.test(name))?.[1] ?? lab;
 }
 
