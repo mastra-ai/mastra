@@ -328,8 +328,8 @@ export function knowledgeSearchWords(query: string): string[] {
 
 /**
  * Points one matched search word earns on a page, by the best field it appears in: name, then
- * description, then body. A page's score is the sum over the query's words, so matching more
- * words always counts and matching them in the name or description counts more than in the body.
+ * description, then body. Pages rank by how many query words they match first; these points only
+ * break ties between pages that match the same number of words.
  */
 export const KNOWLEDGE_SEARCH_WEIGHTS = { name: 3, description: 2, body: 1 } as const;
 

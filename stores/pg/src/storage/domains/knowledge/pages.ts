@@ -1460,10 +1460,16 @@ export class PgKnowledgePages implements KnowledgePageStore {
             `(CASE WHEN p."name" ILIKE ${pattern} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.name} WHEN p."description" ILIKE ${pattern} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.description} WHEN p."body" ILIKE ${pattern} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.body} ELSE 0 END)`,
         )
         .join(' + ');
+      const count = patterns
+        .map(
+          pattern =>
+            `(CASE WHEN p."name" ILIKE ${pattern} OR p."description" ILIKE ${pattern} OR p."body" ILIKE ${pattern} THEN 1 ELSE 0 END)`,
+        )
+        .join(' + ');
       const tier = `CASE WHEN p."canonicalName" LIKE ${phrasePattern} THEN 0 ELSE 1 END`;
       const rows = await this.#rows(
         this.#client,
-        `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY ${tier}, (${score}) DESC, p."updatedAt" DESC, p."id" ASC LIMIT ${limit}`,
+        `SELECT p.* FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId" WHERE ${where.join(' AND ')} ORDER BY ${tier}, (${count}) DESC, (${score}) DESC, p."updatedAt" DESC, p."id" ASC LIMIT ${limit}`,
         params.values,
       );
       for (const row of rows) hits.push({ type: 'page', page: toPage(row) });

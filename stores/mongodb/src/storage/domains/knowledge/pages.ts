@@ -1532,6 +1532,11 @@ export class MongoKnowledgePages implements KnowledgePageStore {
         {
           $addFields: {
             searchTier: { $cond: [{ $regexMatch: { input: '$canonicalName', regex: escapeRegex(phrase) } }, 0, 1] },
+            searchCount: {
+              $add: words.map(word => ({
+                $cond: [{ $or: [has('name', word), has('description', word), has('body', word)] }, 1, 0],
+              })),
+            },
             searchScore: {
               $add: words.map(word => ({
                 $switch: {
@@ -1546,9 +1551,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
             },
           },
         },
-        { $sort: { searchTier: 1, searchScore: -1, updatedAt: -1, id: 1 } },
+        { $sort: { searchTier: 1, searchCount: -1, searchScore: -1, updatedAt: -1, id: 1 } },
         { $limit: limit },
-        { $project: { searchTier: 0, searchScore: 0, _id: 0 } },
+        { $project: { searchTier: 0, searchCount: 0, searchScore: 0, _id: 0 } },
       ])
       .toArray();
     const hits: KnowledgePageSearchHit[] = rows.map(row => ({ type: 'page' as const, page: toPage(row) }));

@@ -1039,7 +1039,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         );
       });
 
-      it('matches any query word, ranking phrase-in-name, then matched words weighted name > description > body, then notes', async () => {
+      it('matches any query word, ranking phrase-in-name, then words matched, then weight name > description > body, then notes', async () => {
         const acme = await scope('org:acme', ORG);
         await scope('org:refund', ORG);
         const pause = () => new Promise(resolve => setTimeout(resolve, 15));
@@ -1072,15 +1072,15 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
           hit.type === 'page' ? `page:${hit.page.name}` : `note:${hit.note.text}`;
 
-        // Any word matches. Pages first: the phrase in the name, then by points (a matched word earns
-        // 3 in the name, else 2 in the description, else 1 in the body), newest first on ties; then notes
-        // by words matched. 'Refund window' matches on "refund" alone; scope pages (org:refund) never hit.
+        // Any word matches. Pages first: the phrase in the name, then most words matched, then points (a
+        // matched word earns 3 in the name, else 2 in the description, else 1 in the body), newest first on
+        // ties; so both words in the body beat one word in the name. Then notes by words matched. 'Refund window' matches on "refund" alone; scope pages (org:refund) never hit.
         expect((await store.searchPages({ query: '  refund   APPROVAL ', read: r })).map(label)).toEqual([
           `page:${phrase.name}`,
           `page:${scattered.name}`,
           `page:${acrossFields.name}`,
-          `page:${nameOnly.name}`,
           `page:${inBody.name}`,
+          `page:${nameOnly.name}`,
           `note:${noteBoth.text}`,
           'note:Approval is logged.',
         ]);
@@ -1105,7 +1105,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         ]);
       });
 
-      it('ranks by words matched and field weight, not recency, and never returns pages that match no word', async () => {
+      it('ranks by words matched, then field weight, then recency, and never returns pages that match no word', async () => {
         const acme = await scope('org:acme', ORG);
         const pause = () => new Promise(resolve => setTimeout(resolve, 15));
         const inName = await page(acme.id, 'Zebra care');
@@ -1120,23 +1120,47 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
           hit.type === 'page' ? hit.page.name : hit.note.text;
         const r = read(['org:acme']);
-        // Points: Zebra care 3; Safari 1 + 1 = 2; Stripes 2 (a tie goes to the newer page); Savanna 1.
+        // Words matched first, then points, then newest. Safari matches 2 words (zebra, giraffe), the others 1:
+        // Zebra care 3 points, Stripes 2, Savanna 1. Two body words beat one name word.
         expect((await store.searchPages({ query: 'zebra giraffe lion', read: r })).map(label)).toEqual([
-          inName.name,
           bothInBody.name,
+          inName.name,
           inDescription.name,
           oneInBody.name,
         ]);
-        // Name beats description beats body for the same word, though the body page is newer.
+        // Same word count: name beats description beats body, though the body page is newer.
         expect((await store.searchPages({ query: 'zebra', read: r })).map(label)).toEqual([
           inName.name,
           inDescription.name,
           bothInBody.name,
         ]);
-        // One word in the name (3) beats two words only in the body (2).
-        expect((await store.searchPages({ query: 'giraffe zebra', read: r })).map(label)[0]).toBe(inName.name);
         // Equal points: newest first, and the limit applies after ranking.
         expect((await store.searchPages({ query: 'giraffe', read: r, limit: 1 })).map(label)).toEqual([oneInBody.name]);
+      });
+
+      it('ranks the page that has every query word above newer pages that match one word in their name', async () => {
+        const acme = await scope('org:acme', ORG);
+        const pause = () => new Promise(resolve => setTimeout(resolve, 15));
+        // The podcast page names none of the words but contains all three in its body.
+        const podcast = await page(acme.id, 'Opus 5.5 launches: is Anthropic back?', {
+          body: 'Peter Steinberger, creator of OpenClaw, joins the show.',
+        });
+        await pause();
+        const peter = await page(acme.id, 'Peter profile', { body: 'Bio.' });
+        await pause();
+        const steinberger = await page(acme.id, 'Steinberger interview', { body: 'Notes.' });
+        await pause();
+        const openclaw = await page(acme.id, 'OpenClaw roadmap', { body: 'Plans.' });
+        const names = async (query: string) =>
+          (await store.searchPages({ query, read: read(['org:acme']) })).map(hit =>
+            hit.type === 'page' ? hit.page.name : hit.note.text,
+          );
+        expect(await names('Peter Steinberger OpenClaw')).toEqual([
+          podcast.name,
+          openclaw.name,
+          steinberger.name,
+          peter.name,
+        ]);
       });
 
       it('never counts a hidden note toward search results or the limit', async () => {

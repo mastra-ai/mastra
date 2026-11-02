@@ -700,13 +700,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       const name = lower(page.name);
       const description = lower(page.description);
       const body = lower(page.body);
+      let matched = 0;
       let score = 0;
       for (const word of words) {
         if (name.includes(word)) score += KNOWLEDGE_SEARCH_WEIGHTS.name;
         else if (description.includes(word)) score += KNOWLEDGE_SEARCH_WEIGHTS.description;
         else if (body.includes(word)) score += KNOWLEDGE_SEARCH_WEIGHTS.body;
+        else continue;
+        matched++;
       }
-      return score;
+      return { matched, score };
     };
     const noteScore = (note: KnowledgeNote) => {
       const text = lower(note.text);
@@ -717,12 +720,13 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       .map(page => ({
         page,
         phrase: canonicalKnowledgeName(page.name).includes(phrase) ? 0 : 1,
-        score: pageScore(page),
+        ...pageScore(page),
       }))
-      .filter(hit => hit.score > 0)
+      .filter(hit => hit.matched > 0)
       .sort(
         (a, b) =>
           a.phrase - b.phrase ||
+          b.matched - a.matched ||
           b.score - a.score ||
           b.page.updatedAt.getTime() - a.page.updatedAt.getTime() ||
           (a.page.id < b.page.id ? -1 : 1),

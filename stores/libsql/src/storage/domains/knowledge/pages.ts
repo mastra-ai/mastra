@@ -1273,11 +1273,14 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
           `(CASE WHEN ${field('p.name')} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.name} WHEN ${field('p.description')} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.description} WHEN ${field('p.body')} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.body} ELSE 0 END)`,
       )
       .join(' + ');
+    const pageCount = words
+      .map(() => `(CASE WHEN ${field('p.name')} OR ${field('p.description')} OR ${field('p.body')} THEN 1 ELSE 0 END)`)
+      .join(' + ');
     const triple = likes.flatMap(like => [like, like, like]);
     const pageRows = await this.#query(
       this.#read,
-      `SELECT p.* FROM "${T.pages}" p WHERE p.deletedAt IS NULL AND p.isScope = 0 AND ${readable.sql}${scopeFilter} AND (${pageMatch}) ORDER BY CASE WHEN instr(p.canonicalName, ?) > 0 THEN 0 ELSE 1 END, (${pageScore}) DESC, p.updatedAt DESC, p.id ASC LIMIT ?`,
-      [...readable.args, ...scopeArgs, ...triple, phrase, ...triple, limit],
+      `SELECT p.* FROM "${T.pages}" p WHERE p.deletedAt IS NULL AND p.isScope = 0 AND ${readable.sql}${scopeFilter} AND (${pageMatch}) ORDER BY CASE WHEN instr(p.canonicalName, ?) > 0 THEN 0 ELSE 1 END, (${pageCount}) DESC, (${pageScore}) DESC, p.updatedAt DESC, p.id ASC LIMIT ?`,
+      [...readable.args, ...scopeArgs, ...triple, phrase, ...triple, ...triple, limit],
     );
     const hits: KnowledgePageSearchHit[] = pageRows.map(row => ({ type: 'page', page: toPage(row) }));
     if (hits.length >= limit) return hits;
