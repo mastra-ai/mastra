@@ -128,7 +128,7 @@ export function AgentPlaygroundVersionBar({
             options={versionOptions}
             value={currentValue}
             onValueChange={onVersionSelect}
-            placeholder="Select version..."
+            placeholder="Select version"
             variant="ghost"
             className="min-w-0 flex-1"
           />
@@ -257,7 +257,7 @@ export function AgentPlaygroundVersionBar({
               <Field>
                 <FieldLabel>Change message</FieldLabel>
                 <Input
-                  placeholder="Describe what changed..."
+                  placeholder="Describe what changed"
                   value={changeMessage}
                   onChange={e => setChangeMessage(e.target.value)}
                   onKeyDown={e => {

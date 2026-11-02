@@ -69,7 +69,7 @@ test.describe('Admin Role', () => {
 
       // Admin has wildcard permissions, so agents:execute is granted
       // The chat input should be enabled with normal placeholder
-      const chatInput = page.locator('textarea[placeholder="Enter your message..."]');
+      const chatInput = page.locator('textarea[placeholder="Enter your message"]');
       await expect(chatInput).toBeVisible();
       await expect(chatInput).not.toBeDisabled();
 

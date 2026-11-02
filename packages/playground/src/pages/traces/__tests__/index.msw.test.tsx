@@ -512,7 +512,7 @@ describe('Traces page view switch', () => {
 
       renderPage();
 
-      const filterInput = await screen.findByPlaceholderText('Filter traces…');
+      const filterInput = await screen.findByPlaceholderText('Filter traces');
       expect(filterInput.closest('main')).not.toBeNull();
     });
 
@@ -1873,7 +1873,7 @@ describe('Traces side panel span search', () => {
       renderPage('/traces?traceId=trace-a');
 
       expect(await screen.findByText('llm call')).toBeTruthy();
-      fireEvent.change(screen.getByPlaceholderText('Search spans...'), { target: { value: 'zanzibar-payload-term' } });
+      fireEvent.change(screen.getByPlaceholderText('Search spans'), { target: { value: 'zanzibar-payload-term' } });
 
       await waitFor(() => expect(screen.queryByText('llm call')).toBeNull());
       expect(screen.getByText('weather tool')).toBeTruthy();

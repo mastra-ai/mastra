@@ -512,7 +512,7 @@ export function TraceDataPanelView({
                     <input
                       type="search"
                       aria-label="Search spans"
-                      placeholder="Search spans..."
+                      placeholder="Search spans"
                       value={query}
                       onChange={event => setQuery(event.target.value)}
                       className="h-full min-w-0 flex-1 bg-transparent px-1.5 text-label text-foreground outline-hidden placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
