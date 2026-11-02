@@ -28,8 +28,6 @@ export const KNOWLEDGE_TOOLS = new Set([
 interface PageSummary {
   id: string;
   name: string;
-  /** The page's full readable address, e.g. `docs:mastra#workflows/suspend-and-resume`. */
-  ref?: string;
   address?: string;
   scope?: string;
   /** The full readable ref (`docs:mastra#observability/logging`); older cores send only the last `key`. */
