@@ -679,21 +679,21 @@ export function KnowledgePageExplorer({
   // The pages focused before this one, most recent last, so Back retraces a walk through the levels.
   const [history, setHistory] = useState<readonly string[]>([]);
   const lastSelected = useRef<string | null>(selectedPageId);
-  const goingBack = useRef(false);
+  const goingBackTo = useRef<string | null>(null);
   useEffect(() => {
     const previous = lastSelected.current;
     lastSelected.current = selectedPageId;
-    if (goingBack.current) {
-      goingBack.current = false;
-      return;
-    }
+    const backTarget = goingBackTo.current;
+    goingBackTo.current = null;
+    // Arriving where Back pointed isn't a new step; any other selection is, even if Back's was ignored.
+    if (backTarget && backTarget === selectedPageId) return;
     if (!previous || !selectedPageId || previous === selectedPageId) return;
     setHistory(current => [...current.filter(id => id !== selectedPageId), previous].slice(-FOCUS_HISTORY_CAP));
   }, [selectedPageId]);
   const backTo = history.length ? history[history.length - 1] : undefined;
   const goBack = () => {
     if (!backTo) return;
-    goingBack.current = true;
+    goingBackTo.current = backTo;
     setHistory(current => current.slice(0, -1));
     onSelect(backTo);
   };

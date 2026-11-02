@@ -12,6 +12,7 @@ import {
   ReactFlow,
   ReactFlowProvider,
   useReactFlow,
+  useStore,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { Maximize, Pin } from 'lucide-react';
@@ -116,10 +117,16 @@ type PageNodeData = PageFlowNode['data'] & {
   showCount?: boolean;
 };
 
+/** Most a tooltip is enlarged to offset a zoomed-out graph. */
+const TOOLTIP_MAX_SCALE = 3;
+
 /** A page far from the focus: a small coloured dot that names itself on hover. */
 function DotNode({ data }: { data: PageNodeData }) {
   const { page, size, dimmed, color, path, ref, links } = data;
   const [hover, setHover] = useState(false);
+  // The graph is often zoomed far out; the tooltip is scaled back up so it stays as readable as the page.
+  const zoom = useStore(state => state.transform[2]);
+  const tipScale = Math.min(Math.max(1 / zoom, 1), TOOLTIP_MAX_SCALE);
   const standIn = isChildPlaceholder(page);
   const group = isScopeGroup(page);
   // A group's count is already in its name; what it needs to say is how to see its members.
@@ -166,7 +173,8 @@ function DotNode({ data }: { data: PageNodeData }) {
       {hover ? (
         <div
           role="tooltip"
-          className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex w-max max-w-72 -translate-x-1/2 flex-col rounded-md border border-border bg-card px-2 py-1 shadow-overlay"
+          className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex w-max max-w-72 flex-col rounded-md border border-border bg-card px-2 py-1 shadow-overlay"
+          style={{ transform: `translateX(-50%) scale(${tipScale})`, transformOrigin: 'bottom center' }}
         >
           <span
             data-testid="knowledge-tooltip-tail"
@@ -594,7 +602,7 @@ const CLICK_SLOP_PX = 4;
 /** The focused page's circle is this much larger than its neighbours'. */
 const FOCUSED_SCALE = 1.2;
 /** Most branch colours the legend names; the rest are counted. */
-const LEGEND_BRANCH_CAP = 6;
+const LEGEND_BRANCH_CAP = 4;
 /** Most links a hovered page draws that aren't drawn already. */
 const HOVER_LINK_CAP = 40;
 

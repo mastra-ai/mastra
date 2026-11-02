@@ -239,6 +239,12 @@ describe('KnowledgePageGraph', () => {
       expect(tail.className).toContain('bg-card');
     });
 
+    it('keeps its tooltip at least full size, whatever the zoom', () => {
+      renderGraph({ pages: deep });
+      hoverDot('ticket');
+      expect(screen.getByRole('tooltip').style.transform).toMatch(/^translateX\(-50%\) scale\((1|[1-3](\.\d+)?)\)$/);
+    });
+
     it('draws the child count badge on a solid background', () => {
       renderGraph({ pages: [page('org', null, { name: 'Acme', childCount: 4 }), page('a', 'org')] });
       const badge = screen.getByTestId('knowledge-child-count-badge');
