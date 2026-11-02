@@ -410,7 +410,7 @@ const sidebars = {
       type: 'category',
       label: 'Knowledge',
       collapsed: true,
-      customProps: { tags: ['beta'] },
+      customProps: { tags: ['alpha'] },
       items: [
         { type: 'doc', id: 'knowledge/knowledge-class', label: 'Knowledge Class' },
         { type: 'doc', id: 'knowledge/knowledge-tools', label: 'Knowledge Tools' },

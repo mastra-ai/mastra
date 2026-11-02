@@ -228,7 +228,7 @@ const sidebars = {
             id: 'knowledge/overview',
           },
           customProps: {
-            tags: ['beta'],
+            tags: ['alpha'],
           },
           items: [
             {
