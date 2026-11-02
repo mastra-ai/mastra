@@ -12,6 +12,7 @@ import type {
   ProviderStatus,
   SandboxCloneOptions,
   SandboxInfo,
+  SandboxNetworking,
   SandboxStartResult,
   SpawnProcessOptions,
 } from '@mastra/core/workspace';
@@ -309,6 +310,9 @@ export type CaptureCheckpointResult =
  * instance are cleared, so the next `ensureRunning()` on a reused instance
  * will re-provision cleanly.
  */
+/** E2B's sandbox control port (envd). Never a preview. */
+const E2B_CONTROL_PORT = 49983;
+
 export class SandboxDestroyedError extends Error {
   readonly sandboxId: string | undefined;
   readonly command: string;
@@ -531,6 +535,37 @@ export class PlatformSandbox extends MastraSandbox {
   get sandboxId(): string | undefined {
     return this.status === 'running' ? this._sandboxId : undefined;
   }
+
+  /**
+   * Port URLs for a running sandbox. Ports are private by default: anyone
+   * with access to the sandbox's project can open a port's URL in a browser
+   * after signing in to the platform, and anyone else is turned away. The URL
+   * doesn't expire, so it's the one to share.
+   */
+  readonly networking: SandboxNetworking = {
+    getPortUrl: async (port: number): Promise<string | null> => {
+      if (!Number.isInteger(port) || port < 1 || port > 65_535 || port === E2B_CONTROL_PORT) return null;
+      // Only E2B-backed sandboxes serve their ports.
+      if (this._client.sandboxProvider !== 'e2b') return null;
+      const sandboxId = this.sandboxId;
+      if (!sandboxId) return null;
+      try {
+        // The proxy builds the address for the sandbox's region; the one-time
+        // sign-in link it comes with isn't needed here.
+        const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/preview-grants`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ port }),
+        });
+        const { url } = (await response.json()) as { url: string };
+        return `${new URL(url).origin}/`;
+      } catch (error) {
+        // Destroyed, or a platform that doesn't serve previews yet.
+        if (error instanceof PlatformApiError && (error.status === 404 || error.status === 410)) return null;
+        throw error;
+      }
+    },
+  };
 
   private readonly _client: PlatformClient;
   private readonly _usesProviderRoutes: boolean;
