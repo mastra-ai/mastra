@@ -4,6 +4,7 @@ import type { KnowledgeReadScope } from '../../storage';
 import { InMemoryKnowledgePageStore } from '../../storage/domains/knowledge/pages-inmemory';
 import {
   listKnowledgeTreeChildren,
+  MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN,
   readKnowledgePage,
   readKnowledgePageActivity,
   readKnowledgePageGraph,
@@ -126,6 +127,48 @@ describe('listKnowledgeTreeChildren', () => {
       const { store } = await seed();
       const roots = await listKnowledgeTreeChildren(store, { parentId: null, read: supportOnly });
       expect(counts(roots.pages)).toEqual({ Support: 2 });
+    });
+
+    describe('when a scope has more child scopes than one walk looks at', () => {
+      async function wideScopes(sizes: number[]) {
+        const store = new InMemoryKnowledgePageStore();
+        const roots = [];
+        for (const [index, size] of sizes.entries()) {
+          const root = (
+            await store.materializeScope({
+              address: `org:o${index}`,
+              declaration: 'org:$orgId',
+              name: `Org ${index}`,
+              provenance: host,
+            })
+          ).scope;
+          for (let team = 0; team < size; team++) {
+            await store.materializeScope({
+              address: `team:o${index}:t${team}`,
+              declaration: 'team:$orgId:$teamId',
+              name: `Team ${team}`,
+              parentId: root.id,
+              provenance: host,
+            });
+          }
+          roots.push(root);
+        }
+        return store;
+      }
+
+      it('marks the count as a lower bound', async () => {
+        const store = await wideScopes([MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN + 5]);
+        const [root] = (await listKnowledgeTreeChildren(store, { parentId: null, read: 'all' })).pages;
+        expect(root?.childCountCapped).toBe(true);
+        expect(root?.childCount).toBe(MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN);
+      });
+
+      it('leaves an exact count unmarked', async () => {
+        const store = await wideScopes([3]);
+        const [root] = (await listKnowledgeTreeChildren(store, { parentId: null, read: 'all' })).pages;
+        expect(root?.childCount).toBe(3);
+        expect(root && 'childCountCapped' in root).toBe(false);
+      });
     });
 
     it('leaves counts out when the store cannot count children', async () => {

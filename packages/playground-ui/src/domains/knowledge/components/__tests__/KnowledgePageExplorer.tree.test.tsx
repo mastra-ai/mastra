@@ -55,15 +55,30 @@ function detail(pageId: string): KnowledgeExplorerPageDetail {
   return { page: target, notes: [], ancestors, related: [] };
 }
 
-function Host({ requested, siteChildCount }: { requested: KnowledgeExplorerTreeRequest[]; siteChildCount?: number }) {
+function Host({
+  requested,
+  siteChildCount,
+  siteCapped,
+}: {
+  requested: KnowledgeExplorerTreeRequest[];
+  siteChildCount?: number;
+  siteCapped?: boolean;
+}) {
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<KnowledgeExplorerView>('graph');
+  const siteNow = {
+    ...site,
+    ...(siteChildCount === undefined ? {} : { childCount: siteChildCount }),
+    ...(siteCapped ? { childCountCapped: true } : {}),
+  };
   const source: KnowledgeExplorerSource = {
     usePage: pageId => (pageId ? ok(detail(pageId)) : idle),
     useSearch: () => ({ data: { results: [] } }),
     useTreeLevels: requests => {
       requested.push(...requests);
-      return requests.map(({ parentId }) => ok(levels[parentId ?? ''] ?? { pages: [] }));
+      return requests.map(({ parentId }) =>
+        ok(parentId === null ? { pages: [siteNow] } : (levels[parentId] ?? { pages: [] })),
+      );
     },
   };
   return (
@@ -72,7 +87,7 @@ function Host({ requested, siteChildCount }: { requested: KnowledgeExplorerTreeR
       <KnowledgePageExplorer
         // The graph loaded only the first pages; the articles are outside it.
         graph={{
-          pages: [siteChildCount === undefined ? site : { ...site, childCount: siteChildCount }, pricing],
+          pages: [siteNow, pricing],
           edges: [],
           pinnedIds: [],
           truncated: true,
@@ -209,6 +224,21 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       renderWithProviders(<Host requested={[]} />);
       fireEvent.click(row('site:mastra'));
       expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
+    });
+  });
+
+  describe('when the server capped a count', () => {
+    it('shows it as a lower bound in the tree', () => {
+      renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
+      expect(within(row('site:mastra')).getByTestId('knowledge-tree-count').textContent).toBe('1000+');
+    });
+
+    it('says so in the graph instead of a short count of what is left', () => {
+      renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
+      fireEvent.click(row('site:mastra'));
+      expect(screen.getByTestId('knowledge-graph-more-children').textContent).toBe(
+        '1000+ pages under site:mastra, 2 drawn. Open the tree to see them all.',
+      );
     });
   });
 });

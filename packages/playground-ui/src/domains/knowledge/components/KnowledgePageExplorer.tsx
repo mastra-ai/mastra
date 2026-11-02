@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { graphWithChildren } from '../lib/pageGraph';
 import { bodyLinkEdges } from '../lib/pageRefs';
+import { childCountLabel } from '../lib/pageTree';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
 
 import type {
@@ -482,7 +483,8 @@ function useLazyTree(
   const mayHaveChildren = useCallback(
     (page: KnowledgePagePayload) =>
       !loaded.has(page.id) &&
-      (page.childCount !== undefined ? page.childCount > 0 : graphParents ? graphParents.has(page.id) : true),
+      (page.childCountCapped ||
+        (page.childCount !== undefined ? page.childCount > 0 : graphParents ? graphParents.has(page.id) : true)),
     [loaded, graphParents],
   );
   const loadMore = useMemo(() => {
@@ -580,7 +582,7 @@ export function KnowledgePageExplorer({
     [drawn.pages, focusScope, focusScopeId],
   );
   const focusedInGraph = view === 'graph' && selectedPageId ? pagesById.get(selectedPageId) : undefined;
-  const hiddenChildren = focusedInGraph ? (drawn.hiddenChildren.get(focusedInGraph.id) ?? 0) : 0;
+  const children = focusedInGraph ? drawn.hiddenChildren.get(focusedInGraph.id) : undefined;
   const views: Array<{ value: KnowledgeExplorerView; label: string; narrowOnly?: boolean }> = [
     { value: 'tree', label: 'Tree', narrowOnly: true },
     { value: 'graph', label: 'Graph' },
@@ -617,10 +619,12 @@ export function KnowledgePageExplorer({
           The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
         </p>
       ) : null}
-      {hiddenChildren > 0 ? (
+      {focusedInGraph && children && (children.hidden > 0 || focusedInGraph.childCountCapped) ? (
         <p className="text-ui-sm text-muted-foreground" data-testid="knowledge-graph-more-children">
-          +{hiddenChildren} more {hiddenChildren === 1 ? 'page' : 'pages'} under {focusedInGraph?.name} not drawn. Open
-          the tree to see them all.
+          {focusedInGraph.childCountCapped
+            ? `${childCountLabel(focusedInGraph)} pages under ${focusedInGraph.name}, ${children.drawn} drawn.`
+            : `+${children.hidden} more ${children.hidden === 1 ? 'page' : 'pages'} under ${focusedInGraph.name} not drawn.`}{' '}
+          Open the tree to see them all.
         </p>
       ) : null}
       {selectedPageId && !showPage && isNotFound(selected.error) ? (

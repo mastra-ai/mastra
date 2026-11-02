@@ -39,6 +39,8 @@ export interface KnowledgePagePayload {
   deletedAt?: string;
   /** Pages (and, for a scope, child scopes) directly under this one; tree levels only, from servers that count them. */
   childCount?: number;
+  /** The server stopped counting child scopes at its scan limit, so `childCount` is a lower bound. */
+  childCountCapped?: boolean;
 }
 
 export interface KnowledgeNotePayload {

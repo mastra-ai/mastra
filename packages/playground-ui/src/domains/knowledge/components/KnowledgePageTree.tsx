@@ -2,7 +2,7 @@ import { ChevronRight, Pin } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
-import { buildPageTree, pageAncestorIds, visiblePageRows } from '../lib/pageTree';
+import { buildPageTree, childCountLabel, pageAncestorIds, visiblePageRows } from '../lib/pageTree';
 import type { KnowledgePagePayload } from '../pageTypes';
 
 import { cn } from '@/utils/cn';
@@ -194,10 +194,10 @@ export function KnowledgePageTree({
               {row.page.childCount ? (
                 <span
                   data-testid="knowledge-tree-count"
-                  aria-label={`${row.page.childCount} below`}
+                  aria-label={`${childCountLabel(row.page)} below`}
                   className="shrink-0 text-caption text-muted-foreground tabular-nums"
                 >
-                  {row.page.childCount}
+                  {childCountLabel(row.page)}
                 </span>
               ) : null}
               {pinned.has(row.page.id) ? (

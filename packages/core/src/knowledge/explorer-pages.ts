@@ -85,6 +85,11 @@ export type KnowledgeTreePage = KnowledgePage & {
    * (an adapter older than `countChildPages`), so a UI can tell "none" from "unknown".
    */
   childCount?: number;
+  /**
+   * Set when the child-scope walk for this page hit {@link MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN}, so
+   * `childCount` is a lower bound: show it as "at least" (e.g. `1000+`), not as the exact number.
+   */
+  childCountCapped?: true;
 };
 
 export interface KnowledgeTreeChildren {
@@ -144,12 +149,14 @@ async function withChildCounts(
   const counted: KnowledgeTreePage[] = [];
   for (const page of pages) {
     let childCount = Object.hasOwn(counts, page.id) ? (counts[page.id] ?? 0) : 0;
+    let capped = false;
     if (page.isScope) {
       const childScopes = await visibleChildScopes(store, page.id, read, budget);
       childCount += childScopes.scopes.length;
-      truncated ||= childScopes.truncated;
+      capped = childScopes.truncated;
+      truncated ||= capped;
     }
-    counted.push({ ...page, childCount });
+    counted.push(capped ? { ...page, childCount, childCountCapped: true } : { ...page, childCount });
   }
   return { pages: counted, truncated };
 }

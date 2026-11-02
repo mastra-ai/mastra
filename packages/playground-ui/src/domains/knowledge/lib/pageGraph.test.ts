@@ -28,7 +28,7 @@ describe('graphWithChildren', () => {
   it("adds at most the cap of a focused page's missing children and counts the rest", () => {
     const result = graphWithChildren([root, first], ['root'], kids, new Set(['root']), 2);
     expect(result.pages.map(p => p.id)).toEqual(['root', 'a', 'b', 'c']);
-    expect(result.hiddenChildren.get('root')).toBe(2);
+    expect(result.hiddenChildren.get('root')).toEqual({ hidden: 2, drawn: 3 });
   });
 
   it('adds nothing for a focused page whose children have not loaded yet', () => {
@@ -49,6 +49,6 @@ describe('graphWithChildren', () => {
     ];
     const result = graphWithChildren([{ ...root, childCount: undefined }], ['root'], loaded, new Set(['root']));
     expect(result.pages.map(p => p.id)).toEqual(['root']);
-    expect(result.hiddenChildren.get('root')).toBe(0);
+    expect(result.hiddenChildren.get('root')).toEqual({ hidden: 0, drawn: 0 });
   });
 });
