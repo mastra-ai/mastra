@@ -1,5 +1,21 @@
 # @mastra/core
 
+## 1.82.0-alpha.1
+
+### Minor Changes
+
+- Added time to first token and time to first chunk measures to trace and span aggregates, so dashboards can chart streaming latency next to duration. ([#29055](https://github.com/mastra-ai/mastra/pull/29055))
+
+  The new measures are `timeToFirstToken.avg`, `.min`, `.max`, `.p50`, `.p90`, `.p95`, `.p99`, and `.count`, plus the same set for `timeToFirstChunk`. Traces and spans without a recorded value are skipped instead of counted as 0, and `.count` reports how many had one. Stores opt in through the `aggregate-time-to-first-measures` feature.
+
+### Patch Changes
+
+- Fixed durable agents (`durable: true`) ending the `model_generation` trace span without `responseId` and `responseModel`. Durable runs now record the provider's response id and model on the span, the same as non-durable agents, so a trace can be linked back to the provider's own response log. Fixes #29053. ([#29180](https://github.com/mastra-ai/mastra/pull/29180))
+
+- Fixed metadata filters in the in-memory store returning records whose nested metadata had different keys from the filter when one side contained an `undefined` value. ([#29101](https://github.com/mastra-ai/mastra/pull/29101))
+
+- Fixed directly resumed nested workflows in the evented engine so they continue suspended parent runs. ([#25979](https://github.com/mastra-ai/mastra/pull/25979))
+
 ## 1.82.0-alpha.0
 
 ### Minor Changes

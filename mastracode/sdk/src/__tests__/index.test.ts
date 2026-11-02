@@ -765,8 +765,9 @@ describe('createMastraCode', () => {
         }
       | undefined;
     expect(agentControllerConfig?.gateways?.[0]?.id).toBe('amazon-bedrock');
-    expect(agentControllerConfig?.gateways?.[1]?.id).toBe('github-copilot');
-    expect(agentControllerConfig?.gateways?.[2]).toBe(mastraCodeGatewayMock);
+    expect(agentControllerConfig?.gateways?.[1]?.id).toBe('google-vertex');
+    expect(agentControllerConfig?.gateways?.[2]?.id).toBe('github-copilot');
+    expect(agentControllerConfig?.gateways?.[3]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
 

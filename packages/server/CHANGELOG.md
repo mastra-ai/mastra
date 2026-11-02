@@ -1,5 +1,28 @@
 # @mastra/server
 
+## 1.82.0-alpha.1
+
+### Minor Changes
+
+- Added the `aggregateTimeToFirstMeasures` observability capability. Trace and span aggregate requests for `timeToFirstToken.*` or `timeToFirstChunk.*` measures now return `501` against stores that can't compute them, and field discovery omits those measures for such stores. ([#29055](https://github.com/mastra-ai/mastra/pull/29055))
+
+  ```typescript
+  const { capabilities } = await mastraClient.getObservabilityCapabilities();
+
+  if (capabilities.traceAggregate && capabilities.aggregateTimeToFirstMeasures) {
+    const { rows } = await mastraClient.aggregateTraces({
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
+      groupBy: ['entityName'],
+      measures: ['timeToFirstChunk.p95', 'timeToFirstChunk.count'],
+    });
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`8751dd7`](https://github.com/mastra-ai/mastra/commit/8751dd7f56eefe40d8ce57b6d44df415cadbda4f), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`ebf8a9a`](https://github.com/mastra-ai/mastra/commit/ebf8a9a1370105fd6bcc5706711203236a1993ff)]:
+  - @mastra/core@1.82.0-alpha.1
+
 ## 1.82.0-alpha.0
 
 ### Minor Changes

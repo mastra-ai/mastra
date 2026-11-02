@@ -288,8 +288,10 @@ export interface MastraFactoryConfig {
    * credentials instead of per-account credentials. With auth enabled, these
    * providers are only usable when listed here; the stored-key flow is never
    * offered for them. Supported: `'amazon-bedrock'` (AWS credential chain —
-   * `AWS_BEARER_TOKEN_BEDROCK` or access keys/profile/role plus `AWS_REGION`).
-   * Every signed-in account can then run these models on the deployment's
+   * `AWS_BEARER_TOKEN_BEDROCK` or access keys/profile/role plus `AWS_REGION`)
+   * and `'google-vertex'` (Application Default Credentials plus
+   * `GOOGLE_VERTEX_PROJECT` and `GOOGLE_VERTEX_LOCATION`). Every signed-in
+   * account can then run these models on the deployment's
    * credentials. Default: none.
    */
   deploymentModelProviders?: readonly string[];
