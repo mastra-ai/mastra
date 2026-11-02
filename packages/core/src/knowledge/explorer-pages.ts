@@ -2,6 +2,8 @@ import type {
   KnowledgeNote,
   KnowledgePage,
   KnowledgePageActivityEvent,
+  KnowledgePageLinkCounts,
+  KnowledgePageLinkEdge,
   KnowledgePageSearchHit,
   KnowledgePageStore,
   KnowledgePin,
@@ -434,4 +436,73 @@ export async function readKnowledgeScopeGrants(
     }
   }
   return grants;
+}
+
+/** Most pages one {@link readKnowledgePageLinkCounts} call counts. */
+export const MAX_KNOWLEDGE_LINK_COUNT_PAGES = 200;
+/** Most links one {@link readKnowledgePageLinks} call returns. */
+export const MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS = 200;
+
+/**
+ * How many distinct other pages link to each page (`in`) and are linked from it (`out`), by body `[[ref]]`
+ * or note mention, counted by the store over every page it holds rather than only the ones a UI has
+ * loaded. Pages `read` can't reach count as zero, the same as pages that don't exist. Returns `null`
+ * when the store has no link index.
+ */
+export async function readKnowledgePageLinkCounts(
+  store: KnowledgePageStore,
+  input: { pageIds: string[]; read: KnowledgeReadScope },
+): Promise<Record<string, KnowledgePageLinkCounts> | null> {
+  const pageIds = [...new Set(input.pageIds)].slice(0, MAX_KNOWLEDGE_LINK_COUNT_PAGES);
+  if (pageIds.length === 0) return {};
+  try {
+    return await store.countPageLinks({ pageIds, read: input.read });
+  } catch (error) {
+    if (error instanceof KnowledgeUnsupportedCapabilityError) return null;
+    throw error;
+  }
+}
+
+/** One page's links, with the pages at their other ends so a UI can name and place them. */
+export interface KnowledgePageLinks {
+  edges: KnowledgePageLinkEdge[];
+  /** The pages at the other end of `edges` that `read` can reach. */
+  pages: KnowledgePage[];
+  /** True when the page has more links than {@link MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS}. */
+  truncated: boolean;
+}
+
+/**
+ * The links into and out of one readable page, by body `[[ref]]` or note mention. A page `read` can't
+ * reach has none. Returns `null` when the store has no link index.
+ */
+export async function readKnowledgePageLinks(
+  store: KnowledgePageStore,
+  input: { pageId: string; read: KnowledgeReadScope; direction?: 'in' | 'out' | 'both' },
+): Promise<KnowledgePageLinks | null> {
+  if (!(await store.getPage({ id: input.pageId, read: input.read }))) return { edges: [], pages: [], truncated: false };
+  let listed: KnowledgePageLinkEdge[];
+  try {
+    listed = await store.listPageLinks({
+      pageIds: [input.pageId],
+      read: input.read,
+      direction: input.direction ?? 'both',
+      limit: MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS + 1,
+    });
+  } catch (error) {
+    if (error instanceof KnowledgeUnsupportedCapabilityError) return null;
+    throw error;
+  }
+  const truncated = listed.length > MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS;
+  const edges = listed.slice(0, MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS);
+  const others = [
+    ...new Set(edges.flatMap(edge => [edge.fromPageId, edge.toPageId]).filter(id => id !== input.pageId)),
+  ];
+  const pages: KnowledgePage[] = [];
+  for (let start = 0; start < others.length; start += MAX_KNOWLEDGE_PAGE_LIST_LIMIT) {
+    pages.push(
+      ...(await store.getPages({ ids: others.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT), read: input.read })),
+    );
+  }
+  return { edges, pages, truncated };
 }

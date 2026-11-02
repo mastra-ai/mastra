@@ -464,7 +464,11 @@ export type { KnowledgeInstructionParts, KnowledgeInstructionsOption } from './i
 export {
   DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS,
   listKnowledgeTreeChildren,
+  MAX_KNOWLEDGE_EXPLORER_PAGE_LINKS,
+  MAX_KNOWLEDGE_LINK_COUNT_PAGES,
   readKnowledgePage,
+  readKnowledgePageLinkCounts,
+  readKnowledgePageLinks,
   readKnowledgePageActivity,
   readKnowledgePageGraph,
   readKnowledgeScopeGrants,
@@ -475,6 +479,7 @@ export type {
   KnowledgePageGraph,
   KnowledgePageGraphEdge,
   KnowledgePageGraphLimits,
+  KnowledgePageLinks,
   KnowledgePageView,
   KnowledgeTreeChildren,
 } from './explorer-pages';
