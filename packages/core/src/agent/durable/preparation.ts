@@ -2,6 +2,7 @@ import type { StandardSchemaWithJSON } from '@mastra/schema-compat/schema';
 import { MastraFGAPermissions } from '../../auth/ee';
 import type { MastraFGAPermissionInput } from '../../auth/ee';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../../channels/output-processor';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraLanguageModel, MastraModelConfig } from '../../llm/model/shared.types';
@@ -108,6 +109,10 @@ function snapshotRequestContextEntries(
     // Execution ids are claimed per execution. A persisted id would be restored
     // over a later execution's id (e.g. the recovered one) and fence it out.
     if (key === MASTRA_DURABLE_EXECUTIONS_KEY) continue;
+    // Live chat adapter, thread and callbacks for the channel output processor.
+    // JSON keeps a method-less husk of it, which a restored run would mistake
+    // for a live render context; the processor rebuilds it from the thread.
+    if (key === CHAT_CHANNEL_RENDER_CONTEXT_KEY) continue;
     // Serialize each entry exactly once with a bounded pass: a shared-reference
     // graph would otherwise make JSON.stringify expand exponentially and wedge
     // the event loop on every durable step, and reading the value twice (probe

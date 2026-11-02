@@ -230,8 +230,12 @@ export class ChatChannelOutputProcessor {
       return state.render as ChatChannelRenderContext | undefined;
     }
 
+    // A request context restored from a persisted snapshot (durable/evented
+    // runs, workflow resume) carries a JSON copy of the render context with its
+    // functions and live adapter stripped. Only trust a live one; otherwise
+    // rebuild from the thread below.
     const fromRequest = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-    if (fromRequest) {
+    if (typeof fromRequest?.wrapStream === 'function') {
       state.render = fromRequest;
       return fromRequest;
     }
