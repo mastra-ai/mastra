@@ -1207,7 +1207,6 @@ export interface ThreadQueryConformanceCase {
   scope?: TraceQueryTenantScope;
   expected: Array<{ threadId: string }>;
   requiresStrictFeedbackValueTypes?: boolean;
-  /** Storage feature the case needs; stores that don't declare it skip the case. */
   requiresFeature?: ObservabilityStorageFeature;
 }
 
@@ -1482,7 +1481,6 @@ export interface TraceQueryConformanceCase {
   scope?: TraceQueryTenantScope;
   expected: Array<{ traceId: string }>;
   requiresStrictFeedbackValueTypes?: boolean;
-  /** Storage feature the case needs; stores that don't declare it skip the case. */
   requiresFeature?: ObservabilityStorageFeature;
 }
 

@@ -56,7 +56,6 @@ const OUTCOME_FIELDS = new Set(['outcome', 'stopReason']);
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE = 'trace-query-context-fields';
-// Trace and span context fields, keyed by the storage feature that added their SQL.
 const TRACE_QUERY_CONTEXT_FIELD_FEATURES = new Map([
   ['runId', OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE],
   ['sessionId', OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE],
@@ -402,7 +401,6 @@ function usesField(
   return fields.has(predicate.field);
 }
 
-/** Whether the store can serve `path` in trace and span predicates. Fields outside the context table always can. */
 export function supportsObservabilityTraceQueryContextField(observabilityStore: ObservabilityStorage, path: string) {
   const feature = TRACE_QUERY_CONTEXT_FIELD_FEATURES.get(path);
   return feature === undefined || getFeatures(observabilityStore)?.includes(feature) === true;
