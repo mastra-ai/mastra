@@ -15,6 +15,7 @@ import {
   KNOWLEDGE_READ_BODY_TOKENS,
   KNOWLEDGE_READ_INLINE_TOKENS,
   KNOWLEDGE_READ_OUTLINE_ENTRIES,
+  KNOWLEDGE_READ_REST_OUTLINE_TOKENS,
   KnowledgeBodyLines,
   knowledgeBodyGrep,
   knowledgeBodyOutline,
@@ -298,7 +299,7 @@ function searchTool(host: KnowledgePageToolHost) {
             ? {
                 more: [
                   max < MAX_LIMIT
-                    ? `results: showing the top ${max}; there may be more. Search again with a higher limit (up to ${MAX_LIMIT}), a narrower query, or browse with knowledge_list.`
+                    ? `results: showing the top ${max}. If none of these is what you need, narrow the query, raise the limit (up to ${MAX_LIMIT}), or browse with knowledge_list.`
                     : `results: showing the top ${max}, the most one search returns. Narrow the query or scope, or browse with knowledge_list.`,
                 ],
               }
@@ -424,13 +425,33 @@ function bodyView(
   // A whole body that fits comes as it is; any part comes numbered, with the range a write takes back.
   if (!input.section && start === 0 && window.next === undefined) return { body };
   const range = { start: lines.startPosition(window.start), end: lines.endPosition(window.end) };
+  // A first read cut short also lists the headings it did not reach, so the reader can go
+  // straight to the section it needs instead of paging toward it line by line.
+  const below =
+    window.next !== undefined && !input.section && !input.from
+      ? knowledgeBodyOutline(body).filter(heading => heading.line > range.end.line)
+      : [];
+  const outline: typeof below = [];
+  let outlineTokens = 0;
+  for (const heading of below) {
+    outlineTokens += estimateTokenCount(JSON.stringify(heading));
+    if (outlineTokens > KNOWLEDGE_READ_REST_OUTLINE_TOKENS) break;
+    outline.push(heading);
+  }
   if (window.next !== undefined) {
     const next = lines.startPosition(window.next);
     more.push(
-      `body: showing lines ${range.start.line}–${range.end.line} of ${lines.count}. Read on with ${again}from: ${fromText(next)}.`,
+      outline.length
+        ? `body: showing lines ${range.start.line}–${range.end.line} of ${lines.count}. \`outline\` lists the ${outline.length < below.length ? `first ${outline.length} of ${below.length} headings below (all of them with outline: true)` : 'headings below'}; read the one you need with section, or read on with from: ${fromText(next)}.`
+        : `body: showing lines ${range.start.line}–${range.end.line} of ${lines.count}. Read on with ${again}from: ${fromText(next)}.`,
     );
   }
-  return { lines: lines.numbered(window.start, window.end), range, lineCount: lines.count };
+  return {
+    lines: lines.numbered(window.start, window.end),
+    range,
+    lineCount: lines.count,
+    ...(outline.length ? { outline } : {}),
+  };
 }
 
 function readTool(host: KnowledgePageToolHost) {
@@ -439,7 +460,7 @@ function readTool(host: KnowledgePageToolHost) {
     description:
       'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists the scopes this run holds. ' +
       `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
-      `A body returns at most ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on. ` +
+      `A body returns at most ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read cut short also gives the \`outline\` of the headings it did not reach. ` +
       'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
       'Those part reads return just that part of the body. To edit part of a long body, pass the `range` a read gave you to knowledge_page.',
     inputSchema: {

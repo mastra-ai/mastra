@@ -9,6 +9,8 @@ export const KNOWLEDGE_READ_BODY_TOKENS = 1_000;
 export const KNOWLEDGE_READ_INLINE_TOKENS = 1_000;
 /** Most headings one outline lists. */
 export const KNOWLEDGE_READ_OUTLINE_ENTRIES = 200;
+/** Most estimated tokens of headings a first read cut short lists for the part of the body it did not reach. */
+export const KNOWLEDGE_READ_REST_OUTLINE_TOKENS = 500;
 
 /** A markdown heading's section: from its heading line to the next heading at its level or above. */
 export interface KnowledgeBodySection {

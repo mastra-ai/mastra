@@ -5,7 +5,7 @@ import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
-import { KNOWLEDGE_READ_BODY_TOKENS, knowledgeBodySections } from '../page-body';
+import { KNOWLEDGE_READ_BODY_TOKENS, KNOWLEDGE_READ_REST_OUTLINE_TOKENS, knowledgeBodySections } from '../page-body';
 
 const memory = knowledgeMemoryScopes();
 
@@ -254,11 +254,45 @@ describe('knowledge_read on long pages', () => {
       expect(estimateTokenCount(text)).toBeLessThanOrEqual(KNOWLEDGE_READ_BODY_TOKENS);
       const more = (result.more ?? []).find((line: string) => line.startsWith('body:'));
       if (!more) break;
-      expect(more).toMatch(/^body: showing lines \d+–\d+ of \d+\. Read on with from: \{"line":\d+\}\.$/);
+      expect(more).toMatch(
+        /^body: showing lines \d+–\d+ of \d+\. (Read on with|`outline` lists the .*headings below( \(all of them with outline: true\))?; read the one you need with section, or read on with) from: \{"line":\d+\}\.$/,
+      );
       from = JSON.parse(/from: (\{.*\})\.$/.exec(more)![1]!);
     }
     expect(reads).toBeGreaterThan(5);
     expect(await readAll(call, 'docs:acme#anthropic')).toBe(body);
+  });
+
+  it('lists the headings a first read did not reach, so one section read gets a fact far down the page', async () => {
+    const { knowledge, call } = setup();
+    // Shaped like the models page: the answer sits in a short section far past the first read.
+    const body = `${referenceBody(12)}\n\n### Select the OpenAI Responses API\n\nCustom \`url\` endpoints use Chat Completions by default; set \`api: "responses"\`.\n\n## Use AI SDK with Mastra\n\nMore text.`;
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'models', name: 'Models', body });
+    const first = await call('knowledge_read', { page: 'docs:acme#models' });
+    expect(first.page.lines).not.toContain('api: "responses"');
+    const heading = first.page.outline?.find(
+      (entry: { title: string }) => entry.title === 'Select the OpenAI Responses API',
+    );
+    expect(heading).toMatchObject({ level: 3, line: expect.any(Number), tokens: expect.any(Number) });
+    expect(heading.line).toBeGreaterThan(first.page.range.end.line);
+    expect(first.page.outline.every((entry: { line: number }) => entry.line > first.page.range.end.line)).toBe(true);
+    expect(estimateTokenCount(JSON.stringify(first.page.outline))).toBeLessThanOrEqual(
+      KNOWLEDGE_READ_REST_OUTLINE_TOKENS,
+    );
+    expect(first.more[0]).toMatch(/`outline` lists the headings below; read the one you need with section/);
+    const section = await call('knowledge_read', { page: 'docs:acme#models', section: heading.title });
+    expect(section.page.lines).toContain('api: "responses"');
+    expect(section.more).toBeUndefined();
+    // Reads that already aim somewhere do not repeat it.
+    const later = await call('knowledge_read', { page: 'docs:acme#models', from: { line: 20 } });
+    expect(later.page.outline).toBeUndefined();
+    // A page with many headings lists only as many as fit, and says where the rest are.
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'big', name: 'Big', body: referenceBody(80) });
+    const big = await call('knowledge_read', { page: 'docs:acme#big' });
+    expect(estimateTokenCount(JSON.stringify(big.page.outline))).toBeLessThanOrEqual(
+      KNOWLEDGE_READ_REST_OUTLINE_TOKENS,
+    );
+    expect(big.more[0]).toMatch(/lists the first \d+ of \d+ headings below \(all of them with outline: true\)/);
   });
 
   it('returns a short body whole, with no more', async () => {
@@ -506,12 +540,12 @@ describe('knowledge_read on long pages', () => {
     );
   });
 
-  it('says when search hit its limit', async () => {
+  it('says when search hit its limit, without telling the agent to search again', async () => {
     const { knowledge, call } = setup();
     for (let i = 0; i < 3; i++) await knowledge.upsertPage({ scope: 'docs:acme', path: `p${i}`, name: `Widget ${i}` });
-    expect((await call('knowledge_search', { query: 'widget', limit: 2 })).more[0]).toMatch(
-      /showing the top 2; there may be more/,
-    );
+    const more = (await call('knowledge_search', { query: 'widget', limit: 2 })).more[0];
+    expect(more).toMatch(/^results: showing the top 2\. If none of these is what you need/);
+    expect(more).not.toMatch(/there may be more|Search again/);
     expect((await call('knowledge_search', { query: 'widget', limit: 5 })).more).toBeUndefined();
   });
 
