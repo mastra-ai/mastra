@@ -12,6 +12,8 @@ export interface SkillSimpleFormProps {
   instructions: string;
   onInstructionsChange: (instructions: string) => void;
   readOnly?: boolean;
+  /** Locks only the name, for skills whose name is their identity. */
+  nameReadOnly?: boolean;
 }
 
 export function SkillSimpleForm({
@@ -22,10 +24,11 @@ export function SkillSimpleForm({
   instructions,
   onInstructionsChange,
   readOnly,
+  nameReadOnly,
 }: SkillSimpleFormProps) {
   return (
     <div className="flex h-full flex-col gap-4">
-      <Field disabled={readOnly}>
+      <Field disabled={readOnly || nameReadOnly}>
         <FieldLabel>Name</FieldLabel>
         <Input value={name} onChange={e => onNameChange(e.target.value)} placeholder="Skill name" />
       </Field>
@@ -60,7 +63,7 @@ export function SkillSimpleForm({
               onChange={onInstructionsChange}
               language="markdown"
               editable
-              placeholder="You are a helpful assistant that…"
+              placeholder="You are a helpful assistant"
               showCopyButton={false}
               className="size-full"
             />

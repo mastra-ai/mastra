@@ -33,7 +33,7 @@ const InputDemo = () => {
   return (
     <FileDropBackdrop onFilesDrop={files => setFileNames(files.map(file => file.name).join(', '))}>
       <div className="w-80">
-        <Input readOnly aria-label="Dropped files" placeholder="Drag a file anywhere…" value={fileNames} />
+        <Input readOnly aria-label="Dropped files" placeholder="Drag a file anywhere" value={fileNames} />
       </div>
     </FileDropBackdrop>
   );
@@ -66,7 +66,7 @@ const ComposerDemo = ({ accept, label, description }: { accept?: string; label?:
               ))}
             </ComposerAttachmentList>
           )}
-          <ComposerInput aria-label="Message" placeholder="Drop files anywhere to attach them…" />
+          <ComposerInput aria-label="Message" placeholder="Drop files anywhere to attach them" />
           <ComposerActions>
             <input
               ref={fileInputRef}

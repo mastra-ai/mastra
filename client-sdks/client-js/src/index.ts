@@ -16,6 +16,15 @@ export type {
   GetAgentCardOptions,
   VerifyAgentCardSignatureOptions,
 } from './resources/a2a';
+export type {
+  KnowledgeActivityResponse,
+  KnowledgeChangeNotice,
+  KnowledgeGraphResponse,
+  KnowledgeInstanceSummary,
+  KnowledgePageResponse,
+  KnowledgeSearchResponse,
+  KnowledgeTreeResponse,
+} from './resources/knowledge';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
 export type {
   MastraDBMessage,

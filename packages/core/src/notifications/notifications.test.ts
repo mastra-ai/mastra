@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MastraCompositeStore } from '../storage/base';
+import { applyNotificationRoutingRequirement } from './routing';
 import { InMemoryNotificationsStorage, NotificationsStorage } from './storage';
 import type { UpdateNotificationInput } from './types';
 import {
@@ -695,6 +696,45 @@ describe('notification inbox', () => {
       status: 'delivered',
       deliveredSignalId: result.signals[0]?.id,
     });
+  });
+
+  it('starts a deferred delivery with the scopes it was sent with, queueing it when the active run holds others', async () => {
+    const storage = new InMemoryNotificationsStorage();
+    const now = new Date('2026-05-30T12:00:00Z');
+    const sent: any[] = [];
+    const queued: any[] = [];
+    const sendSignal = vi.fn((signal, target) => {
+      sent.push(target);
+      return {
+        accepted: Promise.resolve({ action: 'blocked', reason: 'scope-mismatch', runId: 'run-r1' }),
+        signal,
+      };
+    });
+    const queueSignal = vi.fn((signal, target) => {
+      queued.push(target);
+      return { accepted: Promise.resolve({ action: 'deliver', runId: 'run-r2' }), signal };
+    });
+    const mastra = { getAgentById: vi.fn(async () => ({ sendSignal, queueSignal })) } as any;
+    await storage.createNotification({
+      id: 'n1',
+      agentId: 'agent-1',
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      source: 'github',
+      kind: 'ci-status',
+      priority: 'high',
+      summary: 'CI failed',
+      deliverAt: now,
+      metadata: applyNotificationRoutingRequirement(undefined, { scopes: ['request:r2'] }),
+    });
+
+    const result = await dispatchDueNotifications({ mastra, storage, now });
+
+    expect(result.failed).toEqual([]);
+    expect(result.delivered).toMatchObject([{ id: 'n1', status: 'delivered' }]);
+    expect(sent).toEqual([{ resourceId: 'resource-1', threadId: 'thread-1', scopes: ['request:r2'] }]);
+    expect(queued).toEqual(sent);
+    expect(result.signals[0]?.metadata).not.toHaveProperty('__mastraNotificationRouting');
   });
 
   it('resolves stream options for deferred deliveries so a woken idle thread has a request context', async () => {

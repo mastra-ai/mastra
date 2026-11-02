@@ -524,7 +524,7 @@ describe('PropertyFilterCreator — a pick-multi property', () => {
 
     fireEvent.keyDown(screen.getByRole('menuitem', { name: /Primitive Type/i }), { key: 'ArrowRight' });
 
-    const search = await screen.findByPlaceholderText('Search primitive type...');
+    const search = await screen.findByPlaceholderText('Search primitive type');
     await waitFor(() => expect(document.activeElement).toBe(search));
   });
 

@@ -79,7 +79,8 @@ type OptionalizeUndefined<T> = T extends Date
           >
         : T;
 
-type Serialized<T> = T extends Date
+/** A server payload type as it arrives over JSON: `Date` fields become ISO strings. */
+export type Serialized<T> = T extends Date
   ? string
   : T extends readonly (infer U)[]
     ? Serialized<U>[]

@@ -4,7 +4,7 @@ import { ActivityTimedTrigger } from '@mastra/playground-ui/domains/chat/activit
 
 import { toolCallStatus } from '../../services/transcript';
 import type { ToolCall } from '../../services/transcript';
-import { ToolBody, toolHasBody } from './ToolBody';
+import { ToolBody, toolHasBody, toolKnowledgeCard } from './ToolBody';
 
 export function ToolCard({
   tool,
@@ -15,7 +15,12 @@ export function ToolCard({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
-  const { icon: ToolIcon, label, detail, description, command } = presentTool(tool.toolName, tool.args);
+  const presented = presentTool(tool.toolName, tool.args);
+  const { icon: ToolIcon, description, command } = presented;
+  // A finished Knowledge call says what it did ("Read Refunds", "Pinned Escalation Process") like Studio's card.
+  const knowledge = toolKnowledgeCard(tool);
+  const label = knowledge?.title ?? presented.label;
+  const detail = knowledge ? knowledge.detail : presented.detail;
   const foldable = toolHasBody(tool, command);
 
   return (

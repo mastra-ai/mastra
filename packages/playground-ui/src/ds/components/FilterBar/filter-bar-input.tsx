@@ -64,7 +64,7 @@ export function FilterBarInput(props: FilterBarInputProps) {
 }
 
 function FilterBarInputImpl({
-  placeholder = 'Filter…',
+  placeholder = 'Filter',
   className,
   'aria-label': ariaLabel = 'Add filter',
   groupId,
@@ -285,12 +285,12 @@ function FilterBarInputImpl({
     step === 'field'
       ? placeholder
       : step === 'operator'
-        ? 'Operator…'
+        ? 'Operator'
         : valueStep.hasSuggestions && valueStep.allowFreeText
-          ? 'Search or type a value…'
+          ? 'Search or type a value'
           : field?.type === 'number'
-            ? 'Number…'
-            : 'Value…';
+            ? 'Number'
+            : 'Value';
 
   return (
     <>
@@ -346,7 +346,7 @@ function FilterBarInputImpl({
             className,
           )}
         >
-          <ListFilterIcon aria-hidden className="ml-[-.3em] shrink-0 text-muted-foreground" />
+          <ListFilterIcon aria-hidden className="shrink-0" />
           <ComboboxPrimitive.Input
             ref={el => {
               inputRef.current = el;

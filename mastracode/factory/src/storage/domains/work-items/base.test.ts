@@ -3,8 +3,11 @@
  * dedup scoping and the atomic update path.
  */
 
+import { randomUUID } from 'node:crypto';
+
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it, vi } from 'vitest';
+import { PgFactoryStorage } from '@mastra/pg';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import {
   applyStageTransition,
@@ -26,6 +29,8 @@ const input = {
   sessions: {},
   metadata: {},
 };
+
+const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
 async function makeStorage(): Promise<WorkItemsStorage> {
   const backend = new LibSQLFactoryStorage({ id: 'work-items-test', url: ':memory:' });
@@ -176,173 +181,6 @@ describe('WorkItemsStorage', () => {
 
     expect(rows.map(row => row.id).sort()).toEqual([first.item.id, second.item.id].sort());
     expect(rows.every(row => row.orgId === 'org1')).toBe(true);
-  });
-
-  it('refuses a claim held by another project and resolves a renamed record within the project', async () => {
-    const storage = await makeStorage();
-    const claimKey = 'linear:issue:1';
-    const first = await storage.upsert({
-      orgId: 'org1',
-      userId: 'user1',
-      factoryProjectId: 'project1',
-      input: { ...input, claimKey },
-    });
-
-    await expect(
-      storage.upsert({
-        orgId: 'org1',
-        userId: 'user1',
-        factoryProjectId: 'project2',
-        input: { ...input, externalSource: { ...input.externalSource, externalId: 'renamed' }, claimKey },
-      }),
-    ).rejects.toMatchObject({ code: 'work_item_claim_conflict', claimant: { id: first.item.id } });
-
-    const renamed = await storage.upsert({
-      orgId: 'org1',
-      userId: 'user1',
-      factoryProjectId: 'project1',
-      input: { ...input, externalSource: { ...input.externalSource, externalId: 'renamed' }, claimKey },
-    });
-    expect(renamed).toMatchObject({ created: false, item: { id: first.item.id, claimKey } });
-    expect(await storage.list({ orgId: 'org1', factoryProjectId: 'project1' })).toHaveLength(1);
-    expect(await storage.getByClaimKey({ orgId: 'org1', claimKey })).toMatchObject({ id: first.item.id });
-  });
-
-  it('releases the claim when a card finishes so another project can file the record', async () => {
-    const storage = await makeStorage();
-    storage.useTerminalPhasePredicate(item => item.stages.includes('done'));
-    const claimKey = 'linear:issue:1';
-    const first = await storage.upsert({
-      orgId: 'org1',
-      userId: 'user1',
-      factoryProjectId: 'project1',
-      input: { ...input, claimKey },
-    });
-
-    const finished = await storage.update({
-      orgId: 'org1',
-      id: first.item.id,
-      userId: 'user1',
-      patch: { stages: ['done'] },
-    });
-    expect(finished?.item.claimKey).toBeNull();
-
-    const second = await storage.upsert({
-      orgId: 'org1',
-      userId: 'user1',
-      factoryProjectId: 'project2',
-      input: { ...input, claimKey },
-    });
-    expect(second.created).toBe(true);
-    expect(await storage.getByClaimKey({ orgId: 'org1', claimKey })).toMatchObject({ id: second.item.id });
-  });
-
-  it('lets an unclaimed card adopt a claim unless another card holds it', async () => {
-    const storage = await makeStorage();
-    const claimKey = 'linear:issue:1';
-    const legacy = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
-    expect(legacy.item.claimKey).toBeNull();
-
-    const claimed = await storage.claimWorkItem({ orgId: 'org1', id: legacy.item.id, claimKey });
-    expect(claimed).toMatchObject({ id: legacy.item.id, claimKey });
-    expect(await storage.claimWorkItem({ orgId: 'org1', id: legacy.item.id, claimKey })).toMatchObject({ claimKey });
-
-    const other = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project2', input });
-    expect(await storage.claimWorkItem({ orgId: 'org1', id: other.item.id, claimKey })).toBeNull();
-    expect(await storage.claimWorkItem({ orgId: 'org1', id: legacy.item.id, claimKey: 'linear:issue:2' })).toBeNull();
-  });
-
-  it('does not claim a card that is born finished', async () => {
-    const storage = await makeStorage();
-    storage.useTerminalPhasePredicate(item => item.stages.includes('done'));
-    const claimKey = 'linear:issue:1';
-    const finished = await storage.upsert({
-      orgId: 'org1',
-      userId: 'user1',
-      factoryProjectId: 'project1',
-      input: { ...input, stages: ['done'], claimKey },
-    });
-    expect(finished.item.claimKey).toBeNull();
-
-    const live = await storage.upsert({
-      orgId: 'org1',
-      userId: 'user1',
-      factoryProjectId: 'project2',
-      input: { ...input, claimKey },
-    });
-    expect(live).toMatchObject({ created: true, item: { claimKey } });
-  });
-
-  it('adopts a claim on reuse in every mode and refuses one held elsewhere', async () => {
-    const storage = await makeStorage();
-    const claimKey = 'linear:issue:1';
-    const legacy = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
-    expect(legacy.item.claimKey).toBeNull();
-
-    const preserved = await storage.upsert({
-      orgId: 'org1',
-      userId: 'user1',
-      factoryProjectId: 'project1',
-      input: { ...input, claimKey },
-      reuseMode: 'preserve',
-    });
-    expect(preserved).toMatchObject({ created: false, item: { id: legacy.item.id, claimKey } });
-
-    const otherLegacy = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project2', input });
-    await expect(
-      storage.upsert({
-        orgId: 'org1',
-        userId: 'user1',
-        factoryProjectId: 'project2',
-        input: { ...input, title: 'Updated', claimKey },
-      }),
-    ).rejects.toMatchObject({ code: 'work_item_claim_conflict', claimant: { id: legacy.item.id } });
-    expect(await storage.get({ orgId: 'org1', id: otherLegacy.item.id })).toMatchObject({ claimKey: null });
-  });
-
-  it('claims through run starts and refuses a start for a record another project holds', async () => {
-    const storage = await makeStorage();
-    const claimKey = 'linear:issue:1';
-    const start = (factoryProjectId: string, kickoffKey: string, stages: string[] = ['intake']) =>
-      storage.prepareRunStart({
-        orgId: 'org1',
-        userId: 'user1',
-        factoryProjectId,
-        workItem: { input: { ...input, stages, claimKey } },
-        role: 'work',
-        session: { sessionId: `session-${kickoffKey}`, branch: 'factory/42', threadId: `thread-${kickoffKey}` },
-        resourceId: 'resource-1',
-        kickoffKey,
-        kickoffMessage: null,
-      });
-
-    const first = await start('project1', 'kickoff-1');
-    expect(first.item.claimKey).toBe(claimKey);
-    await expect(start('project2', 'kickoff-2')).rejects.toMatchObject({
-      code: 'work_item_claim_conflict',
-      claimant: { id: first.item.id },
-    });
-
-    const legacy = await storage.upsert({
-      orgId: 'org1',
-      userId: 'user1',
-      factoryProjectId: 'project3',
-      input: { ...input, externalSource: { ...input.externalSource, externalId: '43' } },
-    });
-    const adopted = await storage.prepareRunStart({
-      orgId: 'org1',
-      userId: 'user1',
-      factoryProjectId: 'project3',
-      workItem: {
-        input: { ...legacy.item, ...input, externalSource: legacy.item.externalSource, claimKey: 'linear:issue:2' },
-      },
-      role: 'work',
-      session: { sessionId: 'session-3', branch: 'factory/43', threadId: 'thread-3' },
-      resourceId: 'resource-1',
-      kickoffKey: 'kickoff-3',
-      kickoffMessage: null,
-    });
-    expect(adopted.item).toMatchObject({ id: legacy.item.id, claimKey: 'linear:issue:2' });
   });
 
   it('mints a fresh binding when re-entered after the prior binding is revoked', async () => {
@@ -1292,3 +1130,110 @@ describe('getBySource', () => {
     expect(await storage.getBySource(slackThread)).toBeNull();
   });
 });
+
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
+  'one card per external record per project on %s',
+  backend => {
+    const record = {
+      externalSource: { integrationId: 'jira', type: 'issue', externalId: 'jira-issue:conn-1:ENG-42:10001' },
+      title: 'Fix intake sync',
+      stages: ['intake'],
+      sessions: {},
+      metadata: {},
+    };
+
+    async function setup() {
+      const storage =
+        backend === 'postgres'
+          ? new PgFactoryStorage({ id: `work-items-${randomUUID()}`, connectionString: postgresUrl! })
+          : new LibSQLFactoryStorage({ id: `work-items-${randomUUID()}`, url: ':memory:' });
+      const workItems = storage.registerDomain(new WorkItemsStorage());
+      await storage.init();
+      onTestFinished(() => storage.close());
+      workItems.useTerminalPhasePredicate(item => item.stages.includes('done'));
+      const orgId = `org-${randomUUID()}`;
+      // Postgres persists across runs and the source-key index is per project id, so ids are unique per test.
+      const project = (name: string) => `${name}-${orgId}`;
+      const upsert = (name: string) =>
+        workItems.upsert({
+          orgId,
+          userId: 'user-1',
+          factoryProjectId: project(name),
+          input: record,
+          reuseMode: 'preserve',
+        });
+      const start = (name: string) =>
+        workItems.prepareRunStart({
+          orgId,
+          userId: 'user-1',
+          factoryProjectId: project(name),
+          workItem: { input: record },
+          role: 'work',
+          session: {
+            sessionId: `session-${project(name)}`,
+            branch: 'factory/eng-42',
+            threadId: `thread-${project(name)}`,
+          },
+          resourceId: 'resource-1',
+          kickoffKey: `kickoff-${project(name)}`,
+          kickoffMessage: null,
+        });
+      const cards = async (name: string) =>
+        (await workItems.list({ orgId, factoryProjectId: project(name) })).filter(
+          item => item.externalSource?.externalId === record.externalSource.externalId,
+        );
+      return { storage, workItems, orgId, upsert, start, cards };
+    }
+
+    it('files the same external record in two projects', async () => {
+      const { upsert, start, cards } = await setup();
+
+      const a = await upsert('project-a');
+      const b = await upsert('project-b');
+      expect(a.created).toBe(true);
+      expect(b.created).toBe(true);
+      expect(b.item.id).not.toBe(a.item.id);
+
+      const c = await start('project-c');
+      const d = await start('project-d');
+      expect(d.item.id).not.toBe(c.item.id);
+
+      for (const project of ['project-a', 'project-b', 'project-c', 'project-d']) {
+        expect(await cards(project)).toHaveLength(1);
+      }
+    });
+
+    it("reuses a project's card for the same record, also after it finished", async () => {
+      const { workItems, orgId, upsert, cards } = await setup();
+
+      const first = await upsert('project-a');
+      const live = await upsert('project-a');
+      expect(live).toMatchObject({ created: false, item: { id: first.item.id } });
+
+      await workItems.update({ orgId, userId: 'user-1', id: first.item.id, patch: { stages: ['done'] } });
+      const finished = await upsert('project-a');
+      expect(finished).toMatchObject({ created: false, item: { id: first.item.id, stages: ['done'] } });
+      expect(await cards('project-a')).toHaveLength(1);
+    });
+
+    it('a claim left on an old card blocks nothing', async () => {
+      const { storage, upsert, cards } = await setup();
+
+      const a = await upsert('project-a');
+      // A card filed while claims were enforced still carries its claim value.
+      await storage.ops.updateMany('work_items', { id: a.item.id }, { claim_key: 'jira:issue:X' });
+
+      const b = await upsert('project-b');
+      expect(b.created).toBe(true);
+      const again = await upsert('project-a');
+      expect(again).toMatchObject({ created: false, item: { id: a.item.id } });
+      expect(await cards('project-a')).toHaveLength(1);
+      expect(await cards('project-b')).toHaveLength(1);
+
+      const rowA = await storage.ops.findOne<{ claim_key: string | null }>('work_items', { id: a.item.id });
+      const rowB = await storage.ops.findOne<{ claim_key: string | null }>('work_items', { id: b.item.id });
+      expect(rowA?.claim_key).toBe('jira:issue:X');
+      expect(rowB?.claim_key).toBeNull();
+    });
+  },
+);

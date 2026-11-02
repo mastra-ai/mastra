@@ -682,6 +682,37 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
 
+  addAction(factory, 'skills', FACTORY_API_ROUTE_CATALOG.skillList, {
+    description: "List Factory skills; pass a projectId to include that project's edits",
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: "List skills with a project's edits",
+        command: `mastra api factory skills '{"projectId":"<project-id>"}'`,
+      },
+    ],
+  });
+
+  const factorySkill = factory
+    .command('skill')
+    .description("Edit a Factory project's skills; organization admins only");
+  addAction(factorySkill, 'update', FACTORY_API_ROUTE_CATALOG.skillOverrideSave, {
+    description: 'Save an edited SKILL.md for one Factory project; the frontmatter name must match the skill name',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Edit the factory-plan skill for one project',
+        command: `mastra api factory skill update <project-id> factory-plan '{"content":"---\\nname: factory-plan\\ndescription: Our planning rules\\n---\\n\\n# Plan\\n"}'`,
+      },
+    ],
+  });
+  addAction(factorySkill, 'revert', FACTORY_API_ROUTE_CATALOG.skillOverrideRevert, {
+    description: "Revert a Factory project's edit so the skill uses its original SKILL.md",
+    routePlacement: 'origin',
+  });
+
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {
     description: 'Get Factory project metrics',
     input: 'optional',
