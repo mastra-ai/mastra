@@ -6002,6 +6002,29 @@ describe('FactoryDecisionDispatcher', () => {
       }
     });
 
+    it('rechecks storage once an hour in case a wake was lost', async () => {
+      vi.useFakeTimers();
+      try {
+        const { storage, claims, delivered, dispatcher } = await startIdle();
+        const afterStartup = claims.pending.mock.calls.length;
+
+        // Drop the wake the write sends, as if it was lost in transit.
+        dispatcher.wake = () => {};
+        await preparePromptKickoff(storage);
+        await vi.advanceTimersByTimeAsync(59 * 60_000);
+        expect(claims.pending.mock.calls.length).toBe(afterStartup);
+        expect(delivered).not.toContain('factory-kickoff:kickoff-1');
+
+        Reflect.deleteProperty(dispatcher, 'wake');
+        await vi.advanceTimersByTimeAsync(2 * 60_000);
+        expect(claims.pending.mock.calls.length).toBeGreaterThan(afterStartup);
+        await vi.waitFor(() => expect(delivered).toContain('factory-kickoff:kickoff-1'));
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('dispatches a run start queued while it sleeps', async () => {
       vi.useFakeTimers();
       try {

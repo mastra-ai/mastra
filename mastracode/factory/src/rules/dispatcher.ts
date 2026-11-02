@@ -56,8 +56,10 @@ const LEASE_MS = 30_000;
 // dispatcher does not poll: it sleeps until the next row becomes claimable or
 // a write wakes it.
 const POLL_MS = 1_000;
-// setTimeout clamps larger delays to 1ms.
-const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+// Safety net for an idle dispatcher: a wake lost in transit (a pubsub outage, a
+// write from a process that does not publish) is picked up within this window.
+// Well above Neon's 5-minute autosuspend so an idle database still sleeps.
+const IDLE_RECHECK_MS = 60 * 60_000;
 const BATCH_SIZE = 10;
 const MAX_ATTEMPTS = 5;
 
@@ -708,7 +710,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #runLoop(): Promise<void> {
-    let delay: number | undefined;
+    let delay = POLL_MS;
     do {
       this.#wakeRequested = false;
       try {
@@ -721,7 +723,7 @@ export class FactoryDecisionDispatcher {
     // No await between the loop exit and clearing #loop, so a wake() can
     // never land in between and be lost.
     this.#loop = undefined;
-    if (this.#stopping || delay === undefined) return;
+    if (this.#stopping) return;
     this.#timer = setTimeout(() => {
       this.#timer = undefined;
       this.wake();
@@ -729,8 +731,8 @@ export class FactoryDecisionDispatcher {
     this.#timer.unref?.();
   }
 
-  /** One loop cycle; returns the delay until the next one, or undefined to sleep until woken. */
-  async #cycle(): Promise<number | undefined> {
+  /** One loop cycle; returns the delay until the next one. */
+  async #cycle(): Promise<number> {
     const now = new Date();
     // Fire-and-forget like the reconcile walk: the sweep reads every active
     // binding, so awaiting it would stretch the cycle as the active set grows.
@@ -772,8 +774,7 @@ export class FactoryDecisionDispatcher {
       console.error('Factory decision dispatch cycle failed', sanitizeDispatchError(error));
       return POLL_MS;
     }
-    if (dueTimes.length === 0) return undefined;
-    return Math.max(POLL_MS, Math.min(Math.min(...dueTimes) - Date.now(), MAX_TIMER_DELAY_MS));
+    return Math.max(POLL_MS, Math.min(Math.min(...dueTimes, Infinity) - Date.now(), IDLE_RECHECK_MS));
   }
 
   /**
