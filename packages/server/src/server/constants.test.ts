@@ -1,9 +1,14 @@
-import { RequestContext } from '@mastra/core/request-context';
+import { RequestContext, withoutLiveRequestKeys } from '@mastra/core/request-context';
 import { describe, expect, it } from 'vitest';
 import {
+  MASTRA_AUTH_TOKEN_KEY,
   MASTRA_INHERITED_MEMORY_KEY,
   MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
+  MASTRA_NORMALIZED_USER_KEY,
   MASTRA_SCOPES_KEY,
+  MASTRA_USER_KEY,
+  MASTRA_USER_PERMISSIONS_KEY,
+  MASTRA_USER_ROLES_KEY,
   RESERVED_REQUEST_CONTEXT_KEYS,
   isReservedRequestContextKey,
 } from './constants';
@@ -47,6 +52,24 @@ describe('isReservedRequestContextKey', () => {
     for (const key of RESERVED_REQUEST_CONTEXT_KEYS) {
       expect(isReservedRequestContextKey(key)).toBe(true);
     }
+  });
+
+  it('keeps the auth keys core drops on workflow resume in sync with these constants', () => {
+    // Core can't import these constants, so it keeps its own copy of the key
+    // names. A rename here without one in core would let a resumed run keep
+    // the starting user.
+    const authKeys = [
+      MASTRA_AUTH_TOKEN_KEY,
+      MASTRA_USER_KEY,
+      MASTRA_NORMALIZED_USER_KEY,
+      MASTRA_USER_ROLES_KEY,
+      MASTRA_USER_PERMISSIONS_KEY,
+      MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
+    ];
+    const snapshot = Object.fromEntries([...authKeys, 'tenant'].map(key => [key, 'stored']));
+
+    expect(withoutLiveRequestKeys(snapshot)).toEqual({ tenant: 'stored' });
+    expect(RESERVED_REQUEST_CONTEXT_KEYS).toEqual(expect.arrayContaining(authKeys));
   });
 
   it('leaves ordinary keys to the caller', () => {

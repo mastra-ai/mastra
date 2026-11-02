@@ -60,6 +60,7 @@ import {
   summarizeToolChoiceForSpan,
 } from '../../processors/span-payload';
 import type { ProcessorStepOutput } from '../../processors/step-schema';
+import { withoutLiveRequestKeys } from '../../request-context';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
 import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
@@ -105,13 +106,7 @@ import { waitForSuspendedSnapshot } from '../utils';
 import { Workflow, Run } from '../workflow';
 import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
-import {
-  isTripwireChunk,
-  createTripWireFromChunk,
-  getTextDeltaFromChunk,
-  withoutAuthToken,
-  withoutLiveRequestKeys,
-} from './helpers';
+import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 

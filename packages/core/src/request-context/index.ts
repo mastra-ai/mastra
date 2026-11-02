@@ -10,6 +10,7 @@ export {
   RequestContext,
   isReservedRequestContextKey,
   mergeVersionOverrides,
+  withoutLiveRequestKeys,
 } from '@internal/core/request-context';
 export type { VersionOverrides, VersionSelector } from '@internal/core/request-context';
 
