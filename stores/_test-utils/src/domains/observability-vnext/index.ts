@@ -1,3 +1,4 @@
+export * from './outcome-fields';
 export * from './span-aggregate';
 export * from './trace-aggregate';
 export * from './trace-query';
@@ -46,6 +47,7 @@ import {
 } from './trace-query';
 import type { TraceAggregateFixtureData } from './trace-aggregate';
 import type { TraceQueryFixtureData } from './trace-query';
+import { createOutcomeFieldTests } from './outcome-fields';
 import { TIMING_FIELDS, timingValue } from './timing-fields';
 
 export interface ObservabilityVNextCapabilities {
@@ -210,6 +212,8 @@ export async function writeTraceQueryFixture(
       rootEntityType: (span.rootEntityType ?? null) as EntityType | null,
       rootEntityId: span.rootEntityId ?? null,
       rootEntityName: span.rootEntityName ?? null,
+      model: span.model ?? null,
+      provider: span.provider ?? null,
       tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,
@@ -2599,8 +2603,9 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       if (capabilities.traceQuery) {
         it('reads model and provider from attributes when the columns are empty', async () => {
           // Rows written before the columns existed are never backfilled, so a
-          // span read must agree with the trace and span queries, which read
-          // the model-call attributes.
+          // span read must agree with trace-query filters and span-query results,
+          // which fall back to the model-call attributes. Span-query filters read
+          // only the columns.
           await storage.batchCreateSpans({
             records: [
               makeSpan({
@@ -2619,6 +2624,10 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
       }
     });
+
+    if (capabilities.traceQuery) {
+      createOutcomeFieldTests({ getStorage: () => storage, flushPendingMerges, refreshDiscovery });
+    }
 
     describe('getStructure / getTraceLight', () => {
       beforeEach(async () => {

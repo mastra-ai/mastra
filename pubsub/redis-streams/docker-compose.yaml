@@ -1,6 +1,6 @@
 services:
   postgres:
-    image: pgvector/pgvector:0.8.4-pg16
+    image: pgvector/pgvector:0.8.7-pg16
     ports:
       - '5436:5432'
     environment:

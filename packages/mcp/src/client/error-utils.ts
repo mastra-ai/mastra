@@ -28,6 +28,24 @@ export function isReconnectableMCPError(error: unknown): boolean {
   );
 }
 
+const GATEWAY_UNAVAILABLE_STATUSES = new Set([502, 503, 504]);
+
+/**
+ * Whether a failed `tasks/get` poll should be retried while waiting out an outage.
+ *
+ * Adds HTTP 502/503/504 (a proxy or load balancer answering while the server
+ * restarts or deploys) to the reconnectable failures. Kept separate from
+ * {@link isReconnectableMCPError}: `tasks/get` is idempotent, but a `tools/call`
+ * retried after a gateway 5xx could run its work twice.
+ */
+export function isRecoverableTaskPollError(error: unknown): boolean {
+  if (isReconnectableMCPError(error)) return true;
+  if (!(error instanceof Error)) return false;
+  const { httpStatus } = getMCPDiscoveryErrorDetails(error);
+  if (httpStatus !== undefined) return GATEWAY_UNAVAILABLE_STATUSES.has(httpStatus);
+  return /\bhttp 50[234]\b/i.test(error.message);
+}
+
 /** Structured transport metadata for a failed aggregate MCP discovery. */
 export interface MCPDiscoveryErrorDetails {
   /** Human-readable failure message. Includes `(HTTP nnn)` when an HTTP status is available. */

@@ -902,27 +902,20 @@ describe('TraceDataPanelView — messages column', () => {
 });
 
 describe('TraceDataPanelView — timeline view', () => {
-  it('offers a tree/timeline button group next to the search field instead of Spans/Timeline tabs', () => {
+  it('offers a tree/timeline toggle next to the search field instead of Spans/Timeline tabs', () => {
     render(<TraceDataPanelView {...baseProps} />);
 
     expect(screen.queryByRole('tab', { name: 'Spans' })).toBeNull();
     expect(screen.queryByRole('tab', { name: 'Timeline' })).toBeNull();
-    const tree = screen.getByRole('button', { name: 'Span tree' });
-    const timeline = screen.getByRole('button', { name: 'Timeline' });
-    expect(tree.getAttribute('aria-pressed')).toBe('true');
-    expect(tree.getAttribute('data-variant')).toBe('primary');
-    expect(timeline.getAttribute('aria-pressed')).toBe('false');
-    expect(timeline.getAttribute('data-variant')).toBe('default');
-    expect(
-      tree
-        .closest('[data-slot="buttons-group"]')
-        ?.parentElement?.contains(screen.getByRole('searchbox', { name: 'Search spans' })),
-    ).toBe(true);
+    const views = screen.getByRole('group', { name: 'Span view' });
+    expect(views.parentElement?.contains(screen.getByRole('searchbox', { name: 'Search spans' }))).toBe(true);
+    expect(screen.getByRole('button', { name: 'Span tree' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('aria-pressed')).toBe('false');
 
-    fireEvent.click(timeline);
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
     expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'Timeline' }).getAttribute('data-variant')).toBe('primary');
-    expect(screen.getByRole('button', { name: 'Span tree' }).getAttribute('data-variant')).toBe('default');
+    expect(screen.getByRole('button', { name: 'Span tree' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByLabelText('Trace time axis')).toBeTruthy();
   });
 
   it('follows a controlled spanView and reports picks to the consumer', () => {

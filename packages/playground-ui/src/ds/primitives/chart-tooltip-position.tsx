@@ -37,6 +37,9 @@ export function ChartTooltipPosition({
     const el = ref.current;
     const chart = anchor.current?.closest('.recharts-wrapper');
     if (!el || !chart || !coordinate) return;
+    // Grow only while the pointer moves across the chart, so the readout doesn't jump in width from
+    // point to point ("8 AM" vs "12 PM", "10" vs "1,240"). The portal unmounts on leave, which resets it.
+    el.style.minWidth = `${el.offsetWidth}px`;
     const box = chart.getBoundingClientRect();
     const pointX = box.left + coordinate.x;
     const pointY = box.top + coordinate.y;

@@ -49,6 +49,8 @@ export interface SourcePickerProps {
   onToggleItem: (id: string) => Promise<void>;
   itemDescription?: (id: string) => string | undefined;
   itemActions?: (item: SourcePickerItem) => ReactNode;
+  /** Full-width content under a selected item's row, for routing that doesn't fit beside it. */
+  itemDetails?: (item: SourcePickerItem) => ReactNode;
   addControl?: (item: SourcePickerItem, focusSearch: () => void) => ReactNode;
 }
 
@@ -66,6 +68,7 @@ export function SourcePicker(props: SourcePickerProps) {
     onToggleItem,
     itemDescription,
     itemActions,
+    itemDetails,
   } = props;
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
@@ -91,6 +94,7 @@ export function SourcePicker(props: SourcePickerProps) {
               const item: SourcePickerItem = group?.items.find(candidate => candidate.id === id) ?? { id, label: id };
               const context = [groups.length > 1 ? group?.label : undefined, item.hint].filter(Boolean).join(' · ');
               const description = itemDescription?.(id);
+              const details = itemDetails?.(item);
               return (
                 <li key={id} className={cn(settingsRowLayout, 'flex flex-wrap items-center')}>
                   <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
@@ -131,6 +135,7 @@ export function SourcePicker(props: SourcePickerProps) {
                       Remove
                     </Button>
                   </div>
+                  {details && <div className="min-w-0 basis-full">{details}</div>}
                 </li>
               );
             })}

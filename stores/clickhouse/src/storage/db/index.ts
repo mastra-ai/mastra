@@ -760,6 +760,13 @@ export class ClickhouseDB extends MastraBase {
       if ('updatedAt' in filteredRecord || (await this.getTableColumns(tableName)).has('updatedAt')) {
         filteredRecord.updatedAt = rawUpdatedAt instanceof Date ? rawUpdatedAt.toISOString() : rawUpdatedAt;
       }
+      // Like batchInsert: ClickHouse 26.8+ reads bare numbers in DateTime64 columns as
+      // Unix seconds, so epoch-millisecond timestamps must be sent as ISO strings.
+      for (const [key, value] of Object.entries(filteredRecord)) {
+        if (TABLE_SCHEMAS[tableName]?.[key]?.type === 'timestamp' && typeof value === 'number') {
+          filteredRecord[key] = new Date(value).toISOString();
+        }
+      }
 
       await this.client.insert({
         table: tableName,

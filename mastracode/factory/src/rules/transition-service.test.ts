@@ -772,12 +772,12 @@ describe('FactoryTransitionService', () => {
     expect(acceptedAt).toBeInstanceOf(Date);
     expect(
       (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
-        row => row.decision.type === 'invokeSkill' && row.decision.role === 'plan',
+        row => row.decision.type === 'invokeSkill' && row.decision.skillName === 'factory-plan',
       ),
     ).toHaveLength(1);
     const gated = await service.transition({
       ...request({ id: item.id, revision: planningRevision }, { stage: 'execute', identity: 'agent-execute' }),
-      actor: { type: 'agent', bindingId: 'agent', role: 'plan' },
+      actor: { type: 'agent', bindingId: 'agent', role: 'work' },
       ingress: { type: 'agent', identity: 'agent-execute' },
     });
     expect(gated).toMatchObject({ status: 'rejected', code: 'approval_required' });
@@ -785,7 +785,7 @@ describe('FactoryTransitionService', () => {
     // No work build is queued while the plan awaits approval.
     expect(
       (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
-        row => row.decision.type === 'invokeSkill' && row.decision.role === 'work',
+        row => row.decision.type === 'invokeSkill' && row.decision.skillName === undefined,
       ),
     ).toHaveLength(0);
   });
@@ -1206,7 +1206,10 @@ describe('FactoryTransitionService', () => {
 
     expect(result.status).toBe('accepted');
     const [plan] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
-    expect(plan).toMatchObject({ decision: { type: 'invokeSkill', role: 'plan' }, approvedBy: 'agent:binding-1' });
+    expect(plan).toMatchObject({
+      decision: { type: 'invokeSkill', role: 'work', skillName: 'factory-plan' },
+      approvedBy: 'agent:binding-1',
+    });
     expect(plan?.approvedAt).not.toBeNull();
   });
 
@@ -2070,7 +2073,7 @@ describe('audit trail', () => {
 describe('phase semantics', () => {
   it.each([
     ['triage', 'triage'],
-    ['planning', 'plan'],
+    ['planning', 'work'],
     ['execute', 'work'],
     ['review', 'work'],
   ] as const)('seats a human kickoff into Work %s with the %s role', async (stage, role) => {

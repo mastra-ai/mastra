@@ -91,6 +91,10 @@ import {
   assertObservabilityDeltaSupported,
   assertObservabilitySpanQuerySupported,
   assertObservabilitySpanQueryFieldsSupported,
+  assertObservabilitySpanAggregateModelDimensionsSupported,
+  assertObservabilitySpanQueryModelFieldsSupported,
+  assertObservabilitySpanQueryOutcomeFieldsSupported,
+  assertObservabilityTraceQueryOutcomeFieldsSupported,
   assertObservabilityThreadQuerySupported,
   assertObservabilityTraceAggregateSupported,
   assertObservabilitySpanAggregateSupported,
@@ -108,6 +112,8 @@ import {
   assertObservabilityTraceQueryRootSpanFieldsSupported,
   assertObservabilityTraceQueryRootSpanValuesSupported,
   supportsObservabilityTraceQueryRootSpanField,
+  isObservabilityOutcomeField,
+  supportsObservabilityTraceQueryOutcomeFields,
   assertObservabilityTraceQuerySupported,
   createObservabilityListQuerySchema,
   getObservabilityStorageCapabilities,
@@ -372,6 +378,7 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
+      assertObservabilityTraceQueryOutcomeFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTimeToFirstChunkSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTraceQueryTimeToFirstTokenSortSupported(observabilityStore, plan.orderBy);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
@@ -513,6 +520,7 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
+      assertObservabilityTraceQueryOutcomeFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
@@ -637,9 +645,13 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     try {
       observabilityStore = await getObservabilityStore(mastra);
       // `span-aggregate` covers every span query field that shipped before it, time to first
-      // chunk included, so only time to first token needs a gate.
+      // chunk included, so only time to first token and model/provider (as predicates, and as
+      // dimensions or countDistinct fields) need a gate.
       assertObservabilitySpanAggregateSupported(observabilityStore);
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
+      assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
+      assertObservabilitySpanAggregateModelDimensionsSupported(observabilityStore, plan);
+      assertObservabilitySpanQueryOutcomeFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
@@ -750,6 +762,8 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       observabilityStore = await getObservabilityStore(mastra);
       assertObservabilitySpanQuerySupported(observabilityStore);
       assertObservabilitySpanQueryFieldsSupported(observabilityStore, plan.where);
+      assertObservabilitySpanQueryModelFieldsSupported(observabilityStore, plan.where);
+      assertObservabilitySpanQueryOutcomeFieldsSupported(observabilityStore, plan);
       assertObservabilityTraceQueryTimeToFirstChunkSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
       assertObservabilityTraceQueryTimeToFirstChunkSortSupported(observabilityStore, plan.orderBy);
@@ -870,6 +884,11 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
         .filter(
           field =>
             predicateScope !== 'trace' || supportsObservabilityTraceQueryRootSpanField(observabilityStore, field.path),
+        )
+        .filter(
+          field =>
+            !isObservabilityOutcomeField(field.path) ||
+            supportsObservabilityTraceQueryOutcomeFields(observabilityStore),
         );
       // Older Core's strict response schema has no `aggregate` key, so only send it when Core can describe it.
       const describesAggregate =
@@ -884,7 +903,12 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
           aggregate: {
             dimensions: coreStorage
               .getTraceAggregateDimensionDescriptors()
-              .filter(dimension => supportsObservabilityTraceQueryRootSpanField(observabilityStore, dimension.path)),
+              .filter(dimension => supportsObservabilityTraceQueryRootSpanField(observabilityStore, dimension.path))
+              .filter(
+                dimension =>
+                  !isObservabilityOutcomeField(dimension.path) ||
+                  supportsObservabilityTraceQueryOutcomeFields(observabilityStore),
+              ),
             measures: coreStorage.getTraceAggregateMeasureDescriptors(),
           },
         }),
@@ -920,6 +944,7 @@ export const GET_TRACE_QUERY_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
       assertObservabilityTraceQueryDiscoverySupported(observabilityStore);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
       assertObservabilityTraceQueryRootSpanValuesSupported(observabilityStore, plan);
+      assertObservabilityTraceQueryOutcomeFieldsSupported(observabilityStore, plan);
     } catch (error) {
       if (error instanceof coreStorage.TraceQueryValidationError) {
         throwTraceQueryError(422, { code: error.code, message: error.message, issues: error.issues });
@@ -1041,6 +1066,8 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
         assertObservabilityTraceQueryTimeToFirstTokenSupported(observabilityStore, plan.where);
         assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan.traces);
         assertObservabilityTraceQueryRootSpanFieldsSupported(observabilityStore, plan);
+        assertObservabilityTraceQueryOutcomeFieldsSupported(observabilityStore, plan.traces);
+        assertObservabilityTraceQueryOutcomeFieldsSupported(observabilityStore, plan);
       }
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {

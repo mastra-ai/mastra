@@ -298,10 +298,12 @@ export function normalizeChunkPayload(type: string, payload: unknown): unknown {
   const normalized = normalizePayload(payload);
   if (normalized === null || typeof normalized !== 'object') return normalized;
 
-  // Only the plain loop puts the suspended step's usage on these chunks yet (#27440).
-  // suspended-step-usage.scenario.test.ts tracks that gap per engine.
+  // Engines differ on which of these chunks carry the suspended step's usage
+  // (suspended-step-usage.scenario.test.ts tracks it per engine). Only the plain loop
+  // adds the step's provider metadata, which its MODEL_GENERATION cost reads.
   if (type === 'tool-call-approval' || type === 'tool-call-suspended') {
     delete (normalized as Record<string, unknown>).usage;
+    delete (normalized as Record<string, unknown>).providerMetadata;
     return normalized;
   }
   if (type !== 'tool-error') return normalized;

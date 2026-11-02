@@ -26,7 +26,7 @@ export type ObservabilityHistogramProps = {
   isError?: boolean;
   /** Previous buckets stay on screen, dimmed, while a new selection loads. */
   isUpdating?: boolean;
-  /** Dragging across bars reports the first and last selected bar; turn it into a window with `zoomWindow`. */
+  /** Dragging across bars, or clicking one, reports the first and last selected bar; turn it into a window with `zoomWindow`. */
   onZoom?: (range: DragSelectionRange) => void;
 };
 
@@ -79,6 +79,7 @@ export function ObservabilityHistogram({
             valueFormatter={formatCount}
             isLoading={isLoading}
             onZoom={onZoom}
+            onBucketClick={onZoom ? (_row, index) => onZoom({ start: index, end: index }) : undefined}
             {...BUCKET_AXIS}
           />
         </div>

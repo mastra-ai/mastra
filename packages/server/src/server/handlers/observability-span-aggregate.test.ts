@@ -93,15 +93,65 @@ describe('AGGREGATE_SPANS', () => {
     );
   });
 
+  it('returns 501 for model and provider filters before calling an adapter without dedicated columns', async () => {
+    const request = {
+      timeRange: TIME_RANGE,
+      where: { op: 'in', value: { path: 'provider' }, set: ['openai'] },
+      groupBy: ['name'],
+      measures: ['count'],
+    };
+    const { mastra, observabilityStore } = createHarness();
+    const error = await captureHttpException(AGGREGATE_SPANS.handler(params(mastra, request)));
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'SPAN_AGGREGATE_UNSUPPORTED',
+      message: 'Model and provider span predicates are not supported by the configured observability store',
+    });
+    expect(observabilityStore.aggregateSpans).not.toHaveBeenCalled();
+
+    const updated = createHarness(['span-aggregate', 'trace-query-tenant-scope', 'span-query-model-fields']);
+    await AGGREGATE_SPANS.handler(params(updated.mastra, request));
+    expect(updated.observabilityStore.aggregateSpans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'membership', field: 'provider', operator: 'in', values: ['openai'] },
+      }),
+    );
+  });
+
+  it.each([
+    ['groupBy', { groupBy: ['provider', 'model'], measures: ['count'] }],
+    ['countDistinct', { groupBy: ['rootEntityName'], measures: ['count', 'countDistinct.model'] }],
+  ])(
+    'returns 501 for model and provider %s before calling an adapter that only filters on them',
+    async (_label, body) => {
+      const request = { timeRange: TIME_RANGE, ...body };
+      // A store released with model/provider filters declares `span-query-model-fields` but can't group by them.
+      const { mastra, observabilityStore } = createHarness([
+        'span-aggregate',
+        'trace-query-tenant-scope',
+        'span-query-model-fields',
+      ]);
+      const error = await captureHttpException(AGGREGATE_SPANS.handler(params(mastra, request)));
+      expect(error.status).toBe(501);
+      expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+        code: 'SPAN_AGGREGATE_UNSUPPORTED',
+        message: 'Grouping spans by model or provider is not supported by the configured observability store',
+      });
+      expect(observabilityStore.aggregateSpans).not.toHaveBeenCalled();
+
+      const updated = createHarness(['span-aggregate', 'trace-query-tenant-scope', 'span-aggregate-model-dimensions']);
+      await AGGREGATE_SPANS.handler(params(updated.mastra, request));
+      expect(updated.observabilityStore.aggregateSpans).toHaveBeenCalledWith(
+        expect.objectContaining({ dimensions: body.groupBy }),
+      );
+    },
+  );
+
   it('returns stable semantic issues from the planner without touching storage', async () => {
     const { mastra, observabilityStore, getStore } = createHarness();
     const cases = [
       {
         request: { timeRange: TIME_RANGE, groupBy: ['spanId'], measures: ['count'] },
-        issue: { code: 'field_not_allowed', path: ['groupBy', 0] },
-      },
-      {
-        request: { timeRange: TIME_RANGE, groupBy: ['model'], measures: ['count'] },
         issue: { code: 'field_not_allowed', path: ['groupBy', 0] },
       },
       {
@@ -223,6 +273,44 @@ describe('AGGREGATE_SPANS', () => {
     expect(observabilityStore.aggregateSpans).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { type: 'comparison', field: 'timeToFirstTokenMs', operator: 'lte', value: 0 },
+      }),
+    );
+  });
+
+  it.each([
+    { name: 'where', request: { where: { op: 'exists', path: 'outcome' }, measures: ['count'] } },
+    { name: 'groupBy', request: { groupBy: ['stopReason'], measures: ['count'] } },
+    { name: 'countDistinct', request: { measures: ['countDistinct.outcome'] } },
+  ])('returns 501 before calling a store without outcome support for $name', async ({ request }) => {
+    const { mastra, observabilityStore } = createHarness(['span-aggregate', 'span-query-context-fields']);
+    const error = await captureHttpException(
+      AGGREGATE_SPANS.handler(params(mastra, { timeRange: TIME_RANGE, ...request })),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'SPAN_AGGREGATE_UNSUPPORTED',
+      message: 'Outcome and stop reason span fields are not supported by the configured observability store',
+    });
+    expect(observabilityStore.aggregateSpans).not.toHaveBeenCalled();
+  });
+
+  it('passes outcome grouping and distinct counts to stores that advertise span-query-outcome-fields', async () => {
+    const { mastra, observabilityStore } = createHarness(['span-aggregate', 'span-query-outcome-fields']);
+    await AGGREGATE_SPANS.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+        groupBy: ['outcome', 'stopReason'],
+        measures: ['count', 'countDistinct.outcome'],
+      }),
+    );
+
+    expect(observabilityStore.aggregateSpans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'outcome', operator: 'eq', value: 'limit' },
+        dimensions: ['outcome', 'stopReason'],
+        measures: expect.arrayContaining([{ type: 'countDistinct', name: 'countDistinct.outcome', field: 'outcome' }]),
       }),
     );
   });

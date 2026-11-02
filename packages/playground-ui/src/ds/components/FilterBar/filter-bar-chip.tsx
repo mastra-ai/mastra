@@ -164,7 +164,8 @@ export function FilterBarChip({
   const [initial] = useState(() => !ctx.mounted);
   const [openSegment, setOpenSegment] = useState<FilterBarSegment | null>(null);
   const field = ctx.getField(item.fieldId);
-  const operator = ctx.getOperator(item.operatorId);
+  const operator =
+    (field && ctx.getFieldOperators(field).find(o => o.id === item.operatorId)) ?? ctx.getOperator(item.operatorId);
   const index = ctx.items.findIndex(i => i.id === item.id);
   const rootRef = useRef<HTMLDivElement>(null);
   const leaving = ctx.leaving.has(item.id);

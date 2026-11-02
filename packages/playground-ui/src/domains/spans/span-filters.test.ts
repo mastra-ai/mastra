@@ -6,11 +6,14 @@ import {
   buildSpanQueryWhere,
   createSpanFilterBarFields,
   SPAN_CONTEXT_FILTER_FIELD_IDS,
+  SPAN_MODEL_FILTER_FIELD_IDS,
+  SPAN_OUTCOME_FILTER_FIELD_IDS,
   SPAN_CORE_FILTER_FIELD_IDS,
 } from './span-filters';
 
-const withContext = { withContextFields: true };
-const coreOnly = { withContextFields: false };
+const streamingTimings = { withTimeToFirstChunk: true, withTimeToFirstToken: true };
+const withContext = { withContextFields: true, ...streamingTimings };
+const coreOnly = { withContextFields: false, ...streamingTimings };
 
 const eq = (path: string, literal: string | number): TraceQueryScalarPredicate => ({
   op: 'eq',
@@ -18,8 +21,10 @@ const eq = (path: string, literal: string | number): TraceQueryScalarPredicate =
   right: { literal },
 });
 
-const fieldIds = (withContextFields: boolean) =>
-  createSpanFilterBarFields({ withContextFields, entityNames: [], environments: [] }).map(field => field.id);
+const fieldIds = (withContextFields: boolean, support = streamingTimings) =>
+  createSpanFilterBarFields({ withContextFields, ...support, entityNames: [], environments: [] }).map(
+    field => field.id,
+  );
 
 const collectPaths = (predicate: TraceQueryScalarPredicate | undefined): string[] => {
   if (!predicate) return [];
@@ -37,7 +42,12 @@ describe('span filter fields', () => {
   describe('when listing every filterable field', () => {
     it('only offers paths the span query grammar accepts', () => {
       const registryPaths = Object.keys(SPAN_QUERY_FIELD_REGISTRY);
-      for (const id of [...SPAN_CORE_FILTER_FIELD_IDS, ...SPAN_CONTEXT_FILTER_FIELD_IDS]) {
+      for (const id of [
+        ...SPAN_CORE_FILTER_FIELD_IDS,
+        ...SPAN_CONTEXT_FILTER_FIELD_IDS,
+        ...SPAN_OUTCOME_FILTER_FIELD_IDS,
+        ...SPAN_MODEL_FILTER_FIELD_IDS,
+      ]) {
         expect(registryPaths).toContain(id);
       }
     });
@@ -62,9 +72,68 @@ describe('span filter fields', () => {
     });
   });
 
+  describe('when the store does not record streaming timings', () => {
+    it('offers time to first chunk and time to first token only when the store records each', () => {
+      const none = fieldIds(true, { withTimeToFirstChunk: false, withTimeToFirstToken: false });
+      expect(none).not.toContain('timeToFirstChunkMs');
+      expect(none).not.toContain('timeToFirstTokenMs');
+
+      const chunkOnly = fieldIds(true, { withTimeToFirstChunk: true, withTimeToFirstToken: false });
+      expect(chunkOnly).toContain('timeToFirstChunkMs');
+      expect(chunkOnly).not.toContain('timeToFirstTokenMs');
+
+      const tokenOnly = fieldIds(true, { withTimeToFirstChunk: false, withTimeToFirstToken: true });
+      expect(tokenOnly).not.toContain('timeToFirstChunkMs');
+      expect(tokenOnly).toContain('timeToFirstTokenMs');
+    });
+  });
+
+  describe('when the store accepts outcome fields', () => {
+    const fields = createSpanFilterBarFields({
+      withContextFields: false,
+      withOutcomeFields: true,
+      entityNames: [],
+      environments: [],
+    });
+
+    it('adds Outcome and Stop reason to the core fields', () => {
+      expect(fields.map(field => field.id)).toEqual(expect.arrayContaining(['outcome', 'stopReason']));
+      expect(fields.find(field => field.id === 'outcome')?.operatorLabels).toEqual({ notExists: 'is not recorded' });
+    });
+  });
+
+  describe('when the store accepts model fields', () => {
+    const fields = createSpanFilterBarFields({
+      withContextFields: false,
+      withModelFields: true,
+      entityNames: [],
+      environments: [],
+      valueSuggestions: () => async () => [],
+    });
+
+    it('adds Model and Provider with discovered value suggestions', () => {
+      for (const [id, label] of [
+        ['model', 'Model'],
+        ['provider', 'Provider'],
+      ]) {
+        const field = fields.find(candidate => candidate.id === id);
+        expect(field).toMatchObject({ label });
+        expect(field?.operators).toContain('notExists');
+        expect(typeof field?.suggestions).toBe('function');
+      }
+    });
+  });
+
+  describe('when the store does not accept model fields', () => {
+    it('offers neither Model nor Provider', () => {
+      expect(fieldIds(true)).not.toContain('model');
+      expect(fieldIds(true)).not.toContain('provider');
+    });
+  });
+
   describe('when building each field', () => {
     const fields = createSpanFilterBarFields({
-      withContextFields: true,
+      ...withContext,
       entityNames: ['weather-agent'],
       environments: ['production'],
       valueSuggestions: () => async () => [],
@@ -115,13 +184,58 @@ describe('span filter fields', () => {
 
     it('treats durations as numbers', () => {
       expect(byId('durationMs')).toMatchObject({ type: 'number' });
-      expect(byId('timeToFirstChunkMs')).toMatchObject({ type: 'number' });
+      expect(byId('timeToFirstChunkMs')).toMatchObject({ type: 'number', label: 'Time to first chunk (ms)' });
+      expect(byId('timeToFirstTokenMs')).toMatchObject({ type: 'number', label: 'Time to first token (ms)' });
       expect(byId('durationMs').operators).toContain('gte');
     });
 
     it('leaves ids as free text', () => {
       expect(byId('runId').suggestions).toBeUndefined();
       expect(byId('traceId').operators).not.toContain('notExists');
+    });
+  });
+});
+
+describe('buildSpanQueryWhere — outcome fields', () => {
+  const outcomeTokens = [
+    { fieldId: 'outcome', value: 'limit' },
+    { fieldId: 'stopReason', operatorId: 'notExists', value: '' },
+  ];
+
+  describe('when the store accepts outcome fields', () => {
+    it('filters on the outcome and stop reason', () => {
+      expect(buildSpanQueryWhere(outcomeTokens, [], { ...coreOnly, withOutcomeFields: true })).toEqual({
+        op: 'and',
+        args: [eq('outcome', 'limit'), { op: 'notExists', path: 'stopReason' }],
+      });
+    });
+  });
+
+  describe('when the store does not accept outcome fields', () => {
+    it('drops them', () => {
+      expect(buildSpanQueryWhere(outcomeTokens, [], coreOnly)).toBeUndefined();
+    });
+  });
+});
+
+describe('buildSpanQueryWhere — model fields', () => {
+  const modelTokens: TraceFilterToken[] = [
+    { fieldId: 'model', value: 'gpt-5.6' },
+    { fieldId: 'provider', value: 'openai' },
+  ];
+
+  describe('when the store accepts model fields', () => {
+    it('filters on the model and provider', () => {
+      expect(buildSpanQueryWhere(modelTokens, [], { ...coreOnly, withModelFields: true })).toEqual({
+        op: 'and',
+        args: [eq('model', 'gpt-5.6'), eq('provider', 'openai')],
+      });
+    });
+  });
+
+  describe('when the store does not accept model fields', () => {
+    it('drops them', () => {
+      expect(buildSpanQueryWhere(modelTokens, [], withContext)).toBeUndefined();
     });
   });
 });
@@ -158,6 +272,42 @@ describe('buildSpanQueryWhere', () => {
 
     it('drops it when the store does not', () => {
       expect(buildSpanQueryWhere(tokens, [], coreOnly)).toBeUndefined();
+    });
+  });
+
+  describe.each([
+    ['time to first chunk', 'timeToFirstChunkMs', 'withTimeToFirstChunk'],
+    ['time to first token', 'timeToFirstTokenMs', 'withTimeToFirstToken'],
+  ] as const)('when a token filters %s', (_label, fieldId, flag) => {
+    it('compares it as a number', () => {
+      expect(buildSpanQueryWhere([{ fieldId, operatorId: 'lte', value: '500' }], [], coreOnly)).toEqual({
+        op: 'and',
+        args: [{ op: 'lte', left: { path: fieldId }, right: { literal: 500 } }],
+      });
+    });
+
+    it('also keeps spans that never streamed when negated', () => {
+      expect(buildSpanQueryWhere([{ fieldId, operatorId: 'isNot', value: '500' }], [], coreOnly)).toEqual({
+        op: 'and',
+        args: [
+          {
+            op: 'or',
+            args: [
+              { op: 'ne', left: { path: fieldId }, right: { literal: 500 } },
+              { op: 'notExists', path: fieldId },
+            ],
+          },
+        ],
+      });
+    });
+
+    it('drops it, also inside groups, when the store does not record it', () => {
+      const unsupported = { ...withContext, [flag]: false };
+      const token: TraceFilterToken = { fieldId, operatorId: 'lte', value: '500' };
+      expect(buildSpanQueryWhere([token], [], unsupported)).toBeUndefined();
+      expect(
+        buildSpanQueryWhere([], [{ logic: 'or', nodes: [token, { fieldId: 'status', value: 'error' }] }], unsupported),
+      ).toEqual({ op: 'and', args: [eq('status', 'error')] });
     });
   });
 

@@ -7,6 +7,7 @@ export * from './domains/memory/child-process-memory-storage';
 export * from './domains/knowledge';
 export * from './domains/datasets/fidelity';
 export * from './domains/run-fencing';
+export { createBackgroundTasksTests } from './domains/background-tasks';
 export * from './domains/workflow-step-guards';
 export * from './vector-factory';
 export * from './config-validation';

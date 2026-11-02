@@ -38,6 +38,9 @@ export function stripAnsi(text: string): string {
  * Mastra validation-error envelopes (e.g. from output-schema validation
  * failures) are tagged as `{ type: 'error-json', value }` so providers
  * receive a valid tool-result output instead of an untagged object.
+ *
+ * `{ error: string }` results (e.g. substituted by a blocking `beforeToolCall`
+ * hook) are tagged as `{ type: 'error-text', value }` so the model sees the reason.
  */
 export function sandboxToModelOutput(output: unknown): unknown {
   if (typeof output === 'string') {
@@ -45,6 +48,9 @@ export function sandboxToModelOutput(output: unknown): unknown {
   }
   if (isValidationError(output)) {
     return { type: 'error-json', value: output };
+  }
+  if (typeof output === 'object' && output !== null && typeof (output as { error?: unknown }).error === 'string') {
+    return { type: 'error-text', value: (output as { error: string }).error };
   }
   return output;
 }

@@ -11,7 +11,13 @@ import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload
 import { createStep } from '../../../workflows/workflow';
 import { readScoped, writeScoped } from '../../run-scope-access';
 import type { RunScopeContext } from '../../run-scope-access';
-import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
+import {
+  DELEGATION_FAILURE_KEY,
+  DELEGATION_BAILED_KEY,
+  STEP_TOOLS_KEY,
+  TOOL_PAYLOAD_TRANSFORM_KEY,
+} from '../../run-scope-keys';
+import { takeDelegationFailure } from '../../shared/delegation-outcome';
 import { readToolResultFromMessageList } from '../../shared/read-tool-result';
 import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
 import { commitToolResult, computeModelOutputProviderMetadata } from '../../shared/steps/tool-result-commit-core';
@@ -397,6 +403,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           if (rest.requestContext?.get('__mastra_delegationBailed')) {
             writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
             rest.requestContext.set('__mastra_delegationBailed', false);
+            const cause = takeDelegationFailure(rest.requestContext);
+            if (cause) rest.tracingScope?.set(DELEGATION_FAILURE_KEY, cause);
           }
           return {
             ...initialResult,
@@ -556,6 +564,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         if (rest.requestContext?.get('__mastra_delegationBailed')) {
           writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
           rest.requestContext.set('__mastra_delegationBailed', false);
+          const cause = takeDelegationFailure(rest.requestContext);
+          if (cause) rest.tracingScope?.set(DELEGATION_FAILURE_KEY, cause);
         }
 
         return {
