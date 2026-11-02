@@ -5,6 +5,7 @@ import {
   GRAPH_CHILD_CAP,
   HIGHER_LEVEL_CAP,
   PLACEHOLDER_CAP,
+  ROOT_CIRCLE_CAP,
   WANTED_CIRCLE_CAP,
   graphShape,
   isChildPlaceholder,
@@ -122,6 +123,33 @@ describe('graphShape', () => {
     });
   });
 
+  describe('when a page with no children is focused', () => {
+    const siblings = Array.from({ length: 12 }, (_, index) =>
+      page(`s${String(index).padStart(2, '0')}`, 'blog', { childCount: 2 }),
+    );
+    const leaf = page('leaf', 'blog', { childCount: 0 });
+    const shape = graphShape([...pages, leaf, ...siblings], 'leaf');
+
+    it('draws its first siblings as circles, the rest as dots', () => {
+      // The blog's other children (post-1, post-2) come first in position order and take two of the slots.
+      const circles = ['post-1', 'post-2', ...siblings.map(sibling => sibling.id)].filter(
+        id => shape.form.get(id) === 'full',
+      );
+      expect(circles).toEqual(['post-1', 'post-2', 's00', 's01', 's02', 's03', 's04', 's05']);
+      expect(circles).toHaveLength(ROOT_CIRCLE_CAP);
+      expect(shape.form.get('s11')).toBe('dot');
+      expect(shape.form.get('leaf')).toBe('full');
+    });
+
+    it('leaves a focus that has children with just its own children as circles', () => {
+      const parent = graphShape([...pages, leaf, ...siblings], 'blog');
+      expect(parent.form.get('s00')).toBe('full');
+      expect(parent.form.get('draft')).toBe('dot');
+      const nested = graphShape(pages, 'post-1');
+      expect(nested.form.get('post-2')).toBe('dot');
+    });
+  });
+
   describe('when nothing is focused', () => {
     it('centres on the only root scope', () => {
       const shape = graphShape(pages, null);
@@ -130,12 +158,23 @@ describe('graphShape', () => {
       expect(shape.form.get('post-1')).toBe('dot');
     });
 
-    it('puts several root scopes on the first ring as full circles, with their children as dots', () => {
+    it('puts several root scopes on the first ring as full circles, with their first children as circles too', () => {
       const shape = graphShape([...pages, page('other', null, { address: 'resource:docs' })], null);
       expect(shape.center).toBeNull();
       expect(shape.form.get('site')).toBe('full');
       expect(shape.form.get('other')).toBe('full');
-      expect(shape.form.get('blog')).toBe('dot');
+      expect(shape.form.get('blog')).toBe('full');
+      // The level below those circles is the dots.
+      expect(shape.form.get('post-1')).toBe('dot');
+    });
+
+    it('draws only the first few children of each root as circles, the rest as dots', () => {
+      const many = Array.from({ length: 12 }, (_, index) => page(`c${String(index).padStart(2, '0')}`, 'other'));
+      const shape = graphShape([...pages, page('other', null, { address: 'resource:docs' }), ...many], null);
+      const forms = many.map(child => shape.form.get(child.id));
+      expect(forms.filter(form => form === 'full')).toHaveLength(ROOT_CIRCLE_CAP);
+      expect(forms.slice(0, ROOT_CIRCLE_CAP).every(form => form === 'full')).toBe(true);
+      expect(forms.slice(ROOT_CIRCLE_CAP).every(form => form === 'dot')).toBe(true);
     });
   });
 
@@ -203,6 +242,48 @@ describe('lazyGraph', () => {
     expect(standIns).toHaveLength(PLACEHOLDER_CAP);
     expect(standIns.every(p => p.parentId === 'blog')).toBe(true);
     expect(standIns[0]?.name).toBe('281 pages under blog');
+  });
+
+  it("with nothing focused, draws the roots, their first children, and those children's own children", () => {
+    const kids = Array.from({ length: 12 }, (_, index) =>
+      page(`k${String(index).padStart(2, '0')}`, 'site', { childCount: 2 }),
+    );
+    const grand = page('g', 'k00');
+    const graph = lazyGraph({
+      ...base,
+      pages: [page('site', null, { address: 'site:mastra', childCount: 12 }), page('other', null), ...kids, grand],
+      loadedParents: new Set(['', 'site', 'other', 'k00']),
+      focusId: null,
+    });
+    const ids = graph.pages.map(p => p.id);
+    expect(ids).toContain('g');
+    // A child past the circles is a bare dot: its children are neither drawn nor stood in for.
+    expect(graph.pages.filter(p => isChildPlaceholder(p) && p.parentId === 'k11')).toHaveLength(0);
+    expect(graph.pages.filter(p => isChildPlaceholder(p) && p.parentId === 'k01')).toHaveLength(2);
+    expect(graph.wanted).toEqual(expect.arrayContaining(['site', 'other', 'k00', 'k01']));
+    expect(graph.wanted).not.toContain('k11');
+  });
+
+  it("with a childless page focused, stands in its siblings' children as dots", () => {
+    const siblings = Array.from({ length: 10 }, (_, index) =>
+      page(`s${String(index).padStart(2, '0')}`, 'blog', { childCount: 3 }),
+    );
+    const graph = lazyGraph({
+      ...base,
+      pages: [
+        page('site', null),
+        page('blog', 'site', { childCount: 11 }),
+        page('leaf', 'blog', { childCount: 0 }),
+        ...siblings,
+      ],
+      loadedParents: new Set(['', 'site', 'blog', 'leaf']),
+      focusId: 'leaf',
+    });
+    const standIns = (parent: string) => graph.pages.filter(p => isChildPlaceholder(p) && p.parentId === parent);
+    expect(standIns('s00')).toHaveLength(3);
+    expect(standIns('s09')).toHaveLength(0);
+    expect(graph.wanted).toEqual(expect.arrayContaining(['leaf', 'blog', 's00']));
+    expect(graph.wanted).not.toContain('s09');
   });
 
   it('caps the children it draws and counts the rest', () => {

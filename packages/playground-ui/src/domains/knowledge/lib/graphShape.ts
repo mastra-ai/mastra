@@ -18,6 +18,39 @@ export type GraphNodeForm = 'full' | 'dot';
 
 /** Pages at most this many parent links from the focus draw as full circles. */
 export const FULL_CIRCLE_DEPTH = 1;
+
+/**
+ * How many pages one level farther out than the usual circles still draw as circles, so a graph with nothing
+ * to expand around the focus (nothing focused, or a page with no children) reads like a focused scope
+ * instead of a ring of bare dots. The rest of that level, and the level below, are dots.
+ */
+export const ROOT_CIRCLE_CAP = 8;
+
+/**
+ * The pages promoted to circles at depth two. With nothing focused they are the first children of each
+ * root. With a focus that has no children they are its first siblings, the children of its parent, since
+ * those are the pages around it. A focus with children needs no promotion: its own children are the circles.
+ */
+export function promotedCircles(
+  children: ReadonlyMap<string, readonly KnowledgePagePayload[]>,
+  roots: readonly KnowledgePagePayload[],
+  center: KnowledgePagePayload | undefined,
+  focused: boolean,
+): Set<string> {
+  const promoted = new Set<string>();
+  const take = (parentId: string, except?: string) => {
+    (children.get(parentId) ?? [])
+      .filter(child => child.id !== except && !isChildPlaceholder(child))
+      .slice(0, ROOT_CIRCLE_CAP)
+      .forEach(child => promoted.add(child.id));
+  };
+  if (!focused && !center) {
+    for (const root of roots) take(root.id);
+  } else if (center && focused && !(children.get(center.id)?.length ?? 0) && !(center.childCount ?? 0)) {
+    if (center.parentId && center.parentId !== center.id) take(center.parentId, center.id);
+  }
+  return promoted;
+}
 /** A dot's diameter. */
 export const KNOWLEDGE_DOT_SIZE = 14;
 /** A dot's diameter when it carries its link count. */
@@ -75,6 +108,7 @@ export function graphShape(pages: readonly KnowledgePagePayload[], focusId: stri
   roots.sort(comparePagePosition);
 
   const center = focusId && byId.has(focusId) ? focusId : roots.length === 1 ? (roots[0]?.id ?? null) : null;
+  const centerPage = center ? byId.get(center) : undefined;
   const depth = new Map<string, number>();
   const branch = new Map<string, string>();
   const via = new Map<string, string | null>();
@@ -112,11 +146,12 @@ export function graphShape(pages: readonly KnowledgePagePayload[], focusId: stri
       level.set(page.id, 'scope');
     }
   }
+  const rootCircles = promotedCircles(children, roots, centerPage, Boolean(focusId && byId.has(focusId)));
   const form = new Map<string, GraphNodeForm>();
   let farCircles = 0;
   for (const page of live) {
     const at = depth.get(page.id);
-    const near = at !== undefined && at <= FULL_CIRCLE_DEPTH && !isChildPlaceholder(page);
+    const near = at !== undefined && (at <= FULL_CIRCLE_DEPTH || rootCircles.has(page.id)) && !isChildPlaceholder(page);
     const higher = at !== undefined && level.has(page.id) && !isChildPlaceholder(page);
     form.set(page.id, near || (higher && farCircles++ < HIGHER_LEVEL_CAP) ? 'full' : 'dot');
   }
@@ -166,12 +201,20 @@ export function radialLayout(
   firstRing.forEach(weigh);
 
   // Ring radii: the first fits its full circles side by side; dot rings sit beyond it.
-  const firstSizes = firstRing.reduce((sum, id) => sum + sizeOf(byId.get(id) as KnowledgePagePayload) + 30, 0);
-  const radii = [0, Math.max(FIRST_RING, firstSizes / (2 * Math.PI))];
+  // A ring of full circles is wide enough for them side by side; the ring after one leaves room for their size.
+  const circleWidth = new Map<number, number>();
+  for (const [id, at] of shape.depth) {
+    const page = byId.get(id);
+    if (!page || id === shape.center || shape.form.get(id) !== 'full') continue;
+    circleWidth.set(at, (circleWidth.get(at) ?? 0) + sizeOf(page) + 30);
+  }
+  const radii = [0, Math.max(FIRST_RING, (circleWidth.get(1) ?? 0) / (2 * Math.PI))];
   const radius = (at: number) => {
     while (radii.length <= at) {
-      const last = radii[radii.length - 1] as number;
-      radii.push(last + (radii.length === 2 ? FIRST_DOT_RING_GAP : DOT_RING_GAP));
+      const next = radii.length;
+      const last = radii[next - 1] as number;
+      const gap = circleWidth.has(next - 1) && next > 1 ? FIRST_DOT_RING_GAP : DOT_RING_GAP;
+      radii.push(Math.max(last + gap, (circleWidth.get(next) ?? 0) / (2 * Math.PI)));
     }
     return radii[at] as number;
   };
@@ -327,6 +370,8 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
     queue.push(page.id);
   };
   const center = focus ?? (roots.length === 1 ? roots[0] : undefined);
+  // Pages one level out that draw as circles too, with their own children drawn as dots.
+  const rootCircleIds = promotedCircles(children, roots, center, Boolean(focus));
   if (center) add(center, 0);
   else for (const root of roots) add(root, 1);
   // The path up from the focus, however far, so it is clear where the focus sits.
@@ -339,7 +384,7 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
     const id = queue.shift() as string;
     const page = drawn.get(id) as KnowledgePagePayload;
     const at = depth.get(id) as number;
-    if (at >= 2) continue;
+    if (at >= 3 || (at === 2 && !rootCircleIds.has(id))) continue;
     const parent = page.parentId ? byId.get(page.parentId) : undefined;
     if (parent) add(parent, at + 1);
     const kids = children.get(id) ?? [];
@@ -402,7 +447,7 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
       : roots.map(root => root.id);
   // One level beyond the circles: the children of the pages drawn as circles, so their own children show as dots.
   const circles = [...depth]
-    .filter(([id, at]) => at <= 1 && !wanted.includes(id))
+    .filter(([id, at]) => (at <= 1 || rootCircleIds.has(id)) && !wanted.includes(id))
     .map(([id]) => drawn.get(id) as KnowledgePagePayload)
     .filter(page => (page.childCount ?? 0) > 0 && !isScopeGroup(page) && !isChildPlaceholder(page));
   wanted.push(...circles.slice(0, WANTED_CIRCLE_CAP).map(page => page.id));
