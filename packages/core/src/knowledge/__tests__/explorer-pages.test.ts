@@ -105,6 +105,38 @@ describe('listKnowledgeTreeChildren', () => {
     ]);
   });
 
+  describe('child counts', () => {
+    const counts = (pages: Array<{ name: string; childCount?: number }>) =>
+      Object.fromEntries(pages.map(page => [page.name, page.childCount]));
+
+    it('counts the pages, and for a scope the child scopes, directly under each listed page', async () => {
+      const { store, acme, support } = await seed();
+      expect(counts((await listKnowledgeTreeChildren(store, { parentId: null, read: 'all' })).pages).Acme).toBe(2);
+      expect(counts((await listKnowledgeTreeChildren(store, { parentId: acme.id, read: 'all' })).pages)).toEqual({
+        Support: 2,
+        Engineering: 1,
+      });
+      expect(counts((await listKnowledgeTreeChildren(store, { parentId: support.id, read: 'all' })).pages)).toEqual({
+        Refunds: 1,
+        Billing: 0,
+      });
+    });
+
+    it('counts only what the caller can read', async () => {
+      const { store } = await seed();
+      const roots = await listKnowledgeTreeChildren(store, { parentId: null, read: supportOnly });
+      expect(counts(roots.pages)).toEqual({ Support: 2 });
+    });
+
+    it('leaves counts out when the store cannot count children', async () => {
+      const { store, support } = await seed();
+      // An adapter built before countChildPages existed.
+      Object.assign(store, { countChildPages: undefined });
+      const level = await listKnowledgeTreeChildren(store, { parentId: support.id, read: 'all' });
+      expect(level.pages.map(page => 'childCount' in page)).toEqual([false, false]);
+    });
+  });
+
   it('pages ordinary child pages with a cursor and lists scopes only on the first page', async () => {
     const { store, support } = await seed();
     const first = await listKnowledgeTreeChildren(store, { parentId: support.id, read: 'all', limit: 1 });

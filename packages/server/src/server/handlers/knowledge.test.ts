@@ -72,6 +72,15 @@ describe('Knowledge read routes', () => {
     expect(names((await call(GET_KNOWLEDGE_TREE_ROUTE, { ...args, parentId: support.id })).pages)).toEqual(['Refunds']);
   });
 
+  it('says how many children sit under each page of a tree level', async () => {
+    const { mastra, acme } = await setup();
+    const level = await call(GET_KNOWLEDGE_TREE_ROUTE, { mastra, knowledgeKey: 'main', parentId: acme.id });
+    expect(level.pages.map((page: { name: string; childCount?: number }) => [page.name, page.childCount])).toEqual([
+      ['Support', 1],
+      ['Engineering', expect.any(Number)],
+    ]);
+  });
+
   it('returns a page with ancestors, notes, references and pin, and 404s an unknown page', async () => {
     const { mastra, refunds, roadmap } = await setup();
     const args = { mastra, knowledgeKey: 'main' };

@@ -7,7 +7,12 @@ import type {
   KnowledgePin,
   KnowledgeReadScope,
 } from '../storage';
-import { knowledgeScopeReadable, MAX_KNOWLEDGE_PAGE_LIST_LIMIT, parseKnowledgePageRef } from '../storage';
+import {
+  KnowledgeUnsupportedCapabilityError,
+  knowledgeScopeReadable,
+  MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
+  parseKnowledgePageRef,
+} from '../storage';
 import type { KnowledgeRole } from './declarations';
 
 /**
@@ -73,9 +78,18 @@ async function visibleChildScopes(
   return { scopes, truncated };
 }
 
+/** A page in one tree level, with how many readable children sit directly under it. */
+export type KnowledgeTreePage = KnowledgePage & {
+  /**
+   * Readable child pages, plus readable child scopes for a scope. Left out when the store can't count
+   * (an adapter older than `countChildPages`), so a UI can tell "none" from "unknown".
+   */
+  childCount?: number;
+};
+
 export interface KnowledgeTreeChildren {
   /** Readable child scopes (all of them, on the first page only), then readable child pages in order. */
-  pages: KnowledgePage[];
+  pages: KnowledgeTreePage[];
   /** Cursor for more child pages; child scopes are never paged. */
   nextCursor?: string;
   /** True when the scope walk hit {@link MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN}. */
@@ -98,13 +112,46 @@ export async function listKnowledgeTreeChildren(
     cursor === undefined
       ? await visibleChildScopes(store, parentId, read, { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN })
       : { scopes: [], truncated: false };
-  if (parentId === null) return { pages: scopes.scopes, truncated: scopes.truncated };
+  if (parentId === null) {
+    const counted = await withChildCounts(store, scopes.scopes, read);
+    return { pages: counted.pages, truncated: scopes.truncated || counted.truncated };
+  }
   const children = await store.listChildPages({ parentId, read, cursor, limit });
+  const counted = await withChildCounts(store, [...scopes.scopes, ...children.pages], read);
   return {
-    pages: [...scopes.scopes, ...children.pages],
+    pages: counted.pages,
     ...(children.nextCursor ? { nextCursor: children.nextCursor } : {}),
-    truncated: scopes.truncated,
+    truncated: scopes.truncated || counted.truncated,
   };
+}
+
+/** Child counts for one level: one `countChildPages` call, plus a child-scope walk per scope page. */
+async function withChildCounts(
+  store: KnowledgePageStore,
+  pages: KnowledgePage[],
+  read: KnowledgeReadScope,
+): Promise<{ pages: KnowledgeTreePage[]; truncated: boolean }> {
+  if (pages.length === 0 || typeof store.countChildPages !== 'function') return { pages, truncated: false };
+  let counts: Record<string, number>;
+  try {
+    counts = await store.countChildPages({ parentIds: pages.map(page => page.id), read });
+  } catch (error) {
+    if (error instanceof KnowledgeUnsupportedCapabilityError) return { pages, truncated: false };
+    throw error;
+  }
+  const budget = { remaining: MAX_KNOWLEDGE_EXPLORER_SCOPE_SCAN };
+  let truncated = false;
+  const counted: KnowledgeTreePage[] = [];
+  for (const page of pages) {
+    let childCount = Object.hasOwn(counts, page.id) ? (counts[page.id] ?? 0) : 0;
+    if (page.isScope) {
+      const childScopes = await visibleChildScopes(store, page.id, read, budget);
+      childCount += childScopes.scopes.length;
+      truncated ||= childScopes.truncated;
+    }
+    counted.push({ ...page, childCount });
+  }
+  return { pages: counted, truncated };
 }
 
 /**

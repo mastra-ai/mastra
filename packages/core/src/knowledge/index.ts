@@ -466,6 +466,7 @@ export type {
   KnowledgePageGraphLimits,
   KnowledgePageView,
   KnowledgeTreeChildren,
+  KnowledgeTreePage,
 } from './explorer-pages';
 export type { KnowledgeConfig } from './config';
 export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';
