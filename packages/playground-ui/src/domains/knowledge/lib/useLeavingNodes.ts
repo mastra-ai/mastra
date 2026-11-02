@@ -1,7 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
-/** How long a view change takes: nodes glide, resize and fade over this. Matches `--duration-normal`. */
+/** How long a view change takes: nodes glide, resize and fade over this. */
 export const KNOWLEDGE_GRAPH_TRANSITION_MS = 300;
 
 /** Whether the person has not asked the system to cut motion. Without `matchMedia` (a test DOM) nothing animates. */

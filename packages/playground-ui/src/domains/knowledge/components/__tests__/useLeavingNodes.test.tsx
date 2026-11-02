@@ -64,7 +64,7 @@ describe('useLeavingNodes', () => {
 
   it('glides, resizes and fades every node over the same 300ms', () => {
     for (const property of ['transform', 'width', 'height', 'opacity']) {
-      expect(css).toMatch(new RegExp(`${property} var\\(--duration-normal, 300ms\\)`));
+      expect(css).toMatch(new RegExp(`${property} 300ms`));
     }
     expect(KNOWLEDGE_GRAPH_TRANSITION_MS).toBe(300);
   });

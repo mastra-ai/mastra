@@ -20,11 +20,11 @@
    leave are faded out (the graph keeps them a moment). Under reduced motion every one of these is off. */
 .knowledge-graph .react-flow__node {
   transition:
-    transform var(--duration-normal, 300ms) var(--ease-out-custom, ease-out),
-    width var(--duration-normal, 300ms) var(--ease-out-custom, ease-out),
-    height var(--duration-normal, 300ms) var(--ease-out-custom, ease-out),
-    opacity var(--duration-normal, 300ms) var(--ease-out-custom, ease-out);
-  animation: knowledge-node-in var(--duration-normal, 300ms) var(--ease-out-custom, ease-out) both;
+    transform 300ms var(--ease-out-custom, ease-out),
+    width 300ms var(--ease-out-custom, ease-out),
+    height 300ms var(--ease-out-custom, ease-out),
+    opacity 300ms var(--ease-out-custom, ease-out);
+  animation: knowledge-node-in 300ms var(--ease-out-custom, ease-out) both;
 }
 
 @keyframes knowledge-node-in {
