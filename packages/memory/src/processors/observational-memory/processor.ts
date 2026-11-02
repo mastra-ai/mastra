@@ -18,7 +18,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
-import { contextPressure, snapshotContextRequest } from './context-pressure';
+import { contextPressure, countToolDefinitionTokens, snapshotContextRequest } from './context-pressure';
 import type { ContextRequest, ContextUsageAnchor } from './context-pressure';
 import { omDebug } from './debug';
 import { getOmFailureMetadata } from './error';
@@ -246,6 +246,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     state.__omActorModelContext = actorModelContext;
 
     return this.engine.getTokenCounter().runWithModelContext(actorModelContext, async () => {
+      // The prompt-stage hook has no tools; keep their size for this step's request snapshot.
+      state.__omToolTokens = countToolDefinitionTokens(args.tools, args.activeTools, this.engine.getTokenCounter());
+
       // Repro capture setup
       const reproCaptureEnabled = isOmReproCaptureEnabled();
       const preRecordSnapshot = reproCaptureEnabled
@@ -436,7 +439,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           // Consume the measurement once. In particular, an overflow retry or an activation
           // cannot resurrect the pre-compaction anchor from the completed steps array.
           delete state.__omContextAnchor;
-          ctx = await step.prepare(pressure === undefined ? undefined : Math.max(0, pressure - current.fixedTokens));
+          ctx = await step.prepare(pressure);
         } catch (error) {
           // Map observation errors through abort (processor-specific concern)
           const err = error instanceof Error ? error : new Error(String(error));
@@ -534,6 +537,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       args.stepNumber,
       `${args.model.provider}/${args.model.modelId}`,
       this.engine.getTokenCounter(),
+      typeof args.state.__omToolTokens === 'number' ? args.state.__omToolTokens : 0,
     );
   }
 
