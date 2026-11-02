@@ -16,7 +16,9 @@ import type { CorrelationContext } from '../../observability';
 import type { MastraCompositeStore } from '../../storage/base';
 import type { TargetType } from '../../storage/types';
 import type { StepResult } from '../../workflows';
-import type { ScorerResult } from './types';
+import { isConversationInput } from '../replay/conversation';
+import type { ExecutionResult } from './executor';
+import type { AgentExperimentOutput, ScorerResult } from './types';
 
 function toScorerTargetEntityType(targetType?: TargetType): EntityType | undefined {
   switch (targetType) {
@@ -252,38 +254,20 @@ export async function runScorersForItem(
 
       // Persist only scores from successful scorer runs.
       if (persistScores && storage && result.error === null && result.score !== null) {
-        try {
-          // Legacy score-store emission. This path is being deprecated.
-          await validateAndSaveScore(storage, {
-            ...(stableScoreKey ? { id: `${stableScoreKey}:${scorer.id}` } : {}),
-            scorerId: scorer.id,
-            score: result.score,
-            reason: result.reason ?? undefined,
-            input: item.input,
-            output,
-            additionalContext: item.metadata,
-            entityType: targetType.toUpperCase(),
-            entityId: itemId,
-            source: 'TEST',
-            runId,
-            traceId,
-            scorer: {
-              id: scorer.id,
-              name: scorer.name,
-              description: scorer.description ?? '',
-              hasJudge: !!scorer.judge,
-            },
-            entity: {
-              id: targetId,
-              name: targetId,
-            },
-            ...promptMetadata,
-          });
-        } catch (saveError) {
-          // TODO: Remove this warning path once the old scores storage is deprecated.
-          // Log but don't fail - score persistence is best-effort
-          console.warn(`Failed to save score for scorer ${scorer.id}:`, saveError);
-        }
+        await saveExperimentScore(
+          storage,
+          scorer,
+          result,
+          item,
+          output,
+          runId,
+          targetType,
+          targetId,
+          itemId,
+          traceId,
+          stableScoreKey,
+          promptMetadata,
+        );
       }
 
       return result;
@@ -302,6 +286,144 @@ export async function runScorersForItem(
       targetScope: scorer.type === 'trajectory' ? 'trajectory' : 'span',
     };
   });
+}
+
+/** Shared scoring for both in-process experiments and caller-driven run-item execution. */
+export async function runScorersForExecution(
+  scorers: MastraScorer<any, any, any, any>[],
+  item: Parameters<typeof runScorersForItem>[1] & { id: string },
+  execution: ExecutionResult,
+  mastra: Mastra,
+  storage: MastraCompositeStore | null,
+  runId: string,
+  targetType: TargetType,
+  targetId: string,
+  persistScores = true,
+  stableScoreKey?: string,
+): Promise<ScorerResult[]> {
+  if (targetType === 'agent' && isConversationInput(item.input) && !execution.turns) return [];
+  if (!execution.turns) {
+    await flushForTrajectoryScorers(mastra, scorers, execution.traceId);
+    return runScorersForItem(
+      scorers,
+      item,
+      execution.output,
+      storage,
+      runId,
+      targetType,
+      targetId,
+      item.id,
+      execution.scorerInput,
+      execution.scorerOutput,
+      execution.traceId ?? undefined,
+      execution.stepResults || execution.stepExecutionPath
+        ? {
+            stepResults: execution.stepResults,
+            stepExecutionPath: execution.stepExecutionPath,
+            spanId: execution.spanId,
+          }
+        : undefined,
+      persistScores,
+      stableScoreKey,
+    );
+  }
+
+  const output = execution.output as AgentExperimentOutput;
+  const turns = output.turns!;
+  for (const [index, turnExecution] of execution.turns.entries()) {
+    const turn = turns[index]!;
+    // Failed/unexecuted turns do not receive a fabricated answer or score.
+    if (turnExecution.error) continue;
+    await flushForTrajectoryScorers(mastra, scorers, turnExecution.traceId);
+    turn.scores = await runScorersForItem(
+      scorers,
+      { ...turn, metadata: item.metadata },
+      turn.output,
+      storage,
+      runId,
+      targetType,
+      targetId,
+      item.id,
+      turnExecution.scorerInput,
+      turnExecution.scorerOutput,
+      turnExecution.traceId ?? undefined,
+      undefined,
+      false,
+    );
+  }
+
+  const totalTurns = output.replay!.turnCount;
+  return Promise.all(
+    scorers.map(async scorer => {
+      const results = turns.flatMap(turn => turn.scores.filter(score => score.scorerId === scorer.id));
+      const numeric = results.filter(result => result.score !== null && Number.isFinite(result.score));
+      const failures = results.filter(result => result.error);
+      const result: ScorerResult = {
+        scorerId: scorer.id,
+        scorerName: scorer.name,
+        score: numeric.length ? numeric.reduce((sum, result) => sum + result.score!, 0) / numeric.length : null,
+        reason: `${numeric.length}/${totalTurns} turns scored; ${failures.length} scorer errors; ${totalTurns - numeric.length} turns without a numeric score.`,
+        error: numeric.length ? null : failures.map(result => result.error).join('; ') || null,
+        ...(results.length && results.every(result => result.notScorable)
+          ? { notScorable: results[0]!.notScorable }
+          : {}),
+        targetScope: scorer.type === 'trajectory' ? 'trajectory' : 'span',
+      };
+      if (persistScores && storage && result.score !== null) {
+        await saveExperimentScore(
+          storage,
+          scorer,
+          result,
+          item,
+          output,
+          runId,
+          targetType,
+          targetId,
+          item.id,
+          undefined,
+          stableScoreKey,
+        );
+      }
+      return result;
+    }),
+  );
+}
+
+async function saveExperimentScore(
+  storage: MastraCompositeStore,
+  scorer: MastraScorer<any, any, any, any>,
+  result: ScorerResult,
+  item: Parameters<typeof runScorersForItem>[1],
+  output: unknown,
+  runId: string,
+  targetType: TargetType,
+  targetId: string,
+  itemId: string,
+  traceId?: string,
+  stableScoreKey?: string,
+  promptMetadata?: ScorerPromptMetadata,
+): Promise<void> {
+  try {
+    await validateAndSaveScore(storage, {
+      ...(stableScoreKey ? { id: `${stableScoreKey}:${scorer.id}` } : {}),
+      scorerId: scorer.id,
+      score: result.score!,
+      reason: result.reason ?? undefined,
+      input: item.input,
+      output,
+      additionalContext: item.metadata,
+      entityType: targetType.toUpperCase(),
+      entityId: itemId,
+      source: 'TEST',
+      runId,
+      traceId,
+      scorer: { id: scorer.id, name: scorer.name, description: scorer.description ?? '', hasJudge: !!scorer.judge },
+      entity: { id: targetId, name: targetId },
+      ...promptMetadata,
+    });
+  } catch (saveError) {
+    console.warn(`Failed to save score for scorer ${scorer.id}:`, saveError);
+  }
 }
 
 /** Prompt/step metadata returned by scorer.run() for DB persistence. */

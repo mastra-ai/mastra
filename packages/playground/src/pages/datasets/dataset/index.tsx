@@ -48,7 +48,7 @@ function DatasetPage() {
   const crumbs: CrumbDef[] = [...shellCrumbs, datasetVersionCrumb];
 
   // Dialog states
-  const [experimentDialogOpen, setExperimentDialogOpen] = useState(false);
+  const [experimentDialogOpen, setExperimentDialogOpen] = useState(() => searchParams.get('run') === 'true');
   const [addItemDialogOpen, setAddItemDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [duplicateDialogOpen, setDuplicateDialogOpen] = useState(false);

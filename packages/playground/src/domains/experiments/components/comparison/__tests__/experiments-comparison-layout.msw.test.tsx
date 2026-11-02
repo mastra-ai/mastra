@@ -17,6 +17,7 @@ import {
   challengerResults,
   challengerScoreRows,
   comparisonResponse,
+  conversationComparison,
   contenderResults,
   contenderScoreRows,
   contenderTraceSpans,
@@ -142,6 +143,25 @@ const isClipped = (section: HTMLElement) =>
 const makePayloadsOverflow = () => vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(1000);
 
 describe('experiments comparison table', () => {
+  describe('when comparing conversation replays', () => {
+    it('aligns both columns to the same source turn when either selector changes', async () => {
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/datasets/${DATASET_ID}/compare`, () =>
+          HttpResponse.json(conversationComparison),
+        ),
+      );
+      renderComparison();
+      await findItemRow('conversation-item');
+      const baseline = within(sideOf('conversation-item', 'Baseline'));
+      const contender = within(sideOf('conversation-item', 'Contender 1'));
+      fireEvent.click(baseline.getByRole('button', { name: /Turn 2/ }));
+      expect(baseline.getByRole('button', { name: /Turn 2/ }).getAttribute('aria-pressed')).toBe('true');
+      expect(contender.getByRole('button', { name: /Turn 2/ }).getAttribute('aria-pressed')).toBe('true');
+      expect(contender.getByText('Similarity: Judge unavailable')).toBeTruthy();
+      expect(contender.getByText('Provider disconnected')).toBeTruthy();
+    });
+  });
+
   describe('when the comparison loads', () => {
     it('renders the Items, Baseline and Contender 1 column headers', async () => {
       renderComparison();

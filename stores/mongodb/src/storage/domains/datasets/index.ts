@@ -201,7 +201,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       groundTruth: row.groundTruth,
       expectedTrajectory: row.expectedTrajectory,
       toolMocks: (typeof row.toolMocks === 'string' ? safelyParseJSON(row.toolMocks) : row.toolMocks) ?? emptyValue,
+      memorySeed: (typeof row.memorySeed === 'string' ? safelyParseJSON(row.memorySeed) : row.memorySeed) ?? emptyValue,
       unmockedToolPolicy: row.unmockedToolPolicy ?? emptyValue,
+      toolMockMatchMode: row.toolMockMatchMode ?? emptyValue,
       scorerIds: (typeof row.scorerIds === 'string' ? safelyParseJSON(row.scorerIds) : row.scorerIds) ?? emptyValue,
       requestContext:
         (typeof row.requestContext === 'string' ? safelyParseJSON(row.requestContext) : row.requestContext) ??
@@ -526,7 +528,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             groundTruth: args.groundTruth,
             expectedTrajectory: args.expectedTrajectory,
             toolMocks: args.toolMocks ?? null,
+            memorySeed: args.memorySeed ?? null,
             unmockedToolPolicy: args.unmockedToolPolicy ?? null,
+            toolMockMatchMode: args.toolMockMatchMode ?? null,
             scorerIds: args.scorerIds ?? null,
             requestContext: args.requestContext ?? null,
             metadata: args.metadata ?? null,
@@ -558,7 +562,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         groundTruth: args.groundTruth,
         expectedTrajectory: args.expectedTrajectory,
         toolMocks: args.toolMocks,
+        memorySeed: args.memorySeed,
         unmockedToolPolicy: args.unmockedToolPolicy,
+        toolMockMatchMode: args.toolMockMatchMode,
         scorerIds: args.scorerIds,
         requestContext: args.requestContext,
         metadata: args.metadata,
@@ -586,7 +592,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         args.groundTruth !== undefined ||
         args.expectedTrajectory !== undefined ||
         args.toolMocks !== undefined ||
+        args.memorySeed !== undefined ||
         args.unmockedToolPolicy !== undefined ||
+        args.toolMockMatchMode !== undefined ||
         args.scorerIds !== undefined ||
         args.requestContext !== undefined ||
         args.metadata !== undefined ||
@@ -667,8 +675,11 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
         const mergedExpectedTrajectory =
           args.expectedTrajectory !== undefined ? args.expectedTrajectory : existing.expectedTrajectory;
         const mergedToolMocks = args.toolMocks !== undefined ? args.toolMocks : existing.toolMocks;
+        const mergedMemorySeed = args.memorySeed !== undefined ? args.memorySeed : existing.memorySeed;
         const mergedUnmockedToolPolicy =
           args.unmockedToolPolicy !== undefined ? args.unmockedToolPolicy : existing.unmockedToolPolicy;
+        const mergedToolMockMatchMode =
+          args.toolMockMatchMode !== undefined ? args.toolMockMatchMode : existing.toolMockMatchMode;
         const mergedScorerIds = args.scorerIds !== undefined ? (args.scorerIds ?? undefined) : existing.scorerIds;
         const mergedRequestContext = args.requestContext !== undefined ? args.requestContext : existing.requestContext;
         const mergedMetadata = args.metadata !== undefined ? args.metadata : existing.metadata;
@@ -696,7 +707,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             groundTruth: mergedGroundTruth,
             expectedTrajectory: mergedExpectedTrajectory,
             toolMocks: mergedToolMocks ?? null,
+            memorySeed: mergedMemorySeed ?? null,
             unmockedToolPolicy: mergedUnmockedToolPolicy ?? null,
+            toolMockMatchMode: mergedToolMockMatchMode ?? null,
             scorerIds: mergedScorerIds ?? null,
             requestContext: mergedRequestContext,
             metadata: mergedMetadata,
@@ -719,7 +732,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           groundTruth: mergedGroundTruth,
           expectedTrajectory: mergedExpectedTrajectory,
           toolMocks: mergedToolMocks,
+          memorySeed: mergedMemorySeed,
           unmockedToolPolicy: mergedUnmockedToolPolicy,
+          toolMockMatchMode: mergedToolMockMatchMode,
           scorerIds: mergedScorerIds,
           requestContext: mergedRequestContext,
           metadata: mergedMetadata,
@@ -797,7 +812,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
             groundTruth: existing.groundTruth,
             expectedTrajectory: existing.expectedTrajectory,
             toolMocks: existing.toolMocks ?? null,
+            memorySeed: existing.memorySeed ?? null,
             unmockedToolPolicy: existing.unmockedToolPolicy ?? null,
+            toolMockMatchMode: existing.toolMockMatchMode ?? null,
             scorerIds: existing.scorerIds ?? null,
             requestContext: existing.requestContext,
             metadata: existing.metadata,
@@ -866,7 +883,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
               groundTruth: null,
               expectedTrajectory: null,
               toolMocks: null,
+              memorySeed: null,
               unmockedToolPolicy: null,
+              toolMockMatchMode: null,
               scorerIds: null,
               requestContext: null,
               metadata,
@@ -985,7 +1004,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
               groundTruth: insert.item.groundTruth,
               expectedTrajectory: insert.item.expectedTrajectory,
               toolMocks: insert.item.toolMocks,
+              memorySeed: insert.item.memorySeed,
               unmockedToolPolicy: insert.item.unmockedToolPolicy,
+              toolMockMatchMode: insert.item.toolMockMatchMode,
               scorerIds: insert.item.scorerIds,
               requestContext: insert.item.requestContext,
               metadata: insert.item.metadata,
@@ -1091,7 +1112,9 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
           groundTruth: item.groundTruth,
           expectedTrajectory: item.expectedTrajectory,
           toolMocks: item.toolMocks ?? null,
+          memorySeed: item.memorySeed ?? null,
           unmockedToolPolicy: item.unmockedToolPolicy ?? null,
+          toolMockMatchMode: item.toolMockMatchMode ?? null,
           scorerIds: item.scorerIds ?? null,
           requestContext: item.requestContext,
           metadata: item.metadata,

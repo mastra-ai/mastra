@@ -8,6 +8,7 @@ import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { GaugeIcon } from 'lucide-react';
+import { replayContext, replayLabel, replayUsage, replayUserMessage } from '../utils/replay';
 import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
 import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
 import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
@@ -165,13 +166,17 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
       ) : (
         <>
           {results.map((result, index) => {
+            const usage =
+              replayContext(result.output)?.mode === 'conversation' ? replayUsage(result.output) : result.usage;
             const hasError = Boolean(result.error);
             const isFeatured = result.id === featuredResultId;
 
             const rowCells = (
               <>
                 {hasItemIdColumn && (
-                  <DataList.Cell className="text-muted-foreground">{result.itemId?.slice(0, 8) ?? ''}</DataList.Cell>
+                  <DataList.Cell className="text-muted-foreground">
+                    {replayLabel(result.output) ?? result.itemId?.slice(0, 8) ?? ''}
+                  </DataList.Cell>
                 )}
 
                 {hasStatusColumn && (
@@ -185,7 +190,12 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 )}
 
                 {hasInputColumn && (
-                  <DataList.TextCell font="mono">{truncate(formatValue(result.input), 200)}</DataList.TextCell>
+                  <DataList.TextCell font={replayLabel(result.output) ? undefined : 'mono'}>
+                    {truncate(
+                      formatValue(replayLabel(result.output) ? replayUserMessage(result.input) : result.input),
+                      200,
+                    )}
+                  </DataList.TextCell>
                 )}
 
                 {hasOutputColumn && (
@@ -225,7 +235,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                     className="text-muted-foreground tabular-nums"
                     data-testid={`result-cost-${result.id}`}
                   >
-                    {formatCostValue(result.usage?.estimatedCost, result.usage?.costUnit)}
+                    {formatCostValue(usage?.estimatedCost, usage?.costUnit)}
                   </DataList.Cell>
                 )}
 
@@ -234,7 +244,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                     className="text-muted-foreground tabular-nums"
                     data-testid={`result-tokens-${result.id}`}
                   >
-                    {formatTokenCount(totalTokens(result.usage))}
+                    {formatTokenCount(totalTokens(usage))}
                   </DataList.Cell>
                 )}
 

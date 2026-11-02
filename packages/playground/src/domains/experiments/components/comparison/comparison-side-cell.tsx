@@ -3,7 +3,9 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { isReplayRecord, replayContext } from '../../utils/replay';
 import { getResultErrorMessage, getResultOutputText } from '../../utils/result-output';
+import { ConversationReplayResult } from '../conversation-replay-result';
 import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonColumn } from './build-comparison-rows';
 import { ComparisonMetricList } from './comparison-metric-list';
@@ -24,6 +26,8 @@ export interface ComparisonSideCellProps {
   onOutputExpandedChange?: (expanded: boolean) => void;
   /** Opens the trace of this side's run. The button only shows when the run has a trace. */
   onShowTrace?: (traceId: string) => void;
+  selectedTurn?: number;
+  onSelectTurn?: (turnIndex: number) => void;
 }
 
 function formatValue(value: unknown): string {
@@ -61,6 +65,8 @@ export function ComparisonSideCell({
   outputExpanded,
   onOutputExpandedChange,
   onShowTrace,
+  selectedTurn,
+  onSelectTurn,
 }: ComparisonSideCellProps) {
   const { isMetricVisible } = useCompareMetricPreferences();
 
@@ -80,6 +86,8 @@ export function ComparisonSideCell({
     );
   }
 
+  const conversationOutput =
+    replayContext(data.output)?.mode === 'conversation' && isReplayRecord(data.output) ? data.output : undefined;
   const outputStr = formatValue(data.output);
   const outputText = getResultOutputText(data);
   const errorMessage = getResultErrorMessage(data);
@@ -114,7 +122,14 @@ export function ComparisonSideCell({
         </ComparisonSection>
       )}
 
-      {errorMessage ? (
+      {conversationOutput ? (
+        <ConversationReplayResult
+          output={conversationOutput}
+          onShowTrace={onShowTrace}
+          selectedTurn={selectedTurn}
+          onSelectTurn={onSelectTurn}
+        />
+      ) : errorMessage ? (
         <ComparisonSection title="Error" tone="negative" framed actions={resultActions(errorMessage)}>
           <Txt tone="muted" className="p-3 break-words">
             {errorMessage}

@@ -1,3 +1,4 @@
+import { conversationResult } from '../../../__tests__/fixtures/replay';
 import type {
   CompareExperimentsResponse,
   DatasetExperimentResult,
@@ -299,4 +300,19 @@ export const contenderTraceSpans: GetTraceResponse = {
 export const contenderTraceFeedback: RouteResponse<'GET /observability/feedback'> = {
   feedback: [],
   pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+};
+
+export const conversationComparison: CompareExperimentsResponse = {
+  baselineId: BASELINE_ID,
+  items: [
+    {
+      itemId: 'conversation-item',
+      input: conversationResult.input,
+      groundTruth: null,
+      results: {
+        [BASELINE_ID]: { output: conversationResult.output, scores: { similarity: 0 } },
+        [CONTENDER_ID]: { output: conversationResult.output, scores: { similarity: 0 } },
+      },
+    },
+  ],
 };

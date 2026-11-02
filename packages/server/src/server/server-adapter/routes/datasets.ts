@@ -6,6 +6,8 @@ import {
   DELETE_DATASET_ROUTE,
   LIST_ITEMS_ROUTE,
   ADD_ITEM_ROUTE,
+  ITEMS_FROM_THREAD_ROUTE,
+  PREVIEW_REPLAY_ROUTE,
   GET_ITEM_ROUTE,
   UPDATE_ITEM_ROUTE,
   DELETE_ITEM_ROUTE,
@@ -44,6 +46,8 @@ export const DATASETS_ROUTES = [
   // Item list and add
   LIST_ITEMS_ROUTE,
   ADD_ITEM_ROUTE,
+  ITEMS_FROM_THREAD_ROUTE,
+  PREVIEW_REPLAY_ROUTE,
   // Batch operations - MUST come before item-specific routes to avoid /items/batch matching /items/:itemId
   BATCH_INSERT_ITEMS_ROUTE,
   BATCH_DELETE_ITEMS_ROUTE,
