@@ -2581,6 +2581,20 @@ describe('MDocument', () => {
 
         expect(doc.getText().flatMap(text => JSON.parse(text).items)).toEqual(['one', 'two', 'three', 'four', 'five']);
       });
+
+      it('keys a split array object by its index in the source array', async () => {
+        const doc = MDocument.fromJSON(
+          JSON.stringify({ items: ['a', 'b', { first: 'x'.repeat(20), second: 'y'.repeat(20) }] }),
+        );
+
+        await doc.chunk({ strategy: 'json', maxSize: 50 });
+
+        const chunks = doc.getText().map(text => JSON.parse(text).items);
+        expect(chunks[0]).toEqual(['a', 'b']);
+        const splitFields = chunks.slice(1).reduce((acc, curr) => ({ ...acc, ...curr['2'] }), {});
+        expect(splitFields).toEqual({ first: 'x'.repeat(20), second: 'y'.repeat(20) });
+        expect(chunks.slice(1).every(chunk => Object.keys(chunk).join() === '2')).toBe(true);
+      });
     });
   });
 

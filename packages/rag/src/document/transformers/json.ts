@@ -205,7 +205,7 @@ export class RecursiveJsonTransformer {
       }
     };
 
-    for (const item of value) {
+    for (const [itemIndex, item] of value.entries()) {
       // Try adding item to current group
       const testGroup = [...currentGroup, item];
       const testChunk = this.createChunk(testGroup, path);
@@ -226,7 +226,7 @@ export class RecursiveJsonTransformer {
         if (this.isWithinSizeLimit(singleItemChunk)) {
           currentGroup = singleItemArray;
         } else {
-          const itemPath = [...path, String(chunks.length)];
+          const itemPath = [...path, String(itemIndex)];
           const nestedChunks = this.handleNestedObject(item, itemPath, depth + 1, maxDepth);
           chunks.push(...nestedChunks);
         }
