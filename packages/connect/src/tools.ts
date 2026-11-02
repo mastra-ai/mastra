@@ -3,12 +3,14 @@ import { MCPClient } from '@mastra/mcp';
 
 import type { ConnectClientOptions, IntegrationCatalogEntry, ProjectConnection, ResolvedClient } from './client.js';
 import {
+  getProjectIntegrationSettings,
   listIntegrations,
   listProjectConnections,
   platformMcpTransport,
   resolveClient,
   validateResourceId,
 } from './client.js';
+import { buildConnectPromptTool, CONNECT_PROMPT_TOOL_KEY } from './connect-prompt-tool.js';
 import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 import {
   buildMcpMultiConnectionTools,
@@ -129,6 +131,17 @@ export interface ToolsOptions {
    * resolves global-only.
    */
   resourceId?: string | ((ctx?: ToolsResolverContext) => string | undefined | Promise<string | undefined>);
+  /**
+   * Whether resource-scoped resolutions include the built-in
+   * `request_connection` tool, which lets the agent prompt the end user to
+   * connect a provider account mid-conversation (chat UIs render its
+   * structured output as a connect card). The connectable set follows the
+   * `providers` allowlist when one was given. Otherwise it uses the project's
+   * provider configuration in Mastra Platform, with the full catalog only when
+   * that configuration is unset. Default `true`; global-only resolutions never
+   * include it (there is no end user to scope a new connection to).
+   */
+  connectPrompt?: boolean;
 }
 
 // Keep the public resolver type structural so linked/local package builds do not
@@ -301,6 +314,7 @@ function sharedStateKey(projectId: string, ttlMs: number, options: ToolsOptions)
     allowTools: options.allowTools,
     disallowTools: options.disallowTools,
     requireApproval: options.requireApproval,
+    connectPrompt: options.connectPrompt,
     client: {
       baseUrl: options.client?.baseUrl,
       orgId: options.client?.orgId,
@@ -480,6 +494,20 @@ async function loadSnapshotInputs(
   return { connections, catalog: [], catalogAvailable: false };
 }
 
+/** Loads fresh prompt inputs and resolves project policy only when code did not provide an allowlist. */
+async function loadConnectPromptInputs(state: SharedToolsState, client: ResolvedClient) {
+  const codeAllowlist = state.normalizedProviders.only;
+  const [inputs, settings] = await Promise.all([
+    loadSnapshotInputs(state, client),
+    codeAllowlist === undefined ? getProjectIntegrationSettings(client, state.projectId) : Promise.resolve(undefined),
+  ]);
+  const projectProviders = settings?.endUserProviders;
+  const allowlist =
+    codeAllowlist ??
+    (projectProviders === null || projectProviders === undefined ? undefined : new Set(projectProviders));
+  return { catalog: inputs.catalog, connections: inputs.connections, allowlist };
+}
+
 /**
  * Fetches a fresh snapshot for one scope, deduplicating concurrent calls per
  * scope. Rejects on failure. A refresh requested while the state is closing
@@ -509,6 +537,22 @@ function refreshScope(state: SharedToolsState, scope: SnapshotScope): Promise<Re
           state.mcpClients,
           state.resolverId,
         );
+        // Resource-scoped resolutions carry the built-in connect-prompt tool
+        // so the agent can ask this user to connect a provider account. The
+        // tool re-fetches catalog + connections per invocation: connection
+        // state must read fresh right after the user completes the flow.
+        if (scope.resourceId !== undefined && state.options.connectPrompt !== false) {
+          if (record[CONNECT_PROMPT_TOOL_KEY]) {
+            throw new MastraConnectConfigError(
+              `Tool key '${CONNECT_PROMPT_TOOL_KEY}' is reserved for the built-in connect-prompt tool; a provider resolved a tool with the same key. Disable it with connectPrompt: false or exclude the conflicting provider tool.`,
+            );
+          }
+          const client = scope.client;
+          record[CONNECT_PROMPT_TOOL_KEY] = buildConnectPromptTool({
+            loadInputs: () => loadConnectPromptInputs(state, client),
+            resourceId: scope.resourceId,
+          }) as ResolvedToolsRecord[string];
+        }
         scope.cache = { snapshot: record, fetchedAt: Date.now(), mcpKeys };
         scope.lastFailureAt = undefined;
         await pruneStaleMcpClients(state);
@@ -662,6 +706,12 @@ export function tools(options: ToolsOptionsInput = {}): ToolsResolver {
     throw new MastraConnectError(
       'invalid_options',
       'Top-level requireApproval must be a boolean or an array of tool keys.',
+    );
+  }
+  if (options.connectPrompt !== undefined && typeof options.connectPrompt !== 'boolean') {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid connectPrompt: expected a boolean, got ${typeof options.connectPrompt}.`,
     );
   }
 
@@ -1121,35 +1171,34 @@ async function mapTools(
           } as Parameters<typeof request.registration.createTools>[0]);
           applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval);
         }
-      } else {
+      } else if (request.registration.transport === 'mcp') {
         // kind === 'multi'
-        if (request.registration.transport === 'mcp') {
-          for (const connection of resolution.connections) {
-            activeMcpKeys.add(`${integrationId}::${connection.id}`);
-          }
-          providerTools = await buildMcpMultiConnectionTools({
-            registration: request.registration,
-            connections: resolution.connections,
-            allowTools: request.options.allowTools,
-            disallowTools: request.options.disallowTools,
-            requireApproval: request.options.requireApproval,
-            client,
-            globalClient,
-            mcpClients,
-            resolverId,
-          });
-        } else {
-          providerTools = buildProxyMultiConnectionTools({
-            registration: request.registration as ProxyProviderRegistration,
-            connections: resolution.connections,
-            allowTools: request.options.allowTools,
-            disallowTools: request.options.disallowTools,
-            client: clientOptions,
-          });
-          applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval, [
-            listConnectionsToolKey(integrationId),
-          ]);
+
+        for (const connection of resolution.connections) {
+          activeMcpKeys.add(`${integrationId}::${connection.id}`);
         }
+        providerTools = await buildMcpMultiConnectionTools({
+          registration: request.registration,
+          connections: resolution.connections,
+          allowTools: request.options.allowTools,
+          disallowTools: request.options.disallowTools,
+          requireApproval: request.options.requireApproval,
+          client,
+          globalClient,
+          mcpClients,
+          resolverId,
+        });
+      } else {
+        providerTools = buildProxyMultiConnectionTools({
+          registration: request.registration as ProxyProviderRegistration,
+          connections: resolution.connections,
+          allowTools: request.options.allowTools,
+          disallowTools: request.options.disallowTools,
+          client: clientOptions,
+        });
+        applyProxyRequireApproval(providerTools, integrationId, request.options.requireApproval, [
+          listConnectionsToolKey(integrationId),
+        ]);
       }
     } catch (error) {
       // Warn-and-skip exists so one unreachable provider never takes down the

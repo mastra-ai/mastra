@@ -1,17 +1,19 @@
 import type { GetAgentResponse } from '@mastra/client-js';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
+import type { QueryClient } from '@tanstack/react-query';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useImperativeHandle } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { AgentConfigPanel } from '../agent-config-panel';
 import { AgentDetailHeaderActions } from '../agent-detail-header-actions';
 import { v2Agent } from './fixtures/composer-model-settings';
 import { RouteSidePanelProvider, useRouteSidePanel } from '@/lib/route-side-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
 const AGENT_ID = 'agent-1';
 const storedAgent: GetAgentResponse = { ...v2Agent, source: 'stored' };
@@ -38,8 +40,16 @@ function FakeLayoutPanel() {
   );
 }
 
+let queryClient: QueryClient | undefined;
+
+function render(ui: React.ReactElement) {
+  const result = renderWithProviders(ui, { router: true });
+  queryClient = result.queryClient;
+  return result;
+}
+
 function renderActions() {
-  return renderWithProviders(
+  return render(
     <TestLinkProvider>
       <TooltipProvider>
         <RouteSidePanelProvider>
@@ -50,11 +60,13 @@ function renderActions() {
         </RouteSidePanelProvider>
       </TooltipProvider>
     </TestLinkProvider>,
-    { router: true },
   );
 }
 
-afterEach(() => {
+// Let in-flight queries settle inside act; a React Query notification landing after jsdom teardown throws "window is not defined".
+afterEach(async () => {
+  if (queryClient) await waitForMutationsIdle(queryClient);
+  queryClient = undefined;
   vi.clearAllMocks();
   localStorage.clear();
   delete (window as unknown as Record<string, unknown>).MASTRA_EXPERIMENTAL_UI;
@@ -100,5 +112,51 @@ describe('AgentDetailHeaderActions', () => {
 
     const edit = await screen.findByText('Edit');
     expect(edit.closest('a')?.getAttribute('href')).toBe(`/cms/agents/${AGENT_ID}`);
+  });
+});
+
+describe('when the screen is narrow', () => {
+  function stubNarrowScreen() {
+    vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+      matches: true,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: () => false,
+    }));
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('opens the Config panel in a drawer from the header Config button', async () => {
+    stubNarrowScreen();
+    installHandlers();
+    render(
+      <TestLinkProvider>
+        <TooltipProvider>
+          <RouteSidePanelProvider>
+            <AgentConfigPanel agentId={AGENT_ID}>
+              <div data-testid="header-actions">
+                <AgentDetailHeaderActions agentId={AGENT_ID} />
+              </div>
+            </AgentConfigPanel>
+          </RouteSidePanelProvider>
+        </TooltipProvider>
+      </TestLinkProvider>,
+    );
+
+    const toggle = await screen.findByTestId('agent-overview-panel-toggle');
+    expect(screen.getByTestId('header-actions').contains(toggle)).toBe(true);
+    expect(screen.queryByRole('dialog')).toBeNull();
+
+    fireEvent.click(toggle);
+
+    const drawer = await screen.findByRole('dialog', { name: 'Config' });
+    expect(drawer.contains(screen.getByTestId('agent-overview-panel'))).toBe(true);
   });
 });

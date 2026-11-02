@@ -727,10 +727,15 @@ describe('the side session run-end backstop', () => {
       attributes: { backstop: 'true', 'from-session': result.sessionId, 'from-user': 'user-1' },
     });
 
-    // A later run nobody started from here (a typed message, a wake) reports too.
+    // A later run (a typed message, a wake) that ends with nothing new doesn't say "finished" again.
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reports).toHaveLength(1);
+
+    // But a failure after it still goes out.
+    session.emit({ type: 'agent_end', reason: 'error' } as AgentControllerEvent);
     await vi.waitFor(() => expect(reports).toHaveLength(2));
-    expect(reports[1]!.target).toEqual({ resourceId: scope.sessionId, threadId: scope.threadId });
+    expect(reports[1]!.input).toMatchObject({ kind: 'failed' });
   });
 
   it('stays quiet when the agent already sent its own final report', async () => {
@@ -999,6 +1004,19 @@ describe('factory_start_session in work-item mode', () => {
     expect(after.stages).toEqual(item.stages);
     expect(after.autonomyArmedAt).toEqual(item.autonomyArmedAt);
     expect(after.sessions.work).toMatchObject({ sessionId: result.sessionId });
+  });
+
+  it("still starts Work's old plan role, which no phase names as its context any more", async () => {
+    const { start, item, seed } = await withItem();
+
+    const result = (await start({ prompt: 'Plan it.', workItem: item.id, role: 'plan' })) as Started;
+
+    expect(result).toMatchObject({ mode: 'work-item', role: 'plan' });
+    const after = (await seed.workItems.get({ orgId: 'org-1', id: item.id }))!;
+    expect(after.sessions.plan).toMatchObject({ sessionId: result.sessionId });
+    await expect(start({ prompt: 'Go.', workItem: item.id, role: 'spectator' })).rejects.toThrow(
+      'board has no spectator role.',
+    );
   });
 
   it('starts a work-item run shared with the org even from a private session', async () => {

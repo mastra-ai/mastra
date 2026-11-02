@@ -6,6 +6,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip
 
 export type NotificationSignalNoticeProps = {
   signal: SignalData;
+  defaultOpen?: boolean;
 };
 
 export const MCP_EVENT_GAP_MESSAGE = 'Gap: events may have been skipped';
@@ -38,7 +39,7 @@ const GapBadge = () => (
   </Tooltip>
 );
 
-export const NotificationSignalNotice = ({ signal }: NotificationSignalNoticeProps) => {
+export const NotificationSignalNotice = ({ signal, defaultOpen }: NotificationSignalNoticeProps) => {
   const notification = getNotificationMetadata(signal);
   const mcpEvent = getMcpEventSignalInfo(signal);
   const priority = notification?.priority ?? formatSignalValue(signal.attributes?.priority);
@@ -54,6 +55,7 @@ export const NotificationSignalNotice = ({ signal }: NotificationSignalNoticePro
       pending={pending}
       extraBadges={mcpEvent?.truncated ? <GapBadge /> : undefined}
       messageLabel={mcpEvent?.kind === 'mcp-event' ? MCP_EVENT_UNTRUSTED_LABEL : undefined}
+      defaultOpen={defaultOpen}
     />
   );
 };

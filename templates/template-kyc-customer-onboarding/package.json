@@ -40,14 +40,14 @@
   },
   "dependencies": {
     "@duckdb/node-api": "1.5.5-r.4",
-    "@hono/node-server": "1.19.17",
+    "@hono/node-server": "2.1.5",
     "@libsql/client": "0.17.4",
     "@mastra/core": "latest",
     "@mastra/hono": "latest",
     "@mastra/libsql": "latest",
     "@mastra/observability": "latest",
     "hono": "4.13.11",
-    "zod": "4.4.3"
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "mastra": "latest",

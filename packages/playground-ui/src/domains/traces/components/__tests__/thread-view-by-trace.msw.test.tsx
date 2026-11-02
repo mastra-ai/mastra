@@ -211,6 +211,13 @@ const renderView = ({
     </TestLinkProvider>,
   );
 
+/** A span row in the tree, not the open span panel's header that repeats its title. */
+const treeRow = (title: string) => {
+  const row = screen.getAllByText(title).find(element => !element.closest('[data-slot="span-data-panel"]'));
+  if (!row) throw new Error(`No tree row titled ${title}`);
+  return row;
+};
+
 describe('ThreadViewByTrace', () => {
   describe('when the thread contains historical traces', () => {
     afterEach(() => {
@@ -281,14 +288,14 @@ describe('ThreadViewByTrace', () => {
         });
       await refocus();
       expect(requested).not.toHaveBeenCalled();
-      fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByRole('heading', { name: /^Span/ });
+      fireEvent.click(treeRow('Chef agent run'));
+      await screen.findByRole('region', { name: 'Chef agent run' });
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(requested.mock.calls).toEqual([['trace-a']]);
       requested.mockClear();
       await refocus();
       expect(requested.mock.calls).toEqual([['trace-a']]);
-      fireEvent.click(screen.getByText('Chef agent run'));
+      fireEvent.click(treeRow('Chef agent run'));
       requested.mockClear();
       await refocus();
       expect(requested).not.toHaveBeenCalled();
@@ -429,15 +436,15 @@ describe('ThreadViewByTrace', () => {
 
     fireEvent.click(await screen.findByText('Chef agent run'));
 
-    await screen.findByRole('heading', { name: /^Span/ });
+    await screen.findByRole('region', { name: 'Chef agent run' });
     // The conversation column stays mounted while the span panel is open.
     expect(screen.getByTestId('thread-view-by-trace')).not.toBeNull();
     expect(screen.getByText('Chef agent follow-up')).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
     // Re-clicking the selected span toggles the span panel off.
-    fireEvent.click(screen.getByText('Chef agent run'));
-    await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
+    fireEvent.click(treeRow('Chef agent run'));
+    await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull());
   });
 
   it('keeps the row of the selected span highlighted while its details are open', async () => {
@@ -448,13 +455,13 @@ describe('ThreadViewByTrace', () => {
       screen.getByTestId('thread-view-by-trace').querySelector(`[data-trace-id="${traceId}"]`);
 
     fireEvent.click(await screen.findByText('Chef agent run'));
-    await screen.findByRole('heading', { name: /^Span/ });
+    await screen.findByRole('region', { name: 'Chef agent run' });
 
     expect(rowOf('trace-a')?.getAttribute('data-active')).toBe('true');
     expect(rowOf('trace-b')?.getAttribute('data-active')).toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    fireEvent.click(screen.getByText('Chef agent run'));
+    fireEvent.click(treeRow('Chef agent run'));
     await waitFor(() => expect(rowOf('trace-a')?.getAttribute('data-active')).toBeNull());
   });
 
@@ -472,7 +479,7 @@ describe('ThreadViewByTrace', () => {
       fireEvent.click(within(toolBadge).getAllByRole('button')[0]);
 
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
-      expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
+      expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 
@@ -495,7 +502,7 @@ describe('ThreadViewByTrace', () => {
       expect(spanLabel('Chef agent follow-up').className).not.toContain('opacity-30');
       // Highlighting is a timeline-only affordance: no span is selected and the panel stays closed,
       // so opening a span remains the user's own click.
-      expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
+      expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull();
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(spanLabel('Chef agent run').getAttribute('aria-selected')).toBe('false');
       // The most specific span behind the message (last id, deepest in the tree) is brought into
@@ -552,7 +559,7 @@ describe('ThreadViewByTrace', () => {
 
       // Highlighting does not open the panel, so open a span by hand and then close it.
       fireEvent.click(spanLabel('Recipe lookup'));
-      await screen.findByRole('heading', { name: /^Span/ });
+      await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).not.toBeNull());
       fireEvent.click(spanLabel('Recipe lookup'));
       await waitFor(() => expect(spanLabel('Recipe lookup').className).not.toContain('opacity-30'));
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
@@ -632,7 +639,7 @@ describe('ThreadViewByTrace', () => {
 
       await screen.findAllByRole('button', { name: 'Expand' });
       fireEvent.click(await screen.findByText('Chef agent run'));
-      await screen.findByRole('heading', { name: /^Span/ });
+      await screen.findByRole('region', { name: 'Chef agent run' });
 
       expect(
         timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
@@ -641,8 +648,8 @@ describe('ThreadViewByTrace', () => {
       expect(screen.queryByRole('button', { name: 'Collapse' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-      fireEvent.click(screen.getByText('Chef agent run'));
-      await waitFor(() => expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull());
+      fireEvent.click(treeRow('Chef agent run'));
+      await waitFor(() => expect(document.querySelector('[data-slot="span-data-panel"]')).toBeNull());
       expect(
         timelineOf('trace-a')?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight,
       ).toBe('');
@@ -884,11 +891,11 @@ describe('ThreadViewByTrace', () => {
       expect(rowIds()).toEqual(['trace-a', 'trace-b']);
     });
 
-    it('loads 10 turns per page by default, or the given pageSize', async () => {
+    it('loads 3 turns per page by default, or the given pageSize', async () => {
       const requests = installPagedHandlers();
       const { unmount } = renderView({ withQueryTrace });
       await screen.findByText('Chef agent follow-up');
-      expect(requests[0]?.size).toBe(10);
+      expect(requests[0]?.size).toBe(3);
       unmount();
 
       renderView({ withQueryTrace, pageSize: 4 });

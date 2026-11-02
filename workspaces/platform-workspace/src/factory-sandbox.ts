@@ -20,12 +20,14 @@ export interface PlatformFactorySandboxSettings extends Record<string, unknown> 
   cpuCount?: number;
   /** Memory in MB for the sandbox template. Part of the template identity. */
   memoryMb?: number;
+  /** Install Docker Engine and Compose, started on first use. Part of the template identity. */
+  docker?: boolean;
   /** Minutes idle before the sandbox pauses. Runtime only. */
   idleTimeoutMinutes?: number;
 }
 
 /** Applied when neither the environment setting nor a host default is set. */
-const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 } as const;
+const DEFAULT_SETTINGS = { cpuCount: 2, memoryMb: 1024, docker: false, idleTimeoutMinutes: 5 } as const;
 
 const SETTINGS_SCHEMA = {
   type: 'object',
@@ -51,6 +53,13 @@ const SETTINGS_SCHEMA = {
         { const: 4096, title: '4 GB' },
         { const: 8192, title: '8 GB' },
       ],
+    },
+    docker: {
+      type: 'boolean',
+      title: 'Docker',
+      description:
+        'Install Docker Engine and Compose; the daemon starts on first use. We recommend at least 2 GB of memory for Docker.',
+      default: DEFAULT_SETTINGS.docker,
     },
     idleTimeoutMinutes: {
       type: 'integer',
@@ -86,8 +95,14 @@ function settingsSchema(
 
 export interface PlatformFactorySandboxOptions extends Omit<
   PlatformSandboxOptions,
-  'id' | 'sandboxId' | 'sessionId' | 'template'
+  'id' | 'sandboxId' | 'sessionId' | 'template' | 'env'
 > {
+  /**
+   * Runtime environment of every session sandbox. A function receives each
+   * session's context, so a credential can go to one factory's sessions only:
+   * `ctx => (ctx.factoryId === id ? { TOKEN } : {})`.
+   */
+  env?: Record<string, string> | ((ctx: FactorySandboxContext) => Record<string, string>);
   /** Options for the environment's repo template. */
   template?: {
     /** Build-only environment, excluded from template identity and runtime sandboxes. */
@@ -143,13 +158,15 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
       ...(template?.buildEnv ? { buildEnv: template.buildEnv } : {}),
       cpuCount: settings.cpuCount ?? defaults?.cpuCount ?? DEFAULT_SETTINGS.cpuCount,
       memoryMB: settings.memoryMb ?? defaults?.memoryMb ?? DEFAULT_SETTINGS.memoryMb,
+      docker: settings.docker ?? defaults?.docker ?? DEFAULT_SETTINGS.docker,
     });
   }
 
   create(ctx: FactorySandboxContext, settings: PlatformFactorySandboxSettings): PlatformSandbox {
-    const { defaults, template: _template, ...options } = this.#options;
+    const { defaults, template: _template, env, ...options } = this.#options;
     return new PlatformSandbox({
       ...options,
+      ...(env ? { env: typeof env === 'function' ? env(ctx) : env } : {}),
       id: ctx.sessionId,
       sessionId: ctx.sessionId,
       sandboxId: ctx.sandboxId,

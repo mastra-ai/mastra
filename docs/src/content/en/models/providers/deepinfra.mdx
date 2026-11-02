@@ -592,18 +592,6 @@ for await (const chunk of stream) {
     "outputCost": 4.951
   },
   {
-    "model": "deepinfra/stepfun-ai/Step-5-Preview",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 1000000,
-    "inputCost": 1,
-    "outputCost": 2.7
-  },
-  {
     "model": "deepinfra/tencent/Hy4-preview",
     "imageInput": false,
     "audioInput": false,
@@ -614,18 +602,6 @@ for await (const chunk of stream) {
     "maxOutput": 64000,
     "inputCost": 0.834,
     "outputCost": 2.501
-  },
-  {
-    "model": "deepinfra/thinkingmachines/Inkling",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 524288,
-    "maxOutput": 1048576,
-    "inputCost": 0.95,
-    "outputCost": 4.05
   },
   {
     "model": "deepinfra/thinkingmachines/Inkling-Small",
@@ -733,6 +709,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -749,6 +727,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

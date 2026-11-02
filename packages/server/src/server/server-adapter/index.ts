@@ -28,12 +28,13 @@ import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 import type { ServerRoute } from './routes';
-import { SERVER_ROUTES, getEffectivePermission } from './routes';
+import { OPT_IN_ROUTES, SERVER_ROUTES, getEffectivePermission } from './routes';
 import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
 export * from './routes';
 export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
+export { propagateRequestAbort } from './mcp-disconnect';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
@@ -41,6 +42,7 @@ export {
   MASTRA_AUTH_MODE_KEY,
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
+  MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
   RESERVED_REQUEST_CONTEXT_KEYS,
   isReservedRequestContextKey,
@@ -57,6 +59,82 @@ export function getCustomHTTPExceptionResponse(error: unknown): Response | undef
   }
 
   return error.getResponse();
+}
+
+/**
+ * Response for an HTTPException thrown from a `registerApiRoute` handler, or undefined for
+ * any other error (which callers keep behind a generic 500). Duck-typed so an HTTPException
+ * from `hono/http-exception`, possibly a separate Hono install, is recognised too.
+ */
+export function getCustomRouteHTTPExceptionResponse(error: unknown): Response | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const httpError = error as Error & { status?: unknown; res?: unknown; getResponse?: unknown };
+  const status = httpError.status;
+  if (
+    typeof httpError.getResponse !== 'function' ||
+    typeof status !== 'number' ||
+    !Number.isInteger(status) ||
+    status < 400 ||
+    status > 599
+  ) {
+    return undefined;
+  }
+  if (httpError.res) return (httpError.getResponse as () => Response).call(httpError);
+  return Response.json({ error: httpError.message }, { status });
+}
+
+export interface HTTPErrorResponseBody {
+  error: string;
+  cause?: { failingItems: unknown[] } | { field: string; errors: Array<{ path: string; message: string }> };
+}
+
+/**
+ * Only allowlisted causes are exposed to clients; any other cause stays server-side:
+ * - `cause.failingItems` (dataset schema-update rejections)
+ * - `cause.field` + `cause.errors` (schema validation failures), reduced to each error's path and message
+ */
+function getSafeErrorCause(error: unknown): HTTPErrorResponseBody['cause'] {
+  try {
+    const raw = error instanceof Error ? error.cause : undefined;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+    if (Array.isArray((raw as any).failingItems)) {
+      return { failingItems: (raw as any).failingItems };
+    }
+    const { field, errors } = raw as { field?: unknown; errors?: unknown };
+    if (typeof field === 'string' && Array.isArray(errors)) {
+      return {
+        field,
+        errors: errors.flatMap(e =>
+          e && typeof e.path === 'string' && typeof e.message === 'string'
+            ? [{ path: e.path, message: e.message }]
+            : [],
+        ),
+      };
+    }
+  } catch {
+    // property access threw (e.g. a getter) — omit cause
+  }
+  return undefined;
+}
+
+/**
+ * Maps a handler error to the status and JSON body every adapter sends:
+ * `error.status` (HTTPException) first, then `error.details.status` (MastraError), else 500.
+ */
+export function getHTTPErrorResponse(error: unknown): { status: number; body: HTTPErrorResponseBody } {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+
+  if (error && typeof error === 'object') {
+    if ('status' in error) {
+      const cause = getSafeErrorCause(error);
+      return { status: (error as any).status, body: { error: message, ...(cause ? { cause } : {}) } };
+    }
+    if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
+      return { status: (error.details as any).status, body: { error: message } };
+    }
+  }
+
+  return { status: 500, body: { error: message } };
 }
 
 /**
@@ -776,11 +854,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     route: ServerRoute,
     userPermissions: string[] | undefined,
     hasPermissionFn: (userPerms: string[], required: string) => boolean,
-    requestContext?: RequestContext,
+    requestContext: RequestContext,
   ): { status: number; error: string; message: string } | null {
     // If RBAC is not configured, skip permission checks entirely
     // Auth-only mode = authenticated users get full access
-    const rbacProvider = requestContext ? this.getEffectiveRBACProvider(requestContext) : this.mastra.getServer()?.rbac;
+    const rbacProvider = this.getEffectiveRBACProvider(requestContext);
 
     if (!rbacProvider) {
       return null;
@@ -1063,7 +1141,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
 
     const schemaRoutes = routes.filter(isSchemaApiRoute);
     for (const route of schemaRoutes) {
-      await this.registerRoute(this.app, route as unknown as ServerRoute, { prefix: '' });
+      // Opt-in built-in routes are first-party: Studio and the client SDK call them under the API prefix,
+      // so they mount there like any built-in route. Other custom routes mount at the root.
+      // Matched by identity: a cloned route object lands back at the root.
+      const prefix = (OPT_IN_ROUTES as readonly unknown[]).includes(route) ? this.prefix : '';
+      await this.registerRoute(this.app, route as unknown as ServerRoute, { prefix });
     }
 
     return routes.filter((route): route is HonoCustomApiRoute => !isSchemaApiRoute(route));
@@ -1118,6 +1200,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      const httpExceptionResponse = getCustomRouteHTTPExceptionResponse(err);
+      if (httpExceptionResponse) return httpExceptionResponse;
       // Log before responding — otherwise the error is invisible on the server
       // and the client only ever sees an opaque 500.
       this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
@@ -1291,7 +1375,14 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (allCustomRoutes && allCustomRoutes.length > 0) {
       const componentSchemas = openApiSpec.components?.schemas ?? Object.create(null);
-      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes, componentSchemas);
+      // Opt-in built-in routes are mounted under the API prefix (see registerSchemaApiRoutes), so they keep the
+      // top-level server; every other custom route is served at the root.
+      const isPrefixed = (route: ApiRoute) => (OPT_IN_ROUTES as readonly unknown[]).includes(route);
+      const customPaths = convertCustomRoutesToOpenAPIPaths(
+        allCustomRoutes.filter(route => !isPrefixed(route)),
+        componentSchemas,
+      );
+      const prefixedPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes.filter(isPrefixed), componentSchemas);
       if (Object.keys(componentSchemas).length > 0) {
         openApiSpec.components = { ...openApiSpec.components, schemas: componentSchemas };
       }
@@ -1302,6 +1393,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
           }
         }
       }
+      Object.assign(customPaths, prefixedPaths);
       openApiSpec.paths = { ...openApiSpec.paths, ...customPaths };
     }
 

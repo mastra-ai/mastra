@@ -65,6 +65,7 @@ function makeChannels(
   opts: {
     streaming?: boolean | { updateIntervalMs?: number };
     textFormat?: 'markdown' | 'plain';
+    textDisplay?: 'show' | 'hidden';
     onAbort?: 'flush' | 'discard';
     toolDisplay?: 'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ((event: any, ctx: any) => any);
     typingStatus?: boolean | ((chunk: any, ctx: any) => any);
@@ -76,6 +77,7 @@ function makeChannels(
       isError?: boolean;
     }) => string | Record<string, unknown> | null;
     logger?: any;
+    formatError?: (error: Error, context: unknown) => string;
   } = {},
 ) {
   const recording = createRecording();
@@ -84,11 +86,13 @@ function makeChannels(
     streaming: opts.streaming ?? false,
   };
   if (opts.textFormat !== undefined) adapterConfig.textFormat = opts.textFormat;
+  if (opts.textDisplay !== undefined) adapterConfig.textDisplay = opts.textDisplay;
   if (opts.onAbort !== undefined) adapterConfig.onAbort = opts.onAbort;
   if (opts.toolDisplay !== undefined) adapterConfig.toolDisplay = opts.toolDisplay;
   if (opts.typingStatus !== undefined) adapterConfig.typingStatus = opts.typingStatus;
   if (opts.cards !== undefined) adapterConfig.cards = opts.cards;
   if (opts.formatToolCall !== undefined) adapterConfig.formatToolCall = opts.formatToolCall;
+  if (opts.formatError !== undefined) adapterConfig.formatError = opts.formatError;
   const channels = new AgentChannels({
     adapters: { test: adapterConfig as any },
   });
@@ -101,10 +105,10 @@ async function drive(
   chunks: any[],
   chatThread: any,
   approvalContext?: { toolCallId: string; messageId: string },
+  requestContext: Map<string, unknown> = new Map(),
 ) {
   const render = (channels as any)._buildRenderContext(chatThread, 'test', { approvalContext });
   const processor = new ChatChannelOutputProcessor();
-  const requestContext = new Map<string, unknown>();
   requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, render);
   const state: Record<string, unknown> = {};
 
@@ -299,6 +303,96 @@ describe('ChatChannelOutputProcessor', () => {
       const posts = calls.filter(c => c.kind === 'post');
       expect(posts).toHaveLength(1);
       expect((posts[0] as any).arg).toBe('❌ Error: boom');
+    });
+
+    it.each([false, true])("hands formatError the run's request context (streaming: %s)", async streaming => {
+      const formatError = vi.fn((_error: Error, _context: unknown) => 'custom feedback');
+      const { channels, calls, chatThread } = makeChannels({ streaming, formatError });
+      const runContext = new Map<string, unknown>([['controller', { sessionId: 'session-1' }]]);
+      const error = new Error('boom');
+      await drive(channels, [{ type: 'error', payload: { error } }], chatThread, undefined, runContext);
+
+      expect(formatError).toHaveBeenCalledOnce();
+      const [formatted, context] = formatError.mock.calls[0]!;
+      expect(formatted).toBe(error);
+      expect((context as { requestContext: Map<string, unknown> }).requestContext.get('controller')).toEqual({
+        sessionId: 'session-1',
+      });
+      expect(calls.filter(c => c.kind === 'post').map(c => (c as any).arg)).toEqual(['custom feedback']);
+    });
+  });
+
+  describe("textDisplay: 'hidden'", () => {
+    const reply = [
+      { type: 'text-start', payload: { id: 'x' } },
+      { type: 'text-delta', payload: { text: 'Running the tests now.' } },
+      { type: 'text-end', payload: { id: 'x' } },
+    ];
+
+    it('posts no reply text with the static driver', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textDisplay: 'hidden' });
+      await drive(
+        channels,
+        [...reply, { type: 'step-finish', payload: {} }, { type: 'finish', payload: {} }],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+    });
+
+    it('opens no streaming post with the streaming driver', async () => {
+      const { channels, calls, chatThread } = makeChannels({
+        streaming: true,
+        toolDisplay: 'hidden',
+        textDisplay: 'hidden',
+      });
+      await drive(
+        channels,
+        [...reply, { type: 'step-finish', payload: {} }, { type: 'finish', payload: {} }],
+        chatThread,
+      );
+      expect(calls.filter(c => c.kind === 'post')).toEqual([]);
+    });
+
+    it('still renders tool cards and errors', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textDisplay: 'hidden' });
+      await drive(
+        channels,
+        [
+          ...reply,
+          { type: 'tool-call', payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' } } },
+          {
+            type: 'tool-result',
+            payload: { toolCallId: 't1', toolName: 'weather', args: { city: 'Vancouver' }, result: 'sunny' },
+          },
+          { type: 'error', payload: { error: new Error('boom') } },
+        ],
+        chatThread,
+      );
+      const posts = calls.filter(c => c.kind === 'post').map(c => (c as any).arg);
+      expect(posts).toContain('❌ Error: boom');
+      expect(posts.some(p => typeof p === 'object' && p !== null && !('markdown' in p))).toBe(true);
+      expect(JSON.stringify(posts)).not.toContain('Running the tests now.');
+    });
+
+    it('still shows the typing status while hidden text streams', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textDisplay: 'hidden' });
+      await drive(
+        channels,
+        [...reply, { type: 'step-finish', payload: {} }, { type: 'finish', payload: {} }],
+        chatThread,
+      );
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toContain('is typing…');
+    });
+
+    it('passes text through to the agent stream unchanged', async () => {
+      const { channels, chatThread } = makeChannels({ streaming: false, textDisplay: 'hidden' });
+      const render = (channels as any)._buildRenderContext(chatThread, 'test', {});
+      const requestContext = { get: (key: string) => (key === CHAT_CHANNEL_RENDER_CONTEXT_KEY ? render : undefined) };
+      const processor = new ChatChannelOutputProcessor();
+      const part = { type: 'text-delta', payload: { text: 'kept' } };
+      const out = await processor.processOutputStream({ part, state: {}, requestContext } as any);
+      expect(out).toBe(part);
     });
   });
 

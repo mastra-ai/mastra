@@ -27,6 +27,10 @@ Rules:
 - Fixtures MUST be typed with response types re-exported from `@mastra/client-js`
   and live in a nearby `__tests__/fixtures/` folder. No `as any`, no bespoke
   inline types.
+- **Exception**: the end-user connect surface (`/connect/*` routes mounted by
+  `userConnectRoutes()`) is not part of the `@mastra/client-js` SDK. Its
+  fixtures are typed with the route-contract types exported from
+  `@mastra/playground-ui/domains/connect` instead.
 
 ## Commands
 

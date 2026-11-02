@@ -150,7 +150,7 @@ export const assistant = new Agent({
   id: 'assistant',
   name: 'assistant',
   instructions: 'You help the team track work in Linear from Slack and Discord.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: async ctx => {
     const channel = ctx.requestContext?.get('channel') as ChannelContext | undefined
     const all = await connectTools(ctx)

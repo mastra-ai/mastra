@@ -15,6 +15,7 @@ import { NvidiaIcon } from '@/ds/icons/NvidiaIcon';
 import { OpenaiChatIcon } from '@/ds/icons/OpenaiChatIcon';
 import { OpenRouterIcon } from '@/ds/icons/OpenRouterIcon';
 import { QwenIcon } from '@/ds/icons/QwenIcon';
+import { TypesafeIcon } from '@/ds/icons/TypesafeIcon';
 import { XaiIcon } from '@/ds/icons/XaiIcon';
 import { ZaiIcon } from '@/ds/icons/ZaiIcon';
 import { cn } from '@/utils/cn';
@@ -45,6 +46,7 @@ const brandMarks = new Map<string, ComponentType<SVGProps<SVGSVGElement>>>([
   ['moonshotai', MoonshotIcon],
   ['xai', XaiIcon],
   ['x-ai', XaiIcon],
+  ['typesafe', TypesafeIcon],
 ]);
 
 const iconSizes: IconSize[] = ['xs', 'sm', 'md', 'lg'];

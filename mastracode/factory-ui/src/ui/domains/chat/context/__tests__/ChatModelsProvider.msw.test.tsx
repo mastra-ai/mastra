@@ -63,7 +63,9 @@ describe('ChatModelsProvider', () => {
         http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
           HttpResponse.json({ project: { id: 'factory-1', modelScope, defaultModelId: 'deepseek/deepseek-flash' } }),
         ),
-        http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5.5' })),
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: 'openai/gpt-5.5', thinkingLevel: null }),
+        ),
       );
 
       server.use(
@@ -121,7 +123,7 @@ describe('ChatModelsProvider', () => {
         HttpResponse.json({ project: { id: 'factory-1', defaultModelId: 'openrouter/fable-5' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1' }),
+        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1', thinkingLevel: null }),
       ),
     );
 
@@ -147,7 +149,7 @@ describe('ChatModelsProvider', () => {
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
         await defaultPending;
-        return HttpResponse.json({ modelId: null });
+        return HttpResponse.json({ modelId: null, thinkingLevel: null });
       }),
     );
 
@@ -165,10 +167,10 @@ describe('ChatModelsProvider', () => {
     expect(screen.getByText('ready')).toBeVisible();
   });
 
-  it('surfaces personal default loading failures instead of treating them as no default', async () => {
+  it("surfaces personal default loading failures instead of starting a personal-routed chat on the Factory's model", async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
-        HttpResponse.json({ project: { id: 'factory-1', defaultModelId: 'openrouter/fable-5' } }),
+        HttpResponse.json({ project: { id: 'factory-1', modelScope: 'user', defaultModelId: 'openrouter/fable-5' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
         HttpResponse.json({ error: 'model_defaults_unavailable' }, { status: 503 }),
@@ -180,12 +182,14 @@ describe('ChatModelsProvider', () => {
         <ChatModelsProvider>
           <ActiveModelProbe />
           <ErrorProbe />
+          <LoadingProbe />
         </ChatModelsProvider>
       </ChatSessionContext.Provider>,
     );
 
-    expect(await screen.findByText('openrouter/fable-5')).toBeVisible();
-    expect(await screen.findByText('error')).toBeVisible();
+    expect(await screen.findByText('ready')).toBeVisible();
+    expect(screen.getByText('error')).toBeVisible();
+    expect(screen.queryByText('openrouter/fable-5')).not.toBeInTheDocument();
   });
 
   it('uses the live session state model', async () => {
@@ -194,7 +198,7 @@ describe('ChatModelsProvider', () => {
         HttpResponse.json({ project: { id: 'factory-1', modelScope: 'user' } }),
       ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1' }),
+        HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1', thinkingLevel: null }),
       ),
     );
     const liveSession: ChatSessionContextApi = {

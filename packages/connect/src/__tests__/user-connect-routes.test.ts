@@ -36,6 +36,8 @@ function makeConnection(overrides?: Record<string, unknown>) {
 function fakePlatform(options?: {
   connections?: Array<Record<string, unknown>>;
   integrations?: Array<Record<string, unknown>>;
+  endUserProviders?: string[] | null;
+  gateConnectUrl?: string;
 }) {
   const connections = options?.connections ?? [makeConnection()];
   const integrations = options?.integrations ?? [
@@ -45,7 +47,9 @@ function fakePlatform(options?: {
       displayName: 'Linear',
       logoUrl: 'https://logos.test/linear.png',
       authType: 'OAUTH2',
-      authFields: [],
+      // Includes `target` so tests cover the headless credentials/params
+      // split surviving the catalog schema parse.
+      authFields: [{ name: 'workspace', target: 'params', label: 'Workspace', required: true }],
     },
     { id: 'slack', capabilities: { mcp: false }, displayName: 'Slack', logoUrl: null, authType: 'OAUTH2' },
     { id: 'github', capabilities: { mcp: true }, displayName: 'GitHub', logoUrl: null, authType: 'OAUTH2' },
@@ -61,6 +65,9 @@ function fakePlatform(options?: {
       body: typeof init?.body === 'string' ? JSON.parse(init.body) : undefined,
     });
     if (url.pathname === '/v2/integrations') return Response.json({ integrations });
+    if (url.pathname === '/v2/projects/proj_1/integration-settings') {
+      return Response.json({ endUserProviders: options?.endUserProviders ?? null });
+    }
     if (url.pathname.endsWith('/connections') && method === 'GET') {
       const resourceId = url.searchParams.get('resourceId');
       const rows = connections.filter(connection =>
@@ -71,11 +78,32 @@ function fakePlatform(options?: {
       return Response.json({ connections: rows });
     }
     if (url.pathname.includes('/connect-sessions') && method === 'POST') {
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : {};
       return Response.json({
         connectionId: 'c_new1',
         integrationId: url.pathname.split('/integrations/')[1]!.split('/')[0]!,
-        connectUrl: 'https://connect.test/session',
-        sessionToken: 'sess_tok',
+        // The platform nulls both launch capabilities (vendor link + session
+        // token) for resource-scoped sessions: the launch gate is the only
+        // reader.
+        connectUrl: body.resourceId ? null : 'https://connect.test/session',
+        sessionToken: body.resourceId ? null : 'sess_tok',
+        expiresAt: '2026-10-13T15:00:00Z',
+      });
+    }
+    if (url.pathname.endsWith('/connect-url') && method === 'GET') {
+      // Launch gate: the platform serves the stored vendor link only when the
+      // caller's resource assertion matches the pending row; everything else
+      // is an indistinguishable 404.
+      const connectionId = url.pathname.split('/connections/')[1]!.split('/')[0]!;
+      const asserted = new Headers(init?.headers).get('x-mastra-resource-id');
+      const row = connections.find(connection => connection.id === connectionId);
+      if (!row || row.resourceId === null || asserted !== row.resourceId) {
+        return Response.json({ error: 'not found' }, { status: 404 });
+      }
+      return Response.json({
+        // Mirrors the real Nango format: the hosted-page URL carries the
+        // session token as its only secret.
+        connectUrl: options?.gateConnectUrl ?? 'https://connect.nango.dev/?session_token=nango_connect_session_t1',
         expiresAt: '2026-10-13T15:00:00Z',
       });
     }
@@ -102,6 +130,7 @@ function makeCtx(options?: {
   resourceId?: string;
   params?: Record<string, string>;
   query?: Record<string, string>;
+  requestHeaders?: Record<string, string>;
   user?: unknown;
 }) {
   const store = new Map<string, unknown>();
@@ -113,6 +142,7 @@ function makeCtx(options?: {
     req: {
       param: (name: string) => options?.params?.[name],
       query: (name: string) => options?.query?.[name],
+      header: (name: string) => options?.requestHeaders?.[name.toLowerCase()],
     },
     get: (key: string) => (key === 'requestContext' ? requestContext : undefined),
     header: (name: string, value: string) => {
@@ -123,6 +153,7 @@ function makeCtx(options?: {
     html: (content: string, status = 200) =>
       new Response(content, { status, headers: { 'content-type': 'text/html; charset=UTF-8', ...headers } }),
     body: (data: string | null, status = 200) => new Response(data, { status, headers }),
+    redirect: (location: string, status = 302) => new Response(null, { status, headers: { location, ...headers } }),
   };
 }
 
@@ -147,10 +178,10 @@ afterEach(() => {
 });
 
 describe('userConnectRoutes construction', () => {
-  it('requires a non-empty providers allowlist', () => {
-    expect(() => userConnectRoutes({ providers: [], projectId: 'proj_1' })).toThrow(/never defaults open/);
-    // @ts-expect-error providers is required
-    expect(() => userConnectRoutes({ projectId: 'proj_1' })).toThrow();
+  it('rejects an explicit empty allowlist but accepts omitting providers entirely', () => {
+    expect(() => userConnectRoutes({ providers: [], projectId: 'proj_1' })).toThrow(/non-empty allowlist/);
+    // Omitted providers defer to the project's provider configuration at request time.
+    expect(userConnectRoutes({ projectId: 'proj_1' }).length).toBeGreaterThan(0);
   });
 
   it('rejects reserved provider ids that collide with static route segments', () => {
@@ -191,6 +222,7 @@ describe('userConnectRoutes construction', () => {
       'GET /end-user/connections',
       'GET /end-user/connections/:id/status',
       'DELETE /end-user/connections/:id',
+      'GET /end-user/connections/:id/launch',
       'POST /end-user/:provider/sessions',
       'GET /end-user/:provider',
     ]);
@@ -278,13 +310,54 @@ describe('GET /providers', () => {
       displayName: 'Linear',
       logoUrl: 'https://logos.test/linear.png',
       authType: 'OAUTH2',
-      authFields: [],
+      // `target` survives the parse — headless auth needs it to route the
+      // value as a flow param instead of a credential.
+      authFields: [{ name: 'workspace', target: 'params', label: 'Workspace', required: true }],
     });
+  });
+
+  it('inherits the full catalog when project configuration is null', async () => {
+    const { fetchMock, requests } = fakePlatform();
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch, { providers: undefined }));
+    const response = await (findRoute(routes, 'GET', '/connect/providers') as any).handler(
+      makeCtx({ resourceId: 'end-user-42' }),
+    );
+    const body = await json(response);
+    expect(body.providers.map((provider: { id: string }) => provider.id)).toEqual(['linear', 'slack', 'github']);
+    expect(requests.some(request => request.url.pathname.endsWith('/integration-settings'))).toBe(true);
+  });
+
+  it('uses project provider configuration when code omits providers', async () => {
+    const { fetchMock } = fakePlatform({ endUserProviders: ['github', 'linear'] });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch, { providers: undefined }));
+    const response = await (findRoute(routes, 'GET', '/connect/providers') as any).handler(
+      makeCtx({ resourceId: 'end-user-42' }),
+    );
+    const body = await json(response);
+    expect(body.providers.map((provider: { id: string }) => provider.id)).toEqual(['github', 'linear']);
+  });
+
+  it('lets the code allowlist override project provider configuration without fetching it', async () => {
+    const { fetchMock, requests } = fakePlatform({ endUserProviders: ['github'] });
+    const routes = userConnectRoutes(
+      routeOptions(fetchMock as unknown as typeof fetch, { providers: ['slack', 'linear'] }),
+    );
+    const response = await (findRoute(routes, 'GET', '/connect/providers') as any).handler(
+      makeCtx({ resourceId: 'end-user-42' }),
+    );
+    const body = await json(response);
+    expect(body.providers.map((provider: { id: string }) => provider.id)).toEqual(['slack', 'linear']);
+    expect(requests.some(request => request.url.pathname.endsWith('/integration-settings'))).toBe(false);
   });
 });
 
 describe('GET /connections', () => {
-  it('marks scope and hides connections for providers outside the allowlist', async () => {
+  it('marks scope and lists existing connections regardless of the allowlist', async () => {
+    // The provider policy gates what end users can newly connect, not what
+    // already exists: agents keep resolving tools from existing connections,
+    // and a user must be able to see (and disconnect) their own rows even
+    // after an admin narrows the allowlist. 'github' is outside the test
+    // allowlist but its rows stay visible.
     const { fetchMock } = fakePlatform({
       connections: [
         makeConnection(),
@@ -297,9 +370,65 @@ describe('GET /connections', () => {
       makeCtx({ resourceId: 'end-user-42' }),
     );
     const body = await json(response);
+    // Rows carry display metadata from the full catalog (not the policy-
+    // filtered provider list) so clients can render de-allowlisted providers:
+    // 'github' is outside the allowlist yet still gets its name resolved.
     expect(body.connections).toEqual([
-      { id: 'c_lin1', integrationId: 'linear', status: 'active', accountLabel: 'Acme', scope: 'global' },
-      { id: 'c_lin2', integrationId: 'linear', status: 'active', accountLabel: null, scope: 'user' },
+      {
+        id: 'c_lin1',
+        integrationId: 'linear',
+        displayName: 'Linear',
+        logoUrl: 'https://logos.test/linear.png',
+        status: 'active',
+        accountLabel: 'Acme',
+        scope: 'global',
+      },
+      {
+        id: 'c_lin2',
+        integrationId: 'linear',
+        displayName: 'Linear',
+        logoUrl: 'https://logos.test/linear.png',
+        status: 'active',
+        accountLabel: null,
+        scope: 'user',
+      },
+      {
+        id: 'c_gh1',
+        integrationId: 'github',
+        displayName: 'GitHub',
+        logoUrl: null,
+        status: 'active',
+        accountLabel: 'Acme',
+        scope: 'global',
+      },
+    ]);
+  });
+
+  it('still lists connections when the catalog lookup fails', async () => {
+    // Display metadata is best-effort decoration: a catalog outage must not
+    // take down the listing (or status polling / disconnects behind it).
+    const { fetchMock } = fakePlatform();
+    const failingFetch = vi.fn().mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname === '/v2/integrations') return Response.json({ error: 'boom' }, { status: 500 });
+      return fetchMock(input, init);
+    });
+    const routes = userConnectRoutes(routeOptions(failingFetch as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections') as any).handler(
+      makeCtx({ resourceId: 'end-user-42' }),
+    );
+    expect(response.status).toBe(200);
+    const body = await json(response);
+    expect(body.connections).toEqual([
+      {
+        id: 'c_lin1',
+        integrationId: 'linear',
+        displayName: null,
+        logoUrl: null,
+        status: 'active',
+        accountLabel: 'Acme',
+        scope: 'global',
+      },
     ]);
   });
 });
@@ -315,8 +444,9 @@ describe('POST /:provider/sessions', () => {
     expect(await json(response)).toEqual({
       connectionId: 'c_new1',
       integrationId: 'linear',
-      connectUrl: 'https://connect.test/session',
-      sessionToken: 'sess_tok',
+      // The browser gets the launch-gate path only — never a launch
+      // capability (vendor connect URL or session token).
+      launchUrl: '/connect/connections/c_new1/launch',
       expiresAt: '2026-10-13T15:00:00Z',
     });
     const sessionRequest = requests.find(request => request.url.pathname.includes('/connect-sessions'))!;
@@ -331,6 +461,135 @@ describe('POST /:provider/sessions', () => {
       makeCtx({ resourceId: 'end-user-42', params: { provider: 'github' } }),
     );
     expect(response.status).toBe(404);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('with inherited project configuration, accepts any catalog provider and 404s unknown ids', async () => {
+    const { fetchMock } = fakePlatform();
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch, { providers: undefined }));
+    const handler = (findRoute(routes, 'POST', '/connect/:provider/sessions') as any).handler;
+
+    // github is outside the default test allowlist but in the catalog.
+    const created = await handler(makeCtx({ resourceId: 'end-user-42', params: { provider: 'github' } }));
+    expect(created.status).toBe(201);
+    expect((await json(created)).integrationId).toBe('github');
+
+    const unknown = await handler(makeCtx({ resourceId: 'end-user-42', params: { provider: 'nope' } }));
+    expect(unknown.status).toBe(404);
+  });
+
+  it('treats an empty project provider list as disabling new end-user connections', async () => {
+    const { fetchMock, requests } = fakePlatform({ endUserProviders: [] });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch, { providers: undefined }));
+    const response = await (findRoute(routes, 'POST', '/connect/:provider/sessions') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { provider: 'linear' } }),
+    );
+    expect(response.status).toBe(404);
+    expect(requests.some(request => request.url.pathname.includes('/connect-sessions'))).toBe(false);
+  });
+});
+
+describe('GET /connections/:id/launch', () => {
+  it('redirects the owner into the vendor OAuth flow with the resource assertion', async () => {
+    const { fetchMock, requests } = fakePlatform({
+      connections: [makeConnection({ id: 'c_own', resourceId: 'end-user-42', status: 'pending' })],
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { id: 'c_own' } }),
+    );
+    expect(response.status).toBe(302);
+    expect(response.headers.get('location')).toBe('https://connect.nango.dev/?session_token=nango_connect_session_t1');
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    const gateRequest = requests.find(request => request.url.pathname.endsWith('/connect-url'))!;
+    expect(gateRequest.url.pathname).toBe('/v2/connections/c_own/connect-url');
+    expect(gateRequest.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-42');
+  });
+
+  it('releases the session token to the owner when redeemed as JSON', async () => {
+    // Headless redemption: the same gate (same identity + ownership checks)
+    // hands the proven owner's fetch the session token instead of 302ing the
+    // popup into Nango's hosted page. The token and the hosted URL are the
+    // same capability — the URL is just the token in query-param clothing —
+    // so releasing it here does not widen the gate's blast radius.
+    const { fetchMock, requests } = fakePlatform({
+      connections: [makeConnection({ id: 'c_own', resourceId: 'end-user-42', status: 'pending' })],
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({
+        resourceId: 'end-user-42',
+        params: { id: 'c_own' },
+        requestHeaders: { accept: 'application/json' },
+      }),
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(await json(response)).toEqual({
+      sessionToken: 'nango_connect_session_t1',
+      expiresAt: '2026-10-13T15:00:00Z',
+    });
+    const gateRequest = requests.find(request => request.url.pathname.endsWith('/connect-url'))!;
+    expect(gateRequest.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-42');
+  });
+
+  it('returns a null token on JSON redemption when the vendor URL format changes', async () => {
+    // Fail safe, not open: if the token cannot be extracted, the client falls
+    // back to the hosted popup through the 302 flow. The vendor URL itself is
+    // never surfaced in the JSON body.
+    const { fetchMock } = fakePlatform({
+      connections: [makeConnection({ id: 'c_own', resourceId: 'end-user-42', status: 'pending' })],
+      gateConnectUrl: 'https://connect.nango.dev/some/other/shape',
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({
+        resourceId: 'end-user-42',
+        params: { id: 'c_own' },
+        requestHeaders: { accept: 'application/json' },
+      }),
+    );
+    expect(response.status).toBe(200);
+    const body = await json(response);
+    expect(body.sessionToken).toBeNull();
+    expect(JSON.stringify(body)).not.toContain('connect.nango.dev');
+  });
+
+  it('keeps 404 parity on JSON redemption for a session owned by another resource', async () => {
+    const { fetchMock } = fakePlatform({
+      connections: [makeConnection({ id: 'c_other', resourceId: 'end-user-other', status: 'pending' })],
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({
+        resourceId: 'end-user-42',
+        params: { id: 'c_other' },
+        requestHeaders: { accept: 'application/json' },
+      }),
+    );
+    expect(response.status).toBe(404);
+    expect((await json(response)).error.code).toBe('connection_not_found');
+  });
+
+  it('404s for a session owned by another resource — a leaked launch URL is useless', async () => {
+    const { fetchMock } = fakePlatform({
+      connections: [makeConnection({ id: 'c_other', resourceId: 'end-user-other', status: 'pending' })],
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { id: 'c_other' } }),
+    );
+    expect(response.status).toBe(404);
+    expect((await json(response)).error.code).toBe('connection_not_found');
+  });
+
+  it('401s without an authenticated identity', async () => {
+    const { fetchMock } = fakePlatform();
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'GET', '/connect/connections/:id/launch') as any).handler(
+      makeCtx({ params: { id: 'c_own' } }),
+    );
+    expect(response.status).toBe(401);
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
@@ -370,6 +629,20 @@ describe('DELETE /connections/:id', () => {
     const deletion = requests.find(request => request.method === 'DELETE')!;
     expect(deletion.url.pathname).toBe('/v2/connections/c_own');
     expect(deletion.headers.get(RESOURCE_ID_HEADER)).toBe('end-user-42');
+  });
+
+  it('disconnects an own connection whose provider left the allowlist', async () => {
+    // Narrowing the allowlist must not orphan existing connections: the user
+    // can no longer add github accounts, but can still disconnect this one.
+    const { fetchMock, requests } = fakePlatform({
+      connections: [makeConnection({ id: 'c_gh_own', integrationId: 'github', resourceId: 'end-user-42' })],
+    });
+    const routes = userConnectRoutes(routeOptions(fetchMock as unknown as typeof fetch));
+    const response = await (findRoute(routes, 'DELETE', '/connect/connections/:id') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { id: 'c_gh_own' } }),
+    );
+    expect(response.status).toBe(204);
+    expect(requests.find(request => request.method === 'DELETE')!.url.pathname).toBe('/v2/connections/c_gh_own');
   });
 
   it('refuses to disconnect global connections and 404s invisible ones', async () => {
@@ -464,6 +737,49 @@ describe('platform failure mapping', () => {
     const body = await json(response);
     expect(JSON.stringify(body)).not.toContain('secret detail');
     expect(body.error.code).toBe('platform_error');
+  });
+
+  it('surfaces platform conflicts with their actionable detail', async () => {
+    const { fetchMock: base } = fakePlatform();
+    const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
+      const url = new URL(String(input));
+      if (url.pathname.includes('/connect-sessions') && init?.method === 'POST') {
+        // Mirrors the platform's RFC-7807 conflict for the per-resource
+        // connection cap: the detail tells the end user what to do next.
+        return new Response(
+          JSON.stringify({
+            detail:
+              'Connection limit reached for this resource on linear (max 5); disconnect an existing connection and retry',
+          }),
+          { status: 409, headers: { 'content-type': 'application/problem+json' } },
+        );
+      }
+      return (base as unknown as typeof fetch)(input as string, init);
+    }) as unknown as typeof fetch;
+    const routes = userConnectRoutes(routeOptions(fetchMock));
+    const response = await (findRoute(routes, 'POST', '/connect/:provider/sessions') as any).handler(
+      makeCtx({ resourceId: 'end-user-42', params: { provider: 'linear' } }),
+    );
+    expect(response.status).toBe(409);
+    const body = await json(response);
+    expect(body.error.code).toBe('conflict');
+    expect(body.error.message).toContain('Connection limit reached');
+  });
+
+  it('maps platform rate limiting to a generic 429', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        Response.json({ detail: 'internal rate limiter detail' }, { status: 429 }),
+      ) as unknown as typeof fetch;
+    const routes = userConnectRoutes(routeOptions(fetchMock));
+    const response = await (findRoute(routes, 'GET', '/connect/connections') as any).handler(
+      makeCtx({ resourceId: 'end-user-42' }),
+    );
+    expect(response.status).toBe(429);
+    const body = await json(response);
+    expect(body.error.code).toBe('rate_limited');
+    expect(JSON.stringify(body)).not.toContain('rate limiter detail');
   });
 
   it('maps a missing access token to a generic 500 configuration error', async () => {

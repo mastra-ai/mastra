@@ -1,9 +1,14 @@
 import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
+import { InMemoryServerCache } from '../../cache/inmemory';
 import type { RequestContext } from '../../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
+import { CachingPubSub } from '../../events/caching-pubsub';
+import { EventEmitterPubSub } from '../../events/event-emitter';
+import type { PubSub } from '../../events/pubsub';
+import { isRunLocalTopic } from '../../events/topics';
 import { RegisteredLogger } from '../../logger';
 import type { Mastra } from '../../mastra';
 import type { TracingContext, TracingPolicy } from '../../observability';
@@ -12,6 +17,7 @@ import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
+import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
 import { getStepResult } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
 import { getEntryComponent, getEntryId, getEntrySchemas } from '../step-entry';
@@ -26,6 +32,7 @@ import {
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
+  #stepPubsub?: PubSub;
   constructor({ mastra }: { mastra?: Mastra }) {
     super({ name: 'StepExecutor', component: RegisteredLogger.WORKFLOW });
     this.mastra = mastra;
@@ -37,6 +44,43 @@ export class StepExecutor extends MastraBase {
     if (logger) {
       this.__setLogger(logger);
     }
+  }
+
+  /**
+   * The PubSub handed to step execution contexts as `[PUBSUB_SYMBOL]`.
+   *
+   * The evented engine runs each step on whichever worker claims the event, and
+   * durable agent steps publish their `agent.stream.<runId>` frames on that
+   * context pubsub. When it is `mastra.pubsub` directly, those frames bypass the
+   * cache entirely and reach the transport unnumbered, so nothing can be
+   * replayed or resumed from an offset — the duplicates and hangs COR-1474
+   * reports.
+   *
+   * Reusing an existing `CachingPubSub`, or wrapping the bus with one that
+   * shares `mastra.serverCache`, puts every frame through one append path.
+   *
+   * A process-local cache only numbers frames correctly when every publisher
+   * shares it. Behind a cross-process transport, each process would number its
+   * own frames from 0 and observers would drop the worker's frames as late
+   * duplicates, so those steps publish unnumbered (live-only), as before.
+   */
+  #getStepPubsub(): PubSub {
+    if (this.#stepPubsub) return this.#stepPubsub;
+    const inner = this.mastra!.pubsub;
+    const cache = this.mastra?.serverCache;
+    if (inner instanceof CachingPubSub) {
+      this.#stepPubsub = inner;
+    } else if (cache && !(cache instanceof InMemoryServerCache && !(inner.__rawBus() instanceof EventEmitterPubSub))) {
+      this.#stepPubsub = new CachingPubSub(inner, cache, {
+        // Run-local watch events are per-process fan-out (often megabytes of
+        // cumulative step results) and must never land in a shared cache.
+        shouldCache: topic => !isRunLocalTopic(topic),
+        logger: this.logger,
+      });
+    } else {
+      this.#stepPubsub = inner;
+    }
+    return this.#stepPubsub;
   }
 
   /**
@@ -165,6 +209,7 @@ export class StepExecutor extends MastraBase {
     // and traces match the default engine.
     const workflowStepSpan = params.tracingContext?.currentSpan?.createChildSpan({
       type: SpanType.WORKFLOW_STEP,
+      outcome: null,
       name: `workflow step: '${stepId}'`,
       entityType: EntityType.WORKFLOW_STEP,
       entityId: stepId,
@@ -257,7 +302,7 @@ export class StepExecutor extends MastraBase {
               abort: () => {
                 abortController?.abort();
               },
-              [PUBSUB_SYMBOL]: this.mastra!.pubsub,
+              [PUBSUB_SYMBOL]: this.#getStepPubsub(),
               [STREAM_FORMAT_SYMBOL]: params.format,
               engine: {},
               abortSignal: abortController?.signal,
@@ -339,11 +384,13 @@ export class StepExecutor extends MastraBase {
         finalResult.__stateDelta = stateDelta;
       }
 
-      if (finalResult.status === 'success') {
-        workflowStepSpan?.end({ output: stepOutput, attributes: { status: 'success' } });
-      } else {
-        workflowStepSpan?.end({ attributes: { status: finalResult.status } });
-      }
+      completeWorkflowSpan(workflowStepSpan, {
+        end: {
+          ...workflowTermination(finalResult),
+          ...(finalResult.status === 'success' ? { output: stepOutput } : {}),
+          attributes: { status: finalResult.status },
+        },
+      });
 
       return finalResult;
     } catch (error: any) {
@@ -354,7 +401,16 @@ export class StepExecutor extends MastraBase {
         fallbackMessage: 'Unknown step execution error',
       });
 
-      workflowStepSpan?.error({ error: errorInstance });
+      completeWorkflowSpan(workflowStepSpan, {
+        error: {
+          ...workflowTermination(
+            error instanceof TripWire
+              ? { status: 'tripwire', tripwire: { reason: error.message, processorId: error.processorId } }
+              : { status: 'failed', error: errorInstance },
+          ),
+          error: errorInstance,
+        },
+      });
 
       // Log the error for observability (matching default engine behavior)
       const mastraError = new MastraError(
@@ -444,13 +500,13 @@ export class StepExecutor extends MastraBase {
       }),
     );
 
-    const idxs = results.reduce((acc, result, idx) => {
+    const idxs = results.reduce<number[]>((acc, result, idx) => {
       if (result) {
         acc.push(idx);
       }
 
       return acc;
-    }, [] as number[]);
+    }, []);
 
     return idxs;
   }
@@ -512,7 +568,7 @@ export class StepExecutor extends MastraBase {
           abort: () => {
             abortController?.abort();
           },
-          [PUBSUB_SYMBOL]: this.mastra!.pubsub,
+          [PUBSUB_SYMBOL]: this.#getStepPubsub(),
           [STREAM_FORMAT_SYMBOL]: undefined, // TODO
           engine: {},
           abortSignal: abortController?.signal,
@@ -594,7 +650,7 @@ export class StepExecutor extends MastraBase {
               },
               outputWriter,
             ),
-            [PUBSUB_SYMBOL]: this.mastra!.pubsub,
+            [PUBSUB_SYMBOL]: this.#getStepPubsub(),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
@@ -679,7 +735,7 @@ export class StepExecutor extends MastraBase {
               },
               outputWriter,
             ),
-            [PUBSUB_SYMBOL]: this.mastra!.pubsub,
+            [PUBSUB_SYMBOL]: this.#getStepPubsub(),
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,

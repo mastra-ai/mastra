@@ -35,6 +35,8 @@ const DIMENSION_SQL: Record<string, string> = {
   entityId: 'r.entityId',
   environment: 'r.environment',
   status: TRACE_STATUS_SQL,
+  outcome: 'r.outcome',
+  stopReason: 'r.stopReason',
   serviceName: 'r.serviceName',
   executionSource: 'r.executionSource',
   threadId: 'r.threadId',
@@ -59,6 +61,8 @@ const SPAN_DIMENSION_SQL: Record<string, string> = Object.fromEntries(
     'rootEntityName',
     'environment',
     'status',
+    'outcome',
+    'stopReason',
     'serviceName',
     'executionSource',
     'threadId',
@@ -67,6 +71,8 @@ const SPAN_DIMENSION_SQL: Record<string, string> = Object.fromEntries(
     'sessionId',
     'organizationId',
     'experimentId',
+    'model',
+    'provider',
   ].map(field => [field, `r.${field}`]),
 );
 

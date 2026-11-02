@@ -156,7 +156,7 @@ const AgentMetadataModelListItem = ({
             defaultProvider={modelConfig.model.provider}
             defaultModel={modelConfig.model.modelId}
             updateModel={params => updateModelInModelList({ modelConfigId: modelConfig.id, model: params })}
-            autoSave={true}
+            autoSave
           />
         </div>
         {isLastEnabled ? (

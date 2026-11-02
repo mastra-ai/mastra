@@ -423,6 +423,55 @@ export class LibSQLDB extends MastraBase {
   }
 
   /**
+   * Updates multiple records in one write batch, with the same retry behavior as
+   * {@link batchUpdate}. Returns, in input order, whether each update changed a row,
+   * so callers can put extra conditions in `keys` (for example `{ endedAt: null }`).
+   */
+  public async batchUpdateReportingChanges({
+    tableName,
+    updates,
+  }: {
+    tableName: TABLE_NAMES;
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+  }): Promise<boolean[]> {
+    return this.executeWriteOperationWithRetry(async () => {
+      const changed = updates.map(() => false);
+      const statements: ReturnType<typeof prepareUpdateStatement>[] = [];
+      const statementIndexes: number[] = [];
+      for (const [index, { keys, data }] of updates.entries()) {
+        // Filter out columns that don't exist in the actual database table
+        const filteredData = await this.filterRecordToKnownColumns(tableName, data);
+        if (Object.keys(filteredData).length === 0) continue;
+        statements.push(prepareUpdateStatement({ tableName, updates: filteredData, keys }));
+        statementIndexes.push(index);
+      }
+      if (statements.length === 0) return changed;
+
+      const results = await withClientWriteLock(this.client, () => this.client.batch(statements, 'write'));
+      results.forEach((result, i) => {
+        const index = statementIndexes[i];
+        if (index !== undefined) changed[index] = result.rowsAffected > 0;
+      });
+      return changed;
+    }, `batch update in table ${tableName}`).catch(error => {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'BATCH_UPDATE_REPORTING_CHANGES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+          },
+        },
+        error,
+      );
+    });
+  }
+
+  /**
    * Internal batch delete implementation without retry logic.
    * Each record can be deleted based on single or composite keys.
    */
@@ -643,7 +692,7 @@ export class LibSQLDB extends MastraBase {
   }): Promise<number> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
 
-    const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? `${whereClause.sql}` : ''}`;
+    const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? whereClause.sql : ''}`;
 
     const result = await this.client.execute({
       sql: statement,

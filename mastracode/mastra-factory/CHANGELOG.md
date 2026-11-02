@@ -1,5 +1,142 @@
 # create-factory
 
+## 0.4.2-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`c4f1cb1`](https://github.com/mastra-ai/mastra/commit/c4f1cb1d3e6bd185451878ca7ae2d54593940d22), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`8af4ef3`](https://github.com/mastra-ai/mastra/commit/8af4ef3f740eda25c0d6d477552005c57b397575), [`ba602f5`](https://github.com/mastra-ai/mastra/commit/ba602f5f4622d6a3e6beb6d2741e3d19efe57ca9), [`c2703be`](https://github.com/mastra-ai/mastra/commit/c2703be145138d87436119e8f5fa05b8eff08a5a)]:
+  - mastra@1.38.0-alpha.0
+
+## 0.4.1
+
+### Patch Changes
+
+- The region prompt now defaults to `us` instead of `eu`. Pass `--region eu` or pick `eu` in the prompt to keep using the EU region. ([#28748](https://github.com/mastra-ai/mastra/pull/28748))
+
+- Updated dependencies [[`7488ca1`](https://github.com/mastra-ai/mastra/commit/7488ca1716b3d921bcb9b02cb2fb3ceddfdd0686), [`8175b28`](https://github.com/mastra-ai/mastra/commit/8175b28bb5d2df864567771f774bf388bcbcf70c), [`5cc1e6a`](https://github.com/mastra-ai/mastra/commit/5cc1e6a4cd0bd8bee3eda69bb502ba4d12513752), [`4eeccd5`](https://github.com/mastra-ai/mastra/commit/4eeccd5c5168a4745cfc497882e620d4b1ab236b), [`ad0a796`](https://github.com/mastra-ai/mastra/commit/ad0a79694c714fd378d2ba7254571e8fc6371996), [`2c6da6f`](https://github.com/mastra-ai/mastra/commit/2c6da6f449f7385475a843e26e05834450303a89), [`436b734`](https://github.com/mastra-ai/mastra/commit/436b734df58a5ec82bf4450b24da193cd8d27e24), [`436b734`](https://github.com/mastra-ai/mastra/commit/436b734df58a5ec82bf4450b24da193cd8d27e24), [`d27c394`](https://github.com/mastra-ai/mastra/commit/d27c3943e802dff2628f33702bd8f4d922219a04), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff)]:
+  - mastra@1.37.0
+
+## 0.4.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`8175b28`](https://github.com/mastra-ai/mastra/commit/8175b28bb5d2df864567771f774bf388bcbcf70c), [`5cc1e6a`](https://github.com/mastra-ai/mastra/commit/5cc1e6a4cd0bd8bee3eda69bb502ba4d12513752), [`4eeccd5`](https://github.com/mastra-ai/mastra/commit/4eeccd5c5168a4745cfc497882e620d4b1ab236b), [`d27c394`](https://github.com/mastra-ai/mastra/commit/d27c3943e802dff2628f33702bd8f4d922219a04), [`80f2f21`](https://github.com/mastra-ai/mastra/commit/80f2f21133688844e34110da5c8f27b4ee37fb63)]:
+  - mastra@1.37.0-alpha.3
+
+## 0.4.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies [[`2c6da6f`](https://github.com/mastra-ai/mastra/commit/2c6da6f449f7385475a843e26e05834450303a89)]:
+  - mastra@1.37.0-alpha.2
+
+## 0.4.1-alpha.1
+
+### Patch Changes
+
+- The region prompt now defaults to `us` instead of `eu`. Pass `--region eu` or pick `eu` in the prompt to keep using the EU region. ([#28748](https://github.com/mastra-ai/mastra/pull/28748))
+
+- Updated dependencies [[`ad0a796`](https://github.com/mastra-ai/mastra/commit/ad0a79694c714fd378d2ba7254571e8fc6371996), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff), [`6a18fc5`](https://github.com/mastra-ai/mastra/commit/6a18fc50948f583ae6190a60a81164a8f02042ff)]:
+  - mastra@1.37.0-alpha.1
+
+## 0.4.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`7488ca1`](https://github.com/mastra-ai/mastra/commit/7488ca1716b3d921bcb9b02cb2fb3ceddfdd0686)]:
+  - mastra@1.37.0-alpha.0
+
+## 0.4.0
+
+### Minor Changes
+
+- Changed which starter `create-factory` scaffolds. By default it now uses the platform template ([template-factory](https://github.com/mastra-ai/template-factory)). With `--no-platform` it uses the new self-hosted template ([template-factory-self-hosted](https://github.com/mastra-ai/template-factory-self-hosted)). That template runs on PostgreSQL, WorkOS, a GitHub App, and local sandboxes, with no Mastra platform services. Passing `--template` still overrides both. ([#28430](https://github.com/mastra-ai/mastra/pull/28430))
+
+  The setup also generates a `FACTORY_CREDENTIAL_ENCRYPTION_KEY` in `.env` when the template declares an empty one, so the self-hosted template starts with stored credentials encrypted instead of failing on a missing key.
+
+  ```bash
+  npm create factory@latest -- --no-platform
+  ```
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@clack/prompts@^1.8.1` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/1.8.1) (from `^1.7.0`, in `dependencies`)
+  - Updated dependency [`tinyexec@^1.3.1` ↗︎](https://www.npmjs.com/package/tinyexec/v/1.3.1) (from `^1.2.4`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+- Updated dependencies [[`f396b43`](https://github.com/mastra-ai/mastra/commit/f396b435c72042fc6d9e82c361fa047675995812), [`34983c9`](https://github.com/mastra-ai/mastra/commit/34983c9bbb6d22538b86371463af3797259aaf55), [`fa94ed2`](https://github.com/mastra-ai/mastra/commit/fa94ed2a5194d45409c046467ffc649148d3ff8b), [`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb), [`decd0a0`](https://github.com/mastra-ai/mastra/commit/decd0a0066286996a4558f63e91a8edfa1143feb), [`8cce2b4`](https://github.com/mastra-ai/mastra/commit/8cce2b40191aed3204efedff345ba24d6f14fdb2), [`f3bc1ca`](https://github.com/mastra-ai/mastra/commit/f3bc1caddb161453f8e2636fd0fc96d9b60e2719), [`a5a9179`](https://github.com/mastra-ai/mastra/commit/a5a9179daa5ac1ed49447265038208c9f96cd0f8), [`2afea6f`](https://github.com/mastra-ai/mastra/commit/2afea6f00bdb4da7a336be9f8ee79f449ed815a6), [`9368852`](https://github.com/mastra-ai/mastra/commit/9368852addcb66e5fd7cef696137774302e5b61e), [`3e5ca12`](https://github.com/mastra-ai/mastra/commit/3e5ca12f7c941e92e242f2dd08c7018644b0cbbd), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`e177739`](https://github.com/mastra-ai/mastra/commit/e1777390c12fe5f605f79383847f5c3a71773304), [`80c6d4f`](https://github.com/mastra-ai/mastra/commit/80c6d4f7699646b60915a5c59007d716e009a6b3), [`371892b`](https://github.com/mastra-ai/mastra/commit/371892ba3822d44e9d1516ae8ec88d8c458d4d1d), [`2141334`](https://github.com/mastra-ai/mastra/commit/214133466a4d91a277b345fcbdb5726ac863b30d), [`8d68b51`](https://github.com/mastra-ai/mastra/commit/8d68b5144d4289974b87120eeec08aaa0dd96866), [`3041247`](https://github.com/mastra-ai/mastra/commit/304124703fbb6bcf61ca0d5c388f17faf94455f5), [`de53c27`](https://github.com/mastra-ai/mastra/commit/de53c27a70dbd0c362384691459648043edbee72), [`7cd42a5`](https://github.com/mastra-ai/mastra/commit/7cd42a5863a19be68552c99565c345e06e4ffb1f), [`f925d17`](https://github.com/mastra-ai/mastra/commit/f925d1714616cb81f8fac35a3f1c7618972f4e77), [`a9ceb19`](https://github.com/mastra-ai/mastra/commit/a9ceb1988c4501095632ac9290958a60ddc3305c)]:
+  - mastra@1.36.0
+
+## 0.4.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.36.0-alpha.7
+
+## 0.4.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.36.0-alpha.6
+
+## 0.4.0-alpha.5
+
+### Minor Changes
+
+- Changed which starter `create-factory` scaffolds. By default it now uses the platform template ([template-factory](https://github.com/mastra-ai/template-factory)). With `--no-platform` it uses the new self-hosted template ([template-factory-self-hosted](https://github.com/mastra-ai/template-factory-self-hosted)). That template runs on PostgreSQL, WorkOS, a GitHub App, and local sandboxes, with no Mastra platform services. Passing `--template` still overrides both. ([#28430](https://github.com/mastra-ai/mastra/pull/28430))
+
+  The setup also generates a `FACTORY_CREDENTIAL_ENCRYPTION_KEY` in `.env` when the template declares an empty one, so the self-hosted template starts with stored credentials encrypted instead of failing on a missing key.
+
+  ```bash
+  npm create factory@latest -- --no-platform
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb)]:
+  - mastra@1.36.0-alpha.5
+
+## 0.3.1-alpha.4
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@clack/prompts@^1.8.1` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/1.8.1) (from `^1.7.0`, in `dependencies`)
+  - Updated dependency [`tinyexec@^1.3.1` ↗︎](https://www.npmjs.com/package/tinyexec/v/1.3.1) (from `^1.2.4`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+- Updated dependencies [[`34983c9`](https://github.com/mastra-ai/mastra/commit/34983c9bbb6d22538b86371463af3797259aaf55), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - mastra@1.36.0-alpha.4
+
+## 0.3.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`decd0a0`](https://github.com/mastra-ai/mastra/commit/decd0a0066286996a4558f63e91a8edfa1143feb)]:
+  - mastra@1.36.0-alpha.3
+
+## 0.3.1-alpha.2
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.36.0-alpha.2
+
+## 0.3.1-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`f396b43`](https://github.com/mastra-ai/mastra/commit/f396b435c72042fc6d9e82c361fa047675995812), [`fa94ed2`](https://github.com/mastra-ai/mastra/commit/fa94ed2a5194d45409c046467ffc649148d3ff8b), [`8cce2b4`](https://github.com/mastra-ai/mastra/commit/8cce2b40191aed3204efedff345ba24d6f14fdb2), [`2141334`](https://github.com/mastra-ai/mastra/commit/214133466a4d91a277b345fcbdb5726ac863b30d), [`3041247`](https://github.com/mastra-ai/mastra/commit/304124703fbb6bcf61ca0d5c388f17faf94455f5), [`7cd42a5`](https://github.com/mastra-ai/mastra/commit/7cd42a5863a19be68552c99565c345e06e4ffb1f)]:
+  - mastra@1.36.0-alpha.1
+
+## 0.3.1-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`f3bc1ca`](https://github.com/mastra-ai/mastra/commit/f3bc1caddb161453f8e2636fd0fc96d9b60e2719), [`a5a9179`](https://github.com/mastra-ai/mastra/commit/a5a9179daa5ac1ed49447265038208c9f96cd0f8), [`2afea6f`](https://github.com/mastra-ai/mastra/commit/2afea6f00bdb4da7a336be9f8ee79f449ed815a6), [`9368852`](https://github.com/mastra-ai/mastra/commit/9368852addcb66e5fd7cef696137774302e5b61e), [`e177739`](https://github.com/mastra-ai/mastra/commit/e1777390c12fe5f605f79383847f5c3a71773304), [`80c6d4f`](https://github.com/mastra-ai/mastra/commit/80c6d4f7699646b60915a5c59007d716e009a6b3), [`8d68b51`](https://github.com/mastra-ai/mastra/commit/8d68b5144d4289974b87120eeec08aaa0dd96866), [`de53c27`](https://github.com/mastra-ai/mastra/commit/de53c27a70dbd0c362384691459648043edbee72), [`a9ceb19`](https://github.com/mastra-ai/mastra/commit/a9ceb1988c4501095632ac9290958a60ddc3305c)]:
+  - mastra@1.35.1-alpha.0
+
 ## 0.3.0
 
 ### Minor Changes

@@ -51,7 +51,7 @@ async function renderDialog(props: Partial<DialogProps> = {}) {
 
 const nameInput = () => screen.getByLabelText<HTMLInputElement>(/^Name/);
 const typeName = (value: string) => fireEvent.change(nameInput(), { target: { value } });
-const submit = () => fireEvent.click(screen.getByRole('button', { name: 'Create Dataset' }));
+const submit = () => fireEvent.click(screen.getByRole('button', { name: 'Create dataset' }));
 
 describe('CreateDatasetDialog', () => {
   describe('when the dialog opens', () => {

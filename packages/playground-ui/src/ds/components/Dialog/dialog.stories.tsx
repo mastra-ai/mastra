@@ -430,6 +430,7 @@ export const FullPage: Story = {
                 'Up to 3 projects',
               ]}
             >
+              {/* oxlint-disable-next-line mastra/sentence-case-labels -- plan names are proper nouns */}
               <Button>Downgrade to Free</Button>
             </PlanColumn>
             <PlanColumn
@@ -467,6 +468,7 @@ export const FullPage: Story = {
                 '2× Medium included',
               ]}
             >
+              {/* oxlint-disable-next-line mastra/sentence-case-labels -- plan names are proper nouns */}
               <Button variant="primary">Upgrade to Teams</Button>
             </PlanColumn>
             <PlanColumn

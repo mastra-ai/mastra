@@ -8,6 +8,7 @@ import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
+import { SpanPayloadToolCalls } from '@mastra/playground-ui/domains/traces/components/span-payload/span-payload-primitives';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -27,7 +28,12 @@ import {
 import type { ReactNode } from 'react';
 import { useMemo } from 'react';
 import { useExperimentResultUsage } from '../hooks/use-experiment-result-usage';
-import { getResultErrorMessage, getResultOutputText } from '../utils/result-output';
+import {
+  getMissingTextNotice,
+  getResultErrorMessage,
+  getResultOutputText,
+  getResultToolCalls,
+} from '../utils/result-output';
 import { sideDurationMs } from './comparison/build-comparison-rows';
 import { ComparisonMetricList } from './comparison/comparison-metric-list';
 import type { ComparisonMetric } from './comparison/comparison-metric-list';
@@ -160,6 +166,8 @@ function ExperimentResultPanelBody({
   const inputStr = formatValue(result.input);
   const outputStr = formatValue(result.output);
   const outputText = getResultOutputText(result);
+  const toolCalls = getResultToolCalls(result);
+  const missingTextNotice = getMissingTextNotice(result);
   const canFlag = onFlagForReview && result.status !== 'needs-review' && result.status !== 'complete';
   const tags = Array.isArray(result.tags) ? result.tags : [];
   const selectedResults = useMemo(() => [result], [result]);
@@ -197,7 +205,7 @@ function ExperimentResultPanelBody({
           <span className="font-mono" title={result.itemId}>
             {getShortId(result.itemId)}
           </span>
-          <CopyButton content={result.itemId} tooltip="Copy Item Id to clipboard" variant="link" />
+          <CopyButton content={result.itemId} tooltip="Copy item ID to clipboard" variant="link" />
         </span>
       ),
       delta: null,
@@ -288,7 +296,19 @@ function ExperimentResultPanelBody({
           </ComparisonSection>
         ) : (
           <ComparisonSection title="Output" framed actions={<CopyButton content={outputStr} />}>
-            <ComparisonPayload value={outputText ?? result.output} />
+            {missingTextNotice ? (
+              <Txt tone="muted" className="p-3 break-words">
+                {missingTextNotice}
+              </Txt>
+            ) : (
+              <ComparisonPayload value={outputText ?? result.output} />
+            )}
+          </ComparisonSection>
+        )}
+
+        {toolCalls.length > 0 && (
+          <ComparisonSection title={`Tool calls (${toolCalls.length})`}>
+            <SpanPayloadToolCalls toolCalls={toolCalls} />
           </ComparisonSection>
         )}
 
@@ -313,7 +333,7 @@ function ExperimentResultPanelBody({
         <DataPanel.HeaderActions>
           {experimentLink && (
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               render={<Link href={experimentLink} />}
               tooltip="See experiment"
@@ -323,7 +343,7 @@ function ExperimentResultPanelBody({
             </Button>
           )}
           {result.traceId && onShowTrace && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
               <TraceIcon />
             </Button>
           )}

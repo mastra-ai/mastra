@@ -496,7 +496,7 @@ export const AgentObservationalMemory = ({ agentId, resourceId, threadId }: Agen
         onClick={() => (isDetailViewOpen ? closeDetailView() : openDetailView())}
         icon={<Brain />}
       >
-        Analyze Observations
+        Analyze observations
       </Button>
     </div>
   );

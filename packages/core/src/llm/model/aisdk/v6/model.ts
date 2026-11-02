@@ -3,7 +3,6 @@ import type { LanguageModelV3, LanguageModelV3CallOptions } from '@ai-sdk/provid
 import { aiV5PromptToAIV6Prompt } from '../../../../agent/message-list/conversion';
 import type { MastraLanguageModelV3 } from '../../shared.types';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
-import { toSingleSystemMessage } from '../single-system-message';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV3['doStream']>>;
 
@@ -95,7 +94,7 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
   }
 
   async doGenerate(options: LanguageModelV3CallOptions) {
-    const result = await this.#model.doGenerate(remapCallOptionsToV3(this.#withSingleSystemMessage(options)));
+    const result = await this.#model.doGenerate(remapCallOptionsToV3(options));
 
     return {
       ...result,
@@ -106,12 +105,7 @@ export class AISDKV6LanguageModel implements MastraLanguageModelV3 {
   }
 
   async doStream(options: LanguageModelV3CallOptions) {
-    return await this.#model.doStream(remapCallOptionsToV3(this.#withSingleSystemMessage(options)));
-  }
-
-  #withSingleSystemMessage(options: LanguageModelV3CallOptions): LanguageModelV3CallOptions {
-    const prompt = toSingleSystemMessage(this.provider, options.prompt);
-    return prompt === options.prompt ? options : { ...options, prompt };
+    return await this.#model.doStream(remapCallOptionsToV3(options));
   }
 
   /**

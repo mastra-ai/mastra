@@ -12,8 +12,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
-import { emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
+import { emptyChannelPlatforms, emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
 import { attachmentMessages } from './fixtures/attachment-messages';
+import { abortedSignalRun, acceptedSignalMessage, signalRunStart } from './fixtures/signal-run';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
@@ -58,6 +59,7 @@ const workingMemoryResponse = () =>
   HttpResponse.json({ workingMemory: null, source: 'thread', workingMemoryTemplate: null, threadExists: false });
 
 const baseHandlers = () => [
+  http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(emptyChannelPlatforms)),
   http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
   http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'user-1' })),
   http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
@@ -132,9 +134,10 @@ const renderThreadTree = (initialMessages: MastraDBMessage[], options: RenderThr
         <ChatProvider
           key={threadId}
           agentId="agent-1"
+          modelVersion={v2Agent.modelVersion}
           threadId={threadId}
           initialMessages={initialMessages}
-          supportsMemory={true}
+          supportsMemory
           settings={{ modelSettings: { chatWithLegacyStream: false, ...modelSettings } }}
         >
           <Thread
@@ -581,7 +584,7 @@ describe('Thread', () => {
       }
     });
 
-    it('shows a scroll-to-bottom control when the viewport is not at the bottom', async () => {
+    it('shows a scroll-to-bottom control when the reader scrolls back up', async () => {
       const scrollTo = vi.fn();
       const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTo');
       Object.defineProperty(HTMLElement.prototype, 'scrollTo', {
@@ -603,13 +606,23 @@ describe('Thread', () => {
         const viewport = document.querySelector<HTMLElement>('[data-slot="message-scroller-viewport"]');
         if (!viewport) throw new Error('missing message scroller viewport');
 
-        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 40 });
+        // The opening scroll lands two frames after mount. Let it settle before the
+        // reader moves, or it races the scroll below and decides the outcome instead.
+        await act(
+          () => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))),
+        );
+
+        Object.defineProperty(viewport, 'scrollTop', { configurable: true, writable: true, value: 220 });
         Object.defineProperty(viewport, 'clientHeight', { configurable: true, value: 100 });
         Object.defineProperty(viewport, 'scrollHeight', { configurable: true, value: 320 });
+        await act(async () => {
+          fireEvent.scroll(viewport);
+        });
 
         const scrollToEnd = screen.getByRole('button', { name: 'Scroll to end' });
         expect(scrollToEnd.getAttribute('data-active')).toBe('false');
 
+        viewport.scrollTop = 40;
         await act(async () => {
           fireEvent.scroll(viewport);
         });
@@ -1149,6 +1162,89 @@ describe('Thread', () => {
     expect(captured).toHaveLength(0);
   });
 
+  describe('when thread signals allow sending during a run', () => {
+    let subscription: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let sentMessages: string[];
+    let abortRequests: number;
+
+    beforeEach(async () => {
+      window.MASTRA_AGENT_SIGNALS = 'true';
+      subscription = undefined;
+      sentMessages = [];
+      abortRequests = 0;
+      server.use(...baseHandlers());
+      server.use(
+        http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryEnabled)),
+        http.post(
+          `${BASE_URL}/api/agents/:agentId/threads/subscribe`,
+          () =>
+            new HttpResponse(
+              new ReadableStream<Uint8Array>({
+                start(controller) {
+                  subscription = controller;
+                },
+              }),
+              { headers: { 'content-type': 'text/event-stream' } },
+            ),
+        ),
+        http.post(`${BASE_URL}/api/agents/:agentId/send-message`, async ({ request }) => {
+          sentMessages.push(JSON.stringify(await request.json()));
+          return HttpResponse.json(acceptedSignalMessage);
+        }),
+        http.post(`${BASE_URL}/api/agents/:agentId/threads/abort`, () => {
+          abortRequests += 1;
+          return HttpResponse.json(abortedSignalRun);
+        }),
+      );
+
+      await act(async () => {
+        renderThread([]);
+      });
+      await waitFor(() => expect(subscription).toBeDefined());
+      await act(async () => subscription?.enqueue(new TextEncoder().encode(sseChunk(signalRunStart))));
+      await screen.findByRole('button', { name: 'Cancel' });
+    });
+
+    afterEach(async () => {
+      await act(async () => subscription?.close());
+    });
+
+    it('replaces cancel with send while drafting and restores cancel after clearing the draft', () => {
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+
+      const textarea = screen.getByPlaceholderText('Enter your message...');
+      fireEvent.change(textarea, { target: { value: '   ' } });
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+
+      fireEvent.change(textarea, { target: { value: 'Continue with the new instructions' } });
+      expect(screen.queryByRole('button', { name: 'Cancel' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
+
+      fireEvent.change(textarea, { target: { value: '' } });
+      expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
+    });
+
+    it('does not cancel the run when Send is double-clicked', async () => {
+      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), {
+        target: { value: 'Continue with the new instructions' },
+      });
+      const primaryAction = screen.getByRole('button', { name: 'Send' });
+      fireEvent.click(primaryAction, { detail: 1 });
+      await waitFor(() => expect(sentMessages.join()).toContain('Continue with the new instructions'));
+      fireEvent.click(primaryAction, { detail: 2 });
+      await act(async () => new Promise(resolve => setTimeout(resolve, 100)));
+
+      expect(abortRequests).toBe(0);
+    });
+
+    it('cancels the run when Cancel is clicked', async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }), { detail: 1 });
+
+      await waitFor(() => expect(abortRequests).toBe(1));
+    });
+  });
+
   it('shows a cancel control while a run is in flight', async () => {
     let resolveStream: (() => void) | null = null;
     const blockedStream = () =>
@@ -1181,6 +1277,10 @@ describe('Thread', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /cancel/i })).toBeTruthy();
     });
+
+    fireEvent.change(textarea, { target: { value: 'Wait until this run finishes' } });
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
 
     await act(async () => {
       resolveStream?.();
@@ -1393,6 +1493,7 @@ describe('Thread signal-path user-message reconciliation', () => {
   beforeEach(() => {
     window.MASTRA_AGENT_SIGNALS = 'true';
     server.resetHandlers();
+    server.use(...baseHandlers());
   });
 
   it('keeps the same user-row DOM node when the data-user-message echo swaps the message id', async () => {

@@ -1,14 +1,13 @@
 import { Select as SelectPrimitive } from '@base-ui/react/select';
 import type { SelectPopupProps, SelectPositionerProps } from '@base-ui/react/select';
-import { Check, ChevronDown } from 'lucide-react';
+import { Check } from 'lucide-react';
 import * as React from 'react';
 
-import { buttonVariants } from '../Button/Button';
+import { ButtonChevron, buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
 import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
 import {
   menuItemCheckClass,
@@ -19,7 +18,6 @@ import {
 } from '@/ds/primitives/menu-item';
 import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 /**
@@ -162,20 +160,7 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         {...keepOwnAccessibleName(props)}
       >
         {children}
-        {/* `SelectPrimitive.Icon` renders the provided element in place of its
- default `<span>`, so the chevron would land as a *direct* `<svg>`
- child of the trigger — where Button's `TEXT_MODE_ADORNMENTS`
- `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
- would distort and mis-position it. Wrapping it in a `<span>` keeps
- the svg one level deep so those rules can't reach it, leaving the
- chevron pinned at the right edge at its intended size and color. */}
-        <SelectPrimitive.Icon
-          render={
-            <span className="flex shrink-0 items-center">
-              <ChevronDown className={cn('size-4 text-muted-foreground', transitions.colors)} />
-            </span>
-          }
-        />
+        <ButtonChevron size={size} />
       </SelectPrimitive.Trigger>
     );
   },
@@ -224,7 +209,6 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
-    const menu = useFluidMenu();
     const positionerProps: SelectContentPositionerProps = {
       side,
       align,
@@ -247,9 +231,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
           <SelectPrimitive.Popup ref={ref} className={cn(menuPopupClass, menuScrollPopupClass, className)} {...props}>
             {/* The viewport is Select's list, so Select scrolls it to line the selected item up with the
                 trigger. `role` is restated because the viewport's own `presentation` role would win. */}
-            <MenuScrollArea menu={menu} viewportRender={<SelectPrimitive.List role="listbox" />}>
-              {children}
-            </MenuScrollArea>
+            <MenuScrollArea viewportRender={<SelectPrimitive.List role="listbox" />}>{children}</MenuScrollArea>
           </SelectPrimitive.Popup>
         </SelectPrimitive.Positioner>
       </SelectPrimitive.Portal>
@@ -263,7 +245,7 @@ export type SelectItemProps = Omit<SelectPrimitive.Item.Props, 'className'> & {
 };
 
 const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Item ref={useFluidMenuItemRef(ref)} className={cn(menuItemClass, className)} {...props}>
+  <SelectPrimitive.Item ref={ref} className={cn(menuItemClass, className)} {...props}>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     <SelectPrimitive.ItemIndicator className={menuItemCheckClass}>
       <Check />

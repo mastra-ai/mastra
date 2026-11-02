@@ -60,3 +60,38 @@ describe('title regeneration', () => {
     expect(row.canRegenerateTitle).toBe(offered);
   });
 });
+
+describe('external links', () => {
+  const slackThread = testWorkItem({ source: 'slack-thread', url: 'https://app.slack.com/client/T-1/C-1' });
+  const pullRequest = testWorkItem({ id: 'pr-1', source: 'github-pr', url: 'https://github.com/acme/app/pull/43' });
+  const mergeRequest = testWorkItem({
+    id: 'mr-1',
+    source: 'gitlab-pr',
+    url: 'https://gitlab.com/acme/app/-/merge_requests/43',
+  });
+  const linearIssue = testWorkItem({ source: 'linear-issue', url: 'https://linear.app/acme/issue/FACT-528' });
+
+  it.each([
+    [
+      'the source and its pull request',
+      slackThread,
+      pullRequest,
+      [
+        ['Open in Slack', slackThread.url],
+        ['Open pull request', pullRequest.url],
+      ],
+    ],
+    [
+      'a merge request once when it is the source',
+      mergeRequest,
+      mergeRequest,
+      [['Open merge request', mergeRequest.url]],
+    ],
+    ['an issue tracker by name', linearIssue, undefined, [['Open in Linear', linearIssue.url]]],
+    ['nothing for an item without a link', testWorkItem(), undefined, []],
+  ] as const)('offers %s', (_case, item, pullRequestItem, links) => {
+    const row = factoryRow(testSession('s1'), { item, pullRequest: pullRequestItem });
+
+    expect(row.externalLinks.map(link => [link.label, link.url])).toEqual(links);
+  });
+});

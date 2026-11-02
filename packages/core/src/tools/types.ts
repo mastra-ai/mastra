@@ -696,7 +696,8 @@ export interface ToolExecutionContext<
 
   /**
    * Observability helpers for recording child spans and structured logs
-   * from inside a tool's execute function. Always provided — when no
+   * from inside a tool's execute function. Always provided to the tool's
+   * `execute` callback (callers of `tool.execute()` may omit it) — when no
    * tracing context is active, `span` runs the function directly and
    * `log` is a no-op. No null-checking needed.
    *
@@ -709,6 +710,16 @@ export interface ToolExecutionContext<
    */
   observe: ToolObserve;
 }
+
+/**
+ * Context accepted when calling `tool.execute(input, context)` directly. `observe`
+ * is optional here because the tool runtime fills it in (a no-op implementation
+ * when no tracing span is active); the tool's own `execute` callback always
+ * receives it.
+ */
+export type ToolExecuteCallContext<TContext> = Omit<TContext, 'observe'> & {
+  observe?: ToolObserve;
+};
 
 /**
  * Context received by a tool's `execute` callback. The runtime always provides
@@ -787,6 +798,12 @@ export interface ToolAction<
   // Note: For outputSchema, we use the input type because Zod transforms are applied during validation
   // Note: { error?: never } enables inline type narrowing with 'error' in result checks
   execute?: (inputData: TSchemaIn, context: TContext) => Promise<TSchemaOut | ValidationError | void>;
+  /**
+   * Display-only tool: stream the call to the client, return `{ acknowledged: true }`
+   * from the server, and continue the model loop without waiting for a browser result.
+   * Cannot be combined with `execute`.
+   */
+  renderOnly?: boolean;
   mastra?: Mastra;
   /**
    * Whether the tool requires explicit user approval before execution.

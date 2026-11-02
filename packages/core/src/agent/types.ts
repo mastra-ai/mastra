@@ -13,6 +13,7 @@ import type { ChannelConfig } from '../channels/types';
 import type { WaitUntilFn } from '../channels/wait-until';
 import type { MastraScorer, MastraScorers, ScoringFilter, ScoringSamplingConfig } from '../evals';
 import type { PubSub } from '../events/pubsub';
+import type { Knowledge } from '../knowledge';
 import type {
   CoreMessage,
   DefaultLLMStreamOptions,
@@ -44,7 +45,14 @@ import type {
   NotificationRecord,
   SendNotificationSignalInput,
 } from '../notifications/types';
-import type { Span, SpanType, TracingOptions, TracingPolicy, ObservabilityContext } from '../observability';
+import type {
+  Span,
+  SpanType,
+  TracingOptions,
+  TracingPolicy,
+  ObservabilityContext,
+  SpanTermination,
+} from '../observability';
 import type {
   ErrorProcessorOrWorkflow,
   InputProcessorOrWorkflow,
@@ -58,6 +66,7 @@ import type { MastraModelOutput } from '../stream/base/output';
 import type {
   AgentChunkType,
   ThreadHistoryChunk,
+  ThreadRunStatusChunk,
   CustomChunkWriter,
   MastraOnFinishCallbackArgs,
   ModelManagerModelConfig,
@@ -66,7 +75,7 @@ import type { ToolAction, ToolHooks, VercelTool, VercelToolV5 } from '../tools';
 import type { WebSearchToolPlaceholder } from '../tools/builtin/web-search';
 import type { ToolPayloadTransformPolicy } from '../tools/types';
 import type { DynamicArgument } from '../types';
-import type { MastraVoice } from '../voice';
+import type { IMastraVoice } from '../voice';
 import type { Workflow } from '../workflows';
 import type { ShouldPersistSnapshotFn } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace';
@@ -75,6 +84,7 @@ import type { Agent } from './agent';
 import type { AgentExecutionOptions, NetworkOptions } from './agent.types';
 import type { AgentStreamEvent } from './durable/types';
 import type { MessageList } from './message-list/index';
+import type { AgentScopesConfig } from './scopes';
 import type { AgentSignalAttributes, AgentSignalType, CreatedAgentSignal } from './signals';
 import type { SubAgent } from './subagent';
 export type {
@@ -261,7 +271,14 @@ export type SendAgentSignalAccepted<OUTPUT = unknown> =
   | { action: 'deliver'; runId: string }
   | { action: 'persist' }
   | { action: 'discard' }
-  | { action: 'blocked'; reason: 'thread-blocked'; runId: string };
+  | { action: 'blocked'; reason: 'thread-blocked'; runId: string }
+  /**
+   * The signal named `scopes` that differ from those of the run active on the thread
+   * (or of a run whose scopes this process can't see). A run's scopes are fixed when it
+   * starts, so the signal did not join it: wait for `runId` to end and send it again to
+   * start its own run.
+   */
+  | { action: 'blocked'; reason: 'scope-mismatch'; runId: string };
 
 export interface SendAgentSignalResult<OUTPUT = unknown> {
   /**
@@ -424,13 +441,23 @@ export interface AgentSubscribeToThreadOptions extends AgentThreadIdentityOption
    * chunks are always emitted.
    */
   withInitialHistory?: boolean | { perPage?: number };
+  /** Emit ordered thread-run-status chunks, including retained outcomes. Defaults to false. */
+  withRunStatus?: boolean;
   /** Request context used to resolve the agent's memory when loading initial history. */
   requestContext?: RequestContext;
 }
 
-export interface AgentThreadSubscription<OUTPUT = unknown, WITH_HISTORY extends boolean = false> {
+export interface AgentThreadSubscription<
+  OUTPUT = unknown,
+  WITH_HISTORY extends boolean = false,
+  WITH_RUN_STATUS extends boolean = false,
+> {
   /** With `withInitialHistory`, the first chunk is a `thread-history` chunk. */
-  stream: AsyncIterable<AgentChunkType<OUTPUT> | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)>;
+  stream: AsyncIterable<
+    | AgentChunkType<OUTPUT>
+    | (WITH_RUN_STATUS extends true ? ThreadRunStatusChunk : never)
+    | (WITH_HISTORY extends true ? ThreadHistoryChunk : never)
+  >;
   activeRunId: () => string | null;
   /** @internal */
   __getCurrentRunRequestContext?: () => RequestContext | undefined;
@@ -835,10 +862,15 @@ interface AgentConfigBase<
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
    * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`.
-   * Unioned with per-call `scopes` and the reserved `mastra__scopes` request-context key.
-   * A resolver function runs once per call with the request context.
+   * Scopes say who the run is; what it may do with them is decided by whatever reads them, such as
+   * Knowledge's scope declarations.
+   * A run's incoming scopes are the call's `scopes`, `defaultOptions.scopes` and the reserved
+   * `mastra__scopes` request-context key. A static list is added to them. A function receives
+   * them as `scopes` (with the request context) and returns the run's final set, so it can narrow
+   * or replace them; it must keep any `resource:`/`thread:` scope it was given. It runs once per
+   * call and is not called on resume.
    */
-  scopes?: DynamicArgument<string[], TRequestContext>;
+  scopes?: AgentScopesConfig<TRequestContext>;
   /**
    * Skills that guide agent behavior — reusable instructions the model loads on demand.
    *
@@ -897,9 +929,9 @@ interface AgentConfigBase<
    * must not share a single mutable instance (ws, tools, instructions, request context). The caller owns the
    * lifecycle (e.g. `disconnect()`) of a resolver-produced instance.
    *
-   * A static `MastraVoice` remains shared across requests, which is appropriate for one-shot TTS.
+   * A static voice instance remains shared across requests, which is appropriate for one-shot TTS.
    */
-  voice?: DynamicArgument<MastraVoice, TRequestContext>;
+  voice?: DynamicArgument<IMastraVoice, TRequestContext>;
   /**
    * Messaging channels the agent communicates over (e.g. Slack, Discord).
    *
@@ -930,6 +962,12 @@ interface AgentConfigBase<
    * When configured, workspace tools are automatically injected into the agent.
    */
   workspace?: DynamicArgument<AnyWorkspace | undefined, TRequestContext>;
+  /**
+   * Knowledge attached to this agent: a Knowledge instance or the key it is registered under on Mastra.
+   * The agent gets its tools, usage instructions and pins without needing Memory.
+   * @experimental
+   */
+  knowledge?: Knowledge | string;
   /**
    * Input processors that can modify or validate messages before they are processed by the agent.
    * These can be individual processors (implementing `processInput` or `processInputStep`) or
@@ -1265,6 +1303,8 @@ export type AgentStreamOptions<
 export type AgentModelManagerConfig = ModelManagerModelConfig & { enabled: boolean };
 
 export type AgentExecuteOnFinishOptions = {
+  /** Runtime terminal cause, applied only once finish-time work has completed. */
+  termination?: SpanTermination;
   runId: string;
   result: MastraOnFinishCallbackArgs & { object?: unknown };
   thread: StorageThreadType | null | undefined;
@@ -1345,6 +1385,13 @@ export interface DurableAgentLike {
     options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>>;
+  /**
+   * Abort `runId` and resolve whether the abort was confirmed: by a local close
+   * in this process, or by the process executing the run answering over
+   * `pubsub`. Used by the server's run abort route.
+   * @internal
+   */
+  __abortRunAcknowledged?(runId: string): Promise<boolean>;
   /**
    * Get workflows that need to be registered with Mastra.
    * Called during agent registration to auto-register durable execution workflows.

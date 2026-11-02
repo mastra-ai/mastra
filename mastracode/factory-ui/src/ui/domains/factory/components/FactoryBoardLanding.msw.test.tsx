@@ -32,7 +32,7 @@ const endpoint = `${TEST_BASE_URL}/web/factory/projects/project-1/boards`;
 
 describe('installed board landing', () => {
   it.each(['release', 'work', 'review'])('redirects to installed %s board preserving built-in URLs', async id => {
-    const payload: BoardCatalogResponse = { boards: [{ id, title: id, initialPhase: 'queued', phases: [] }] };
+    const payload: BoardCatalogResponse = { boards: [{ id, name: id, title: id, initialPhase: 'queued', phases: [] }] };
     server.use(http.get(endpoint, () => HttpResponse.json(payload)));
     renderLanding();
     expect(await screen.findByText(`/factories/project-1/${id === 'release' ? 'boards/release' : id}`)).toBeTruthy();
@@ -67,7 +67,7 @@ describe('installed board landing', () => {
       }),
     );
     renderLanding();
-    expect(screen.getByRole('status').textContent).toBe('Loading boards…');
+    expect(screen.getByRole('status', { name: 'Loading boards' })).toBeInTheDocument();
     release();
     expect((await screen.findByRole('alert')).textContent).toBe('Unable to load boards.');
   });

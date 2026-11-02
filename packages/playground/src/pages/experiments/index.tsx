@@ -250,7 +250,7 @@ export default function Experiments() {
           targetId={targetId}
           onFiltersChange={handleFiltersChange}
           selection={{
-            selectedCount: selectedIds.length,
+            selectedIds,
             onClearSelection: () => setSelectedExperimentIds([]),
             onCompare: executeCompare,
             compareDisabledReason,

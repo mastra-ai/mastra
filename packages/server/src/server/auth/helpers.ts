@@ -295,6 +295,28 @@ export type AuthResult =
 
 const pass: AuthResult = { action: 'next' };
 
+/**
+ * Lets an app's `authorize(path, method, user, context)` read `context.get('requestContext')` and
+ * `context.get('mastra')` on every adapter, as it can on Hono, so per-caller values (the Knowledge scope) bind
+ * the same way everywhere. Hono and NestJS contexts already answer `get`; Express, Fastify and Koa pass a web
+ * Request, Elysia its own context, and adapters with no builder pass nothing.
+ */
+const withAuthorizeVariables = (base: unknown, ctx: AuthMiddlewareContext): unknown => {
+  const variables: Record<string, unknown> = {
+    mastra: ctx.mastra,
+    requestContext: ctx.requestContext,
+    customRouteAuthConfig: ctx.customRouteAuthConfig,
+  };
+  const get = (key: string) => variables[key];
+  if (base === null || base === undefined) {
+    return { get, req: ctx.rawRequest };
+  }
+  if (typeof base === 'object' && typeof (base as { get?: unknown }).get !== 'function') {
+    Object.defineProperty(base, 'get', { value: get, configurable: true });
+  }
+  return base;
+};
+
 const adaptToMastraAuthRequest = (request: MastraAuthRequest): MastraAuthRequest => {
   if (!(request instanceof Request)) {
     return request;
@@ -585,7 +607,7 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     }
   } else if ('authorize' in authConfig && typeof authConfig.authorize === 'function') {
     try {
-      const authorizeCtx = ctx.buildAuthorizeContext();
+      const authorizeCtx = withAuthorizeVariables(ctx.buildAuthorizeContext(), ctx);
       const isAuthorized = await authConfig.authorize(path, method, user, authorizeCtx as any);
 
       if (!isAuthorized) {
@@ -609,7 +631,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
     // No explicit authorization configured (authorizeUser, authorize, or rules)
     // Check if RBAC is configured - if not, allow authenticated users through
     // (auth-only mode = authenticated users get full access)
-    const rbacProvider = mastra.getServer()?.rbac;
+    const rbacProvider =
+      requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio'
+        ? (mastra.getStudio?.()?.rbac ?? mastra.getServer()?.rbac)
+        : mastra.getServer()?.rbac;
     if (rbacProvider) {
       if (defaultAuthConfig.rules && defaultAuthConfig.rules.length > 0) {
         const isAuthorized = await checkRules(defaultAuthConfig.rules, path, method, user);

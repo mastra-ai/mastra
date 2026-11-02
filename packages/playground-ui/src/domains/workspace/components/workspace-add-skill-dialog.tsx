@@ -413,7 +413,7 @@ export function WorkspaceAddSkillDialog({
               disabled={!parsedSource || isSelectedSkillInstalled}
               data-testid="install-skill-button"
             >
-              {isInstalling ? 'Installing...' : isSelectedSkillInstalled ? 'Already Installed' : 'Install'}
+              {isInstalling ? 'Installing...' : isSelectedSkillInstalled ? 'Already installed' : 'Install'}
             </DialogAction>
           </DialogFooter>
         )}

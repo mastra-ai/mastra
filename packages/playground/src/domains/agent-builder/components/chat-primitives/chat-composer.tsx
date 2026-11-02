@@ -72,7 +72,6 @@ export const ChatComposer = ({
             tooltip={isRunning ? 'Generating…' : 'Send'}
             disabled={!canSubmit}
             data-testid={submitTestId}
-            className="rounded-full"
           >
             {isRunning ? <Loader2 className="animate-spin" /> : <ArrowUpIcon />}
           </Button>

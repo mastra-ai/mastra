@@ -214,6 +214,30 @@ describe('handleError', () => {
       expect(caught!.message).toBe('run is busy');
     });
 
+    it.each([
+      ['DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE', 'pending', 500],
+      ['DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE', 'paused', 409],
+    ])('returns a numeric HTTP failure for %s', async (id, snapshotStatus, status) => {
+      const err = new MastraError({
+        id,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'No restartable checkpoint is available',
+        details: { agentName: 'agent', runId: 'run', snapshotStatus },
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'Recovery failed');
+      } catch (error) {
+        caught = error as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      const response = caught!.getResponse();
+      expect(response.status).toBe(status);
+      expect(response.ok).toBe(false);
+      expect(await response.text()).toBe(err.message);
+    });
+
     it('does not treat a superseded execution as a request conflict', () => {
       const err = Object.assign(new Error('superseded'), { id: 'DURABLE_AGENT_EXECUTION_SUPERSEDED' });
       let caught: HTTPException | undefined;
@@ -223,6 +247,28 @@ describe('handleError', () => {
         caught = e as HTTPException;
       }
       expect(caught!.status).not.toBe(409);
+    });
+  });
+
+  describe('AGENT_REQUEST_CONTEXT_VALIDATION_FAILED', () => {
+    it('maps a rejected request context to 400 with the original message', () => {
+      const err = new MastraError({
+        id: 'AGENT_REQUEST_CONTEXT_VALIDATION_FAILED',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: "Request context validation failed for agent 'a':\n- userId: Required",
+        details: { agentId: 'a', agentName: 'a' },
+      });
+      let caught: HTTPException | undefined;
+      try {
+        handleError(err, 'default');
+      } catch (e) {
+        caught = e as HTTPException;
+      }
+      expect(caught).toBeInstanceOf(HTTPException);
+      expect(caught!.status).toBe(400);
+      expect(caught!.message).toBe(err.message);
+      expect(caught!.cause).toBe(err);
     });
   });
 

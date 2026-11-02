@@ -328,6 +328,17 @@ describe('BoardPage filters', () => {
     await user.keyboard('zz');
     expect(screen.queryAllByRole('menuitemcheckbox')).toEqual([]);
     expect(screen.getByText('No matches')).toBeInTheDocument();
+    // Reopen just this submenu, leaving the properties menu mounted.
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.getAllByRole('menu')).toHaveLength(1));
+    await user.keyboard('{ArrowRight}');
+    expect(await screen.findByRole('textbox', { name: 'Search author' })).toHaveValue('');
+    expect(
+      screen
+        .getAllByRole('menuitemcheckbox')
+        .slice(0, 2)
+        .map(option => option.textContent),
+    ).toEqual(expect.arrayContaining(['erin', 'judy']));
     await closePropertiesMenus(user);
     await openPropertySubmenu(user, MENU, 'Author');
     expect(screen.getByRole('textbox', { name: 'Search author' })).toHaveValue('');

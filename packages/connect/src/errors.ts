@@ -82,7 +82,7 @@ interface ProblemJson {
   status?: number;
   detail?: string;
   code?: string;
-  error?: string | { message?: unknown };
+  error?: string | { message?: unknown; code?: unknown };
   // GitHub-style bodies surface a top-level `message` string.
   message?: string;
   // Jira surfaces human-readable messages as `errorMessages: string[]`.
@@ -110,6 +110,12 @@ export async function extractProblemDetail(
   try {
     const data = (await response.clone().json()) as ProblemJson;
     if (data && typeof data === 'object') {
+      // Microsoft Graph and OData services nest the code: `{ "error": { "code", "message" } }`.
+      // It is only used as a last-resort detail; `code` stays the platform's own top-level code.
+      const nestedCode =
+        data.error && typeof data.error === 'object' && typeof data.error.code === 'string' && data.error.code
+          ? data.error.code
+          : undefined;
       const code = typeof data.code === 'string' ? data.code : undefined;
       for (const field of ['detail', 'title', 'error', 'message'] as const) {
         const value = data[field];
@@ -137,6 +143,9 @@ export async function extractProblemDetail(
         const entry = Object.entries(data.errors).find(([, value]) => typeof value === 'string' && value);
         if (entry) return { detail: truncate(`${entry[0]}: ${entry[1]}`), code, isProblemJson };
       }
+      // Graph sometimes returns an empty message (e.g. a 401 `UnknownError`);
+      // its code is then the only diagnostic it offers.
+      if (nestedCode) return { detail: truncate(nestedCode), code, isProblemJson };
       return { code, isProblemJson };
     }
   } catch {

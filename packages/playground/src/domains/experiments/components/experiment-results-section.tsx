@@ -102,7 +102,7 @@ export function ExperimentResultsSection({
 
   const resultsListColumns = useMemo(
     () => [
-      { name: 'itemId', label: 'Item ID', size: 'auto' },
+      { name: 'itemId', label: 'Item ID', size: '7rem' },
       { name: 'input', label: 'Input', size: '20rem' },
       ...getOptionalResultColumns(results),
       ...(supportsMetrics

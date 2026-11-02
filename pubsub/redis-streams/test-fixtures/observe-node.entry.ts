@@ -17,6 +17,7 @@ import { createInterface } from 'node:readline';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
+import { CachingPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
@@ -68,17 +69,19 @@ async function main() {
     model: openai('gpt-4o-mini'),
     tools: { wait_gate: waitGate, lookup_status: lookup },
   });
-  const pubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
+  const redisPubsub = new RedisStreamsPubSub({ url: REDIS_URL, keyPrefix: KEY_PREFIX, blockMs: 200 });
+  const cache = new RedisServerCache(
+    { client: cacheClient as any },
+    { ...nodeRedisPreset, keyPrefix: `${KEY_PREFIX}:cache` },
+  );
+  const pubsub = process.env.PREWRAPPED_PUBSUB === '1' ? new CachingPubSub(redisPubsub, cache) : redisPubsub;
   const agent = ENGINE === 'evented' ? createEventedAgent({ agent: base }) : createDurableAgent({ agent: base });
 
   const mastra = new Mastra({
     logger: false,
     storage: new LibSQLStore({ id: 'observe-storage', url: STORAGE_URL! }),
     pubsub,
-    cache: new RedisServerCache(
-      { client: cacheClient as any },
-      { ...nodeRedisPreset, keyPrefix: `${KEY_PREFIX}:cache` },
-    ),
+    cache,
     agents: { observerAgent: agent },
   });
   const durable: any = mastra.getAgent('observerAgent');

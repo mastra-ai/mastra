@@ -51,6 +51,7 @@ import {
   ToolsIcon,
   TraceIcon,
   TsIcon,
+  TypesafeIcon,
   VariablesIcon,
   WorkflowCoinIcon,
   WorkflowIcon,
@@ -274,6 +275,7 @@ const brandIcons = [
   { name: 'Meta', component: MetaIcon },
   { name: 'Moonshot', component: MoonshotIcon },
   { name: 'xAI', component: XaiIcon },
+  { name: 'Typesafe', component: TypesafeIcon },
 ];
 
 export const BrandIcons: Story = {
@@ -316,10 +318,10 @@ export const Stroke: Story = {
       ))}
       <div className="flex items-center gap-3">
         <Button size="sm" icon={<Plus />}>
-          Add Header
+          Add header
         </Button>
         <Button size="md" icon={<Plus />}>
-          Add Header
+          Add header
         </Button>
         <Button size="lg" icon={<Play />}>
           Run

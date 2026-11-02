@@ -20,7 +20,7 @@ const baseSpan = {
 
 export const rootSpan = {
   ...baseSpan,
-  spanId: 'span-root',
+  spanId: 'root01',
   name: 'Root agent run',
   parentSpanId: null,
   entityType: 'agent',
@@ -32,17 +32,17 @@ export const rootSpan = {
 };
 export const childSpanOne = {
   ...baseSpan,
-  spanId: 'span-child-1',
+  spanId: 'child1',
   name: 'First tool call',
   spanType: SpanType.TOOL_CALL,
-  parentSpanId: 'span-root',
+  parentSpanId: 'root01',
 };
 export const childSpanTwo = {
   ...baseSpan,
-  spanId: 'span-child-2',
+  spanId: 'child2',
   name: 'Second tool call',
   spanType: SpanType.TOOL_CALL,
-  parentSpanId: 'span-root',
+  parentSpanId: 'root01',
 };
 
 /** Full trace tree: root with two children — enough to exercise prev/next span navigation. */
@@ -52,7 +52,27 @@ export const panelTraceSpans: GetTraceResponse = {
 };
 
 export const spanDetailById: Record<string, GetSpanResponse> = {
-  'span-root': { span: { ...rootSpan, input: { message: 'go' }, output: { text: 'done' } } },
-  'span-child-1': { span: { ...childSpanOne, sessionId: 'session-42', input: { arg: 1 }, output: { ok: true } } },
-  'span-child-2': { span: { ...childSpanTwo, input: { arg: 2 }, output: { ok: true } } },
+  root01: { span: { ...rootSpan, input: { message: 'go' }, output: { text: 'done' } } },
+  child1: { span: { ...childSpanOne, sessionId: 'session-42', input: { arg: 1 }, output: { ok: true } } },
+  child2: { span: { ...childSpanTwo, input: { arg: 2 }, output: { ok: true } } },
+};
+
+const skillSignal = { id: 'signal-skill-1', type: 'reactive', tagName: 'skill', attributes: { name: 'weather-check' } };
+
+/** The root run started by a skill signal: its input is the serialized signal object. */
+export const skillSignalRootDetail: GetSpanResponse = {
+  span: {
+    ...rootSpan,
+    attributes: { signal: skillSignal },
+    input: {
+      ...skillSignal,
+      contents: 'Check the forecast before answering.\n\nARGUMENTS: Paris',
+      createdAt: '2026-08-30T12:00:00.000Z',
+      __isCreatedSignal: true,
+      toDBMessage: '[Function]',
+      toLLMMessage: '[Function]',
+      toDataPart: '[Function]',
+    },
+    output: { text: 'done' },
+  },
 };

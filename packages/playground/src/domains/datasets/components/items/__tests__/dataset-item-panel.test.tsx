@@ -100,7 +100,7 @@ describe('DatasetItemPanel', () => {
       renderPanel(baseItem);
       await enterEditMode();
 
-      expect(screen.getByRole('button', { name: 'Save Changes' })).not.toBeNull();
+      expect(screen.getByRole('button', { name: 'Save changes' })).not.toBeNull();
       expect(screen.queryByRole('switch', { name: 'Override dataset scorers' })).toBeNull();
     });
   });
@@ -117,7 +117,7 @@ describe('DatasetItemPanel', () => {
       renderPanel(itemWithScorers);
       await enterEditMode();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
       await waitFor(() => expect(capture).toHaveBeenCalledTimes(1));
       expect(capture.mock.calls[0]?.[0]).not.toHaveProperty('scorerIds');

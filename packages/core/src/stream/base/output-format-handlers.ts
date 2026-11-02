@@ -630,6 +630,16 @@ export function createOutputHandler<OUTPUT = undefined>({ schema }: { schema?: P
 }
 
 /**
+ * Errors this transformer emits itself (validation, truncation, malformed enum), as opposed to
+ * errors the provider streamed. They are enqueued before the model's `finish` chunk.
+ */
+const structuredOutputErrors = new WeakSet<object>();
+
+export function isStructuredOutputError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && structuredOutputErrors.has(error);
+}
+
+/**
  * Transforms raw text-delta chunks into structured object chunks for JSON mode streaming.
  *
  * For JSON response formats, this transformer:
@@ -698,15 +708,15 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         }
       }
 
-      // Always pass through the original chunk for downstream processing
-      controller.enqueue(chunk);
-
-      // Wait for the terminal finish reason before resolving the final object.
+      // Resolve structured output before finish: thread subscribers stop reading at that boundary.
       // Providers that omit finish are handled by the flush fallback below.
       if (chunk.type === 'finish') {
         finishReason = chunk.payload.stepResult.reason;
         await finalize(controller);
       }
+
+      // Always pass through the original chunk for downstream processing
+      controller.enqueue(chunk);
     },
 
     async flush(controller) {
@@ -715,7 +725,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   });
 
   async function finalize(controller: TransformStreamDefaultController<ChunkType<OUTPUT>>) {
-    if (!accumulatedText?.trim() || finalResult) {
+    if (!accumulatedText?.trim() || finalResult || finishReason === 'error') {
       return;
     }
 
@@ -771,6 +781,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
         metadata: { fallback: true },
       });
     } else {
+      structuredOutputErrors.add(error);
       controller.enqueue({
         from: ChunkFrom.AGENT,
         runId: currentRunId ?? '',

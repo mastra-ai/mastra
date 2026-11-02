@@ -18,26 +18,35 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
-import type { TypingStatusFn } from '@mastra/core/channels';
+import type { AgentChannels, TypingStatusFn } from '@mastra/core/channels';
+import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
-import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
+import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { announcePullRequest } from '../channel-thread-announcements.js';
+import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
+import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
+import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
 import { createSlackConnectRoutes } from './connect-route.js';
 import { SlackFeedPublisher } from './feed-publisher.js';
+import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
+import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool.js';
+import { createShareFileTool, isSlackThread } from './share-file-tool.js';
+import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
 
-/**
- * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
- * is required because the Slack adapter validates it at construction — an
- * integration constructed without it would throw during `prepare()` rather than
- * reporting itself unconfigured.
- */
+/** Slack app credentials, read from env ONCE by the deploy entry. */
 export interface SlackIntegrationConfig {
-  /** Verifies inbound Slack request signatures. Required. */
-  signingSecret: string;
+  /** Slack event transport. Defaults to webhook mode. */
+  mode?: 'webhook' | 'socket';
+  /** Verifies inbound Slack request signatures. Required in webhook mode. */
+  signingSecret?: string;
+  /** App-level token used to connect to Slack. Required in socket mode. */
+  appToken?: string;
   /** Bot token used to post replies and ephemeral cards. */
   botToken?: string;
   /**
@@ -94,13 +103,25 @@ function describeToolCall(args: unknown): string | undefined {
   return `is ${/^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text}`;
 }
 
-const factoryTypingStatus: TypingStatusFn = chunk => {
+/**
+ * With reply text hidden, streamed text never reaches the thread, so it gets
+ * no status: an "is typing..." set after the reply tool's post would sit on
+ * the thread with nothing coming, and race the clear at the end of the run.
+ */
+const factoryTypingStatus =
+  (textDisplay: SlackAdapterChannelConfig['textDisplay']): TypingStatusFn =>
+  chunk => {
   switch (chunk.type) {
     case 'reasoning-delta':
       return 'is thinking...';
     case 'text-delta':
-      return 'is typing...';
+      return textDisplay === 'hidden' ? undefined : 'is typing...';
+    // The reply tool's text streams into the thread as the model writes it.
+    case 'tool-call-input-streaming-start':
+      return chunk.payload.toolName === REPLY_TOOL_NAME ? 'is typing...' : undefined;
     case 'tool-call':
+      // Still finishing the streamed reply; don't flip to "is working...".
+      if (chunk.payload.toolName === REPLY_TOOL_NAME) return 'is typing...';
       return describeToolCall(chunk.payload.args) ?? 'is working...';
     default:
       return undefined;
@@ -126,7 +147,8 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
  * who want Slack's "Thinking Steps" widget.
  */
 function factoryAdapterOptions(overrides: SlackAdapterChannelConfig): SlackAdapterChannelConfig {
-  return { typingStatus: factoryTypingStatus, toolDisplay: 'hidden', ...overrides };
+  const textDisplay = overrides.textDisplay ?? 'hidden';
+  return { typingStatus: factoryTypingStatus(textDisplay), toolDisplay: 'hidden', textDisplay, ...overrides };
 }
 
 export class SlackIntegration implements FactoryIntegration {
@@ -139,6 +161,17 @@ export class SlackIntegration implements FactoryIntegration {
   readonly requiresStableStateSigner = true;
 
   readonly #config: SlackIntegrationConfig;
+  readonly #adapterOptions: SlackAdapterChannelConfig;
+  /** Bound in `initialize()`; the controller mounts after integrations are built. */
+  #channels: ShareFileToolDeps['channels'];
+  readonly #deps: ShareFileToolDeps = { channels: () => this.#channels?.() };
+  /**
+   * With reply text hidden (the Factory default) the agent speaks through
+   * `reply_in_thread`, so the prompt, reminder and live streaming for that
+   * tool come with it. The setting is fixed for the deployment, so it is
+   * decided once here rather than on every run.
+   */
+  readonly processors: { input: InputProcessor[]; output: OutputProcessor[] };
   /**
    * Whether `channels()` found a source-control owner on the context and wired
    * repo-backed sessions. Set at the channels() attach path, which runs once at
@@ -147,12 +180,69 @@ export class SlackIntegration implements FactoryIntegration {
   #repoBackedSessions = false;
 
   constructor(config: SlackIntegrationConfig) {
-    if (!config.signingSecret) {
+    const mode = config.mode ?? 'webhook';
+    if (mode === 'webhook' && !config.signingSecret) {
       throw new Error(
-        "SlackIntegration: 'signingSecret' is required — Slack cannot verify inbound requests without it.",
+        "SlackIntegration: 'signingSecret' is required in webhook mode — Slack cannot verify inbound requests without it.",
       );
     }
+    if (mode === 'socket' && !config.appToken) {
+      throw new Error("SlackIntegration: 'appToken' is required in socket mode — Slack cannot open a Socket Mode connection without it.");
+    }
+    if (mode === 'socket' && !config.botToken) {
+      throw new Error("SlackIntegration: 'botToken' is required in socket mode — Factory cannot reply without it.");
+    }
     this.#config = config;
+    this.#adapterOptions = factoryAdapterOptions(adapterOverrides(config.adapterOptions));
+    const textHidden = this.#textHidden;
+    this.processors = {
+      input: [
+        new FactoryChannelReplyProcessor(),
+        ...(textHidden ? [new FactoryReplyReminderProcessor()] : []),
+      ],
+      output: [
+        new FactoryChannelSessionLinkProcessor(),
+        ...(textHidden ? [new FactoryReplyStreamProcessor(this.#deps)] : []),
+      ],
+    };
+  }
+
+  get #textHidden(): boolean {
+    return this.#adapterOptions.textDisplay === 'hidden';
+  }
+
+  initialize(args: { channels?: () => AgentChannels | null | undefined }): void {
+    this.#channels = args.channels;
+  }
+
+  /**
+   * `attach_file`, and `reply_in_thread` when reply text is hidden, on runs
+   * whose session is linked to a Slack thread. The tools find the thread to
+   * post into when they are called.
+   */
+  async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
+    if (!(await isSlackThread(requestContext, this.#deps))) return {};
+    return {
+      ...createShareFileTool(requestContext, this.#deps),
+      ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
+    };
+  }
+
+  /**
+   * When a run opens a pull request, post its link into the session's Slack
+   * thread.
+   */
+  async postToolObserver({
+    toolContext,
+    requestContext,
+  }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
+    const url = parseCreatedPullRequest(toolContext);
+    const threadId = (requestContext?.get('controller') as { threadId?: string } | undefined)?.threadId;
+    if (!url || !requestContext || !threadId || !(await isSlackThread(requestContext, this.#deps))) return;
+    // Not awaited: the tool call must not wait on Slack.
+    void announcePullRequest(this.#channels?.(), threadId, 'opened', url).catch(error =>
+      console.warn('[slack] pull request opened announcement failed', error),
+    );
   }
 
   channels(ctx: IntegrationContext): FactoryChannelsConfig {
@@ -161,11 +251,15 @@ export class SlackIntegration implements FactoryIntegration {
     const sourceControls =
       ctx.storage.sourceControls ?? (ctx.storage.sourceControlOwner ? [ctx.storage.sourceControlOwner] : []);
     this.#repoBackedSessions = sourceControls.length > 0;
+    const mode = this.#config.mode ?? 'webhook';
     return createSlackChannelsConfig({
       slack: {
-        clientId: this.#config.clientId,
-        clientSecret: this.#config.clientSecret,
+        mode: this.#config.mode,
+        ...(mode === 'webhook'
+          ? { clientId: this.#config.clientId, clientSecret: this.#config.clientSecret }
+          : {}),
         signingSecret: this.#config.signingSecret,
+        appToken: this.#config.appToken,
         botToken: this.#config.botToken,
       },
       accountLinks: ctx.storage.channelIdentity,
@@ -174,7 +268,7 @@ export class SlackIntegration implements FactoryIntegration {
       modelDefaults: ctx.storage.modelDefaults,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
-      adapterOptions: factoryAdapterOptions(adapterOverrides(this.#config.adapterOptions)),
+      adapterOptions: this.#adapterOptions,
     });
   }
 

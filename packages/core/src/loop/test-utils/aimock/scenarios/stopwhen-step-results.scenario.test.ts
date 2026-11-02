@@ -1,7 +1,12 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import {
+  describeForAllEngines,
+  isDurableEngineVariant,
+  runLoopScenario,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 
 /**
  * Regression class: what a custom `stopWhen` predicate sees.
@@ -94,6 +99,71 @@ describeForAllEngines('AIMock loop scenario: stopWhen step results', engine => {
     expect(chunks!.filter(chunk => chunk.type === 'step-finish')).toHaveLength(3);
     expect(seenStepCounts).toEqual([1, 2]);
   });
+
+  const recordToolResults = async () => {
+    const seen: Array<Array<{ toolResults: any[]; content: Array<{ type: string }> }>> = [];
+    const { output } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'What should I be doing in Toronto today?',
+      tools,
+      stopWhen: (({ steps }: { steps: any[] }) => {
+        seen.push(steps.map(step => ({ toolResults: step.toolResults, content: step.content })));
+        return false;
+      }) as any,
+      fixtures: llm => scriptThreeTurns(llm),
+    });
+    await output.consumeStream();
+    return seen;
+  };
+
+  const expectedResults = [
+    {
+      toolCallId: 'call_weather',
+      toolName: 'weather',
+      value: { temperature: 70, conditions: 'sunny', location: 'Toronto' },
+    },
+    { toolCallId: 'call_plan', toolName: 'plan_activities', value: { activities: 'Walk along the waterfront' } },
+  ];
+
+  it('populates toolResults on every step it passes the predicate', async () => {
+    const seen = await recordToolResults();
+
+    expect(seen.map(steps => steps.length)).toEqual([1, 2]);
+    for (const steps of seen) {
+      steps.forEach((step, index) => {
+        const { toolCallId, toolName } = expectedResults[index]!;
+        expect(step.toolResults).toHaveLength(1);
+        expect(step.toolResults[0]).toMatchObject({ toolCallId, toolName });
+        expect(step.toolResults).toHaveLength(step.content.filter(part => part.type === 'tool-result').length);
+      });
+    }
+  });
+
+  // The durable engines rebuild steps from Mastra tool-result chunk payloads
+  // ({ args, result }, no `type`) rather than AI SDK ToolResultParts
+  // ({ type, input, output: { type: 'json', value } }), so a predicate that reads
+  // `output` sees undefined there. Tracked in
+  // https://github.com/mastra-ai/mastra/issues/28519; drop the it.fails once fixed.
+  (isDurableEngineVariant(engine) ? it.fails : it)(
+    'passes toolResults to the predicate as AI SDK tool-result parts',
+    async () => {
+      const seen = await recordToolResults();
+
+      expect(seen).toHaveLength(2);
+      for (const steps of seen) {
+        steps.forEach((step, index) => {
+          const { toolCallId, toolName, value } = expectedResults[index]!;
+          expect(step.toolResults[0]).toMatchObject({
+            type: 'tool-result',
+            toolCallId,
+            toolName,
+            output: { type: 'json', value },
+          });
+        });
+      }
+    },
+  );
 
   for (const withText of [false, true]) {
     const variant = withText ? ' (text and tool call in one step)' : '';

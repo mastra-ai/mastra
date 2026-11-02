@@ -8,7 +8,6 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 
 import { coreFeatures } from '@mastra/core/features';
-import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
 import {
   MastraMemory,
@@ -52,8 +51,6 @@ import type {
   ThreadCloneMetadata,
   ObservationalMemoryRecord,
   BufferedObservationChunk,
-  KnowledgeStorage,
-  KnowledgeScope,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -64,10 +61,6 @@ import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
-import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
-import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
-import { getRemindThreadId, isOwnedRemindThread } from './processors/observational-memory/subconscious/remind-protocol';
-import { createAskMemoryTool } from './processors/observational-memory/subconscious/remind-questions';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 import type {
   SummarizeConversationOptions,
@@ -76,6 +69,7 @@ import type {
 import { TokenCounter } from './processors/observational-memory/token-counter';
 import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+import { SUBCONSCIOUS_REMOVED_MESSAGE } from './removed-subconscious';
 import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory, parseWorkingMemoryJson } from './tools/working-memory';
@@ -101,7 +95,7 @@ export {
   KnowledgeSemanticIndexCoordinator,
   StaleKnowledgeSemanticIndexError,
   Subconscious,
-} from './processors/observational-memory/subconscious';
+} from './removed-subconscious';
 export type {
   KnowledgeSemanticIndexCoordinatorConfig,
   ResolvedSubconsciousAgent,
@@ -111,7 +105,7 @@ export type {
   SubconsciousConfig,
   SubconsciousCustomObservationConfig,
   SubconsciousObservationEntry,
-} from './processors/observational-memory/subconscious';
+} from './removed-subconscious';
 export { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 export type {
   SummarizeConversationOptions,
@@ -128,8 +122,6 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   model?: ObservationalMemoryConfig['model'];
   observation?: ObservationalMemoryConfig['observation'];
   reflection?: ObservationalMemoryConfig['reflection'];
-  /** @experimental This API may change without notice. */
-  experimental_subconscious?: Subconscious;
   activateAfterIdle?: ObservationalMemoryConfig['activateAfterIdle'];
   activateOnProviderChange?: ObservationalMemoryConfig['activateOnProviderChange'];
   temporalMarkers?: boolean;
@@ -138,6 +130,8 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   autoModels?: ObservationalMemoryConfig['autoModels'];
   canUseProvider?: ObservationalMemoryConfig['canUseProvider'];
   resolveModel?: ObservationalMemoryConfig['resolveModel'];
+  /** @deprecated Subconscious was removed; attach `Knowledge` to the agent instead. Setting it throws. */
+  experimental_subconscious?: unknown;
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -146,12 +140,8 @@ type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
 
 type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
   options?: MemoryOptions;
-  /**
-   * Selects the experimental Knowledge runtime used by Subconscious observation ingestion, tools, pinning,
-   * curation, and semantic indexing. A string resolves a keyed instance from the owning Mastra;
-   * a Knowledge instance supports standalone wiring. Omit to use the `knowledge` domain of this Memory's own storage.
-   */
-  knowledge?: string | Knowledge | false;
+  /** @deprecated Memory no longer selects a Knowledge; attach `Knowledge` to the agent instead. Setting it throws. */
+  knowledge?: unknown;
 };
 
 type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
@@ -485,9 +475,6 @@ export class Memory extends MastraMemory {
   private _omEngine: Promise<ObservationalMemory | null> | undefined;
   private _omEngineInstance: ObservationalMemory | null | undefined;
   private _mastraInstance: Mastra | undefined;
-  private readonly _knowledge: MemoryConstructorConfig['knowledge'];
-  private _knowledgeStore?: Promise<KnowledgeStorage>;
-  private _knowledgeSemanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
 
   /**
    * Every vector cleanup that deleteThread or deleteMessages started in the background.
@@ -543,8 +530,6 @@ export class Memory extends MastraMemory {
   __registerMastra(mastra: Mastra): void {
     super.__registerMastra(mastra);
     this._mastraInstance = mastra;
-    this._knowledgeStore = undefined;
-    this._knowledgeSemanticIndex = undefined;
     if (this._omEngineInstance) {
       this._omEngineInstance.__registerMastra(mastra);
     } else {
@@ -552,55 +537,9 @@ export class Memory extends MastraMemory {
     }
   }
 
-  /** @internal Creates isolated memory for a derived subconscious agent. */
-  createSubconsciousMemory(): Memory {
-    const memory = new Memory({
-      storage: this.storage,
-      knowledge: this.getKnowledgeInstance() ?? this._knowledge,
-      vector: this.vector,
-      embedder: this.embedder,
-      embedderOptions: this.embedderOptions,
-      options: { observationalMemory: false },
-    });
-    if (this._mastraInstance) memory.__registerMastra(this._mastraInstance);
-    return memory;
-  }
-
   public override getMergedThreadConfig(config?: MemoryConfigInternal): MemoryConfigInternal {
     const merged = super.getMergedThreadConfig(config);
-    return this.applyManagedWorkingMemoryDefaults(this.applySubconsciousDefaults(merged));
-  }
-
-  private applySubconsciousDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
-    const omConfig = normalizeObservationalMemoryConfig(
-      config.observationalMemory as boolean | MemoryObservationalMemoryOptions | undefined,
-    );
-    if (!omConfig?.experimental_subconscious) return config;
-    if (!(omConfig.experimental_subconscious instanceof Subconscious)) {
-      throw new Error('observationalMemory.experimental_subconscious must be a Subconscious instance.');
-    }
-
-    const observation = (omConfig.observation ?? {}) as NonNullable<ObservationalMemoryConfig['observation']>;
-    const extract = observation.extract ?? [];
-    const existingSlugs = new Set(extract.map(extractor => extractor.slug));
-    let curatorMemory: Memory | undefined;
-    const subconsciousExtractors = omConfig.experimental_subconscious
-      .createObservationExtractors(
-        selectObserverModel(omConfig),
-        () => (curatorMemory ??= this.createSubconsciousMemory()),
-      )
-      .filter(extractor => !existingSlugs.has(extractor.slug));
-
-    return {
-      ...config,
-      observationalMemory: {
-        ...omConfig,
-        observation: {
-          ...observation,
-          extract: [...extract, ...subconsciousExtractors],
-        },
-      },
-    } as MemoryConfigInternal;
+    return this.applyManagedWorkingMemoryDefaults(merged);
   }
 
   private applyManagedWorkingMemoryDefaults(config: MemoryConfigInternal): MemoryConfigInternal {
@@ -634,9 +573,15 @@ export class Memory extends MastraMemory {
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
-    const { knowledge, ...memoryConfig } = config;
-    super({ name: 'Memory', ...memoryConfig } as { name: string } & SharedMemoryConfig);
-    this._knowledge = knowledge;
+    const om = config.options?.observationalMemory;
+    if (
+      (config.knowledge !== undefined && config.knowledge !== false) ||
+      (typeof om === 'object' && om?.experimental_subconscious !== undefined)
+    ) {
+      throw new Error(SUBCONSCIOUS_REMOVED_MESSAGE);
+    }
+    const { knowledge: _knowledge, ...sharedConfig } = config;
+    super({ name: 'Memory', ...sharedConfig } as { name: string } & SharedMemoryConfig);
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
@@ -665,80 +610,6 @@ export class Memory extends MastraMemory {
         );
       }
     }
-    // Every Knowledge write queues semantic-index work; only a vector store and embedder drain it.
-    if (omConfig?.experimental_subconscious) {
-      if (!this.vector) {
-        throw new Error('Subconscious semantic knowledge requires a vector store. Pass a `vector` option to Memory.');
-      }
-      if (!this.embedder) {
-        throw new Error('Subconscious semantic knowledge requires an embedder. Pass an `embedder` option to Memory.');
-      }
-    }
-  }
-
-  /** Returns the configured Knowledge v2 instance, or undefined when Knowledge comes from this Memory's own storage. */
-  public getKnowledgeInstance(): Knowledge | undefined {
-    if (this._knowledge === false || this._knowledge === undefined) return undefined;
-    if (typeof this._knowledge !== 'string') return this._knowledge;
-    if (!this._mastraInstance) {
-      throw new Error(
-        `Memory cannot resolve Knowledge instance "${this._knowledge}" before it is registered with Mastra.`,
-      );
-    }
-    return this._mastraInstance.getKnowledge(this._knowledge);
-  }
-
-  /**
-   * Resolves the one Knowledge storage domain used by every Subconscious path on this Memory.
-   * Configured v2 runtimes never fall back to Memory storage, preventing split-brain state.
-   */
-  public async getKnowledgeStore(): Promise<KnowledgeStorage> {
-    if (this._knowledge === undefined) return this.resolveStorageKnowledgeStore();
-    if (this._knowledge === false) throw new Error('Knowledge is disabled for this Memory instance.');
-    if (!this._knowledgeStore) {
-      const promise = this.getKnowledgeInstance()!
-        .getStorage()
-        .catch(error => {
-          if (this._knowledgeStore === promise) this._knowledgeStore = undefined;
-          throw error;
-        });
-      this._knowledgeStore = promise;
-    }
-    return this._knowledgeStore;
-  }
-
-  private async resolveStorageKnowledgeStore(): Promise<KnowledgeStorage> {
-    const store = await this.storage.getStore('knowledge');
-    if (!store) {
-      throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
-    }
-    return store;
-  }
-
-  public async getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined> {
-    if (!this.vector || !this.embedder) return undefined;
-    if (!this._knowledgeSemanticIndex) {
-      const promise = this.getKnowledgeStore()
-        .then(
-          knowledge =>
-            new KnowledgeSemanticIndexCoordinator({
-              knowledge,
-              vector: this.vector!,
-              embedder: this.embedder!,
-              embedderOptions: this.embedderOptions,
-            }),
-        )
-        .catch(error => {
-          if (this._knowledgeSemanticIndex === promise) this._knowledgeSemanticIndex = undefined;
-          throw error;
-        });
-      this._knowledgeSemanticIndex = promise;
-    }
-    return this._knowledgeSemanticIndex;
-  }
-
-  public async drainKnowledgeSemanticIndex(scope?: KnowledgeScope): Promise<number> {
-    return (await this.getKnowledgeSemanticIndex())?.drain(scope) ?? 0;
   }
 
   /**
@@ -1180,12 +1051,6 @@ export class Memory extends MastraMemory {
   async deleteThread(threadId: string): Promise<void> {
     const memoryStore = await this.getMemoryStore();
     const thread = await memoryStore.getThreadById({ threadId });
-    const remindThreadId = getRemindThreadId(threadId);
-    const remindThread = thread?.resourceId ? await memoryStore.getThreadById({ threadId: remindThreadId }) : null;
-
-    if (thread?.resourceId && isOwnedRemindThread(remindThread, threadId, thread.resourceId)) {
-      await this.deleteStoredThread(memoryStore, remindThreadId, remindThread.resourceId);
-    }
     await this.deleteStoredThread(memoryStore, threadId, thread?.resourceId);
   }
 
@@ -1201,6 +1066,12 @@ export class Memory extends MastraMemory {
     }
 
     await memoryStore.deleteThread({ threadId });
+    // Fire-and-forget (it never throws): neither deleteThread nor settled() may wait on
+    // the pubsub, which can stall indefinitely while e.g. Redis reconnects.
+    // The peer range still admits @mastra/core versions without clearThreadStream.
+    if (typeof this.clearThreadStream === 'function') {
+      void this.clearThreadStream(threadId, resourceId);
+    }
     if (resourceId && memoryStore.supportsObservationalMemory) {
       await memoryStore.clearObservationalMemory(threadId, resourceId);
     }
@@ -1732,12 +1603,7 @@ ${workingMemory}`;
       // System messages are runtime instructions and should never be stored in memory.
       // Transient signals (`transient: true`) are delivery-only and must never be stored.
       // Then strip working memory tags from all persistable messages.
-      const updatedMessages = messages
-        .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
-        .map(m => {
-          return this.updateMessageToHideWorkingMemoryV2(m);
-        })
-        .filter((m): m is MastraDBMessage => Boolean(m));
+      const updatedMessages = this.prepareMessagesForPersistence(messages);
 
       const config = this.getMergedThreadConfig(memoryConfig);
 
@@ -1915,6 +1781,13 @@ ${workingMemory}`;
     }
   }
 
+  private prepareMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
+    return messages
+      .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
+      .map(m => this.updateMessageToHideWorkingMemoryV2(m))
+      .filter((m): m is MastraDBMessage => m !== null);
+  }
+
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     const newMessage = { ...message };
     // Only spread content if it's a proper V2 object to avoid corrupting non-object content
@@ -1930,6 +1803,8 @@ ${workingMemory}`;
       if (Array.isArray(newMessage.content.toolInvocations)) {
         newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(newMessage.content.toolInvocations);
       }
+      const lastOriginalPart = newMessage.content.parts.at(-1);
+      const sealMetadata = lastOriginalPart && 'metadata' in lastOriginalPart ? lastOriginalPart.metadata : undefined;
       newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts).map(part => {
         if (part?.type === 'text') {
           const text = typeof part.text === 'string' ? part.text : '';
@@ -1940,6 +1815,24 @@ ${workingMemory}`;
         }
         return part;
       });
+
+      // The last part can be a hidden tool call. Retain its seal boundary on the
+      // last surviving part without changing the live message used by the observer.
+      const lastIndex = newMessage.content.parts.length - 1;
+      const lastPart = newMessage.content.parts[lastIndex];
+      if (lastPart && sealMetadata && typeof sealMetadata === 'object' && 'mastra' in sealMetadata) {
+        const mastra = sealMetadata.mastra;
+        if (mastra && typeof mastra === 'object' && 'sealedAt' in mastra && typeof mastra.sealedAt === 'number') {
+          const existingMetadata = 'metadata' in lastPart ? lastPart.metadata : undefined;
+          const metadata = existingMetadata && typeof existingMetadata === 'object' ? existingMetadata : {};
+          const existingMastra =
+            'mastra' in metadata && metadata.mastra && typeof metadata.mastra === 'object' ? metadata.mastra : {};
+          newMessage.content.parts[lastIndex] = {
+            ...lastPart,
+            ...{ metadata: { ...metadata, mastra: { ...existingMastra, sealedAt: mastra.sealedAt } } },
+          };
+        }
+      }
 
       // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
       // only skip the message when it also has no text content left.
@@ -2098,10 +1991,12 @@ ${workingMemory}`;
     const workingMemoryConfig = config.workingMemory;
 
     // In readOnly or non-agent-managed mode, provide context without tool instructions.
+    // With agentManaged: false the app still updates the memory, so the agent must not claim it can't.
     if (config?.readOnly || workingMemoryConfig.agentManaged === false) {
       return this.getReadOnlyWorkingMemoryInstruction({
         template: workingMemoryTemplate,
         data: workingMemoryData,
+        autoUpdated: !config?.readOnly,
       });
     }
 
@@ -2114,6 +2009,19 @@ ${workingMemory}`;
           template: workingMemoryTemplate,
           data: workingMemoryData,
         });
+  }
+
+  /** Fetch current stored copies of messages in a resumed turn, bypassing run-state history caches. */
+  public async getPersistedMessages(threadId: string, ids: string[]): Promise<MastraDBMessage[]> {
+    if (!ids.length) return [];
+    const memoryStore = await this.getMemoryStore();
+    const result = await memoryStore.listMessages({
+      threadId,
+      perPage: 0,
+      include: ids.map(id => ({ id })),
+      includeTotal: false,
+    });
+    return result.messages.filter(message => ids.includes(message.id));
   }
 
   /**
@@ -2334,13 +2242,13 @@ ${workingMemory}`;
   }
 
   /**
-   * Raw message upsert — persist messages to storage without embedding or working memory processing.
+   * Raw message upsert — apply the persistence projection without embedding or extracting working memory.
    * Used by the processor to save sealed messages before firing a background buffer operation.
    */
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
 
-    const persistableMessages = messages.filter(m => m.role !== 'system' && !isTransientSignalMessage(m));
+    const persistableMessages = this.prepareMessagesForPersistence(messages);
     if (persistableMessages.length === 0) return;
 
     const memoryStore = await this.getMemoryStore();
@@ -2378,10 +2286,6 @@ ${workingMemory}`;
       throw new Error(
         'Observational memory requires @mastra/core support for request-response-id-rotation. Please bump @mastra/core to a newer version.',
       );
-    }
-
-    if (omConfig.experimental_subconscious) {
-      await this.getKnowledgeStore();
     }
 
     const { ObservationalMemory: OMClass } = await import('./processors/observational-memory');
@@ -2567,10 +2471,17 @@ ${
   /**
    * Generate read-only working memory instructions.
    * This provides the working memory context without any tool update instructions.
-   * Used when memory is in readOnly mode.
+   * Used when memory is in readOnly mode, or with `autoUpdated` when the app updates it (agentManaged: false).
    */
-  protected getReadOnlyWorkingMemoryInstruction({ data }: { template: WorkingMemoryTemplate; data: string | null }) {
-    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY):
+  protected getReadOnlyWorkingMemoryInstruction({
+    data,
+    autoUpdated = false,
+  }: {
+    template: WorkingMemoryTemplate;
+    data: string | null;
+    autoUpdated?: boolean;
+  }) {
+    return `WORKING_MEMORY_SYSTEM_INSTRUCTION (${autoUpdated ? 'AUTO-UPDATED' : 'READ-ONLY'}):
 The following is your working memory - persistent information about the user and conversation collected over previous interactions. This data is provided for context to help you maintain continuity.
 
 <working_memory_data>
@@ -2580,7 +2491,11 @@ ${data || 'No working memory data available.'}
 Guidelines:
 1. Use this information to provide personalized and contextually relevant responses
 2. Act naturally - don't mention this system to users. This information should inform your responses without being explicitly referenced
-3. This memory is read-only in the current session - you cannot update it
+3. ${
+      autoUpdated
+        ? "This memory is updated automatically after each response. When the user shares or corrects information, acknowledge it naturally. Never say you can't save or update it"
+        : 'This memory is read-only in the current session - you cannot update it'
+    }
 
 Notes:
 - This system is here so that you can maintain the conversation when your context window is very short
@@ -2627,6 +2542,8 @@ Notes:
     await this.vector.createIndex({
       indexName,
       dimension: usedDimensions,
+      // Observation search filters by these fields. Semantic recall indexes the same ones.
+      metadataIndexes: ['resource_id', 'thread_id'],
     } as any);
 
     return { indexName };
@@ -3076,23 +2993,6 @@ Notes:
         },
       });
     }
-    if (
-      omConfig?.experimental_subconscious instanceof Subconscious &&
-      omConfig.experimental_subconscious.resolved.tools
-    ) {
-      Object.assign(tools, createKnowledgeTools(this));
-      const remind = omConfig.experimental_subconscious.resolved.observation.find(
-        agent => agent.name === 'remind' && 'builtIn' in agent,
-      );
-      if (remind && 'builtIn' in remind) {
-        tools.ask_memory = createAskMemoryTool({
-          memory: this,
-          config: remind,
-          omModel: selectObserverModel(omConfig),
-          getParentAgent: agentId => this._mastraInstance?.getAgentById(agentId),
-        });
-      }
-    }
 
     return tools;
   }
@@ -3118,16 +3018,82 @@ Notes:
     const memoryStore = await this.getMemoryStore();
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    // Update vector database if semantic recall is enabled and any messages have content updates
-    if (this.vector && config.semanticRecall) {
-      const messagesWithContent = messages.filter(m => m.content !== undefined);
+    // Use effective content for filtering/empty-message decisions, but keep the
+    // patch shape: forwarding omitted fields would overwrite concurrent edits.
+    const existing = await memoryStore.listMessagesById({ messageIds: messages.map(m => m.id) });
+    const existingById = new Map(existing.messages.map(m => [m.id, m]));
+    // Text to index per edited message, read from the projected effective content so a
+    // sparse patch does not hide stored text. Fields the patch sets take priority.
+    const textForEmbeddingById = new Map<string, string | null>();
+    const textFields = ['content', 'parts'] as const;
+    const textOf = (
+      content: Partial<Pick<MastraDBMessage['content'], (typeof textFields)[number]>>,
+      fields: readonly (typeof textFields)[number][],
+    ): string | null => {
+      for (const field of fields) {
+        const text =
+          field === 'content'
+            ? content.content?.trim()
+              ? content.content
+              : null
+            : (content.parts ?? [])
+                .filter((part): part is TextPart => part?.type === 'text')
+                .map(part => part.text)
+                .join(' ')
+                .trim();
+        if (text) return text;
+      }
+      return null;
+    };
+    messages = messages.flatMap(update => {
+      const stored = existingById.get(update.id);
+      if (!stored) return [];
+      const effective = {
+        ...stored,
+        ...update,
+        content:
+          update.content === undefined
+            ? stored.content
+            : {
+                ...stored.content,
+                ...update.content,
+                metadata: { ...stored.content.metadata, ...update.content.metadata },
+              },
+      };
+      const [projected] = this.prepareMessagesForPersistence([effective]);
+      if (!projected) return [];
+      if (update.content === undefined) {
+        existingById.set(update.id, effective);
+        return [update];
+      }
+      const content = {
+        ...update.content,
+        ...(update.content.parts !== undefined ? { parts: projected.content.parts } : {}),
+        ...(update.content.content !== undefined ? { content: projected.content.content } : {}),
+        ...(update.content.toolInvocations !== undefined ? { toolInvocations: projected.content.toolInvocations } : {}),
+      };
+      existingById.set(update.id, { ...effective, content: { ...effective.content, ...content } });
+      const patched = textFields.filter(field => update.content?.[field] !== undefined);
+      if (patched.length > 0) {
+        const omitted = textFields.filter(field => !patched.includes(field));
+        // Fall back to stored text only when the projection hid the patched text, not
+        // when the edit cleared it.
+        const text =
+          textOf(projected.content, patched) ??
+          (textOf(update.content, patched) ? textOf(projected.content, omitted) : null);
+        textForEmbeddingById.set(update.id, text);
+      }
+      return [{ ...update, content }];
+    });
+    if (messages.length === 0) return [];
 
-      if (messagesWithContent.length > 0) {
-        // Get existing messages to obtain threadId and resourceId for vector metadata
-        const existingMessagesResult = await memoryStore.listMessagesById({
-          messageIds: messagesWithContent.map(m => m.id),
-        });
-        const existingMessagesMap = new Map(existingMessagesResult.messages.map(m => [m.id, m]));
+    // Update vector database if semantic recall is enabled and any messages have text updates
+    if (this.vector && config.semanticRecall) {
+      const messagesWithTextUpdates = [...textForEmbeddingById.keys()].map(id => ({ id }));
+
+      if (messagesWithTextUpdates.length > 0) {
+        // Reuse the pre-update rows for vector metadata.
+        const existingMessagesMap = new Map(existing.messages.map(m => [m.id, m]));
 
         // Collect embeddings for messages with new text content
         const embeddingData: Array<{
@@ -3150,37 +3116,11 @@ Notes:
 
         // Prepare new embeddings and track which messages need vector operations
         await Promise.all(
-          messagesWithContent.map(async message => {
+          messagesWithTextUpdates.map(async message => {
             const existingMessage = existingMessagesMap.get(message.id);
             if (!existingMessage) return;
 
-            // Extract text from the new content
-            let textForEmbedding: string | null = null;
-            const content = message.content;
-
-            if (content) {
-              if (
-                'content' in content &&
-                content.content &&
-                typeof content.content === 'string' &&
-                content.content.trim() !== ''
-              ) {
-                textForEmbedding = content.content;
-              } else if (
-                'parts' in content &&
-                content.parts &&
-                Array.isArray(content.parts) &&
-                content.parts.length > 0
-              ) {
-                // Extract text from all text parts, concatenate
-                const joined = (content.parts as any[])
-                  .filter(part => part?.type === 'text')
-                  .map(part => (part as TextPart).text)
-                  .join(' ')
-                  .trim();
-                if (joined) textForEmbedding = joined;
-              }
-            }
+            const textForEmbedding = textForEmbeddingById.get(message.id) ?? null;
 
             // If there's new text content, embed it
             if (textForEmbedding) {
@@ -3317,9 +3257,8 @@ Notes:
         return item;
       } else if (item && typeof item === 'object' && 'id' in item) {
         return item.id;
-      } else {
-        throw new Error('Invalid input: array items must be strings or objects with an id property');
       }
+      throw new Error('Invalid input: array items must be strings or objects with an id property');
     });
 
     const invalidIds = messageIds.filter(id => !id || typeof id !== 'string');
@@ -4158,11 +4097,6 @@ Notes:
       processors.push(wm);
     }
 
-    const pins = await this.createPinnedStateProcessor(configuredProcessors, context);
-    if (pins) {
-      processors.push(pins);
-    }
-
     return processors;
   }
 
@@ -4227,12 +4161,14 @@ Notes:
     const runtimeObservationalMemory = normalizeObservationalMemoryConfig(
       runtimeMemory?.memoryConfig?.observationalMemory,
     );
-    const threadConfig = runtimeObservationalMemory
-      ? this.getMergedThreadConfig({
-          ...runtimeMemory?.memoryConfig,
-          observationalMemory: runtimeObservationalMemory,
-        } as MemoryConfigInternal)
-      : this.threadConfig;
+    // A disabled override normalizes to undefined, but must not restore instance defaults.
+    const threadConfig =
+      runtimeMemory?.memoryConfig?.observationalMemory !== undefined
+        ? this.getMergedThreadConfig({
+            ...runtimeMemory?.memoryConfig,
+            observationalMemory: runtimeObservationalMemory ?? false,
+          } as MemoryConfigInternal)
+        : this.threadConfig;
 
     const effectiveConfig = normalizeObservationalMemoryConfig(threadConfig.observationalMemory);
     if (!effectiveConfig) return null;
@@ -4274,31 +4210,6 @@ Notes:
     if (alreadyConfigured) return null;
 
     return new WorkingMemoryStateProcessor(this, runtimeMemory?.memoryConfig);
-  }
-
-  /**
-   * Creates a PinnedStateProcessor when Subconscious pins are enabled on the
-   * merged thread config. The gate is the validated `resolved.pins` on the
-   * Subconscious instance, never the raw user object. Returns null when pins
-   * are off or the processor is already present in the user's configured
-   * processors.
-   */
-  private async createPinnedStateProcessor(
-    configuredProcessors: InputProcessorOrWorkflow[] = [],
-    context?: RequestContext,
-  ): Promise<InputProcessor | null> {
-    const runtimeMemory = context?.get('MastraMemory') as { memoryConfig?: MemoryConfigInternal } | undefined;
-    const mergedConfig = this.getMergedThreadConfig(runtimeMemory?.memoryConfig);
-    const omConfig = normalizeObservationalMemoryConfig(mergedConfig.observationalMemory);
-    const subconscious = omConfig?.experimental_subconscious;
-    if (!(subconscious instanceof Subconscious) || subconscious.resolved.pins === false) return null;
-
-    const { PinnedStateProcessor, SUBCONSCIOUS_PINS_STATE_ID } =
-      await import('./processors/observational-memory/subconscious');
-    const alreadyConfigured = configuredProcessors.some(p => !('workflow' in p) && p.id === SUBCONSCIOUS_PINS_STATE_ID);
-    if (alreadyConfigured) return null;
-
-    return new PinnedStateProcessor({ getKnowledgeStore: () => this.getKnowledgeStore() });
   }
 }
 

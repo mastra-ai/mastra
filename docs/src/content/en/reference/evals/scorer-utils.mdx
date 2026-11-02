@@ -424,10 +424,12 @@ Creates a test run object for trajectory scorers. Wraps a `Trajectory` into the 
 import { createTrajectoryTestRun } from '@mastra/evals/scorers/utils'
 
 const run = createTrajectoryTestRun({
-  steps: [
-    { stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } },
-    { stepType: 'tool_call', name: 'summarize' },
-  ],
+  trajectory: {
+    steps: [
+      { stepType: 'tool_call', name: 'search', toolArgs: { q: 'test' } },
+      { stepType: 'tool_call', name: 'summarize' },
+    ],
+  },
 })
 
 const result = await trajectoryScorer.run(run)

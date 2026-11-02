@@ -1,9 +1,12 @@
 import type { MessageMetadata, SuspendedToolMetadata, ToolApprovalMetadata } from '../messages/message-metadata';
 import type { ToolPartFields } from '../messages/renderers/tool-part';
 import { isRecord } from '../messages/signal-data';
+import { KNOWLEDGE_TOOLS, knowledgeCard } from './badges/knowledge-tool-badge';
 import { getCodeModeCall } from './code-mode';
+import { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
 import { SUBMIT_PLAN_TOOL_ID } from './submit-plan-tool-id';
 import { WORKSPACE_TOOLS } from './workspace-tool-constants';
+import { isConnectPromptPayload } from '@/domains/connect/types';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { isTaskTool } from '@/ds/components/ai/tool-call';
 
@@ -12,6 +15,7 @@ export type ToolCardKind =
   | 'hidden'
   | 'observation'
   | 'ask_user'
+  | 'connect_prompt'
   | 'submit_plan'
   | 'background'
   | 'agent'
@@ -20,6 +24,7 @@ export type ToolCardKind =
   | 'sandbox'
   | 'code_mode'
   | 'mcp_app'
+  | 'knowledge'
   | 'plain';
 
 export interface ToolCardContext {
@@ -89,13 +94,16 @@ export function isHiddenTool(toolName: string): boolean {
 }
 
 export function toolCardKind(
-  { toolName, toolCallId, input, output }: ToolPartFields,
+  { toolName, toolCallId, input, output, state }: ToolPartFields,
   { metadata, mcpAppTools }: ToolCardContext,
 ): ToolCardKind {
   if (toolName === 'mastra-memory-om-observation') return 'observation';
   if (isHiddenTool(toolName)) return 'hidden';
   // A question read back in history draws as a plain badge, but it is still a question: never folded away.
   if (toolName === 'ask_user') return 'ask_user';
+  // Built-in `request_connection` tool from `@mastra/connect`: a settled call renders
+  // as an interactive connect card; while running it falls back to a plain badge.
+  if (toolName === CONNECT_PROMPT_TOOL_NAME && isConnectPromptPayload(output)) return 'connect_prompt';
   const { suspended } = toolInteraction(metadata, toolName, toolCallId);
   if (
     toolName === SUBMIT_PLAN_TOOL_ID ||
@@ -111,5 +119,9 @@ export function toolCardKind(
   if (SANDBOX_TOOLS.has(toolName)) return 'sandbox';
   if (codeModeCall(input, output)) return 'code_mode';
   if (mcpAppTools?.[toolName]) return 'mcp_app';
+  // A settled Knowledge result draws as a readable card; while running or failed it stays a plain badge.
+  if (KNOWLEDGE_TOOLS.has(toolName) && isSettledState(state) && knowledgeCard(toolName, input, output)) {
+    return 'knowledge';
+  }
   return 'plain';
 }

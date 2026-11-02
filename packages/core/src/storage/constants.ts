@@ -1013,6 +1013,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     completedAt: { type: 'timestamp', nullable: true },
     ownerId: { type: 'text', nullable: true },
     leaseExpiresAt: { type: 'timestamp', nullable: true },
+    expiresAt: { type: 'timestamp', nullable: true },
+    metadata: { type: 'jsonb', nullable: true },
   },
   [TABLE_SCHEDULES]: {
     id: { type: 'text', nullable: false, primaryKey: true },

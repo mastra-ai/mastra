@@ -365,7 +365,7 @@ async function executeCommand(input: Record<string, any>, context: any) {
       noteDroppedOutput(await truncateOutput(stderr.toString(), tail, tokenLimit, tokenFrom), stderr.dropped, 'stderr'),
     );
     const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorLine = `Error: ${errorMessage}`;
+    const errorLine = `Error: ${errorMessage}\nExit code: -1`;
     return appendTerminalLine(parts, abortedWhenSettled ? `${CANCELLED_RUN_NOTE}\n${errorLine}` : errorLine);
   }
 }

@@ -8,7 +8,6 @@ import { expect, it } from 'vitest';
 import { Agent } from '../../../../agent';
 import { createDurableAgent, createEventedAgent } from '../../../../agent/durable';
 import { createScorer } from '../../../../evals';
-import { EventEmitterPubSub } from '../../../../events';
 import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import { InMemoryStore } from '../../../../storage';
@@ -48,13 +47,12 @@ async function drive(engine: ParityEngine, variant: Variant) {
       },
     },
   });
-  const pubsub = new EventEmitterPubSub();
   const wrapper =
     engine === 'plain'
       ? undefined
       : engine === 'durable'
-        ? createDurableAgent({ agent, pubsub })
-        : createEventedAgent({ agent, pubsub });
+        ? createDurableAgent({ agent })
+        : createEventedAgent({ agent });
   const host = new Mastra({ agents: { agent: wrapper ?? agent }, storage: new InMemoryStore(), logger: false });
   let cleanup: (() => void) | undefined;
   try {

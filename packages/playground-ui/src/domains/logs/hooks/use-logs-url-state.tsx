@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef } from 'react';
 import {
+  DEFAULT_LOGS_DATE_PRESET,
   LOGS_DATE_FROM_PARAM,
   LOGS_DATE_PRESET_PARAM,
   LOGS_DATE_PRESET_VALUES,
@@ -87,7 +88,9 @@ export function useLogsUrlState(
 
   const datePreset = useMemo<LogsDatePreset>(() => {
     const value = searchParams.get(LOGS_DATE_PRESET_PARAM);
-    return value && LOGS_DATE_PRESET_VALUES.has(value as LogsDatePreset) ? (value as LogsDatePreset) : 'last-24h';
+    return value && LOGS_DATE_PRESET_VALUES.has(value as LogsDatePreset)
+      ? (value as LogsDatePreset)
+      : DEFAULT_LOGS_DATE_PRESET;
   }, [searchParams]);
 
   const dateFromParamRaw = searchParams.get(LOGS_DATE_FROM_PARAM);
@@ -190,7 +193,7 @@ export function useLogsUrlState(
       setSearchParams(
         prev => {
           const next = new URLSearchParams(prev);
-          if (preset === 'last-24h') {
+          if (preset === DEFAULT_LOGS_DATE_PRESET) {
             next.delete(LOGS_DATE_PRESET_PARAM);
             next.delete(LOGS_DATE_FROM_PARAM);
             next.delete(LOGS_DATE_TO_PARAM);

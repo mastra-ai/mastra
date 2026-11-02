@@ -56,6 +56,7 @@ import { reconcileInterval, reconciliationEnabled } from './reconciliation-confi
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
 import { attachGithubReconciler, attachGithubRules } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
+import type { GitIdentity } from './sandbox.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -428,6 +429,11 @@ export class GithubIntegration implements FactoryIntegration {
     return this.#slug;
   }
 
+  /** Commit authorship for repositories opened by this App. */
+  get gitIdentity(): GitIdentity | undefined {
+    return { login: `${this.#slug}[bot]` };
+  }
+
   /** Whether a GitHub login belongs to this integration's App. */
   isFactoryCommentAuthor(login: string | null | undefined): boolean {
     return typeof login === 'string' && login.toLowerCase() === `${this.#slug}[bot]`.toLowerCase();
@@ -631,17 +637,21 @@ export class GithubIntegration implements FactoryIntegration {
   }
 
   /**
-   * Fetch a single repo's metadata through an installation token and confirm
-   * the installation actually has access to it. Returns `null` when the repo
-   * is not accessible to the installation (so a client can't create a project
-   * for an arbitrary repo under an installation id it merely owns).
+   * Fetch a single repo's metadata and confirm the installation was granted
+   * it. Returns `null` when the repo belongs to another installation or none
+   * (GitHub answers 404), so a client can't link an arbitrary repo under an
+   * installation id it merely owns. `repos.get` alone isn't enough: it returns
+   * any public repo to any token. Other upstream failures throw.
    */
   async getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
     const parts = splitRepoFullName(repoFullName);
     if (!parts) return null;
-    const octokit = this.getInstallationOctokit(installationId);
     try {
-      const { data } = await octokit.repos.get(parts);
+      const [{ data: installation }, { data }] = await Promise.all([
+        this.getAppOctokit().apps.getRepoInstallation(parts),
+        this.getInstallationOctokit(installationId).repos.get(parts),
+      ]);
+      if (installation.id !== installationId) return null;
       return {
         id: data.id,
         fullName: data.full_name,
@@ -651,8 +661,9 @@ export class GithubIntegration implements FactoryIntegration {
         private: data.private,
         installationId,
       };
-    } catch {
-      return null;
+    } catch (error) {
+      if ((error as { status?: number }).status === 404) return null;
+      throw error;
     }
   }
 

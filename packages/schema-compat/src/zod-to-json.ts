@@ -626,11 +626,10 @@ export function zodToJsonSchema(
 
     // Fix anyOf patterns for nullable fields - required for OpenAI compatibility
     return fixAnyOfNullable(jsonSchema);
-  } else {
-    // Zod v3 path - use the original converter
-    return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
-      $refStrategy: strategy,
-      target,
-    }) as JSONSchema7;
   }
+  // Zod v3 path - use the original converter
+  return zodToJsonSchemaOriginal(zodSchema as ZodSchemaV3, {
+    $refStrategy: strategy,
+    target,
+  }) as JSONSchema7;
 }

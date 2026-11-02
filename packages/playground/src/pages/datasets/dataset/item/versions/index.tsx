@@ -169,11 +169,11 @@ function DatasetItemVersionsComparePage() {
           <Button variant="ghost" size="sm" onClick={() => setParam('view', isDiffView ? null : 'diff')}>
             {isDiffView ? (
               <>
-                <ColumnsIcon /> Default View
+                <ColumnsIcon /> Default view
               </>
             ) : (
               <>
-                <GitCompareArrowsIcon /> Diff View
+                <GitCompareArrowsIcon /> Diff view
               </>
             )}
           </Button>

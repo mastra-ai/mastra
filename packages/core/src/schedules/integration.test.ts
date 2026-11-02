@@ -209,7 +209,7 @@ describe('Agent schedules — scheduler integration', () => {
       expect(triggers[0]!.outcome).toBe('succeeded');
     }, 10_000);
 
-    it('drops the wake subscription once the scheduler is running and on stopWorkers()', async () => {
+    it('keeps the wake subscription while the scheduler runs and drops it on stopWorkers()', async () => {
       const pubsub = new EventEmitterPubSub();
       const subscribe = vi.spyOn(pubsub, 'subscribe');
       const unsubscribe = vi.spyOn(pubsub, 'unsubscribe');
@@ -244,7 +244,8 @@ describe('Agent schedules — scheduler integration', () => {
       );
       await waitForScheduler(mastra);
       expect(ack).toHaveBeenCalledOnce();
-      expect(unsubscribe).toHaveBeenCalledWith(SCHEDULER_WAKE_TOPIC, wakeCb);
+      // A running scheduler sleeps until its next fire; later wakes re-arm it.
+      expect(unsubscribe).not.toHaveBeenCalledWith(SCHEDULER_WAKE_TOPIC, wakeCb);
 
       const wakeCalls = (spy: typeof subscribe) => spy.mock.calls.filter(([topic]) => topic === SCHEDULER_WAKE_TOPIC);
 
@@ -256,13 +257,13 @@ describe('Agent schedules — scheduler integration', () => {
       expect(wakeCalls(unsubscribe)).toHaveLength(1);
 
       // stop → start: the scheduler worker object survives and is restarted by
-      // the regular start loop. Boot re-subscribes (scheduler not running yet)
-      // and must unwire again once it is, leaving no dangling subscription.
+      // the regular start loop. Boot re-subscribes once (scheduler not running
+      // yet) and keeps that subscription while it runs.
       await mastra.startWorkers();
       await waitForScheduler(mastra);
       expect(mastra.workers.filter(w => w.name === 'scheduler')).toHaveLength(1);
       expect(wakeCalls(subscribe)).toHaveLength(2);
-      expect(wakeCalls(unsubscribe)).toHaveLength(2);
+      expect(wakeCalls(unsubscribe)).toHaveLength(1);
     }, 10_000);
 
     it('still boots the other workers and the boot probe when the wake subscribe fails', async () => {

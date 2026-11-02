@@ -33,6 +33,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
+import { executionFailureTermination } from '../observability/execution-outcome';
 import { executeWithContext } from '../observability/utils';
 import type {
   OutputResult,
@@ -49,7 +50,8 @@ import {
   endOutputStreamSpanOutsideStep,
   findOwnModelStepSpan,
 } from '../processors/runner';
-import { createProcessorSendSignal } from '../processors/send-signal';
+import type { ProcessorLateSignalSink } from '../processors/send-signal';
+import { createProcessorSendSignal, PROCESSOR_LATE_SIGNAL_SINK } from '../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -827,7 +829,12 @@ export function createStepFromProcessor<TProcessorId extends string>(
       requestContext,
       tracingContext,
       outputWriter,
-    }: Parameters<ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>>[0]) => {
+      mastra,
+      runId: workflowRunId,
+    }: Parameters<ProcessorStepExecutor<ProcessorStepInput | ProcessorStepOutput>>[0] & {
+      mastra?: Mastra;
+      runId?: string;
+    }) => {
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
       // we need access to all possible properties
@@ -836,6 +843,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         llmRequestProcessorIds?: ReadonlySet<string>;
         abortSignal?: AbortSignal;
         agent?: Agent;
+        lateSignalSink?: ProcessorLateSignalSink;
       };
       const {
         phase,
@@ -879,6 +887,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
         abortSignal,
         // Agent reference so processors can access the running agent (e.g. on signal/schedule wake)
         agent,
+        // Receives sendSignal calls made after the creating durable step returned
+        lateSignalSink,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -1158,6 +1168,9 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 messageList: processorMessageList,
                 writer: processorWriter,
                 rotateResponseMessageId: rotateCurrentResponseMessageId,
+                lateSink:
+                  (workflowRunId ? mastra?.__getRunScope(workflowRunId)?.get(PROCESSOR_LATE_SIGNAL_SINK) : undefined) ??
+                  lateSignalSink,
               }),
             }
           : {}),
@@ -1166,6 +1179,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // Pass-through data that should flow to the next processor in a chain
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
+        agent,
+        lateSignalSink,
         phase,
         runId: agentRunId,
         // Auto-create MessageList from messages if not provided
@@ -1380,10 +1395,13 @@ export function createStepFromProcessor<TProcessorId extends string>(
 
               // Preserve messages in return - passThrough doesn't include messages,
               // so we must explicitly include it to avoid losing it for subsequent steps.
+              // Unless the processor returned its own array, hand on the list as it is now: it may have
+              // removed or added messages through the messageList, and a later processor that returns
+              // the stale array would otherwise put removed messages back.
               return {
                 ...passThrough,
-                messages,
                 ...validatedResult,
+                messages: validatedResult.messages ?? checkedMessageList.get.all.db(),
                 runId: agentRunId,
                 systemMessages: checkedMessageList.getSystemMessages(),
                 ...(currentMessageId ? { messageId: validatedResult.messageId ?? currentMessageId } : {}),
@@ -1831,6 +1849,36 @@ type RequireAgentInput<TPrev> = [TPrev] extends [{ prompt: string }]
       readonly receivedPrevOutput: TPrev;
     };
 
+/**
+ * Expected shape of one step passed to `.parallel()`. Distributes over unions so a
+ * non-tuple array of different steps is checked step by step. Input follows the
+ * `.then()` rule: the previous output only has to satisfy the step's input.
+ */
+type ParallelStepCheck<TStep, TState, TPrevSchema, TEngineType, TRequestContext> =
+  TStep extends Step<
+    string,
+    infer S,
+    infer TStepInput,
+    infer O,
+    any, // Don't infer TResume - causes issues with heterogeneous tuples
+    any, // Don't infer TSuspend - causes issues with heterogeneous tuples
+    TEngineType,
+    infer TStepRC
+  >
+    ? Step<
+        string,
+        SubsetOf<S, TState>,
+        TPrevSchema extends TStepInput ? TStepInput : TPrevSchema,
+        O,
+        any,
+        any,
+        TEngineType,
+        // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+        // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+        unknown extends TStepRC ? unknown : TRequestContext
+      >
+    : `Error: Expected Step with state schema that is a subset of workflow state`;
+
 export class Workflow<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -2017,6 +2065,14 @@ export class Workflow<
 
   __markInternal() {
     this.isInternal = true;
+    // Nested workflows of an internal workflow are its own plumbing (e.g. the
+    // background-task attempt body, the agentic loop iteration), not resources
+    // end users are granted access to.
+    for (const step of Object.values(this.steps)) {
+      if (step instanceof Workflow && !step.isInternal) {
+        step.__markInternal();
+      }
+    }
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -2064,7 +2120,7 @@ export class Workflow<
           return;
         case 'mapping':
           this.steps[entry.id] = createMappingStep(entry.id, entry.mapConfig as MappingConfig) as any;
-          return;
+          break;
       }
     };
     switch (live.type) {
@@ -2095,9 +2151,9 @@ export class Workflow<
           outputSchema: z.object({}),
           execute: async () => ({}),
         });
-        return;
+        break;
       default:
-        return;
+        break;
     }
   }
 
@@ -2517,7 +2573,7 @@ export class Workflow<
       >;
     }
 
-    const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce(
+    const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce<Record<string, any>>(
       (a, [key, mapping]) => {
         const m: any = mapping;
         if (m.value !== undefined) {
@@ -2561,7 +2617,7 @@ export class Workflow<
         }
         return a;
       },
-      {} as Record<string, any>,
+      {},
     );
 
     type MappedOutputSchema = any;
@@ -2592,31 +2648,15 @@ export class Workflow<
   }
 
   // TODO: make typing better here
-  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType, any>[]>(
+  parallel<TParallelSteps extends readonly Step<string, any, any, any, any, any, TEngineType, any>[]>(
     steps: TParallelSteps & {
-      [K in keyof TParallelSteps]: TParallelSteps[K] extends Step<
-        string,
-        infer S,
+      [K in keyof TParallelSteps]: ParallelStepCheck<
+        TParallelSteps[K],
+        TState,
         TPrevSchema,
-        infer O,
-        any, // Don't infer TResume - causes issues with heterogeneous tuples
-        any, // Don't infer TSuspend - causes issues with heterogeneous tuples
         TEngineType,
-        infer TStepRC
-      >
-        ? Step<
-            string,
-            SubsetOf<S, TState>,
-            TPrevSchema,
-            O,
-            any,
-            any,
-            TEngineType,
-            // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
-            // declare one matching the workflow's TRequestContext. Mismatched schemas error.
-            unknown extends TStepRC ? unknown : TRequestContext
-          >
-        : `Error: Expected Step with state schema that is a subset of workflow state`;
+        TRequestContext
+      >;
     },
     options?: StepFlowEntryOptions,
   ) {
@@ -3161,9 +3201,9 @@ export class Workflow<
     const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
     this.__registerMastra(mastra);
 
-    // FGA authorization check
+    // FGA authorization check (internal workflows are exempt, matching Run.start)
     const fgaProvider = mastra?.getServer()?.fga;
-    if (fgaProvider) {
+    if (fgaProvider && !this.isInternal) {
       const user = requestContext?.get('user' as any);
       await requireFGA({
         fgaProvider,
@@ -3986,7 +4026,15 @@ export class Run<
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
-    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
+    const span = this.workflowRunSpan;
+    // Older observability implementations may only support end({ endTree: true }).
+    const endTree = span?.endTree ?? span?.end;
+    endTree?.call(span, {
+      endTree: true,
+      outcome: 'abort',
+      stopReason: 'caller_cancelled',
+      attributes: { status: 'canceled' },
+    });
 
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
@@ -4154,6 +4202,7 @@ export class Run<
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -4194,7 +4243,7 @@ export class Run<
 
       return { inputDataToUse: validatedInput, initialStateToUse: validatedState };
     })().catch(error => {
-      workflowSpan?.error({ error: error as Error });
+      workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
       throw error;
     });
 
@@ -4231,7 +4280,7 @@ export class Run<
               : initialRunSnapshot,
           });
         } catch (error) {
-          workflowSpan?.error({ error: error as Error });
+          workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
           throw error;
         }
       }
@@ -5256,38 +5305,13 @@ export class Run<
       }
     });
 
-    // Build tracing options for the resumed span, linking to the original suspended span if available
-    // Priority: user-provided tracingOptions > persisted tracingContext from snapshot
     const persistedTracingContext = snapshot?.tracingContext;
-    const userProvidedTraceId = params.tracingOptions?.traceId;
-    const userProvidedParentSpanId = params.tracingOptions?.parentSpanId;
-
-    // Only fall back to persisted traceId when the caller didn't provide either tracing identifier.
-    // If the caller provided parentSpanId without traceId, using the persisted traceId would create
-    // invalid cross-trace parentage (a span in one trace claiming a parent from another trace).
-    const effectiveTraceId =
-      userProvidedTraceId ?? (!userProvidedParentSpanId ? persistedTracingContext?.traceId : undefined);
-
-    // Only use persisted spanId as parentSpanId if:
-    // 1. User didn't provide their own parentSpanId, AND
-    // 2. Either no user traceId was provided, OR user traceId matches persisted traceId
-    // This prevents cross-trace parentage where a span in one trace claims a parent from another trace
-    const shouldUsePersistedParentSpan =
-      !userProvidedParentSpanId && (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
-
-    const resumeTracingOptions = {
-      ...params.tracingOptions,
-      traceId: effectiveTraceId,
-    };
-
-    // The persisted resume link travels separately from tracingOptions:
-    // tracingOptions.parentSpanId is reserved for external correlation ids,
-    // while the suspended span's id is a Mastra span present in storage.
-    const resumedFromSpanId = shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : undefined;
+    const isAgentLoop = Boolean(this.executionEngine.options.resumeTracingContext);
 
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}' (resumed)`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -5300,11 +5324,11 @@ export class Run<
         resumedFromSpanId: persistedTracingContext?.spanId,
       },
       tracingPolicy: this.tracingPolicy,
-      tracingOptions: resumeTracingOptions,
+      tracingOptions: params.tracingOptions,
       tracingContext: observabilityContext.tracingContext,
       requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
-      resumedFromSpanId,
+      resumeFrom: isAgentLoop ? undefined : persistedTracingContext,
     });
 
     this.workflowRunSpan = workflowSpan;
@@ -5623,6 +5647,7 @@ export class Run<
     }
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -5771,6 +5796,7 @@ export class Run<
 
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       input: inputData,
       entityType: EntityType.WORKFLOW_RUN,
@@ -5798,7 +5824,7 @@ export class Run<
     try {
       await this.#claimRun({ workflowsStore, snapshot, operation: 'timeTravel' });
     } catch (error) {
-      workflowSpan?.error({ error: error as Error, endSpan: true });
+      workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error, endSpan: true });
       throw error;
     }
 

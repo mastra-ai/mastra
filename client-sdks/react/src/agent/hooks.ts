@@ -7,7 +7,7 @@ import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { TaskItem } from '@mastra/core/signals';
-import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, NetworkChunkType, ThreadRunStatusChunk } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accumulateChunk,
@@ -362,6 +362,7 @@ export const useChat = ({
   const liveApprovalIds = useRef(new Set<string>());
   const liveRunId = useRef<string | undefined>(undefined);
   const liveRunFinished = useRef(false);
+  const pendingRunStatuses = useRef<Map<string, ThreadRunStatusChunk> | undefined>(undefined);
   const [isAwaitingToolApproval, setIsAwaitingToolApproval] = useState(false);
 
   const baseClient = useMastraClient();
@@ -653,7 +654,12 @@ export const useChat = ({
       const subscriptionAgent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
       _threadSubscriptionPromiseRef.current = subscriptionAgent
-        .subscribeToThread({ resourceId, threadId, ...(withInitialHistory ? { withInitialHistory } : {}) })
+        .subscribeToThread({
+          resourceId,
+          threadId,
+          withRunStatus: true,
+          ...(withInitialHistory ? { withInitialHistory } : {}),
+        })
         .then(response => {
           const subscription = response;
           if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {
@@ -667,7 +673,17 @@ export const useChat = ({
               onChunk: chunk => {
                 if (chunk.type === 'thread-history') {
                   if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
-                    const { hasMore } = chunk.payload;
+                    const { hasMore, activeRunId } = chunk.payload;
+                    if (
+                      activeRunId &&
+                      activeRunId !== liveRunId.current &&
+                      (!liveRunId.current || liveRunFinished.current)
+                    ) {
+                      liveRunId.current = activeRunId;
+                      liveRunFinished.current = false;
+                      _currentRunId.current = activeRunId;
+                      setIsRunning(pendingToolApprovalIdsRef.current.size === 0);
+                    }
                     setSubscriptionPagination(
                       typeof hasMore === 'boolean' ? { key: subscriptionKey, pagination: { hasMore } } : undefined,
                     );
@@ -683,6 +699,20 @@ export const useChat = ({
                     key: `${agentId}:${resourceId ?? ''}:${threadId}`,
                     messages: chunk.payload.messages,
                   });
+                  return;
+                }
+                if (chunk.type === 'thread-run-status') {
+                  if (chunk.runId !== liveRunId.current) {
+                    pendingRunStatuses.current?.set(chunk.runId, chunk);
+                    return;
+                  }
+                  setIsRunning(false);
+                  if (chunk.payload.status !== 'suspended') {
+                    liveRunFinished.current = true;
+                    for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
+                    pendingToolApprovalIdsRef.current.clear();
+                    setIsAwaitingToolApproval(false);
+                  }
                   return;
                 }
                 return processStreamChunk(chunk);
@@ -924,6 +954,7 @@ export const useChat = ({
 
     const streamWithLegacyRoute = async () => {
       const runId = uuid();
+      _currentRunId.current = runId;
       const response = await agent.stream(coreUserMessages, {
         model,
         runId,
@@ -1003,6 +1034,10 @@ export const useChat = ({
       clientToolsResolver,
     };
 
+    const liveRunIdBeforeSend = liveRunId.current;
+    // An outcome can reach SSE before the acceptance response supplies its run ID.
+    const earlyRunStatuses = new Map<string, ThreadRunStatusChunk>();
+    pendingRunStatuses.current = earlyRunStatuses;
     try {
       const result = await agent.sendMessage({
         message:
@@ -1023,6 +1058,28 @@ export const useChat = ({
           },
         },
       });
+      // SSE may already have finished this run or moved on while the request was pending.
+      if (
+        _streamAbortRef.current === internalAbort &&
+        liveRunId.current === liveRunIdBeforeSend &&
+        liveRunId.current !== result.runId
+      ) {
+        liveApprovalIds.current.clear();
+        liveRunId.current = result.runId;
+        liveRunFinished.current = false;
+        _currentRunId.current = result.runId;
+        setIsRunning(true);
+        const earlyStatus = earlyRunStatuses.get(result.runId);
+        if (earlyStatus) {
+          setIsRunning(false);
+          if (earlyStatus.payload.status !== 'suspended') {
+            liveRunFinished.current = true;
+            for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
+            pendingToolApprovalIdsRef.current.clear();
+            setIsAwaitingToolApproval(false);
+          }
+        }
+      }
       const echoedSignalId =
         result.signal &&
         typeof result.signal === 'object' &&
@@ -1062,6 +1119,8 @@ export const useChat = ({
         }
       }
       throw error;
+    } finally {
+      if (pendingRunStatuses.current === earlyRunStatuses) pendingRunStatuses.current = undefined;
     }
 
     if (_streamAbortRef.current === internalAbort) {
@@ -1137,12 +1196,42 @@ export const useChat = ({
   };
 
   const handleCancelRun = () => {
-    _streamAbortRef.current?.abort();
-    _streamAbortRef.current = null;
+    const runId = _currentRunId.current;
+    const agent = baseClient?.getAgent(agentId);
     const threadSubscription = _threadSubscriptionRef.current;
-    void Promise.resolve(threadSubscription?.abort?.()).catch(error => {
-      console.error('[useChat] Failed to abort thread subscription', error);
-    });
+    const streamAbort = _streamAbortRef.current;
+    const cancellationAbort = new AbortController();
+    const timeout = setTimeout(
+      () => cancellationAbort.abort(new Error('Agent run cancellation was not acknowledged')),
+      10_000,
+    );
+    // Stop execution explicitly: aborting the HTTP request only detaches a durable observer.
+    const cancellation = (async () => {
+      if (agent && runId) {
+        while (true) {
+          cancellationAbort.signal.throwIfAborted();
+          const options = { signal: cancellationAbort.signal };
+          const result = threadId
+            ? await agent.abortThread({ threadId, resourceId: resourceId || agentId, expectedRunId: runId }, options)
+            : await agent.abortRun(runId, options);
+          if (result.aborted) return;
+          // Stop can overtake stream registration. Keep the request alive until cancellation is applied.
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      await threadSubscription?.abort?.();
+    })()
+      .catch(error => {
+        // Older servers and non-durable agents still stop when their HTTP request is aborted.
+        if (isObject(error) && (error.status === 404 || error.status === 501)) return;
+        throw error;
+      })
+      .finally(() => {
+        clearTimeout(timeout);
+        streamAbort?.abort();
+        if (_streamAbortRef.current === streamAbort) _streamAbortRef.current = null;
+      });
+    void cancellation.catch(error => console.error('[useChat] Failed to abort agent run', error));
     closeThreadSubscription();
     setMessages(prev => finishStreamingAssistantMessage(prev));
     liveRunFinished.current = true;
@@ -1154,6 +1243,7 @@ export const useChat = ({
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
     _activeContinuation.current = {};
+    return cancellation;
   };
 
   const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {

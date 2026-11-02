@@ -5,6 +5,7 @@ import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
 import { AgenticLoopBuilder } from '../../../loop/loop-builder';
 import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
 import { decideContinuation } from '../../../loop/shared/continuation-core';
+import { agentLoopTermination } from '../../../loop/shared/execution-outcome';
 import { drainSignalsToTranscript } from '../../../loop/shared/steps/signal-drain-core';
 import { getAbortReason, isMastraTimeoutError } from '../../../loop/timeout';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
@@ -16,6 +17,7 @@ import { calculateObservedUsage, isUsageIncomplete } from '../../../observabilit
 import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
 import { createEventedWorkflow, createWorkflow } from '../../../workflows/create';
+import { markNonRedeliverable } from '../../../workflows/evented/helpers';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
@@ -51,6 +53,7 @@ import {
   storeMessageListState,
   buildDeferredStepFinishChunk,
   expandDurableSteps,
+  carriedSpanClocks,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -541,6 +544,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               agentSpanData: state.agentSpanData,
               modelSpanData: state.modelSpanData,
               completionStartTime: state.completionStartTime,
+              timeToFirstTokenMs: state.timeToFirstTokenMs,
             };
           },
           { id: 'map-to-llm-input' },
@@ -555,6 +559,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
               completionStartTime: llmOutput.completionStartTime,
+              timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
               // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
               stepUsage: llmOutput.stepResult?.totalUsage,
             })) as DurableToolCallInput[];
@@ -798,15 +803,18 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               return await (condition as (context: any) => boolean | PromiseLike<boolean>)(context);
             } catch (error) {
               const originalError = getErrorFromUnknown(error);
-              throw new MastraError(
-                {
-                  id: DURABLE_STOP_WHEN_ERROR_ID,
-                  domain: ErrorDomain.AGENT,
-                  category: ErrorCategory.USER,
-                  text: originalError.message,
-                  details: { name: originalError.name, message: originalError.message },
-                },
-                originalError,
+              // A throwing predicate is deterministic; redelivering the event would only rerun it.
+              throw markNonRedeliverable(
+                new MastraError(
+                  {
+                    id: DURABLE_STOP_WHEN_ERROR_ID,
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.USER,
+                    text: originalError.message,
+                    details: { name: originalError.name, message: originalError.message },
+                  },
+                  originalError,
+                ),
               );
             }
           })
@@ -892,6 +900,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       });
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
+      const tracingRegistry = getRunRegistryEntry(state.runId, rt.mastra);
+      if (tracingRegistry) tracingRegistry.tracingStopCause = decision.stopCause;
       const isFinal = decision.isFinal;
       await emitStepFinish(!isFinal);
 
@@ -1123,16 +1133,28 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
-              // Rebuilt spans end from snapshots taken at run start, so the clock the
-              // steps carried is applied here: the loop state's for the originals, the
-              // registry's for a resumed segment's fresh spans.
-              const clock = reg?.resumeModelSpanData ? reg.resumeCompletionStartTime : state.completionStartTime;
-              const completionStartTime = clock ? new Date(clock) : undefined;
+              // Rebuilt spans end from snapshots taken at run start, so the clocks the
+              // steps carried are applied here.
+              const clocks = carriedSpanClocks(reg, state);
+              // Another worker may lack tracingTermination; fallback retains guardrail outcome but can lose observer context.
+              const termination =
+                ['tripwire', 'error'].includes(finalOutput.stepResult?.reason ?? '') && reg?.tracingTermination
+                  ? reg.tracingTermination
+                  : agentLoopTermination({
+                      stopCause: reg?.tracingStopCause,
+                      delegationFailure: reg?.tracingDelegationFailure,
+                      finishReason: finalOutput.stepResult?.reason,
+                      tripwire,
+                      maxSteps: initData.options?.maxSteps,
+                    });
               if (observability) {
                 if (modelSpanData) {
-                  const modelSpan = observability.rebuildSpan(
-                    modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
-                  ) as AIModelGenerationSpan | undefined;
+                  const modelSpan =
+                    reg?.resumeModelSpan ??
+                    reg?.modelSpan ??
+                    (observability.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
+                      | AIModelGenerationSpan
+                      | undefined);
                   // Surface every tool call made during the run so exporters (e.g. PostHog)
                   // see the same { toolCallId, toolName, args } shape as the in-process loop.
                   const toolCalls = state.accumulatedSteps.flatMap(step =>
@@ -1144,20 +1166,25 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   );
                   const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
                   modelSpan?.createTracker()?.endGeneration({
+                    ...termination,
                     output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
                     attributes: {
                       finishReason: finalOutput.stepResult?.reason,
                       ...(usageIncomplete ? { usageIncomplete: true } : {}),
-                      ...(completionStartTime ? { completionStartTime } : {}),
+                      ...clocks,
                     },
                     usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
                   });
                 }
                 if (agentSpanData) {
-                  const agentSpan = observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+                  const agentSpan =
+                    reg?.resumeAgentSpan ??
+                    reg?.agentSpan ??
+                    observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
                   agentSpan?.end({
+                    ...termination,
                     output: { text: finalText },
-                    ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
+                    ...(clocks ? { attributes: clocks } : {}),
                   });
                 }
               }

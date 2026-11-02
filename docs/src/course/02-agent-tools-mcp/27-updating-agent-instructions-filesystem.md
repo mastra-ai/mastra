@@ -30,7 +30,7 @@ export const personalAssistantAgent = new Agent({
        - You also have filesystem read/write access to a notes directory. 
        - You can use that to store info for later use or organize info for the user.
        - You can use this notes directory to keep track of to-do list items for the user.
-       - Notes dir: ${path.join(process.cwd(), 'notes')}
+       - Notes dir: ${notesDir}
     
     Keep your responses concise and friendly.
   `,
@@ -43,3 +43,5 @@ export const personalAssistantAgent = new Agent({
 By updating your agent's instructions to include information about the Filesystem tools, you're helping it understand when and how to use these tools. The instructions provide context about what the Filesystem tools can do, such as storing information for later use and keeping track of to-do list items.
 
 This context helps your agent make better decisions about when to use the Filesystem tools and how to organize the information it stores. The inclusion of the notes directory path in the instructions ensures that your agent knows exactly where it can read from and write to.
+
+The snippet reuses `notesDir` from the MCP configuration you added earlier in this same file, so the validated absolute path is shared rather than read from the environment a second time.

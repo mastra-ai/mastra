@@ -18,6 +18,7 @@ import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Models } from '../models';
 import { buildAvailableModels, buildBuilderSettings } from './fixtures/builder';
+import { datedModels } from '@/domains/llm/__tests__/fixtures/models';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -70,6 +71,23 @@ describe('Models', () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  describe('when the catalog contains release dates', () => {
+    it('shows the newest model cards first within the provider', async () => {
+      server.use(http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json(datedModels)));
+      const { getByTestId } = await renderModels();
+      const cards = getByTestId('model-provider-section-openai').querySelectorAll(
+        '[data-testid^="model-card-openai-"]',
+      );
+      expect(Array.from(cards, card => card.getAttribute('data-testid'))).toEqual([
+        'model-card-openai-gpt-5',
+        'model-card-openai-gpt-4.1',
+        'model-card-openai-gpt-4o',
+        'model-card-openai-custom-a',
+        'model-card-openai-custom-z',
+      ]);
+    });
   });
 
   describe('when rendering the model grid', () => {

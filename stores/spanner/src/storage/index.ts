@@ -398,15 +398,11 @@ export class SpannerStore extends MastraCompositeStore {
    */
   async close() {
     if (!this.ownsClient) return;
-    try {
-      await this.database.close();
-      if (this.spanner) {
-        // Spanner node lib wraps most functions (including this one with PromisifyAll), but currently there's a bug that causes awaiting on it to hand indefinitely.
-        // Current workaround is to just call it without await https://github.com/googleapis/google-cloud-node/issues/8106
-        void this.spanner.close();
-      }
-    } catch (error) {
-      throw error;
+    await this.database.close();
+    if (this.spanner) {
+      // Spanner node lib wraps most functions (including this one with PromisifyAll), but currently there's a bug that causes awaiting on it to hand indefinitely.
+      // Current workaround is to just call it without await https://github.com/googleapis/google-cloud-node/issues/8106
+      void this.spanner.close();
     }
   }
 }

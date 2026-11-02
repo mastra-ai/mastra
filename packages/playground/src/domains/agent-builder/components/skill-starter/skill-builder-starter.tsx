@@ -143,7 +143,6 @@ export const SkillBuilderStarter = () => {
                 tooltip="Start building"
                 disabled={trimmed.length === 0 || isCreating}
                 data-testid="skill-builder-starter-submit"
-                className="rounded-full"
               >
                 {isCreating ? (
                   <span data-testid="skill-builder-starter-submit-spinner">

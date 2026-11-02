@@ -42,7 +42,7 @@ async function renderForm(scorerIds: string[]) {
   return { onSuccess };
 }
 
-const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save Changes' }));
+const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
 
 describe('EditDatasetForm', () => {
   describe('given a dataset that already has default scorers', () => {

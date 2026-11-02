@@ -321,7 +321,13 @@ describe('MCP Tool Tracing', () => {
       }),
     );
 
-    expect(mockToolSpan.end).toHaveBeenCalledWith({ attributes: { success: true }, output: { files: ['/tmp'] } });
+    expect(mockToolSpan.end).toHaveBeenCalledWith({
+      attributes: { success: true },
+      output: { files: ['/tmp'] },
+      outcome: 'success',
+      stopReason: null,
+      stopReasonContext: null,
+    });
   });
 
   it('should use TOOL_CALL span type for tools without mcpMetadata', async () => {

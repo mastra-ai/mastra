@@ -19,7 +19,7 @@ const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
 type SessionAnswer = 'not-found' | 'server-error';
 
 function stubSessionRoute(answer: SessionAnswer) {
-  const route = { reads: 0 };
+  const route = { reads: 0, answer };
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -32,12 +32,14 @@ function stubSessionRoute(answer: SessionAnswer) {
         project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' },
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     // The server answers a teammate's private session exactly like a missing one.
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, () => {
       route.reads += 1;
-      if (answer === 'not-found') return HttpResponse.json({ error: 'Session not found' }, { status: 404 });
+      if (route.answer === 'not-found') return HttpResponse.json({ error: 'Session not found' }, { status: 404 });
       return HttpResponse.json({ error: 'boom' }, { status: 500 });
     }),
     // The chat shell asks for permissions before the session read settles.
@@ -76,7 +78,9 @@ describe('opening a session the viewer cannot see', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Start a new session' }));
 
-    expect(router.state.location.pathname).toMatch(new RegExp(`^/factories/${FACTORY_ID}/user/new/[0-9a-f-]{36}$`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toMatch(new RegExp(`^/factories/${FACTORY_ID}/user/new/[0-9a-f-]{36}$`)),
+    );
   });
 
   it('explains other failures and offers only a retry', async () => {
@@ -89,5 +93,20 @@ describe('opening a session the viewer cannot see', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     await waitFor(() => expect(route.reads).toBe(2));
+  });
+
+  it('asks the server again when the viewer comes back to a session that failed', async () => {
+    const route = stubSessionRoute('server-error');
+    const router = openSession();
+    expect(await screen.findByRole('heading', { name: 'Could not load this session' })).toBeInTheDocument();
+
+    await router.navigate(`/factories/${FACTORY_ID}/user/new/${crypto.randomUUID()}`);
+    await waitFor(() =>
+      expect(screen.queryByRole('heading', { name: 'Could not load this session' })).not.toBeInTheDocument(),
+    );
+    route.answer = 'not-found';
+    await router.navigate(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`);
+
+    expect(await screen.findByRole('heading', { name: 'Session not found' })).toBeInTheDocument();
   });
 });

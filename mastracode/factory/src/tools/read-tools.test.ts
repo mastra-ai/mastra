@@ -33,7 +33,6 @@ function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
     factoryProjectId: 'project-1',
     board: null,
     externalSource: null,
-    claimKey: null,
     parentWorkItemId: null,
     title: `Item ${overrides.id}`,
     stages: ['intake'],
@@ -225,6 +224,22 @@ describe('factory_list_work_items', () => {
     const result = await run<ListResult>('factory_list_work_items', {});
     expect(result.items.find(row => row.id === 'b')?.activeWorker).toEqual({ role: 'work', sessionId: 'session-b' });
     expect(result.items.find(row => row.id === 'a')?.number).toBe(12);
+  });
+
+  it('links each card on its board when a public URL is configured', async () => {
+    vi.stubEnv('MASTRACODE_PUBLIC_URL', 'https://factory.example.com');
+    try {
+      const { run } = setup({ items: rows });
+      const result = await run<{ items: Array<{ id: string; url: string | null }> }>('factory_list_work_items', {});
+      expect(result.items.find(row => row.id === 'a')?.url).toBe(
+        'https://factory.example.com/factories/project-1/work?item=a',
+      );
+      expect(result.items.find(row => row.id === 'c')?.url).toBe(
+        'https://factory.example.com/factories/project-1/review?item=c',
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('defaults to 25 rows, caps at 50 and flags truncation', async () => {

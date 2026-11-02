@@ -61,6 +61,7 @@ export class AgentsDSQL extends AgentsStorage {
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) {
+      // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
       return;
     }
     // No default indexes for agents domain
