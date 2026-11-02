@@ -1020,7 +1020,7 @@ describe('Agent signals: idle and active behaviors', () => {
         { resourceId: 'res', threadId: 'th', ifIdle: { streamOptions: { runId: '' } } },
       );
 
-      const accepted = await withTimeout(result.accepted, 2_000);
+      const accepted = await withTimeout(result.accepted, 'Timed out waiting for wake', 2_000);
       if (accepted.action !== 'wake') throw new Error('expected wake');
       expect(accepted.runId).not.toBe('');
       expect(accepted.output.runId).toBe(accepted.runId);
