@@ -626,8 +626,8 @@ function readTool(host: KnowledgePageToolHost) {
 const LIST_DEFAULT_LIMIT = 50;
 const LIST_MAX_LIMIT = 100;
 const LIST_MAX_DEPTH = 3;
-/** Most estimated tokens of entries one `knowledge_list` returns: room for a full default `limit` of entries with descriptions. */
-const LIST_MAX_TOKENS = 5_000;
+/** Most estimated tokens of entries one `knowledge_list` returns, the same budget as a body read. */
+const LIST_MAX_TOKENS = KNOWLEDGE_READ_BODY_TOKENS;
 
 /** One entry of a `knowledge_list` result. */
 interface ListEntry {
@@ -652,7 +652,7 @@ function listTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_list',
     description:
-      'List the page tree under a starting point: each child with its ref (pass it to knowledge_read or knowledge_list), name, description and how many children it has. ' +
+      'List the page tree under a starting point: each child with its ref (pass it to knowledge_read or knowledge_list), name and how many children it has. Pass `descriptions: true` to include page descriptions too. ' +
       'Without `from`, lists the scopes this run can read. Use it to find your way around a scope before searching or reading. ' +
       `One result holds at most \`limit\` entries and about ${LIST_MAX_TOKENS.toLocaleString('en-US')} tokens of them; when it stops early, \`more\` says how many entries were left out and gives the \`cursor\` to list the rest (pass the same \`from\`).`,
     inputSchema: {
@@ -676,6 +676,11 @@ function listTool(host: KnowledgePageToolHost) {
           minLength: 1,
           description: "The previous result's nextCursor, for the entries after it (pass the same `from`).",
         },
+        descriptions: {
+          type: 'boolean',
+          description:
+            "Include each page's description. Off by default; knowledge_read returns a page's description too.",
+        },
       },
       additionalProperties: false,
     } satisfies JSONSchema7,
@@ -685,11 +690,13 @@ function listTool(host: KnowledgePageToolHost) {
         depth: requestedDepth,
         limit: requestedLimit,
         cursor: requestedCursor,
+        descriptions,
       } = input as {
         from?: string;
         depth?: number;
         limit?: number;
         cursor?: string;
+        descriptions?: boolean;
       };
       // A `t<depth>.<limit>.<skip>.<cursor>` cursor resumes a result cut short by tokens: it lists
       // the same entries again (same depth, limit and underlying cursor) and skips those already
@@ -836,7 +843,7 @@ function listTool(host: KnowledgePageToolHost) {
           entries.push({
             ref: node.ref,
             name: node.page.name,
-            ...(node.page.description ? { description: node.page.description } : {}),
+            ...(descriptions && node.page.description ? { description: node.page.description } : {}),
             depth: node.depth,
             children: node.children,
             ...(node.page.isScope ? { scope: true as const } : {}),

@@ -1,3 +1,4 @@
+import { KNOWLEDGE_READ_BODY_TOKENS } from '../page-body';
 import { describe, expect, it } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
@@ -63,19 +64,13 @@ describe('knowledge_list', () => {
     expect(entries.find((entry: any) => entry.ref === 'docs:acme').children).toBe(2);
   });
 
-  it('lists children with full refs, descriptions and child counts, and every ref reads back', async () => {
+  it('lists children with full refs and child counts, and every ref reads back', async () => {
     const { call } = await site();
     const result = await call(ORG, 'knowledge_list', { from: 'docs:acme#guides', depth: 2 });
     expect(result.from).toEqual({ ref: 'docs:acme#guides', name: 'Guides' });
     expect(result.entries).toEqual([
       { ref: 'docs:acme#guides/observability', name: 'Observability', depth: 1, children: 2 },
-      {
-        ref: 'docs:acme#guides/observability/logging',
-        name: 'Logging',
-        description: 'Structured logs',
-        depth: 2,
-        children: 0,
-      },
+      { ref: 'docs:acme#guides/observability/logging', name: 'Logging', depth: 2, children: 0 },
       { ref: 'docs:acme#guides/observability/tracing', name: 'Tracing', depth: 2, children: 0 },
       { ref: 'docs:acme#guides/deploy', name: 'Deploy', depth: 1, children: 0 },
     ]);
@@ -83,6 +78,21 @@ describe('knowledge_list', () => {
     for (const entry of result.entries) {
       expect((await call(ORG, 'knowledge_read', { page: entry.ref })).page.name).toBe(entry.name);
     }
+  });
+
+  it('adds descriptions only when asked', async () => {
+    const { call } = await site();
+    const result = await call(ORG, 'knowledge_list', {
+      from: 'docs:acme#guides/observability',
+      descriptions: true,
+    });
+    expect(result.entries[0]).toEqual({
+      ref: 'docs:acme#guides/observability/logging',
+      name: 'Logging',
+      description: 'Structured logs',
+      depth: 1,
+      children: 0,
+    });
   });
 
   it("doesn't show a scope the run can't read, or count its pages", async () => {
@@ -204,7 +214,7 @@ describe('knowledge_list', () => {
     expect((await call(ORG, 'knowledge_read', { page: below.entries[0].ref })).page.name).toBe('Under');
   });
 
-  it('stops at about 5,000 tokens of entries and pages through the rest, each entry once, at depth 2', async () => {
+  it('stops at about the read token cap of entries and pages through the rest, each entry once, at depth 2', async () => {
     const { knowledge, call } = setup();
     const long = (i: number) => `Section ${i}: ${'detail '.repeat(60).trim()}`;
     const expected: string[] = [];
@@ -226,22 +236,23 @@ describe('knowledge_list', () => {
         from: 'docs:acme',
         depth: 2,
         limit: 100,
+        descriptions: true,
         ...(cursor ? { cursor } : {}),
       });
       pages++;
       seen.push(...result.entries.map((entry: any) => entry.ref));
-      expect(JSON.stringify(result.entries).length).toBeLessThan(5_000 * 6);
+      expect(JSON.stringify(result.entries).length).toBeLessThan(KNOWLEDGE_READ_BODY_TOKENS * 6);
       cursor = result.nextCursor;
       if (cursor) {
         expect(result.more).toEqual([
           expect.stringMatching(
             new RegExp(
-              `^entries: stopped at about 5,000 tokens; \\d+ more entries \\(about [\\d,]+ tokens\\) left out\\. List again with from: "docs:acme", cursor: "${cursor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"\\.$`,
+              `^entries: stopped at about ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens; \\d+ more entries \\(about [\\d,]+ tokens\\) left out\\. List again with from: "docs:acme", cursor: "${cursor.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"\\.$`,
             ),
           ),
         ]);
       }
-    } while (cursor && pages < 20);
+    } while (cursor && pages < 200);
     expect(pages).toBeGreaterThan(1);
     expect(seen).toEqual(expected);
   });
@@ -257,14 +268,19 @@ describe('knowledge_list', () => {
         description: long,
       });
     }
-    const first = await call(ORG, 'knowledge_list', { from: 'docs:acme', limit: 60 });
+    const first = await call(ORG, 'knowledge_list', { from: 'docs:acme', limit: 60, descriptions: true });
     expect(first.entries.length).toBeLessThan(60);
-    expect(first.more[0]).toMatch(/^entries: stopped at about 5,000 tokens/);
+    expect(first.more[0]).toMatch(/^entries: stopped at about [\d,]+ tokens/);
     const seen: string[] = [];
     let cursor: string | undefined;
     let result: any;
     do {
-      result = await call(ORG, 'knowledge_list', { from: 'docs:acme', limit: 60, ...(cursor ? { cursor } : {}) });
+      result = await call(ORG, 'knowledge_list', {
+        from: 'docs:acme',
+        limit: 60,
+        descriptions: true,
+        ...(cursor ? { cursor } : {}),
+      });
       seen.push(...result.entries.map((entry: any) => entry.ref));
       cursor = result.nextCursor;
     } while (cursor);
