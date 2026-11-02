@@ -360,9 +360,6 @@ importers:
       oxlint-tsgolint:
         specifier: 7.0.2004
         version: 7.0.2004
-      path-to-regexp:
-        specifier: ^8.4.2
-        version: 8.4.2
       prettier:
         specifier: 3.9.10
         version: 3.9.10
@@ -32141,7 +32138,6 @@ snapshots:
       zod: 4.6.7
     transitivePeerDependencies:
       - supports-color
-    optional: true
 
   '@ai-sdk/google@1.2.22(zod@4.6.7)':
     dependencies:
