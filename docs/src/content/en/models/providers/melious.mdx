@@ -7,7 +7,7 @@ description: "Browse Melious model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/melious.svg" alt="Melious logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Melious
 
-Access 13 Melious models through Mastra's model router. Authentication is handled automatically using the `MELIOUS_API_KEY` environment variable.
+Access 8 Melious models through Mastra's model router. Authentication is handled automatically using the `MELIOUS_API_KEY` environment variable.
 
 Learn more in the [Melious documentation](https://melious.ai/docs/reference/models).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "melious/deepseek-r1-0528"
+  model: "melious/deepseek-v4-flash-0731"
 });
 
 // Generate a response
@@ -54,8 +54,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.11592,
-    "outputCost": 0.2898
+    "inputCost": 0.1115,
+    "outputCost": 0.27875
   },
   {
     "model": "melious/deepseek-v4.1-flash",
@@ -66,8 +66,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.23184,
-    "outputCost": 1.1592
+    "inputCost": 0.223,
+    "outputCost": 1.115
   },
   {
     "model": "melious/deepseek-v4.1-flash-1017",
@@ -78,8 +78,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 384000,
-    "inputCost": 0.33675,
-    "outputCost": 1.347
+    "inputCost": 0.3345,
+    "outputCost": 1.338
   },
   {
     "model": "melious/glm-5.3",
@@ -90,8 +90,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 1.1592,
-    "outputCost": 3.4776
+    "inputCost": 1.115,
+    "outputCost": 3.345
   },
   {
     "model": "melious/glm-5.3-flash",
@@ -102,8 +102,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 0.11592,
-    "outputCost": 0.46368
+    "inputCost": 0.1115,
+    "outputCost": 0.446
   },
   {
     "model": "melious/kimi-k2.6",
@@ -114,8 +114,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 256000,
     "maxOutput": 256000,
-    "inputCost": 0.78505,
-    "outputCost": 3.3645
+    "inputCost": 0.669,
+    "outputCost": 4.014
   },
   {
     "model": "melious/kimi-k2.7-code",
@@ -126,8 +126,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.728975,
-    "outputCost": 3.644875
+    "inputCost": 0.61325,
+    "outputCost": 3.28925
   },
   {
     "model": "melious/kimi-k3",
@@ -138,8 +138,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 3.196275,
-    "outputCost": 15.981375
+    "inputCost": 3.17775,
+    "outputCost": 15.88875
   }
 ]}
 />
@@ -158,7 +158,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://api.melious.ai/v1",
-    id: "melious/deepseek-r1-0528",
+    id: "melious/deepseek-v4-flash-0731",
     apiKey: process.env.MELIOUS_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -179,7 +179,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "melious/kimi-k3"
-      : "melious/deepseek-r1-0528";
+      : "melious/deepseek-v4-flash-0731";
   }
 });
 ```

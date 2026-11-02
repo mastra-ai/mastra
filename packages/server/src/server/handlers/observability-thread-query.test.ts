@@ -61,6 +61,14 @@ function getDeclaredErrorSchema(status: 400 | 409 | 413 | 422 | 501 | 503 | 504)
   return schema as z.ZodTypeAny;
 }
 
+const TIMING_FIELDS = [
+  { field: 'timeToFirstChunkMs', name: 'Time to first chunk', feature: 'trace-query-time-to-first-chunk' },
+  { field: 'timeToFirstTokenMs', name: 'Time to first token', feature: 'trace-query-time-to-first-token' },
+] as const;
+/** The storage features of every other timing field, so a test proves each field is gated on its own. */
+const otherTimingFeatures = (field: string) =>
+  TIMING_FIELDS.filter(timing => timing.field !== field).map(timing => timing.feature);
+
 describe('QUERY_THREADS', () => {
   beforeEach(() => vi.clearAllMocks());
 
@@ -75,6 +83,34 @@ describe('QUERY_THREADS', () => {
       result: 'threadRows',
       timeRange: { mode: 'traces' },
       orderBy: { field: 'endedAt', direction: 'desc' },
+    });
+  });
+
+  it('gates time to first token on thread rows and keeps time to first chunk open on every row adapter', async () => {
+    const rowsRequest = (path: string) => ({
+      ...createTestServerContext({ mastra: older.mastra }),
+      ...threadQueryRequestSchema.parse({
+        timeRange: { traces: TIME_RANGE },
+        where: { op: 'gt', left: { path }, right: { literal: 500 } },
+      }),
+    });
+    const older = createHarness(['thread-query', 'thread-query-rows']);
+    const error = await captureHttpException(QUERY_THREADS.handler(rowsRequest('timeToFirstTokenMs')));
+    expect(error.status).toBe(501);
+    expect(await error.getResponse().json()).toEqual({
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'Time to first token predicates are not supported by the configured observability store',
+    });
+    await QUERY_THREADS.handler(rowsRequest('timeToFirstChunkMs'));
+    expect(older.observabilityStore.queryThreads).toHaveBeenCalledOnce();
+
+    const supported = createHarness(['thread-query', 'thread-query-rows', 'trace-query-time-to-first-token']);
+    await QUERY_THREADS.handler({
+      ...rowsRequest('timeToFirstTokenMs'),
+      ...createTestServerContext({ mastra: supported.mastra }),
+    });
+    expect(supported.observabilityStore.queryThreads.mock.calls[0]![0]).toMatchObject({
+      where: { type: 'comparison', field: 'timeToFirstTokenMs', operator: 'gt', value: 500 },
     });
   });
 
@@ -155,27 +191,27 @@ describe('QUERY_THREADS', () => {
     }
   });
 
-  it('returns 501 before calling an older store for time to first chunk predicates', async () => {
+  it.each(TIMING_FIELDS)('returns 501 before calling an older store for $field predicates', async ({ field, name }) => {
     const requests = [
       {
         traces: {
           timeRange: TIME_RANGE,
-          where: { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 500 } },
+          where: { op: 'gt', left: { path: field }, right: { literal: 500 } },
         },
       },
       {
         traces: { timeRange: TIME_RANGE },
-        where: { traces: { some: { spans: { some: { op: 'exists', path: 'timeToFirstChunkMs' } } } } },
+        where: { traces: { some: { spans: { some: { op: 'exists', path: field } } } } },
       },
     ];
     for (const request of requests) {
-      const { mastra, observabilityStore } = createHarness(['thread-query']);
+      const { mastra, observabilityStore } = createHarness(['thread-query', ...otherTimingFeatures(field)]);
       const error = await captureHttpException(QUERY_THREADS.handler(params(mastra, request)));
 
       expect(error.status).toBe(501);
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_QUERY_UNSUPPORTED',
-        message: 'Time to first chunk predicates are not supported by the configured observability store',
+        message: `${name} predicates are not supported by the configured observability store`,
       });
       expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
     }

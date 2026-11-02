@@ -20,6 +20,9 @@ function useThreadMutationInvalidation({ agentControllerId, sessionId }: AgentCo
     queryClient.invalidateQueries({ queryKey: queryKeys.agentControllerThreads(agentControllerId, sessionId) });
 }
 
+export const switchThreadMutationKey = (agentControllerId: string, sessionId: string) =>
+  ['agent-controller', agentControllerId, sessionId, 'switch-thread'] as const;
+
 export function useCreateAgentControllerThreadMutation(args: AgentControllerThreadMutationArgs) {
   const { session } = createAgentControllerClient(args);
   const invalidateThreads = useThreadMutationInvalidation(args);
@@ -36,6 +39,7 @@ export function useSwitchAgentControllerThreadMutation(args: AgentControllerThre
   const { session } = createAgentControllerClient(args);
 
   return useMutation({
+    mutationKey: switchThreadMutationKey(agentControllerId, sessionId),
     mutationFn: async (threadId: string) => {
       await requireAgentControllerSession(session).switchThread(threadId);
       return requireAgentControllerSession(session).state({ threadId });

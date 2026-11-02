@@ -1102,7 +1102,10 @@ export class TestExporter extends BaseExporter {
         normalizedSpan.entityId = normalizeValue(span.entityId, 'entityId') as string;
       }
       if (span.attributes && Object.keys(span.attributes).length > 0) {
-        normalizedSpan.attributes = normalizeValue(span.attributes) as Record<string, unknown>;
+        const attributes = normalizeValue(span.attributes) as Record<string, unknown>;
+        // Only the span's own timing attribute is masked, never a same-named payload field.
+        if (typeof attributes.timeToFirstTokenMs === 'number') attributes.timeToFirstTokenMs = '<ms>';
+        normalizedSpan.attributes = attributes;
       }
       if (span.metadata && Object.keys(span.metadata).length > 0) {
         normalizedSpan.metadata = normalizeValue(span.metadata) as Record<string, unknown>;

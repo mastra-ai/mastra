@@ -18,6 +18,19 @@ describe('LocalFactorySandbox', () => {
     expect(created.env).toEqual({ PATH: '/usr/bin' });
   });
 
+  it('resolves an env function per session so a credential reaches one factory only', () => {
+    const sandbox = new LocalFactorySandbox({
+      root: '/tmp/mc-sandboxes',
+      env: ctx => (ctx.factoryId === 'fac-platform' ? { TOKEN: 't' } : {}),
+    });
+    const scoped = sandbox.create({ sessionId: 'a', factoryId: 'fac-platform', getRepositoryAccess: undefined }, {});
+    const other = sandbox.create({ sessionId: 'b', factoryId: 'fac-mastra', getRepositoryAccess: undefined }, {});
+    const legacy = sandbox.create({ sessionId: 'c', getRepositoryAccess: undefined }, {});
+    expect(scoped.env).toEqual({ TOKEN: 't' });
+    expect(other.env).toEqual({});
+    expect(legacy.env).toEqual({});
+  });
+
   it('defaults to MASTRACODE_LOCAL_SANDBOX_ROOT and an allow-listed host env', () => {
     vi.stubEnv('MASTRACODE_LOCAL_SANDBOX_ROOT', ' /tmp/mc-env-root ');
     vi.stubEnv('HOME', '/home/dev');

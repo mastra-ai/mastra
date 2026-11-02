@@ -10,7 +10,7 @@ import { ChatSessionContext } from '../../../context/ChatSessionContext';
 import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
 import { ChatTranscriptContext } from '../../../context/ChatTranscriptContext';
 import type { ChatTranscriptApi } from '../../../context/ChatTranscriptContext';
-import { useComposerConnectionNotice } from '../../../hooks/useComposerConnectionNotice';
+import { RECONNECT_NOTICE_DELAY_MS, useComposerConnectionNotice } from '../../../hooks/useComposerConnectionNotice';
 import { initialTranscript } from '../../../services/transcript';
 import { ComposerConnectionNotice } from '../../ComposerConnectionNotice';
 import { ConnectionActivity } from '../ConnectionActivity';
@@ -49,8 +49,8 @@ function ActivityFixture({ status, busy }: { status: ChatConnectionApi['status']
       <ChatSessionContext.Provider value={session}>
         <ChatConnectionContext.Provider value={{ status }}>
           <ChatTranscriptContext.Provider value={transcript}>
-            <ComposerHeader open={notice.open}>
-              <ComposerConnectionNotice notice={notice.notice} />
+            <ComposerHeader open={notice !== undefined}>
+              {notice && <ComposerConnectionNotice notice={notice} />}
             </ComposerHeader>
             <ConnectionActivity />
           </ChatTranscriptContext.Provider>
@@ -71,77 +71,63 @@ describe('ConnectionActivity', () => {
     act(() => vi.advanceTimersByTime(milliseconds));
   }
 
-  it.each([
-    ['reconnecting', 'Reconnecting…'],
-    ['error', 'Connection lost. Check the server and reload to reconnect.'],
-  ] as const)('given the %s stream while the agent runs, then it outranks the working state', (status, label) => {
-    const view = renderWithProviders(<ActivityFixture status={status} busy />);
-    advance(300);
+  it('given a reconnect that outlasts the delay, then the composer header shows it and the status line hides the working state', () => {
+    const view = renderWithProviders(<ActivityFixture status="reconnecting" busy />);
+    advance(RECONNECT_NOTICE_DELAY_MS);
 
-    expect(screen.getByText(label)).toBeVisible();
+    expect(screen.getByRole('status')).toHaveTextContent('Reconnecting…');
     expect(screen.queryByText('Working…')).toBeNull();
-    expect(screen.getAllByRole('status')).toHaveLength(1);
+    expect(screen.queryByText(/Connection lost/)).toBeNull();
 
     view.rerender(<ActivityFixture status="ready" busy />);
 
-    expect(screen.queryByText(label)).not.toBeInTheDocument();
-    expect(screen.getByText('Reconnected')).toBeVisible();
-    expect(screen.getByText('Working…')).toBeInTheDocument();
-
-    advance(1_999);
-    expect(screen.getByText('Reconnected')).toBeVisible();
-    advance(1);
-    expect(screen.queryByText('Reconnected')).not.toBeInTheDocument();
+    // Recovery clears the notice without a confirmation flash.
+    expect(screen.queryByText('Reconnecting…')).toBeNull();
+    expect(screen.queryByText('Reconnected')).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('Working…');
   });
 
-  it('hides brief connection blips without flashing a recovery confirmation', () => {
+  it('hides connection blips shorter than the delay', () => {
     const view = renderWithProviders(<ActivityFixture status="ready" busy={false} />);
-    expect(screen.queryByRole('status')).toBeNull();
     view.rerender(<ActivityFixture status="reconnecting" busy={false} />);
-    advance(250);
+    advance(RECONNECT_NOTICE_DELAY_MS - 1);
     expect(screen.queryByRole('status')).toBeNull();
     view.rerender(<ActivityFixture status="ready" busy={false} />);
-    advance(3_000);
+    advance(5_000);
     expect(screen.queryByRole('status')).toBeNull();
   });
 
-  it('keeps the notice open through repeated drops and restarts the recovery confirmation', () => {
+  it('restarts the delay for each new drop', () => {
     const view = renderWithProviders(<ActivityFixture status="reconnecting" busy={false} />);
-    advance(300);
+    advance(RECONNECT_NOTICE_DELAY_MS);
     expect(screen.getByRole('status')).toHaveTextContent('Reconnecting…');
     view.rerender(<ActivityFixture status="ready" busy={false} />);
-    advance(1_900);
-    view.rerender(<ActivityFixture status="reconnecting" busy={false} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Reconnecting…');
-    advance(2_100);
-    expect(screen.getByRole('status')).toHaveTextContent('Reconnecting…');
-    view.rerender(<ActivityFixture status="ready" busy={false} />);
-    advance(1_999);
-    expect(screen.getByRole('status')).toHaveTextContent('Reconnected');
-    advance(1);
     expect(screen.queryByRole('status')).toBeNull();
+    view.rerender(<ActivityFixture status="reconnecting" busy={false} />);
+    advance(RECONNECT_NOTICE_DELAY_MS - 1);
+    expect(screen.queryByRole('status')).toBeNull();
+    advance(1);
+    expect(screen.getByRole('status')).toHaveTextContent('Reconnecting…');
   });
 
-  it('shows a failed connection immediately and keeps the guidance until recovery', () => {
+  it('shows a failed connection immediately in the header and clears it on recovery', () => {
     const view = renderWithProviders(<ActivityFixture status="ready" busy={false} />);
     view.rerender(<ActivityFixture status="error" busy={false} />);
     expect(screen.getByRole('status')).toHaveTextContent('Connection lost.');
     advance(10_000);
     expect(screen.getByRole('status')).toHaveTextContent('Connection lost.');
+    expect(screen.queryByText('Reconnecting…')).toBeNull();
     view.rerender(<ActivityFixture status="ready" busy={false} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Reconnected');
-    advance(2_000);
-    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.queryByText('Reconnected')).toBeNull();
+    expect(screen.queryByText(/Connection lost/)).toBeNull();
   });
 
-  it('cancels pending notices when leaving a session', () => {
+  it('cancels a pending notice when leaving a session', () => {
     const view = renderWithProviders(<ActivityFixture status="reconnecting" busy={false} />);
     advance(100);
     view.unmount();
     renderWithProviders(<ActivityFixture status="connecting" busy={false} />);
     advance(5_000);
-    expect(screen.queryByText('Reconnecting…')).not.toBeInTheDocument();
-    expect(screen.queryByText('Reconnected')).not.toBeInTheDocument();
+    expect(screen.queryByText('Reconnecting…')).toBeNull();
   });
 });

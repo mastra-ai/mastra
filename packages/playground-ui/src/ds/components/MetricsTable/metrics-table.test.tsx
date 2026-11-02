@@ -56,16 +56,16 @@ describe('MetricsTable', () => {
         columns={columns}
         rows={rows}
         getRowKey={r => r.name}
-        sort={{ column: 'spend', direction: 'asc' }}
+        sort={{ column: 'spend', direction: 'desc' }}
         onSortChange={onSortChange}
       />,
     );
-    expect(names()).toEqual(['gemini-2.5-pro', 'gpt-5', 'claude-sonnet-4.5']);
+    expect(names()).toEqual(['claude-sonnet-4.5', 'gpt-5', 'gemini-2.5-pro']);
 
     fireEvent.click(screen.getByRole('button', { name: 'Spend' }));
-    expect(onSortChange).toHaveBeenCalledWith({ column: 'spend', direction: 'desc' });
+    expect(onSortChange).toHaveBeenCalledWith({ column: 'spend', direction: 'asc' });
     // Still the controlled order until the owner passes the new sort.
-    expect(names()).toEqual(['gemini-2.5-pro', 'gpt-5', 'claude-sonnet-4.5']);
+    expect(names()).toEqual(['claude-sonnet-4.5', 'gpt-5', 'gemini-2.5-pro']);
   });
 
   it('reports row hover and click, by mouse and keyboard, without scrolling on Space', () => {
@@ -120,5 +120,87 @@ describe('MetricsTable', () => {
   it('shows the empty message when there are no rows', () => {
     render(<MetricsTable columns={columns} rows={[]} getRowKey={r => r.name} empty="Nothing in this range." />);
     expect(screen.getByRole('cell', { name: 'Nothing in this range.' })).toBeDefined();
+  });
+
+  it('pages rows by pageSize, sorting across every page, and goes back to the first page on a new sort', () => {
+    const many: Row[] = Array.from({ length: 12 }, (_, i) => ({ name: `m${i}`, spend: i }));
+    render(<MetricsTable columns={columns} rows={many} getRowKey={r => r.name} pageSize={5} />);
+    expect(names()).toEqual(['m0', 'm1', 'm2', 'm3', 'm4']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Page 3' }));
+    expect(names()).toEqual(['m10', 'm11']);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Spend' }));
+    expect(names()).toEqual(['m11', 'm10', 'm9', 'm8', 'm7']);
+  });
+
+  it('shows no pagination when every row fits one page', () => {
+    render(<MetricsTable columns={columns} rows={rows} getRowKey={r => r.name} pageSize={5} />);
+    expect(screen.queryByRole('navigation')).toBeNull();
+  });
+
+  it('shows skeleton rows under the real header while loading, instead of rows or the empty message', () => {
+    render(<MetricsTable columns={columns} rows={[]} getRowKey={r => r.name} pageSize={4} isLoading empty="Nothing" />);
+    expect(screen.getByRole('columnheader', { name: 'Model' })).toBeDefined();
+    expect(screen.getAllByRole('row').slice(1)).toHaveLength(4);
+    expect(screen.queryByText('Nothing')).toBeNull();
+  });
+
+  it('explains a column in a tooltip on its header, which screen readers read as its description', () => {
+    render(
+      <MetricsTable
+        columns={[
+          ...columns,
+          { id: 'change', header: '% Change', cell: () => '+1%', description: 'Against last week' },
+        ]}
+        rows={rows}
+        getRowKey={r => r.name}
+      />,
+    );
+    // Not sortable, so a focusable label rather than a button; no separate info icon.
+    const header = screen.getByText('% Change').parentElement;
+    const id = header?.getAttribute('aria-describedby');
+    expect(header?.getAttribute('tabindex')).toBe('0');
+    expect(id && document.getElementById(id)?.textContent).toBe('Against last week');
+    expect(screen.queryByRole('button', { name: /About/ })).toBeNull();
+  });
+
+  it('highlights the active row', () => {
+    render(
+      <MetricsTable columns={columns} rows={rows} getRowKey={r => r.name} isRowActive={r => r.name === 'gpt-5'} />,
+    );
+    const [, first, second] = screen.getAllByRole('row');
+    expect(first?.getAttribute('aria-current')).toBe('true');
+    expect(second?.hasAttribute('aria-current')).toBe(false);
+  });
+
+  it('turns the sort off on a third click: back to the given order, or to defaultSort', () => {
+    const onSortChange = vi.fn();
+    const { unmount } = render(
+      <MetricsTable columns={columns} rows={rows} getRowKey={r => r.name} onSortChange={onSortChange} />,
+    );
+    const spend = () => screen.getByRole('button', { name: 'Spend' });
+    fireEvent.click(spend());
+    expect(names()).toEqual(['claude-sonnet-4.5', 'gpt-5', 'gemini-2.5-pro']);
+    fireEvent.click(spend());
+    expect(names()).toEqual(['gemini-2.5-pro', 'gpt-5', 'claude-sonnet-4.5']);
+    fireEvent.click(spend());
+    expect(names()).toEqual(['gpt-5', 'claude-sonnet-4.5', 'gemini-2.5-pro']);
+    expect(onSortChange).toHaveBeenLastCalledWith(undefined);
+    unmount();
+
+    render(
+      <MetricsTable
+        columns={columns}
+        rows={rows}
+        getRowKey={r => r.name}
+        defaultSort={{ column: 'spend', direction: 'desc' }}
+      />,
+    );
+    const model = () => screen.getByRole('button', { name: 'Model' });
+    fireEvent.click(model());
+    fireEvent.click(model());
+    fireEvent.click(model());
+    expect(names()).toEqual(['claude-sonnet-4.5', 'gpt-5', 'gemini-2.5-pro']);
   });
 });

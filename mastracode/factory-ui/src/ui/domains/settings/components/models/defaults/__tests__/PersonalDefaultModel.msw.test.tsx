@@ -98,10 +98,33 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await user.click(await screen.findByRole('button', { name: 'Apply to running sessions' }));
+    await user.click(await screen.findByRole('button', { name: 'Apply to my running chats' }));
     await waitForMutationsIdle(client);
 
     expect(screen.getByText(/Switched 1 session/)).toHaveTextContent('Switched 1 session. 1 skipped: not running (1)');
+  });
+
+  it('does not claim nothing was running when every running chat failed to switch', async () => {
+    stubPersonalCatalog(models);
+    server.use(
+      http.get(DEFAULT_MODEL_URL, () => HttpResponse.json({ modelId: 'openai/gpt-5', thinkingLevel: null })),
+      http.post(`${DEFAULT_MODEL_URL}/apply`, () =>
+        HttpResponse.json({
+          modelId: 'openai/gpt-5',
+          applied: [],
+          skipped: [{ sessionId: 'running-session', reason: 'apply-failed' }],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderInField();
+
+    await user.click(await screen.findByRole('button', { name: 'Apply to my running chats' }));
+    await waitForMutationsIdle(client);
+
+    expect(screen.getByText(/No sessions switched/)).toHaveTextContent(
+      'No sessions switched. 1 skipped: apply failed (1)',
+    );
   });
 
   it('clears the personal default', async () => {

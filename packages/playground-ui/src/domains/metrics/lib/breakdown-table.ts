@@ -48,16 +48,6 @@ export function changeDescription(window: { start: Date; end: Date }, label: str
 /** Org-wide, every tab but Projects names each row's project in its own column. */
 export const showsProject = (tab: BreakdownTab, byProject: boolean) => byProject && tab !== 'projects';
 
-/**
- * The table's narrowest width before it scrolls sideways: room for the label (at its narrowest) and
- * every column. Threads at org scope have both Project and Resource.
- */
-export function tableMinWidth(project: boolean, threads: boolean) {
-  if (project && threads) return 'min-w-280';
-  if (project) return 'min-w-248';
-  return threads ? 'min-w-240' : 'min-w-200';
-}
-
 /** The compared column's header, so "Cost change" sits beside Cost. */
 export const comparedLabel = (tab: BreakdownTab, metric: ChangeMetric) =>
   metric === 'count' ? volumeLabel(tab) : METRIC_LABEL[metric];

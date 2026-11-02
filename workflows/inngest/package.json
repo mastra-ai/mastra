@@ -1,6 +1,6 @@
 {
   "name": "@mastra/inngest",
-  "version": "1.10.8",
+  "version": "1.11.0",
   "description": "Mastra Inngest integration",
   "license": "Apache-2.0",
   "type": "module",
@@ -47,7 +47,7 @@
     "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
-    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/api": "^1.10.0",
     "inngest": "^4.26.0"
   },
   "devDependencies": {
@@ -59,7 +59,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workflow-test-utils": "workspace:*",
-    "@koa/router": "^13.1.1",
+    "@koa/router": "^15.7.0",
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",

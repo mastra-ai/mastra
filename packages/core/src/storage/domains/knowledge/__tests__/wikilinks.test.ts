@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { knowledgeSemanticDocumentId, knowledgeSemanticIdempotencyKey, parseKnowledgeWikilinks } from '../base';
+import { parseKnowledgeWikilinks } from '../base';
+import { knowledgeSemanticDocumentId, knowledgeSemanticIdempotencyKey } from '../legacy';
 
 describe('knowledge wikilinks and semantic ids', () => {
   it('parses unique trimmed wikilinks deterministically', () => {

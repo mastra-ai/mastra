@@ -1,6 +1,6 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext } from '../rules/types.js';
 import { legacyGithubWorkItemBranch, workItemBranch, workItemNumber } from '../work-item-branch.js';
-import { defineBoard } from './define-board.js';
+import { compileBoardDefinition } from './define-board.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 function sourceRef(item: FactoryRuleItemContext): string {
@@ -146,41 +146,33 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
   } as const;
 }
 
-export const reviewBoard = defineBoard({
+export const reviewBoard = compileBoardDefinition({
   id: 'review',
-  title: 'Review',
+  name: 'Review',
   initialPhase: 'intake',
   transitionPolicy: reviewTransitionPolicy,
   phases: {
     intake: {
-      title: 'Intake',
+      name: 'Intake',
       kind: 'resting',
-      outcomes: {
-        reviewRequested: 'review',
-        merged: 'done',
-        closed: 'canceled',
-      },
+      nextPhases: ['review', 'done', 'canceled'],
     },
     review: {
-      title: 'Reviewing',
+      name: 'Reviewing',
       kind: 'working',
-      role: 'review',
-      outcomes: {
-        parked: 'intake',
-        merged: 'done',
-        closed: 'canceled',
-      },
+      runner: { context: 'review' },
+      nextPhases: ['intake', 'done', 'canceled'],
       onEnter: { pullRequest: reviewPullRequest, gitlabPullRequest: reviewPullRequest },
     },
     done: {
-      title: 'Done',
+      name: 'Done',
       kind: 'terminal',
-      outcomes: { updated: 'review' },
+      nextPhases: ['review'],
     },
     canceled: {
-      title: 'Canceled',
+      name: 'Canceled',
       kind: 'terminal',
-      outcomes: { reviewRequested: 'review' },
+      nextPhases: ['review'],
     },
   },
 });

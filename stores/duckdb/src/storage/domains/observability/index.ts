@@ -99,7 +99,7 @@ import type {
   TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
-import { spanAggregateFeatures, spanQueryFeatures, timeToFirstChunkFeatures } from '../../features';
+import { outcomeFeatures, spanAggregateFeatures, spanQueryFeatures, timingFeatures } from '../../features';
 import { resolveTargets, runPrune } from '../../retention';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
@@ -278,7 +278,8 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
-        ...timeToFirstChunkFeatures,
+        ...timingFeatures,
+        ...outcomeFeatures,
         'trace-query-root-span-fields',
         'trace-query-root-entity-id',
       ] as const;
@@ -305,7 +306,8 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
-      ...timeToFirstChunkFeatures,
+      ...timingFeatures,
+      ...outcomeFeatures,
       'trace-query-root-span-fields',
       'trace-query-root-entity-id',
     ] as const;

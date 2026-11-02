@@ -3924,3 +3924,54 @@ describe('ProcessorRunner', () => {
     });
   });
 });
+
+describe('ProcessorRunner workflow failure diagnostics', () => {
+  it('keeps the underlying processor error as the cause of PROCESSOR_WORKFLOW_FAILED', async () => {
+    const original = new Error('processor exploded');
+    const workflow = createWorkflow({
+      id: 'failing-processor-workflow',
+      inputSchema: ProcessorStepSchema,
+      outputSchema: ProcessorStepSchema,
+      type: 'processor',
+      options: { validateInputs: false },
+    })
+      .then(
+        createStep({
+          id: 'exploding-processor',
+          execute: async () => {
+            throw original;
+          },
+        } as any),
+      )
+      .commit() as ProcessorWorkflow;
+
+    const runner = new ProcessorRunner({
+      inputProcessors: [workflow],
+      outputProcessors: [],
+      logger: mockLogger,
+      agentName: 'test-agent',
+    });
+
+    const messageList = new MessageList({ threadId: 'test-thread' });
+    const error = await runner
+      .runProcessInputStep({
+        messageList,
+        stepNumber: 0,
+        steps: [],
+        model: {} as any,
+        tools: {},
+        retryCount: 0,
+        runId: 'run-failing-processor',
+        requestContext: new RequestContext(),
+        memory: undefined,
+      })
+      .catch((caught: unknown) => caught);
+
+    expect(error).toMatchObject({ id: 'PROCESSOR_WORKFLOW_FAILED' });
+    expect((error as Error).message).toContain('processor exploded');
+    // The original error must stay reachable instead of being flattened into text.
+    const cause = (error as { cause?: Error }).cause;
+    expect(cause).toBe(original);
+    expect(cause?.stack).toBeDefined();
+  });
+});

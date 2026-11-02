@@ -5,7 +5,7 @@ import { getErrorFromUnknown, MastraNonRetryableError } from '@mastra/core/error
 import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
-import type { EntityType } from '@mastra/core/observability';
+import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
   ExecutionContext,
@@ -19,6 +19,7 @@ import type { Inngest, BaseContext } from 'inngest';
 import { NonRetriableError } from 'inngest';
 import type { NestedWorkflowResult } from './nested-workflow-output';
 import { NESTED_WORKFLOW_OUTPUT_MODE } from './nested-workflow-output';
+import { workflowTermination } from './observability-compat';
 import { InngestWorkflow } from './workflow';
 
 function isNonRetryableStepFailure(error: unknown): boolean {
@@ -151,9 +152,17 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
 
         if (isNonRetryable || i === params.retries) {
           if (cause?.status === 'failed') {
-            params.stepSpan?.error({
-              error: e,
-              attributes: { status: 'failed' },
+            await this.errorStepSpan({
+              span: params.stepSpan,
+              operationId: `workflow.${params.workflowId}.run.${params.runId}.step.${stepId}.span.error`,
+              errorOptions: {
+                ...workflowTermination({
+                  status: 'failed',
+                  error: cause.error,
+                }),
+                error: getErrorFromUnknown(e),
+                attributes: { status: 'failed' },
+              },
             });
             // Ensure cause.error is an Error instance
             if (cause.error && !(cause.error instanceof Error)) {
@@ -173,9 +182,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             serializeStack: false,
             fallbackMessage: 'Unknown step execution error',
           });
-          params.stepSpan?.error({
-            error: errorInstance,
-            attributes: { status: 'failed' },
+          await this.errorStepSpan({
+            span: params.stepSpan,
+            operationId: `workflow.${params.workflowId}.run.${params.runId}.step.${stepId}.span.error`,
+            errorOptions: {
+              ...workflowTermination({ status: 'failed', error: errorInstance }),
+              error: errorInstance,
+              attributes: { status: 'failed' },
+            },
           });
           return {
             ok: false,
@@ -333,7 +347,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     parentSpan: any;
     stepId: string;
     operationId: string;
-    options: {
+    options: SpanOutcomeFields & {
       name: string;
       type: any;
       input?: unknown;
@@ -362,7 +376,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       const span = observability.startSpan({
         ...options,
         entityType: options.entityType as EntityType | undefined,
-        traceId: executionContext.tracingIds?.traceId,
+        traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
         parentSpanId,
       });
 
@@ -385,7 +399,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async endStepSpan(params: {
     span: any;
     operationId: string;
-    endOptions: {
+    endOptions: SpanOutcomeFields & {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
@@ -404,7 +418,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async errorStepSpan(params: {
     span: any;
     operationId: string;
-    errorOptions: {
+    errorOptions: SpanOutcomeFields & {
       error: Error;
       attributes?: Record<string, unknown>;
     };
@@ -424,7 +438,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async createChildSpan(params: {
     parentSpan: any;
     operationId: string;
-    options: {
+    options: SpanOutcomeFields & {
       name: string;
       type: any;
       input?: unknown;
@@ -448,7 +462,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       // Create span using tracingIds for traceId, and actual parent span for parentSpanId
       const span = observability.startSpan({
         ...options,
-        traceId: executionContext.tracingIds?.traceId,
+        traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
         parentSpanId,
         tracingPolicy: this.options?.tracingPolicy,
       });
@@ -472,7 +486,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async endChildSpan(params: {
     span: any;
     operationId: string;
-    endOptions?: {
+    endOptions?: SpanOutcomeFields & {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
@@ -491,7 +505,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async errorChildSpan(params: {
     span: any;
     operationId: string;
-    errorOptions: {
+    errorOptions: SpanOutcomeFields & {
       error: Error;
       attributes?: Record<string, unknown>;
     };

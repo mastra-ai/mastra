@@ -3,6 +3,7 @@ import type { Command } from 'commander';
 import { InvalidArgumentError } from 'commander';
 
 export const CREATE_LLM_PROVIDERS = [
+  { value: 'mastra', label: 'Mastra Gateway', hint: 'every model with one key, sign in to get it' },
   { value: 'openai', label: 'OpenAI' },
   { value: 'anthropic', label: 'Anthropic' },
   { value: 'google', label: 'Gemini' },

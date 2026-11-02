@@ -78,13 +78,15 @@ export function errorReason(error: unknown): string {
  * them itself.
  */
 export function environmentBuildContext(
-  project: Pick<FactoryProject, 'id' | 'orgId'>,
+  project: Pick<FactoryProject, 'id' | 'orgId' | 'name'>,
   environment: SessionEnvironment,
   heads: EnvironmentHeads,
   versionControl: Pick<VersionControl, 'getRepositoryAccess'>,
 ): FactorySandboxContext {
   return {
     sessionId: environmentBuildSessionId(project.id),
+    factoryId: project.id,
+    factoryName: project.name,
     ...environmentSandboxContext(environment, {
       orgId: project.orgId,
       getRepositoryAccess: args => versionControl.getRepositoryAccess(args),

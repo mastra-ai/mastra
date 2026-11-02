@@ -1,14 +1,11 @@
 import { MetricsCardActions } from './metrics-card-actions';
 import { MetricsCardContent } from './metrics-card-content';
-import { MetricsCardDescription } from './metrics-card-description';
 import { MetricsCardError } from './metrics-card-error';
+import { MetricsCardHeadline } from './metrics-card-headline';
 import { MetricsCardLoading } from './metrics-card-loading';
 import { MetricsCardNoData } from './metrics-card-no-data';
 import { MetricsCardRoot } from './metrics-card-root';
-import { MetricsCardSummary } from './metrics-card-summary';
-import { MetricsCardTab, MetricsCardTabs } from './metrics-card-tabs';
 import { MetricsCardTitle } from './metrics-card-title';
-import { MetricsCardTitleAndDescription } from './metrics-card-title-and-description';
 import { MetricsCardTitleMenu } from './metrics-card-title-menu';
 import { MetricsCardToolbar } from './metrics-card-toolbar';
 import { MetricsCardTopBar } from './metrics-card-top-bar';
@@ -20,15 +17,11 @@ export const MetricsCard = Object.assign(MetricsCardRoot, {
   Kpi: MetricsKpiCard,
   TopBar: MetricsCardTopBar,
   Toolbar: MetricsCardToolbar,
-  Tabs: MetricsCardTabs,
-  Tab: MetricsCardTab,
   Actions: MetricsCardActions,
-  TitleAndDescription: MetricsCardTitleAndDescription,
   Title: MetricsCardTitle,
   TitleMenu: MetricsCardTitleMenu,
-  Description: MetricsCardDescription,
-  Summary: MetricsCardSummary,
   Total: MetricsCardTotal,
+  Headline: MetricsCardHeadline,
   Loading: MetricsCardLoading,
   Error: MetricsCardError,
   Content: MetricsCardContent,

@@ -1,7 +1,7 @@
 import type { AgentControllerEvent } from '@mastra/client-js';
 import { useEffect, useRef, useState } from 'react';
 
-import { useDocumentVisible } from '../../../lib/hooks/useDocumentVisible';
+import { useRecentlyVisible } from '../../../lib/hooks/useDocumentVisible';
 import type { AgentControllerSession } from '../services/agentControllerClient';
 
 export type SseConnectionState = 'never' | 'connected' | 'dropped';
@@ -108,9 +108,10 @@ export function useAgentControllerEvents({
   const [connectionState, setConnectionState] = useState<SseConnectionState>('never');
   // A hidden tab must not hold a stream: browsers cap HTTP/1.1 at 6 connections
   // per host, so a few background tabs starve every other request to the app.
-  // Losing visibility tears the subscription down through the normal cleanup
-  // path; regaining it re-subscribes and re-syncs like any reconnect.
-  const visible = useDocumentVisible();
+  // A tab hidden past the grace period tears the subscription down through the
+  // normal cleanup path; regaining visibility re-subscribes and re-syncs like
+  // any reconnect. A quick tab switch keeps the stream.
+  const visible = useRecentlyVisible();
   const onEventRef = useRef(onEvent);
   const onConnectedChangeRef = useRef(onConnectedChange);
 
