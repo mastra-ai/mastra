@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { seriesColor, seriesColors, seriesLab } from './series-colors';
+import { SHADES, seriesColor, seriesColors, seriesLab, shadeLightness } from './series-colors';
 
 describe('seriesLab', () => {
   it('reads the lab from the provider, its aliases and API suffixes', () => {
@@ -76,10 +76,25 @@ describe('seriesColors', () => {
 });
 
 describe('seriesColor', () => {
-  it('shifts lightness, hue and chroma from the base token for later shades', () => {
+  it('moves lightness a share of the way to white or black, with a hue nudge and less chroma', () => {
     expect(seriesColor('orange')).toBe('var(--chart-series-orange)');
     expect(seriesColor('orange', 1)).toBe(
-      'oklch(from var(--chart-series-orange) calc(l + 0.08) calc(c * 0.85) calc(h + 10))',
+      'oklch(from var(--chart-series-orange) calc(l + (1 - l) * 0.3) calc(c * 0.85) calc(h + 10))',
     );
+    expect(seriesColor('orange', 2)).toBe(
+      'oklch(from var(--chart-series-orange) calc(l * 0.9) calc(c * 1) calc(h + -10))',
+    );
+  });
+
+  // Base lightness of the series tokens: light-mode neutral, light mode, dark mode, dark amber, dark neutral.
+  it.each([0.32, 0.62, 0.76, 0.82, 0.9])('keeps ten distinct shades inside the gamut from lightness %s', l => {
+    const shades = SHADES.map(([share]) => shadeLightness(l, share));
+    for (const v of shades) {
+      expect(v).toBeGreaterThan(0.05);
+      expect(v).toBeLessThan(0.99);
+    }
+    const sorted = [...shades].sort((a, b) => a - b);
+    const gaps = sorted.slice(1).map((v, i) => v - (sorted[i] ?? 0));
+    expect(Math.min(...gaps)).toBeGreaterThan(0.004);
   });
 });

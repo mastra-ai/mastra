@@ -96,29 +96,34 @@ export function seriesLab(provider?: string | null, model?: string | null): stri
 
 /**
  * Shades of a hue handed out more than once: a little lighter, then darker, then further, each
- * nudged warmer or cooler. The nudge stays under half the gap between hues, so a shade never reads
- * as the next lab's color. Ten in all, as many as a chart names; past that they repeat.
- * `[lightness, hue in degrees, chroma factor]`.
+ * nudged warmer or cooler. Lightness moves a share of the room left (toward white when positive,
+ * toward black when negative), so a light base like xAI's white never clips. The hue nudge stays
+ * under half the gap between hues, so a shade never reads as the next lab's color. Ten in all, as
+ * many as a chart names; past that they repeat. `[lightness share, hue in degrees, chroma factor]`.
  */
-const SHADES: [number, number, number][] = [
+export const SHADES: [number, number, number][] = [
   [0, 0, 1],
-  [0.08, 10, 0.85],
-  [-0.08, -10, 1],
-  [0.15, -10, 0.75],
-  [-0.15, 10, 1],
-  [0.22, 0, 0.65],
-  [-0.22, 0, 1],
-  [0.04, -12, 0.9],
-  [-0.04, 12, 1],
-  [0.11, 0, 0.8],
+  [0.3, 10, 0.85],
+  [-0.1, -10, 1],
+  [0.55, -10, 0.75],
+  [-0.2, 10, 1],
+  [0.75, 0, 0.6],
+  [-0.3, 0, 1],
+  [0.15, -12, 0.9],
+  [-0.05, 12, 1],
+  [0.42, 0, 0.8],
 ];
+
+/** A shade's lightness from its base's: a share of the way to white, or to black. */
+export const shadeLightness = (l: number, share: number) => (share > 0 ? l + (1 - l) * share : l * (1 + share));
 
 /** A hue's color, or its nth shade. */
 export function seriesColor(hue: SeriesHue, shade = 0) {
   const base = `var(--chart-series-${hue})`;
-  const [dl = 0, dh = 0, c = 1] = SHADES[shade % SHADES.length] ?? [];
-  if (!dl && !dh) return base;
-  return `oklch(from ${base} calc(l + ${dl}) calc(c * ${c}) calc(h + ${dh}))`;
+  const [share = 0, dh = 0, c = 1] = SHADES[shade % SHADES.length] ?? [];
+  if (!share && !dh) return base;
+  const l = share > 0 ? `calc(l + (1 - l) * ${share})` : `calc(l * ${1 + share})`;
+  return `oklch(from ${base} ${l} calc(c * ${c}) calc(h + ${dh}))`;
 }
 
 /** The order hues go to series with no lab, each far from the one before. */
