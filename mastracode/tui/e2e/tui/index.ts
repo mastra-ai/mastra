@@ -207,6 +207,7 @@ import { shellPassthroughDuringRunScenario } from './shell-passthrough-during-ru
 import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
 import { shellPassthroughLongOutputScenario } from './shell-passthrough-long-output.js';
 import { shellPassthroughNonpersistentScenario } from './shell-passthrough-nonpersistent.js';
+import { signInRenewalOfflineScenario } from './sign-in-renewal-offline.js';
 import { skillTabAutocompleteScenario } from './skill-tab-autocomplete.js';
 import { skillsCommandActivationScenario } from './skills-command-activation.js';
 import { skillsSymlinkDedupeScenario } from './skills-symlink-dedupe.js';
@@ -469,6 +470,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'storage-startup-pg-fallback': storageStartupPgFallbackScenario,
   'stream-error-retry': streamErrorRetryScenario,
   'account-rotation': accountRotationScenario,
+  'sign-in-renewal-offline': signInRenewalOfflineScenario,
   'account-routing-targeted': accountRoutingTargetedScenario,
   'pack-fallback': packFallbackScenario,
   'pack-flag-startup': packFlagStartupScenario,

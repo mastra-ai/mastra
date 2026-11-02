@@ -28,6 +28,7 @@ if (typeof process !== 'undefined' && (process.versions?.node || process.version
 
 import { parseAuthorizationInput } from '../authorization-input.js';
 import { generatePKCE } from '../pkce.js';
+import { renewSignIn } from '../renew-sign-in.js';
 import type { AuthMode, OAuthCredentials, OAuthLoginCallbacks, OAuthPrompt, OAuthProviderInterface } from '../types.js';
 
 export const OPENAI_CODEX_AUTH_MODES: ReadonlyArray<AuthMode> = [
@@ -204,31 +205,6 @@ async function exchangeAuthorizationCode(
   }
 
   return tokenResponseToResult((await response.json()) as TokenResponseJson, 'token');
-}
-
-async function refreshAccessToken(refreshToken: string): Promise<TokenResult> {
-  try {
-    const response = await fetch(TOKEN_URL, {
-      method: 'POST',
-      signal: requestSignal(),
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        client_id: CLIENT_ID,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error('[openai-codex] Token refresh failed:', response.status);
-      return { type: 'failed' };
-    }
-
-    return tokenResponseToResult((await response.json()) as TokenResponseJson, 'Token refresh');
-  } catch {
-    console.error('[openai-codex] Token refresh request failed');
-    return { type: 'failed' };
-  }
 }
 
 async function createAuthorizationFlow(
@@ -736,10 +712,25 @@ export async function refreshOpenAICodexToken(
   previousAccountId?: string,
   previousEmail?: string,
 ): Promise<OAuthCredentials> {
-  const result = await refreshAccessToken(refreshToken);
-  if (result.type !== 'success') {
-    throw new Error('Failed to refresh OpenAI Codex token');
-  }
+  const result = await renewSignIn(
+    'OpenAI Codex',
+    () =>
+      fetch(TOKEN_URL, {
+        method: 'POST',
+        signal: requestSignal(),
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          grant_type: 'refresh_token',
+          refresh_token: refreshToken,
+          client_id: CLIENT_ID,
+        }),
+      }),
+    body => {
+      const parsed = tokenResponseToResult((body ?? {}) as TokenResponseJson, 'Token refresh');
+      if (parsed.type !== 'success') throw new Error('OpenAI Codex token response missing fields');
+      return parsed;
+    },
+  );
 
   const accountId = requireAccountId(result, previousAccountId);
 

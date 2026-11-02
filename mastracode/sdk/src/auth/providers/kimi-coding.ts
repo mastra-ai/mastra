@@ -7,6 +7,8 @@ import {
   stepDeviceCodePoll,
 } from '../device-code.js';
 import type { DeviceCodePollOutcome, DeviceCodePollState } from '../device-code.js';
+import { SignInRenewalFailedError } from '../provider-auth-error.js';
+import { renewSignIn } from '../renew-sign-in.js';
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types.js';
 
 const CLIENT_ID = '17e5f671-d194-4dfb-9706-5516cb48c098';
@@ -236,39 +238,33 @@ export async function refreshKimiCodingToken(
 ): Promise<OAuthCredentials> {
   const clientId = CLIENT_ID;
   const deviceHeaders = getKimiCodingDeviceHeaders(options.deviceId);
-  let lastError: Error | undefined;
-  for (let attempt = 0; attempt <= REFRESH_MAX_RETRIES; attempt++) {
+  // Retry only what renewSignIn reports as transient (offline, 429/5xx).
+  for (let attempt = 0; ; attempt++) {
     if (attempt > 0) await abortableSleep(1000 * 2 ** (attempt - 1), options.signal);
-    let response: Response;
     try {
-      response = await fetch(`${OAUTH_HOST}/api/oauth/token`, {
-        method: 'POST',
-        headers: {
-          ...deviceHeaders,
-          'Content-Type': 'application/x-www-form-urlencoded',
-          Accept: 'application/json',
-        },
-        body: new URLSearchParams({
-          client_id: clientId,
-          grant_type: 'refresh_token',
-          refresh_token: refreshToken,
-        }).toString(),
-        signal: requestSignal(options.signal),
-      });
+      return await renewSignIn(
+        'Kimi For Coding',
+        () =>
+          fetch(`${OAUTH_HOST}/api/oauth/token`, {
+            method: 'POST',
+            headers: {
+              ...deviceHeaders,
+              'Content-Type': 'application/x-www-form-urlencoded',
+              Accept: 'application/json',
+            },
+            body: new URLSearchParams({
+              client_id: clientId,
+              grant_type: 'refresh_token',
+              refresh_token: refreshToken,
+            }).toString(),
+            signal: requestSignal(options.signal),
+          }),
+        body => credentialsFromTokenResponse(body, 'refresh', options.deviceId),
+      );
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
-      if (attempt === REFRESH_MAX_RETRIES) throw lastError;
-      continue;
+      if (!(error instanceof SignInRenewalFailedError) || attempt === REFRESH_MAX_RETRIES) throw error;
     }
-    const data = await readJson(response);
-    if (response.ok) return credentialsFromTokenResponse(data, 'refresh', options.deviceId);
-
-    const error = typeof data?.error === 'string' ? ` ${data.error}` : '';
-    lastError = new Error(`Kimi For Coding token refresh failed: ${response.status}${error}`);
-    const retryable = response.status === 429 || response.status >= 500;
-    if (!retryable || attempt === REFRESH_MAX_RETRIES) throw lastError;
   }
-  throw lastError ?? new Error('Kimi For Coding token refresh failed');
 }
 
 export const kimiCodingOAuthProvider: OAuthProviderInterface = {

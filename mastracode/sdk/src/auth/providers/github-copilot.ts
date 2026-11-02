@@ -12,6 +12,7 @@
  *   - `enterpriseUrl` is the GitHub Enterprise hostname, or undefined for github.com.
  */
 
+import { renewSignIn } from '../renew-sign-in.js';
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types.js';
 
 export type GitHubCopilotCredentials = OAuthCredentials & {
@@ -338,40 +339,42 @@ export async function refreshGitHubCopilotToken(
   const domain = enterpriseDomain || 'github.com';
   const urls = getUrls(domain);
 
-  const raw = await fetchJson(
-    urls.copilotTokenUrl,
-    {
-      headers: {
-        Accept: 'application/json',
-        Authorization: `Bearer ${refreshToken}`,
-        ...COPILOT_HEADERS,
-      },
+  return renewSignIn(
+    'GitHub Copilot',
+    () =>
+      fetch(urls.copilotTokenUrl, {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${refreshToken}`,
+          ...COPILOT_HEADERS,
+        },
+        signal: requestSignal(signal),
+      }),
+    raw => {
+      if (!raw || typeof raw !== 'object') {
+        throw new Error('Invalid Copilot token response');
+      }
+
+      const obj = raw as Record<string, unknown>;
+      const token = obj.token;
+      const expiresAt = obj.expires_at;
+
+      if (typeof token !== 'string' || typeof expiresAt !== 'number') {
+        throw new Error('Invalid Copilot token response fields');
+      }
+
+      const credentials: GitHubCopilotCredentials = {
+        refresh: refreshToken,
+        access: token,
+        // expires_at is seconds; subtract 5 minutes so we refresh before actual expiry.
+        expires: expiresAt * 1000 - 5 * 60 * 1000,
+      };
+      if (enterpriseDomain) {
+        credentials.enterpriseUrl = enterpriseDomain;
+      }
+      return credentials;
     },
-    signal,
   );
-
-  if (!raw || typeof raw !== 'object') {
-    throw new Error('Invalid Copilot token response');
-  }
-
-  const obj = raw as Record<string, unknown>;
-  const token = obj.token;
-  const expiresAt = obj.expires_at;
-
-  if (typeof token !== 'string' || typeof expiresAt !== 'number') {
-    throw new Error('Invalid Copilot token response fields');
-  }
-
-  const credentials: GitHubCopilotCredentials = {
-    refresh: refreshToken,
-    access: token,
-    // expires_at is seconds; subtract 5 minutes so we refresh before actual expiry.
-    expires: expiresAt * 1000 - 5 * 60 * 1000,
-  };
-  if (enterpriseDomain) {
-    credentials.enterpriseUrl = enterpriseDomain;
-  }
-  return credentials;
 }
 
 /**

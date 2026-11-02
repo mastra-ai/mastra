@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { AuthStorage } from '../../auth/storage.js';
 import { buildAnthropicOAuthFetch } from '../claude-max.js';
@@ -88,27 +88,41 @@ describe.each(SUBSCRIPTIONS)('$name subscription requests', ({ name, id, url, bu
 
 // On a flaky connection (plane wifi) the token endpoint can't be reached, errors,
 // or answers with a captive-portal page. The saved sign-in is still good, so the
-// request must say Anthropic is unreachable instead of asking to sign in again.
-describe.each([
-  { label: 'is unreachable', response: () => HttpResponse.error(), detail: /fetch/i },
-  { label: 'is down', response: () => new HttpResponse('upstream down', { status: 503 }), detail: /503/ },
-  {
-    label: 'answers with a captive-portal page',
-    response: () => new HttpResponse('<html>Sign in to the wifi</html>', { headers: { 'content-type': 'text/html' } }),
-    detail: /unreadable/,
-  },
-])('Anthropic subscription requests when the sign-in server $label', ({ response, detail }) => {
-  it('say Anthropic could not be reached and keep the saved sign-in', async () => {
-    storage.set('anthropic', { type: 'oauth', access: 'expired', refresh: 'still-valid', expires: 0 });
-    server.use(http.post('https://console.anthropic.com/v1/oauth/token', response));
+// request must say the provider is unreachable instead of asking to sign in again.
+describe.each(
+  SUBSCRIPTIONS.flatMap(subscription =>
+    [
+      { label: 'is unreachable', response: () => HttpResponse.error(), detail: /fetch/i },
+      { label: 'is down', response: () => new HttpResponse('upstream down', { status: 503 }), detail: /503/ },
+      {
+        label: 'answers with a captive-portal page',
+        response: () =>
+          new HttpResponse('<html>Sign in to the wifi</html>', { headers: { 'content-type': 'text/html' } }),
+        detail: /unreadable/,
+      },
+    ].map(failure => ({ ...subscription, ...failure })),
+  ),
+)('$name subscription requests when the sign-in server $label', ({ name, id, url, buildFetch, response, detail }) => {
+  it('say the provider could not be reached and keep the saved sign-in', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    storage.set(id, {
+      type: 'oauth',
+      access: 'expired',
+      refresh: 'still-valid',
+      expires: 0,
+      deviceId: 'a'.repeat(32),
+    });
+    server.use(http.all('*', response));
 
-    const error = await buildAnthropicOAuthFetch({ authStorage: storage })(
-      'https://api.anthropic.com/v1/messages',
-    ).catch((caught: unknown) => caught as Error);
+    // Kimi retries transient failures with backoff; skip the waits.
+    const pending = buildFetch(storage)(url).catch((caught: unknown) => caught as Error);
+    await vi.runAllTimersAsync();
+    const error = await pending;
+    vi.useRealTimers();
 
     expect(error.name).not.toBe('ProviderAuthRequiredError');
-    expect(error.message).toMatch(/^Couldn't reach Anthropic to renew the sign-in/);
+    expect(error.message).toMatch(new RegExp(`^Couldn't reach ${name} to renew the sign-in`));
     expect(error.message).toMatch(detail);
-    expect(storage.get('anthropic')).toMatchObject({ type: 'oauth', refresh: 'still-valid' });
+    expect(storage.get(id)).toMatchObject({ type: 'oauth', refresh: 'still-valid' });
   });
 });

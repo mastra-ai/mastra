@@ -213,7 +213,7 @@ describe('OpenAI Codex OAuth account id extraction', () => {
     vi.stubGlobal('fetch', fetchMock);
     const { refreshOpenAICodexToken } = await import('./openai-codex.js');
 
-    await expect(refreshOpenAICodexToken('refresh-old')).rejects.toThrow('Failed to refresh OpenAI Codex token');
+    await expect(refreshOpenAICodexToken('refresh-old')).rejects.toThrow(/unreadable token response/);
     expect(consoleError.mock.calls.flat().join(' ')).not.toContain(accessToken);
 
     consoleError.mockRestore();

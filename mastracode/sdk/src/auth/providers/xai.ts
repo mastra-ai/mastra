@@ -13,6 +13,7 @@
 
 import { createDeviceCodePollState, pollDeviceCodeUntilComplete, stepDeviceCodePoll } from '../device-code.js';
 import type { DeviceCodePollOutcome, DeviceCodePollState } from '../device-code.js';
+import { renewSignIn } from '../renew-sign-in.js';
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types.js';
 
 const CLIENT_ID = 'b1a00492-073a-47ea-816f-4c329264a828';
@@ -245,21 +246,20 @@ export async function refreshXAIToken(
   signal?: AbortSignal,
   previousIdToken?: string,
 ): Promise<OAuthCredentials> {
-  const response = await postForm(
-    TOKEN_URL,
-    {
-      grant_type: 'refresh_token',
-      client_id: CLIENT_ID,
-      refresh_token: refreshToken,
-    },
-    signal,
+  return renewSignIn(
+    'xAI',
+    () =>
+      postForm(
+        TOKEN_URL,
+        {
+          grant_type: 'refresh_token',
+          client_id: CLIENT_ID,
+          refresh_token: refreshToken,
+        },
+        signal,
+      ),
+    body => credentialsFromTokenResponse(body, refreshToken, previousIdToken),
   );
-
-  if (!response.ok) {
-    throw new Error(`xAI token refresh failed: ${response.status}`);
-  }
-
-  return credentialsFromTokenResponse((await response.json()) as unknown, refreshToken, previousIdToken);
 }
 
 /** Decode the email claim out of an id_token JWT payload (no verification). */

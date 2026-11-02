@@ -13,6 +13,7 @@ export type ScenarioName =
   | 'abort-queued-followup'
   | 'startup-interrupted'
   | 'account-rotation'
+  | 'sign-in-renewal-offline'
   | 'account-routing-targeted'
   | 'branch-context-long-name'
   | 'active-signal-followup'

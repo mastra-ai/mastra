@@ -17,7 +17,11 @@ import type { JSONSchema7 } from '@mastra/schema-compat';
 import { applyCompatLayer, GoogleSchemaCompatLayer } from '@mastra/schema-compat';
 import { wrapLanguageModel } from 'ai';
 import type { LanguageModelMiddleware } from 'ai';
-import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
+import {
+  ProviderAuthRequiredError,
+  rejectUnauthorizedResponse,
+  SignInRenewalFailedError,
+} from '../auth/provider-auth-error.js';
 import { COPILOT_HEADERS, fetchCopilotModels, getGitHubCopilotBaseUrl } from '../auth/providers/github-copilot.js';
 import type { CopilotModelEntry, GitHubCopilotCredentials } from '../auth/providers/github-copilot.js';
 import { AuthStorage } from '../auth/storage.js';
@@ -357,6 +361,12 @@ export function clearCopilotCatalogCache(): void {
   inflightFetches.clear();
 }
 
+/** Listing models offline returns the same empty list as signed out; the next request reports the network error. */
+function noCredentialWhenUnreachable(error: unknown): undefined {
+  if (error instanceof SignInRenewalFailedError) return undefined;
+  throw error;
+}
+
 /**
  * Return the user's currently-available Copilot models.
  *
@@ -383,7 +393,7 @@ export async function getCopilotModelCatalog(
   let accountInstanceId: string | undefined;
   let enterpriseUrl: string | undefined;
   if (storage.getOAuthCredential) {
-    const credential = await storage.getOAuthCredential(COPILOT_PROVIDER_ID);
+    const credential = await storage.getOAuthCredential(COPILOT_PROVIDER_ID).catch(noCredentialWhenUnreachable);
     if (!credential || credential.type !== 'oauth') return [];
     accessToken = credential.access;
     // A snapshot that names its account is coherent by construction — the store
@@ -399,7 +409,7 @@ export async function getCopilotModelCatalog(
     // a rotation can land inside it, so bracket the fetch: only an id that held
     // still names the account that produced this token.
     const idBeforeToken = storage.getActiveAccount?.(COPILOT_PROVIDER_ID)?.id;
-    accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID);
+    accessToken = await storage.getApiKey(COPILOT_PROVIDER_ID).catch(noCredentialWhenUnreachable);
     if (!accessToken) return [];
     accountInstanceId = readStableAccountId(storage, idBeforeToken);
     const stored = storage.get(COPILOT_PROVIDER_ID);

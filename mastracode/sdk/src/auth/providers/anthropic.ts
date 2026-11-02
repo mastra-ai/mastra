@@ -14,7 +14,7 @@
 
 import { parseAuthorizationInput } from '../authorization-input.js';
 import { generatePKCE } from '../pkce.js';
-import { SignInRenewalFailedError } from '../provider-auth-error.js';
+import { renewSignIn } from '../renew-sign-in.js';
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types.js';
 
 const decode = (s: string) => atob(s);
@@ -129,50 +129,35 @@ export async function loginAnthropic(
  * Refresh Anthropic OAuth token
  */
 export async function refreshAnthropicToken(refreshToken: string): Promise<OAuthCredentials> {
-  // Only a 4xx means Anthropic refused the refresh token. Anything else leaves
-  // the sign-in valid, so it must not read as an expired one.
-  const unreachable = (detail: string, cause?: unknown) =>
-    new SignInRenewalFailedError(`Couldn't reach Anthropic to renew the sign-in: ${detail}`, { cause });
-
-  let response: Response;
-  try {
-    response = await fetch(TOKEN_URL, {
-      method: 'POST',
-      signal: AbortSignal.timeout(15_000),
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'refresh_token',
-        client_id: CLIENT_ID,
-        refresh_token: refreshToken,
+  return renewSignIn(
+    'Anthropic',
+    () =>
+      fetch(TOKEN_URL, {
+        method: 'POST',
+        signal: AbortSignal.timeout(15_000),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          grant_type: 'refresh_token',
+          client_id: CLIENT_ID,
+          refresh_token: refreshToken,
+        }),
       }),
-    });
-  } catch (error) {
-    throw unreachable(error instanceof Error ? error.message : String(error), error);
-  }
-
-  if (response.status >= 500) {
-    throw Object.assign(unreachable(`token server returned ${response.status}`), { status: response.status });
-  }
-  if (!response.ok) {
-    throw new Error(`Anthropic token refresh failed: ${response.status}`);
-  }
-
-  let data: {
-    access_token: string;
-    refresh_token: string;
-    expires_in: number;
-  };
-  try {
-    data = (await response.json()) as typeof data;
-  } catch (error) {
-    throw unreachable('unreadable token response', error);
-  }
-
-  return {
-    refresh: data.refresh_token,
-    access: data.access_token,
-    expires: Date.now() + data.expires_in * 1000 - 5 * 60 * 1000,
-  };
+    body => {
+      const data = (body ?? {}) as { access_token?: unknown; refresh_token?: unknown; expires_in?: unknown };
+      if (
+        typeof data.access_token !== 'string' ||
+        typeof data.refresh_token !== 'string' ||
+        typeof data.expires_in !== 'number'
+      ) {
+        throw new Error('Anthropic token response missing fields');
+      }
+      return {
+        refresh: data.refresh_token,
+        access: data.access_token,
+        expires: Date.now() + data.expires_in * 1000 - 5 * 60 * 1000,
+      };
+    },
+  );
 }
 
 export const anthropicOAuthProvider: OAuthProviderInterface = {

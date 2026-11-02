@@ -109,7 +109,7 @@ describe('refreshGitHubCopilotToken', () => {
       'fetch',
       vi.fn(async () => jsonResponse({ token: 'copilot-bearer' })),
     );
-    await expect(refreshGitHubCopilotToken('ghu_test_token')).rejects.toThrow(/Invalid Copilot token response/);
+    await expect(refreshGitHubCopilotToken('ghu_test_token')).rejects.toThrow(/unreadable token response/);
   });
 });
 
