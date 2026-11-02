@@ -40,7 +40,6 @@ const FIXTURES: Fixture[] = [
     input: {
       board: 'work',
       title: 'Issue 42',
-      claimKey: 'github:issue:10:42',
       externalSource: {
         integrationId: 'github',
         type: 'issue',
@@ -358,7 +357,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
         org_id: ORG,
         factory_project_id: PROJECT,
         board: card.board,
-        claim_key: card.claimKey,
         triage_type: card.triageType,
         accepted_at: card.acceptedAt,
         autonomy_armed_at: card.autonomyArmedAt,
@@ -387,7 +385,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
         expect(source?.metadata ?? {}, `${fixture.name}: source ${key}`).not.toHaveProperty(key);
       }
       for (const row of [workItem, boardItem, source].filter(Boolean)) {
-        for (const column of ['kind', 'comment_count', 'feed_activity_at']) {
+        for (const column of ['kind', 'claim_key', 'comment_count', 'feed_activity_at']) {
           expect(row, `${fixture.name}: retired ${column}`).not.toHaveProperty(column);
         }
       }
@@ -460,23 +458,18 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     expect(split.workItems.size).toBe(FIXTURES.length + 1);
   });
 
-  it('copies an old replica claim handoff even when the new owner is migrated first', async () => {
+  it('leaves inert claims in legacy storage without copying them into split records', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
-    await migrateWorkItemSplit(storage);
-    const oldId = cards.get('github issue')!;
-    await workItems.update({ orgId: ORG, id: oldId, userId: USER, patch: { stages: ['done'] } });
-    const { item: newOwner } = await workItems.upsert({
-      orgId: ORG,
-      userId: USER,
-      factoryProjectId: 'aaa-project',
-      input: { title: 'New owner', claimKey: 'github:issue:10:42' },
-    });
+    const id = cards.get('github issue')!;
+    await storage.ops.updateMany('work_items', { id }, { claim_key: 'github:issue:10:42' });
 
-    expect(await migrateWorkItemSplit(storage)).toMatchObject({ workItems: 2, recopied: 1, skipped: [] });
+    expect(await migrateWorkItemSplit(storage)).toMatchObject({ workItems: FIXTURES.length, skipped: [] });
     const split = await readSplit(storage);
-    expect(split.boardItems.get(oldId)).toMatchObject({ claim_key: null, stages: ['done'] });
-    expect(split.boardItems.get(newOwner.id)).toMatchObject({ claim_key: 'github:issue:10:42' });
+    for (const row of [...split.boardItems.values(), ...split.workItems.values(), ...split.sources]) {
+      expect(row).not.toHaveProperty('claim_key');
+    }
+    expect(await storage.ops.findOne('work_items', { id })).toHaveProperty('claim_key', 'github:issue:10:42');
     expect(await migrateWorkItemSplit(storage)).toMatchObject({ workItems: 0, skipped: [] });
   });
 

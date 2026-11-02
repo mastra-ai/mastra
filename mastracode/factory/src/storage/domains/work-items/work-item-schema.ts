@@ -73,7 +73,6 @@ export const FACTORY_BOARD_ITEMS_SCHEMA: CollectionSchema = {
     org_id: { type: 'text' },
     factory_project_id: { type: 'text' },
     work_item_id: { type: 'text' },
-    claim_key: { type: 'text', nullable: true },
     triage_type: { type: 'text', nullable: true },
     accepted_at: { type: 'timestamp', nullable: true },
     autonomy_armed_at: { type: 'timestamp', nullable: true },
@@ -91,10 +90,7 @@ export const FACTORY_BOARD_ITEMS_SCHEMA: CollectionSchema = {
     migrated_from_updated_at: { type: 'timestamp', nullable: true },
     migrated_from_hash: { type: 'text', nullable: true },
   },
-  uniqueIndexes: [
-    { name: 'factory_board_items_work_item_unique', columns: ['work_item_id'] },
-    { name: 'factory_board_items_org_claim_key_unique', columns: ['org_id', 'claim_key'] },
-  ],
+  uniqueIndexes: [{ name: 'factory_board_items_work_item_unique', columns: ['work_item_id'] }],
   indexes: [
     {
       name: 'factory_board_items_org_project_created_at_id_idx',
@@ -146,7 +142,6 @@ export interface BoardItemDbRecord extends Record<string, unknown> {
   org_id: string;
   factory_project_id: string;
   work_item_id: string;
-  claim_key: string | null;
   triage_type: FactoryTriageType | null;
   accepted_at: Date | null;
   autonomy_armed_at: Date | null;

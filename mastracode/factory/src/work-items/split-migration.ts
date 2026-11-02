@@ -121,7 +121,6 @@ export function splitLegacyWorkItem(
       org_id: row.org_id,
       factory_project_id: String(row.factory_project_id),
       work_item_id: workItemId,
-      claim_key: row.claim_key ?? null,
       board: row.board ?? null,
       parent_board_item_id: row.parent_work_item_id ?? null,
       stages: row.stages,
@@ -268,78 +267,74 @@ export async function migrateWorkItemSplit(
   };
   const projects = new Set<string>();
   const written = new Map<string, BoardScope>();
-  // Recopy released claims before their new owners, even across pages/projects.
-  // Each transaction touches only its own card; no cross-card claim locks.
-  for (const claimed of [false, true]) {
-    let cursor: WorkItemDbRow | undefined;
-    while (true) {
-      const page = await ops.findMany<WorkItemDbRow>(
-        LEGACY,
-        {},
-        {
-          orderBy: [
-            ['org_id', 'asc'],
-            ['factory_project_id', 'asc'],
-            ['created_at', 'asc'],
-            ['id', 'asc'],
-          ],
-          limit: PAGE_SIZE,
-          ...(cursor
-            ? { cursor: { values: [cursor.org_id, cursor.factory_project_id, cursor.created_at, cursor.id] } }
-            : {}),
-        },
-      );
-      if (!page.length) break;
-      cursor = page[page.length - 1];
-      const rows = page.filter(row => Boolean(row.claim_key) === claimed);
-      report.cards += rows.length;
-      for (const row of rows) projects.add(`${row.org_id}\u0000${row.factory_project_id}`);
-      const plan = planWorkItemSplit(
-        rows,
-        await migratedBoardItems(
-          ops,
-          rows.map(row => row.id),
-        ),
-      );
-      report.unchanged += plan.unchanged;
-      report.skipped.push(...plan.skipped);
-      for (const { card, recopy } of [
-        ...plan.inserts.map(card => ({ card, recopy: false })),
-        ...plan.recopies.map(card => ({ card, recopy: true })),
-      ]) {
-        if (!dryRun) {
-          try {
-            const changed = await storage.withTransaction(tx => writeCard(tx, card, recopy));
-            if (!changed) {
-              report.unchanged += 1;
-              continue;
-            }
-          } catch (error) {
-            if (!(error instanceof UniqueViolationError) && !(error instanceof MigrationConflict)) throw error;
-            const raced = (await migratedBoardItems(ops, [card.boardItem.id])).get(card.boardItem.id);
-            if (raced?.migratedFromHash === card.boardItem.migrated_from_hash) report.unchanged += 1;
-            else {
-              const reason =
-                error instanceof UniqueViolationError &&
-                (error.collection === SOURCES || error.collection === BOARD_ITEMS)
-                  ? `Conflicting source or claim: ${error.message}`
-                  : error.message;
-              report.skipped.push({ id: card.boardItem.id, reason });
-            }
+  let cursor: WorkItemDbRow | undefined;
+  while (true) {
+    const page = await ops.findMany<WorkItemDbRow>(
+      LEGACY,
+      {},
+      {
+        orderBy: [
+          ['org_id', 'asc'],
+          ['factory_project_id', 'asc'],
+          ['created_at', 'asc'],
+          ['id', 'asc'],
+        ],
+        limit: PAGE_SIZE,
+        ...(cursor
+          ? { cursor: { values: [cursor.org_id, cursor.factory_project_id, cursor.created_at, cursor.id] } }
+          : {}),
+      },
+    );
+    if (!page.length) break;
+    cursor = page[page.length - 1];
+    const rows = page;
+    report.cards += rows.length;
+    for (const row of rows) projects.add(`${row.org_id}\u0000${row.factory_project_id}`);
+    const plan = planWorkItemSplit(
+      rows,
+      await migratedBoardItems(
+        ops,
+        rows.map(row => row.id),
+      ),
+    );
+    report.unchanged += plan.unchanged;
+    report.skipped.push(...plan.skipped);
+    for (const { card, recopy } of [
+      ...plan.inserts.map(card => ({ card, recopy: false })),
+      ...plan.recopies.map(card => ({ card, recopy: true })),
+    ]) {
+      if (!dryRun) {
+        try {
+          const changed = await storage.withTransaction(tx => writeCard(tx, card, recopy));
+          if (!changed) {
+            report.unchanged += 1;
             continue;
           }
+        } catch (error) {
+          if (!(error instanceof UniqueViolationError) && !(error instanceof MigrationConflict)) throw error;
+          const raced = (await migratedBoardItems(ops, [card.boardItem.id])).get(card.boardItem.id);
+          if (raced?.migratedFromHash === card.boardItem.migrated_from_hash) report.unchanged += 1;
+          else {
+            const reason =
+              error instanceof UniqueViolationError &&
+              (error.collection === SOURCES || error.collection === BOARD_ITEMS)
+                ? `Conflicting source: ${error.message}`
+                : error.message;
+            report.skipped.push({ id: card.boardItem.id, reason });
+          }
+          continue;
         }
-        report.workItems += 1;
-        report.sources += card.source ? 1 : 0;
-        report.boardItems += 1;
-        if (recopy) report.recopied += 1;
-        written.set(`${card.boardItem.org_id}\u0000${card.boardItem.factory_project_id}`, {
-          orgId: card.boardItem.org_id,
-          factoryProjectId: card.boardItem.factory_project_id,
-        });
       }
-      if (page.length < PAGE_SIZE) break;
+      report.workItems += 1;
+      report.sources += card.source ? 1 : 0;
+      report.boardItems += 1;
+      if (recopy) report.recopied += 1;
+      written.set(`${card.boardItem.org_id}\u0000${card.boardItem.factory_project_id}`, {
+        orgId: card.boardItem.org_id,
+        factoryProjectId: card.boardItem.factory_project_id,
+      });
     }
+    if (page.length < PAGE_SIZE) break;
   }
   report.projects = projects.size;
   if (!dryRun && written.size) await bumpBoardVersions(ops, [...written.values()]);
