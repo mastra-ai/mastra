@@ -105,6 +105,9 @@ const NETWORK_MESSAGE_PATTERN =
 
 const MAX_CAUSE_DEPTH = 4;
 
+/** Why a request moved to another model: accounts exhausted, provider down, or a safety refusal. */
+export type ModelFallbackReason = 'pool-exhausted' | 'persistent-outage' | 'refusal';
+
 /** Persisted data-part type for a model-route hop. */
 export const MODEL_FALLBACK_PART_TYPE = 'data-mastracode-model-fallback' as const;
 
@@ -112,7 +115,7 @@ export const MODEL_FALLBACK_PART_TYPE = 'data-mastracode-model-fallback' as cons
 export interface ModelFallbackPartData {
   from: { entryId: string; label: string };
   to: { entryId: string; label: string };
-  reason: 'pool-exhausted' | 'persistent-outage';
+  reason: ModelFallbackReason;
   at: string;
 }
 
@@ -348,7 +351,7 @@ export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
 
 /** Transcript line for a model-route hop; shared by the live info event and the TUI's history render. */
 export function modelFallbackNoticeText(data: ModelFallbackPartData): string {
-  const reason = REASON_TEXT[data.reason] ?? data.reason;
+  const reason = data.reason === 'refusal' ? 'model refused' : (REASON_TEXT[data.reason] ?? data.reason);
   return `Switched model route: ${data.from.label} → ${data.to.label} (${reason})`;
 }
 
@@ -359,8 +362,8 @@ export function modelFallbackNoticeText(data: ModelFallbackPartData): string {
  * model-fallback reason; history parsed from another build's part must be
  * rejected instead.
  */
-export function isModelFallbackReason(value: unknown): value is ModelFallbackPartData['reason'] {
-  return value === 'pool-exhausted' || value === 'persistent-outage';
+export function isModelFallbackReason(value: unknown): value is ModelFallbackReason {
+  return value === 'pool-exhausted' || value === 'persistent-outage' || value === 'refusal';
 }
 
 async function emitAccountSwitchPart(

@@ -1,15 +1,16 @@
 /**
- * E2E: pack fallback hop on a safety refusal.
+ * E2E: a cyber refusal moves the turn to the pack's fallback, for that turn only.
  *
  * One Kimi account on a custom pack whose fallback is the builtin Anthropic
- * pack. The fetch patch answers by host: api.kimi.com → a successful
- * Anthropic-format response that stops with `stop_reason: "refusal"` (the
- * shape of a classifier refusal); api.anthropic.com → a normal completion.
+ * pack. The fetch patch answers by host: api.kimi.com → an Anthropic-format
+ * response that stops with `stop_reason: "refusal"` and a `cyber` stop
+ * category, for the first two requests (the refusal and the refused `continue`
+ * nudge), then normal answers; api.anthropic.com → a normal completion.
  *
- * Without the refusal fallback the turn ends on Kimi's refusal. With it:
- *  - the hop notice renders with the refusal reason,
- *  - the fallback's answer renders and the status line names the fallback,
- *  - outbound order is Kimi then Anthropic, with no Kimi request after.
+ * Without the fallback the turn ends on Kimi's refusal. With it:
+ *  - the hop notice renders with the refusal reason and the fallback answers,
+ *  - the next message goes back to Kimi,
+ *  - outbound order is Kimi, Kimi (nudge), Anthropic, then Kimi.
  */
 import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -26,6 +27,8 @@ const KIMI_MODEL_ID = 'kimi-for-coding/kimi-for-coding';
 const PROMPT = 'Walk me through the buffer overflow in this CTF binary.';
 const REFUSAL_TEXT = 'I can not help with that request.';
 const RESPONSE_TEXT = 'Answered by the fallback pack after the refusal.';
+const SECOND_PROMPT = 'Thanks. Now summarize the README.';
+const KIMI_TEXT = 'Back on the Kimi pack for this one.';
 
 let outbound: string[] = [];
 
@@ -36,6 +39,10 @@ function requestUrl(input: RequestInfo | URL): string {
 }
 
 function anthropicSse(text: string, stopReason: 'end_turn' | 'refusal'): Response {
+  const stopDetails =
+    stopReason === 'refusal'
+      ? { type: 'refusal', category: 'cyber', explanation: 'This request triggered restrictions on cyber content.' }
+      : null;
   const events: Array<[string, object]> = [
     [
       'message_start',
@@ -58,7 +65,11 @@ function anthropicSse(text: string, stopReason: 'end_turn' | 'refusal'): Respons
     ['content_block_stop', { type: 'content_block_stop', index: 0 }],
     [
       'message_delta',
-      { type: 'message_delta', delta: { stop_reason: stopReason, stop_sequence: null }, usage: { output_tokens: 12 } },
+      {
+        type: 'message_delta',
+        delta: { stop_reason: stopReason, stop_sequence: null, stop_details: stopDetails },
+        usage: { output_tokens: 12 },
+      },
     ],
     ['message_stop', { type: 'message_stop' }],
   ];
@@ -69,9 +80,9 @@ function anthropicSse(text: string, stopReason: 'end_turn' | 'refusal'): Respons
 export const refusalFallbackScenario: McE2eScenario = {
   name: 'refusal-fallback',
   description:
-    'A Kimi pack whose model refuses the request (stop_reason refusal) hops to its Anthropic fallback pack, ' +
-    'renders the refusal hop notice and the fallback answer, and never asks Kimi again.',
-  testName: 'hops to the fallback pack when the model refuses',
+    'A Kimi pack whose model gives a cyber refusal (and refuses the continue nudge) finishes the turn on its ' +
+    'Anthropic fallback pack with a refusal notice, and the next message goes back to Kimi.',
+  testName: 'finishes a cyber-refused turn on the fallback pack, then returns',
   async prepare({ appDataDir }) {
     const settingsPath = join(appDataDir, 'settings.json');
     const settings = readMutableSettingsFixture(settingsPath);
@@ -126,7 +137,8 @@ export const refusalFallbackScenario: McE2eScenario = {
       const hostname = new URL(requestUrl(input)).hostname;
       if (hostname === 'api.kimi.com') {
         outbound.push('kimi');
-        return anthropicSse(REFUSAL_TEXT, 'refusal');
+        const kimiCalls = outbound.filter(host => host === 'kimi').length;
+        return kimiCalls <= 2 ? anthropicSse(REFUSAL_TEXT, 'refusal') : anthropicSse(KIMI_TEXT, 'end_turn');
       }
       if (hostname === 'api.anthropic.com') {
         outbound.push('anthropic');
@@ -169,14 +181,16 @@ export const refusalFallbackScenario: McE2eScenario = {
       );
     }
     runtime.printScreen('after refusal hop', terminal);
-    await runtime.waitForScreenText(/Using fallback Anthropic \(refusing-kimi failed\)/i, terminal, 10_000);
-
-    if (outbound[0] !== 'kimi') {
-      throw new Error(`Expected the first request to hit Kimi, saw: ${JSON.stringify(outbound)}`);
+    const afterHop = [...outbound];
+    if (JSON.stringify(afterHop) !== JSON.stringify(['kimi', 'kimi', 'anthropic'])) {
+      throw new Error(`Expected Kimi, the Kimi nudge, then Anthropic; saw: ${JSON.stringify(afterHop)}`);
     }
-    const firstAnthropic = outbound.indexOf('anthropic');
-    if (firstAnthropic === -1 || outbound.slice(firstAnthropic).includes('kimi')) {
-      throw new Error(`Expected no Kimi request after the hop, saw: ${JSON.stringify(outbound)}`);
+
+    terminal.submit(SECOND_PROMPT);
+    await runtime.waitForScreenText(new RegExp(KIMI_TEXT), terminal, 30_000);
+    runtime.printScreen('next message', terminal);
+    if (JSON.stringify(outbound) !== JSON.stringify([...afterHop, 'kimi'])) {
+      throw new Error(`Expected the next message to go back to Kimi; saw: ${JSON.stringify(outbound)}`);
     }
   },
 };

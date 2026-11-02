@@ -1946,6 +1946,7 @@ describe('createMastraCode', () => {
     // exactly what it was before the lane existed.
     expect(processors.map(processor => processor.id)).toEqual([
       'embedding-reconciler',
+      'cyber-refusal-handler',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
@@ -1984,6 +1985,7 @@ describe('createMastraCode', () => {
     expect(inputProcessors).toHaveBeenCalledWith({ requestContext });
     expect(processors?.map(processor => processor.id)).toEqual([
       'request-scoped-reconciler',
+      'cyber-refusal-handler',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
@@ -2009,6 +2011,7 @@ describe('createMastraCode', () => {
     // The built-ins go through the same path, as they did when the lane was an array.
     expect(mastraStub.addProcessor.mock.calls.map(([processor]) => processor.id)).toEqual([
       'needs-mastra',
+      'cyber-refusal-handler',
       'plan-rejection-abort',
       'agents-md-injector',
     ]);
@@ -2039,6 +2042,7 @@ describe('createMastraCode', () => {
     // Plugin processors are the customization layer over Mastra Code's own
     // scaffolding, so they run after it — last in each configured array.
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'cyber-refusal-handler',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
@@ -2051,6 +2055,7 @@ describe('createMastraCode', () => {
     entries = { input: [], output: [] };
 
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'cyber-refusal-handler',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
@@ -2094,6 +2099,7 @@ describe('createMastraCode', () => {
     // and their processors join both lanes.
     expect(provider.isConnected).toBe(true);
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'cyber-refusal-handler',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
@@ -2162,6 +2168,7 @@ describe('createMastraCode', () => {
     // into a debug log and the agent silently loses every processor.
     expect(() => resolveInputProcessors()).not.toThrow();
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
+      'cyber-refusal-handler',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
