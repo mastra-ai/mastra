@@ -5,6 +5,7 @@ import type { WidenedMastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
+import { ImageDownscaler } from '@mastra/core/processors';
 import type { ProcessorContext } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ProviderMetadata } from '@mastra/core/stream';
@@ -202,6 +203,9 @@ export class ObserverRunner {
       // withRetry owns retries and restarts each attempt from a clean prompt.
       // Processor retries would continue from the failed attempt instead.
       errorProcessorDefaults: false,
+      // Screenshots and pasted images can exceed provider limits (Anthropic rejects >8000px).
+      // Shrink them for the Observer prompt; stored messages keep the originals.
+      inputProcessors: [new ImageDownscaler()],
       instructions: buildObserverSystemPrompt(
         isMultiThread,
         this.observationConfig.instruction,
@@ -396,11 +400,12 @@ export class ObserverRunner {
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
+                  const output = await streamResult.getFullOutput();
+                  // A rejected request can resolve with the error instead of throwing it; surface it
+                  // so the empty-output checks below don't turn it into a retryable empty response.
+                  if (shouldRetryWithoutAttachments(output.error, observerMessages)) throw output.error;
                   return assertRecognizedObserverOutput(
-                    assertNonEmptyObserverOutput(
-                      assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM observer'),
-                      'OM observer',
-                    ),
+                    assertNonEmptyObserverOutput(assertCompleteModelResponse(output, 'OM observer'), 'OM observer'),
                     'OM observer',
                     text => hasSingleThreadObserverContent(text, activeExtractors),
                   );
@@ -749,9 +754,13 @@ export class ObserverRunner {
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
+                  const output = await streamResult.getFullOutput();
+                  // A rejected request can resolve with the error instead of throwing it; surface it
+                  // so the empty-output checks below don't turn it into a retryable empty response.
+                  if (shouldRetryWithoutAttachments(output.error, observerMessages)) throw output.error;
                   return assertRecognizedObserverOutput(
                     assertNonEmptyObserverOutput(
-                      assertCompleteModelResponse(await streamResult.getFullOutput(), 'OM multi-thread observer'),
+                      assertCompleteModelResponse(output, 'OM multi-thread observer'),
                       'OM multi-thread observer',
                     ),
                     'OM multi-thread observer',

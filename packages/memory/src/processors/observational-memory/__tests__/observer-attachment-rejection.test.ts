@@ -4,21 +4,24 @@
  * The Observer forwards images from the thread (pasted images, browser screenshots,
  * read_file media) as they are. Providers reject some of them, e.g. Anthropic
  * refuses any image over 8000px per side, which a full-page screenshot easily
- * exceeds. A rejected attachment must not stop observation for the rest of the
- * session: the Observer retries once with attachments replaced by their text
- * placeholders.
+ * exceeds. The Observer downscales oversized images before sending them. When a
+ * provider still rejects an attachment (e.g. a format the downscaler can't decode),
+ * observation must not stop for the rest of the session: the Observer retries once
+ * with attachments replaced by their text placeholders.
  *
  * Runs a real Agent + Memory turn with a real OpenAI provider pointed at AIMock
  * for both the actor and the Observer. The actor takes a screenshot, and the
- * Observer endpoint rejects any request that contains an image.
+ * Observer endpoint rejects images over 8000px (or every image, to force the fallback).
  */
 
+import { deflateSync } from 'node:zlib';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import type { ChatCompletionRequest } from '@copilotkit/aimock';
 import { Agent } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod';
 
@@ -34,8 +37,53 @@ const ACTOR_REPLY = 'The pricing page layout looks correct.';
 const REQUEST_OBSERVATION = '* 🔴 User asked to check the pricing page layout';
 const SCREENSHOT_OBSERVATION = '* 🟡 Agent captured a full-page screenshot of the pricing page';
 const IMAGE_TOO_LARGE = 'At least one of the image dimensions exceed max allowed size: 8000 pixels';
-// A 1x1 PNG stands in for the oversized screenshot; the mock rejects any image.
-const PNG_BASE64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+
+function crc32(bytes: Buffer): number {
+  let crc = ~0;
+  for (const byte of bytes) {
+    crc ^= byte;
+    for (let k = 0; k < 8; k++) crc = (crc >>> 1) ^ (0xedb88320 & -(crc & 1));
+  }
+  return ~crc >>> 0;
+}
+
+function chunk(type: string, data: Buffer): Buffer {
+  const length = Buffer.alloc(4);
+  length.writeUInt32BE(data.length);
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32(body));
+  return Buffer.concat([length, body, crc]);
+}
+
+/** Grayscale full-page-screenshot stand-in: tall enough to exceed the 8000px limit. */
+function tallPng(width: number, height: number): string {
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 0; // grayscale
+  const raw = Buffer.alloc((width + 1) * height, 0x80);
+  for (let y = 0; y < height; y++) raw[y * (width + 1)] = 0;
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]).toString('base64');
+}
+
+const SCREENSHOT_BASE64 = tallPng(40, 9000);
+
+function imageSizes(req: ChatCompletionRequest): Array<{ width: number; height: number }> {
+  const urls = JSON.stringify(req.messages).match(/data:image\/png;base64,[A-Za-z0-9+/=]+/g) ?? [];
+  return urls.map(url => {
+    const png = Buffer.from(url.slice(url.indexOf(',') + 1), 'base64');
+    return { width: png.readUInt32BE(16), height: png.readUInt32BE(20) };
+  });
+}
+const hasOversizedImage = (req: ChatCompletionRequest) =>
+  imageSizes(req).some(({ width, height }) => Math.max(width, height) > 8000);
 
 const observerReply = (scope: 'thread' | 'resource', observation: string) =>
   scope === 'thread'
@@ -69,9 +117,19 @@ afterAll(async () => {
   await mock.stop();
 });
 
-async function runTurn({ scope, rejectEveryRequest }: { scope: 'thread' | 'resource'; rejectEveryRequest: boolean }) {
+type Rejects = 'oversized-images' | 'any-image' | 'every-request';
+
+async function runTurn({ scope, rejects }: { scope: 'thread' | 'resource'; rejects: Rejects }) {
   const rejection = { error: { message: IMAGE_TOO_LARGE, type: 'invalid_request_error' }, status: 400 };
-  mock.on({ endpoint: 'chat', model: OBSERVER, predicate: req => rejectEveryRequest || hasImage(req) }, rejection);
+  mock.on(
+    {
+      endpoint: 'chat',
+      model: OBSERVER,
+      predicate: req =>
+        rejects === 'every-request' || (rejects === 'any-image' && hasImage(req)) || hasOversizedImage(req),
+    },
+    rejection,
+  );
   mock.on(
     { endpoint: 'chat', model: OBSERVER, predicate: includesScreenshot },
     { content: observerReply(scope, SCREENSHOT_OBSERVATION) },
@@ -95,7 +153,7 @@ async function runTurn({ scope, rejectEveryRequest }: { scope: 'thread' | 'resou
         id: 'browser_screenshot',
         description: 'Take a screenshot of the current page',
         inputSchema: z.object({ fullPage: z.boolean().optional() }),
-        execute: async () => ({ base64: PNG_BASE64 }),
+        execute: async () => ({ base64: SCREENSHOT_BASE64 }),
         toModelOutput: (output: { base64: string }) => ({
           type: 'content',
           value: [{ type: 'media', mediaType: 'image/png', data: output.base64 }],
@@ -136,8 +194,18 @@ async function runTurn({ scope, rejectEveryRequest }: { scope: 'thread' | 'resou
 
 describe('Observer request rejected because of an attachment', { timeout: 30_000 }, () => {
   describe.each(['thread', 'resource'] as const)('%s scope', scope => {
-    it('retries once without attachments and keeps observing', async () => {
-      const { result, record, observerCalls } = await runTurn({ scope, rejectEveryRequest: false });
+    it('downscales an oversized screenshot so the Observer accepts it', async () => {
+      const { result, record, observerCalls } = await runTurn({ scope, rejects: 'oversized-images' });
+
+      expect(result.text).toBe(ACTOR_REPLY);
+      expect(observerCalls).toHaveLength(1);
+      const [size] = imageSizes(observerCalls[0]!);
+      expect(size!.height).toBe(2000);
+      expect(record?.activeObservations).toContain(SCREENSHOT_OBSERVATION.slice(2));
+    });
+
+    it('retries once without attachments when the provider still rejects an image', async () => {
+      const { result, record, observerCalls } = await runTurn({ scope, rejects: 'any-image' });
 
       expect(result.tripwire).toBeUndefined();
       expect(result.text).toBe(ACTOR_REPLY);
@@ -154,7 +222,7 @@ describe('Observer request rejected because of an attachment', { timeout: 30_000
     });
 
     it('does not retry again when the request without attachments is rejected too', async () => {
-      const { result, record, observerCalls } = await runTurn({ scope, rejectEveryRequest: true });
+      const { result, record, observerCalls } = await runTurn({ scope, rejects: 'every-request' });
 
       expect(observerCalls).toHaveLength(2);
       expect(hasImage(observerCalls[0]!)).toBe(true);

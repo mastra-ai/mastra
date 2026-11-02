@@ -1,4 +1,5 @@
 export { UnicodeNormalizer, type UnicodeNormalizerOptions } from './unicode-normalizer';
+export { ImageDownscaler, type ImageDownscalerOptions } from './image-downscaler';
 export {
   ModerationProcessor,
   type ModerationOptions,

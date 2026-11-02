@@ -23,6 +23,7 @@ describe('isOmRequestRejection', () => {
     expect(isOmRequestRejection(rejection)).toBe(true);
     expect(isOmRequestRejection(new Error('wrapper', { cause: rejection }))).toBe(true);
     expect(isOmRequestRejection({ error: rejection })).toBe(true);
+    expect(isOmRequestRejection({ cause: new Error('unrelated'), error: rejection })).toBe(true);
   });
 
   it.each([401, 403, 404, 429, 500, 529])('ignores HTTP %i', statusCode => {

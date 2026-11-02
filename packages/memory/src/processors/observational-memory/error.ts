@@ -43,11 +43,13 @@ export function isOmRequestRejection(error: unknown): boolean {
   if (hasAbortInChain(error)) return false;
 
   const visited = new Set<object>();
-  let current: unknown = error;
-  while (isRecord(current) && !visited.has(current)) {
+  const pending: unknown[] = [error];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!isRecord(current) || visited.has(current)) continue;
     visited.add(current);
     if (typeof current.statusCode === 'number' && REQUEST_REJECTION_STATUSES.has(current.statusCode)) return true;
-    current = current.cause ?? current.error;
+    pending.push(current.cause, current.error);
   }
   return false;
 }
