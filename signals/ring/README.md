@@ -5,7 +5,7 @@
 ## Installation
 
 ```bash
-npm install @mastra/ring-signals
+npm install @mastra/ring-signals @mastra/memory
 ```
 
 ## Usage

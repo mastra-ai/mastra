@@ -2,6 +2,9 @@ import type { RingTokens } from './types';
 
 const API_BASE_URL = 'https://api.amazonvision.com';
 const OAUTH_TOKEN_URL = 'https://oauth.ring.com/oauth/token';
+const REQUEST_TIMEOUT_MS = 30_000;
+// Long enough to download a 15-minute clip.
+const MEDIA_TIMEOUT_MS = 5 * 60_000;
 
 type TokenResponse = {
   access_token: string;
@@ -126,6 +129,7 @@ export class RingApiClient {
       method: 'POST',
       headers: this.#headers(auth),
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(MEDIA_TIMEOUT_MS),
     });
   }
 
@@ -134,6 +138,7 @@ export class RingApiClient {
       method,
       headers: this.#headers(auth),
       ...(body ? { body: JSON.stringify(body) } : {}),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const text = await response.text();
     if (!response.ok) {
@@ -151,6 +156,7 @@ export class RingApiClient {
         client_id: this.#options.clientId,
         client_secret: this.#options.clientSecret,
       }),
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
     const text = await response.text();
     if (!response.ok) {

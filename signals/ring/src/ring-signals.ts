@@ -728,6 +728,8 @@ export class RingSignals extends SignalProvider<'ring-signals'> {
   }
 
   async #rememberDevice(accountId: string, deviceId: string): Promise<void> {
+    // Saving the account rewrites its tokens, so let a refresh store the rotated ones first.
+    await this.#refreshes.get(accountId)?.catch(() => undefined);
     const account = await this.#loadAccount(accountId);
     if (!account || account.deviceIds.includes(deviceId)) return;
     await this.#saveAccount({ ...account, deviceIds: [...account.deviceIds, deviceId] }, 'active');
@@ -863,10 +865,16 @@ export class RingSignals extends SignalProvider<'ring-signals'> {
     const cached = this.#mediaCache.get(key);
     if (cached) return cached.data;
 
-    const data = download().then(media => {
-      if (!media) this.#mediaCache.delete(key);
-      return media;
-    });
+    const data = download().then(
+      media => {
+        if (!media) this.#mediaCache.delete(key);
+        return media;
+      },
+      (error: unknown) => {
+        this.#mediaCache.delete(key);
+        throw error;
+      },
+    );
     this.#mediaCache.set(key, { data, expiresAt: now + MEDIA_CACHE_TTL_MS });
 
     while (this.#mediaCache.size > MEDIA_CACHE_MAX_ENTRIES) {

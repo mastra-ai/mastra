@@ -21,7 +21,7 @@ const CLIP_BYTES = Buffer.from('mp4-bytes-0123456789');
 type RingApiCall = { method: string; url: string; body: string };
 
 /** Stands in for the Ring Partner API and OAuth server, which can't be reached from tests. */
-function fakeRingApi() {
+function fakeRingApi({ expiresIn = 3600, refreshGate }: { expiresIn?: number; refreshGate?: Promise<void> } = {}) {
   const calls: RingApiCall[] = [];
   let tokenCount = 0;
 
@@ -32,11 +32,12 @@ function fakeRingApi() {
     calls.push({ method, url, body });
 
     if (url === 'https://oauth.ring.com/oauth/token') {
+      if (body.includes('grant_type=refresh_token')) await refreshGate;
       tokenCount++;
       return Response.json({
         access_token: `access-${tokenCount}`,
         refresh_token: `refresh-${tokenCount}`,
-        expires_in: 3600,
+        expires_in: tokenCount === 1 ? expiresIn : 3600,
       });
     }
     if (url === 'https://api.amazonvision.com/v1/users/me') return Response.json({ data: { id: ACCOUNT_ID } });
@@ -350,12 +351,39 @@ describe('RingSignals', () => {
       expect(await media.text()).toBe('Link expired');
     });
 
-    it('fails a snapshot when no Ring account is linked', async () => {
-      const { ring } = setup();
+    it('fails a snapshot when no Ring account is linked, and succeeds once one is', async () => {
+      const { ring, linkAccount } = setup();
+      const snapshot = () => ring.getTools().ring_snapshot!.execute!({ deviceId: DEVICE_ID, timestamp: 1 }, {} as any);
 
-      await expect(
-        ring.getTools().ring_snapshot!.execute!({ deviceId: DEVICE_ID, timestamp: 1 }, {} as any),
-      ).rejects.toThrow('No linked Ring account');
+      await expect(snapshot()).rejects.toThrow('No linked Ring account');
+
+      await linkAccount();
+      await expect(snapshot()).resolves.toMatchObject({ mediaId: `snapshot:${DEVICE_ID}:1` });
+    });
+
+    it('keeps rotated tokens when a new device sends a webhook during a token refresh', async () => {
+      let releaseRefresh!: () => void;
+      ringApi = fakeRingApi({ expiresIn: 30, refreshGate: new Promise(resolve => (releaseRefresh = resolve)) });
+      vi.stubGlobal('fetch', ringApi.fetchMock);
+      const { ring, linkAccount, postWebhook, storage } = setup({ encryptionKey: '' });
+      await linkAccount();
+
+      const snapshot = ring.getTools().ring_snapshot!.execute!({ deviceId: DEVICE_ID, timestamp: 1 }, {} as any);
+      await vi.waitFor(() =>
+        expect(ringApi.calls.some(call => call.body.includes('grant_type=refresh_token'))).toBe(true),
+      );
+      const webhook = postWebhook(
+        ringEvent({ attributes: { source: 'device-back-door', source_type: 'devices', timestamp: 1 } }),
+      );
+      releaseRefresh();
+      await Promise.all([snapshot, webhook]);
+
+      const channels = (await storage.getStore('channels')) as ChannelsStorage;
+      const [installation] = await channels.listInstallations('ring');
+      expect(installation!.data).toMatchObject({
+        refreshToken: 'refresh-2',
+        deviceIds: [DEVICE_ID, 'device-back-door'],
+      });
     });
   });
 

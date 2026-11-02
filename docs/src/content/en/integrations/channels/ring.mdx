@@ -249,7 +249,7 @@ When media isn't attached on a channel thread, because the platform isn't listed
 
 ### Send Ring alerts to a chat
 
-To get Ring alerts in a chat, the channel and Ring need to use the same thread. Give your channel thread a fixed ID with `resolveResourceId` and `resolveThreadId`, and set `target` to the same values. Before you send the first message, set `HOME_OWNER_USER_ID` in `.env` to your user ID on the channel platform (`message.author.userId`). Only your direct messages get the Ring thread. Group conversations and other senders keep their own threads and don't see Ring alerts or media:
+To get Ring alerts in a chat, the channel and Ring need to use the same thread. Give your channel thread a fixed ID with `resolveResourceId` and `resolveThreadId`, and set `target` to the same values. Before you send the first message, set `HOME_OWNER_USER_ID` in `.env` to your user ID on the channel platform (`message.author.userId`). Only your direct messages get the Ring thread. Group conversations and other senders keep their own threads and don't get Ring alerts. They can still ask the agent for Ring media, as the warning below explains:
 
 ```typescript title="src/mastra/agents/home-agent.ts"
 import { Agent } from '@mastra/core/agent'
