@@ -30,11 +30,12 @@ export interface KnowledgeConfig {
    * `knowledge_page`, `knowledge_note`), `{ read: true }` for `knowledge_search` and `knowledge_read`,
    * `{ write: true }` for `knowledge_page` and `knowledge_note`. Off by default.
    *
-   * `maxTokens` caps each `knowledge_read` body window or match result and each `knowledge_list`
-   * result (estimated tokens, default 1,000); the tools say in `more` how to read on. Raise it for
-   * large-context models or pages with long sections, lower it for small ones.
+   * `{ read: { maxTokens } }` turns read on and caps each `knowledge_read` body window or match
+   * result and each `knowledge_list` result (estimated tokens, default 1,000, at least 100); the
+   * tools say in `more` how to read on, and line-range writes accept at most one read's worth.
+   * Raise it for large-context models or pages with long sections, lower it for small ones.
    */
-  tools?: boolean | { read?: boolean; write?: boolean; maxTokens?: number };
+  tools?: boolean | { read?: boolean | { maxTokens?: number }; write?: boolean };
   /**
    * Pinned pages delivered to an attached agent every turn, plus the `knowledge_pin` tool. Needs
    * Memory. Off by default. `maxPins` defaults to 20, `maxTokens` (estimated, whole set) to 500, at

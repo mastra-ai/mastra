@@ -2,7 +2,7 @@ import { estimateTokenCount, sliceByTokens } from 'tokenx';
 
 /**
  * Default most estimated tokens one `knowledge_read` or `knowledge_list` result returns; the rest
- * comes by `from` or `cursor`. Set per Knowledge with `tools.maxTokens`.
+ * comes by `from` or `cursor`. Set per Knowledge with `tools.read.maxTokens`.
  */
 export const KNOWLEDGE_READ_BODY_TOKENS = 1_000;
 /**

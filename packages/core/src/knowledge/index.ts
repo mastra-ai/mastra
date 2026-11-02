@@ -104,11 +104,15 @@ export class Knowledge extends MastraBase {
     const tools = config.tools;
     this.#tools =
       typeof tools === 'object'
-        ? { read: Boolean(tools.read), write: Boolean(tools.write), maxTokens: tools.maxTokens }
+        ? {
+            read: Boolean(tools.read),
+            write: Boolean(tools.write),
+            maxTokens: typeof tools.read === 'object' ? tools.read.maxTokens : undefined,
+          }
         : { read: Boolean(tools), write: Boolean(tools) };
     const maxTokens = this.#tools.maxTokens;
     if (maxTokens !== undefined && (!Number.isInteger(maxTokens) || maxTokens < 100)) {
-      throw new Error(`Knowledge \`tools.maxTokens\` must be a whole number of at least 100; got ${maxTokens}.`);
+      throw new Error(`Knowledge \`tools.read.maxTokens\` must be a whole number of at least 100; got ${maxTokens}.`);
     }
     this.#pins = resolvePins(config.pinnedContext);
     this.#instructions = config.instructions;

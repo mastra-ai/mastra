@@ -12,7 +12,7 @@ const memory = knowledgeMemoryScopes();
 function setup(maxTokens?: number) {
   const knowledge = new Knowledge({
     storage: new InMemoryStore(),
-    tools: maxTokens === undefined ? true : { read: true, write: true, maxTokens },
+    tools: maxTokens === undefined ? true : { read: { maxTokens }, write: true },
     scopes: {
       ...memory,
       'docs:$orgId': { belongsTo: 'org:$orgId', access: [{ principal: 'org:$orgId', role: 'editor' }] },
@@ -584,7 +584,7 @@ describe('knowledgeBodySections', () => {
   });
 });
 
-describe('tools.maxTokens', () => {
+describe('tools.read.maxTokens', () => {
   it('sets how much one read, match or list returns, and the write guard follows it', async () => {
     const body = referenceBody();
     const small = setup();
@@ -643,6 +643,6 @@ describe('tools.maxTokens', () => {
   });
 
   it('refuses a cap that is not a whole number of at least 100', () => {
-    for (const maxTokens of [0, 50, 1.5, Number.NaN]) expect(() => setup(maxTokens)).toThrow(/tools.maxTokens/);
+    for (const maxTokens of [0, 50, 1.5, Number.NaN]) expect(() => setup(maxTokens)).toThrow(/tools\.read\.maxTokens/);
   });
 });
