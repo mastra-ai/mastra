@@ -48,7 +48,7 @@ import {
 import { applyThemePreference, normalizeThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
-import { formatVersion, getCurrentVersion, isVersionCommand } from './version.js';
+import { getCurrentVersion, isVersionCommand } from './version.js';
 
 let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
@@ -526,7 +526,7 @@ const handleFatalError = createOneShotFatalErrorHandler((error: unknown): void =
 
 async function main() {
   if (isVersionCommand(process.argv)) {
-    process.stdout.write(`${formatVersion(getCurrentVersion())}\n`);
+    process.stdout.write(`${getCurrentVersion()}\n`);
     return;
   }
 

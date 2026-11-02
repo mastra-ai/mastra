@@ -211,6 +211,7 @@ export const FLAGS: FlagSpec[] = [
   },
   {
     key: 'version',
+    short: 'v',
     type: 'boolean',
     help: 'Print the Mastra Code version and exit',
   },

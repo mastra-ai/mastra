@@ -11,11 +11,7 @@ export function getCurrentVersion(): string {
   return pkg.version;
 }
 
-/** Whether the invocation is `mastracode --version`. */
+/** Whether the invocation is `mastracode --version` or `mastracode -v`. */
 export function isVersionCommand(argv: string[]): boolean {
-  return argv[2] === '--version';
-}
-
-export function formatVersion(version: string): string {
-  return `mastracode ${version}`;
+  return argv[2] === '--version' || argv[2] === '-v';
 }
