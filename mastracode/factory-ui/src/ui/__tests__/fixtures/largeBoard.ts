@@ -9,7 +9,6 @@ export function largeBoard(count: number, factoryProjectId = 'fp-1'): WorkItemRo
     factoryProjectId,
     board: 'work',
     externalSource: null,
-    claimKey: null,
     parentWorkItemId: null,
     title: `Large task ${index}`,
     stages: ['triage'],

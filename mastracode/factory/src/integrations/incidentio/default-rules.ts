@@ -4,7 +4,6 @@ import type {
   FactoryIncidentioRuleContext,
   FactoryRuleHandler,
 } from '../../rules/types.js';
-import { incidentioClaimKey } from './claim.js';
 
 export type IncidentioRuleOverrides = Partial<
   Record<FactoryIncidentioEventName, FactoryRuleHandler<FactoryIncidentioRuleContext> | null | undefined>
@@ -23,7 +22,6 @@ function incidentioFollowUpObserved(context: FactoryIncidentioRuleContext) {
     board: context.intake?.board ?? 'work',
     source: 'incidentio-follow-up',
     sourceKey: context.issue.id,
-    claimKey: incidentioClaimKey(context.issue.id),
     title: context.issue.title,
     url: context.issue.url,
     stage: context.intake?.initialPhase ?? 'intake',

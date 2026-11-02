@@ -5244,36 +5244,40 @@ describe('FactoryDecisionDispatcher', () => {
     expect(await decisionByKey(storage, 'linked-1')).toMatchObject({ status: 'succeeded' });
   });
 
-  it('spends a linked-item decision when another project holds the claim for its record', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    await storage.upsert({
+  it('files a linked card even when another project holds a card for the same record', async () => {
+    const seeded = await createFactoryStorageForTests();
+    const storage = seeded.workItems;
+    const elsewhere = await storage.upsert({
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: 'other-project',
       input: {
         externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-1' },
-        claimKey: 'linear:issue:1',
         title: 'ENG-1: held elsewhere',
         stages: ['intake'],
         sessions: {},
         metadata: {},
       },
     });
+    // The other project's card was filed while claims were enforced and still holds the record's claim.
+    await seeded.storage.ops.updateMany('work_items', { id: elsewhere.item.id }, { claim_key: 'linear:issue:1' });
     const parent = await createItem(storage);
     const boards = createLifecycleTestRegistry({
       execute: {
         issue: {
-          onEnter: () => ({
-            type: 'upsertLinkedWorkItem',
-            idempotencyKey: 'linked-claimed',
-            board: 'work',
-            source: 'linear-issue',
-            sourceKey: 'linear:ENG-1',
-            claimKey: 'linear:issue:1',
-            title: 'ENG-1: held elsewhere',
-            url: null,
-            stage: 'intake',
-          }),
+          // A rule written before claims were dropped still returns one.
+          onEnter: () =>
+            ({
+              type: 'upsertLinkedWorkItem',
+              idempotencyKey: 'linked-claimed',
+              board: 'work',
+              source: 'linear-issue',
+              sourceKey: 'linear:ENG-1',
+              claimKey: 'linear:issue:1',
+              title: 'ENG-1: held elsewhere',
+              url: null,
+              stage: 'intake',
+            }) as FactoryCommitDecision,
         },
       },
     });
@@ -5289,6 +5293,16 @@ describe('FactoryDecisionDispatcher', () => {
       ingress: { type: 'human', identity: 'move-claimed' },
       cause: 'test',
     });
+    // The committed decision is validated, which drops the claim; one persisted before
+    // claims were dropped still carries it.
+    const committed = await decisionByKey(storage, 'linked-claimed');
+    expect(committed?.decision).not.toHaveProperty('claimKey');
+    await seeded.storage.ops.updateMany(
+      'factory_deferred_decisions',
+      { id: committed!.id },
+      { decision: { ...committed!.decision, claimKey: 'linear:issue:1' } },
+    );
+    expect((await decisionByKey(storage, 'linked-claimed'))?.decision).toMatchObject({ claimKey: 'linear:issue:1' });
     const { controller } = createSession();
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -5302,39 +5316,44 @@ describe('FactoryDecisionDispatcher', () => {
     const filedHere = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
       item => item.externalSource?.externalId === 'linear:ENG-1',
     );
-    expect(filedHere).toEqual([]);
+    expect(filedHere).toMatchObject([{ parentWorkItemId: parent.id, stages: ['intake'] }]);
+    const filedRow = await seeded.storage.ops.findOne<{ claim_key: string | null }>('work_items', {
+      id: filedHere[0]!.id,
+    });
+    expect(filedRow?.claim_key).toBeNull();
     expect(await decisionByKey(storage, 'linked-claimed')).toMatchObject({ status: 'succeeded' });
+    expect(await storage.get({ orgId: 'org-1', id: elsewhere.item.id })).toEqual(elsewhere.item);
   });
 
-  it('adopts the claim on a linked card filed before claims existed', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const legacy = await storage.upsert({
+  it('reuses the Linear card filed under an older identifier instead of filing a second one', async () => {
+    const { workItems: storage } = await createFactoryStorageForTests();
+    // Filed as OLD-1; the issue has since moved teams and is now ENG-1.
+    const renamed = await storage.upsert({
       orgId: 'org-1',
       userId: 'user-1',
       factoryProjectId: PROJECT_ID,
       input: {
-        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-1' },
-        title: 'ENG-1: filed earlier',
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:OLD-1' },
+        title: 'OLD-1: moved teams',
         stages: ['intake'],
         sessions: {},
-        metadata: {},
+        metadata: { linearIssueId: 'issue-1' },
       },
     });
-    expect(legacy.item.claimKey).toBeNull();
     const parent = await createItem(storage);
     const boards = createLifecycleTestRegistry({
       execute: {
         issue: {
           onEnter: () => ({
             type: 'upsertLinkedWorkItem',
-            idempotencyKey: 'linked-adopt',
+            idempotencyKey: 'linked-renamed',
             board: 'work',
             source: 'linear-issue',
             sourceKey: 'linear:ENG-1',
-            claimKey: 'linear:issue:1',
-            title: 'ENG-1: filed earlier',
+            title: 'ENG-1: moved teams',
             url: null,
             stage: 'intake',
+            metadata: { linearIssueId: 'issue-1' },
           }),
         },
       },
@@ -5348,7 +5367,7 @@ describe('FactoryDecisionDispatcher', () => {
       stage: 'execute',
       expectedRevision: parent.revision,
       actor: { type: 'human', id: 'user-1' },
-      ingress: { type: 'human', identity: 'move-adopt' },
+      ingress: { type: 'human', identity: 'move-renamed' },
       cause: 'test',
     });
     const { controller } = createSession();
@@ -5361,8 +5380,84 @@ describe('FactoryDecisionDispatcher', () => {
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
-    expect(await storage.get({ orgId: 'org-1', id: legacy.item.id })).toMatchObject({ claimKey: 'linear:issue:1' });
-    expect(await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toHaveLength(2);
+    const cards = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
+      item => item.metadata?.linearIssueId === 'issue-1',
+    );
+    expect(cards.map(card => card.id)).toEqual([renamed.item.id]);
+    expect(await decisionByKey(storage, 'linked-renamed')).toMatchObject({ status: 'succeeded' });
+  });
+
+  it.each([
+    { order: 'the finished card is older', finishedAt: '2030-01-01T00:00:00Z', liveAt: '2030-01-02T00:00:00Z' },
+    { order: 'the finished card is newer', finishedAt: '2030-01-02T00:00:00Z', liveAt: '2030-01-01T00:00:00Z' },
+  ])('reuses the live Linear card under an older identifier when $order', async ({ finishedAt, liveAt }) => {
+    const { workItems: storage, storage: db } = await createFactoryStorageForTests();
+    // One card finished as OLD-1, a later one is live as OPS-1; the issue is now ENG-1.
+    const fileCard = async (identifier: string, stage: string, createdAt: string) => {
+      const { item } = await storage.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        input: {
+          externalSource: { integrationId: 'linear', type: 'issue', externalId: `linear:${identifier}` },
+          title: `${identifier}: moved teams`,
+          stages: [stage],
+          sessions: {},
+          metadata: { linearIssueId: 'issue-1' },
+        },
+      });
+      await db.ops.updateMany('work_items', { id: item.id }, { created_at: new Date(createdAt) });
+      return item;
+    };
+    const finished = await fileCard('OLD-1', 'done', finishedAt);
+    const live = await fileCard('OPS-1', 'intake', liveAt);
+    const parent = await createItem(storage);
+    const boards = createLifecycleTestRegistry({
+      execute: {
+        issue: {
+          onEnter: () => ({
+            type: 'upsertLinkedWorkItem',
+            idempotencyKey: 'linked-renamed-twice',
+            board: 'work',
+            source: 'linear-issue',
+            sourceKey: 'linear:ENG-1',
+            title: 'ENG-1: moved teams',
+            url: null,
+            stage: 'intake',
+            metadata: { linearIssueId: 'issue-1' },
+          }),
+        },
+      },
+    });
+    const transitionService = new FactoryTransitionService({ storage, configVersion: 'rules-v1', boards });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: parent.id,
+      board: 'work',
+      stage: 'execute',
+      expectedRevision: parent.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'move-renamed-twice' },
+      cause: 'test',
+    });
+    const { controller } = createSession();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    await dispatcher.runOnce(new Date('2030-01-03T00:00:00Z'));
+
+    const cards = (await storage.list({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).filter(
+      item => item.metadata?.linearIssueId === 'issue-1',
+    );
+    expect(cards.map(card => card.id).sort()).toEqual([finished.id, live.id].sort());
+    expect(await storage.get({ orgId: 'org-1', id: live.id })).toMatchObject({ parentWorkItemId: parent.id });
+    expect(await storage.get({ orgId: 'org-1', id: finished.id })).toMatchObject({ parentWorkItemId: null });
+    expect(await decisionByKey(storage, 'linked-renamed-twice')).toMatchObject({ status: 'succeeded' });
   });
 
   it('removes a newly materialized linked item when its initial Intake entry is rejected', async () => {

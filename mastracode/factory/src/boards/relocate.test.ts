@@ -13,7 +13,6 @@ function item(overrides: Partial<WorkItemRow> = {}): WorkItemRow {
     factoryProjectId: 'project-1',
     board: 'work',
     externalSource: null,
-    claimKey: null,
     parentWorkItemId: null,
     title: 'Card',
     stages: ['intake'],

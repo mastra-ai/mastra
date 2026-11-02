@@ -33,7 +33,6 @@ function item(overrides: Partial<WorkItemRow> & { id: string }): WorkItemRow {
     factoryProjectId: 'project-1',
     board: null,
     externalSource: null,
-    claimKey: null,
     parentWorkItemId: null,
     title: `Item ${overrides.id}`,
     stages: ['intake'],

@@ -1,6 +1,5 @@
 import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryJiraEventName, FactoryJiraRuleContext, FactoryRuleHandler } from '../../rules/types.js';
-import { jiraClaimKey } from './claim.js';
 
 export type JiraRuleOverrides = Partial<
   Record<FactoryJiraEventName, FactoryRuleHandler<FactoryJiraRuleContext> | null | undefined>
@@ -17,7 +16,6 @@ function jiraIssueObserved(context: FactoryJiraRuleContext) {
     board: context.intake?.board ?? 'work',
     source: 'jira-issue',
     sourceKey: context.issue.id,
-    claimKey: jiraClaimKey(context.issue.id),
     title: context.issue.title,
     url: context.issue.url,
     stage: context.intake?.initialPhase ?? 'intake',
