@@ -2,7 +2,12 @@ import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createStep, createWorkflow as createLocalWorkflow } from '@mastra/core/workflows';
-import { ApplicationFailure, CancelledFailure, WorkflowFailedError } from '@temporalio/client';
+import {
+  ApplicationFailure,
+  CancelledFailure,
+  WorkflowExecutionAlreadyStartedError,
+  WorkflowFailedError,
+} from '@temporalio/client';
 import type { Client } from '@temporalio/client';
 import { proxyActivities } from '@temporalio/workflow';
 import { describe, expect, it, vi } from 'vitest';
@@ -337,6 +342,23 @@ describe('TemporalRun lifecycle hooks', () => {
       expect(hooks.onError).toHaveBeenCalledTimes(onError ? 1 : 0);
     },
   );
+
+  it('start() does not run the finish callbacks when Temporal does not start the run', async () => {
+    // Another run already owns the id, so its outcome must not be reported as this run's.
+    const start = vi
+      .fn()
+      .mockRejectedValue(
+        new WorkflowExecutionAlreadyStartedError('Workflow execution already started', 'test-run', 'testWorkflow'),
+      );
+    const { hooks, workflow } = createHookedWorkflow(start);
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    const result = await run.start({ inputData: {} });
+
+    expect(result.status).toBe('failed');
+    expect(hooks.onFinish).not.toHaveBeenCalled();
+    expect(hooks.onError).not.toHaveBeenCalled();
+  });
 
   it.each(['start', 'startAsync'] as const)(
     '%s() rejects without starting the workflow when onStart throws',
