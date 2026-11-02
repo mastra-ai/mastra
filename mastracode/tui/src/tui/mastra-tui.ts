@@ -6,7 +6,7 @@ import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 import type { Component } from '@earendil-works/pi-tui';
 import type { BackgroundCompletionEvent } from '@mastra/code-sdk/agents/background-completion-events';
-import { isModelFallbackReason, MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
 import type { PendingModelFallback } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getOAuthProviders } from '@mastra/code-sdk/auth/storage';
 import {
@@ -154,7 +154,7 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
     typeof pendingFallback.fromEntryId === 'string' &&
     typeof pendingFallback.toEntryId === 'string' &&
     typeof pendingFallback.toModelId === 'string' &&
-    isModelFallbackReason(pendingFallback.reason) &&
+    (pendingFallback.reason === 'pool-exhausted' || pendingFallback.reason === 'persistent-outage') &&
     typeof pendingFallback.at === 'string'
       ? (pendingFallback as PendingModelFallback)
       : null;

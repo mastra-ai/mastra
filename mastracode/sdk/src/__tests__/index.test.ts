@@ -1946,15 +1946,11 @@ describe('createMastraCode', () => {
     // exactly what it was before the lane existed.
     expect(processors.map(processor => processor.id)).toEqual([
       'embedding-reconciler',
-      'mastracode-refusal-fallback',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual([
-      'cyber-refusal-handler',
-      'mastracode-refusal-fallback',
-    ]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
   });
 
   it('appends embedding output processors after the built-in output processors', async () => {
@@ -1964,12 +1960,8 @@ describe('createMastraCode', () => {
     await createMastraCode({ outputProcessors: () => [customProcessor], disablePlugins: true });
 
     const processors = resolveOutputProcessors();
-    expect(processors.map(processor => processor.id)).toEqual([
-      'cyber-refusal-handler',
-      'mastracode-refusal-fallback',
-      'embedding-stamper',
-    ]);
-    expect(processors[2]).toBe(customProcessor);
+    expect(processors.map(processor => processor.id)).toEqual(['cyber-refusal-handler', 'embedding-stamper']);
+    expect(processors[1]).toBe(customProcessor);
   });
 
   it('resolves request-scoped input processors before mandatory built-ins', async () => {
@@ -1992,7 +1984,6 @@ describe('createMastraCode', () => {
     expect(inputProcessors).toHaveBeenCalledWith({ requestContext });
     expect(processors?.map(processor => processor.id)).toEqual([
       'request-scoped-reconciler',
-      'mastracode-refusal-fallback',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
@@ -2018,7 +2009,6 @@ describe('createMastraCode', () => {
     // The built-ins go through the same path, as they did when the lane was an array.
     expect(mastraStub.addProcessor.mock.calls.map(([processor]) => processor.id)).toEqual([
       'needs-mastra',
-      'mastracode-refusal-fallback',
       'plan-rejection-abort',
       'agents-md-injector',
     ]);
@@ -2049,32 +2039,23 @@ describe('createMastraCode', () => {
     // Plugin processors are the customization layer over Mastra Code's own
     // scaffolding, so they run after it — last in each configured array.
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
-      'mastracode-refusal-fallback',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
       'acme-input',
     ]);
-    expect(resolveOutputProcessors()).toEqual([
-      expect.objectContaining({ id: 'cyber-refusal-handler' }),
-      expect.objectContaining({ id: 'mastracode-refusal-fallback' }),
-      pluginOutput,
-    ]);
+    expect(resolveOutputProcessors()).toEqual([expect.objectContaining({ id: 'cyber-refusal-handler' }), pluginOutput]);
 
     // A plugin disabled or updated mid-session changes what the manager reports;
     // the next request picks it up through the same agent.
     entries = { input: [], output: [] };
 
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
-      'mastracode-refusal-fallback',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual([
-      'cyber-refusal-handler',
-      'mastracode-refusal-fallback',
-    ]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
   });
 
   it('runs plugin signal providers through the lane, never the agent signals array', async () => {
@@ -2113,7 +2094,6 @@ describe('createMastraCode', () => {
     // and their processors join both lanes.
     expect(provider.isConnected).toBe(true);
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
-      'mastracode-refusal-fallback',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
@@ -2121,7 +2101,6 @@ describe('createMastraCode', () => {
     ]);
     expect(resolveOutputProcessors()).toEqual([
       expect.objectContaining({ id: 'cyber-refusal-handler' }),
-      expect.objectContaining({ id: 'mastracode-refusal-fallback' }),
       outputProcessor,
     ]);
     expect(built.controller).toBeDefined();
@@ -2183,15 +2162,11 @@ describe('createMastraCode', () => {
     // into a debug log and the agent silently loses every processor.
     expect(() => resolveInputProcessors()).not.toThrow();
     expect(resolveInputProcessors().map(processor => processor.id)).toEqual([
-      'mastracode-refusal-fallback',
       'plan-rejection-abort',
       'agents-md-injector',
       'mastracode-account-start-notice',
     ]);
-    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual([
-      'cyber-refusal-handler',
-      'mastracode-refusal-fallback',
-    ]);
+    expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
     // Warned once, not once per request: this is the hot path.
     expect(warn).toHaveBeenCalledTimes(1);
     warn.mockRestore();

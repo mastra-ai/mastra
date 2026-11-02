@@ -1,4 +1,6 @@
 import type { MessageList } from '../agent/message-list';
+import { resolveModelConfig } from '../llm';
+import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { RequestContext } from '../request-context';
 import type {
   Processor,
@@ -9,8 +11,8 @@ import type {
   ProcessOutputStepArgs,
 } from './index';
 
-/** A model the handler can switch to after a refusal. */
-export type CyberRefusalFallbackModel = NonNullable<ProcessInputStepResult['model']>;
+/** A model the handler can switch to after a refusal: anything an agent's `model` accepts. */
+export type CyberRefusalFallbackModel = MastraModelConfig;
 
 export interface CyberRefusalFallbackContext {
   /** 0 for the first fallback after the original model refused, 1 for the next, and so on. */
@@ -149,8 +151,8 @@ export class CyberRefusalHandler implements Processor<'cyber-refusal-handler'> {
     this.#fallbackModels = options.fallbackModels;
   }
 
-  processInputStep({ state }: ProcessInputStepArgs): ProcessInputStepResult | undefined {
-    const model = state[FALLBACK_MODEL_KEY] as CyberRefusalFallbackModel | undefined;
+  async processInputStep({ state }: ProcessInputStepArgs): Promise<ProcessInputStepResult | undefined> {
+    const model = state[FALLBACK_MODEL_KEY] as MastraLanguageModel | undefined;
     return model ? { model } : undefined;
   }
 
@@ -206,8 +208,13 @@ export class CyberRefusalHandler implements Processor<'cyber-refusal-handler'> {
     if (!fallbacks) return false;
 
     const attempt = (state[FALLBACK_ATTEMPT_KEY] as number | undefined) ?? 0;
-    const model = Array.isArray(fallbacks) ? fallbacks[attempt] : await fallbacks({ attempt, requestContext });
-    if (!model) return false;
+    const config = Array.isArray(fallbacks) ? fallbacks[attempt] : await fallbacks({ attempt, requestContext });
+    if (!config) return false;
+
+    const model = await resolveModelConfig(config, requestContext);
+    if (model.specificationVersion === 'v1') {
+      throw new Error('CyberRefusalHandler fallbackModels cannot use AI SDK v4 (LanguageModelV1) models');
+    }
 
     state[FALLBACK_ATTEMPT_KEY] = attempt + 1;
     state[FALLBACK_MODEL_KEY] = model;

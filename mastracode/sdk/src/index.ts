@@ -92,7 +92,6 @@ import {
   MODEL_FALLBACK_STATE_KEY,
 } from './auth/account-rotation-processor.js';
 import { isKimiCodingDeviceId } from './auth/providers/kimi-coding.js';
-import { RefusalFallbackProcessor } from './auth/refusal-fallback-processor.js';
 import { AuthStorage } from './auth/storage.js';
 import { CODE_AGENT_ID, DEFAULT_CONFIG_DIR, DEFAULT_OM_MODEL_ID, validateConfigDirName } from './constants.js';
 import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/index.js';
@@ -1212,22 +1211,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // the resolver below: the resolver runs before every LLM call, and rebuilding
   // stateful processors per request would reset them.
   const staticConfiguredInputProcessors = Array.isArray(config?.inputProcessors) ? config.inputProcessors : [];
-  const accountRotation = new AccountRotationProcessor({
-    credentialStore: authStorage,
-    // Same budget core enforces (maxProcessorRetries below): past it, core
-    // discards retry:true, so the processor no-ops instead of rotating.
-    maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
-    settingsPath: config?.settingsPath,
-    modeless,
-    resolveDefaultThinkingLevel: config?.resolveDefaultThinkingLevel,
-  });
-  // Shares the account-rotation route cursor and hop announcement. One
-  // instance in the output lane (sees the refusal) and the input lane (hops).
-  const refusalFallback = new RefusalFallbackProcessor(accountRotation);
   const mastraCodeInputProcessors: InputProcessor[] = [
     ...staticConfiguredInputProcessors,
-    // First built-in, so a refused model's input step ends before the others run for it.
-    refusalFallback,
     new PlanRejectionAbortProcessor(),
     ...(backgroundToolsEnabled ? [createBackgroundWorkSignalProcessor()] : []),
     new AgentsMDInjector({
@@ -1514,8 +1499,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
         // Anthropic cyber refusals finish a step instead of throwing, so they are
         // handled here; OpenAI's throw and are handled in the error lane below.
         new CyberRefusalHandler(),
-        // After the cyber handler, so a cyber refusal gets its one nudge first.
-        refusalFallback,
         ...configured,
         ...readPluginProcessors().output.map(entry => entry.value),
         ...(pluginSignalLane?.getOutputProcessors() ?? []),
@@ -1563,7 +1546,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
       // means StreamErrorRetryProcessor already spent its budget, which is the
       // hop condition; quota/auth errors were never transient-matched and
       // rotate immediately.
-      accountRotation,
+      new AccountRotationProcessor({
+        credentialStore: authStorage,
+        // Same budget core enforces (maxProcessorRetries below): past it, core
+        // discards retry:true, so the processor no-ops instead of rotating.
+        maxProcessorRetries: MASTRACODE_MAX_PROCESSOR_RETRIES,
+        settingsPath: config?.settingsPath,
+        modeless,
+        resolveDefaultThinkingLevel: config?.resolveDefaultThinkingLevel,
+      }),
     ],
     // Individual processors have tighter limits; this remains a defensive
     // ceiling for custom/plugin processors that might retry indefinitely.

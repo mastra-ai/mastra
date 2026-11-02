@@ -103,7 +103,7 @@ Each switch is a processor retry, so it counts against `maxProcessorRetries`.
     name: 'fallbackModels',
     type: 'CyberRefusalFallbackModel[] | ((context: { attempt: number; requestContext?: RequestContext }) => CyberRefusalFallbackModel | undefined | Promise<CyberRefusalFallbackModel | undefined>)',
     description:
-      'Models to switch to when a refusal survives the retry, in order, or a function that picks one when the refusal happens. The fallback lasts for the rest of the run. Requires the handler in `inputProcessors` too.',
+      'Models to switch to when a refusal survives the retry, in order, or a function that picks one when the refusal happens. Each entry takes anything an agent `model` accepts: a model router string, a provider model instance, or `{ id, model }`. The fallback lasts for the rest of the run. Requires the handler in `inputProcessors` too.',
     isOptional: true,
   },
 ]}
@@ -127,7 +127,7 @@ Each switch is a processor retry, so it counts against `maxProcessorRetries`.
   },
   {
     name: 'processInputStep',
-    type: '(args: ProcessInputStepArgs) => ProcessInputStepResult | undefined',
+    type: '(args: ProcessInputStepArgs) => Promise<ProcessInputStepResult | undefined>',
     description: 'Uses the fallback model for each step after a switch. Does nothing without `fallbackModels`.',
     isOptional: false,
   },
