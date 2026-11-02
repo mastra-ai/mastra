@@ -4082,6 +4082,15 @@ describe('PlatformSandbox networking', () => {
     await expect(sandbox.networking.getPortUrl(3000)).resolves.toBeNull();
   });
 
+  it('forgets a sandbox the platform says was destroyed', async () => {
+    const { sandbox } = makeSandbox(json({ error: { message: 'gone', type: 'sandbox_destroyed' } }, { status: 410 }));
+    await sandbox._start();
+
+    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBeNull();
+    expect(sandbox.sandboxId).toBeUndefined();
+    expect(sandbox.status).toBe('pending');
+  });
+
   it('passes on other platform errors', async () => {
     const { sandbox } = makeSandbox(json({ error: { message: 'boom', type: 'internal' } }, { status: 500 }));
     await sandbox._start();

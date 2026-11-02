@@ -550,8 +550,9 @@ export class PlatformSandbox extends MastraSandbox {
       const sandboxId = this.sandboxId;
       if (!sandboxId) return null;
       try {
-        // The proxy builds the address for the sandbox's region; the one-time
-        // sign-in link it comes with isn't needed here.
+        // The proxy builds the address for the sandbox's region. The one-time
+        // sign-in link it comes with isn't needed here: it's single-use and
+        // expires after a minute, so dropping it costs nothing.
         const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/preview-grants`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
@@ -560,8 +561,13 @@ export class PlatformSandbox extends MastraSandbox {
         const { url } = (await response.json()) as { url: string };
         return `${new URL(url).origin}/`;
       } catch (error) {
-        // Destroyed, or a platform that doesn't serve previews yet.
-        if (error instanceof PlatformApiError && (error.status === 404 || error.status === 410)) return null;
+        if (error instanceof PlatformApiError && error.status === 410) {
+          // Destroyed upstream: stop pointing at it, unless a new sandbox replaced it meanwhile.
+          if (this._sandboxId === sandboxId) this._clearDestroyedState(sandboxId);
+          return null;
+        }
+        // A platform that doesn't serve previews yet.
+        if (error instanceof PlatformApiError && error.status === 404) return null;
         throw error;
       }
     },
