@@ -1,7 +1,7 @@
 import { ArrowLeft, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { isChildPlaceholder, isScopeGroup, lazyGraph } from '../lib/graphShape';
+import { isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
 import { childCountLabel } from '../lib/pageTree';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
@@ -613,7 +613,12 @@ export function KnowledgePageExplorer({
             focusId: selectedPageId,
             openGroups,
           })
-        : { pages: graph.pages, hiddenChildren: new Map<string, { hidden: number; drawn: number }>(), wanted: [] },
+        : {
+            pages: graph.pages,
+            hiddenChildren: new Map<string, { hidden: number; drawn: number }>(),
+            wanted: [],
+            hub: null,
+          },
     [lazyMode, lazy.pages, lazy.loaded, selectedPageId, openGroups, graph.pages],
   );
   useEffect(() => {
@@ -724,7 +729,8 @@ export function KnowledgePageExplorer({
     () => withinScope(drawn.pages, focusScope ? focusScopeId : null),
     [drawn.pages, focusScope, focusScopeId],
   );
-  const focusedInGraph = view === 'graph' && selectedPageId ? pagesById.get(selectedPageId) : undefined;
+  // With nothing selected the graph still centres on its first root scope, so that scope's "more" note shows.
+  const focusedInGraph = view === 'graph' ? pagesById.get(selectedPageId ?? drawn.hub ?? '') : undefined;
   const children = focusedInGraph ? drawn.hiddenChildren.get(focusedInGraph.id) : undefined;
   const views: Array<{ value: KnowledgeExplorerView; label: string; narrowOnly?: boolean }> = [
     { value: 'tree', label: 'Tree', narrowOnly: true },
@@ -891,6 +897,7 @@ export function KnowledgePageExplorer({
                 pinnedIds={graph.pinnedIds}
                 grants={graph.grants}
                 selectedPageId={selectedPageId}
+                centerId={drawn.hub}
                 hiddenLinks={linkView.hidden}
                 knownLinks={knownLinks}
                 showCounts={dotCounts}
@@ -900,6 +907,7 @@ export function KnowledgePageExplorer({
                 onSelect={page => {
                   // A stand-in loads its parent's children; a scope group opens into its scopes.
                   if (isChildPlaceholder(page)) return page.parentId ? previewParent(page.parentId) : undefined;
+                  if (isRestCircle(page)) return undefined;
                   if (isScopeGroup(page)) return setOpenGroups(current => new Set(current).add(page.id));
                   onSelect(page.id);
                   // Hosts resolve a `?page=` with no view to the page view, so say graph outright.

@@ -2,13 +2,17 @@ import { describe, expect, it } from 'vitest';
 
 import type { KnowledgePagePayload } from '../pageTypes';
 import {
+  CROWD_MIN_SCALE,
+  CROWD_START,
   GRAPH_CHILD_CAP,
   HIGHER_LEVEL_CAP,
   PLACEHOLDER_CAP,
   ROOT_CIRCLE_CAP,
   WANTED_CIRCLE_CAP,
+  crowdScale,
   graphShape,
   isChildPlaceholder,
+  isRestCircle,
   isScopeGroup,
   lazyGraph,
   radialLayout,
@@ -158,23 +162,21 @@ describe('graphShape', () => {
       expect(shape.form.get('post-1')).toBe('dot');
     });
 
-    it('puts several root scopes on the first ring as full circles, with their first children as circles too', () => {
-      const shape = graphShape([...pages, page('other', null, { address: 'resource:docs' })], null);
-      expect(shape.center).toBeNull();
-      expect(shape.form.get('site')).toBe('full');
+    it('centres on the first root and draws the other roots beside its children, as circles', () => {
+      const shape = graphShape([...pages, page('other', null, { address: 'resource:docs', position: 'z' })], null);
+      expect(shape.center).toBe('site');
+      expect(shape.depth.get('other')).toBe(1);
       expect(shape.form.get('other')).toBe('full');
       expect(shape.form.get('blog')).toBe('full');
-      // The level below those circles is the dots.
       expect(shape.form.get('post-1')).toBe('dot');
     });
 
-    it('draws only the first few children of each root as circles, the rest as dots', () => {
-      const many = Array.from({ length: 12 }, (_, index) => page(`c${String(index).padStart(2, '0')}`, 'other'));
-      const shape = graphShape([...pages, page('other', null, { address: 'resource:docs' }), ...many], null);
-      const forms = many.map(child => shape.form.get(child.id));
-      expect(forms.filter(form => form === 'full')).toHaveLength(ROOT_CIRCLE_CAP);
-      expect(forms.slice(0, ROOT_CIRCLE_CAP).every(form => form === 'full')).toBe(true);
-      expect(forms.slice(ROOT_CIRCLE_CAP).every(form => form === 'dot')).toBe(true);
+    it('draws every child of the first root as a circle, as it would for a focused scope', () => {
+      const many = Array.from({ length: 12 }, (_, index) => page(`c${String(index).padStart(2, '0')}`, 'site'));
+      const unfocused = graphShape([...pages, ...many], null);
+      const focused = graphShape([...pages, ...many], 'site');
+      expect(many.every(child => unfocused.form.get(child.id) === 'full')).toBe(true);
+      expect([...unfocused.form]).toEqual([...focused.form]);
     });
   });
 
@@ -251,17 +253,22 @@ describe('lazyGraph', () => {
     const grand = page('g', 'k00');
     const graph = lazyGraph({
       ...base,
-      pages: [page('site', null, { address: 'site:mastra', childCount: 12 }), page('other', null), ...kids, grand],
+      pages: [
+        page('site', null, { address: 'site:mastra', childCount: 12, position: 'a' }),
+        page('other', null, { position: 'b' }),
+        ...kids,
+        grand,
+      ],
       loadedParents: new Set(['', 'site', 'other', 'k00']),
       focusId: null,
     });
     const ids = graph.pages.map(p => p.id);
     expect(ids).toContain('g');
-    // A child past the circles is a bare dot: its children are neither drawn nor stood in for.
-    expect(graph.pages.filter(p => isChildPlaceholder(p) && p.parentId === 'k11')).toHaveLength(0);
+    // Every child of the first root is a circle, so each one that has not loaded stands in dots for its children.
+    expect(graph.hub).toBe('site');
+    expect(graph.pages.filter(p => isChildPlaceholder(p) && p.parentId === 'k11')).toHaveLength(2);
     expect(graph.pages.filter(p => isChildPlaceholder(p) && p.parentId === 'k01')).toHaveLength(2);
-    expect(graph.wanted).toEqual(expect.arrayContaining(['site', 'other', 'k00', 'k01']));
-    expect(graph.wanted).not.toContain('k11');
+    expect(graph.wanted).toEqual(expect.arrayContaining(['site', 'other', 'k00', 'k01', 'k11']));
   });
 
   it("with a childless page focused, stands in its siblings' children as dots", () => {
@@ -287,14 +294,17 @@ describe('lazyGraph', () => {
   });
 
   it('caps the children it draws and counts the rest', () => {
-    const many = Array.from({ length: 30 }, (_, index) => page(`p${String(index).padStart(2, '0')}`, 'blog'));
+    const many = Array.from({ length: 60 }, (_, index) => page(`p${String(index).padStart(2, '0')}`, 'blog'));
     const graph = lazyGraph({
       ...base,
-      pages: [page('site', null), page('blog', 'site', { childCount: 30 }), ...many],
+      pages: [page('site', null), page('blog', 'site', { childCount: 60 }), ...many],
       loadedParents: new Set(['', 'site', 'blog']),
       focusId: 'blog',
     });
-    expect(graph.hiddenChildren.get('blog')).toEqual({ hidden: 30 - GRAPH_CHILD_CAP, drawn: GRAPH_CHILD_CAP });
+    expect(graph.hiddenChildren.get('blog')).toEqual({ hidden: 60 - GRAPH_CHILD_CAP, drawn: GRAPH_CHILD_CAP });
+    const rest = graph.pages.find(isRestCircle);
+    expect(rest?.name).toBe(`+${60 - GRAPH_CHILD_CAP} more`);
+    expect(rest?.parentId).toBe('blog');
   });
 
   it('collapses sibling memory scopes into one circle per type until opened, but not under the focus', () => {
@@ -303,7 +313,11 @@ describe('lazyGraph', () => {
     );
     const input = {
       ...base,
-      pages: [page('site', null), page('resource', null, { address: 'resource:docs' }), ...threads],
+      pages: [
+        page('site', null, { position: 'a' }),
+        page('resource', null, { address: 'resource:docs', position: 'b' }),
+        ...threads,
+      ],
       loadedParents: new Set(['', 'site', 'resource']),
       focusId: null,
     };
@@ -330,7 +344,7 @@ describe('lazyGraph', () => {
   });
 
   it('also wants the children of the circles it draws, so their children show as dots, up to a cap', () => {
-    const kids = Array.from({ length: 15 }, (_, index) =>
+    const kids = Array.from({ length: 40 }, (_, index) =>
       page(`k${String(index).padStart(2, '0')}`, 'site', { childCount: 3 }),
     );
     const graph = lazyGraph({
@@ -354,5 +368,18 @@ describe('lazyGraph', () => {
     const after = lazyGraph({ ...input, loadedParents: new Set(['', 'site', 'blog']) });
     expect(before.wanted).toEqual(['site', 'blog']);
     expect(after.wanted).toEqual(before.wanted);
+  });
+});
+
+describe('crowdScale', () => {
+  it('leaves a ring that fits at full size', () => {
+    expect(crowdScale(1)).toBe(1);
+    expect(crowdScale(CROWD_START)).toBe(1);
+  });
+
+  it('shrinks a crowded ring, but never below the smallest size', () => {
+    expect(crowdScale(CROWD_START * 2)).toBeLessThan(1);
+    expect(crowdScale(45)).toBeGreaterThanOrEqual(CROWD_MIN_SCALE);
+    expect(crowdScale(10_000)).toBe(CROWD_MIN_SCALE);
   });
 });

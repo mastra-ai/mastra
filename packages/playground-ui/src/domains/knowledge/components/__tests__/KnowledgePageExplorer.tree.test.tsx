@@ -240,7 +240,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
     it("loads a page's children when the pointer rests on the dots standing in for them", () => {
       // Only so many circles load their children up front; the rest stand in with dots from their count.
       const requested: KnowledgeExplorerTreeRequest[] = [];
-      const { container } = renderWithProviders(<Host requested={requested} extraSiblings={14} />);
+      const { container } = renderWithProviders(<Host requested={requested} extraSiblings={30} />);
       const standIn = standIns(container)[0]?.closest('.react-flow__node');
       if (!standIn) throw new Error('no stand-in dot');
       const before = standIns(container).length;

@@ -24,7 +24,9 @@ import {
   KNOWLEDGE_DOT_SIZE,
   branchColors,
   graphShape,
+  crowdScale,
   isChildPlaceholder,
+  isRestCircle,
   isScopeGroup,
   radialLayout,
 } from '../lib/graphShape';
@@ -336,27 +338,30 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
   const group = isScopeGroup(page);
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
   const placeholder = isPlaceholder(page);
+  const rest = isRestCircle(page);
   return (
     <div
       data-testid="knowledge-page-node"
       data-page-id={page.id}
-      data-page-type={placeholder ? 'placeholder' : group ? 'group' : page.isScope ? 'scope' : 'page'}
-      className={`relative transition-opacity ${placeholder ? 'cursor-default' : 'cursor-pointer'}`}
+      data-page-type={placeholder ? 'placeholder' : rest ? 'rest' : group ? 'group' : page.isScope ? 'scope' : 'page'}
+      className={`relative transition-opacity ${placeholder || rest ? 'cursor-default' : 'cursor-pointer'}`}
       style={{ width: size, height: size, opacity: dimmed ? 0.35 : 1 }}
       title={
         placeholder
           ? `${kind} · ${page.address} · nothing written to it yet`
-          : group
-            ? `${page.name}: click to show them`
-            : page.isScope && page.address
-              ? `${kind} · ${page.address}`
-              : page.name
+          : rest
+            ? `${page.name} pages not drawn. Open the tree to see them all.`
+            : group
+              ? `${page.name}: click to show them`
+              : page.isScope && page.address
+                ? `${kind} · ${page.address}`
+                : page.name
       }
     >
       <div
         className="knowledge-circle flex size-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-2 px-3 text-center shadow-raised"
         data-selected={selected || undefined}
-        style={placeholder ? PLACEHOLDER_STYLE : page.isScope ? SCOPE_STYLE : PAGE_STYLE}
+        style={placeholder || rest ? PLACEHOLDER_STYLE : page.isScope ? SCOPE_STYLE : PAGE_STYLE}
       >
         <Txt
           as="span"
@@ -367,7 +372,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
           data-testid={page.isScope ? 'knowledge-scope-caption' : 'knowledge-page-caption'}
         >
           {data.level ? <LevelIcon level={data.level} /> : null}
-          {kind}
+          {rest ? 'More' : kind}
         </Txt>
         <Txt as="span" variant="label" tone="ink" className="pointer-events-none line-clamp-3 max-w-full break-words">
           {page.isScope && page.address && !group ? <BreakAtColons text={page.address} /> : page.name}
@@ -788,6 +793,8 @@ export interface KnowledgePageGraphProps {
   /** Access grants between scopes, drawn from each principal scope to the scope it reaches. */
   grants?: readonly KnowledgeScopeGrantPayload[];
   selectedPageId?: string | null;
+  /** The page the layout centres on when none is selected, drawn like a focused page without the ring. */
+  centerId?: string | null;
   /** Per page, links into and out of it that the graph doesn't draw; shown as `→in out→` on full circles. */
   hiddenLinks?: ReadonlyMap<string, { in: number; out: number }>;
   /** Every link between pages, drawn or not: hovering a page draws its own, and tooltips count them. */
@@ -830,6 +837,7 @@ function KnowledgePageGraphInner({
   pinnedIds = [],
   grants,
   selectedPageId,
+  centerId,
   hiddenLinks,
   knownLinks,
   showCounts,
@@ -870,7 +878,7 @@ function KnowledgePageGraphInner({
   // The focused page sits at the centre with its parent and children around it as full circles; pages
   // farther out are dots on outer rings, inside their branch's slice. A last overlap pass is the only force.
   const laidOut = useMemo(() => {
-    const shape = graphShape(graphPages, selectedPageId ?? null);
+    const shape = graphShape(graphPages, selectedPageId ?? centerId ?? null);
     const colors = branchColors(graphPages, shape);
     const flow = toPageFlow(graphPages, allEdges);
     for (const node of flow.nodes) {
@@ -879,8 +887,12 @@ function KnowledgePageGraphInner({
         const links = linkCounts.get(node.id);
         const counted = showCounts && !isChildPlaceholder(node.data.page) && !!links && links.in + links.out > 0;
         node.data.size = counted ? KNOWLEDGE_COUNTED_DOT_SIZE : KNOWLEDGE_DOT_SIZE;
-      } else if (node.id === selectedPageId) node.data.size = Math.round(node.data.size * FOCUSED_SCALE);
+      } else if (node.id === shape.center) node.data.size = Math.round(node.data.size * FOCUSED_SCALE);
     }
+    // A page with dozens of children draws them smaller, so the ring stays a size that can be read and fitted.
+    const ring = flow.nodes.filter(node => shape.depth.get(node.id) === 1 && shape.form.get(node.id) === 'full');
+    const crowd = crowdScale(ring.length);
+    if (crowd < 1) for (const node of ring) node.data.size = Math.round(node.data.size * crowd);
     const sizes = new Map(flow.nodes.map(node => [node.id, node.data.size]));
     const radial = radialLayout(graphPages, shape, page => sizes.get(page.id) ?? KNOWLEDGE_DOT_SIZE);
     const positions = runLayout(
@@ -894,7 +906,7 @@ function KnowledgePageGraphInner({
       { ticks: 0 },
     );
     return { nodes: flow.nodes, edges: flow.edges, positions, shape, colors };
-  }, [graphPages, allEdges, selectedPageId, linkCounts, showCounts]);
+  }, [graphPages, allEdges, selectedPageId, centerId, linkCounts, showCounts]);
   const pageById = useMemo(() => new Map(graphPages.map(page => [page.id, page])), [graphPages]);
   const drawnLevels = useMemo(() => {
     const kinds = new Set<GraphLevel>();
@@ -922,12 +934,16 @@ function KnowledgePageGraphInner({
   const childrenUndrawn = useMemo(() => {
     const drawn = new Map<string, number>();
     for (const page of graphPages) {
-      if (page.parentId && !isChildPlaceholder(page)) drawn.set(page.parentId, (drawn.get(page.parentId) ?? 0) + 1);
+      if (page.parentId && !isChildPlaceholder(page) && !isRestCircle(page))
+        drawn.set(page.parentId, (drawn.get(page.parentId) ?? 0) + 1);
     }
     return new Set(
       graphPages
         .filter(
-          page => !isScopeGroup(page) && (page.childCountCapped || (page.childCount ?? 0) > (drawn.get(page.id) ?? 0)),
+          page =>
+            !isScopeGroup(page) &&
+            !isRestCircle(page) &&
+            (page.childCountCapped || (page.childCount ?? 0) > (drawn.get(page.id) ?? 0)),
         )
         .map(page => page.id),
     );
@@ -1139,7 +1155,7 @@ function KnowledgePageGraphInner({
   // First click selects; a click on the page that is already selected opens it. A double-click is the two.
   const activate = (page: KnowledgePagePayload) => {
     // A stand-in or a scope group isn't a page: the host loads or opens what it stands for.
-    if (isChildPlaceholder(page) || isScopeGroup(page)) return onSelect(page);
+    if (isChildPlaceholder(page) || isScopeGroup(page) || isRestCircle(page)) return onSelect(page);
     if (page.id === selectedPageId && onOpen) return onOpen(page);
     selectedHere.current = page.id;
     onSelect(page);

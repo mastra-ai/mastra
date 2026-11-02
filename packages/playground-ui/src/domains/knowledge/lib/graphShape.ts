@@ -20,48 +20,50 @@ export type GraphNodeForm = 'full' | 'dot';
 export const FULL_CIRCLE_DEPTH = 1;
 
 /**
- * How many pages one level farther out than the usual circles still draw as circles, so a graph with nothing
- * to expand around the focus (nothing focused, or a page with no children) reads like a focused scope
- * instead of a ring of bare dots. The rest of that level, and the level below, are dots.
+ * How many pages one level farther out than the usual circles still draw as circles, so a page with no
+ * children reads like a focused scope instead of a ring of bare dots. The rest of that level, and the level
+ * below, are dots.
  */
 export const ROOT_CIRCLE_CAP = 8;
 
 /**
- * The pages promoted to circles at depth two. With nothing focused they are the first children of each
- * root. With a focus that has no children they are its first siblings, the children of its parent, since
- * those are the pages around it. A focus with children needs no promotion: its own children are the circles.
+ * The pages promoted to circles at depth two: for a centre with no children, its first siblings, the children
+ * of its parent, since those are the pages around it. A centre with children needs no promotion: its own
+ * children are the circles.
  */
 export function promotedCircles(
   children: ReadonlyMap<string, readonly KnowledgePagePayload[]>,
-  roots: readonly KnowledgePagePayload[],
   center: KnowledgePagePayload | undefined,
-  focused: boolean,
 ): Set<string> {
   const promoted = new Set<string>();
-  const take = (parentId: string, except?: string) => {
-    (children.get(parentId) ?? [])
-      .filter(child => child.id !== except && !isChildPlaceholder(child))
-      .slice(0, ROOT_CIRCLE_CAP)
-      .forEach(child => promoted.add(child.id));
-  };
-  if (!focused && !center) {
-    for (const root of roots) take(root.id);
-  } else if (center && focused && !(children.get(center.id)?.length ?? 0) && !(center.childCount ?? 0)) {
-    if (center.parentId && center.parentId !== center.id) take(center.parentId, center.id);
+  if (center && !(children.get(center.id)?.length ?? 0) && !(center.childCount ?? 0)) {
+    if (center.parentId && center.parentId !== center.id) {
+      (children.get(center.parentId) ?? [])
+        .filter(child => child.id !== center.id && !isChildPlaceholder(child))
+        .slice(0, ROOT_CIRCLE_CAP)
+        .forEach(child => promoted.add(child.id));
+    }
   }
   return promoted;
 }
+
 /** A dot's diameter. */
 export const KNOWLEDGE_DOT_SIZE = 14;
 /** A dot's diameter when it carries its link count. */
 export const KNOWLEDGE_COUNTED_DOT_SIZE = 22;
 
 const PLACEHOLDER_PREFIX = 'more:';
+const REST_PREFIX = 'rest:';
 const GROUP_PREFIX = 'group:';
 
 /** A stand-in dot for a child that hasn't loaded yet; `parentId` is the page whose children it stands for. */
 export function isChildPlaceholder(page: Pick<KnowledgePagePayload, 'id'>): boolean {
   return page.id.startsWith(PLACEHOLDER_PREFIX);
+}
+
+/** The circle that says how many more children the centre has than are drawn; it opens nothing. */
+export function isRestCircle(page: Pick<KnowledgePagePayload, 'id'>): boolean {
+  return page.id.startsWith(REST_PREFIX);
 }
 
 /** One circle standing for several sibling scopes of one type, e.g. a resource's memory threads. */
@@ -107,7 +109,7 @@ export function graphShape(pages: readonly KnowledgePagePayload[], focusId: stri
   for (const list of children.values()) list.sort(comparePagePosition);
   roots.sort(comparePagePosition);
 
-  const center = focusId && byId.has(focusId) ? focusId : roots.length === 1 ? (roots[0]?.id ?? null) : null;
+  const center = focusId && byId.has(focusId) ? focusId : (roots[0]?.id ?? null);
   const centerPage = center ? byId.get(center) : undefined;
   const depth = new Map<string, number>();
   const branch = new Map<string, string>();
@@ -131,6 +133,10 @@ export function graphShape(pages: readonly KnowledgePagePayload[], focusId: stri
     // Parent first, so a focused page's parent takes the first slot on the ring.
     if (parentId) visit(parentId, id, at + 1, branch.get(id));
     for (const child of children.get(id) ?? []) visit(child.id, id, at + 1, branch.get(id));
+    // A root at the centre sits among the other roots, each a circle of its own beside its children.
+    if (id === center && centerPage && !centerPage.parentId) {
+      for (const root of roots) if (root.id !== center) visit(root.id, id, at + 1, root.id);
+    }
   }
 
   // Scopes and the path up from the focus are the graph's higher levels: they read as circles, not dots.
@@ -146,7 +152,7 @@ export function graphShape(pages: readonly KnowledgePagePayload[], focusId: stri
       level.set(page.id, 'scope');
     }
   }
-  const rootCircles = promotedCircles(children, roots, centerPage, Boolean(focusId && byId.has(focusId)));
+  const rootCircles = promotedCircles(children, centerPage);
   const form = new Map<string, GraphNodeForm>();
   let farCircles = 0;
   for (const page of live) {
@@ -283,11 +289,24 @@ export function branchColors(pages: readonly KnowledgePagePayload[], shape: Grap
 }
 
 /** Children a drawn page shows at most; the rest are counted, not drawn. */
-export const GRAPH_CHILD_CAP = 24;
+export const GRAPH_CHILD_CAP = 48;
 /** Stand-in dots drawn at most for a page whose children haven't loaded yet. */
 export const PLACEHOLDER_CAP = 8;
 /** Most circles whose children are loaded just to draw them as dots around it. */
-export const WANTED_CIRCLE_CAP = 12;
+export const WANTED_CIRCLE_CAP = 24;
+/** Roots drawn beside the root at the centre when nothing is focused. */
+export const SIBLING_ROOT_CAP = 8;
+/** Children around a page that fit at full size; past this the circles shrink to make room. */
+export const CROWD_START = 16;
+/** Smallest a crowded ring's circles shrink to, as a fraction of their usual size. */
+export const CROWD_MIN_SCALE = 0.6;
+
+/** How much to shrink each of `count` circles sharing a ring, so a page with dozens of children still fits. */
+export function crowdScale(count: number): number {
+  if (count <= CROWD_START) return 1;
+  return Math.max(CROWD_MIN_SCALE, Math.sqrt(CROWD_START / count));
+}
+
 /** Sibling scopes of one type (e.g. `thread`) collapse into one circle from this many. */
 export const SCOPE_GROUP_MIN = 3;
 
@@ -335,6 +354,8 @@ export interface LazyGraph {
   hiddenChildren: Map<string, { hidden: number; drawn: number }>;
   /** Pages the graph wants the next level of: the focus and its parent, or the roots with no focus. */
   wanted: string[];
+  /** The page the layout centres on: the focus, or with nothing focused the first root scope. */
+  hub: string | null;
 }
 
 /**
@@ -369,11 +390,13 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
     drawn.set(page.id, page);
     queue.push(page.id);
   };
-  const center = focus ?? (roots.length === 1 ? roots[0] : undefined);
+  // With nothing focused the first root scope is the hub, drawn exactly as a focused scope is; the other
+  // roots sit beside its children.
+  const center = focus ?? roots[0];
   // Pages one level out that draw as circles too, with their own children drawn as dots.
-  const rootCircleIds = promotedCircles(children, roots, center, Boolean(focus));
+  const rootCircleIds = promotedCircles(children, center);
   if (center) add(center, 0);
-  else for (const root of roots) add(root, 1);
+  if (center && !focus) for (const root of roots.slice(1, 1 + SIBLING_ROOT_CAP)) add(root, 1);
   // The path up from the focus, however far, so it is clear where the focus sits.
   for (let up = focus?.parentId ? byId.get(focus.parentId) : undefined, at = 1; up; at++) {
     if (!depth.has(up.id)) add(up, at);
@@ -407,7 +430,7 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
       if (type) byType.set(type, [...(byType.get(type) ?? []), kid]);
     }
     const grouped = new Set<string>();
-    if (id !== focus?.id) {
+    if (id !== center?.id) {
       for (const [type, members] of byType) {
         const groupId = `${GROUP_PREFIX}${id}:${type}`;
         if (members.length < SCOPE_GROUP_MIN || input.openGroups.has(groupId)) continue;
@@ -436,20 +459,29 @@ export function lazyGraph(input: LazyGraphInput): LazyGraph {
     }
     if (input.loadedParents.has(id)) {
       const total = Math.max(page.childCount ?? kids.length, kids.length);
-      hiddenChildren.set(id, { hidden: Math.max(0, total - drawnKids - grouped.size), drawn: drawnKids });
+      const hidden = Math.max(0, total - drawnKids - grouped.size);
+      hiddenChildren.set(id, { hidden, drawn: drawnKids });
+      if (hidden > 0 && id === center?.id) {
+        const rest = syntheticPage(`${REST_PREFIX}${id}`, page, {
+          name: `+${page.childCountCapped ? `${total}+` : hidden} more`,
+          childCount: hidden,
+        });
+        drawn.set(rest.id, rest);
+        depth.set(rest.id, at + 1);
+      }
     }
   }
 
   const wanted = focus
     ? [focus.id, ...(focus.parentId && focus.parentId !== focus.id ? [focus.parentId] : [])]
-    : center
-      ? [center.id]
-      : roots.map(root => root.id);
+    : roots.map(root => root.id);
   // One level beyond the circles: the children of the pages drawn as circles, so their own children show as dots.
   const circles = [...depth]
     .filter(([id, at]) => (at <= 1 || rootCircleIds.has(id)) && !wanted.includes(id))
     .map(([id]) => drawn.get(id) as KnowledgePagePayload)
-    .filter(page => (page.childCount ?? 0) > 0 && !isScopeGroup(page) && !isChildPlaceholder(page));
+    .filter(
+      page => (page.childCount ?? 0) > 0 && !isScopeGroup(page) && !isChildPlaceholder(page) && !isRestCircle(page),
+    );
   wanted.push(...circles.slice(0, WANTED_CIRCLE_CAP).map(page => page.id));
-  return { pages: [...drawn.values()], hiddenChildren, wanted };
+  return { pages: [...drawn.values()], hiddenChildren, wanted, hub: center?.id ?? null };
 }
