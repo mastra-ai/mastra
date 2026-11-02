@@ -118,11 +118,50 @@ describe('knowledge_list', () => {
     expect(seen[0]).toBe('docs:acme#reference/api-00');
   });
 
+  it('caps the starting level at the limit, child scopes included, and pages on through scopes then pages', async () => {
+    const { knowledge, call } = setup();
+    const held = ['org:acme', 'docs:acme'];
+    for (let i = 0; i < 4; i++) {
+      held.push(`team:acme:t${i}`);
+      await call([...held], 'knowledge_read', { page: `team:acme:t${i}` });
+    }
+    for (let i = 0; i < 3; i++) await knowledge.upsertPage({ scope: 'docs:acme', path: `p${i}`, name: `P${i}` });
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let turn = 0; turn < 10; turn++) {
+      const page = await call(held, 'knowledge_list', { from: 'docs:acme', limit: 3, ...(cursor ? { cursor } : {}) });
+      expect(page.entries.length).toBeLessThanOrEqual(3);
+      seen.push(...page.entries.map((entry: any) => entry.ref));
+      cursor = page.nextCursor;
+      if (!cursor) {
+        expect(page.more).toBeUndefined();
+        break;
+      }
+      expect(page.more).toEqual([`entries: more at depth 1. List again with from: "docs:acme", cursor: "${cursor}".`]);
+    }
+    expect(seen).toEqual([
+      'team:acme:t0',
+      'team:acme:t1',
+      'team:acme:t2',
+      'team:acme:t3',
+      'docs:acme#p0',
+      'docs:acme#p1',
+      'docs:acme#p2',
+    ]);
+
+    const roots = await call(held, 'knowledge_list', { limit: 2 });
+    expect(roots.entries.map((entry: any) => entry.ref)).toEqual(['org:acme', 'docs:acme']);
+    expect(roots.more).toEqual([`entries: more at depth 1. List again with cursor: "${roots.nextCursor}".`]);
+    const rest = await call(held, 'knowledge_list', { limit: 10, cursor: roots.nextCursor });
+    expect(rest.entries).toHaveLength(4);
+    await expect(call(held, 'knowledge_list', { cursor: 'bogus' })).rejects.toThrow(/did not come from knowledge_list/);
+  });
+
   it('says when deeper levels were cut off by the limit', async () => {
     const { call } = await site();
     const result = await call(ORG, 'knowledge_list', { from: 'docs:acme', depth: 3, limit: 6 });
     expect(result.entries).toHaveLength(6);
-    expect(result.more).toMatch(/list an entry by its ref/);
+    expect(result.more).toEqual([expect.stringMatching(/stopped listing deeper levels at 6 entries/)]);
     const reference = result.entries.find((entry: any) => entry.ref === 'docs:acme#reference');
     expect(reference.children).toBe(12);
   });

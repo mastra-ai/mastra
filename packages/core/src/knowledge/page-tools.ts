@@ -293,7 +293,10 @@ function bodyView(
   input: { outline?: boolean; section?: string; match?: string; bodyOffset: number; more: string[] },
 ): { body?: string; outline?: ReturnType<typeof knowledgeBodyOutline>; sections?: string[] } {
   const { more } = input;
-  if (!body) return {};
+  if (!body) {
+    if (input.outline || input.section || input.match) more.push('body: the page has no body.');
+    return {};
+  }
   if (input.outline) {
     const outline = knowledgeBodyOutline(body);
     if (outline.length > KNOWLEDGE_READ_OUTLINE_ENTRIES) {
@@ -343,8 +346,8 @@ function readTool(host: KnowledgePageToolHost) {
     id: 'knowledge_read',
     description:
       'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists the scopes this run holds. ' +
-      `A body returns at most ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens at a time; for a long page, ask for its \`outline\` of headings, then read one \`section\`, or only the sections that \`match\` a term. ` +
-      'Anything cut short is listed in `more` with how to get the rest.',
+      `A body returns at most ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens at a time. Read a page whole first; only when \`more\` says its body was truncated, ask for its \`outline\` of headings and read one \`section\`, or only the sections that \`match\` a term. ` +
+      'Those part reads return just that part of the body. Anything cut short is listed in `more` with how to get the rest.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -420,6 +423,16 @@ function readTool(host: KnowledgePageToolHost) {
       }
 
       const page = await run.pageOrCloseMatches(ref);
+      // A part of the body (outline, section, matches, or a later window) comes alone: the notes,
+      // children and mentions came with the first read and would only repeat.
+      if (outline || section || match || bodyOffset > 0) {
+        const more: string[] = [];
+        const view = bodyView(page.body ?? '', { outline, section, match, bodyOffset, more });
+        return {
+          page: { ...pageSummary(page, await pageRefs(run, [page])), version: page.version, ...view },
+          ...(more.length ? { more } : {}),
+        };
+      }
       const [notes, children, mentioning] = await Promise.all([
         run.storage.listNotes({ pageId: page.id, read: run.read, cursor, limit }),
         run.storage.listChildPages({ parentId: page.id, read: run.read, limit }),
@@ -455,11 +468,11 @@ function readTool(host: KnowledgePageToolHost) {
       ]);
       const ownRef = addresses.refs.get(page.id) ?? page.id;
       const more: string[] = [];
-      const view = bodyView(page.body ?? '', { outline, section, match, bodyOffset, more });
+      const view = bodyView(page.body ?? '', { bodyOffset, more });
       if (notes.nextCursor) more.push(`notes: more than ${limit}. Read again with cursor: "${notes.nextCursor}".`);
       if (children.nextCursor) {
         more.push(
-          `children: more than ${limit}. List them with knowledge_list from: "${ownRef}", cursor: "${children.nextCursor}".`,
+          `children: more than ${limit}. List them with knowledge_list from: "${ownRef}"${page.isScope ? '' : `, cursor: "p${children.nextCursor}"`}.`,
         );
       }
       if (childScopesCut)
@@ -536,7 +549,7 @@ function listTool(host: KnowledgePageToolHost) {
         cursor: {
           type: 'string',
           minLength: 1,
-          description: "The previous result's nextCursor, for the next entries at depth 1.",
+          description: "The previous result's nextCursor, for the next entries at depth 1 (pass the same `from`).",
         },
       },
       additionalProperties: false,
@@ -573,24 +586,45 @@ function listTool(host: KnowledgePageToolHost) {
         return out;
       };
 
+      // Cursors are ours: `s<n>` continues the scopes at this level from the n-th, `p<store cursor>`
+      // continues the child pages (`p` alone starts them).
+      if (cursor && !/^[sp]/.test(cursor))
+        throw new Error('knowledge_list: that cursor did not come from knowledge_list.');
+      const scopeOffset = cursor?.startsWith('s') ? Number(cursor.slice(1)) || 0 : 0;
+      const pageCursor = cursor?.startsWith('p') ? cursor.slice(1) || undefined : undefined;
       let origin: KnowledgePage | undefined;
       let originRef: string | undefined;
-      let roots: KnowledgePage[];
-      let nextCursor: string | undefined;
+      let scopes: KnowledgePage[] = [];
       if (!from) {
-        if (cursor) throw new Error('knowledge_list: a cursor needs the `from` it came from.');
+        if (cursor?.startsWith('p')) throw new Error('knowledge_list: a page cursor needs the `from` it came from.');
         const held = await run.storage.getScopesByAddress(run.principals);
         const order = (scope: KnowledgePage) => run.principals.indexOf(scope.address ?? '');
-        roots = held.filter(scope => knowledgeScopeReadable(scope, run.read)).sort((a, b) => order(a) - order(b));
+        scopes = held.filter(scope => knowledgeScopeReadable(scope, run.read)).sort((a, b) => order(a) - order(b));
       } else {
         origin = await run.pageOrCloseMatches(from);
         originRef = (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id;
-        // A scope's readable child scopes lead its first page and don't count against the limit;
-        // child pages continue by cursor.
-        const scopes = origin.isScope && !cursor ? await childScopes(origin.id) : [];
-        const pages = await run.storage.listChildPages({ parentId: origin.id, read: run.read, cursor, limit });
-        roots = [...scopes, ...pages.pages];
-        nextCursor = pages.nextCursor;
+        if (origin.isScope && !pageCursor) scopes = await childScopes(origin.id);
+      }
+      // A scope's readable child scopes come first, then its child pages; both count against `limit`.
+      const shownScopes = scopes.slice(scopeOffset, scopeOffset + limit);
+      let roots: KnowledgePage[] = shownScopes;
+      let nextCursor: string | undefined;
+      if (scopeOffset + shownScopes.length < scopes.length) {
+        nextCursor = `s${scopeOffset + shownScopes.length}`;
+      } else if (origin) {
+        const room = limit - shownScopes.length;
+        if (room > 0) {
+          const pages = await run.storage.listChildPages({
+            parentId: origin.id,
+            read: run.read,
+            cursor: pageCursor,
+            limit: room,
+          });
+          roots = [...shownScopes, ...pages.pages];
+          if (pages.nextCursor) nextCursor = `p${pages.nextCursor}`;
+        } else if ((await run.storage.countChildPages({ parentIds: [origin.id], read: run.read }))[origin.id]) {
+          nextCursor = 'p';
+        }
       }
 
       type Node = { page: KnowledgePage; ref: string; depth: number; children: number; below: Node[] };
@@ -647,6 +681,17 @@ function listTool(host: KnowledgePageToolHost) {
         level = nextLevel;
       }
 
+      const more: string[] = [];
+      if (nextCursor) {
+        more.push(
+          `entries: more at depth 1. List again with ${from ? `from: ${JSON.stringify(from)}, ` : ''}cursor: "${nextCursor}".`,
+        );
+      }
+      if (truncated) {
+        more.push(
+          `entries: stopped listing deeper levels at ${limit} entries. List an entry by its ref to see the rest of its children.`,
+        );
+      }
       const entries: ListEntry[] = [];
       const flatten = (nodes: Node[]) => {
         for (const node of nodes) {
@@ -666,11 +711,7 @@ function listTool(host: KnowledgePageToolHost) {
         ...(origin ? { from: { ref: originRef!, name: origin.name } } : {}),
         entries,
         ...(nextCursor ? { nextCursor } : {}),
-        ...(truncated
-          ? {
-              more: `Stopped listing deeper levels at ${limit} entries: list an entry by its ref to see the rest of its children.`,
-            }
-          : {}),
+        ...(more.length ? { more } : {}),
       };
     },
   });

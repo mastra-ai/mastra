@@ -84,6 +84,20 @@ describe('knowledge_read on long pages', () => {
     expect(result.more).toBeUndefined();
   });
 
+  it('returns only the asked-for part of the body on part reads, without notes, children or mentions', async () => {
+    const { knowledge, call } = setup();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody(3) });
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic/child', name: 'Child' });
+    await knowledge.addNote({ scope: 'docs:acme', path: 'anthropic', text: 'A fact' });
+    for (const part of [{ outline: true }, { section: 'Setup' }, { match: 'ANTHROPIC_API_KEY' }, { bodyOffset: 10 }]) {
+      const result = await call('knowledge_read', { page: 'docs:acme#anthropic', ...part });
+      expect(Object.keys(result).filter(key => key !== 'more')).toEqual(['page']);
+      expect(result.page.ref).toBe('docs:acme#anthropic');
+    }
+    const empty = await call('knowledge_read', { page: 'docs:acme#anthropic/child', outline: true });
+    expect(empty.more).toEqual(['body: the page has no body.']);
+  });
+
   it('gives an outline of headings with sizes, skipping headings inside code fences', async () => {
     const { knowledge, call } = setup();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody(3) });
@@ -146,6 +160,7 @@ describe('knowledge_read on long pages', () => {
       `mentionedIn: more than 2. Read again with mentionedInCursor: "${first.mentionedInCursor}".`,
     ]);
     const childCursor = /cursor: "([^"]+)"/.exec(first.more[1])![1];
+    expect(childCursor).toMatch(/^p/);
     const rest = await call('knowledge_list', { from: 'docs:acme#hub', cursor: childCursor });
     expect(rest.entries.map((entry: any) => entry.ref)).toEqual(['docs:acme#hub/child-2']);
     const mentions = await call('knowledge_read', {
