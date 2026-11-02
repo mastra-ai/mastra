@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Paged metrics tables, such as the Breakdown card and the Gateway Overview share cards, now always keep a full page of rows' height, so the card no longer changes size when you page, switch views or finish loading, and the pagination stays in the same place. The Breakdown card shows 10 rows per page instead of 13.
+Pagination in paged metrics tables, such as the Metrics Breakdown card, no longer jumps when a page has fewer rows. The table now reserves a full page of rows, so the last page, a single short page, or an empty result keep the same table height and Prev/Next stays where you clicked it. The Breakdown card shows 10 rows per page instead of 13.

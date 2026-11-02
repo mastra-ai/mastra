@@ -73,14 +73,15 @@ export function MetricsTableBody<Row>({
   }
   if (rows.length === 0) {
     if (pageSize) {
-      // Empty, a paged table keeps a full page's height, with the message in its middle.
+      // Empty, a paged table keeps at least a full page's height, with the message in its middle.
+      // Both share one grid cell, so a message taller than the page still grows the row.
       return (
-        <div role="row" className="relative col-span-full">
+        <div role="row" className="col-span-full grid *:col-start-1 *:row-start-1">
           <MetricsTableFiller count={pageSize} />
           {empty !== undefined && (
             <p
               role="cell"
-              className="absolute inset-0 flex items-center justify-center text-center text-body-sm text-muted-foreground"
+              className="flex items-center justify-center px-3 py-4 text-center text-body-sm text-muted-foreground"
             >
               {empty}
             </p>
