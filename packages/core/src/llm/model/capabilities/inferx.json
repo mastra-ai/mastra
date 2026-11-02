@@ -30,12 +30,12 @@
     "gemma-4-31B-it-fp8"
   ],
   "reasoning": {
-    "Qwen3.6-35B-A3B-FP8": [
+    "deepseek-v4-flash": [
       {
         "type": "toggle"
       }
     ],
-    "deepseek-v4-flash": [
+    "Qwen3.6-35B-A3B-FP8": [
       {
         "type": "toggle"
       }

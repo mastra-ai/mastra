@@ -34,7 +34,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "umans-glm-5.3-flash": [
+    "umans-deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -61,10 +64,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "umans-deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
+    "umans-glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

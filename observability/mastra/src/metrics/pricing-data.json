@@ -30961,14 +30961,16 @@
       },
       "openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.016,
-          "output": 0.058
+          "input": 0.03,
+          "output": 0.15,
+          "cache_read": 0.015
         }
       },
       "openai/gpt-oss-20b": {
         "cost": {
-          "input": 0.004,
-          "output": 0.017
+          "input": 0.006,
+          "output": 0.025,
+          "cache_read": 0.005
         }
       },
       "openai/gpt-oss-safeguard-20b": {
@@ -36160,9 +36162,9 @@
       },
       "reka-ai/glm-5.3-flash": {
         "cost": {
-          "input": 0.18,
-          "output": 0.6,
-          "cache_read": 0.028
+          "input": 0.15,
+          "output": 0.5,
+          "cache_read": 0.027
         }
       },
       "reka-ai/reka-edge-2603": {
@@ -42772,9 +42774,9 @@
       },
       "google/gemma-4-26b-a4b-it": {
         "cost": {
-          "input": 0.058,
-          "output": 0.174,
-          "cache_read": 0.029
+          "input": 0.037,
+          "output": 0.11,
+          "cache_read": 0.018
         }
       },
       "google/gemma-4-26b-a4b-it-cybersecurity": {
@@ -42786,9 +42788,9 @@
       },
       "google/gemma-4-26b-a4b-it:thinking": {
         "cost": {
-          "input": 0.058,
-          "output": 0.174,
-          "cache_read": 0.029
+          "input": 0.037,
+          "output": 0.11,
+          "cache_read": 0.018
         }
       },
       "google/gemma-4-31b-it": {
@@ -43973,8 +43975,9 @@
       },
       "openai/gpt-oss-20b": {
         "cost": {
-          "input": 0.004,
-          "output": 0.018
+          "input": 0.007,
+          "output": 0.028,
+          "cache_read": 0.006
         }
       },
       "openai/gpt-oss-safeguard-20b": {
@@ -45266,14 +45269,14 @@
       },
       "z-ai/glm-5.2": {
         "cost": {
-          "input": 0.07,
+          "input": 0.078,
           "output": 1.4,
           "cache_read": 0.069
         }
       },
       "z-ai/glm-5.2:thinking": {
         "cost": {
-          "input": 0.07,
+          "input": 0.078,
           "output": 1.4,
           "cache_read": 0.069
         }
@@ -53824,8 +53827,9 @@
       },
       "openai/gpt-oss-120b": {
         "cost": {
-          "input": 0.014,
-          "output": 0.052
+          "input": 0.15,
+          "output": 0.6,
+          "cache_read": 0.075
         }
       },
       "openai/gpt-oss-20b": {
@@ -54893,9 +54897,9 @@
       },
       "z-ai/glm-5.3": {
         "cost": {
-          "input": 0.08,
-          "output": 3.6,
-          "cache_read": 0.076
+          "input": 0.0699,
+          "output": 1.4,
+          "cache_read": 0.0689
         }
       },
       "z-ai/glm-5.3-flash": {

@@ -21,7 +21,7 @@
     "minimax-m3"
   ],
   "reasoning": {
-    "deepseek-v4.1-flash": [
+    "deepseek-v4-flash-0731": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -39,13 +39,13 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "deepseek-v4-flash-0731": [
+    "kimi-k3": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "kimi-k3": [
+    "deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]

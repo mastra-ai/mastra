@@ -26,13 +26,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "grok-4.5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gpt-5.5": [
+    "claude-opus-4-8": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -56,6 +50,12 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "gpt-5.4": [
       {
         "type": "effort",
@@ -68,7 +68,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "claude-opus-4-8": [
+    "grok-4.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

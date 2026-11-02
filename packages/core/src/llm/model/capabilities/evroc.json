@@ -34,6 +34,32 @@
     "zai-org/GLM-5.2"
   ],
   "reasoning": {
+    "zai-org/GLM-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "mistralai/Mistral-Medium-3.5-128B": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "Qwen/Qwen3.8-27B": [
       {
         "type": "toggle"
@@ -48,40 +74,14 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "google/gemma-4-26B-A4B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mistralai/Mistral-Medium-3.5-128B": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "evroc/roc": [
       {
         "type": "budget_tokens"
       }
     ],
-    "moonshotai/Kimi-K2.6": [
+    "google/gemma-4-26B-A4B-it": [
       {
-        "type": "budget_tokens"
+        "type": "toggle"
       }
     ]
   }
