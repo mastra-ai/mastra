@@ -495,8 +495,7 @@ export class AuthStorage {
   getAccountCredential(providerId: string, instanceId: string): OAuthCredential | undefined {
     const account = this.accountEntries(providerId).find(entry => entry.id === instanceId);
     if (!account) return undefined;
-    const { type: _type, id: _id, label: _label, addedAt: _addedAt, active: _active, ...credential } = account;
-    return { type: 'oauth', ...credential };
+    return { type: 'oauth', ...credentialFieldsOf(account) };
   }
 
   /**
