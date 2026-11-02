@@ -424,7 +424,20 @@ export function createFactoryRouteAuth(provider: IMastraAuthProvider | undefined
     ensureUser: (c: Context) => ensureFactoryAuthUser(provider, c),
     tenant: (c: Context) => factoryAuthTenant(c),
     isOrganizationAdmin: (c: Context, organizationId: string) => isOrganizationAdmin(provider, c, organizationId),
+    fetchPlatformAsUser: async (c: Context, path: string, init?: RequestInit) => {
+      if (!provider || !isPlatformFetchProvider(provider)) return null;
+      const res = await provider.fetchAsRequestUser(c.req.raw, path, init);
+      forwardPendingResponseHeaders(provider, c);
+      return res;
+    },
   };
+}
+
+/** Auth providers that can call the Mastra platform API as the request's user (`MastraAuthStudio`). */
+function isPlatformFetchProvider(provider: IMastraAuthProvider): provider is IMastraAuthProvider & {
+  fetchAsRequestUser(request: Request, path: string, init?: RequestInit): Promise<Response | null>;
+} {
+  return typeof (provider as { fetchAsRequestUser?: unknown }).fetchAsRequestUser === 'function';
 }
 
 /** True when the given provider is WorkOS. Gates WorkOS-only capabilities. */

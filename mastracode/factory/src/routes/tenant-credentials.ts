@@ -27,6 +27,8 @@ import {
 } from '@mastra/code-sdk/agents/credential-resolver';
 import { getOAuthProvider, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
 import type { AuthCredential, CredentialStore, OAuthCredential } from '@mastra/code-sdk/auth/types';
+import { MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
+import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
@@ -313,8 +315,14 @@ export async function resolveTenantProviderDefaultModel(
     return store.get(getAuthProviderId(provider)) !== undefined || store.allowsDeploymentCredentials(provider);
   };
   if (currentModelId && usable(currentModelId)) return undefined;
-  return Object.entries(PROVIDER_DEFAULT_MODELS).find(([provider]) => store.get(provider) !== undefined)?.[1];
+  const providerDefault = Object.entries(PROVIDER_DEFAULT_MODELS).find(
+    ([provider]) => store.get(provider) !== undefined,
+  )?.[1];
+  return providerDefault ?? (store.get(MASTRA_GATEWAY_PROVIDER) ? MASTRA_GATEWAY_DEFAULT_MODEL : undefined);
 }
+
+/** Default model for a Factory that only has a Mastra Gateway key: the Anthropic default, through the gateway. */
+export const MASTRA_GATEWAY_DEFAULT_MODEL = `${MASTRA_GATEWAY_PREFIX}${PROVIDER_DEFAULT_MODELS.anthropic}`;
 
 /** Test hook: clear registration and cached tenant snapshots. */
 export function resetTenantCredentialResolverForTests(): void {

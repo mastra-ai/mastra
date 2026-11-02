@@ -29,6 +29,12 @@ export interface RouteAuth {
   tenant(c: Context): { orgId?: string; userId: string } | undefined;
   /** Fail-closed check that the caller administers the given organization. */
   isOrganizationAdmin(c: Context, organizationId: string): Promise<boolean>;
+  /**
+   * Call the Mastra platform API as the signed-in user (`path` like
+   * `/gateway/organization/v2/keys`). `null` when the auth provider is not
+   * Mastra platform auth or the request has no session.
+   */
+  fetchPlatformAsUser?(c: Context, path: string, init?: RequestInit): Promise<Response | null>;
 }
 
 /** Dependencies shared by every factory route module. */

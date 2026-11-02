@@ -871,6 +871,25 @@ export class MastraAuthStudio
   }
 
   /**
+   * Call the shared API as the request's signed-in user, forwarding their
+   * session cookie (e.g. Factory creating a Mastra Gateway key for the user's
+   * organization). A rotated cookie is queued for
+   * {@link consumePendingResponseHeaders}. Returns `null` without a session.
+   *
+   * @param path Shared API path, e.g. `/gateway/organization/v2/keys`.
+   */
+  async fetchAsRequestUser(request: Request, path: string, init: RequestInit = {}): Promise<Response | null> {
+    const sessionCookie = this.getSessionIdFromRequest(request);
+    if (!sessionCookie) return null;
+    const headers = new Headers(init.headers);
+    headers.set('Cookie', `${COOKIE_NAME}=${sessionCookie}`);
+    const res = await fetch(`${this.sharedApiUrl}${path}`, { ...init, headers });
+    const cacheKey = await this.verificationKey('cookie', sessionCookie);
+    this.captureRotatedCookie(res, sessionCookie, cacheKey, request);
+    return res;
+  }
+
+  /**
    * Fetch the shared API's `/auth/me` and return the raw response body, or
    * `null` on any non-OK / network error. Split out so `ensureOrganization`
    * and `isOrganizationAdmin` can reuse it without duplicating the shape.

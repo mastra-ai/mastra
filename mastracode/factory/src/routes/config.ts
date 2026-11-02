@@ -9,7 +9,7 @@ import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
-import { getModelReasoningOptions } from '@mastra/core/llm';
+import { getModelReasoningOptions, MastraGateway } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
@@ -37,17 +37,19 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
+import { createGatewayKey, getGatewayCredits, MastraGatewayError } from './mastra-gateway.js';
 import {
   credentialLabel,
   getAuthProviderId,
   listTenantCredentialsForRequest,
+  MASTRA_GATEWAY_CATALOG_PROVIDER,
   resolveCredentialContext,
   tenantOrgId,
   WEB_OAUTH_PROVIDERS,
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
-import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
+import { MASTRA_GATEWAY_DEFAULT_MODEL, resolveTenantProviderDefaultModel } from './tenant-credentials.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -138,6 +140,30 @@ export interface ModelCatalog {
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
 }
 
+type CatalogModel = Awaited<ReturnType<ModelCatalog['listAvailableModels']>>[number];
+
+/**
+ * The controller's model catalog, plus the Mastra Gateway's models for tenant
+ * callers. The boot-time catalog lists `mastra/...` models only when the server
+ * itself has a gateway key; tenants bring their own (connected in one click).
+ */
+async function listCatalogModels(
+  controller: ModelCatalog,
+  tenantCredentials: CredentialRecord[] | undefined,
+): Promise<CatalogModel[]> {
+  const models = await controller.listAvailableModels();
+  if (!tenantCredentials || models.some(m => m.provider === MASTRA_GATEWAY_CATALOG_PROVIDER)) return models;
+  const gateway = (await new MastraGateway().fetchProviders())[MASTRA_GATEWAY_CATALOG_PROVIDER];
+  const gatewayModels = (gateway?.models ?? []).map(modelName => ({
+    id: `${MASTRA_GATEWAY_CATALOG_PROVIDER}/${modelName}`,
+    provider: MASTRA_GATEWAY_CATALOG_PROVIDER,
+    modelName,
+    hasApiKey: false,
+    releaseDate: gateway?.modelReleaseDates?.[modelName],
+  }));
+  return [...models, ...gatewayModels];
+}
+
 /**
  * Build a deduplicated, sorted list of providers from the model catalog,
  * annotated with where each provider's credential currently comes from.
@@ -160,7 +186,7 @@ export async function listProviders({
   deploymentProviders?: ReadonlySet<string>;
   listCustomProviders?: () => Promise<CustomProviderRecord[]>;
 }): Promise<ProviderInfo[]> {
-  const models = await controller.listAvailableModels();
+  const models = await listCatalogModels(controller, tenantCredentials);
   const seen = new Map<string, ProviderInfo>();
 
   for (const model of models) {
@@ -402,7 +428,7 @@ export async function buildProviderAccess({
   tenantCredentials?: CredentialRecord[];
   deploymentProviders?: ReadonlySet<string>;
 }): Promise<ProviderAccess> {
-  const models = await controller.listAvailableModels();
+  const models = await listCatalogModels(controller, tenantCredentials);
   const hasModelKey = (provider: string) => models.some(m => m.provider === provider && m.hasApiKey);
   const accessLevel = (provider: string): ProviderAccessLevel => {
     const authProviderId = getAuthProviderId(provider);
@@ -415,6 +441,8 @@ export async function buildProviderAccess({
       const credential = grantingTenantRecord(tenantCredentials, authProviderId)?.credential;
       if (credential?.type === 'oauth') return 'oauth';
       if (credential?.type === 'api_key' && credential.key.trim().length > 0) return 'apikey';
+      // Model resolution falls back to the server's own gateway key, if it has one.
+      if (provider === MASTRA_GATEWAY_CATALOG_PROVIDER && MastraCodeGateway.getMastraGatewayApiKey()) return 'apikey';
       return false;
     }
 
@@ -479,7 +507,7 @@ export async function buildModelCatalog({
   listCustomProviders?: () => Promise<CustomProviderRecord[]>;
 }): Promise<ModelCatalogEntry[]> {
   const [models, access] = await Promise.all([
-    controller.listAvailableModels(),
+    listCatalogModels(controller, tenantCredentials),
     buildProviderAccess({
       controller,
       authStorage: tenantCredentials ? undefined : authStorage,
@@ -904,8 +932,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       const availableProviders = new Set(
         Object.entries(access).flatMap(([providerId, configured]) => (configured ? [providerId] : [])),
       );
-      // `mastra/` routes run through the Mastra gateway whenever its key is configured.
-      if (MastraCodeGateway.getMastraGatewayApiKey()) availableProviders.add(MASTRA_GATEWAY_PROVIDER);
+      // `mastra/` routes run through the Mastra gateway whenever a key is configured:
+      // the caller's own (tenant mode) or the server's.
+      if (access[MASTRA_GATEWAY_CATALOG_PROVIDER] || MastraCodeGateway.getMastraGatewayApiKey()) {
+        availableProviders.add(MASTRA_GATEWAY_PROVIDER);
+      }
       if (options.customProviders) {
         const context = await resolveCustomProvidersContext({
           c: loose(c),
@@ -1032,6 +1063,77 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
           } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      // One click: create a Mastra Gateway key for the caller's Mastra organization
+      // (as the caller, on the platform API) and store it in the requested scope.
+      registerApiRoute(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/connect`, {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
+          if ('response' in ctx) return ctx.response;
+          if (ctx.mode !== 'tenant') {
+            return c.json(
+              {
+                error: 'mastra_sign_in_required',
+                message: 'The Mastra Gateway needs a Factory signed in with a Mastra account.',
+              },
+              400,
+            );
+          }
+          let body: { scope?: unknown } = {};
+          try {
+            body = await c.req.json();
+          } catch {
+            // No body: personal scope.
+          }
+          const scope = body.scope === 'org' ? 'org' : 'user';
+          if (scope === 'org' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
+            return c.json({ error: 'organization_admin_required' }, 403);
+          }
+          const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
+          try {
+            const existing = (await ctx.storage.listCredentials(ctx.orgId, ctx.userId)).some(
+              r => r.scope === scope && r.provider === MASTRA_GATEWAY_PROVIDER,
+            );
+            if (!existing) {
+              const key = await createGatewayKey(auth, loose(c));
+              await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, { type: 'api_key', key });
+              onCredentialsChanged(tenant);
+            }
+            const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
+            const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
+            return c.json({
+              ok: true,
+              provider: providers.find(p => p.provider === MASTRA_GATEWAY_CATALOG_PROVIDER),
+              defaultModelId: MASTRA_GATEWAY_DEFAULT_MODEL,
+            });
+          } catch (error) {
+            if (error instanceof MastraGatewayError) {
+              return c.json({ error: error.code, message: error.message }, error.status);
+            }
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
+      registerApiRoute(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`, {
+        method: 'GET',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
+          if ('response' in ctx) return ctx.response;
+          if (ctx.mode !== 'tenant') return c.json({ error: 'mastra_sign_in_required' }, 400);
+          try {
+            return c.json(await getGatewayCredits(auth, loose(c), ctx.orgId));
+          } catch (error) {
+            if (error instanceof MastraGatewayError) {
+              return c.json({ error: error.code, message: error.message }, error.status);
+            }
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
         },

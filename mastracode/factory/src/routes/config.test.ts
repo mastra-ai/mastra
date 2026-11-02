@@ -19,6 +19,7 @@ import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.js';
+import type { RouteAuth } from './route.js';
 import {
   registerTenantCredentialResolver,
   resetTenantCredentialResolverForTests,
@@ -185,7 +186,7 @@ describe('listProviders', () => {
         controller: makeAgentController([{ provider: 'openai', hasApiKey: false, apiKeyEnvVar: 'OPENAI_API_KEY' }]),
         tenantCredentials: [record('openai-codex', 'user', 'oauth')],
       });
-      expect(list[0]?.source).toBe('oauth-user');
+      expect(list.find(p => p.provider === 'openai')?.source).toBe('oauth-user');
     });
 
     it('reports orgKey when an org-wide API key exists, even when shadowed by a personal credential', async () => {
@@ -227,7 +228,7 @@ describe('listProviders with deployment-provided providers', () => {
 
   it('omits Bedrock in tenant mode unless the deployment opted in', async () => {
     const list = await listProviders({ controller, tenantCredentials: [] });
-    expect(list.map(p => p.provider)).toEqual(['anthropic']);
+    expect(list.map(p => p.provider)).toEqual(['anthropic', 'mastra']);
   });
 
   it("reports Bedrock as 'deployment' in tenant mode when opted in", async () => {
@@ -248,7 +249,7 @@ describe('listProviders with deployment-provided providers', () => {
       tenantCredentials: [],
       deploymentProviders: new Set(['amazon-bedrock']),
     });
-    expect(list).toEqual([]);
+    expect(list.map(p => p.provider)).toEqual(['mastra']);
   });
 
   it('leaves local mode unchanged', async () => {
@@ -599,6 +600,109 @@ describe('provider key routes with a tenant', () => {
     const authStorage = { setStoredApiKey } as unknown as AuthStorage;
     await putKey(buildApp(userA, authStorage), { key: 'sk-mine' });
     expect(setStoredApiKey).not.toHaveBeenCalled();
+  });
+});
+
+describe('Mastra Gateway routes with a tenant', () => {
+  let seed: FactoryStorageTestSeed;
+  const fetchPlatformAsUser = vi.fn<NonNullable<RouteAuth['fetchPlatformAsUser']>>();
+  const controller = makeAgentController([{ provider: 'anthropic', hasApiKey: false }]);
+  const user = { workosId: 'user-a', organizationId: 'org1' };
+
+  function buildApp() {
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, user as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as any,
+      new ConfigRoutes({
+        auth: { ...fakeRouteAuth(), fetchPlatformAsUser },
+        controller,
+        modelCredentials: seed.credentials,
+        memorySettings: seed.memorySettings,
+      }).routes(),
+    );
+    return app;
+  }
+
+  const connect = (app: Hono, scope: 'user' | 'org') =>
+    app.request('/web/config/providers/mastra/connect', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ scope }),
+    });
+
+  beforeEach(async () => {
+    seed = await createFactoryStorageForTests();
+    fetchPlatformAsUser.mockReset();
+  });
+
+  it('creates a gateway key as the signed-in user and lists the gateway models', async () => {
+    fetchPlatformAsUser.mockResolvedValue(Response.json({ keyId: 'key_1', apiKey: 'msk_factory' }, { status: 201 }));
+    const app = buildApp();
+
+    const res = await connect(app, 'user');
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toMatchObject({
+      provider: { provider: 'mastra', source: 'stored-user' },
+      defaultModelId: `mastra/${PROVIDER_DEFAULT_MODELS.anthropic}`,
+    });
+    expect(fetchPlatformAsUser).toHaveBeenCalledWith(expect.anything(), '/gateway/organization/v2/keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'Factory' }),
+    });
+    expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'mastra-gateway')).toEqual({
+      type: 'api_key',
+      key: 'msk_factory',
+    });
+    const { models } = (await (await app.request('/web/config/models')).json()) as { models: Array<{ id: string }> };
+    expect(models.map(m => m.id)).toContain(`mastra/${PROVIDER_DEFAULT_MODELS.anthropic}`);
+  });
+
+  it('reuses the key the scope already has', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', { type: 'api_key', key: 'msk_existing' });
+
+    const res = await connect(buildApp(), 'org');
+
+    expect(res.status).toBe(200);
+    expect(fetchPlatformAsUser).not.toHaveBeenCalled();
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toMatchObject({
+      key: 'msk_existing',
+    });
+  });
+
+  it('stores nothing when the user cannot create keys for their Mastra organization', async () => {
+    fetchPlatformAsUser.mockResolvedValue(new Response(null, { status: 403 }));
+
+    const res = await connect(buildApp(), 'org');
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('mastra_org_write_required');
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
+  });
+
+  it('reports the remaining gateway credits and where to add more', async () => {
+    fetchPlatformAsUser.mockResolvedValue(
+      Response.json({
+        customer: {
+          creditPool: { featureId: 'gateway_credits' },
+          balances: { gateway_credits: { featureId: 'gateway_credits', granted: 5, usage: 5 } },
+        },
+      }),
+    );
+
+    const res = await buildApp().request('/web/config/providers/mastra/credits');
+
+    expect(await res.json()).toEqual({
+      remaining: 0,
+      unlimited: false,
+      addCreditsUrl: 'https://projects.mastra.ai/add-credits/org1',
+    });
+    expect(fetchPlatformAsUser).toHaveBeenCalledWith(expect.anything(), '/billing/customer', undefined);
   });
 });
 

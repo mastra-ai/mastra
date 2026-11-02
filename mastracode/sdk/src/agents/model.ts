@@ -10,6 +10,7 @@ import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
 import { toMemoryModelId } from '../onboarding/packs.js';
 import {
   loadSettings,
+  MASTRA_GATEWAY_PROVIDER,
   resolveDefaultThinkingLevel,
   stripMastraCodeCustomProviderPrefix,
 } from '../onboarding/settings.js';
@@ -270,7 +271,11 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
 
   const routerId = `${MASTRACODE_GATEWAY_ID}/${normalizedModelId}`;
 
-  const mgApiKey = MastraCodeGateway.getMastraGatewayApiKey();
+  // A tenant's own gateway key (Factory's "Mastra Gateway" provider) wins over
+  // the server-global key, so each org is billed to its own Mastra account.
+  const mgApiKey =
+    tenantCredentialStore?.getStoredApiKey(MASTRA_GATEWAY_PROVIDER)?.trim() ||
+    MastraCodeGateway.getMastraGatewayApiKey();
   const rawGatewayBase =
     settings.memoryGateway?.baseUrl ?? process.env['MASTRA_GATEWAY_URL'] ?? 'https://gateway-api.mastra.ai';
   const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
