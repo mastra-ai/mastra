@@ -215,7 +215,7 @@ Ring sends these event types. Events without an entry in `DEFAULT_RING_EVENTS` a
 | `subscription_activated` | A Ring paid subscription or trial starts | Disabled | |
 | `subscription_deactivated` | A Ring paid subscription or trial ends | Disabled | |
 
-Each notification has `deviceId` and `timestamp` attributes. Motion events also have `motionType`: `human`, `vehicle`, `package_delivery`, or `other_motion` when Ring Smart Alerts are on, and `motion` when they're off.
+Device events have `deviceId` and `timestamp` attributes. Subscription events have no `timestamp`, and app integration and subscription events have no `deviceId`. Motion events also have `motionType`: `human`, `vehicle`, `package_delivery`, or `other_motion` when Ring Smart Alerts are on, and `motion` when they're off.
 
 Some events also have side effects, whether or not they're enabled. `app_integration_removed` deletes the account's stored tokens, and `subscription_deactivated` logs a warning that media is no longer available.
 
@@ -239,7 +239,7 @@ type RingWebhookEvent = {
       source_id?: string
       source_type?: string
       timestamp?: number
-      sub_type?: RingMotionType | 'paid' | 'trial'
+      sub_type?: RingMotionType | RingSubscriptionType
       plan_id?: string | null
       expires_at?: string
       component_ids?: string[]
@@ -434,7 +434,7 @@ Returns: `boolean`, `true` if the thread was subscribed.
 - `DEFAULT_RING_INSTRUCTIONS`: The default system instruction, for both tools.
 - `buildRingInstructions({ snapshot, clip })`: Builds the system instruction for the enabled tools. Use it to extend the default text.
 - `RingApiClient` and `RingApiError`: A client for the Ring Partner API and the error it throws.
-- Types: `RingSignalsOptions`, `RingEventType`, `RingEventNotification`, `RingMotionType`, `RingWebhookEvent`, `RingTargetResolver`, `RingToolsOptions`, `RingSnapshotToolOptions`, `RingClipToolOptions`, `RingAttachmentOption`, and `RingMaxAttachmentBytesOption`.
+- Types: `RingSignalsOptions`, `RingEventType`, `RingEventNotification`, `RingMotionType`, `RingSubscriptionType`, `RingWebhookEvent`, `RingTargetResolver`, `RingToolsOptions`, `RingSnapshotToolOptions`, `RingClipToolOptions`, `RingAttachmentOption`, and `RingMaxAttachmentBytesOption`.
 
 ## Related
 
