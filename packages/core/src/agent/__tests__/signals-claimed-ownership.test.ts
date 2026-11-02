@@ -3280,13 +3280,10 @@ describe('Agent signals: claimed thread ownership', () => {
     // Node checks timers against a cached loop clock, so a timer can run just before
     // Date.now() reaches its due time. That must not buy an extra request at the deadline.
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const fakeSetTimeout = globalThis.setTimeout;
     try {
-      const fakeSetTimeout = globalThis.setTimeout;
-      vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
-        callback: (...args: unknown[]) => void,
-        ms?: number,
-        ...args: unknown[]
-      ) => fakeSetTimeout(callback, ms && ms > 1 ? ms - 1 : ms, ...args)) as typeof setTimeout);
+      globalThis.setTimeout = ((callback: (...args: unknown[]) => void, ms?: number, ...args: unknown[]) =>
+        fakeSetTimeout(callback, ms && ms > 1 ? ms - 1 : ms, ...args)) as typeof setTimeout;
 
       let discoveryRequests = 0;
       class FailingDiscoveryPubSub extends EventEmitterPubSub {
@@ -3326,6 +3323,9 @@ describe('Agent signals: claimed thread ownership', () => {
       await rejected;
       expect(discoveryRequests).toBe(4);
     } finally {
+      // Put the fake clock's own setTimeout back before uninstalling it. Uninstalling over a
+      // replaced global leaves the dead fake setTimeout in place for later files in a shared worker.
+      globalThis.setTimeout = fakeSetTimeout;
       vi.useRealTimers();
     }
   });
