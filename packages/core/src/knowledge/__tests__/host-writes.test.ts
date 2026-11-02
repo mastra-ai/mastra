@@ -202,10 +202,34 @@ describe('Knowledge host page writes', () => {
     await expect(knowledge.upsertPage({ scope: 'wiki:acme', path: 'a', name: 'A' })).rejects.toThrow(
       /does not match a declared scope type/,
     );
-    for (const path of ['', 'a//b', '/a', 'a/']) {
-      await expect(knowledge.upsertPage({ scope: 'docs:acme', path, name: 'A' })).rejects.toThrow(/non-empty keys/);
+    for (const path of ['', '/', '//']) {
+      await expect(knowledge.upsertPage({ scope: 'docs:acme', path, name: 'A' })).rejects.toThrow(/at least one key/);
     }
     await expect(knowledge.upsertPage({ scope: 'docs:acme', path: 'a#b', name: 'A' })).rejects.toThrow();
+  });
+
+  it('treats leading, trailing and doubled slashes as the clean path everywhere a path is parsed', async () => {
+    const { knowledge, call } = setup();
+    const docs = ['org:acme'];
+    const first = await knowledge.upsertPage({ scope: 'docs:acme', path: 'models/gateways/', name: 'Gateways' });
+    expect(first.status).toBe('created');
+    expect(first.page.key).toBe('gateways');
+    for (const path of ['models/gateways', '/models/gateways', 'models//gateways/']) {
+      const again = await knowledge.upsertPage({ scope: 'docs:acme', path, name: 'Gateways' });
+      expect(again).toMatchObject({ status: 'unchanged', page: { id: first.page.id } });
+    }
+    for (const page of ['docs:acme#models/gateways/', 'docs:acme#models//gateways', 'docs:acme#/models/gateways']) {
+      expect((await call(docs, 'knowledge_read', { page })).page.id).toBe(first.page.id);
+    }
+    const note = await knowledge.addNote({
+      scope: 'docs:acme',
+      path: 'models/gateways/',
+      text: 'See [[docs:acme#models/gateways/]].',
+    });
+    expect(note.mentions).toEqual([first.page.id]);
+    await expect(knowledge.removePage({ scope: 'docs:acme', path: 'models/gateways/' })).resolves.toMatchObject({
+      id: first.page.id,
+    });
   });
 
   it('settles concurrent writes to one new path on a single page', async () => {

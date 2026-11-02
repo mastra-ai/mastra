@@ -265,9 +265,18 @@ export class KnowledgePageDepthError extends Error {
 export function parseKnowledgePageRef(ref: string): { scope: string; path: string[] } | null {
   const hash = ref.indexOf('#');
   if (hash <= 0) return null;
-  const path = ref.slice(hash + 1).split('/');
-  if (path.some(key => knowledgePageKeyProblem(key))) return null;
+  const path = knowledgePagePath(ref.slice(hash + 1));
+  if (path.length === 0 || path.some(key => knowledgePageKeyProblem(key))) return null;
   return { scope: ref.slice(0, hash), path };
+}
+
+/**
+ * The keys of a key path. Empty segments are dropped, so a leading, trailing or doubled `/`
+ * (`guides/`, `/guides`, `guides//cli`) names the same page as the clean path.
+ * @experimental
+ */
+export function knowledgePagePath(path: string): string[] {
+  return path.split('/').filter(key => key !== '');
 }
 
 /** @experimental */

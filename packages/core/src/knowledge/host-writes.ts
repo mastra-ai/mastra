@@ -1,6 +1,6 @@
 import { KnowledgeNotFoundError } from '../storage/domains/knowledge/base';
 import type { KnowledgeStorage } from '../storage/domains/knowledge/base';
-import { assertKnowledgeNoteTextWithinBound } from '../storage/domains/knowledge/pages';
+import { assertKnowledgeNoteTextWithinBound, knowledgePagePath } from '../storage/domains/knowledge/pages';
 import type { KnowledgeNote, KnowledgePage, KnowledgeProvenance } from '../storage/domains/knowledge/pages';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
 import type { KnowledgeSemanticIndex } from './semantic';
@@ -14,8 +14,8 @@ export interface KnowledgeUpsertPageInput {
   scope: string;
   /**
    * Key path below the scope, e.g. `guides/install`. It is the page's identity: writing the same path
-   * again updates that page. Keys can't contain `#` or `%`. Missing pages along the path are
-   * created with their key as name.
+   * again updates that page. Keys can't contain `#` or `%`. A leading, trailing or doubled `/` is
+   * dropped (`guides/` is `guides`). Missing pages along the path are created with their key as name.
    */
   path: string;
   name: string;
@@ -84,8 +84,8 @@ export interface KnowledgeHostWriter {
 const MAX_ATTEMPTS = 8;
 
 function splitPath(path: string): string[] {
-  const keys = path.split('/');
-  if (!path || keys.some(key => !key)) throw new Error(`Knowledge page path "${path}" needs non-empty keys.`);
+  const keys = knowledgePagePath(path);
+  if (keys.length === 0) throw new Error(`Knowledge page path "${path}" needs at least one key.`);
   return keys;
 }
 
@@ -210,8 +210,8 @@ async function resolveMentions(storage: KnowledgeStorage, text: string): Promise
     const hash = ref.indexOf('#');
     if (hash <= 0) continue;
     const [scope] = await storage.getScopesByAddress([ref.slice(0, hash)]);
-    const keys = ref.slice(hash + 1).split('/');
-    if (!scope || keys.some(key => !key)) continue;
+    const keys = knowledgePagePath(ref.slice(hash + 1));
+    if (!scope || keys.length === 0) continue;
     const page = await storage.getPageByPath({ scopeId: scope.id, path: keys, read: 'all' });
     if (page) ids.add(page.id);
   }
