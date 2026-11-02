@@ -48,7 +48,7 @@ import {
 import { applyThemePreference, normalizeThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
-import { getCurrentVersion } from './version.js';
+import { formatVersion, getCurrentVersion, isVersionFlag } from './version.js';
 
 let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
@@ -67,6 +67,8 @@ let storageClosed = false;
 let cleanupPromise: Promise<void> | null = null;
 let getResumeThreadId: (() => string | null) | undefined;
 let remoteSession: RemoteSession | undefined;
+// `--version` output must stay machine-readable, so skip the exit-time terminal reset.
+let printedVersionOnly = false;
 
 const CRASH_LOG_PATH = '/tmp/mastra-crash.log';
 
@@ -397,6 +399,7 @@ process.on('exit', () => {
   // Belt-and-suspenders: always write terminal reset sequences directly,
   // regardless of whether tui.stop() succeeded. Writing them twice is harmless
   // but missing them leaves the terminal in a corrupted state.
+  if (printedVersionOnly) return;
   try {
     process.stdout.write(
       '\x1b[?2004l' + // disable bracketed paste
@@ -521,6 +524,13 @@ const handleFatalError = createOneShotFatalErrorHandler((error: unknown): void =
 });
 
 async function main() {
+  if (isVersionFlag(process.argv)) {
+    printedVersionOnly = true;
+    process.stdout.write(`${formatVersion(getCurrentVersion())}\n`);
+    await new Promise(resolve => process.stdout.write('', resolve));
+    return process.exit(0);
+  }
+
   if (process.argv[2] === 'plugin') {
     return pluginMain(process.argv.slice(3));
   }
