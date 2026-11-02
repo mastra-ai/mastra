@@ -291,12 +291,14 @@ export function branchColors(pages: readonly KnowledgePagePayload[], shape: Grap
   return new Map(order.map((id, index) => [id, BRANCH_COLORS[index % BRANCH_COLORS.length] as string]));
 }
 
+/** Framing never zooms out past this, so circle names stay readable; a bigger graph is panned, not shrunk. */
+export const READABLE_MIN_ZOOM = 0.7;
 /** Children a drawn page shows at most; the rest are counted, not drawn. */
-export const GRAPH_CHILD_CAP = 48;
+export const GRAPH_CHILD_CAP = 16;
 /** Stand-in dots drawn at most for a page whose children haven't loaded yet. */
 export const PLACEHOLDER_CAP = 8;
 /** Most circles whose children are loaded just to draw them as dots around it. */
-export const WANTED_CIRCLE_CAP = 24;
+export const WANTED_CIRCLE_CAP = 12;
 /** Roots drawn beside the root at the centre when nothing is focused. */
 export const SIBLING_ROOT_CAP = 8;
 /** Children around a page that fit at full size; past this the circles shrink to make room. */

@@ -7,6 +7,7 @@ import {
   GRAPH_CHILD_CAP,
   HIGHER_LEVEL_CAP,
   PLACEHOLDER_CAP,
+  READABLE_MIN_ZOOM,
   ROOT_CIRCLE_CAP,
   WANTED_CIRCLE_CAP,
   crowdScale,
@@ -415,5 +416,26 @@ describe('crowdScale', () => {
     expect(crowdScale(CROWD_START * 2)).toBeLessThan(1);
     expect(crowdScale(45)).toBeGreaterThanOrEqual(CROWD_MIN_SCALE);
     expect(crowdScale(10_000)).toBe(CROWD_MIN_SCALE);
+  });
+});
+
+describe('readable framing', () => {
+  it('draws 16 children at full size and counts the rest, rather than shrinking dozens of circles to fit', () => {
+    const many = Array.from({ length: 60 }, (_, index) => page(`p${String(index).padStart(2, '0')}`, 'blog'));
+    const graph = lazyGraph({
+      rootKey: '',
+      openGroups: new Set<string>(),
+      pages: [page('site', null), page('blog', 'site', { childCount: 60 }), ...many],
+      loadedParents: new Set(['', 'site', 'blog']),
+      focusId: 'blog',
+    });
+    const circles = graph.pages.filter(candidate => candidate.parentId === 'blog' && !isRestCircle(candidate));
+    expect(circles).toHaveLength(16);
+    expect(graph.pages.find(isRestCircle)?.name).toBe('+44 more');
+    expect(crowdScale(circles.length)).toBe(1);
+  });
+
+  it('never frames the graph below a zoom at which circle names can be read', () => {
+    expect(READABLE_MIN_ZOOM).toBeGreaterThanOrEqual(0.7);
   });
 });

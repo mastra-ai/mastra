@@ -24,6 +24,7 @@ import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
   KNOWLEDGE_DOT_HIT_MARGIN,
   KNOWLEDGE_DOT_SIZE,
+  READABLE_MIN_ZOOM,
   branchColors,
   graphShape,
   crowdScale,
@@ -1191,7 +1192,7 @@ function KnowledgePageGraphInner({
     const targets = focus ? current.filter(node => focus.has(node.id)) : current;
     const bounds = graphBounds(targets);
     if (!bounds) return;
-    const viewport = getViewportForBounds(bounds, width, height, 0.1, focus ? 1.5 : 2, focus ? 0.3 : 0.1);
+    const viewport = getViewportForBounds(bounds, width, height, READABLE_MIN_ZOOM, focus ? 1.5 : 2, focus ? 0.3 : 0.1);
     void flow.setViewport(viewport, duration ? { duration } : undefined);
   }, []);
 
