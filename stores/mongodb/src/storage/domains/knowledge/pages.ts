@@ -18,6 +18,10 @@ import type {
   KnowledgeNote,
   KnowledgeNoteListOutput,
   KnowledgePage,
+  KnowledgePageBodyLink,
+  KnowledgePageLinkCounts,
+  KnowledgePageLinkEdge,
+  KnowledgePageLinkKind,
   KnowledgePageActivityAction,
   KnowledgePageActivityEvent,
   KnowledgePageListOutput,
@@ -45,12 +49,16 @@ const loadPagesCore = createKnowledgePagesCoreLoader(coreFeatures, () => import(
 
 const DEFAULT_LIST_LIMIT = 50;
 const MONGO_DUPLICATE_KEY = 11000;
+// Mirrors MAX_KNOWLEDGE_PAGE_LINKS in @mastra/core/storage; the core loader doesn't carry it.
+const MAX_PAGE_LINKS = 10_000;
+const DEFAULT_LINK_LIMIT = 1_000;
 
 export const MONGO_KNOWLEDGE_PAGES_COLLECTIONS = {
   pages: 'mastra_knowledge_pages',
   notes: 'mastra_knowledge_notes',
   pins: 'mastra_knowledge_pins',
   activity: 'mastra_knowledge_activity',
+  links: 'mastra_knowledge_page_links',
   state: 'mastra_knowledge_access_state',
 } as const;
 
@@ -261,11 +269,12 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     );
     const inspection = await this.inspectSchema();
     if (inspection.status === 'incompatible-reset-required') throw new MongoKnowledgeResetRequiredError(inspection);
-    const [pages, notes, pins, activity] = await Promise.all([
+    const [pages, notes, pins, activity, links] = await Promise.all([
       this.#c('pages'),
       this.#c('notes'),
       this.#c('pins'),
       this.#c('activity'),
+      this.#c('links'),
     ]);
     await Promise.all([
       pages.createIndex({ id: 1 }, { unique: true }),
@@ -289,12 +298,16 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       activity.createIndex({ id: 1 }, { unique: true }),
       activity.createIndex({ pageScopeId: 1, createdAt: -1, id: -1 }),
       activity.createIndex({ pageId: 1, createdAt: -1, id: -1 }),
+      links.createIndex({ fromPageId: 1, ref: 1 }, { unique: true }),
+      links.createIndex({ toPageId: 1 }),
+      links.createIndex({ ref: 1 }),
     ]);
   }
 
   /** Drops exactly the Knowledge collections (never Memory's) and recreates schema 4. */
   async reset(): Promise<void> {
     for (const name of KNOWLEDGE_RESETTABLE_TABLE_NAMES) await this.#drop(name);
+    await this.#drop(MONGO_KNOWLEDGE_PAGES_COLLECTIONS.links);
     await this.init();
   }
 
@@ -1278,6 +1291,137 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return counts;
   }
 
+  async replacePageBodyLinks(input: { pageId: string; links: KnowledgePageBodyLink[] }): Promise<void> {
+    await this.#tx(async session => {
+      const links = await this.#c('links');
+      await links.deleteMany({ fromPageId: input.pageId }, { session });
+      if (!input.links.length) return;
+      await links.insertMany(
+        input.links.map(link => ({
+          fromPageId: input.pageId,
+          ref: link.ref,
+          toPageId: link.toPageId,
+          count: link.count,
+        })),
+        { session },
+      );
+    });
+  }
+
+  async listPageBodyLinkSources(input: { refs?: string[]; toPageIds?: string[] }): Promise<string[]> {
+    const any: Filter<Document>[] = [];
+    if (input.refs?.length) any.push({ toPageId: null, ref: { $in: input.refs } });
+    if (input.toPageIds?.length) any.push({ toPageId: { $in: input.toPageIds } });
+    if (!any.length) return [];
+    const ids = await (await this.#c('links')).distinct('fromPageId', { $or: any });
+    return ids.map(String);
+  }
+
+  /** Resolved links touching `pageIds`, both ends live and readable, notes only through visible notes. */
+  async #visibleLinks(
+    pageIds: string[],
+    read: KnowledgeReadScope,
+    direction: 'in' | 'out' | 'both',
+    kinds: KnowledgePageLinkKind[] | undefined,
+  ): Promise<KnowledgePageLinkEdge[]> {
+    const ids = [...new Set(pageIds)];
+    if (!ids.length) return [];
+    const wanted = new Set(kinds ?? ['body', 'note']);
+    const touching = (from: string, to: string | null | undefined) =>
+      (direction !== 'in' && ids.includes(from)) || (direction !== 'out' && !!to && ids.includes(to));
+    const readable = await this.#readable(read);
+    const raw = new Map<string, KnowledgePageLinkEdge>();
+    const add = (fromPageId: string, toPageId: string, kind: KnowledgePageLinkKind, count: number) => {
+      if (fromPageId === toPageId) return;
+      const key = `${fromPageId}\u0000${toPageId}\u0000${kind}`;
+      const edge = raw.get(key);
+      if (edge) edge.count += count;
+      else raw.set(key, { fromPageId, toPageId, kind, count });
+    };
+    const side: Filter<Document>[] = [];
+    if (direction !== 'in') side.push({ fromPageId: { $in: ids } });
+    if (direction !== 'out') side.push({ toPageId: { $in: ids } });
+    if (wanted.has('body')) {
+      const rows = await (
+        await this.#c('links')
+      )
+        .find({ toPageId: { $ne: null }, $or: side }, { projection: { _id: 0, fromPageId: 1, toPageId: 1, count: 1 } })
+        .toArray();
+      for (const row of rows) {
+        if (touching(String(row.fromPageId), String(row.toPageId))) {
+          add(String(row.fromPageId), String(row.toPageId), 'body', Number(row.count));
+        }
+      }
+    }
+    if (wanted.has('note')) {
+      const noteSide: Filter<Document>[] = [];
+      if (direction !== 'in') noteSide.push({ pageId: { $in: ids } });
+      if (direction !== 'out') noteSide.push({ mentions: { $in: ids } });
+      const rows = await (
+        await this.#c('notes')
+      )
+        .find(
+          { ...live, ...this.#visibleNotes(readable), mentions: { $exists: true, $ne: [] }, $or: noteSide },
+          { projection: { _id: 0, pageId: 1, mentions: 1 } },
+        )
+        .toArray();
+      for (const row of rows) {
+        for (const mentioned of new Set((row.mentions as string[]) ?? [])) {
+          if (touching(String(row.pageId), mentioned)) add(String(row.pageId), mentioned, 'note', 1);
+        }
+      }
+    }
+    if (!raw.size) return [];
+    const ends = [...new Set([...raw.values()].flatMap(edge => [edge.fromPageId, edge.toPageId]))];
+    const visible = new Set(
+      (
+        await (
+          await this.#c('pages')
+        )
+          .find(
+            { id: { $in: ends }, ...live, ...this.#inScopes('scopeId', readable) },
+            { projection: { _id: 0, id: 1 } },
+          )
+          .toArray()
+      ).map(row => String(row.id)),
+    );
+    return [...raw.values()].filter(edge => visible.has(edge.fromPageId) && visible.has(edge.toPageId));
+  }
+
+  async countPageLinks(input: {
+    pageIds: string[];
+    read: KnowledgeReadScope;
+    kinds?: KnowledgePageLinkKind[];
+  }): Promise<Record<string, KnowledgePageLinkCounts>> {
+    const linked = new Map(input.pageIds.map(id => [id, { in: new Set<string>(), out: new Set<string>() }]));
+    for (const edge of await this.#visibleLinks(input.pageIds, input.read, 'both', input.kinds)) {
+      linked.get(edge.fromPageId)?.out.add(edge.toPageId);
+      linked.get(edge.toPageId)?.in.add(edge.fromPageId);
+    }
+    return Object.fromEntries([...linked].map(([id, sets]) => [id, { in: sets.in.size, out: sets.out.size }]));
+  }
+
+  async listPageLinks(input: {
+    pageIds: string[];
+    read: KnowledgeReadScope;
+    direction?: 'in' | 'out' | 'both';
+    kinds?: KnowledgePageLinkKind[];
+    limit?: number;
+  }): Promise<KnowledgePageLinkEdge[]> {
+    const limit = input.limit ?? DEFAULT_LINK_LIMIT;
+    if (!Number.isInteger(limit) || limit < 1) throw new RangeError('Knowledge link limit must be a positive integer');
+    const kindOrder = (kind: KnowledgePageLinkKind) => (kind === 'body' ? 0 : 1);
+    const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+    return (await this.#visibleLinks(input.pageIds, input.read, input.direction ?? 'both', input.kinds))
+      .sort(
+        (a, b) =>
+          compare(a.fromPageId, b.fromPageId) ||
+          compare(a.toPageId, b.toPageId) ||
+          kindOrder(a.kind) - kindOrder(b.kind),
+      )
+      .slice(0, Math.min(limit, MAX_PAGE_LINKS));
+  }
+
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
     const ids = [...new Set(input.pageIds)];
     const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
@@ -1672,7 +1816,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   /** Deletes every document but keeps the collections, indexes and schema-version marker. */
   async clearAll(): Promise<void> {
     await this.#tx(async session => {
-      for (const name of ['activity', 'pins', 'notes', 'pages'] as const) {
+      for (const name of ['activity', 'pins', 'notes', 'links', 'pages'] as const) {
         await (await this.#c(name)).deleteMany({}, { session });
       }
     });
