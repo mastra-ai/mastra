@@ -189,12 +189,12 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
     }
   });
 
-  it('rejects a call to an unknown tool with a protocol error', async () => {
+  it.each(['nope', 'constructor'])('rejects a call to unknown tool %s with a protocol error', async name => {
     const client = await connectClient(served.url);
     try {
-      await expect(client.callTool({ name: 'nope', arguments: {} })).rejects.toMatchObject({
+      await expect(client.callTool({ name, arguments: {} })).rejects.toMatchObject({
         code: -32602,
-        message: expect.stringContaining('Unknown tool: nope'),
+        message: expect.stringContaining(`Unknown tool: ${name}`),
       });
     } finally {
       await client.close();
