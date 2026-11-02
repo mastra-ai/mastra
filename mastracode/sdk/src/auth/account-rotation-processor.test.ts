@@ -996,6 +996,53 @@ describe('model-route fallback parts', () => {
     expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
   });
 
+  it('hops to the next route entry when the model refuses with a cyber_policy error', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'openai/gpt-5.6-sol',
+      entries: [
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5', accountId: seeded.accountA.id },
+      ],
+    });
+    const refusal = apiError(400, {
+      url: 'https://api.openai.com/v1/responses',
+      message: 'This content was flagged for possible cybersecurity risk.',
+    });
+    // The second refusal: CyberRefusalHandler already spent its nudge.
+    const args = makeArgs({ error: refusal, requestContext: route.requestContext, retryCount: 1 });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(args.writer.custom).toHaveBeenCalledWith({
+      type: MODEL_FALLBACK_PART_TYPE,
+      data: expect.objectContaining({
+        from: { entryId: 'openai', label: 'OpenAI' },
+        to: { entryId: 'anthropic', label: 'Anthropic' },
+        reason: 'refusal',
+      }),
+    });
+    expect(route.state[MODEL_FALLBACK_STATE_KEY]).toMatchObject({ toEntryId: 'anthropic', reason: 'refusal' });
+    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: ACCOUNT_SWITCH_PART_TYPE }));
+    expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
+  });
+
+  it('surfaces a cyber_policy refusal on the last route entry without a TripWire', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'openai/gpt-5.6-sol',
+      entries: [{ id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' }],
+    });
+    const refusal = Object.assign(apiError(400, { url: 'https://api.openai.com/v1/responses' }), {
+      responseBody: JSON.stringify({ error: { code: 'cyber_policy', message: 'blocked' } }),
+    });
+    const args = makeArgs({ error: refusal, requestContext: route.requestContext, retryCount: 1 });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
+  });
+
   it('returns retry false when no route fallback remains', async () => {
     const seeded = await makeTwoAccountStorage();
     const route = makeRouteContext({

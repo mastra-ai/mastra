@@ -30,7 +30,7 @@ export interface PendingModelFallback {
   toEntryId: string;
   toModelId: string;
   threadId?: string;
-  reason: 'pool-exhausted' | 'persistent-outage';
+  reason: 'pool-exhausted' | 'persistent-outage' | 'refusal';
   at: string;
 }
 
@@ -264,7 +264,7 @@ export const stateSchema = z
         toEntryId: z.string(),
         toModelId: z.string(),
         threadId: z.string().optional(),
-        reason: z.enum(['pool-exhausted', 'persistent-outage']),
+        reason: z.enum(['pool-exhausted', 'persistent-outage', 'refusal']),
         at: z.string(),
       })
       .nullish(),

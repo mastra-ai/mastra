@@ -108,11 +108,18 @@ const MAX_CAUSE_DEPTH = 4;
 /** Persisted data-part type for a model-route hop. */
 export const MODEL_FALLBACK_PART_TYPE = 'data-mastracode-model-fallback' as const;
 
+/**
+ * Why the request moved to the next model-route entry: the account pool ran
+ * out, the provider stayed down, or the model refused the request on safety
+ * grounds (see `RefusalFallbackProcessor`).
+ */
+export type ModelFallbackReason = 'pool-exhausted' | 'persistent-outage' | 'refusal';
+
 /** Non-secret transcript payload for a model-route hop. */
 export interface ModelFallbackPartData {
   from: { entryId: string; label: string };
   to: { entryId: string; label: string };
-  reason: 'pool-exhausted' | 'persistent-outage';
+  reason: ModelFallbackReason;
   at: string;
 }
 
@@ -125,7 +132,7 @@ export interface PendingModelFallback {
   toEntryId: string;
   toModelId: string;
   threadId?: string;
-  reason: 'pool-exhausted' | 'persistent-outage';
+  reason: ModelFallbackReason;
   at: string;
 }
 
@@ -348,7 +355,7 @@ export function accountSwitchNoticeText(data: AccountSwitchPartData): string {
 
 /** Transcript line for a model-route hop; shared by the live info event and the TUI's history render. */
 export function modelFallbackNoticeText(data: ModelFallbackPartData): string {
-  const reason = REASON_TEXT[data.reason] ?? data.reason;
+  const reason = data.reason === 'refusal' ? 'model refused' : (REASON_TEXT[data.reason] ?? data.reason);
   return `Switched model route: ${data.from.label} → ${data.to.label} (${reason})`;
 }
 
@@ -359,8 +366,41 @@ export function modelFallbackNoticeText(data: ModelFallbackPartData): string {
  * model-fallback reason; history parsed from another build's part must be
  * rejected instead.
  */
-export function isModelFallbackReason(value: unknown): value is ModelFallbackPartData['reason'] {
-  return value === 'pool-exhausted' || value === 'persistent-outage';
+export function isModelFallbackReason(value: unknown): value is ModelFallbackReason {
+  return value === 'pool-exhausted' || value === 'persistent-outage' || value === 'refusal';
+}
+
+const CYBER_POLICY_ERROR_CODE = 'cyber_policy';
+const CYBER_REFUSAL_MESSAGE = 'this content was flagged for possible cybersecurity risk';
+
+/**
+ * Whether an API error is a provider safety refusal: OpenAI's `cyber_policy`
+ * error, matched the way core's `CyberRefusalHandler` matches it (code or
+ * message, anywhere in the error, response, data, parsed body or cause graph).
+ * Core doesn't export its matcher, so this mirrors it.
+ */
+export function isSafetyRefusalError(error: unknown): boolean {
+  const visited = new WeakSet<object>();
+  const visit = (candidate: unknown): boolean => {
+    if (typeof candidate !== 'object' || candidate === null || visited.has(candidate)) return false;
+    visited.add(candidate);
+    const { code, message, responseBody } = candidate as Record<string, unknown>;
+    if (typeof code === 'string' && code.toLowerCase() === CYBER_POLICY_ERROR_CODE) return true;
+    if (typeof message === 'string' && message.toLowerCase().includes(CYBER_REFUSAL_MESSAGE)) return true;
+    let parsedBody: unknown;
+    if (typeof responseBody === 'string') {
+      try {
+        parsedBody = JSON.parse(responseBody);
+      } catch {
+        parsedBody = undefined;
+      }
+    }
+    const record = candidate as Record<string, unknown>;
+    return (
+      visit(record.error) || visit(record.response) || visit(record.data) || visit(parsedBody) || visit(record.cause)
+    );
+  };
+  return visit(error);
 }
 
 async function emitAccountSwitchPart(
@@ -408,6 +448,23 @@ function providerFromSession(
 interface ModelRouteCascade {
   entries: Array<{ id: string; label: string; modelId: string; accountId?: string }>;
   position: number;
+}
+
+/**
+ * The request's route cursor, shared by every processor that hops the route
+ * (account rotation and refusal fallback), so a refusal hop followed by an
+ * outage hop in the same request announces the entry the request is really on.
+ * Keyed by the request's MessageList (one per run), else the processor state.
+ */
+const routeCascades = new WeakMap<object, ModelRouteCascade | null>();
+
+/** The minimum a processor hook gives to read and announce route hops. */
+export type ModelRouteHopArgs = Pick<ProcessAPIErrorArgs, 'requestContext' | 'state' | 'writer'> & {
+  messageList?: object;
+};
+
+function routeCascadeKey(args: ModelRouteHopArgs): object {
+  return args.messageList ?? args.state;
 }
 
 interface AccountRoute {
@@ -589,6 +646,16 @@ export class AccountRotationProcessor implements Processor {
       return { retry: false };
     }
 
+    // A safety refusal reaches here only after CyberRefusalHandler's one
+    // `continue` nudge (it short-circuits the lane on the first attempt). The
+    // model will refuse again, so hop to the next route entry; on the last
+    // entry, surface the refusal. Never touch the account pool: the account is
+    // fine, the model said no.
+    if (isSafetyRefusalError(error)) {
+      if (await this.hasNextModelRouteEntry(args)) await this.emitModelFallbackPart(args, 'refusal');
+      return { retry: false };
+    }
+
     // Classify before attributing: an error from a provider outside the OAuth
     // registry (API-key/router providers are valid route entries) still hops on
     // rotate/hop classes — there is just no account cursor to advance.
@@ -720,10 +787,15 @@ export class AccountRotationProcessor implements Processor {
    * prefix in processor state. Resolution mirrors getDynamicModel so a hop is
    * never announced for an entry core cannot reach.
    */
-  private async getModelRouteCascade(args: ProcessAPIErrorArgs): Promise<ModelRouteCascade | null> {
-    if (args.state.modelRouteCascade !== undefined) {
-      return (args.state.modelRouteCascade as ModelRouteCascade | null) ?? null;
-    }
+  private async getModelRouteCascade(args: ModelRouteHopArgs): Promise<ModelRouteCascade | null> {
+    const key = routeCascadeKey(args);
+    if (routeCascades.has(key)) return routeCascades.get(key) ?? null;
+    const cascade = await this.resolveModelRouteCascade(args);
+    routeCascades.set(key, cascade);
+    return cascade;
+  }
+
+  private async resolveModelRouteCascade(args: ModelRouteHopArgs): Promise<ModelRouteCascade | null> {
     const controller = getRoutingController(args);
     const state = controller?.getState?.();
     const route = (
@@ -743,7 +815,6 @@ export class AccountRotationProcessor implements Processor {
       ? route?.findIndex(entry => entry.id === pending.toEntryId)
       : route?.findIndex(entry => entry.modelId === controller?.session?.modelId);
     if (!route || startIndex === undefined || startIndex < 0 || route.length - startIndex < 2) {
-      args.state.modelRouteCascade = null;
       return null;
     }
 
@@ -788,12 +859,23 @@ export class AccountRotationProcessor implements Processor {
       });
     }
     if (entries.length < 2) {
-      args.state.modelRouteCascade = null;
       return null;
     }
-    const cascade: ModelRouteCascade = { entries, position: 0 };
-    args.state.modelRouteCascade = cascade;
-    return cascade;
+    return { entries, position: 0 };
+  }
+
+  /** Whether the request's model route has an entry after the one it is on. */
+  async hasNextModelRouteEntry(args: ModelRouteHopArgs): Promise<boolean> {
+    const cascade = await this.getModelRouteCascade(args);
+    return cascade !== null && cascade.position < cascade.entries.length - 1;
+  }
+
+  /**
+   * Announce and persist a hop to the next route entry for a reason decided
+   * elsewhere (a safety refusal). The caller makes core advance afterwards.
+   */
+  async announceModelRouteHop(args: ModelRouteHopArgs, reason: ModelFallbackReason): Promise<void> {
+    await this.emitModelFallbackPart(args, reason);
   }
 
   /**
@@ -806,7 +888,7 @@ export class AccountRotationProcessor implements Processor {
    * to advance. No chain (or already on the last entry) → return and let the
    * plain `retry: false` surface the error exactly as before.
    */
-  private async gateChainHop(args: ProcessAPIErrorArgs, error: unknown): Promise<void> {
+  private async gateChainHop(args: ModelRouteHopArgs, error: unknown): Promise<void> {
     const cascade = await this.getModelRouteCascade(args);
     if (!cascade) return;
     if (cascade.position >= cascade.entries.length - 1) return;
@@ -815,10 +897,7 @@ export class AccountRotationProcessor implements Processor {
   }
 
   /** Announce and persist the next model-route hop before core advances. */
-  private async emitModelFallbackPart(
-    args: ProcessAPIErrorArgs,
-    reason: 'pool-exhausted' | 'persistent-outage',
-  ): Promise<void> {
+  private async emitModelFallbackPart(args: ModelRouteHopArgs, reason: ModelFallbackReason): Promise<void> {
     const cascade = await this.getModelRouteCascade(args);
     if (!cascade) return;
 
