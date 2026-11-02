@@ -4232,3 +4232,86 @@ describe('MDocument.chunk tracing', () => {
     });
   });
 });
+
+describe('regex separators with capture groups', () => {
+  const text = ', alpha; beta,; gamma;';
+
+  async function chunkText(input: string, options: Parameters<MDocument['chunk']>[0]) {
+    const doc = MDocument.fromText(input);
+    await doc.chunk(options);
+    return doc.getText();
+  }
+
+  for (const strategy of ['character', 'recursive'] as const) {
+    for (const separatorPosition of ['start', 'end'] as const) {
+      it(`preserves text for ${strategy} strategy with separatorPosition '${separatorPosition}'`, async () => {
+        const separatorOptions = strategy === 'character' ? { separator: '(,|;)\\s*' } : { separators: ['(,|;)\\s*'] };
+        const chunks = await chunkText(text, {
+          strategy,
+          ...separatorOptions,
+          isSeparatorRegex: true,
+          separatorPosition,
+          maxSize: 12,
+          overlap: 0,
+          stripWhitespace: false,
+        } as Parameters<MDocument['chunk']>[0]);
+
+        expect(chunks.join('')).toBe(text);
+        expect(chunks.every(chunk => chunk.length > 0)).toBe(true);
+      });
+    }
+  }
+
+  it('preserves numbered backreferences in the separator pattern', async () => {
+    const chunks = await chunkText('a,,b;;c,d', {
+      strategy: 'character',
+      separator: '(,|;)\\1',
+      isSeparatorRegex: true,
+      separatorPosition: 'end',
+      maxSize: 100,
+      overlap: 0,
+      stripWhitespace: false,
+    });
+
+    expect(chunks).toEqual(['a,,', 'b;;', 'c,d']);
+  });
+
+  it('does not throw on unmatched optional captures with the character strategy', async () => {
+    const chunks = await chunkText('alpha, beta; gamma', {
+      strategy: 'character',
+      separator: '(,)?;?\\s+',
+      isSeparatorRegex: true,
+      maxSize: 100,
+      overlap: 0,
+    });
+
+    expect(chunks).toEqual(['alpha', 'beta', 'gamma']);
+  });
+
+  it('does not throw on unmatched optional captures with the recursive strategy', async () => {
+    const chunks = await chunkText('alpha, beta; gamma', {
+      strategy: 'recursive',
+      separators: ['(,)?;?\\s+'],
+      isSeparatorRegex: true,
+      maxSize: 8,
+      overlap: 0,
+    });
+
+    expect(chunks).toEqual(['alpha', 'beta', 'gamma']);
+  });
+
+  it('keeps zero-width separators splitting at match positions', async () => {
+    const options = {
+      strategy: 'character',
+      separator: '(?=#)',
+      isSeparatorRegex: true,
+      maxSize: 100,
+      overlap: 0,
+      stripWhitespace: false,
+    } as const;
+
+    expect(await chunkText('#a#b#c', { ...options, separatorPosition: 'start' })).toEqual(['#a', '#b', '#c']);
+    expect(await chunkText('#a#b#c', { ...options, separatorPosition: 'end' })).toEqual(['#a', '#b', '#c']);
+    expect(await chunkText('#a#b#c', options)).toEqual(['#a', '#b', '#c']);
+  });
+});
