@@ -1161,13 +1161,13 @@ export class AgentThreadStreamRuntime {
 
   /**
    * The run id a signal-started run uses: the caller's `ifIdle.streamOptions.runId` when
-   * given, else a fresh one. A caller id naming a run already known here is refused.
+   * non-empty, else a fresh one (`agent.stream()` also replaces an empty id). A caller id naming a run already known here is refused.
    */
   #idleStartRunId(
     state: AgentThreadRuntimeState,
     requestedRunId: string | undefined,
   ): { runId: string; refused?: undefined } | { runId?: undefined; refused: Promise<never> } {
-    if (requestedRunId === undefined) return { runId: globalThis.crypto.randomUUID() };
+    if (!requestedRunId) return { runId: globalThis.crypto.randomUUID() };
     if (!this.#isRunIdInUse(state, requestedRunId)) return { runId: requestedRunId };
     const refused = Promise.reject(
       new Error(`Run id "${requestedRunId}" is already in use; ifIdle.streamOptions.runId must name a new run.`),

@@ -1006,6 +1006,27 @@ describe('Agent signals: idle and active behaviors', () => {
       await expect(accepted.output.text).resolves.toBe('hi');
     });
 
+    it('generates a run id when the caller run id is empty', async () => {
+      const agent = new Agent({
+        id: 'empty-run-id-wake-agent',
+        name: 'Empty Run Id Wake Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('hi'),
+        memory: new MockMemory(),
+      });
+
+      const result = agent.sendSignal(
+        { type: 'user-message', contents: 'hello' },
+        { resourceId: 'res', threadId: 'th', ifIdle: { streamOptions: { runId: '' } } },
+      );
+
+      const accepted = await withTimeout(result.accepted, 2_000);
+      if (accepted.action !== 'wake') throw new Error('expected wake');
+      expect(accepted.runId).not.toBe('');
+      expect(accepted.output.runId).toBe(accepted.runId);
+      await expect(accepted.output.text).resolves.toBe('hi');
+    });
+
     it('uses the caller run id for a run queued behind the active run', async () => {
       const { model, releaseFirst } = createBlockingFirstTextStreamModel('first response', 'queued response');
       const agent = new Agent({
