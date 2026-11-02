@@ -24,11 +24,11 @@ export async function renewSignIn<T>(
     throw unreachable(error instanceof Error ? error.message : String(error), error);
   }
 
-  if (response.status === 429 || response.status >= 500) {
-    throw Object.assign(unreachable(`token server returned ${response.status}`), { status: response.status });
+  if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+    throw new Error(`${providerName} token refresh failed: ${response.status}`);
   }
   if (!response.ok) {
-    throw new Error(`${providerName} token refresh failed: ${response.status}`);
+    throw Object.assign(unreachable(`token server returned ${response.status}`), { status: response.status });
   }
 
   try {
