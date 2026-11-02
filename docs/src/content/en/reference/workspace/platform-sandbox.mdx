@@ -462,7 +462,7 @@ const url = await sandbox.networking.getPortUrl(3000)
 // https://3000-<sandbox id>.sandbox.us.mastra.cloud/
 ```
 
-Ports are private: the URL opens in a browser for members of the sandbox's organization once they sign in to Mastra. Because the URL doesn't expire, you can share it, and opening it wakes a paused sandbox.
+Ports are private: the URL opens in a browser for members of the sandbox's organization once they sign in to Mastra. You can share it, since it never expires, and opening it wakes a paused sandbox.
 
 `getPortUrl()` returns `null` when the sandbox isn't running or has been destroyed. It doesn't start the sandbox.
 
