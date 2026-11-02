@@ -66,10 +66,18 @@ describe('isReservedRequestContextKey', () => {
       MASTRA_USER_PERMISSIONS_KEY,
       MASTRA_KNOWLEDGE_PRINCIPALS_KEY,
     ];
-    const snapshot = Object.fromEntries([...authKeys, 'tenant'].map(key => [key, 'stored']));
+    // The middleware also writes these unprefixed aliases (auth/helpers.ts).
+    const legacyAliases = ['user', 'userRoles', 'userPermissions'];
+    const snapshot = Object.fromEntries([...authKeys, ...legacyAliases, 'tenant'].map(key => [key, 'stored']));
 
     expect(withoutLiveRequestKeys(snapshot)).toEqual({ tenant: 'stored' });
     expect(RESERVED_REQUEST_CONTEXT_KEYS).toEqual(expect.arrayContaining(authKeys));
+  });
+
+  it('keeps app-owned values under the unprefixed alias names when auth did not write them', () => {
+    const snapshot = { user: 'app-value', userRoles: ['app'], userPermissions: ['app'], tenant: 'stored' };
+
+    expect(withoutLiveRequestKeys(snapshot)).toEqual(snapshot);
   });
 
   it('leaves ordinary keys to the caller', () => {
