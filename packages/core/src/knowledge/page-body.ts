@@ -63,9 +63,14 @@ export function knowledgeBodySection(
   return { candidates: (partial.length ? partial : sections).map(section => section.title).slice(0, 10) };
 }
 
+/** A matching section longer than this comes back as its matching paragraphs instead of whole. */
+export const KNOWLEDGE_READ_MATCH_SECTION_TOKENS = 1_000;
+
 /**
  * The parts of a body that contain `term` (case-insensitive): each smallest section (heading to the
  * next heading of any level) holding a match, with its heading, plus text before the first heading.
+ * A section longer than {@link KNOWLEDGE_READ_MATCH_SECTION_TOKENS} gives only its matching
+ * paragraphs, each with the paragraph before and after, marked with where they start in the body.
  */
 export function knowledgeBodyMatches(body: string, term: string): { text: string; sections: string[] } {
   const needle = term.toLowerCase();
@@ -76,10 +81,45 @@ export function knowledgeBodyMatches(body: string, term: string): { text: string
   for (let i = 0; i < cuts.length - 1; i++) {
     const text = body.slice(cuts[i], cuts[i + 1]);
     if (!text.toLowerCase().includes(needle)) continue;
-    parts.push(text.trimEnd());
     titles.push(i === 0 ? '(before the first heading)' : sections[i - 1]!.title);
+    if (estimateTokenCount(text) <= KNOWLEDGE_READ_MATCH_SECTION_TOKENS) {
+      parts.push(text.trimEnd());
+      continue;
+    }
+    parts.push(
+      matchingParagraphs(
+        text,
+        cuts[i]!,
+        needle,
+        i === 0 ? undefined : text.slice(0, text.indexOf('\n') + 1 || text.length),
+      ),
+    );
   }
   return { text: parts.join('\n\n'), sections: titles };
+}
+
+function matchingParagraphs(text: string, base: number, needle: string, heading: string | undefined): string {
+  const paragraphs: { start: number; end: number }[] = [];
+  const gap = /\n[ \t]*\n/g;
+  let start = 0;
+  for (let m = gap.exec(text); m; m = gap.exec(text)) {
+    paragraphs.push({ start, end: m.index });
+    start = m.index + m[0].length;
+  }
+  paragraphs.push({ start, end: text.length });
+  const keep = new Set<number>();
+  paragraphs.forEach((paragraph, i) => {
+    if (!text.slice(paragraph.start, paragraph.end).toLowerCase().includes(needle)) return;
+    for (const j of [i - 1, i, i + 1]) if (j >= 0 && j < paragraphs.length) keep.add(j);
+  });
+  const out: string[] = heading ? [heading.trimEnd()] : [];
+  let previous = -2;
+  for (const i of [...keep].sort((a, b) => a - b)) {
+    if (i !== previous + 1) out.push(`[… body character ${base + paragraphs[i]!.start} …]`);
+    out.push(text.slice(paragraphs[i]!.start, paragraphs[i]!.end).trimEnd());
+    previous = i;
+  }
+  return out.join('\n\n');
 }
 
 /**

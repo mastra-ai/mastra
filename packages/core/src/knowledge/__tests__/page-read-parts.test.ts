@@ -131,6 +131,26 @@ describe('knowledge_read on long pages', () => {
     );
   });
 
+  it('gives only the matching paragraphs of a long section, with where they start in the body', async () => {
+    const { knowledge, call } = setup();
+    const lines = Array.from(
+      { length: 400 },
+      (_, i) => `**Speaker:** line ${i} of the transcript goes on for a while.`,
+    );
+    lines[300] = '**Shane:** Peter Steinberger steers or queues with OpenClaw.';
+    const body = `# Episode\n\n## Transcript\n\n${lines.join('\n\n')}\n\n## More episodes\n\nOther shows.`;
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'podcast', name: 'Podcast', body });
+    const result = await call('knowledge_read', { page: 'docs:acme#podcast', match: 'steinberger' });
+    const at = body.indexOf(lines[299]!);
+    expect(result.page.sections).toEqual(['Transcript']);
+    expect(result.page.body).toBe(
+      `## Transcript\n\n[… body character ${at} …]\n\n${lines.slice(299, 302).join('\n\n')}`,
+    );
+    expect(result.more).toBeUndefined();
+    const from = await call('knowledge_read', { page: 'docs:acme#podcast', bodyOffset: at });
+    expect(from.page.body.startsWith(lines[299]!)).toBe(true);
+  });
+
   it('pulls only the sections that match a term, each with its heading', async () => {
     const { knowledge, call } = setup();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody(3) });
