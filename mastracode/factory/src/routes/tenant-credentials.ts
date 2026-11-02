@@ -26,12 +26,12 @@ import {
   setCredentialStoreProvider,
 } from '@mastra/code-sdk/agents/credential-resolver';
 import { getOAuthProvider, PROVIDER_DEFAULT_MODELS } from '@mastra/code-sdk/auth/storage';
-import type { AuthCredential, CredentialStore, OAuthCredential } from '@mastra/code-sdk/auth/types';
+import type { AuthCredential, CredentialStore } from '@mastra/code-sdk/auth/types';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
 import { isOAuthCredentialExpired } from '../storage/domains/credentials/base.js';
-import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
+import type { ModelCredentialsStorage, RefreshAccountOAuthOptions } from '../storage/domains/credentials/base.js';
 import { getAuthProviderId, getTenantCredentialsStorage, tenantOrgId } from './provider-credentials.js';
 import type { RouteAuth } from './route.js';
 
@@ -151,7 +151,7 @@ export class TenantCredentialStore implements CredentialStore {
       return oauthProvider.getApiKey(resolved.credential);
     }
 
-    return this.#refreshOAuth(storage, resolved.scope, provider, isOAuthCredentialExpired);
+    return this.#refreshOAuth(storage, resolved.scope, provider);
   }
 
   /**
@@ -174,19 +174,14 @@ export class TenantCredentialStore implements CredentialStore {
     );
     if (resolved?.credential.type !== 'oauth') return undefined;
     const rejectedAccess = served?.type === 'oauth' ? served.access : resolved.credential.access;
-    return this.#refreshOAuth(
-      storage,
-      resolved.scope,
-      provider,
-      current => isOAuthCredentialExpired(current) || current.access === rejectedAccess,
-    );
+    return this.#refreshOAuth(storage, resolved.scope, provider, { force: true, staleAccess: rejectedAccess });
   }
 
   async #refreshOAuth(
     storage: ModelCredentialsStorage,
     scope: 'user' | 'org',
     provider: string,
-    needsRefresh: (current: OAuthCredential) => boolean,
+    options?: RefreshAccountOAuthOptions,
   ): Promise<string | undefined> {
     const oauthProvider = getOAuthProvider(provider);
     if (!oauthProvider) return undefined;
@@ -201,7 +196,7 @@ export class TenantCredentialStore implements CredentialStore {
           type: 'oauth' as const,
           ...(await oauthProvider.refreshToken(current)),
         }),
-        needsRefresh,
+        options,
       );
       if (!refreshed) return undefined;
       this.#snapshot.set(provider, refreshed);
