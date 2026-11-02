@@ -108,7 +108,6 @@ Pick the memory layer by how long the conversation needs to remember each partic
 
 - **Short conversations**, or when you need a verbatim record of who said what: use [message history alone](#message-history-alone).
 - **Long-running threads** that outgrow the context window: use [Observational Memory](#with-observational-memory).
-- **A structured participants list** the agent reads and updates on every turn: use [working memory](#with-working-memory).
 
 ### Message history alone
 
@@ -132,45 +131,7 @@ const memory = new Memory({
 
 OM replaces `lastMessages` history loading, so leave `lastMessages` out when OM is on.
 
-:::warning
-
-The Observer doesn't see message attributes yet. It records facts from every participant as coming from "User", so once messages are observed, the agent can no longer tell who said them. Recent messages that are still in the context keep their attributes. Until this is fixed, use [working memory](#with-working-memory) when per-person facts must survive a long thread.
-
-:::
-
-### With working memory
-
-Use working memory when the agent should keep a structured participants list it reads and updates on every turn. The default [working memory](/docs/memory/working-memory) template assumes one user per thread, so provide a template with a participants list:
-
-```typescript title="src/mastra/agents/collab-wm.ts"
-import { LibSQLStore } from '@mastra/libsql'
-import { Memory } from '@mastra/memory'
-
-const memory = new Memory({
-  storage: new LibSQLStore({ id: 'collab-storage', url: 'file:./collab.db' }),
-  options: {
-    lastMessages: 20,
-    workingMemory: {
-      enabled: true,
-      scope: 'thread',
-      template: `# Document Collaboration State
-
-## Participants
-<!-- One entry per collaborator, keyed by the name attribute. -->
-<!-- - **<name>** (<role>): <their position> -->
-
-## Open Questions
-
-## Decisions
-`,
-    },
-  },
-})
-```
-
-Set `scope: 'thread'` so the participants list belongs to the document, not to any one user. Tell the agent in its instructions to add a participant whenever a `<user>` tag carries a new `name`.
-
-For more on templates, see [custom templates](/docs/memory/working-memory#custom-templates).
+The Observer keeps the speaker's attributes, so observations say who said what. A message sent with `attributes: { name: 'Alice', role: 'editor' }` is labeled `User (name="Alice" role="editor")`. Messages sent without attributes are labeled plain `User`.
 
 ## Security
 
@@ -181,5 +142,4 @@ Set the attributes on your server from the authenticated user, never from the re
 - [Sending signals](/docs/signals/sending-signals)
 - [Agent `sendMessage()` reference](/reference/agents/agent#sendmessagemessage-options)
 - [Observational Memory](/docs/memory/observational-memory)
-- [Working memory](/docs/memory/working-memory)
 - [`Memory` reference](/reference/memory/memory-class)
