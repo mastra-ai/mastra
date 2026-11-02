@@ -184,9 +184,18 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
       const result = await client.callTool({ name: 'echoTool', arguments: { text: 42 } });
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain('text');
-      const unknown = await client.callTool({ name: 'nope', arguments: {} });
-      expect(unknown.isError).toBe(true);
-      expect(textOf(unknown)).toBe('Unknown tool: nope');
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('rejects a call to an unknown tool with a protocol error', async () => {
+    const client = await connectClient(served.url);
+    try {
+      await expect(client.callTool({ name: 'nope', arguments: {} })).rejects.toMatchObject({
+        code: -32602,
+        message: expect.stringContaining('Unknown tool: nope'),
+      });
     } finally {
       await client.close();
     }
