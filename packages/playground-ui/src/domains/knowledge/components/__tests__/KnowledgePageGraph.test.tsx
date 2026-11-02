@@ -208,6 +208,17 @@ describe('KnowledgePageGraph', () => {
       return within(dot).getByRole('tooltip').textContent;
     };
 
+    it('says in the legend which circle each dot colour hangs under', () => {
+      renderGraph({ pages: deep });
+      const rows = within(screen.getByRole('list', { name: 'Legend' })).getAllByTestId('knowledge-legend-branch');
+      expect(rows.map(row => row.textContent)).toEqual(['Under Support']);
+    });
+
+    it('leaves colours out of the legend when there are no dots', () => {
+      renderGraph();
+      expect(screen.queryAllByTestId('knowledge-legend-branch')).toHaveLength(0);
+    });
+
     it('names a farther page, its path and how many children it has on hover', () => {
       renderGraph({ pages: deep });
       expect(hoverDot('ticket')).toBe('TicketPageAcme › Support4 children');

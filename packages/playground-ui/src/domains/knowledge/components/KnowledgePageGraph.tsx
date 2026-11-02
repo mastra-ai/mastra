@@ -433,11 +433,14 @@ function GraphLegend({
   links,
   directions,
   dots,
+  branches,
 }: {
   grants: boolean;
   links: boolean;
   directions: boolean;
   dots: boolean;
+  /** The branches dots are coloured by, each named for the circle it hangs under. */
+  branches: Array<{ id: string; name: string; color: string }>;
 }) {
   return (
     <ul
@@ -461,6 +464,25 @@ function GraphLegend({
           <span className="inline-block size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
           <Txt as="span" variant="meta" tone="muted">
             Farther page (hover to name it)
+          </Txt>
+        </li>
+      ) : null}
+      {branches.slice(0, LEGEND_BRANCH_CAP).map(branch => (
+        <li key={branch.id} className="flex items-center gap-2 pl-0.5" data-testid="knowledge-legend-branch">
+          <span
+            className="inline-block size-2 shrink-0 rounded-full"
+            style={{ background: branch.color }}
+            aria-hidden
+          />
+          <Txt as="span" variant="meta" tone="muted" className="max-w-40 truncate">
+            Under {branch.name}
+          </Txt>
+        </li>
+      ))}
+      {branches.length > LEGEND_BRANCH_CAP ? (
+        <li className="pl-0.5">
+          <Txt as="span" variant="meta" tone="muted">
+            +{branches.length - LEGEND_BRANCH_CAP} more branches
           </Txt>
         </li>
       ) : null}
@@ -549,6 +571,8 @@ function GraphLegend({
 
 /** How far the pointer may move between press and release and still count as a click, not a pan. */
 const CLICK_SLOP_PX = 4;
+/** Most branch colours the legend names; the rest are counted. */
+const LEGEND_BRANCH_CAP = 6;
 /** Most links a hovered page draws that aren't drawn already. */
 const HOVER_LINK_CAP = 40;
 
@@ -642,6 +666,19 @@ function KnowledgePageGraphInner({
     return { nodes: flow.nodes, edges: flow.edges, positions, shape, colors };
   }, [graphPages, allEdges, selectedPageId, dotSize]);
   const pageById = useMemo(() => new Map(graphPages.map(page => [page.id, page])), [graphPages]);
+  // Each dot takes its branch's colour; the legend says which circle each colour hangs under.
+  const dotBranches = useMemo(() => {
+    const seen = new Map<string, { id: string; name: string; color: string }>();
+    for (const node of laidOut.nodes) {
+      if (laidOut.shape.form.get(node.id) !== 'dot' || isChildPlaceholder(node.data.page)) continue;
+      const branch = laidOut.shape.branch.get(node.id);
+      const color = branch ? laidOut.colors.get(branch) : undefined;
+      const owner = branch ? pageById.get(branch) : undefined;
+      if (branch && color && owner && !seen.has(branch))
+        seen.set(branch, { id: branch, name: owner.displayLabel ?? owner.name, color });
+    }
+    return [...seen.values()];
+  }, [laidOut, pageById]);
 
   const pinned = useMemo(() => new Set(pinnedIds), [pinnedIds]);
   // Pages with children none of which is drawn yet (stand-ins don't count) carry their child count.
@@ -929,6 +966,7 @@ function KnowledgePageGraphInner({
       }}
     >
       <GraphLegend
+        branches={dotBranches}
         dots={[...laidOut.shape.form.values()].includes('dot')}
         grants={allEdges.some(edge => edge.kind === 'grant')}
         links={allEdges.some(edge => edge.kind === 'link')}
