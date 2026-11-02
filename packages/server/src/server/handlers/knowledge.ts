@@ -334,7 +334,7 @@ export const GET_KNOWLEDGE_PAGE_LINKS_ROUTE = createRoute({
       const { instance, store, read } = await resolveStore(mastra, requestContext, knowledgeKey);
       const links = await requireLinkReaders().readKnowledgePageLinks(store, { pageId, read, direction });
       if (!links) throw new HTTPException(501, { message: 'This Knowledge store has no link index.' });
-      return { ...links, pages: links.pages.map(page => withDisplayLabel(instance, page)) };
+      return { ...links, pages: links.pages.map(page => ({ ...withDisplayLabel(instance, page) })) };
     } catch (error) {
       return handleError(error, 'Error reading Knowledge page links');
     }
