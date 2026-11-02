@@ -53,6 +53,46 @@ describe('ProviderList', () => {
     expect(screen.queryByText('Anthropic')).not.toBeInTheDocument();
   });
 
+  it('connects the Mastra Gateway in one click and warns when the organization has no credits', async () => {
+    let connected = false;
+    server.use(
+      http.get(PROVIDERS_URL, () =>
+        HttpResponse.json({
+          providers: [
+            connected
+              ? { provider: 'mastra', source: 'stored-user', userCredential: 'api_key' }
+              : { provider: 'mastra', source: 'none' },
+            { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
+          ],
+        }),
+      ),
+      http.post(`${PROVIDERS_URL}/mastra/connect`, () => {
+        connected = true;
+        return HttpResponse.json({ ok: true, defaultModelId: 'mastra/anthropic/claude-fable-5' });
+      }),
+      http.get(`${PROVIDERS_URL}/mastra/credits`, () =>
+        HttpResponse.json({
+          remaining: 0,
+          unlimited: false,
+          addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ProviderList credentialScope="user" />);
+
+    const drawer = await openAddProvider(user);
+    await user.click(within(drawer).getByRole('button', { name: 'Connect Mastra Gateway' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add provider' })).not.toBeInTheDocument());
+    expect(await screen.findByText('No gateway credits left')).toBeInTheDocument();
+    expect(within(rowFor('mastra')).getByText('Key saved')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Add credits' })).toHaveAttribute(
+      'href',
+      'https://projects.mastra.ai/add-credits/org-1',
+    );
+  });
+
   it('surfaces a provider list error', async () => {
     server.use(http.get(PROVIDERS_URL, () => HttpResponse.json({ error: 'nope' }, { status: 500 })));
 

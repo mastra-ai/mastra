@@ -37,7 +37,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
-import { createGatewayKey, getGatewayCredits, MastraGatewayError } from './mastra-gateway.js';
+import { createGatewayKey, factoryGatewayKeyLabel, getGatewayCredits, MastraGatewayError } from './mastra-gateway.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -1101,7 +1101,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               r => r.scope === scope && r.provider === MASTRA_GATEWAY_PROVIDER,
             );
             if (!existing) {
-              const key = await createGatewayKey(auth, loose(c));
+              const user = (await auth.ensureUser(loose(c))) as { email?: string } | undefined;
+              const key = await createGatewayKey(auth, loose(c), factoryGatewayKeyLabel(scope, user?.email));
               await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, { type: 'api_key', key });
               onCredentialsChanged(tenant);
             }

@@ -6,9 +6,15 @@ import { Plus } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
-import { useCancelProviderOAuth, useOrgKeyAdminQuery, useProvidersQuery } from '../../../../../../hooks/use-providers';
+import {
+  MASTRA_GATEWAY_PROVIDER,
+  useCancelProviderOAuth,
+  useOrgKeyAdminQuery,
+  useProvidersQuery,
+} from '../../../../../../hooks/use-providers';
 import { useFactoryAuth } from '../../../../../../hooks/useFactoryAuth';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
+import { MastraGatewayCreditsNotice } from '../../../../workspaces/components/MastraGatewayCreditsNotice';
 import { AddApiKeyDialog } from '../../AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../ProviderOAuthDialog';
 import {
@@ -145,6 +151,9 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
           </Button>
         </li>
       </ul>
+      {connections.some(connection => connection.provider.provider === MASTRA_GATEWAY_PROVIDER) && (
+        <MastraGatewayCreditsNotice />
+      )}
       {readOnly && (
         <Txt as="p" variant="caption" tone="muted">
           {ORG_SCOPE_MEMBER_REASON}

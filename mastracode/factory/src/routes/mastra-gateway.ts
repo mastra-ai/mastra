@@ -15,8 +15,13 @@ const MASTRA_PROJECTS_URL = process.env.MASTRA_PROJECTS_URL || 'https://projects
 /** The Starter plan's gateway credit pool, used when the customer names none. */
 const STARTER_CREDIT_POOL = 'gateway_credits';
 
-/** Label of the gateway keys Factory creates, as shown in the platform's key list. */
-export const FACTORY_GATEWAY_KEY_LABEL = 'Factory';
+/**
+ * Label of a gateway key Factory creates, as shown in the platform's key list:
+ * `Factory · Shared` for the organization's key, `Factory · <email>` for a personal one.
+ */
+export function factoryGatewayKeyLabel(scope: 'org' | 'user', email: string | undefined): string {
+  return scope === 'org' ? 'Factory · Shared' : `Factory · ${email ?? 'Personal'}`;
+}
 
 export type MastraGatewayErrorCode =
   | 'mastra_sign_in_required'
@@ -65,11 +70,11 @@ async function platformFetch(auth: RouteAuth, c: Context, path: string, init?: R
 }
 
 /** Create an organization gateway key (`msk_…`) as the signed-in user. */
-export async function createGatewayKey(auth: RouteAuth, c: Context): Promise<string> {
+export async function createGatewayKey(auth: RouteAuth, c: Context, label: string): Promise<string> {
   const res = await platformFetch(auth, c, '/gateway/organization/v2/keys', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label: FACTORY_GATEWAY_KEY_LABEL }),
+    body: JSON.stringify({ label }),
   });
   const { apiKey } = (await res.json()) as { apiKey?: unknown };
   if (typeof apiKey !== 'string' || !apiKey) {

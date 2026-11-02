@@ -607,7 +607,7 @@ describe('Mastra Gateway routes with a tenant', () => {
   let seed: FactoryStorageTestSeed;
   const fetchPlatformAsUser = vi.fn<NonNullable<RouteAuth['fetchPlatformAsUser']>>();
   const controller = makeAgentController([{ provider: 'anthropic', hasApiKey: false }]);
-  const user = { workosId: 'user-a', organizationId: 'org1' };
+  const user = { workosId: 'user-a', organizationId: 'org1', email: 'user-a@example.com' };
 
   function buildApp() {
     const app = new Hono();
@@ -653,7 +653,7 @@ describe('Mastra Gateway routes with a tenant', () => {
     expect(fetchPlatformAsUser).toHaveBeenCalledWith(expect.anything(), '/gateway/organization/v2/keys', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'Factory' }),
+      body: JSON.stringify({ label: 'Factory · user-a@example.com' }),
     });
     expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'mastra-gateway')).toEqual({
       type: 'api_key',

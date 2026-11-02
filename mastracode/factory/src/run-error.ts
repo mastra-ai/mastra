@@ -1,4 +1,5 @@
 import { PROVIDER_AUTH_REQUIRED_ERROR } from '@mastra/code-sdk/auth/provider-auth-error';
+import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
 import {
   classifyProviderError,
   PROVIDER_CALL_ERROR_NAME,
@@ -6,7 +7,7 @@ import {
   providerModelId,
 } from '@mastra/core/error';
 
-export type RunErrorRecovery = 'continue' | 'credentials' | 'model' | 'new_session';
+export type RunErrorRecovery = 'continue' | 'credentials' | 'credits' | 'model' | 'new_session';
 
 export interface RunErrorDescription {
   title: string;
@@ -34,6 +35,14 @@ function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'mo
   }
   switch (classifyProviderError(error)) {
     case 'quota':
+      if (isMastraGatewayError(error)) {
+        return {
+          title: 'Out of Mastra Gateway credits',
+          message:
+            'Your organization has no gateway credits left. Add credits, then continue the run, or choose another model.',
+          recoveries: ['credits', 'continue', 'model'],
+        };
+      }
       return {
         title: 'Provider quota exhausted',
         message: afterProviderReason(
@@ -100,6 +109,14 @@ function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'mo
     case 'unknown':
       return describeUnclassifiedError(error);
   }
+}
+
+/** The Mastra Gateway answered: a `mastra/…` model, or its billing reply (which links to `gateway.mastra.ai`). */
+function isMastraGatewayError(error: RunErrorIdentity): boolean {
+  return (
+    providerModelId(error)?.startsWith(MASTRA_GATEWAY_PREFIX) === true ||
+    /gateway\.mastra\.ai/.test(providerErrorReason(error) ?? error.message)
+  );
 }
 
 function afterProviderReason(error: RunErrorIdentity, next: string, fallback?: string): string {

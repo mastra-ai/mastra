@@ -63,6 +63,18 @@ describe('describeRunError', () => {
     });
   });
 
+  it('names the Mastra Gateway and offers to add credits when its credits run out', () => {
+    const outOfCredits = {
+      name: 'AI_APICallError',
+      message: "You don't have inference credits left. Add credits at https://gateway.mastra.ai/",
+      statusCode: 402,
+    };
+    expect(describeRunError(outOfCredits)).toMatchObject({
+      title: 'Out of Mastra Gateway credits',
+      recoveries: ['credits', 'continue', 'model'],
+    });
+  });
+
   it('quotes a plain-text body the provider sent instead of JSON', () => {
     const textBody = {
       name: 'AI_APICallError',
