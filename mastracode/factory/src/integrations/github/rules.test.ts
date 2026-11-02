@@ -3871,7 +3871,7 @@ describe('GithubRules with intake routes', () => {
     expect(await relabel('labeled-release', ['release'])).toMatchObject({
       board: 'work',
       stages: ['triage'],
-      metadata: { labels: ['release'] },
+      workItem: { labels: ['release'] },
     });
   });
 

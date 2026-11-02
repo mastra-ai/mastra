@@ -28,19 +28,36 @@ const STAMPS: Record<string, Record<string, unknown> | null> = {
 };
 
 describe('provider facts', () => {
-  it('uses normalized provider facts while keeping placement trust authoritative', () => {
+  it.each([false, true])('keeps native labels and authors available to rules (persisted: %s)', persisted => {
     const facts = cardRuleFacts({
-      title: 'Fix',
-      externalSource: SOURCES['github issue']!,
-      metadata: { labels: ['stale'], author: 'stale-author', authorTrusted: false },
-      workItem: { labels: ['bug'], author: 'provider-author' },
+      title: 'Write the guide',
+      externalSource: null,
+      metadata: { labels: ['docs', 42], author: 'writer', authorTrusted: true },
+      ...(persisted ? { workItem: { labels: [], author: null } } : {}),
     });
     expect(facts).toMatchObject({
-      'item.labels': ['bug'],
-      'item.author': 'provider-author',
-      'author.trusted': false,
+      'item.labels': ['docs'],
+      'item.author': 'writer',
+      'author.trusted': true,
     });
   });
+
+  it.each([{ labels: [] }, { labels: ['bug'] }])(
+    'uses normalized provider labels $labels while keeping placement trust authoritative',
+    ({ labels }) => {
+      const facts = cardRuleFacts({
+        title: 'Fix',
+        externalSource: SOURCES['github issue']!,
+        metadata: { labels: ['stale'], author: 'stale-author', authorTrusted: false },
+        workItem: { labels, author: 'provider-author' },
+      });
+      expect(facts).toMatchObject({
+        'item.labels': labels,
+        'item.author': 'provider-author',
+        'author.trusted': false,
+      });
+    },
+  );
 
   it('normalizes incoming source facts before the arrival has a persisted work item', () => {
     const facts = cardRuleFacts({

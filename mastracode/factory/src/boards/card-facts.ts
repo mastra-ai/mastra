@@ -10,9 +10,14 @@ export function cardRuleFacts(
   },
 ): RuleFacts {
   const source = item.externalSource;
-  const provider = item.workItem ?? workItemProviderAdapter(source).toSource(source, item.metadata);
-  const labels = provider?.labels ?? [];
-  const author = provider?.author ?? null;
+  const metadata = item.metadata ?? {};
+  const provider = source ? (item.workItem ?? workItemProviderAdapter(source).toSource(source, metadata)) : null;
+  const labels = source
+    ? (provider?.labels ?? [])
+    : Array.isArray(metadata.labels)
+      ? metadata.labels.filter((label): label is string => typeof label === 'string')
+      : [];
+  const author = source ? (provider?.author ?? null) : typeof metadata.author === 'string' ? metadata.author : null;
   return {
     'item.labels': labels,
     'item.title': item.title,
