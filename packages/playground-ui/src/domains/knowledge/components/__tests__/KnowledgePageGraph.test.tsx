@@ -192,4 +192,30 @@ describe('KnowledgePageGraph', () => {
       });
     });
   });
+
+  describe('dots', () => {
+    // Acme at the centre, Support one ring out, and Support's thread scopes collapsed into one dot further on.
+    const deep = [
+      page('org', null, { name: 'Acme' }),
+      page('support', 'org', { name: 'Support', isScope: true }),
+      page('group:support:thread', 'support', { name: '3 thread scopes', isScope: true, childCount: 3 }),
+      page('ticket', 'support', { name: 'Ticket', childCount: 4 }),
+    ];
+    const hoverDot = (id: string) => {
+      const dot = document.querySelector<HTMLElement>(`[data-testid="knowledge-page-dot"][data-page-id="${id}"]`);
+      if (!dot) throw new Error(`no ${id} dot`);
+      fireEvent.pointerEnter(dot);
+      return within(dot).getByRole('tooltip').textContent;
+    };
+
+    it('names a farther page, its path and how many children it has on hover', () => {
+      renderGraph({ pages: deep });
+      expect(hoverDot('ticket')).toBe('TicketAcme › Support4 children');
+    });
+
+    it('tells how to open a collapsed group of scopes rather than counting it twice', () => {
+      renderGraph({ pages: deep });
+      expect(hoverDot('group:support:thread')).toBe('3 thread scopesAcme › Support · Click to show them');
+    });
+  });
 });

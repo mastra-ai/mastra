@@ -114,15 +114,17 @@ function DotNode({ data }: { data: PageNodeData }) {
   const { page, size, dimmed, color, path } = data;
   const [hover, setHover] = useState(false);
   const standIn = isChildPlaceholder(page);
-  const children = page.childCount ? `${childCountLabel(page)} ${page.childCount === 1 ? 'child' : 'children'}` : null;
-  const label = standIn
-    ? `${page.name}: hover or click to load them`
-    : [page.name, path, children].filter(Boolean).join(' · ');
+  const group = isScopeGroup(page);
+  // A group's count is already in its name; what it needs to say is how to see its members.
+  const hint = standIn ? 'Hover or click to load them' : group ? 'Click to show them' : null;
+  const children =
+    !hint && page.childCount ? `${childCountLabel(page)} ${page.childCount === 1 ? 'child' : 'children'}` : null;
+  const label = [page.name, hint ?? path, children].filter(Boolean).join(' · ');
   return (
     <div
       data-testid="knowledge-page-dot"
       data-page-id={page.id}
-      data-page-type={standIn ? 'stand-in' : page.isScope ? 'scope' : 'page'}
+      data-page-type={standIn ? 'stand-in' : group ? 'group' : page.isScope ? 'scope' : 'page'}
       aria-label={label}
       className="relative cursor-pointer transition-opacity"
       style={{ width: size, height: size, opacity: dimmed ? 0.35 : standIn ? 0.5 : 1 }}
@@ -143,11 +145,11 @@ function DotNode({ data }: { data: PageNodeData }) {
           className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex w-max max-w-72 -translate-x-1/2 flex-col rounded-md border border-border bg-surface-overlay-strong px-2 py-1 shadow-overlay"
         >
           <Txt as="span" variant="label" tone="ink">
-            {standIn ? page.name : page.name}
+            {page.name}
           </Txt>
-          {standIn ? (
+          {hint ? (
             <Txt as="span" variant="meta" tone="muted">
-              Hover or click to load them
+              {group ? `${path} · ${hint}` : hint}
             </Txt>
           ) : (
             <>
