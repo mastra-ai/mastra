@@ -57,7 +57,11 @@ export function KnowledgePageTree({
   // level loading) leave it alone, so a parent the user collapses over the selection stays collapsed.
   const revealed = useRef<string | null>(null);
   useEffect(() => {
-    if (!selectedPageId) return;
+    if (!selectedPageId) {
+      // Forget the last reveal, so picking the same page again after a clear opens its path.
+      revealed.current = null;
+      return;
+    }
     const path = pageAncestorIds(pages, selectedPageId);
     const key = [selectedPageId, ...path].join('/');
     if (revealed.current === key) return;

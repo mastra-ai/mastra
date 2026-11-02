@@ -138,6 +138,29 @@ function Host({
   );
 }
 
+/** Selection changed from outside the explorer, the way search or a link picks a page. */
+function OutsidePickerHost() {
+  const [selected, setSelected] = useState<string | null>('child-2');
+  return (
+    <>
+      <button type="button" onClick={() => setSelected(null)}>
+        Clear selection
+      </button>
+      <button type="button" onClick={() => setSelected('child-2')}>
+        Pick child-2
+      </button>
+      <KnowledgePageExplorer
+        graph={graph}
+        source={source}
+        selectedPageId={selected}
+        onSelect={setSelected}
+        view="page"
+        onViewChange={() => {}}
+      />
+    </>
+  );
+}
+
 beforeAll(() => {
   window.ResizeObserver ??= class {
     observe() {}
@@ -347,6 +370,16 @@ describe('KnowledgePageExplorer page view', () => {
         fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
         fireEvent.click(within(pageView()).getByRole('button', { name: /Refund Policy/ }));
         expect(tree.getByRole('treeitem', { selected: true }).textContent).toContain('Refund Policy');
+      });
+
+      it('opens the path again when the same page is picked after the selection was cleared', () => {
+        renderWithProviders(<OutsidePickerHost />);
+        const tree = within(screen.getByRole('tree'));
+        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Pick child-2' }));
+        expect(tree.getByRole('treeitem', { name: 'Policies' }).getAttribute('aria-expanded')).toBe('true');
+        expect(tree.getByRole('treeitem', { selected: true })).toBeTruthy();
       });
     });
   });
