@@ -341,7 +341,7 @@ describe('ConnectPromptTool', () => {
   });
 
   describe('when authorization fails in the provider popup', () => {
-    it('shows the failure reason and re-enables the connect action', async () => {
+    it('shows the failure reason and resumes the paused tool with it', async () => {
       server.use(
         http.post(`${BASE_URL}/connect/linear/sessions`, () => HttpResponse.json(connectPromptSession)),
         http.get(launchPath, () =>
@@ -358,11 +358,71 @@ describe('ConnectPromptTool', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
       const alert = await screen.findByRole('alert');
-      // The run stays paused so the user can retry.
-      expect(approveToolcall).not.toHaveBeenCalled();
       expect(alert.textContent).toMatch(/window was closed/i);
+      // The agent gets the same reason in the tool result instead of waiting forever.
+      await waitFor(() =>
+        expect(approveToolcall).toHaveBeenCalledWith(toolCallId, {
+          provider: 'linear',
+          status: 'failed',
+          error: expect.stringMatching(/window was closed/i),
+        }),
+      );
+      expect(approveToolcall).toHaveBeenCalledTimes(1);
       // The flow settled, so the action is available to retry.
       expect((screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+  });
+
+  describe('when the connection settles in a non-active state', () => {
+    it('resumes the paused tool with a failure the agent can relay', async () => {
+      linearConnectsHeadlessly();
+      server.use(
+        http.get(`${BASE_URL}/connect/connections/${connectPromptSession.connectionId}/status`, () =>
+          HttpResponse.json({ ...connectPromptStatusActive, status: 'failed' }),
+        ),
+      );
+
+      const { approveToolcall } = renderConnectPrompt();
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+
+      await waitFor(() =>
+        expect(approveToolcall).toHaveBeenCalledWith(toolCallId, {
+          provider: 'linear',
+          status: 'failed',
+          error: 'The connection was not completed.',
+        }),
+      );
+    });
+  });
+
+  describe('when the connect session cannot be created', () => {
+    it('resumes the paused tool with the platform reason', async () => {
+      server.use(
+        http.post(`${BASE_URL}/connect/linear/sessions`, () =>
+          HttpResponse.json(
+            {
+              error: {
+                code: 'conflict',
+                message: 'Connection limit reached for this resource on linear (max 5)',
+              },
+            },
+            { status: 409 },
+          ),
+        ),
+      );
+
+      const { approveToolcall } = renderConnectPrompt();
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+
+      expect((await screen.findByRole('alert')).textContent).toContain('Connection limit reached');
+      await waitFor(() =>
+        expect(approveToolcall).toHaveBeenCalledWith(toolCallId, {
+          provider: 'linear',
+          status: 'failed',
+          error: 'Connection limit reached for this resource on linear (max 5)',
+        }),
+      );
+      expect(approveToolcall).toHaveBeenCalledTimes(1);
     });
   });
 

@@ -40,6 +40,32 @@ function connectPromptFor({
   return undefined;
 }
 
+/** The resume tool's schema accepts; longer failure reasons are cut to fit. */
+const MAX_RESUME_ERROR_LENGTH = 500;
+
+/**
+ * What to resume the paused call with: the settled flow, or a failure when the
+ * connect session couldn't even be created (e.g. the connection limit).
+ */
+function connectPromptResumeFor(
+  payload: ConnectPromptPayload,
+  settled: SettledConnect | null,
+  createError: Error | null,
+): ConnectPromptResume | undefined {
+  const failed = (provider: string, error: string): ConnectPromptResume => ({
+    provider,
+    status: 'failed',
+    error: error.slice(0, MAX_RESUME_ERROR_LENGTH),
+  });
+  if (createError) {
+    const provider = payload.requestedProvider ?? payload.providers[0]?.id;
+    return provider ? failed(provider, createError.message) : undefined;
+  }
+  if (!settled) return undefined;
+  if (settled.status === 'active') return { provider: settled.provider, status: 'active' };
+  return failed(settled.provider, settled.message ?? 'The connection was not completed.');
+}
+
 /**
  * Chat card for the built-in `request_connection` tool: the agent surfaces it
  * when provider tools are unavailable because the caller has no connection.
@@ -49,8 +75,9 @@ function connectPromptFor({
  * before redirecting to the vendor), and polls until the connection settles.
  *
  * The tool pauses the agent run while the card is up. Once the connection
- * activates, the card resumes the paused call with the connected provider, so
- * the agent continues with the tool's result rather than a chat message.
+ * settles, the card resumes the paused call with the outcome — connected, or
+ * the reason it failed — so the agent continues from the tool's result rather
+ * than a chat message.
  */
 export const ConnectPromptTool = ({
   toolName,
@@ -77,24 +104,27 @@ interface ConnectPromptCardProps {
 const ConnectPromptCard = ({ toolCallId, payload, paused, readOnly }: ConnectPromptCardProps) => {
   const { pending, connect, connectedProviders, isCreating, createError, settled } = usePendingConnect();
   const { approveToolcall, isRunning, toolCallApprovals } = useToolCall();
-  const resumedRef = useRef<SettledConnect | null>(null);
+  // The outcome (settled flow or session-creation error) this call was resumed with.
+  const resumedRef = useRef<SettledConnect | Error | null>(null);
   const alreadyResumed = toolCallApprovals[toolCallId] !== undefined;
-
-  // Resume once per activation. A run that is still streaming can't be resumed
-  // yet, so an activation that lands mid-run waits for it to stop.
-  useEffect(() => {
-    if (readOnly || !paused || alreadyResumed || isRunning) return;
-    if (settled?.status !== 'active' || resumedRef.current === settled) return;
-    resumedRef.current = settled;
-    const resume: ConnectPromptResume = { provider: settled.provider, status: 'active' };
-    approveToolcall(toolCallId, resume);
-  }, [readOnly, paused, alreadyResumed, isRunning, settled, approveToolcall, toolCallId]);
 
   const errorMessage =
     createError?.message ??
     (settled?.status === 'failed'
       ? (settled.message ?? 'The connection was not completed. Try connecting again.')
       : null);
+
+  // Resume once per outcome, success or failure, so the agent sees what
+  // happened in the tool result. A run that is still streaming can't be
+  // resumed yet, so an outcome that lands mid-run waits for it to stop.
+  useEffect(() => {
+    if (readOnly || !paused || alreadyResumed || isRunning) return;
+    const outcome = createError ?? settled;
+    if (!outcome || resumedRef.current === outcome) return;
+    resumedRef.current = outcome;
+    const resume = connectPromptResumeFor(payload, settled, createError);
+    if (resume) approveToolcall(toolCallId, resume);
+  }, [readOnly, paused, alreadyResumed, isRunning, settled, createError, payload, approveToolcall, toolCallId]);
 
   return (
     <section aria-label="Connect an account" className="my-2 space-y-3">

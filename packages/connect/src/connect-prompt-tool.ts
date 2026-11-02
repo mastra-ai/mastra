@@ -35,17 +35,21 @@ export interface ConnectPromptPayload {
   providers: ConnectPromptProvider[];
   /** Outcome for the model once a paused prompt resumes, e.g. "Linear connected successfully." */
   message?: string;
+  /** Why the connection failed, as the chat UI reported it, when a paused prompt resumes without one. */
+  error?: string;
 }
 
 /**
  * What a chat UI resumes a paused `request_connection` call with once the
- * user's connection settles. The tool re-checks the platform rather than
- * trusting it, so a stale or forged resume can't report a false success.
+ * user's connection settles: `active`, or `failed` with the reason the UI saw
+ * (closed window, rejected credentials, connection limit). The tool re-checks
+ * the platform rather than trusting it, so a stale or forged resume can't
+ * report a false success, and a failure that raced a success reports success.
  */
-export const connectPromptResumeSchema = z.object({
-  provider: z.string().min(1),
-  status: z.literal('active'),
-});
+export const connectPromptResumeSchema = z.discriminatedUnion('status', [
+  z.object({ provider: z.string().min(1), status: z.literal('active') }),
+  z.object({ provider: z.string().min(1), status: z.literal('failed'), error: z.string().trim().min(1).max(500) }),
+]);
 
 export type ConnectPromptResume = z.infer<typeof connectPromptResumeSchema>;
 
@@ -84,7 +88,7 @@ export function buildConnectPromptTool({
       'Call this when a task needs a provider whose tools are unavailable because no account is connected, ' +
       'or when the user asks to connect one. Do not fabricate links. Pass `provider` to request one ' +
       'specific provider: the call renders a connect prompt in the UI and waits until the user connects, ' +
-      'and its result then says whether the connection succeeded. Omit `provider` to list everything the ' +
+      'and its result then says whether the connection succeeded or why it failed. Omit `provider` to list everything the ' +
       'user can connect without waiting; an unknown provider also returns that list.',
     inputSchema: z.object({
       provider: z
@@ -131,10 +135,11 @@ export function buildConnectPromptTool({
       if (resumed) {
         const provider = payload.providers.find(entry => entry.id.toLowerCase() === resumed.provider.toLowerCase());
         const name = provider?.displayName ?? resumed.provider;
-        return {
-          ...payload,
-          message: provider?.connected ? `${name} connected successfully.` : `${name} is not connected yet.`,
-        };
+        if (provider?.connected) return { ...payload, message: `${name} connected successfully.` };
+        if (resumed.status === 'failed') {
+          return { ...payload, message: `${name} could not be connected: ${resumed.error}`, error: resumed.error };
+        }
+        return { ...payload, message: `${name} is not connected yet.` };
       }
 
       // Only a specific, not-yet-connected provider is worth waiting for. An

@@ -177,6 +177,53 @@ describe('request_connection under an agent', () => {
 
       expect(result).toEqual(expect.objectContaining({ message: 'Linear is not connected yet.' }));
     });
+
+    it('tells the model why the connection failed when resumed with the error', async () => {
+      const { agent } = await agentWithConnectTools(() => []);
+      const stream = await agent.stream('List my Linear issues');
+      for await (const _chunk of stream.fullStream) {
+        // drain until the run suspends
+      }
+
+      const resumed = await agent.resumeStream(
+        { provider: 'linear', status: 'failed', error: 'The authorization window was closed.' },
+        { runId: stream.runId, toolCallId: 'call-1' },
+      );
+      let result: unknown;
+      for await (const chunk of resumed.fullStream) {
+        if (chunk.type === 'tool-result') result = chunk.payload.result;
+      }
+
+      expect(result).toEqual(
+        expect.objectContaining({
+          message: 'Linear could not be connected: The authorization window was closed.',
+          error: 'The authorization window was closed.',
+          providers: [expect.objectContaining({ id: 'linear', connected: false })],
+        }),
+      );
+    });
+
+    it('reports the platform state over a reported failure that raced a successful connection', async () => {
+      let rows: Array<Record<string, unknown>> = [];
+      const { agent } = await agentWithConnectTools(() => rows);
+      const stream = await agent.stream('List my Linear issues');
+      for await (const _chunk of stream.fullStream) {
+        // drain until the run suspends
+      }
+
+      rows = [linearConnection(RESOURCE_ID)];
+      const resumed = await agent.resumeStream(
+        { provider: 'linear', status: 'failed', error: 'Timed out waiting for authorization.' },
+        { runId: stream.runId, toolCallId: 'call-1' },
+      );
+      let result: unknown;
+      for await (const chunk of resumed.fullStream) {
+        if (chunk.type === 'tool-result') result = chunk.payload.result;
+      }
+
+      expect(result).toEqual(expect.objectContaining({ message: 'Linear connected successfully.' }));
+      expect(result).not.toHaveProperty('error');
+    });
   });
 
   describe('when the requested provider is already connected', () => {
