@@ -108,7 +108,7 @@ export class MarkdownHeaderTransformer {
       // Handle code blocks
       if (!inCodeBlock) {
         const fence = strippedLine.match(/^(`{3,}|~{3,})/);
-        if (fence) {
+        if (fence && (fence[1]![0] !== '`' || !strippedLine.slice(fence[1]!.length).includes('`'))) {
           inCodeBlock = true;
           openingFence = fence[1]!;
         }

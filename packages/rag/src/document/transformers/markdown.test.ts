@@ -70,6 +70,18 @@ Follow up.`;
       expect(result[0]?.text).toContain('Content.');
     });
 
+    it('keeps inline backticks between configured headings from opening a fence (#29178)', () => {
+      const transformer = new MarkdownHeaderTransformer([['##', 'Section']]);
+      const result = transformer.splitText({
+        text: '## A\n```npm install```\n## B\nb text',
+      });
+
+      expect(result.map(doc => [doc.text, doc.metadata])).toEqual([
+        ['```npm install```', { Section: 'A' }],
+        ['b text', { Section: 'B' }],
+      ]);
+    });
+
     it('does not split on pipe-containing headings inside fenced code (#29178)', () => {
       const transformer = new MarkdownHeaderTransformer([['##', 'Section']]);
       const result = transformer.splitText({
