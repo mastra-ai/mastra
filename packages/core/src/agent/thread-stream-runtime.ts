@@ -1140,6 +1140,7 @@ export class AgentThreadStreamRuntime {
     if (
       state.threadRunsById.has(runId) ||
       state.threadKeysByRunId.has(runId) ||
+      state.reservedRunScopes.has(runId) ||
       state.remoteThreadKeysByRunId.has(runId) ||
       state.startingQueuedRunIds.has(runId) ||
       state.persistingIdleRunIds.has(runId) ||

@@ -1153,6 +1153,48 @@ describe('Agent signals: idle and active behaviors', () => {
       await first.persisted;
     });
 
+    it('rejects a caller run id reserved by a claimed-owner wake that has not started', async () => {
+      const agent = new Agent({
+        id: 'caller-run-id-claimed-agent',
+        name: 'Caller Run Id Claimed Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('claimed response'),
+        memory: new MockMemory(),
+      });
+      const claim = await agent.claimThreadOwnership({
+        resourceId: 'claimed-res',
+        threadId: 'claimed-th',
+        streamOptions: { memory: { resource: 'claimed-res', thread: 'claimed-th' } },
+      });
+      expect(claim.claimed).toBe(true);
+
+      try {
+        const first = agent.sendSignal(
+          { type: 'user-message', contents: 'first' },
+          {
+            resourceId: 'claimed-res',
+            threadId: 'claimed-th',
+            ifIdle: { streamOptions: { runId: 'claimed-run-id' } },
+          },
+        );
+        const second = agent.sendSignal(
+          { type: 'user-message', contents: 'second' },
+          {
+            resourceId: 'other-res',
+            threadId: 'other-th',
+            ifIdle: { streamOptions: { runId: 'claimed-run-id' } },
+          },
+        );
+        await expect(second.accepted).rejects.toThrow('Run id "claimed-run-id" is already in use');
+        const accepted = await withTimeout(first.accepted, 'Timed out waiting for claimed wake', 2_000);
+        expect(accepted).toMatchObject({ action: 'wake', runId: 'claimed-run-id' });
+        if (accepted.action !== 'wake') throw new Error('Expected signal wake');
+        await expect(accepted.output.text).resolves.toBe('claimed response');
+      } finally {
+        claim.unsubscribe();
+      }
+    });
+
     it('joins the active run and ignores the idle run id while the thread is active', async () => {
       const { model, releaseFirst } = createBlockingFirstTextStreamModel('first response', 'unused');
       const agent = new Agent({
