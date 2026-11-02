@@ -11,7 +11,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { omDebug } from './debug';
-import { formatOmError, isOmModelExecutionFailure, OmModelExecutionError } from './error';
+import { formatOmError, isOmModelExecutionFailure, isOmRequestRejection, OmModelExecutionError } from './error';
 import { getBuiltInExtractedValues, mergeExtractedValues, mergeExtractionFailures } from './extracted-values';
 import { extractStructuredValues } from './extraction-runner';
 import type { Extractor } from './extractor';
@@ -118,6 +118,14 @@ interface MultiThreadObserverResult {
   extractedValues?: Record<string, unknown>;
   extractionFailures?: Array<{ slug: string; error: string }>;
   extractors?: readonly Extractor<any>[];
+}
+
+function shouldRetryWithoutAttachments(error: unknown, messages: ReadonlyArray<{ content: unknown }>): boolean {
+  if (!isOmRequestRejection(error)) return false;
+  return messages.some(
+    message =>
+      Array.isArray(message.content) && message.content.some(part => part?.type === 'image' || part?.type === 'file'),
+  );
 }
 
 function filterObserverExtractors(
@@ -337,7 +345,7 @@ export class ObserverRunner {
 
     const attachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, options?.requestContext);
 
-    const observerMessages = [
+    const buildMessages = (filter: ObserverAttachmentFilter) => [
       buildObserverRequestMessage(
         existingObservations,
         messagesToObserve,
@@ -346,9 +354,10 @@ export class ObserverRunner {
           includeThreadTitle: this.observationConfig.threadTitle,
           extractors: activeExtractors,
         },
-        { attachmentFilter, timeZone: options?.timeZone },
+        { attachmentFilter: filter, timeZone: options?.timeZone },
       ),
     ];
+    let observerMessages = buildMessages(attachmentFilter);
 
     const doGenerate = async () => {
       return withRetry(
@@ -427,7 +436,15 @@ export class ObserverRunner {
       );
     };
 
-    let result = await doGenerate();
+    let result: Awaited<ReturnType<typeof doGenerate>>;
+    try {
+      result = await doGenerate();
+    } catch (error) {
+      if (!shouldRetryWithoutAttachments(error, observerMessages)) throw error;
+      omDebug(`[OM:callObserver] request rejected, retrying without attachments: ${formatOmError(error)}`);
+      observerMessages = buildMessages(false);
+      result = await doGenerate();
+    }
     let parsed = parseObserverOutput(result.text, activeExtractors);
     let retriedDueToDegenerate = false;
 
@@ -683,7 +700,7 @@ export class ObserverRunner {
 
     const multiThreadAttachmentFilter = this.resolveAttachmentFilter(resolvedModel.model, requestContext);
 
-    const observerMessages = [
+    const buildMessages = (filter: ObserverAttachmentFilter) => [
       buildMultiThreadObserverRequestMessage(
         existingObservations,
         messagesByThread,
@@ -692,9 +709,10 @@ export class ObserverRunner {
         wasTruncated,
         this.observationConfig.threadTitle,
         activeExtractors,
-        { attachmentFilter: multiThreadAttachmentFilter, timeZone },
+        { attachmentFilter: filter, timeZone },
       ),
     ];
+    let observerMessages = buildMessages(multiThreadAttachmentFilter);
 
     const doGenerate = async () => {
       return withRetry(
@@ -773,7 +791,15 @@ export class ObserverRunner {
       );
     };
 
-    let result = await doGenerate();
+    let result: Awaited<ReturnType<typeof doGenerate>>;
+    try {
+      result = await doGenerate();
+    } catch (error) {
+      if (!shouldRetryWithoutAttachments(error, observerMessages)) throw error;
+      omDebug(`[OM:callMultiThreadObserver] request rejected, retrying without attachments: ${formatOmError(error)}`);
+      observerMessages = buildMessages(false);
+      result = await doGenerate();
+    }
     let parsed = parseMultiThreadObserverOutput(result.text, activeExtractors);
     let retriedDueToDegenerate = false;
 

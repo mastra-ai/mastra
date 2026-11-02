@@ -31,6 +31,27 @@ export function isOmModelExecutionFailure(error: unknown): boolean {
   return false;
 }
 
+const REQUEST_REJECTION_STATUSES = new Set([400, 413, 415, 422]);
+
+/**
+ * True when the provider rejected the request itself (bad request, payload too large,
+ * unsupported media). Attachments are a common cause, and each provider sets its own
+ * limits (image dimensions, bytes, count, mime types), so the Observer retries such
+ * failures without attachments rather than hard-coding provider limits.
+ */
+export function isOmRequestRejection(error: unknown): boolean {
+  if (hasAbortInChain(error)) return false;
+
+  const visited = new Set<object>();
+  let current: unknown = error;
+  while (isRecord(current) && !visited.has(current)) {
+    visited.add(current);
+    if (typeof current.statusCode === 'number' && REQUEST_REJECTION_STATUSES.has(current.statusCode)) return true;
+    current = current.cause ?? current.error;
+  }
+  return false;
+}
+
 export type OmFailurePolicy = 'abort' | 'continue';
 export type OmFailureKind = 'observer-model' | 'reflector-model';
 
