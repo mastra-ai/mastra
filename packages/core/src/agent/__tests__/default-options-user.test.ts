@@ -8,7 +8,7 @@ function contextWithUser(role: string) {
   return requestContext;
 }
 
-describe('default options callbacks receive the authenticated user', () => {
+describe('agent option callbacks receive the authenticated user', () => {
   const agent = new Agent({
     id: 'default-options-user',
     name: 'Default Options User',
@@ -16,6 +16,7 @@ describe('default options callbacks receive the authenticated user', () => {
     model: 'openai/gpt-4o-mini',
     defaultOptions: ({ user }) => ({ maxSteps: user?.role === 'admin' ? 10 : 2 }),
     defaultNetworkOptions: ({ user }) => ({ maxSteps: user?.role === 'admin' ? 20 : 4 }),
+    scopes: ({ scopes, user }) => (user ? [...scopes, `org:${user.role}`] : scopes),
   });
 
   it('passes user to defaultOptions', async () => {
@@ -26,5 +27,14 @@ describe('default options callbacks receive the authenticated user', () => {
   it('passes user to defaultNetworkOptions', async () => {
     expect((await agent.getDefaultNetworkOptions({ requestContext: contextWithUser('admin') })).maxSteps).toBe(20);
     expect((await agent.getDefaultNetworkOptions({ requestContext: new RequestContext() })).maxSteps).toBe(4);
+  });
+
+  it('passes user to the scopes function', async () => {
+    const scopes = ['resource:user-1'];
+    expect(await agent.getScopes({ requestContext: contextWithUser('admin'), scopes })).toEqual([
+      'resource:user-1',
+      'org:admin',
+    ]);
+    expect(await agent.getScopes({ requestContext: new RequestContext(), scopes })).toEqual(['resource:user-1']);
   });
 });
