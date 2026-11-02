@@ -81,7 +81,7 @@ export interface GraphShape {
   via: Map<string, string | null>;
   /** Pages that sit above others and always draw as labelled circles: scopes, and the focus's ancestors. */
   level: Map<string, GraphLevel>;
-  /** The page the layout centres on; `null` when several root scopes share the centre. */
+  /** The page the layout centres on: the focus, else the first root; `null` only when there are no pages. */
   center: string | null;
 }
 
@@ -94,7 +94,7 @@ function liveOnly(pages: readonly KnowledgePagePayload[]) {
  * many links it sits from the focus, whichever way they run: the focus's parent and its children are 1,
  * its siblings and grandchildren 2. The focus and pages within {@link FULL_CIRCLE_DEPTH} are full circles;
  * every other page, every page the walk never reaches, and every placeholder is a dot. With no focus the
- * roots count as one link from the centre, unless there is only one root, which then becomes the centre.
+ * first root becomes the centre and the other roots sit one link from it. A root is any page whose parent is not loaded, so a page cut off from its parent by a bounded graph is a root too.
  */
 export function graphShape(pages: readonly KnowledgePagePayload[], focusId: string | null): GraphShape {
   const live = liveOnly(pages);
@@ -134,7 +134,7 @@ export function graphShape(pages: readonly KnowledgePagePayload[], focusId: stri
     if (parentId) visit(parentId, id, at + 1, branch.get(id));
     for (const child of children.get(id) ?? []) visit(child.id, id, at + 1, branch.get(id));
     // A root at the centre sits among the other roots, each a circle of its own beside its children.
-    if (id === center && centerPage && !centerPage.parentId) {
+    if (id === center && centerPage && roots.includes(centerPage)) {
       for (const root of roots) if (root.id !== center) visit(root.id, id, at + 1, root.id);
     }
   }

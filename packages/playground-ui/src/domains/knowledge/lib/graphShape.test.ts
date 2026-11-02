@@ -180,6 +180,19 @@ describe('graphShape', () => {
     });
   });
 
+  it('puts the other roots one link out even when the first root has a parent that is not loaded', () => {
+    const pages = [
+      page('a', 'cut-off', { position: 'a' }),
+      page('b', null, { position: 'b' }),
+      page('c', null, { position: 'c' }),
+    ];
+    const shape = graphShape(pages, null);
+    expect(shape.center).toBe('a');
+    expect(shape.depth.get('b')).toBe(1);
+    expect(shape.depth.get('c')).toBe(1);
+    expect(shape.form.get('b')).toBe('full');
+  });
+
   it('draws a page the focus cannot reach as a dot', () => {
     const shape = graphShape([...pages, page('elsewhere', null)], 'blog');
     expect(shape.depth.has('elsewhere')).toBe(false);
