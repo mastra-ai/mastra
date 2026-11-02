@@ -257,6 +257,7 @@ export interface KnowledgePagesCore {
   MAX_KNOWLEDGE_MOVE_PAGES: number;
   MAX_KNOWLEDGE_PAGE_DEPTH: number;
   MAX_KNOWLEDGE_PAGE_LIST_LIMIT: number;
+  MAX_KNOWLEDGE_PAGE_LINKS: number;
   KnowledgeMoveTooLargeError: new (pageId: string, pages: number) => Error;
   KnowledgePageDepthError: new (pageId: string) => Error;
   KnowledgePageHasChildrenError: new (pageId: string) => Error;
@@ -277,6 +278,7 @@ const KNOWLEDGE_PAGES_CORE_NUMBERS = [
   'MAX_KNOWLEDGE_MOVE_PAGES',
   'MAX_KNOWLEDGE_PAGE_DEPTH',
   'MAX_KNOWLEDGE_PAGE_LIST_LIMIT',
+  'MAX_KNOWLEDGE_PAGE_LINKS',
 ] as const;
 
 function resolveKnowledgePagesCore(storageModule: unknown): KnowledgePagesCore {

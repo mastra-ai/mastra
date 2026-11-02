@@ -56,9 +56,6 @@ export const KNOWLEDGE_PAGE_TABLES = {
   links: 'mastra_knowledge_page_links',
 } as const;
 
-/** Most links one `listPageLinks` call returns (core's `MAX_KNOWLEDGE_PAGE_LINKS`). */
-const MAX_PAGE_LINKS = 10_000;
-
 const T = KNOWLEDGE_PAGE_TABLES;
 
 /** DDL for the schema-4 page tables, in creation order. Every statement is idempotent. */
@@ -1193,8 +1190,9 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     if (!Number.isInteger(limit) || limit < 1) throw new RangeError('Knowledge link limit must be a positive integer');
     const ids = [...new Set(input.pageIds)];
     if (ids.length === 0) return [];
+    const core = await loadPagesCore();
     const rows = await this.#links(input.read, input.kinds, ids, input.direction ?? 'both');
-    return rows.slice(0, Math.min(limit, MAX_PAGE_LINKS)).map(row => ({
+    return rows.slice(0, Math.min(limit, core.MAX_KNOWLEDGE_PAGE_LINKS)).map(row => ({
       fromPageId: String(row.fromPageId),
       toPageId: String(row.toPageId),
       kind: row.kind === 'note' ? 'note' : 'body',

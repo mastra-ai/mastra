@@ -49,8 +49,6 @@ const loadPagesCore = createKnowledgePagesCoreLoader(coreFeatures, () => import(
 
 const DEFAULT_LIST_LIMIT = 50;
 const MONGO_DUPLICATE_KEY = 11000;
-// Mirrors MAX_KNOWLEDGE_PAGE_LINKS in @mastra/core/storage; the core loader doesn't carry it.
-const MAX_PAGE_LINKS = 10_000;
 const DEFAULT_LINK_LIMIT = 1_000;
 
 export const MONGO_KNOWLEDGE_PAGES_COLLECTIONS = {
@@ -1410,6 +1408,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
   }): Promise<KnowledgePageLinkEdge[]> {
     const limit = input.limit ?? DEFAULT_LINK_LIMIT;
     if (!Number.isInteger(limit) || limit < 1) throw new RangeError('Knowledge link limit must be a positive integer');
+    const core = await loadPagesCore();
     const kindOrder = (kind: KnowledgePageLinkKind) => (kind === 'body' ? 0 : 1);
     const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
     return (await this.#visibleLinks(input.pageIds, input.read, input.direction ?? 'both', input.kinds))
@@ -1419,7 +1418,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
           compare(a.toPageId, b.toPageId) ||
           kindOrder(a.kind) - kindOrder(b.kind),
       )
-      .slice(0, Math.min(limit, MAX_PAGE_LINKS));
+      .slice(0, Math.min(limit, core.MAX_KNOWLEDGE_PAGE_LINKS));
   }
 
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
