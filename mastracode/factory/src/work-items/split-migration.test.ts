@@ -445,6 +445,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('does not recopy cards when an older replica refreshes only comment summaries or inert claims', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     await migrateWorkItemSplit(storage);
     const before = await readSplit(storage);
 
