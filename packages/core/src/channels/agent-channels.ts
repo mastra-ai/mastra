@@ -1148,13 +1148,8 @@ export class AgentChannels {
    */
   getInputProcessors(configuredProcessors: InputProcessorOrWorkflow[] = []): InputProcessor[] {
     if (this.channelConfig.threadContext?.addSystemMessage === false) return [];
-    const configured = configuredProcessors.find(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
-    if (configured) {
-      // A restored run has no render context on its request, so the processor reads the
-      // adapter config and rebuilds channel context from the thread through this instance.
-      if (configured instanceof ChatChannelProcessor) configured._bindChannels(this);
-      return [];
-    }
+    const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
+    if (hasProcessor) return [];
     return [new ChatChannelProcessor(this)];
   }
 
@@ -1177,12 +1172,8 @@ export class AgentChannels {
   }
 
   getOutputProcessors(configuredProcessors: OutputProcessorOrWorkflow[] = []): OutputProcessor[] {
-    const configured = configuredProcessors.find(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-render');
-    if (configured) {
-      // Lets a configured instance rebuild the render context for runs that arrive without one.
-      if (configured instanceof ChatChannelOutputProcessor) configured._bindChannels(this);
-      return [];
-    }
+    const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-render');
+    if (hasProcessor) return [];
     return [new ChatChannelOutputProcessor(this)];
   }
 

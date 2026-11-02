@@ -167,17 +167,16 @@ export class ChatChannelOutputProcessor {
     this.#agentChannels = agentChannels;
   }
 
-  /** @internal Lets `AgentChannels` bind an instance the agent configured itself. */
-  _bindChannels(agentChannels: AgentChannels): void {
-    this.#agentChannels ??= agentChannels;
-  }
-
   async processOutputStream({
     part,
     state,
     requestContext,
+    agent,
   }: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
-    const render = await this.#resolveRenderContext(state, requestContext);
+    // A processor the agent configured itself has no channels of its own; use the running agent's,
+    // looked up per run so it follows `setChannels` and agents sharing the instance.
+    const agentChannels = this.#agentChannels ?? agent?.getChannels() ?? undefined;
+    const render = await this.#resolveRenderContext(agentChannels, state, requestContext);
     if (!render) return part;
 
     let session = state.session as RenderSession | undefined;
@@ -192,8 +191,8 @@ export class ChatChannelOutputProcessor {
     // the run itself can resolve the approval.
     const renderPart =
       part.type !== 'tool-call-approval' ||
-      !this.#agentChannels ||
-      (await this.#agentChannels.shouldRenderToolApproval(requestContext, (part as any).payload?.toolName));
+      !agentChannels ||
+      (await agentChannels.shouldRenderToolApproval(requestContext, (part as any).payload?.toolName));
     if (renderPart) {
       session.queue.push(part as AgentChunkType<any>);
     }
@@ -220,7 +219,7 @@ export class ChatChannelOutputProcessor {
    * Resolve the render context for this run, built once and cached on `state`.
    *
    * Fast path: the inbound `requestContext` key. Fallback: reconstruct from the
-   * run's `threadId` via the bound `AgentChannels`. The `threadId` is read from
+   * run's `threadId` via the agent's `AgentChannels`. The `threadId` is read from
    * the memory context the framework stashes on `requestContext` under the
    * `MastraMemory` key (populated on every run that resolves a thread, including
    * schedule / signal-wake runs). The resolved value (or `null` for
@@ -228,6 +227,7 @@ export class ChatChannelOutputProcessor {
    * metadata on every chunk.
    */
   async #resolveRenderContext(
+    agentChannels: AgentChannels | undefined,
     state: Record<string, any>,
     requestContext: ProcessOutputStreamArgs['requestContext'],
   ): Promise<ChatChannelRenderContext | undefined> {
@@ -246,11 +246,11 @@ export class ChatChannelOutputProcessor {
     }
 
     const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
-    if (this.#agentChannels && threadId) {
+    if (agentChannels && threadId) {
       // Inbound runs restored from a snapshot keep their JSON-safe channel
       // context; its sender is the run's requester.
       const channel = requestContext?.get('channel') as ChannelContext | undefined;
-      const rebuilt = await this.#agentChannels.buildRenderContextForThread(
+      const rebuilt = await agentChannels.buildRenderContextForThread(
         threadId,
         channel?.userId ? { userId: channel.userId, userName: channel.userName } : undefined,
       );

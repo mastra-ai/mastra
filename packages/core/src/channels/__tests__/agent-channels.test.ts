@@ -186,24 +186,38 @@ describe('AgentChannels', () => {
       expect(agentChannels.getInputProcessors([userProcessor])).toEqual([]);
     });
 
-    it('binds a ChatChannelProcessor the agent configured itself, so a restored run keeps hidden text', async () => {
-      const channels = new AgentChannels({
+    it("uses the running agent's channels for a ChatChannelProcessor the agent configured itself", async () => {
+      const configured = new ChatChannelProcessor();
+      const hidden = new AgentChannels({
         adapters: { slack: { adapter: createMockAdapter('slack'), textDisplay: 'hidden' } },
       } as any);
-      const configured = new ChatChannelProcessor();
-      expect(channels.getInputProcessors([configured])).toEqual([]);
+      const visible = new AgentChannels({ adapters: { slack: { adapter: createMockAdapter('slack') } } } as any);
+      expect(hidden.getInputProcessors([configured])).toEqual([]);
 
       // A run restored from a snapshot keeps its JSON-safe `channel` entry but no render context.
-      const requestContext = new RequestContext();
-      requestContext.set('channel', { platform: 'slack', eventType: 'message', userId: 'U1' });
-      const messageList = new MessageList({});
-      await configured.processInputStep({ messageList, requestContext, state: {}, tools: {} } as any);
-      const prompt = messageList
-        .getSystemMessages('chat-channel-context')
-        .map(m => m.content)
-        .join('\n');
+      const promptFor = async (agent: { getChannels(): AgentChannels | null }) => {
+        const requestContext = new RequestContext();
+        requestContext.set('channel', { platform: 'slack', eventType: 'message', userId: 'U1' });
+        const messageList = new MessageList({});
+        await configured.processInputStep({ messageList, requestContext, state: {}, tools: {}, agent } as any);
+        return messageList
+          .getSystemMessages('chat-channel-context')
+          .map(m => m.content)
+          .join('\n');
+      };
 
-      expect(prompt).toContain('Your text replies are not posted');
+      const agent = {
+        channels: hidden,
+        getChannels() {
+          return this.channels;
+        },
+      };
+      expect(await promptFor(agent)).toContain('Your text replies are not posted');
+
+      // Nothing sticks to the processor: swapped channels, or another agent sharing it, are read fresh.
+      agent.channels = visible;
+      expect(await promptFor(agent)).not.toContain('Your text replies are not posted');
+      expect(await promptFor({ getChannels: () => hidden })).toContain('Your text replies are not posted');
     });
   });
 
