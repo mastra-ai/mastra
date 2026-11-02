@@ -718,7 +718,7 @@ The `ResolveThreadIdContext` passed to the function:
 
 Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that don't match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
 
-Text-like attachments that don't match (`text/*`, JSON, YAML, XML, and similar) are downloaded through the adapter's authenticated fetch when one is available (for example, Slack private files) and given to the agent as text. Contents over 128 KB are truncated. Files the adapter reports as larger than 10 MB aren't downloaded. When the agent has the `read_attachment` tool, the header of a truncated file includes its URL so the agent can read the rest.
+Text-like attachments that don't match (`text/*`, JSON, YAML, XML, and similar) are downloaded through the adapter's authenticated fetch when one is available (for example, Slack private files) and given to the agent as text. Contents over 128 KB are truncated. Files the adapter reports as larger than 10 MB aren't downloaded. The header of a truncated file includes its URL, so an agent with the `read_attachment` tool can read the rest.
 
 The default (`['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`) matches the formats supported by major vision models. Override `inlineMedia` to expand the list (e.g. `['image/*', 'audio/*']`) or replace it entirely with a predicate function.
 
@@ -735,7 +735,7 @@ For platforms with private CDNs (e.g. Slack), attachments are fetched with authe
 
 ## Reading attachments
 
-The `read_attachment` tool from `getTools()` downloads a file shared in the current conversation each time it's called and returns one chunk of it. Nothing is written to the workspace. The tool only reads files attached to messages in the current thread; any other URL is refused without a download.
+The `read_attachment` tool from `getTools()` downloads a file shared in the current conversation each time it's called and returns one chunk of it. Nothing is written to the workspace. The tool only reads files attached to messages in the current thread. Any other URL is refused without a download.
 
 Like the other channel tools, it's only available when you pass it to the agent with `tools: { ...channels.getTools() }`.
 
