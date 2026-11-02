@@ -186,7 +186,7 @@ export function KnowledgePageTree({
   };
 
   if (rows.length === 0) {
-    return <p className="text-body text-muted-foreground px-3 py-2">No pages yet.</p>;
+    return <p className="px-3 py-2 text-body text-muted-foreground">No pages yet.</p>;
   }
 
   const ancestorAt: string[] = [];
@@ -243,7 +243,7 @@ export function KnowledgePageTree({
                   type="button"
                   tabIndex={-1}
                   aria-label={row.expanded ? `Collapse ${row.page.name}` : `Expand ${row.page.name}`}
-                  className="text-muted-foreground hover:text-foreground flex size-5 shrink-0 items-center justify-center rounded"
+                  className="flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground hover:text-foreground"
                   onClick={event => {
                     event.stopPropagation();
                     toggle(row.page.id, !row.expanded);
@@ -261,18 +261,18 @@ export function KnowledgePageTree({
                 <span
                   data-testid="knowledge-tree-count"
                   aria-label={`${childCountLabel(row.page)} below`}
-                  className="text-caption text-muted-foreground shrink-0 tabular-nums"
+                  className="shrink-0 text-caption text-muted-foreground tabular-nums"
                 >
                   {childCountLabel(row.page)}
                 </span>
               ) : null}
               {pinned.has(row.page.id) ? (
-                <Pin size={12} className="text-badge-amber-indicator shrink-0" aria-label="Pinned" />
+                <Pin size={12} className="shrink-0 text-badge-amber-indicator" aria-label="Pinned" />
               ) : null}
               {row.page.isScope && row.page.address && row.page.address !== row.page.name ? (
                 <span
                   data-testid="knowledge-tree-address"
-                  className="text-caption text-muted-foreground max-w-1/2 min-w-0 truncate"
+                  className="max-w-1/2 min-w-0 truncate text-caption text-muted-foreground"
                 >
                   {row.page.address}
                 </span>
@@ -284,7 +284,7 @@ export function KnowledgePageTree({
                 <button
                   key={`more-${parentId}`}
                   type="button"
-                  className="text-caption text-muted-foreground hover:text-foreground flex min-h-7 w-full items-center text-left"
+                  className="flex min-h-7 w-full items-center text-left text-caption text-muted-foreground hover:text-foreground"
                   style={{ paddingLeft: `${depth * 16 + 28}px` }}
                   onClick={more}
                 >

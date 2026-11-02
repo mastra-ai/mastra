@@ -323,13 +323,13 @@ function DotNode({ data }: { data: PageNodeData }) {
           role="tooltip"
           ref={tipRef}
           data-side={side}
-          className={`pointer-events-none absolute ${placement.tip} border-border bg-card shadow-overlay flex w-max max-w-72 flex-col rounded-md border px-2 py-1`}
+          className={`pointer-events-none absolute ${placement.tip} flex w-max max-w-72 flex-col rounded-md border border-border bg-card px-2 py-1 shadow-overlay`}
           style={{ transform: `${placement.transform} scale(${tipScale})`, transformOrigin: placement.origin }}
         >
           <span
             data-testid="knowledge-tooltip-tail"
             aria-hidden
-            className={`border-border bg-card absolute size-2 rotate-45 ${placement.tail}`}
+            className={`absolute size-2 rotate-45 border-border bg-card ${placement.tail}`}
           />
           <Txt as="span" variant="label" tone="ink">
             {page.name}
@@ -448,7 +448,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
           data-testid="knowledge-hidden-links"
           title={linkCountsText(data.hiddenLinks)}
           aria-label={linkCountsText(data.hiddenLinks)}
-          className="border-border bg-card shadow-raised absolute bottom-full left-1/2 -mb-1 flex -translate-x-1/2 gap-1 rounded-full border px-1.5"
+          className="absolute bottom-full left-1/2 -mb-1 flex -translate-x-1/2 gap-1 rounded-full border border-border bg-card px-1.5 shadow-raised"
         >
           {data.hiddenLinks.in > 0 ? (
             <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
@@ -466,7 +466,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
         <span
           data-testid="knowledge-child-count-badge"
           aria-label={`${badge} children, not all drawn`}
-          className="border-border bg-card shadow-raised absolute top-full left-1/2 -mt-1 -translate-x-1/2 rounded-full border px-1.5"
+          className="absolute top-full left-1/2 -mt-1 -translate-x-1/2 rounded-full border border-border bg-card px-1.5 shadow-raised"
         >
           <Txt as="span" variant="meta" tone="ink">
             {badge}
@@ -537,7 +537,7 @@ function PinBadge({ size }: { size: number }) {
   return (
     <span
       data-testid="knowledge-pin-badge"
-      className="bg-badge-amber-strong text-badge-amber-foreground shadow-raised absolute flex items-center justify-center rounded-full"
+      className="absolute flex items-center justify-center rounded-full bg-badge-amber-strong text-badge-amber-foreground shadow-raised"
       style={style}
       aria-label="Pinned"
     >
@@ -654,7 +654,7 @@ function GraphLegend({
   return (
     <ul
       aria-label="Legend"
-      className="border-border bg-card/90 shadow-raised pointer-events-none absolute top-2 left-2 z-10 flex flex-col gap-1 rounded-md border px-2 py-1.5"
+      className="pointer-events-none absolute top-2 left-2 z-10 flex flex-col gap-1 rounded-md border border-border bg-card/90 px-2 py-1.5 shadow-raised"
     >
       <li className="flex items-center gap-2">
         <span className={LEGEND_SWATCH} style={{ ...SCOPE_STYLE }} aria-hidden />
@@ -664,7 +664,7 @@ function GraphLegend({
       </li>
       {levels.includes('scope') ? (
         <li className="flex items-center gap-2" data-testid="knowledge-legend-level-scope">
-          <Layers aria-hidden className="text-muted-foreground size-3 shrink-0" />
+          <Layers aria-hidden className="size-3 shrink-0 text-muted-foreground" />
           <Txt as="span" variant="meta" tone="muted">
             Scope, above its pages
           </Txt>
@@ -672,7 +672,7 @@ function GraphLegend({
       ) : null}
       {levels.includes('ancestor') ? (
         <li className="flex items-center gap-2" data-testid="knowledge-legend-level-ancestor">
-          <ArrowUpToLine aria-hidden className="text-muted-foreground size-3 shrink-0" />
+          <ArrowUpToLine aria-hidden className="size-3 shrink-0 text-muted-foreground" />
           <Txt as="span" variant="meta" tone="muted">
             Page above the focus
           </Txt>
@@ -698,7 +698,7 @@ function GraphLegend({
       ) : null}
       {dots || linkEnds ? (
         <li className="flex items-center gap-2" data-testid="knowledge-legend-dot">
-          <span className="bg-muted-foreground inline-block size-2 shrink-0 rounded-full" aria-hidden />
+          <span className="inline-block size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
           <Txt as="span" variant="meta" tone="muted">
             Page in another branch
           </Txt>
@@ -844,7 +844,7 @@ function GraphLegend({
       ) : null}
       <li className="flex items-center gap-2">
         <span
-          className="bg-badge-amber-strong text-badge-amber-foreground flex size-3 shrink-0 items-center justify-center rounded-full"
+          className="flex size-3 shrink-0 items-center justify-center rounded-full bg-badge-amber-strong text-badge-amber-foreground"
           aria-hidden
         >
           <Pin size={8} />
@@ -1203,7 +1203,6 @@ function KnowledgePageGraphInner({
             hiddenLinks: laidOut.shape.form.get(node.id) === 'full' ? hiddenLinks?.get(node.id) : undefined,
             ref: pageRef(node.data.page, pageById),
             links: linkCounts.get(node.id),
-            notShown: node.id === hoveredId ? hoveredNotShown : undefined,
             showCount: showCounts,
             level: laidOut.shape.form.get(node.id) === 'full' ? laidOut.shape.level.get(node.id) : undefined,
             isParent: node.id === focusParentId,
@@ -1211,19 +1210,7 @@ function KnowledgePageGraphInner({
           },
         };
       }),
-    [
-      laidOut,
-      selectedPageId,
-      pinned,
-      childrenUndrawn,
-      pageById,
-      hiddenLinks,
-      linkCounts,
-      showCounts,
-      focusParentId,
-      hoveredId,
-      hoveredNotShown,
-    ],
+    [laidOut, selectedPageId, pinned, childrenUndrawn, pageById, hiddenLinks, linkCounts, showCounts, focusParentId],
   );
   const { flowEdges: builtEdges, drawnEdgeStyles } = useMemo(() => {
     const drawn = new Set<EdgeStyleKey>();
@@ -1299,10 +1286,17 @@ function KnowledgePageGraphInner({
   // marked. Pointing at a page then changes a few nodes and lines, not all of them.
   const emphasisedNodes = useMemo(
     () =>
-      neighbours
-        ? nodes.map(node => (neighbours.has(node.id) ? { ...node, className: NEIGHBOUR_CLASS } : node))
-        : nodes,
-    [nodes, neighbours],
+      nodes.map(node => {
+        const near = neighbours?.has(node.id);
+        const hovered = node.id === hoveredId && hoveredNotShown > 0;
+        if (!near && !hovered) return node;
+        return {
+          ...node,
+          ...(near ? { className: NEIGHBOUR_CLASS } : {}),
+          ...(hovered ? { data: { ...node.data, notShown: hoveredNotShown } } : {}),
+        };
+      }),
+    [nodes, neighbours, hoveredId, hoveredNotShown],
   );
   const emphasisedEdges = useMemo(
     () =>

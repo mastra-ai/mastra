@@ -272,7 +272,7 @@ function MoreButton({ onClick, label = 'Load more' }: { onClick: () => void; lab
   return (
     <button
       type="button"
-      className="text-caption text-muted-foreground hover:text-foreground self-start"
+      className="self-start text-caption text-muted-foreground hover:text-foreground"
       onClick={onClick}
     >
       {label}
@@ -349,13 +349,13 @@ function ChildPages({
           <li key={child.id} className="flex flex-col">
             <button
               type="button"
-              className="text-body text-info-indicator text-left font-medium hover:underline"
+              className="text-left text-body font-medium text-info-indicator hover:underline"
               onClick={() => onPageClick(child)}
             >
               {child.name}
             </button>
             {child.description ? (
-              <span className="text-caption text-muted-foreground truncate">{child.description}</span>
+              <span className="truncate text-caption text-muted-foreground">{child.description}</span>
             ) : null}
           </li>
         ))}
@@ -400,7 +400,7 @@ function MentionPopup({
       role="dialog"
       aria-label={`${mention.source.name} mentions ${mention.target.name}`}
       data-testid="knowledge-mention-popup"
-      className="border-border bg-card shadow-overlay absolute z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-2 overflow-hidden rounded-lg border p-3"
+      className="absolute z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-3 shadow-overlay"
       style={mentionPopupPlacement(mention)}
     >
       <div className="flex items-start gap-2">
@@ -419,7 +419,7 @@ function MentionPopup({
         <button
           type="button"
           aria-label="Close"
-          className="text-muted-foreground hover:bg-fill hover:text-foreground rounded p-0.5"
+          className="rounded p-0.5 text-muted-foreground hover:bg-fill hover:text-foreground"
           onClick={onClose}
         >
           <X size={14} aria-hidden />
@@ -474,7 +474,7 @@ function SelectedPage({
     [detail.data, pagesById],
   );
 
-  if (detail.isPending) return <p className="text-ui-md text-muted-foreground p-4">Loading page…</p>;
+  if (detail.isPending) return <p className="text-ui-md p-4 text-muted-foreground">Loading page…</p>;
   if (detail.isError || !detail.data) {
     const notFound = isNotFound(detail.error);
     return (
@@ -531,7 +531,7 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
       <input
         aria-label="Search knowledge"
         placeholder="Search pages and notes"
-        className="text-ui-md border-border bg-card h-8 w-full rounded border px-2"
+        className="text-ui-md h-8 w-full rounded border border-border bg-card px-2"
         value={query}
         onChange={event => setQuery(event.target.value)}
       />
@@ -539,13 +539,13 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
         <ul
           role="listbox"
           aria-label="Search results"
-          className="border-border bg-card shadow-raised absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded border"
+          className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded border border-border bg-card shadow-raised"
         >
           {pages.map(page => (
             <li key={page.id} role="option" aria-selected={false}>
               <button
                 type="button"
-                className="text-ui-md hover:bg-muted w-full px-2 py-1.5 text-left"
+                className="text-ui-md w-full px-2 py-1.5 text-left hover:bg-muted"
                 onClick={() => {
                   onSelect(page.id);
                   setQuery('');
@@ -841,23 +841,22 @@ export function KnowledgePageExplorer({
     [drawn.pages],
   );
   const counted = (source.useLinkCounts ?? noLinkQuery)(view === 'graph' ? countIds : []);
-  const exactCounts = useMemo(
-    () => (counted.isError || !counted.data ? undefined : new Map(Object.entries(counted.data))),
-    [counted.isError, counted.data],
-  );
+  const exactCounts = useMemo(() => (counted.data ? new Map(Object.entries(counted.data)) : undefined), [counted.data]);
   const hiddenLinks = useMemo(
     () => (exactCounts ? undrawnLinks(exactCounts, linkEdges) : linkView.hidden),
     [exactCounts, linkEdges, linkView.hidden],
   );
   // The page under the pointer: once it rests there its real links are fetched and drawn to whichever
   // ends are on screen; the rest are counted as not shown.
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  // Only a pointer that rests re-renders the explorer: passing over pages sets and clears a timer.
   const [hoverFetchId, setHoverFetchId] = useState<string | null>(null);
-  useEffect(() => {
-    if (!hoveredId) return setHoverFetchId(null);
-    const timer = setTimeout(() => setHoverFetchId(hoveredId), HOVER_FETCH_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, [hoveredId]);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const setHoveredId = useCallback((id: string | null) => {
+    clearTimeout(hoverTimer.current);
+    if (id) hoverTimer.current = setTimeout(() => setHoverFetchId(id), HOVER_FETCH_DELAY_MS);
+    else setHoverFetchId(null);
+  }, []);
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
   const hovered = (source.usePageLinks ?? noLinkQuery)(hoverFetchId);
   const hoverEdges = useMemo<KnowledgePageEdge[]>(
     () =>
@@ -1003,11 +1002,11 @@ export function KnowledgePageExplorer({
       ) : null}
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         <aside
-          className={`border-border bg-card min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border lg:flex lg:w-72 lg:flex-none lg:shrink-0 ${view === 'tree' ? 'flex' : 'hidden'}`}
+          className={`min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card lg:flex lg:w-72 lg:flex-none lg:shrink-0 ${view === 'tree' ? 'flex' : 'hidden'}`}
         >
           {focusScope ? (
             <div
-              className="border-border bg-fill-subtle flex items-center gap-2 border-b px-3 py-2"
+              className="flex items-center gap-2 border-b border-border bg-fill-subtle px-3 py-2"
               data-testid="knowledge-scope-focus"
             >
               <div className="flex min-w-0 flex-1 flex-col">
@@ -1020,7 +1019,7 @@ export function KnowledgePageExplorer({
               </div>
               <button
                 type="button"
-                className="text-ui-sm text-muted-foreground hover:bg-fill hover:text-foreground shrink-0 rounded px-2 py-1"
+                className="text-ui-sm shrink-0 rounded px-2 py-1 text-muted-foreground hover:bg-fill hover:text-foreground"
                 onClick={() => setFocusScopeId(null)}
               >
                 All scopes
@@ -1029,7 +1028,7 @@ export function KnowledgePageExplorer({
           ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
             {source.useTreeLevels && lazy.rootsPending ? (
-              <p className="text-body text-muted-foreground px-3 py-2">Loading pages…</p>
+              <p className="px-3 py-2 text-body text-muted-foreground">Loading pages…</p>
             ) : (
               <KnowledgePageTree
                 key={focusScope ? focusScope.id : 'all'}
@@ -1052,7 +1051,7 @@ export function KnowledgePageExplorer({
         {showPage ? (
           <section
             aria-label="Selected page"
-            className="border-border bg-card min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border"
+            className="min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border border-border bg-card"
           >
             <SelectedPage
               source={source}
@@ -1064,7 +1063,7 @@ export function KnowledgePageExplorer({
           </section>
         ) : (
           <div
-            className={`border-border bg-background relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border lg:block lg:h-full ${view === 'graph' ? 'block' : 'hidden'}`}
+            className={`relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-border bg-background lg:block lg:h-full ${view === 'graph' ? 'block' : 'hidden'}`}
             data-testid="knowledge-graph-container"
           >
             {graphShown ? (
