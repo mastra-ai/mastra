@@ -13,7 +13,13 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-Knowledge keeps three things apart: **who a run is**, **what each scope allows**, and **what's stored**. The host sets the first, your declarations decide the second, and the model only works with the third.
+Knowledge keeps three things apart:
+
+- **Who a run is**, set at runtime by your server code.
+- **What each scope allows**, set in your Knowledge config.
+- **What's stored**, the pages and notes the model reads and writes.
+
+The model works only with what's stored. It can't change who the run is or what a scope allows.
 
 ## Scopes
 
