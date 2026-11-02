@@ -162,6 +162,12 @@ async function noteSummaries(run: KnowledgeRun, notes: KnowledgeNote[], cache: M
 
 /** Scope pages for addresses the run names; each must be readable. */
 async function readableScopes(run: KnowledgeRun, addresses: string[]): Promise<KnowledgePage[]> {
+  const page = addresses.find(address => address.includes('#'));
+  if (page) {
+    throw new Error(
+      `"${page}" is a page ref, not a scope. scope takes scope addresses such as "${page.slice(0, page.indexOf('#'))}"; to see what is under the page, use knowledge_list with from: "${page}".`,
+    );
+  }
   const scopes = await run.storage.getScopesByAddress(addresses);
   for (const address of addresses) {
     const scope = scopes.find(candidate => candidate.address === address);
@@ -225,7 +231,12 @@ function searchTool(host: KnowledgePageToolHost) {
       const run = await start(host, context);
       const scopeIds = scope ? (await readableScopes(run, scope)).map(page => page.id) : undefined;
       const max = limitOf(limit);
-      const lexical = await run.storage.searchPages({ query, read: run.read, scopeIds, limit: max });
+      // Keyword search has no quoting: a quote mark would be matched as a literal character, so
+      // `"api" "responses"` would find nothing. Search the quoted words instead.
+      const words = query.replace(/["`\u201C\u201D]/g, ' ').trim();
+      const lexical = words
+        ? await run.storage.searchPages({ query: words, read: run.read, scopeIds, limit: max })
+        : [];
       let hits = lexical;
       if (host.semantic) {
         const inScope = (page: KnowledgePage) => !scopeIds || scopeIds.includes(page.scopeId);
@@ -277,15 +288,21 @@ function searchTool(host: KnowledgePageToolHost) {
                 },
           ),
         ),
-        ...(hits.length === max
+        ...(hits.length === 0
           ? {
               more: [
-                max < MAX_LIMIT
-                  ? `results: showing the top ${max}; there may be more. Search again with a higher limit (up to ${MAX_LIMIT}), a narrower query, or browse with knowledge_list.`
-                  : `results: showing the top ${max}, the most one search returns. Narrow the query or scope, or browse with knowledge_list.`,
+                `results: no page or note contains every word of ${JSON.stringify(words || query)}. Search again with one to three key words, or browse with knowledge_list.`,
               ],
             }
-          : {}),
+          : hits.length === max
+            ? {
+                more: [
+                  max < MAX_LIMIT
+                    ? `results: showing the top ${max}; there may be more. Search again with a higher limit (up to ${MAX_LIMIT}), a narrower query, or browse with knowledge_list.`
+                    : `results: showing the top ${max}, the most one search returns. Narrow the query or scope, or browse with knowledge_list.`,
+                ],
+              }
+            : {}),
       };
     },
   });

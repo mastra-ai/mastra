@@ -514,6 +514,26 @@ describe('knowledge_read on long pages', () => {
     );
     expect((await call('knowledge_search', { query: 'widget', limit: 5 })).more).toBeUndefined();
   });
+
+  it('matches quoted words, and says what to try when nothing has every word', async () => {
+    const { knowledge, call } = setup();
+    await knowledge.upsertPage({
+      scope: 'docs:acme',
+      path: 'models',
+      name: 'Models',
+      body: 'Set `api: "responses"` on a custom url model.',
+    });
+    const quoted = await call('knowledge_search', { query: '"api" "responses" `url`' });
+    expect(quoted.results.map((hit: any) => hit.page.ref)).toEqual(['docs:acme#models']);
+    const none = await call('knowledge_search', { query: 'responses gateway namespace' });
+    expect(none.results).toEqual([]);
+    expect(none.more).toEqual([
+      'results: no page or note contains every word of "responses gateway namespace". Search again with one to three key words, or browse with knowledge_list.',
+    ]);
+    await expect(call('knowledge_search', { query: 'responses', scope: ['docs:acme#models'] })).rejects.toThrow(
+      '"docs:acme#models" is a page ref, not a scope. scope takes scope addresses such as "docs:acme"; to see what is under the page, use knowledge_list with from: "docs:acme#models".',
+    );
+  });
 });
 
 describe('knowledgeBodySections', () => {
