@@ -30,6 +30,17 @@ describe('DateTimePicker', () => {
     expect(onValueChange).toHaveBeenCalledWith(new Date(2026, 8, 22, 9, 15));
   });
 
+  it('offers no Apply while the time field is cleared', () => {
+    const { onValueChange } = renderPicker();
+
+    fireEvent.click(screen.getByRole('button', { name: /September 22nd, 2026/ }));
+    fireEvent.change(screen.getByLabelText('Time'), { target: { value: '' } });
+
+    expect(screen.queryByRole('button', { name: 'Apply' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(onValueChange).not.toHaveBeenCalled();
+  });
+
   it('starts an empty picker on the default time', () => {
     renderPicker({ value: undefined, defaultTimeStrValue: '09:00 AM' });
 

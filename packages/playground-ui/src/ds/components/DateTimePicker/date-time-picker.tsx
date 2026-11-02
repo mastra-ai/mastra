@@ -127,7 +127,7 @@ export const DateTimePickerContent = ({
 }) => {
   const [localErrorMsg, setLocalErrorMsg] = React.useState<string | null>(null);
   const [timeStrValue, setTimeStrValue] = React.useState<string>(() =>
-    value ? format(value, 'HH:mm') : toTimeFieldValue(defaultTimeStrValue),
+    value ? format(value, 'HH:mm') : toTimeFieldValue(defaultTimeStrValue) || '00:00',
   );
   const [dateInputValue, setDateInputValue] = React.useState<string>(value ? format(value, 'PP p') : '');
   const [selected, setSelected] = React.useState<Date | undefined>(value ? new Date(value) : undefined);
@@ -166,7 +166,9 @@ export const DateTimePickerContent = ({
 
   const dateInputValueDate = new Date(dateInputValue);
   const dateInputValueIsValid = isValid(dateInputValueDate);
-  const newValueDefined = dateInputValueIsValid && dateInputValueDate.getTime() !== value?.getTime();
+  // A cleared time field leaves the last valid time in the date text, so there's nothing to apply.
+  const timeFilled = timeStrValue !== '';
+  const newValueDefined = timeFilled && dateInputValueIsValid && dateInputValueDate.getTime() !== value?.getTime();
 
   const handleDaySelect = (date: Date | undefined) => {
     setSelected(date);
@@ -264,7 +266,7 @@ export const DateTimePickerContent = ({
           size="md"
           variant={newValueDefined ? 'primary' : 'default'}
           onClick={() => {
-            dateInputValueIsValid ? handleApply() : handleCancel();
+            newValueDefined ? handleApply() : handleCancel();
           }}
         >
           {newValueDefined ? `Apply` : `Cancel`}
