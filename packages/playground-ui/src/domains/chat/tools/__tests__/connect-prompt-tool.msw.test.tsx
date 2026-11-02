@@ -234,6 +234,38 @@ describe('ConnectPromptTool', () => {
 
       await waitFor(() => expect(tools.textContent).toContain('linear_list_issues'));
     });
+
+    it('does not let an agent request that started before the connection keep the old tool list', async () => {
+      let linearActive = false;
+      let releaseFirstAgentRequest!: () => void;
+      const firstAgentRequestHeld = new Promise<void>(resolve => {
+        releaseFirstAgentRequest = resolve;
+      });
+      let agentRequests = 0;
+      linearConnectsHeadlessly();
+      server.use(
+        http.get(`${BASE_URL}/connect/connections/${connectPromptSession.connectionId}/status`, () => {
+          linearActive = true;
+          return HttpResponse.json(connectPromptStatusActive);
+        }),
+        http.get(`${BASE_URL}/api/agents/${connectAgentBeforeLinear.id}`, async () => {
+          agentRequests += 1;
+          const agent = linearActive ? connectAgentWithLinear : connectAgentBeforeLinear;
+          // The first request reads the tools before the connection lands and answers after it.
+          if (agentRequests === 1) await firstAgentRequestHeld;
+          return HttpResponse.json(agent);
+        }),
+      );
+      renderConnectPrompt({ children: <AgentToolNames /> });
+      await waitFor(() => expect(agentRequests).toBe(1));
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull());
+      releaseFirstAgentRequest();
+
+      const tools = await screen.findByRole('list', { name: 'Agent tools' });
+      await waitFor(() => expect(tools.textContent).toContain('linear_list_issues'));
+    });
   });
 
   describe('when the connection activates while the agent is still running', () => {

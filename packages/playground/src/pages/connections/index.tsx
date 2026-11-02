@@ -112,7 +112,9 @@ export default function ConnectionsPage() {
             globalConnections={globalConnections}
             userConnections={userConnections}
             providersById={providersById}
-            loading={surface.isLoading || connectionsQuery.isLoading}
+            // Pending, not loading: a query paused offline is pending without loading,
+            // and must not read as an empty list.
+            loading={surface.isPending || (surface.data?.status === 'ready' && connectionsQuery.isPending)}
             onDisconnect={handleDisconnect}
             disconnectPendingId={disconnect.isPending ? (disconnect.variables?.connectionId ?? null) : null}
           />

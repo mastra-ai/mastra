@@ -45,6 +45,8 @@ function sharedPlatform() {
   let connectionListCount = 0;
   /** When set, connection lists read the rows now but respond only once it resolves. */
   let holdLists: Promise<void> | undefined;
+  /** Hold only the next connection list, letting later ones through. */
+  let holdOnce = false;
   const fetchMock = vi.fn().mockImplementation(async (input: string | URL | Request, init?: RequestInit) => {
     const url = new URL(String(input));
     const method = init?.method ?? 'GET';
@@ -58,7 +60,9 @@ function sharedPlatform() {
       const rows = connections.filter(
         connection => connection.resourceId === null || connection.resourceId === resourceId,
       );
-      await holdLists;
+      const hold = holdLists;
+      if (holdOnce) holdLists = undefined;
+      await hold;
       return Response.json({ connections: rows });
     }
     if (method === 'DELETE') {
@@ -74,7 +78,8 @@ function sharedPlatform() {
     connections,
     client,
     connectionListCount: () => connectionListCount,
-    holdConnectionLists: () => {
+    holdConnectionLists: ({ once = false }: { once?: boolean } = {}) => {
+      holdOnce = once;
       let release!: () => void;
       holdLists = new Promise(resolve => {
         release = resolve;
@@ -184,6 +189,26 @@ describe('connection freshness between the connect routes and the tool resolver'
       expect(Object.keys(await resolver()).sort()).toEqual(['linear_fake_tool', 'request_connection']);
       await status('c_lin1');
       await status('c_lin1');
+      const listsBefore = platform.connectionListCount();
+
+      await resolver();
+
+      expect(platform.connectionListCount()).toBe(listsBefore);
+    });
+  });
+
+  describe('when the same activation is reported again while the refresh it triggered is in flight', () => {
+    it('does not invalidate that refresh', async () => {
+      const { platform, resolver, status } = setup();
+      await resolver();
+      platform.connections.push(makeConnection({ id: 'c_new1' }));
+      await status('c_new1');
+      // The refresh triggered by the first report started after it, so it already sees the connection.
+      const release = platform.holdConnectionLists({ once: true });
+      const refreshing = resolver();
+      await status('c_new1');
+      release();
+      expect(Object.keys(await refreshing).sort()).toEqual(['linear_fake_tool', 'request_connection']);
       const listsBefore = platform.connectionListCount();
 
       await resolver();

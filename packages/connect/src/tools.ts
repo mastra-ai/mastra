@@ -249,6 +249,12 @@ interface SnapshotScope {
   inflight?: Promise<ResolvedToolsRecord>;
   /** Generation the in-flight fetch started under. */
   inflightGeneration?: number;
+  /**
+   * Last reported state per connection, with the generation the report set.
+   * Every fetch under that generation started after the report, so repeating
+   * it while the generation is unchanged needs no new invalidation.
+   */
+  reported: Map<string, { active: boolean; generation: number }>;
   lastFailureAt?: number;
   /** LRU clock for resource-scope eviction. The global scope is never evicted. */
   lastUsedAt: number;
@@ -408,7 +414,8 @@ function scopeKey(resourceId: string | undefined): string {
  * resolution fetches fresh instead of serving a snapshot that is wrong until
  * its TTL runs out. The end-user connect routes call this when they observe
  * the change. A snapshot that already agrees with the change is left alone,
- * so repeated status polls of a settled connection cost nothing.
+ * and so is a refresh that started after the same change was reported, so
+ * repeated status polls of a settled connection cost nothing.
  */
 export function invalidateResourceConnection({
   projectId,
@@ -426,8 +433,11 @@ export function invalidateResourceConnection({
     if (state.projectId !== projectId) continue;
     const scope = state.scopes.get(key);
     if (!scope) continue;
+    const reported = scope.reported.get(connectionId);
+    if (reported?.active === active && reported.generation === scope.generation) continue;
     if (scope.cache && !scope.inflight && scope.cache.activeConnectionIds.has(connectionId) === active) continue;
     scope.generation += 1;
+    scope.reported.set(connectionId, { active, generation: scope.generation });
   }
 }
 
@@ -444,6 +454,7 @@ function acquireScope(state: SharedToolsState, resourceId: string | undefined): 
         ...(resourceId === undefined ? {} : { resourceId }),
       }),
       generation: 0,
+      reported: new Map(),
       lastUsedAt: Date.now(),
     };
     state.scopes.set(key, scope);

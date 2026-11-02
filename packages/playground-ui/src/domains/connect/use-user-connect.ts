@@ -158,12 +158,14 @@ const connectionsQueryKey = ['user-connect', 'connections'] as const;
  * change, so the refetch already sees the new tools.
  */
 function invalidateAfterConnectionChange(queryClient: QueryClient) {
-  return Promise.all([
-    queryClient.invalidateQueries({ queryKey: connectionsQueryKey }),
-    queryClient.invalidateQueries({ queryKey: ['agent'] }),
-    queryClient.invalidateQueries({ queryKey: ['agents'] }),
-    queryClient.invalidateQueries({ queryKey: ['tools'] }),
-  ]);
+  return Promise.all(
+    [connectionsQueryKey, ['agent'], ['agents'], ['tools']].map(async queryKey => {
+      // A first fetch still in flight would otherwise be reused by the
+      // invalidation, and its pre-change answer would land as fresh data.
+      await queryClient.cancelQueries({ queryKey });
+      await queryClient.invalidateQueries({ queryKey });
+    }),
+  );
 }
 
 /** Lists the caller's visible connections (global + their own). */
