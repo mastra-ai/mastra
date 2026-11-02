@@ -164,7 +164,7 @@ describe('when the screen is narrow', () => {
   it('renders Versions header actions without a Config drawer trigger', async () => {
     stubNarrowScreen();
     installHandlers();
-    renderWithProviders(
+    render(
       <TestLinkProvider>
         <TooltipProvider>
           <RouteSidePanelProvider>
@@ -176,7 +176,6 @@ describe('when the screen is narrow', () => {
           </RouteSidePanelProvider>
         </TooltipProvider>
       </TestLinkProvider>,
-      { router: true },
     );
 
     expect(await screen.findByTestId('agent-entity-header-share')).not.toBeNull();
