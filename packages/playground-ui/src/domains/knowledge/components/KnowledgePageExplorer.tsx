@@ -474,8 +474,11 @@ function useLazyTree(
     () => (graph.truncated ? null : new Set(graph.pages.map(page => page.parentId).filter(id => id !== null))),
     [graph],
   );
+  // A counted page has children exactly when its count says so; otherwise guess from the graph.
   const mayHaveChildren = useCallback(
-    (page: KnowledgePagePayload) => !loaded.has(page.id) && (graphParents ? graphParents.has(page.id) : true),
+    (page: KnowledgePagePayload) =>
+      !loaded.has(page.id) &&
+      (page.childCount !== undefined ? page.childCount > 0 : graphParents ? graphParents.has(page.id) : true),
     [loaded, graphParents],
   );
   const loadMore = useMemo(() => {
@@ -532,9 +535,10 @@ export function KnowledgePageExplorer({
     onViewChange('page');
   };
   // From the tree: frame the page in the graph when the graph is up, otherwise open it.
+  // A page the graph didn't load has nothing to frame there, so it opens as a page.
   const selectFromTree = (page: KnowledgePagePayload) => {
     if (page.isScope) setFocusScopeId(page.id);
-    if (view === 'graph') onSelect(page.id);
+    if (view === 'graph' && pagesById.has(page.id)) onSelect(page.id);
     else openPage(page.id);
   };
   // Pages reached from outside the tree (search, links, mentions) clear a focus they fall outside of.

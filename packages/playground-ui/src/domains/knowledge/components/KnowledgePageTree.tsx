@@ -18,7 +18,8 @@ export const KNOWLEDGE_TREE_ROOT = '';
  *
  * A host that loads the tree a level at a time passes `mayHaveChildren` (so unloaded pages still offer
  * a chevron), listens to `onExpandedChange` to load the opened levels, and passes `loadMore` for
- * levels with more children to fetch.
+ * levels with more children to fetch. A page's `childCount`, when the server sends one, shows beside
+ * its name. Selecting a page with children also opens it.
  */
 export function KnowledgePageTree({
   pages,
@@ -156,7 +157,11 @@ export function KnowledgePageTree({
               tabIndex={row.page.id === activeId ? 0 : -1}
               onFocus={() => setFocusedId(row.page.id)}
               onKeyDown={event => onKeyDown(event, index)}
-              onClick={() => onSelect(row.page)}
+              onClick={() => {
+                onSelect(row.page);
+                // Selecting a page with children opens it too, which loads them in a lazily loaded tree.
+                if (row.hasChildren) toggle(row.page.id, true);
+              }}
               className={cn(
                 'flex min-h-8 cursor-pointer items-center gap-1 rounded-md pr-2 outline-none focus-visible:ring-1 focus-visible:ring-border-focus',
                 selected ? 'bg-fill text-foreground' : 'text-foreground hover:bg-fill',
@@ -182,6 +187,15 @@ export function KnowledgePageTree({
               <span className={cn('min-w-0 flex-1 truncate text-body', row.page.isScope && 'font-medium')}>
                 {row.page.name}
               </span>
+              {row.page.childCount ? (
+                <span
+                  data-testid="knowledge-tree-count"
+                  aria-label={`${row.page.childCount} below`}
+                  className="shrink-0 text-caption text-muted-foreground tabular-nums"
+                >
+                  {row.page.childCount}
+                </span>
+              ) : null}
               {pinned.has(row.page.id) ? (
                 <Pin size={12} className="shrink-0 text-badge-amber-indicator" aria-label="Pinned" />
               ) : null}

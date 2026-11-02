@@ -37,6 +37,8 @@ export interface KnowledgePagePayload {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
+  /** Pages (and, for a scope, child scopes) directly under this one; tree levels only, from servers that count them. */
+  childCount?: number;
 }
 
 export interface KnowledgeNotePayload {
