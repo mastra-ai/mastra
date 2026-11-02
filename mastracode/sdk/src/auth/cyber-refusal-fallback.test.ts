@@ -94,10 +94,50 @@ describe('MastraCodeCyberRefusalHandler', () => {
     ]);
   });
 
-  it('ends the turn as before when the session model is not the head of the route', async () => {
-    const { resolveModel, refuse } = setup({ entries: ROUTE }, 'anthropic/claude-opus-5-5');
+  it('ends the turn as before when the session model is not the head of the route and has no auto fallback', async () => {
+    const { resolveModel, refuse } = setup({ entries: ROUTE }, 'openai/gpt-5.5');
 
     expect(await refuse()).toBeUndefined();
     expect(resolveModel).not.toHaveBeenCalled();
+  });
+
+  it("tries core's auto fallback for the running model before the pack chain", async () => {
+    const route = [ROUTE[1], ROUTE[2]];
+    const { resolveModel, refuse, nextStep, writes } = setup({ entries: route }, 'anthropic/claude-opus-5-5');
+
+    expect(await refuse()).toEqual({ retry: true });
+    await nextStep();
+    expect(await refuse()).toEqual({ retry: true });
+    await nextStep();
+    expect(await refuse()).toBeUndefined();
+
+    expect(resolveModel.mock.calls.map(([modelId]) => modelId)).toEqual([
+      'anthropic/claude-opus-4-8',
+      'openai/gpt-5.5',
+    ]);
+    expect((writes[0] as { data: unknown }).data).toEqual(
+      expect.objectContaining({
+        from: { entryId: 'anthropic', label: 'Anthropic' },
+        to: { entryId: 'anthropic/claude-opus-4-8', label: 'anthropic/claude-opus-4-8' },
+        reason: 'refusal',
+      }),
+    );
+  });
+
+  it('uses the auto fallback even when the running model is not the head of the route', async () => {
+    const { resolveModel, refuse } = setup({ entries: ROUTE }, 'anthropic/claude-opus-5-5');
+
+    expect(await refuse()).toEqual({ retry: true });
+    expect(await refuse()).toBeUndefined();
+    expect(resolveModel.mock.calls.map(([modelId]) => modelId)).toEqual(['anthropic/claude-opus-4-8']);
+  });
+
+  it('lets the pack cyber fallback override the auto fallback', async () => {
+    const route = [ROUTE[1], ROUTE[2]];
+    const { resolveModel, refuse } = setup({ entries: route, cyberFallback: ROUTE[0] }, 'anthropic/claude-opus-5-5');
+
+    expect(await refuse()).toEqual({ retry: true });
+    expect(await refuse()).toBeUndefined();
+    expect(resolveModel.mock.calls.map(([modelId]) => modelId)).toEqual(['kimi/k3']);
   });
 });

@@ -1,5 +1,5 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import { CyberRefusalHandler } from '@mastra/core/processors';
+import { CyberRefusalHandler, getCyberRefusalAutoFallback } from '@mastra/core/processors';
 import type {
   CyberRefusalFallbackContext,
   CyberRefusalFallbackModel,
@@ -32,8 +32,10 @@ export interface MastraCodeCyberRefusalHandlerOptions {
 
 /**
  * Picks where a cyber refusal goes once the `continue` nudge fails: the active
- * pack's cyber fallback when one is set (tried once), otherwise the next pack in
- * its fallback chain. The switch lasts for the rest of the run only, and the
+ * pack's cyber fallback when one is set (tried once). Otherwise core's auto
+ * fallback for the running model (the model its provider routes cyber refusals
+ * to, e.g. Opus 5.5 → Opus 4.8) when it has one, then the next packs in the
+ * fallback chain. The switch lasts for the rest of the run only, and the
  * transcript gets the same "Switched model pack" notice as an outage hop.
  */
 export class MastraCodeCyberRefusalHandler extends CyberRefusalHandler {
@@ -73,13 +75,14 @@ export class MastraCodeCyberRefusalHandler extends CyberRefusalHandler {
     );
 
     const cyberFallback = toTarget(state?.modelRoute?.cyberFallback);
-    const target = cyberFallback
-      ? attempt === 0
-        ? cyberFallback
-        : undefined
-      : startIndex === undefined
-        ? undefined
-        : toTarget(route?.[startIndex + 1 + attempt]);
+    const autoModelId = modelId ? getCyberRefusalAutoFallback(modelId) : undefined;
+    const targets: Array<FallbackTarget | undefined> = cyberFallback
+      ? [cyberFallback]
+      : [
+          ...(autoModelId ? [{ id: autoModelId, label: autoModelId, modelId: autoModelId }] : []),
+          ...(startIndex === undefined ? [] : (route?.slice(startIndex + 1).map(toTarget) ?? [])),
+        ];
+    const target = targets[attempt];
     if (!target) return undefined;
 
     const current =
