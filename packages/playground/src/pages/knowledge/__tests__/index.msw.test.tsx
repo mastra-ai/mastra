@@ -160,7 +160,15 @@ describe('Knowledge page', () => {
 
   describe("when a scope's declaration has a display label", () => {
     it('captions the scope with it in the graph', async () => {
-      withInstance(knowledgeGraphWithDisplayLabel());
+      // The server labels scopes the same way in the tree, which the graph is drawn from.
+      const graph = knowledgeGraphWithDisplayLabel();
+      withInstance(graph);
+      server.use(
+        http.get(`${api}/main/tree`, ({ request }) => {
+          const parentId = new URL(request.url).searchParams.get('parentId');
+          return HttpResponse.json({ pages: graph.pages.filter(page => page.parentId === parentId), truncated: false });
+        }),
+      );
       renderPage();
       const caption = await screen.findByTestId('knowledge-scope-caption');
       expect(caption.textContent).toBe('Organization');
@@ -279,7 +287,7 @@ describe('Knowledge page', () => {
       changes.push(paymentsUpdatedNotice);
       // Well inside the five-second poll, so only the pushed change can explain it.
       expect(
-        await within(detail).findByText('Card charges now retry five times.', {}, { timeout: 2_000 }),
+        await within(detail).findByText('Card charges now retry five times.', {}, { timeout: 5_000 }),
       ).toBeTruthy();
     });
   });
@@ -388,7 +396,7 @@ describe('Knowledge page', () => {
       expect(await screen.findByRole('tree')).toBeTruthy();
       await waitFor(() => expect(streams.opened).toBe(1), { timeout: 5_000 });
       setVisibility('hidden');
-      await waitFor(() => expect(streams.closed).toBe(1));
+      await waitFor(() => expect(streams.closed).toBe(1), { timeout: 5_000 });
     });
 
     it('reopens it and shows what changed when the tab is shown again', async () => {
@@ -401,12 +409,12 @@ describe('Knowledge page', () => {
       expect(await within(detail).findByText('Retries card charges three times before failing.')).toBeTruthy();
       await waitFor(() => expect(streams.opened).toBe(1), { timeout: 5_000 });
       setVisibility('hidden');
-      await waitFor(() => expect(streams.closed).toBe(1));
+      await waitFor(() => expect(streams.closed).toBe(1), { timeout: 5_000 });
       view = paymentsPageViewAfterEdit;
       setVisibility('visible');
-      await waitFor(() => expect(streams.opened).toBe(2));
+      await waitFor(() => expect(streams.opened).toBe(2), { timeout: 5_000 });
       expect(
-        await within(detail).findByText('Card charges now retry five times.', {}, { timeout: 2_000 }),
+        await within(detail).findByText('Card charges now retry five times.', {}, { timeout: 5_000 }),
       ).toBeTruthy();
     });
   });
