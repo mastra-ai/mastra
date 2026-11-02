@@ -18,13 +18,18 @@
 
 /* A refocus: pages in both views glide and resize to their new place, new ones fade in, and ones that
    leave are faded out (the graph keeps them a moment). Under reduced motion every one of these is off. */
+.knowledge-graph {
+  /* Keep in step with KNOWLEDGE_GRAPH_TRANSITION_MS in lib/useLeavingNodes.ts. */
+  --knowledge-graph-transition: 700ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+
 .knowledge-graph .react-flow__node {
   transition:
-    transform 300ms var(--ease-out-custom, ease-out),
-    width 300ms var(--ease-out-custom, ease-out),
-    height 300ms var(--ease-out-custom, ease-out),
-    opacity 300ms var(--ease-out-custom, ease-out);
-  animation: knowledge-node-in 300ms var(--ease-out-custom, ease-out) both;
+    transform var(--knowledge-graph-transition),
+    width var(--knowledge-graph-transition),
+    height var(--knowledge-graph-transition),
+    opacity var(--knowledge-graph-transition);
+  animation: knowledge-node-in var(--knowledge-graph-transition) both;
 }
 
 @keyframes knowledge-node-in {

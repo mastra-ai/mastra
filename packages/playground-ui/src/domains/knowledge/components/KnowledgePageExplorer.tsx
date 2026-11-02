@@ -598,7 +598,7 @@ export function KnowledgePageExplorer({
   const [previewed, setPreviewed] = useState<readonly string[]>([]);
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [allLinks, setAllLinks] = useState(false);
-  const [dotCounts, setDotCounts] = useState(false);
+  const [dotCounts, setDotCounts] = useState(true);
   const lazy = useLazyTree(source, graph, selected.data, graphOpened);
   // With tree levels the graph loads like the tree: the focus (or the root scopes) and what sits around
   // it, never the whole instance. Without them it draws the host's bounded graph as it is.

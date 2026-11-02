@@ -2,7 +2,7 @@ import type { CSSProperties } from 'react';
 import { useEffect, useRef, useState } from 'react';
 
 /** How long a view change takes: nodes glide, resize and fade over this. */
-export const KNOWLEDGE_GRAPH_TRANSITION_MS = 300;
+export const KNOWLEDGE_GRAPH_TRANSITION_MS = 700;
 
 /** Whether the person has not asked the system to cut motion. Without `matchMedia` (a test DOM) nothing animates. */
 export function prefersMotion(): boolean {

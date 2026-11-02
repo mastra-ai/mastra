@@ -62,10 +62,11 @@ describe('useLeavingNodes', () => {
     });
   });
 
-  it('glides, resizes and fades every node over the same 300ms', () => {
+  it('glides, resizes and fades every node over one 700ms ease-in-out transition', () => {
     for (const property of ['transform', 'width', 'height', 'opacity']) {
-      expect(css).toMatch(new RegExp(`${property} 300ms`));
+      expect(css).toContain(`${property} var(--knowledge-graph-transition)`);
     }
-    expect(KNOWLEDGE_GRAPH_TRANSITION_MS).toBe(300);
+    expect(css).toContain('--knowledge-graph-transition: 700ms cubic-bezier(0.65, 0, 0.35, 1)');
+    expect(KNOWLEDGE_GRAPH_TRANSITION_MS).toBe(700);
   });
 });

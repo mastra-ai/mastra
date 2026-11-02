@@ -274,12 +274,12 @@ describe('KnowledgePageExplorer tree with child counts', () => {
   });
 
   describe('when the link counts toggle is pressed', () => {
-    it('is off until pressed, and flips its pressed state', () => {
+    it('starts on, and flips its pressed state', () => {
       renderWithProviders(<Host requested={[]} />);
       const toggle = screen.getByTestId('knowledge-graph-dot-counts');
-      expect(toggle.getAttribute('aria-pressed')).toBe('false');
-      fireEvent.click(toggle);
       expect(toggle.getAttribute('aria-pressed')).toBe('true');
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
     });
   });
 
