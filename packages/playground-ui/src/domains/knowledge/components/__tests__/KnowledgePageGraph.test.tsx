@@ -139,7 +139,7 @@ describe('KnowledgePageGraph', () => {
         within(legend)
           .getAllByRole('listitem')
           .map(item => item.textContent),
-      ).toEqual(['Scope', 'Page', 'Mentioned in notes', 'Parent → child', 'Pinned']);
+      ).toEqual(['Scope', 'Scope, above its pages', 'Page', 'Mentioned in notes', 'Parent → child', 'Pinned']);
     });
   });
 
