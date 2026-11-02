@@ -205,7 +205,7 @@ Here Studio owns the instructions, while tool membership stays in code: collabor
 | `{ tools: { description: true } }` | Descriptions of tools already added in code | `instructions`; the tools to describe |
 | `{ model: true }` | A static model fallback list | A static fallback array with immutable entry IDs |
 
-Model editing requires a code-defined fallback array with an immutable `id` for every entry. Studio can change the order, provider and model, enabled state, and `maxRetries`. Each edit creates or updates an Editor draft. Publish the draft to make it the active configuration and persist it in code-backed Editor storage.
+To edit models in Studio, set `editor: { model: true }` and define `model` as a static array in code. Give every entry a stable `id` so Editor can match saved values to the corresponding code-defined model settings. Studio can reorder entries, change their provider and model, and enable or disable them.
 
 Function-valued model configuration remains code-owned and can't be edited in Studio. See [editor overrides](/reference/agents/agent#editor-overrides) for the complete configuration.
 
