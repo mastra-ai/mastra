@@ -533,17 +533,19 @@ const items = await datasetItemsFromThread({
 await dataset.addItems({ items })
 ```
 
-Ten completed turns produce one dataset item. The input contains `{ type: 'conversation', turns: [...] }`, with each turn's user input, original reply, expected trajectory, and tool mocks. Run the dataset with `startExperiment()` as usual. An empty source produces no items.
+A conversation with ten completed turns produces one dataset item. The input contains `{ type: 'conversation', turns: [...] }`, with each turn's user input, original reply, expected trajectory, and tool mocks. Run the dataset with `startExperiment()` as usual. An empty source produces no items.
 
 The candidate must have memory configured. Each attempt gets its own thread and resource. Only the initial working memory is restored; subsequent candidate replies, tool interactions, and memory changes carry forward. The candidate's memory configuration controls recall, including `lastMessages: false` disabling recall. `historyLimit` is only valid for independent turns and is rejected with conversation mode.
 
-Each turn can use only its own recorded tool results. Working-memory tools update isolated candidate state. Other unrecorded calls return a mock miss, even when the experiment's default policy allows live tools. Do not add top-level `groundTruth`, `expectedTrajectory`, or `toolMocks` to a conversation item: those references belong to its turns.
+Each turn can use only its own recorded tool results. Working-memory tools update isolated candidate state. Other unrecorded calls return a mock miss, even when the experiment's default policy allows live tools. Don't add top-level `groundTruth`, `expectedTrajectory`, or `toolMocks` to a conversation item: those references belong to its turns.
 
-Selected scorers run on each completed turn against that turn's references. The item score is the arithmetic mean of available numeric turn scores; missing scores aren't treated as zero. Averages don't guarantee every turn passed. In Studio, open the conversation result and select a turn to inspect its scores, tools, memory, and trace. Missing recordings and incomplete turns remain visible. Saved results retain their references when you edit the dataset later.
+Selected scorers run on each completed turn against that turn's references. The item score is the arithmetic mean of available numeric turn scores. Missing scores aren't treated as zero. Averages don't guarantee every turn passed. In Studio, open the conversation result and select a turn to inspect its scores, tools, memory, and trace. Missing recordings and incomplete turns remain visible. Saved results retain their references when you edit the dataset later.
+
+To watch saved replies side by side, open the experiment comparison and select **Replay conversation** on a conversation item. Use **Play**, **Pause**, the turn controls, or the speed control to follow both candidates together. **Response differs** marks turns with different reply text. It doesn't judge answer quality. Interrupted and unexecuted turns stay visible. With multiple contenders, use the contender selector to choose the pair. Select **Inspect turn** to return to its scores, tool calls, memory, and trace. Playback uses saved results only and makes no model calls. Its pacing is illustrative, not the original generation timing.
 
 Concurrency, hooks, progress, and `itemTimeout` apply to the conversation as one item. A fatal error or cancellation stops later turns and retains completed evidence. An allowed retry starts the whole conversation again with fresh state.
 
-User messages remain fixed, even if the candidate replies differently from production. Use conversations whose later user messages are meaningful across candidate responses. Recorded tool success responses verify attempted calls, not actual changes to an external service.
+User messages remain fixed, even if the candidate replies differently from production. Use conversations whose later user messages still make sense across candidate responses. Recorded tool success responses verify attempted calls, not actual changes to an external service.
 
 ### Working memory during replay
 
