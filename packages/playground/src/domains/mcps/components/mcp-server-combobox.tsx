@@ -23,8 +23,8 @@ export interface MCPServerComboboxProps {
 export function MCPServerCombobox({
   value,
   onValueChange,
-  placeholder = 'Select an MCP server...',
-  searchPlaceholder = 'Search MCP servers...',
+  placeholder = 'Select an MCP server',
+  searchPlaceholder = 'Search MCP servers',
   emptyText = 'No MCP servers found.',
   className,
   disabled = false,

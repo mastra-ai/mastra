@@ -63,7 +63,7 @@ export function SkillSimpleForm({
               onChange={onInstructionsChange}
               language="markdown"
               editable
-              placeholder="You are a helpful assistant that…"
+              placeholder="You are a helpful assistant"
               showCopyButton={false}
               className="size-full"
             />
