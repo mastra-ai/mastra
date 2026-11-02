@@ -28,6 +28,43 @@ import { isPlainRecord, mergeMetadata as mergeSpanMetadata } from './metadata';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
 
+/** Replaces error text exported from traces that hide input or output. */
+export const REDACTED_ERROR_MESSAGE = '[REDACTED]';
+
+/**
+ * `details` keys kept on hidden traces. These are the provider API fields that
+ * `apiCallErrorDetails` already sanitizes. Anything else (a provider's response
+ * body, free-form `MastraError` details) can echo the hidden data.
+ */
+const SAFE_ERROR_DETAIL_KEYS = ['statusCode', 'url', 'isRetryable'] as const;
+
+/**
+ * The error as exported from a trace that hides input or output: keeps what
+ * identifies the error (id, name, domain, category, stack frames, provider
+ * status) and drops the text, which often quotes the hidden data.
+ */
+export function redactErrorInfo<T extends BaseSpan<any>['errorInfo']>(errorInfo: T): T {
+  if (!errorInfo) return errorInfo;
+
+  const { message: _message, stack, details, ...identity } = errorInfo;
+  const safeDetails = details
+    ? Object.fromEntries(SAFE_ERROR_DETAIL_KEYS.filter(key => key in details).map(key => [key, details[key]]))
+    : undefined;
+
+  return {
+    ...identity,
+    message: REDACTED_ERROR_MESSAGE,
+    ...(stack !== undefined ? { stack: redactStackHeader(stack, errorInfo.name) } : {}),
+    ...(safeDetails && Object.keys(safeDetails).length > 0 ? { details: safeDetails } : {}),
+  } as T;
+}
+
+/** A stack starts with `<name>: <message>`, which can span lines; the frames after it are code locations. */
+function redactStackHeader(stack: string, name = 'Error'): string {
+  const firstFrame = stack.search(/\n\s+at /);
+  return `${name}: ${REDACTED_ERROR_MESSAGE}${firstFrame === -1 ? '' : stack.slice(firstFrame)}`;
+}
+
 /** Extended span type that includes getParentSpan method available on BaseSpan instances */
 type AnyBaseSpan = AnySpan & {
   getParentSpan(includeInternalSpans?: boolean): AnySpan | undefined;
@@ -742,7 +779,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       endTime: this.endTime,
       input: hideInput ? undefined : this.input,
       output: hideOutput ? undefined : this.output,
-      errorInfo: this.errorInfo,
+      // An error's message, stack header and details often quote the data the flags hide.
+      errorInfo: hideInput || hideOutput ? redactErrorInfo(this.errorInfo) : this.errorInfo,
       ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
       ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
       ...(this.stopReasonContext !== undefined ? { stopReasonContext: this.stopReasonContext } : {}),
