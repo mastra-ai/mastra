@@ -423,27 +423,6 @@ export class RecursiveJsonTransformer {
   }
 
   /**
-   * Converts Unicode characters to their escaped ASCII representation
-   * e.g., 'café' becomes 'caf\u00e9'
-   */
-  private escapeNonAscii(obj: any): any {
-    if (typeof obj === 'string') {
-      return obj.replace(/[\u0080-\uffff]/g, char => {
-        return `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
-      });
-    }
-
-    if (Array.isArray(obj)) {
-      return obj.map(item => this.escapeNonAscii(item));
-    }
-
-    if (typeof obj === 'object' && obj !== null) {
-      return Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, this.escapeNonAscii(value)]));
-    }
-
-    return obj;
-  }
-  /**
    * Splits JSON into a list of JSON formatted strings
    */
   splitText({
@@ -457,20 +436,16 @@ export class RecursiveJsonTransformer {
   }): string[] {
     const chunks = this.splitJson({ jsonData, convertLists });
 
-    if (ensureAscii) {
-      const escapedChunks = chunks.map(chunk => this.escapeNonAscii(chunk));
-      return escapedChunks.map(chunk => JSON.stringify(chunk));
+    const serialized = chunks.map(chunk => JSON.stringify(chunk));
+
+    if (!ensureAscii) {
+      return serialized;
     }
 
-    return chunks.map(chunk =>
-      JSON.stringify(chunk, (key, value) => {
-        // Convert escaped Unicode sequences back to actual characters
-        // e.g., '\u00e9' -> 'é'
-        if (typeof value === 'string') {
-          return value.replace(/\\u[\da-f]{4}/gi, match => String.fromCharCode(parseInt(match.slice(2), 16)));
-        }
-        return value;
-      }),
+    // Non-ASCII characters only appear inside JSON string literals, so escaping each
+    // UTF-16 code unit keeps the output valid JSON that parses back to the original.
+    return serialized.map(text =>
+      text.replace(/[\u0080-\uffff]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`),
     );
   }
 
