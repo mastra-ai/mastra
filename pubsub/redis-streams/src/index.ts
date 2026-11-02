@@ -77,6 +77,79 @@ function compareStreamIds(a: string, b: string): number {
 }
 
 /**
+ * Connect a client, standalone or cluster, within its `socket.connectTimeout`
+ * (node-redis default: 5000 ms; 0 disables the bound).
+ *
+ * node-redis applies `connectTimeout` only to opening the TCP socket. The
+ * handshake that follows (CLIENT SETINFO, HELLO/AUTH, SELECT) has no deadline,
+ * and the default reconnectStrategy retries a failed attempt forever. So a
+ * server that accepts the socket but never replies (a SIGSTOPped process, or a
+ * proxy that stopped forwarding) makes `connect()` hang forever. The same
+ * budget therefore bounds the whole connect here. On expiry the client is
+ * destroyed, which stops its retry loop and lets a later call connect again.
+ *
+ * destroy() does not stop a cluster's slot discovery: once the nodes answer it
+ * still connects node clients that nothing would close. So when the abandoned
+ * connect settles, the client is destroyed again unless it is open. Until then
+ * no new connect starts on that client: a second discovery would share the
+ * first one's node entries, settle before they connect, and its destroy()
+ * would miss them. A call made meanwhile waits for the abandoned connect
+ * within its own deadline, then connects.
+ */
+const abandonedConnects = new WeakMap<object, Promise<void>>();
+
+async function connectWithin(
+  client: RedisClientType,
+  role: 'write' | 'read',
+  isReleased: () => boolean = () => false,
+): Promise<void> {
+  const cluster = client as unknown as Partial<Pick<RedisClusterType, '_options'>>;
+  const socket = cluster._options ? cluster._options.defaults?.socket : client.options?.socket;
+  const timeoutMs = socket?.connectTimeout ?? 5000;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let connecting: Promise<unknown> | undefined;
+  const timedOut = new Promise<never>((_, reject) => {
+    if (!timeoutMs) return;
+    timer = setTimeout(() => {
+      if (connecting) {
+        const settled = connecting
+          .catch(() => {})
+          .then(() => {
+            if (abandonedConnects.get(client) === settled) abandonedConnects.delete(client);
+            if (client.isOpen) return;
+            try {
+              client.destroy();
+            } catch {
+              // A standalone client's destroy() throws ClientClosedError once closed.
+            }
+          });
+        abandonedConnects.set(client, settled);
+        // close() may already have destroyed this client, and a standalone
+        // client's destroy() throws ClientClosedError when called twice.
+        if (client.isOpen) client.destroy();
+      }
+      reject(
+        new Error(
+          `redis-streams: ${role} client did not connect to Redis within ${timeoutMs}ms (socket.connectTimeout); the server is unreachable or not responding`,
+        ),
+      );
+    }, timeoutMs);
+  });
+  try {
+    const abandoned = abandonedConnects.get(client);
+    if (abandoned) {
+      await Promise.race([abandoned, timedOut]);
+      // close() may have released the client while this call waited.
+      if (isReleased()) throw new Error(`redis-streams: ${role} client closed while connecting`);
+    }
+    connecting = client.connect();
+    await Promise.race([connecting, timedOut]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
  * Parse `maxmemory` / `maxmemory_policy` out of an `INFO memory` reply and
  * return the policy when the server can evict keys under memory pressure.
  */
@@ -277,6 +350,8 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // get consistent semantics across transports.
   #localCallbacks: Map<string, Map<EventCallback, Set<ReturnType<typeof setTimeout>>>> = new Map();
   #closed = false;
+  /** Set once close() has drained publishes and is about to release the writer. */
+  #writerReleased = false;
   #evictionPolicyChecked = false;
 
   constructor(options: RedisStreamsPubSubConfig = {}) {
@@ -404,8 +479,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // second connect().
     if (!this.#writerConnecting && this.#writeClient.isOpen) return;
     if (!this.#writerConnecting) {
-      this.#writerConnecting = this.#writeClient
-        .connect()
+      this.#writerConnecting = connectWithin(this.#writeClient, 'write', () => this.#writerReleased)
         .then(() => {
           if (!this.#evictionPolicyChecked) {
             this.#evictionPolicyChecked = true;
@@ -714,7 +788,20 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // connection until a message arrives.
     const readClient = this.#createReadClient();
     this.#attachErrorLogger(readClient, 'read', { topic });
-    await readClient.connect();
+    try {
+      await connectWithin(readClient, 'read');
+    } catch (err) {
+      // No Subscription exists yet, so #stopSubscription will never destroy
+      // this fan-out group. Without this, every retry would leave one behind.
+      // Not awaited: if Redis froze, this command stalls too, and the caller
+      // must still get the timeout instead of hanging.
+      if (!isGrouped) {
+        void this.#writeClient.xGroupDestroy(streamKey, group).catch(destroyErr => {
+          this.#logger?.debug?.('redis-streams: xGroupDestroy failed', { topic, group, error: errorText(destroyErr) });
+        });
+      }
+      throw err;
+    }
 
     return {
       members: new Map([[cb, {}]]),
@@ -1187,6 +1274,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     // the caller with a ClosingError.
     await this.flush();
 
+    this.#writerReleased = true;
     if (this.#writeClient.isOpen) {
       try {
         await disconnect(this.#writeClient);

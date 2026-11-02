@@ -20,6 +20,7 @@ describe('durable workflow actor forwarding', () => {
     const durableAgent = new AgentType({ agent: baseAgent, pubsub });
     const start = vi.fn().mockResolvedValue(undefined);
     vi.spyOn(durableAgent, 'getWorkflow').mockReturnValue({
+      runs: new Map(),
       createRun: vi.fn().mockResolvedValue({ [startMethod]: start }),
     } as any);
 

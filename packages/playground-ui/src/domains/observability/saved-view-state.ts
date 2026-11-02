@@ -266,13 +266,18 @@ function readDateRange(params: URLSearchParams, spec: PageSpec): SavedViewDateRa
   return to ? { from, to } : { from };
 }
 
-function writeDateRange(params: URLSearchParams, spec: PageSpec, range: SavedViewDateRange | undefined) {
+function writeDateRange(
+  params: URLSearchParams,
+  spec: PageSpec,
+  range: SavedViewDateRange | undefined,
+  defaultDatePreset: string,
+) {
   params.delete(TRACE_DATE_PRESET_PARAM);
   params.delete(TRACE_DATE_FROM_PARAM);
   params.delete(TRACE_DATE_TO_PARAM);
   if (!range) return;
   if ('preset' in range) {
-    if (range.preset !== 'custom' && range.preset !== spec.defaultDatePreset && spec.datePresets.has(range.preset)) {
+    if (range.preset !== 'custom' && range.preset !== defaultDatePreset && spec.datePresets.has(range.preset)) {
       params.set(TRACE_DATE_PRESET_PARAM, range.preset);
     }
     return;
@@ -390,18 +395,30 @@ export type AppliedSavedView = {
   columns?: TraceColumnPreferences;
 };
 
+export type ApplySavedViewOptions = {
+  /**
+   * The range the host shows when the URL names none, when it differs from the page's own default.
+   * Only this preset is left out of the URL; any other one, including the page's default, is written.
+   */
+  defaultDatePreset?: string;
+};
+
 /**
  * Applies `view` on top of `base` (the page's current search params): every view param is replaced,
  * other params (e.g. the open row) are kept and the list restarts at its first page. Parts of the view
  * the page no longer supports (unknown filter field or operator, sort field, date preset, column,
  * option) are dropped one by one; the page's default takes their place.
  */
-export function applySavedView(view: SavedViewState, base: URLSearchParams): AppliedSavedView {
+export function applySavedView(
+  view: SavedViewState,
+  base: URLSearchParams,
+  { defaultDatePreset }: ApplySavedViewOptions = {},
+): AppliedSavedView {
   const spec = PAGE_SPECS[view.page];
   const params = new URLSearchParams(base);
   const { tokens, groups } = splitNodes(keepApplicable(view.filters, spec));
   spec.writeFilters(params, tokens, groups);
-  writeDateRange(params, spec, view.dateRange);
+  writeDateRange(params, spec, view.dateRange, defaultDatePreset ?? spec.defaultDatePreset);
   writeSort(params, spec, view.sort);
   spec.writeOptions(params, view.options ?? {});
   params.delete(PAGE_PARAM);

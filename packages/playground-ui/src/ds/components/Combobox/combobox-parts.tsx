@@ -138,7 +138,7 @@ function ComboboxTrigger({
       className={comboboxTriggerClass({ variant, size, className })}
       {...props}
     >
-      {iconOnly ? (
+      {isIconButtonSize(size) ? (
         <>
           {icon}
           <span className="sr-only">{children}</span>

@@ -294,9 +294,19 @@ export abstract class Bundler extends MastraBase implements IBundler {
   protected outputDir = 'output';
   protected platform: BundlerPlatform = 'node';
   protected defaultExternalsPreset = false;
+  private configEntryFile?: string;
 
   constructor(name: string, component: 'BUNDLER' | 'DEPLOYER' = 'BUNDLER') {
     super({ name, component });
+  }
+
+  /**
+   * The CLI bundles a generated wrapper when the project has file-based agents. The
+   * wrapper only re-exports `mastra`, so option extraction can't find the
+   * `new Mastra({...})` call there and must read the user's entry instead.
+   */
+  setConfigEntryFile(entryFile: string | undefined): void {
+    this.configEntryFile = entryFile;
   }
 
   async loadEnvVars(): Promise<Map<string, string>> {
@@ -376,7 +386,7 @@ export abstract class Bundler extends MastraBase implements IBundler {
     } as const;
 
     try {
-      const bundlerOptions = await getBundlerOptions(mastraEntryFile, outputDirectory);
+      const bundlerOptions = await getBundlerOptions(this.configEntryFile ?? mastraEntryFile, outputDirectory);
 
       return bundlerOptions ?? defaultBundlerOptions;
     } catch (error) {

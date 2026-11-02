@@ -74,8 +74,6 @@ describe('planSpanAggregate', () => {
     'metadata.tenant',
     'durationMs',
     'attributes.x',
-    'model',
-    'provider',
     'stopReasonContext',
   ])('rejects %s as a dimension', dimension => {
     expectIssue({ ...base, groupBy: [dimension] }, 'field_not_allowed', ['groupBy', 0]);
@@ -94,6 +92,22 @@ describe('planSpanAggregate', () => {
       { type: 'countDistinct', name: 'countDistinct.outcome', field: 'outcome' },
     ]);
     expect(plan.orderBy).toEqual({ target: 'measure', measure: 'countDistinct.traceId', direction: 'desc' });
+  });
+
+  it('groups and counts distinct values by model and provider', () => {
+    const plan = planSpanAggregate({
+      ...base,
+      groupBy: ['provider', 'model'],
+      measures: ['count', 'countDistinct.model', 'countDistinct.provider'],
+      orderBy: { field: 'model', direction: 'asc' },
+    });
+    expect(plan.dimensions).toEqual(['provider', 'model']);
+    expect(plan.measures).toEqual([
+      { type: 'canonical', name: 'count' },
+      { type: 'countDistinct', name: 'countDistinct.model', field: 'model' },
+      { type: 'countDistinct', name: 'countDistinct.provider', field: 'provider' },
+    ]);
+    expect(plan.orderBy).toEqual({ target: 'dimension', dimension: 'model', direction: 'asc' });
   });
 
   it.each([

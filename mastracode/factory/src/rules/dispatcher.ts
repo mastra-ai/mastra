@@ -4,7 +4,12 @@ import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/er
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { boardForWorkItem, resolvePhaseSemantics, workItemPhaseSemantics } from '../boards/index.js';
+import {
+  boardForWorkItem,
+  isTerminalWorkItem,
+  resolvePhaseSemantics,
+  workItemPhaseSemantics,
+} from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -24,7 +29,7 @@ import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
-import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemClaimConflictError } from '../storage/domains/work-items/base.js';
+import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryDispatchFailureCode,
@@ -1296,6 +1301,24 @@ export class FactoryDecisionDispatcher {
     }
   }
 
+  /**
+   * The project's card for a Linear issue by its stable id, wherever its identifier now points.
+   * A live card wins over finished ones, as in the Linear rules and issue detail route.
+   */
+  async #linearCardByIssueId(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    boards: BoardRegistry,
+  ) {
+    const issueId = decision.metadata?.linearIssueId;
+    if (decision.source !== 'linear-issue' || typeof issueId !== 'string') return null;
+    const items = await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
+    const cards = items.filter(
+      item => item.externalSource?.integrationId === 'linear' && item.metadata?.linearIssueId === issueId,
+    );
+    return cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0] ?? null;
+  }
+
   async #upsertLinkedItem(
     record: FactoryDeferredDecisionRecord,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
@@ -1347,52 +1370,30 @@ export class FactoryDecisionDispatcher {
         decision,
       })) ??
       null;
-    const upsert = () =>
-      this.#storage.upsert({
-        orgId: record.orgId,
-        userId: 'factory-rule-dispatcher',
-        factoryProjectId: record.factoryProjectId,
-        input: {
-          externalSource: externalSourceForDecision(decision),
-          ...(decision.claimKey ? { claimKey: decision.claimKey } : {}),
-          parentWorkItemId,
-          title: decision.title,
-          board: decision.board,
-          stages: [entryStage],
-          sessions: {},
-          metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
-        },
-        reuseMode: 'preserve',
-      });
-    let result: UpsertWorkItemResult;
-    try {
-      result = await upsert().catch(async error => {
-        if (
-          error instanceof WorkItemClaimConflictError &&
-          (await this.#releaseDeletedProjectClaim(record.orgId, decision.claimKey))
-        ) {
-          return upsert();
+    // A Linear identifier changes when its issue moves teams; the card filed
+    // under the old one is still this issue's card.
+    const renamed = existing ? null : await this.#linearCardByIssueId(record, decision, boards);
+    let result: UpsertWorkItemResult = renamed
+      ? {
+          created: false,
+          item: renamed,
+          previous: { stages: renamed.stages, sessionRoles: Object.keys(renamed.sessions) },
         }
-        throw error;
-      });
-    } catch (error) {
-      // Another live Factory project in the org holds the card for this record.
-      // The decision is spent, not failed: retrying would only be refused again.
-      if (error instanceof WorkItemClaimConflictError) return;
-      throw error;
-    }
-    const { claimKey } = decision;
-    if (!result.created && claimKey && !result.item.claimKey) {
-      // A card filed before claims existed adopts the claim now; a refusal means
-      // another live project already owns the record, and this card stays as it is.
-      const claim = { orgId: record.orgId, id: result.item.id, claimKey };
-      const claimed =
-        (await this.#storage.claimWorkItem(claim)) ??
-        ((await this.#releaseDeletedProjectClaim(record.orgId, claimKey))
-          ? await this.#storage.claimWorkItem(claim)
-          : null);
-      if (claimed) result = { ...result, item: claimed };
-    }
+      : await this.#storage.upsert({
+          orgId: record.orgId,
+          userId: 'factory-rule-dispatcher',
+          factoryProjectId: record.factoryProjectId,
+          input: {
+            externalSource: externalSourceForDecision(decision),
+            parentWorkItemId,
+            title: decision.title,
+            board: decision.board,
+            stages: [entryStage],
+            sessions: {},
+            metadata: { ...decision.metadata, [FACTORY_RULE_MATERIALIZATION_KEY]: record.idempotencyKey },
+          },
+          reuseMode: 'preserve',
+        });
     const itemBoard = boardForWorkItem(result.item);
     if (!skipRules && itemBoard !== decision.board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
@@ -1490,16 +1491,6 @@ export class FactoryDecisionDispatcher {
       causalChain,
     });
     if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
-  }
-
-  /** Drops `claimKey` when the card holding it belongs to a deleted Factory project; true when it is free again. */
-  async #releaseDeletedProjectClaim(orgId: string, claimKey: string | undefined): Promise<boolean> {
-    if (!claimKey || !this.#factoryProjectExists) return false;
-    const holder = await this.#storage.getByClaimKey({ orgId, claimKey });
-    if (!holder) return true;
-    if (await this.#factoryProjectExists({ orgId, factoryProjectId: holder.factoryProjectId })) return false;
-    await this.#storage.releaseProjectClaims({ orgId, factoryProjectId: holder.factoryProjectId });
-    return true;
   }
 
   async #requireItem(record: FactoryDeferredDecisionRecord) {

@@ -93,6 +93,12 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe(
       '`model` and `provider` predicates in span queries and span aggregates. Treat a missing value as unavailable.',
     ),
+  spanAggregateModelDimensions: z
+    .boolean()
+    .default(false)
+    .describe(
+      '`model` and `provider` in span aggregate `groupBy` and `countDistinct`. Treat a missing value as unavailable.',
+    ),
   spanQueryOutcomeFields: z
     .boolean()
     .default(false)

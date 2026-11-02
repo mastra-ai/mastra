@@ -10,6 +10,7 @@ import { TracesExplorerLayout } from './traces-explorer-layout';
 import { TracesExplorerList } from './traces-explorer-list';
 import { TracesExplorerPanel } from './traces-explorer-panel';
 import { TracesExplorerRoot } from './traces-explorer-root';
+import { TracesExplorerSavedViews } from './traces-explorer-saved-views';
 
 export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   Layout: TracesExplorerLayout,
@@ -21,6 +22,7 @@ export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   Histogram: TracesExplorerHistogram,
   List: TracesExplorerList,
   Panel: TracesExplorerPanel,
+  SavedViews: TracesExplorerSavedViews,
 });
 
 export type { TracesExplorerRootProps } from './traces-explorer-root';
@@ -32,6 +34,7 @@ export type {
   TracesExplorerTimeRangeChipProps,
 } from './traces-explorer-filter-bar';
 export type { TracesExplorerPanelProps } from './traces-explorer-panel';
+export type { TracesExplorerSavedViewsProps } from './traces-explorer-saved-views';
 export {
   DEFAULT_TRACES_FILTERS,
   DEFAULT_TRACES_SORT,

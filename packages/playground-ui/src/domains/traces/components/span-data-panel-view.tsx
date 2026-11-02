@@ -340,10 +340,13 @@ function OutputTab({ span, view, onViewChange }: PayloadTabProps) {
 
 /** Everything looked up rather than read, grouped the same way for every span type. */
 function DetailsTab({ traceId, span }: { traceId: string; span: SpanRecord }) {
-  const { model, provider, finishReason, firstToken, speed } = getModelFacts(span);
+  const { finishReason, firstToken, speed, ...facts } = getModelFacts(span);
+  // Agent runs and model steps record the model they ran natively, not only model-call spans.
+  const model = span.model || facts.model;
+  const provider = span.provider || facts.provider;
   // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built SDK declarations type attributes.usage as unknown.
   const usage = span.attributes?.usage as UsageStats | undefined;
-  const hasModel = Boolean(model || finishReason || firstToken || speed);
+  const hasModel = Boolean(model || provider || finishReason || firstToken || speed);
   const durationMs = getSpanDurationMs(span.startedAt, span.endedAt);
   const ids: Array<[string, string | null | undefined]> = [
     ['Span', span.spanId],

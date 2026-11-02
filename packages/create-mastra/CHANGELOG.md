@@ -1,5 +1,27 @@
 # create-mastra
 
+## 1.38.0-alpha.0
+
+## 1.37.0
+
+### Minor Changes
+
+- Added Mastra Gateway as a model provider in `create-mastra`. Pick **Mastra Gateway** to call every model with one key: the CLI signs you in to Mastra in the browser, creates a Gateway API key, writes it to `.env` as `MASTRA_GATEWAY_API_KEY`, and points the agent at `mastra/` models. When your balance is $0, it offers to open the Mastra dashboard's Add credits page. ([#28718](https://github.com/mastra-ai/mastra/pull/28718))
+
+  ```bash
+  npx create-mastra@latest my-app --llm mastra
+  ```
+
+## 1.37.0-alpha.3
+
+### Minor Changes
+
+- Added Mastra Gateway as a model provider in `create-mastra`. Pick **Mastra Gateway** to call every model with one key: the CLI signs you in to Mastra in the browser, creates a Gateway API key, writes it to `.env` as `MASTRA_GATEWAY_API_KEY`, and points the agent at `mastra/` models. When your balance is $0, it offers to open the Mastra dashboard's Add credits page. ([#28718](https://github.com/mastra-ai/mastra/pull/28718))
+
+  ```bash
+  npx create-mastra@latest my-app --llm mastra
+  ```
+
 ## 1.37.0-alpha.2
 
 ## 1.37.0-alpha.1

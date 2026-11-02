@@ -1,8 +1,10 @@
-import { Brain } from 'lucide-react';
 import { ActivityItem } from '../activity';
 import { ReasoningText } from './reasoning-text';
 import { hasReasoningText, hasVisibleReasoning } from './reasoning-visibility';
 import type { ReasoningContent } from './reasoning-visibility';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
+
+const ThinkingGlyph = agentGlyph('thinking');
 
 export interface ReasoningActivityProps extends ReasoningContent {
   defaultOpen?: boolean;
@@ -13,7 +15,7 @@ export function ReasoningActivity({ defaultOpen = true, ...content }: ReasoningA
 
   return (
     <ActivityItem
-      icon={<Brain aria-hidden />}
+      icon={<ThinkingGlyph aria-hidden />}
       label="Reasoning"
       status={content.streaming ? 'running' : 'idle'}
       defaultOpen={defaultOpen}

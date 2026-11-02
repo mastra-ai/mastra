@@ -1703,7 +1703,7 @@ Omitting `after` establishes a cursor and returns no historical traces. Changing
 
 #### `mastra api trace aggregate`
 
-Groups the traces selected by a time range and optional `where` predicate, and returns one row of measures per group. The inline JSON input is required and accepts the same predicates as `trace query`. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+Groups the traces selected by a time range and optional `where` predicate, and returns one row of measures per group, or per group and non-empty time bucket when `interval` is set. The inline JSON input is required and accepts the same predicates as `trace query`. Like other observability commands, it targets `https://observability.mastra.ai` by default.
 
 ```bash
 mastra api trace aggregate <input>
@@ -1738,7 +1738,7 @@ Servers whose observability store doesn't support trace aggregation return `501`
 
 #### `mastra api span query`
 
-Queries completed observability spans across traces, including agent runs and tool calls nested inside other traces. The inline JSON input is required and uses the same request as [`querySpans()`](/reference/client-js/observability#querying-spans). Its `where` predicate filters span fields directly. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+Queries completed observability spans across traces, including agent runs and tool calls nested inside other traces. The inline JSON input is required and uses the same request as [`querySpans()`](/reference/observability/tracing/advanced-queries#query-spans). Its `where` predicate filters span fields directly. Like other observability commands, it targets `https://observability.mastra.ai` by default.
 
 ```bash
 mastra api span query <input>
@@ -1751,7 +1751,7 @@ Servers whose observability store doesn't support span queries return `501`. Fil
 
 #### `mastra api span aggregate`
 
-Groups the spans selected by a time range and optional `where` predicate, and returns one row of measures per group. It accepts the same measures, `interval`, `having`, `orderBy`, and `limit` as `trace aggregate`, but groups by span fields such as `spanType`, `entityName`, `status`, and `rootEntityName`.
+Groups the spans selected by a time range and optional `where` predicate, and returns one row of measures per group, or per group and non-empty time bucket when `interval` is set. It accepts the same fixed measures, `interval`, `having`, `orderBy`, and `limit` as `trace aggregate`. Its `where` filters spans directly, and its dimensions and `countDistinct` fields follow the span contract. It groups by span fields such as `spanType`, `entityName`, `status`, and `rootEntityName`.
 
 ```bash
 mastra api span aggregate <input>
