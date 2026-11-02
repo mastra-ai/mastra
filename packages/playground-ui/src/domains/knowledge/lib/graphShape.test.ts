@@ -259,6 +259,27 @@ describe('lazyGraph', () => {
     expect(standIns[0]?.name).toBe('281 pages under blog');
   });
 
+  it("draws the top level exactly as it draws a focus on the first root's scope, with the same hidden count past the cap", () => {
+    const kids = Array.from({ length: 60 }, (_, index) =>
+      page(`k${String(index).padStart(2, '0')}`, 'site', { childCount: 3 }),
+    );
+    const input = { ...base, pages: [page('site', null, { address: 'site:mastra', childCount: 60 }), ...kids] };
+    const loaded = new Set(['', 'site']);
+    const none = lazyGraph({ ...input, loadedParents: loaded, focusId: null });
+    const scope = lazyGraph({ ...input, loadedParents: loaded, focusId: 'site' });
+    const shapeOf = (graph: typeof none, focus: string | null) => {
+      const shape = graphShape(graph.pages, focus ?? graph.hub);
+      return { center: shape.center, form: [...shape.form], depth: [...shape.depth] };
+    };
+    expect(none.hub).toBe('site');
+    expect(none.pages.map(p => p.id)).toEqual(scope.pages.map(p => p.id));
+    expect(shapeOf(none, null)).toEqual(shapeOf(scope, 'site'));
+    // Past GRAPH_CHILD_CAP the rest is one "+N more" circle on the hub, not a fetch of the whole tree.
+    const rest = none.pages.find(isRestCircle);
+    expect(rest?.name).toBe(`+${60 - GRAPH_CHILD_CAP} more`);
+    expect(none.wanted.length).toBeLessThanOrEqual(WANTED_CIRCLE_CAP + 2);
+  });
+
   it("with nothing focused, draws the roots, their first children, and those children's own children", () => {
     const kids = Array.from({ length: 12 }, (_, index) =>
       page(`k${String(index).padStart(2, '0')}`, 'site', { childCount: 2 }),
