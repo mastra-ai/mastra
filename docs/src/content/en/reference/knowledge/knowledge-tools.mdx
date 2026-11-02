@@ -48,24 +48,25 @@ Knowledge page name "Chargeback Playbook" is ambiguous; use one of these refs: t
 
 ## `knowledge_search`
 
-Searches the pages and notes the run can read. The query is split into words, quote marks are ignored, and each word matches case-insensitively as part of any word (`refund` matches `refunds`). A page matches when its name, description and body together contain every word. A note matches only when its own text contains every word. Keyword results list pages with the whole query in their name first, then pages with every word in their name, then other matching pages, then notes, each most recently updated first. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are merged by rank, so that order no longer holds.
+Searches the pages and notes the run can read. The query is split into words, quote marks are ignored, and each word matches case-insensitively as part of any word (`refund` matches `refunds`). A page matches when its name, description or body contains at least one of the words, and a note when its own text does. Keyword results list pages first. A page whose name contains the whole query comes first. The rest are ranked by how many of the query's words they contain, then by where those words are (a word in the name counts for more than one in the description, and one in the description for more than one in the body), then most recently updated first. Notes come after the pages, ranked by how many words they contain, then newest first. Access checks and `scope` filter results before ranking, and `limit` applies after it. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are merged by rank, so that order no longer holds.
 
 <PropertiesTable
   content={[
   {
     name: 'query',
     type: 'string',
-    description: 'Words to look for. Every word must match, case-insensitively. An empty query returns nothing.',
+    description:
+      'Words to look for. A result contains at least one of them, case-insensitively. An empty query returns nothing.',
   },
   { name: 'scope', type: 'string[]', description: 'Only search pages in these scope addresses.', isOptional: true },
   { name: 'limit', type: 'number', description: 'Maximum results, 1 to 50.', isOptional: true, defaultValue: '10' },
 ]}
 />
 
-Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`. A search that finds nothing also returns `more`, which suggests fewer words or `knowledge_list`:
+Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`. A search that finds nothing also returns `more`, which suggests different key words or `knowledge_list`:
 
 ```text
-results: no page or note contains every word of "enterprise pricing tiers". Search again with one to three key words, or browse with knowledge_list.
+results: no page or note contains any word of "enterprise pricing tiers". Search again with different key words, or browse with knowledge_list.
 ```
 
 `scope` takes scope addresses. A page ref such as `docs:acme#billing` is refused with a pointer to `knowledge_list`.

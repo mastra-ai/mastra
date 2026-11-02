@@ -38,7 +38,7 @@ Upgrading from 1.79.0: on startup, the tables of the earlier experimental Knowle
 
 With `MongoDBStore`, reads that span many scopes, such as a search without `scope`, slow down as the number of scopes a run can read grows, because the store first collects every readable scope. Reads within one scope stay fast.
 
-Without a vector store, search matches pages and notes that contain every word of the query, case-insensitively. See [add semantic search](#add-semantic-search) to also match by meaning.
+Without a vector store, search matches pages and notes that contain any word of the query, case-insensitively, and ranks pages by how many of the words they contain. See [add semantic search](#add-semantic-search) to also match by meaning.
 
 ## Add semantic search
 
