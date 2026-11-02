@@ -181,8 +181,12 @@ export class TemporalExecutionEngine {
           entry.steps.map(step => this.executeEntry(step, inputData, stepResults)),
         );
         const failures = settled.filter(outcome => outcome.status === 'rejected');
-        // A cancelled run ends Canceled, whatever the order of a failed branch and a cancelled one.
-        const rejected = failures.find(outcome => isCancellation(outcome.reason)) ?? failures[0];
+        // Same order as in execute(), whatever the branch order: a cancelled run ends Canceled, and
+        // an error from Workflow code wins so Temporal retries the Workflow Task.
+        const rejected =
+          failures.find(outcome => isCancellation(outcome.reason)) ??
+          failures.find(outcome => !(outcome.reason instanceof TemporalFailure)) ??
+          failures[0];
 
         if (rejected) {
           throw rejected.reason;
