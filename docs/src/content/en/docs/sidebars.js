@@ -276,11 +276,6 @@ const sidebars = {
               id: 'knowledge/limits',
               label: 'Limits',
             },
-            {
-              type: 'doc',
-              id: 'knowledge/mastra-code',
-              label: 'Mastra Code',
-            },
           ],
         },
       ],
