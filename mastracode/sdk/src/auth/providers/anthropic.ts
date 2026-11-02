@@ -14,6 +14,7 @@
 
 import { parseAuthorizationInput } from '../authorization-input.js';
 import { generatePKCE } from '../pkce.js';
+import { SignInRenewalFailedError } from '../provider-auth-error.js';
 import type { OAuthCredentials, OAuthLoginCallbacks, OAuthProviderInterface } from '../types.js';
 
 const decode = (s: string) => atob(s);
@@ -128,26 +129,44 @@ export async function loginAnthropic(
  * Refresh Anthropic OAuth token
  */
 export async function refreshAnthropicToken(refreshToken: string): Promise<OAuthCredentials> {
-  const response = await fetch(TOKEN_URL, {
-    method: 'POST',
-    signal: AbortSignal.timeout(15_000),
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'refresh_token',
-      client_id: CLIENT_ID,
-      refresh_token: refreshToken,
-    }),
-  });
+  // Only a 4xx means Anthropic refused the refresh token. Anything else leaves
+  // the sign-in valid, so it must not read as an expired one.
+  const unreachable = (detail: string, cause?: unknown) =>
+    new SignInRenewalFailedError(`Couldn't reach Anthropic to renew the sign-in: ${detail}`, { cause });
 
+  let response: Response;
+  try {
+    response = await fetch(TOKEN_URL, {
+      method: 'POST',
+      signal: AbortSignal.timeout(15_000),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        grant_type: 'refresh_token',
+        client_id: CLIENT_ID,
+        refresh_token: refreshToken,
+      }),
+    });
+  } catch (error) {
+    throw unreachable(error instanceof Error ? error.message : String(error), error);
+  }
+
+  if (response.status >= 500) {
+    throw Object.assign(unreachable(`token server returned ${response.status}`), { status: response.status });
+  }
   if (!response.ok) {
     throw new Error(`Anthropic token refresh failed: ${response.status}`);
   }
 
-  const data = (await response.json()) as {
+  let data: {
     access_token: string;
     refresh_token: string;
     expires_in: number;
   };
+  try {
+    data = (await response.json()) as typeof data;
+  } catch (error) {
+    throw unreachable('unreadable token response', error);
+  }
 
   return {
     refresh: data.refresh_token,

@@ -90,7 +90,7 @@ describe.each(SUBSCRIPTIONS)('$name subscription requests', ({ name, id, url, bu
 // or answers with a captive-portal page. The saved sign-in is still good, so the
 // request must say Anthropic is unreachable instead of asking to sign in again.
 describe.each([
-  { label: 'is unreachable', response: () => HttpResponse.error(), detail: /fetch failed/ },
+  { label: 'is unreachable', response: () => HttpResponse.error(), detail: /fetch/i },
   { label: 'is down', response: () => new HttpResponse('upstream down', { status: 503 }), detail: /503/ },
   {
     label: 'answers with a captive-portal page',

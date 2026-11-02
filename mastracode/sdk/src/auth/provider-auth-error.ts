@@ -19,6 +19,16 @@ export class ProviderAuthRequiredError extends Error {
   }
 }
 
+/**
+ * Renewing a stored sign-in failed for a reason other than the provider
+ * refusing it: offline, timed out, a 5xx, or a response that isn't the token
+ * (a captive-portal page). The sign-in is still saved, so credential stores
+ * rethrow this instead of reporting the sign-in as expired.
+ */
+export class SignInRenewalFailedError extends Error {
+  readonly name = 'SignInRenewalFailedError';
+}
+
 function providerErrorMessage(body: string): string | undefined {
   try {
     const parsed = JSON.parse(body) as { message?: unknown; error?: unknown };

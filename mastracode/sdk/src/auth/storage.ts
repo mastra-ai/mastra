@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { getAppDataDir } from '../utils/project.js';
+import { SignInRenewalFailedError } from './provider-auth-error.js';
 import { anthropicOAuthProvider } from './providers/anthropic.js';
 import { githubCopilotOAuthProvider } from './providers/github-copilot.js';
 import { kimiCodingOAuthProvider } from './providers/kimi-coding.js';
@@ -814,7 +815,8 @@ export class AuthStorage {
         const fresh = await provider.refreshToken(creds);
         this.persistRefreshedCredential(providerId, instanceId, fresh);
         return fresh;
-      } catch {
+      } catch (error) {
+        if (error instanceof SignInRenewalFailedError) throw error;
         return undefined;
       }
     })();
@@ -828,7 +830,9 @@ export class AuthStorage {
 
   /**
    * Get a ready-to-use OAuth credential snapshot, auto-refreshing if needed.
-   * A failed refresh leaves the active account unchanged and returns undefined;
+   * A failed refresh leaves the active account unchanged and returns undefined,
+   * except a `SignInRenewalFailedError` (provider unreachable), which is rethrown
+   * because the sign-in is still valid;
    * the account-rotation processor owns switching so it can persist a visible
    * account-switch notice with the request that triggered the change.
    */
@@ -892,7 +896,8 @@ export class AuthStorage {
           const fresh = await provider.refreshToken(credential);
           this.persistRefreshedCredential(providerId, undefined, fresh);
           return fresh;
-        } catch {
+        } catch (error) {
+          if (error instanceof SignInRenewalFailedError) throw error;
           return undefined;
         }
       })();
