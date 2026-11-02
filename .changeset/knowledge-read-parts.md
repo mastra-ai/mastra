@@ -11,3 +11,5 @@ knowledge_read({ page: 'docs:acme#models/anthropic', match: 'excludeTools' });
 ```
 
 Every Knowledge read result now lists anything it cut short in `more`, with how to get the rest: the body, notes, child pages (continue with `knowledge_list`), notes that mention the page (new `mentionedInCursor`), and search results at their limit.
+
+A whole-page read keeps a page's notes, and the notes on other pages that mention it, only while each list stays under 1,000 tokens. A longer list is left out and counted in `more`; read it on its own with `notes: true` or `mentionedIn: true`. A read with `cursor` or `mentionedInCursor` now returns only those notes, without repeating the body.

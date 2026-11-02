@@ -218,6 +218,53 @@ describe('knowledge_read on long pages', () => {
       mentionedInCursor: first.mentionedInCursor,
     });
     expect(mentions.mentionedIn).toHaveLength(1);
+    expect(mentions.page.body).toBeUndefined();
+  });
+
+  it('leaves long notes and mentioning notes out of a whole read, counted, and reads them on their own', async () => {
+    const { knowledge, call } = setup();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'big', name: 'Big', body: 'Big body.' });
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'small', name: 'Small', body: 'Small body.' });
+    const long = 'word '.repeat(150);
+    for (let i = 0; i < 8; i++) {
+      await knowledge.upsertPage({ scope: 'docs:acme', path: `ref-${i}`, name: `Ref ${i}` });
+      await knowledge.addNote({ scope: 'docs:acme', path: 'big', text: `Fact ${i}: ${long}` });
+      await knowledge.addNote({ scope: 'docs:acme', path: `ref-${i}`, text: `[[docs:acme#big]] ${long}` });
+    }
+    await knowledge.addNote({ scope: 'docs:acme', path: 'small', text: 'One short fact.' });
+    await knowledge.addNote({ scope: 'docs:acme', path: 'ref-0', text: 'Also [[docs:acme#small]].' });
+
+    const small = await call('knowledge_read', { page: 'docs:acme#small' });
+    expect(small.notes.map((note: any) => note.text)).toEqual(['One short fact.']);
+    expect(small.mentionedIn).toHaveLength(1);
+    expect(small.more).toBeUndefined();
+
+    const whole = await call('knowledge_read', { page: 'docs:acme#big' });
+    expect(whole.page.body).toBe('Big body.');
+    expect(whole.notes).toBeUndefined();
+    expect(whole.mentionedIn).toBeUndefined();
+    expect(whole.notesLeftOut).toBe(8);
+    expect(whole.mentionedInLeftOut).toBe(8);
+    expect(whole.more).toEqual([
+      expect.stringMatching(/^notes: 8 notes \(about [\d,]+ tokens\) left out\. Read them with notes: true\.$/),
+      expect.stringMatching(
+        /^mentionedIn: 8 notes mentioning this page \(about [\d,]+ tokens\) left out\. Read them with mentionedIn: true\.$/,
+      ),
+    ]);
+
+    const notes = await call('knowledge_read', { page: 'docs:acme#big', notes: true });
+    expect(notes.page.body).toBeUndefined();
+    expect(notes.notes).toHaveLength(8);
+    expect(notes.mentionedIn).toBeUndefined();
+    const mentions = await call('knowledge_read', { page: 'docs:acme#big', mentionedIn: true, limit: 3 });
+    expect(mentions.notes).toBeUndefined();
+    expect(mentions.mentionedIn).toHaveLength(3);
+    expect(mentions.more).toEqual([
+      `mentionedIn: more than 3. Read again with mentionedInCursor: "${mentions.mentionedInCursor}".`,
+    ]);
+    await expect(call('knowledge_read', { page: 'docs:acme#big', notes: true, section: 'x' })).rejects.toThrow(
+      /on their own/,
+    );
   });
 
   it('says when search hit its limit', async () => {

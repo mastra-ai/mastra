@@ -1,4 +1,5 @@
 import type { JSONSchema7 } from 'json-schema';
+import { estimateTokenCount } from 'tokenx';
 import type {
   KnowledgeNote,
   KnowledgePage,
@@ -12,6 +13,7 @@ import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast } from './declarations';
 import {
   KNOWLEDGE_READ_BODY_TOKENS,
+  KNOWLEDGE_READ_INLINE_TOKENS,
   KNOWLEDGE_READ_OUTLINE_ENTRIES,
   knowledgeBodyMatches,
   knowledgeBodyOutline,
@@ -287,6 +289,16 @@ function searchTool(host: KnowledgePageToolHost) {
   });
 }
 
+/** Estimated tokens a list adds to a `knowledge_read` result. */
+function inlineSize(list: unknown[]): number {
+  return list.length ? estimateTokenCount(JSON.stringify(list)) : 0;
+}
+
+/** "10 notes", or "more than 10 notes" when a cursor says there are more. */
+function leftOut(count: number, hasMore: boolean, noun: string): string {
+  return `${hasMore ? 'more than ' : ''}${count} ${noun}${count === 1 && !hasMore ? '' : 's'}`;
+}
+
 /** What `knowledge_read` returns of a body: the whole of it, its outline, a section or matches, a window at a time. */
 function bodyView(
   body: string,
@@ -354,17 +366,30 @@ function readTool(host: KnowledgePageToolHost) {
     id: 'knowledge_read',
     description:
       'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists the scopes this run holds. ' +
+      `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
       `A body returns at most ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens at a time. Read a page whole first; only when \`more\` says its body was truncated, ask for its \`outline\` of headings and read one \`section\`, or only the sections that \`match\` a term. ` +
       'Those part reads return just that part of the body. Anything cut short is listed in `more` with how to get the rest.',
     inputSchema: {
       type: 'object',
       properties: {
         page: { type: 'string', minLength: 1, description: pageRefDescription },
-        cursor: { type: 'string', minLength: 1, description: "The previous result's nextCursor, for more notes." },
+        notes: {
+          type: 'boolean',
+          description: "Return only the page's notes, however long, without its body.",
+        },
+        mentionedIn: {
+          type: 'boolean',
+          description: 'Return only the notes on other pages that mention this page, however long, without its body.',
+        },
+        cursor: {
+          type: 'string',
+          minLength: 1,
+          description: "The previous result's nextCursor: returns only the next notes.",
+        },
         mentionedInCursor: {
           type: 'string',
           minLength: 1,
-          description: "The previous result's mentionedInCursor, for more notes that mention this page.",
+          description: "The previous result's mentionedInCursor: returns only the next notes that mention this page.",
         },
         outline: {
           type: 'boolean',
@@ -395,6 +420,8 @@ function readTool(host: KnowledgePageToolHost) {
     execute: async (input, context) => {
       const {
         page: ref,
+        notes: notesOnly,
+        mentionedIn: mentionedInOnly,
         cursor,
         mentionedInCursor,
         outline,
@@ -404,6 +431,8 @@ function readTool(host: KnowledgePageToolHost) {
         limit: requested,
       } = input as {
         page?: string;
+        notes?: boolean;
+        mentionedIn?: boolean;
         cursor?: string;
         mentionedInCursor?: string;
         outline?: boolean;
@@ -414,6 +443,13 @@ function readTool(host: KnowledgePageToolHost) {
       };
       if ([outline, section, match].filter(Boolean).length > 1) {
         throw new Error('knowledge_read: pass at most one of outline, section and match.');
+      }
+      const wantNotes = !!(notesOnly || cursor);
+      const wantMentions = !!(mentionedInOnly || mentionedInCursor);
+      if ((wantNotes || wantMentions) && (outline || section || match || bodyOffset > 0)) {
+        throw new Error(
+          'knowledge_read: read notes or mentionedIn on their own, without outline, section, match or bodyOffset.',
+        );
       }
       const run = await start(host, context);
       const limit = limitOf(requested);
@@ -441,10 +477,48 @@ function readTool(host: KnowledgePageToolHost) {
           ...(more.length ? { more } : {}),
         };
       }
+      // Notes or mentioning notes asked for by name (or by cursor) come alone, whatever their size.
+      if (wantNotes || wantMentions) {
+        const [notes, mentioning] = await Promise.all([
+          wantNotes ? run.storage.listNotes({ pageId: page.id, read: run.read, cursor, limit }) : undefined,
+          wantMentions
+            ? run.storage.listNotesMentioning({ pageId: page.id, read: run.read, cursor: mentionedInCursor, limit })
+            : undefined,
+        ]);
+        const mentionPages = await Promise.all(
+          (mentioning?.notes ?? []).map(note => run.storage.getPage({ id: note.pageId, read: run.read })),
+        );
+        const addresses = await pageRefs(run, [page, ...mentionPages.filter((p): p is KnowledgePage => p !== null)]);
+        const mentionCache: MentionCache = new Map();
+        const more: string[] = [];
+        if (notes?.nextCursor) more.push(`notes: more than ${limit}. Read again with cursor: "${notes.nextCursor}".`);
+        if (mentioning?.nextCursor) {
+          more.push(`mentionedIn: more than ${limit}. Read again with mentionedInCursor: "${mentioning.nextCursor}".`);
+        }
+        return {
+          page: { ...pageSummary(page, addresses), version: page.version },
+          ...(notes
+            ? {
+                notes: await noteSummaries(run, notes.notes, mentionCache),
+                ...(notes.nextCursor ? { nextCursor: notes.nextCursor } : {}),
+              }
+            : {}),
+          ...(mentioning
+            ? {
+                mentionedIn: (await noteSummaries(run, mentioning.notes, mentionCache)).map((note, i) => ({
+                  ...note,
+                  page: mentionPages[i] ? pageSummary(mentionPages[i]!, addresses) : undefined,
+                })),
+                ...(mentioning.nextCursor ? { mentionedInCursor: mentioning.nextCursor } : {}),
+              }
+            : {}),
+          ...(more.length ? { more } : {}),
+        };
+      }
       const [notes, children, mentioning] = await Promise.all([
-        run.storage.listNotes({ pageId: page.id, read: run.read, cursor, limit }),
+        run.storage.listNotes({ pageId: page.id, read: run.read, limit }),
         run.storage.listChildPages({ parentId: page.id, read: run.read, limit }),
-        run.storage.listNotesMentioning({ pageId: page.id, read: run.read, cursor: mentionedInCursor, limit }),
+        run.storage.listNotesMentioning({ pageId: page.id, read: run.read, limit }),
       ]);
       let childScopesCut = false;
       let childScopes: Array<{ address?: string; name: string; description?: string; restricted?: true }> = [];
@@ -477,7 +551,22 @@ function readTool(host: KnowledgePageToolHost) {
       const ownRef = addresses.refs.get(page.id) ?? page.id;
       const more: string[] = [];
       const view = bodyView(page.body ?? '', { bodyOffset, more });
-      if (notes.nextCursor) more.push(`notes: more than ${limit}. Read again with cursor: "${notes.nextCursor}".`);
+      const noteList = await noteSummaries(run, notes.notes, mentionCache);
+      const mentionList = (await noteSummaries(run, mentioning.notes, mentionCache)).map((note, i) => ({
+        ...note,
+        page: mentionPages[i] ? pageSummary(mentionPages[i]!, addresses) : undefined,
+      }));
+      // Small lists ride along; big ones would crowd out the body, so they are counted and left for
+      // a read of their own.
+      const notesInline = inlineSize(noteList) <= KNOWLEDGE_READ_INLINE_TOKENS;
+      const mentionsInline = inlineSize(mentionList) <= KNOWLEDGE_READ_INLINE_TOKENS;
+      if (!notesInline) {
+        more.push(
+          `notes: ${leftOut(noteList.length, !!notes.nextCursor, 'note')} (about ${inlineSize(noteList).toLocaleString('en-US')} tokens) left out. Read them with notes: true.`,
+        );
+      } else if (notes.nextCursor) {
+        more.push(`notes: more than ${limit}. Read again with cursor: "${notes.nextCursor}".`);
+      }
       if (children.nextCursor) {
         more.push(
           `children: more than ${limit}. List them with knowledge_list from: "${ownRef}"${page.isScope ? '' : `, cursor: "p${children.nextCursor}"`}.`,
@@ -485,7 +574,11 @@ function readTool(host: KnowledgePageToolHost) {
       }
       if (childScopesCut)
         more.push(`childScopes: more than ${limit}. List them with knowledge_list from: "${ownRef}".`);
-      if (mentioning.nextCursor) {
+      if (!mentionsInline) {
+        more.push(
+          `mentionedIn: ${leftOut(mentionList.length, !!mentioning.nextCursor, 'note')} mentioning this page (about ${inlineSize(mentionList).toLocaleString('en-US')} tokens) left out. Read them with mentionedIn: true.`,
+        );
+      } else if (mentioning.nextCursor) {
         more.push(`mentionedIn: more than ${limit}. Read again with mentionedInCursor: "${mentioning.nextCursor}".`);
       }
       return {
@@ -494,15 +587,17 @@ function readTool(host: KnowledgePageToolHost) {
           version: page.version,
           ...view,
         },
-        notes: await noteSummaries(run, notes.notes, mentionCache),
-        ...(notes.nextCursor ? { nextCursor: notes.nextCursor } : {}),
+        ...(notesInline
+          ? { notes: noteList, ...(notes.nextCursor ? { nextCursor: notes.nextCursor } : {}) }
+          : { notesLeftOut: noteList.length }),
         children: children.pages.map(child => pageSummary(child, addresses)),
         ...(childScopes.length ? { childScopes } : {}),
-        mentionedIn: (await noteSummaries(run, mentioning.notes, mentionCache)).map((note, i) => ({
-          ...note,
-          page: mentionPages[i] ? pageSummary(mentionPages[i]!, addresses) : undefined,
-        })),
-        ...(mentioning.nextCursor ? { mentionedInCursor: mentioning.nextCursor } : {}),
+        ...(mentionsInline
+          ? {
+              mentionedIn: mentionList,
+              ...(mentioning.nextCursor ? { mentionedInCursor: mentioning.nextCursor } : {}),
+            }
+          : { mentionedInLeftOut: mentionList.length }),
         ...(more.length ? { more } : {}),
       };
     },
