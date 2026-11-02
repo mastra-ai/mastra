@@ -534,11 +534,12 @@ export function KnowledgePageExplorer({
     onSelect(pageId);
     onViewChange('page');
   };
-  // From the tree: frame the page in the graph when the graph is up, otherwise open it.
-  // A page the graph didn't load has nothing to frame there, so it opens as a page.
+  // From the tree: in the graph, a first click frames the page there and a second click on the same
+  // page opens it, like clicking a node. Elsewhere it opens. A page the graph didn't load has nothing to
+  // frame there, so it opens as a page.
   const selectFromTree = (page: KnowledgePagePayload) => {
     if (page.isScope) setFocusScopeId(page.id);
-    if (view === 'graph' && pagesById.has(page.id)) onSelect(page.id);
+    if (view === 'graph' && pagesById.has(page.id) && page.id !== selectedPageId) onSelect(page.id);
     else openPage(page.id);
   };
   // Pages reached from outside the tree (search, links, mentions) clear a focus they fall outside of.

@@ -143,4 +143,24 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(screen.getByTestId('view').textContent).toBe('graph');
     });
   });
+
+  describe('when a page the graph has is clicked twice in the graph view', () => {
+    it('focuses it in the graph first, then opens it as a page', () => {
+      renderWithProviders(<Host requested={[]} />);
+      fireEvent.click(row('Pricing'));
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+      expect(row('Pricing').getAttribute('aria-selected')).toBe('true');
+      fireEvent.click(row('Pricing'));
+      expect(screen.getByTestId('view').textContent).toBe('page');
+      expect(within(screen.getByRole('region', { name: 'Selected page' })).getByText('Pricing')).toBeTruthy();
+    });
+
+    it('focuses a different page instead of opening when the second click lands elsewhere', () => {
+      renderWithProviders(<Host requested={[]} />);
+      fireEvent.click(row('Pricing'));
+      fireEvent.click(row('site:mastra'));
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+      expect(row('site:mastra').getAttribute('aria-selected')).toBe('true');
+    });
+  });
 });
