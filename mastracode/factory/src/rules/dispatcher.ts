@@ -1352,13 +1352,17 @@ export class FactoryDecisionDispatcher {
     // back down to the stage this decision filed it at.
     if (materializedHere && requested.skipRules === true) return;
     const boards = await this.#boards.load(record);
+    // A Linear identifier changes when its issue moves teams; the card filed
+    // under the old one is still this issue's card.
+    const renamed = existing ? null : await this.#linearCardByIssueId(record, requested, boards);
     // Intake routes place only a card this decision files (or is still filing,
     // on a retry); a card already on the board stays where it is.
-    const decision = !existing
+    const current = existing ?? renamed;
+    const decision = !current
       ? await this.#routeArrival(record, requested, boards)
       : materializedHere
-        ? await this.#resumeRoutedCard(record, existing, requested, boards)
-        : this.#keepRoutedCard(existing, requested, boards);
+        ? await this.#resumeRoutedCard(record, current, requested, boards)
+        : this.#keepRoutedCard(current, requested, boards);
     if (materializedHere) {
       for (const suffix of ['destination', 'initial-entry']) {
         const replay = await this.#storage.getTransitionResultByIngress(
@@ -1387,9 +1391,6 @@ export class FactoryDecisionDispatcher {
         decision,
       })) ??
       null;
-    // A Linear identifier changes when its issue moves teams; the card filed
-    // under the old one is still this issue's card.
-    const renamed = existing ? null : await this.#linearCardByIssueId(record, decision, boards);
     let result: UpsertWorkItemResult = renamed
       ? {
           created: false,

@@ -338,6 +338,33 @@ describe('intake routes placing linked cards', () => {
     expect(placed(again)).toEqual({ board: 'work', stages: ['intake'] });
   });
 
+  it('never moves a Linear card whose issue came back under a new identifier', async () => {
+    const { boards, scope, route, deliver, workItems, project } = await setup();
+    const linear = (sourceKey: string) =>
+      deliver({ sourceKey, source: 'linear-issue', metadata: { linearIssueId: 'issue-1' } });
+    const card = await linear('linear-issue:ENG-1');
+    expect(placed(card)).toEqual({ board: 'work', stages: ['intake'] });
+
+    await boards.create(scope, docsBoard, 'admin');
+    await route({
+      name: 'Linear to Docs',
+      when: { operator: 'AND', conditions: [{ field: 'source.integration', operator: 'equals', value: 'linear' }] },
+      target: { boardKey: 'docs' },
+    });
+    // The issue moved teams, so Linear now reports it as OPS-1; the card filed as ENG-1 is still its card.
+    await linear('linear-issue:OPS-1');
+
+    const cards = await workItems.list(scope);
+    expect(cards.map(item => item.id)).toEqual([card!.id]);
+    expect(placed(cards[0])).toEqual({ board: 'work', stages: ['intake'] });
+    expect(cards[0]!.metadata).not.toHaveProperty('intakeRouteId');
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(decision => [decision.status, decision.lastError])).toEqual([
+      ['succeeded', null],
+      ['succeeded', null],
+    ]);
+  });
+
   describe('retrying a card whose move to its route phase failed', () => {
     /** A board that refuses the first move into Ready, as a transient failure would. */
     function flakyRegistry() {
