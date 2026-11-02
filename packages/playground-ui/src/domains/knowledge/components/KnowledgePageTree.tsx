@@ -52,9 +52,15 @@ export function KnowledgePageTree({
   const [focusedId, setFocusedId] = useState<string | null>(null);
   const itemRefs = useRef(new Map<string, HTMLDivElement>());
 
+  // Open the path to a selection once. Later renders with the same selection and path (a refetch, a
+  // level loading) leave it alone, so a parent the user collapses over the selection stays collapsed.
+  const revealed = useRef<string | null>(null);
   useEffect(() => {
     if (!selectedPageId) return;
     const path = pageAncestorIds(pages, selectedPageId);
+    const key = [selectedPageId, ...path].join('/');
+    if (revealed.current === key) return;
+    revealed.current = key;
     setExpanded(current => (path.every(id => current.has(id)) ? current : new Set([...current, ...path])));
   }, [pages, selectedPageId]);
 

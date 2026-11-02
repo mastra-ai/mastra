@@ -331,5 +331,23 @@ describe('KnowledgePageExplorer page view', () => {
       const tree = within(screen.getByRole('tree'));
       expect(tree.getByRole('treeitem', { selected: true }).textContent).toContain('Child 2');
     });
+
+    describe('when a parent of the selected page is collapsed', () => {
+      it('stays collapsed, hiding the selected page', () => {
+        renderWithProviders(<Host initial="child-2" initialView="page" />);
+        const tree = within(screen.getByRole('tree'));
+        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        expect(tree.getByRole('treeitem', { name: 'Policies' }).getAttribute('aria-expanded')).toBe('false');
+        expect(tree.queryByRole('treeitem', { selected: true })).toBeNull();
+      });
+
+      it('opens the path again when another page is selected under it', async () => {
+        renderWithProviders(<Host initial="child-2" initialView="page" />);
+        const tree = within(screen.getByRole('tree'));
+        fireEvent.click(tree.getByRole('button', { name: 'Collapse Policies' }));
+        fireEvent.click(within(pageView()).getByRole('button', { name: /Refund Policy/ }));
+        expect(tree.getByRole('treeitem', { selected: true }).textContent).toContain('Refund Policy');
+      });
+    });
   });
 });
