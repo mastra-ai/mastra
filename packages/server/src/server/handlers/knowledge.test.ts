@@ -241,6 +241,35 @@ describe('Knowledge read routes', () => {
       expect(names(out.pages)).toEqual(['Roadmap']);
     });
 
+    it('checks both link routes against the knowledge key under FGA and refuses a denied caller', async () => {
+      const { mastra, refunds } = await linked();
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'u1' });
+      const filterAccessible = vi.fn(async (_user: unknown, items: unknown[]) => items);
+      const routes = [
+        [GET_KNOWLEDGE_LINK_COUNTS_ROUTE, { pageId: [refunds.id] }],
+        [GET_KNOWLEDGE_PAGE_LINKS_ROUTE, { pageId: refunds.id }],
+      ] as const;
+
+      (mastra as any).getServer = () => ({ fga: { filterAccessible, check: async () => false } });
+      for (const [route, params] of routes) {
+        await expect(call(route, { mastra, requestContext, knowledgeKey: 'main', ...params })).rejects.toMatchObject({
+          status: 404,
+        });
+      }
+
+      const check = vi.fn(async () => true);
+      (mastra as any).getServer = () => ({ fga: { filterAccessible, check } });
+      for (const [route, params] of routes) {
+        await call(route, { mastra, requestContext, knowledgeKey: 'main', ...params });
+      }
+      expect(check).toHaveBeenCalledTimes(2);
+      expect(check).toHaveBeenCalledWith(
+        { id: 'u1' },
+        { resource: { type: 'knowledge', id: 'main' }, permission: 'knowledge:read' },
+      );
+    });
+
     it('shows a caller no link to, from or count for a page it cannot read', async () => {
       const { mastra, refunds, roadmap } = await linked();
       const knowledge = mastra.listKnowledge().main as unknown as Record<string, unknown>;
