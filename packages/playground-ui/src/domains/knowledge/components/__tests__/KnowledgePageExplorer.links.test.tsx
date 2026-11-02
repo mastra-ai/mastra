@@ -165,7 +165,18 @@ describe('KnowledgePageExplorer body links', () => {
       expect(linkLines(container)).toEqual([]);
       expect(screen.getByRole('button', { name: 'All links' }).getAttribute('aria-pressed')).toBe('false');
       const overview = container.querySelector('.react-flow__node [data-page-id="overview"]');
-      expect(overview?.querySelector('[data-testid="knowledge-hidden-links"]')?.textContent).toBe('↑2');
+      expect(overview?.querySelector('[data-testid="knowledge-hidden-links"]')?.textContent).toBe('2→');
+    });
+
+    it("reads each circle's badge as links in on the left and links out on the right, and says so for a screen reader", () => {
+      const { container } = renderWithProviders(<Host initial={null} initialView="graph" />);
+      const badge = container
+        .querySelector('.react-flow__node [data-page-id="overview"]')
+        ?.querySelector('[data-testid="knowledge-hidden-links"]');
+      expect(badge?.getAttribute('aria-label')).toBe('0 links in, 2 links out');
+      expect(badge?.getAttribute('title')).toBe('0 links in, 2 links out');
+      // A count of none is left off rather than written as 0.
+      expect(badge?.textContent).toBe('2→');
     });
 
     it('draws a body-link line from the linking page to each page it links once all links are on', () => {

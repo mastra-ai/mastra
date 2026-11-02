@@ -3,6 +3,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
+import { KNOWLEDGE_COUNTED_DOT_SIZE, KNOWLEDGE_DOT_SIZE } from '../../lib/graphShape';
 import type { KnowledgePagePayload } from '../../pageTypes';
 import { KnowledgePageGraph } from '../KnowledgePageGraph';
 
@@ -139,7 +140,7 @@ describe('KnowledgePageGraph', () => {
         within(legend)
           .getAllByRole('listitem')
           .map(item => item.textContent),
-      ).toEqual(['Scope', 'Scope, above its pages', 'Page', 'Mentioned in notes', 'Parent → child', 'Pinned']);
+      ).toEqual(['Scope', 'Scope, above its pages', 'Page', 'Parent → child', 'Pinned']);
     });
   });
 
@@ -317,7 +318,7 @@ describe('KnowledgePageGraph', () => {
 
       it('shows its kind, address and how many links go in and out', () => {
         renderGraph({ pages: linked, knownLinks: known });
-        expect(hoverDot('ticket')).toBe('TicketPage · team:support#ticketorg:acme › team:support1 link in · 1 out');
+        expect(hoverDot('ticket')).toBe('TicketPage · team:support#ticketorg:acme › team:support1 link in, 1 link out');
       });
 
       it("draws no body-link lines until a dot is hovered, then draws that dot's own", () => {
@@ -337,6 +338,29 @@ describe('KnowledgePageGraph', () => {
         renderGraph({ pages: withFar, knownLinks: known, showCounts: true });
         expect(within(dot('ticket')).getByTestId('knowledge-dot-count').textContent).toBe('2');
         expect(within(dot('far')).queryByTestId('knowledge-dot-count')).toBeNull();
+      });
+
+      it('keeps a dot with no links small when counts are on, and grows only the dots that carry one', () => {
+        const withFar = [...linked, page('far', 'support', { name: 'Far', key: 'far' })];
+        renderGraph({ pages: withFar, knownLinks: known, showCounts: true });
+        expect(Number.parseFloat(dot('far').style.width)).toBe(KNOWLEDGE_DOT_SIZE);
+        expect(Number.parseFloat(dot('ticket').style.width)).toBe(KNOWLEDGE_COUNTED_DOT_SIZE);
+      });
+
+      it('explains the line styles drawn while hovering it, and only those', () => {
+        renderGraph({ pages: linked, knownLinks: known });
+        const legend = within(screen.getByRole('list', { name: 'Legend' }));
+        expect(legend.queryByTestId('knowledge-legend-link')).toBeNull();
+        expect(legend.queryByTestId('knowledge-legend-mention')).toBeNull();
+        expect(legend.getByTestId('knowledge-legend-dot-parent')).toBeTruthy();
+        // Lines touching the hovered page read by direction, so they get the in/out rows, not the plain ones.
+        fireEvent.mouseEnter(dot('ticket'));
+        expect(legend.getByTestId('knowledge-legend-out')).toBeTruthy();
+        expect(legend.getByTestId('knowledge-legend-in')).toBeTruthy();
+        expect(legend.queryByTestId('knowledge-legend-link')).toBeNull();
+        fireEvent.mouseLeave(dot('ticket'));
+        expect(legend.queryByTestId('knowledge-legend-out')).toBeNull();
+        expect(legend.queryByTestId('knowledge-legend-in')).toBeNull();
       });
 
       it('fades dots it is not connected to, and puts them back when the pointer leaves', () => {

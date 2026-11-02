@@ -119,6 +119,12 @@ type PageNodeData = PageFlowNode['data'] & {
   level?: GraphLevel;
 };
 
+/** `4 links in, 14 links out`: what the arrows in a link badge say, for its label and a dot's tooltip. */
+function linkCountsText(links: { in: number; out: number }): string {
+  const noun = (count: number) => (count === 1 ? 'link' : 'links');
+  return `${links.in} ${noun(links.in)} in, ${links.out} ${noun(links.out)} out`;
+}
+
 /** Most a tooltip is enlarged to offset a zoomed-out graph. */
 const TOOLTIP_MAX_SCALE = 3;
 
@@ -148,10 +154,7 @@ function DotNode({ data }: { data: PageNodeData }) {
   const children =
     !hint && page.childCount ? `${childCountLabel(page)} ${page.childCount === 1 ? 'child' : 'children'}` : null;
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
-  const linkText =
-    links && (links.in > 0 || links.out > 0)
-      ? `${links.in} ${links.in === 1 ? 'link' : 'links'} in · ${links.out} out`
-      : null;
+  const linkText = links && (links.in > 0 || links.out > 0) ? linkCountsText(links) : null;
   const label = [page.name, hint ?? path, children, linkText].filter(Boolean).join(' · ');
   return (
     <div
@@ -280,17 +283,18 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       {data.hiddenLinks && (data.hiddenLinks.in > 0 || data.hiddenLinks.out > 0) ? (
         <span
           data-testid="knowledge-hidden-links"
-          title={`${data.hiddenLinks.in} ${data.hiddenLinks.in === 1 ? 'link' : 'links'} in and ${data.hiddenLinks.out} out not drawn`}
+          title={linkCountsText(data.hiddenLinks)}
+          aria-label={linkCountsText(data.hiddenLinks)}
           className="absolute top-0 left-1/2 flex -translate-x-1/2 -translate-y-1/3 gap-1 rounded-full border border-border bg-card px-1.5 shadow-raised"
         >
           {data.hiddenLinks.in > 0 ? (
             <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
-              ↓{data.hiddenLinks.in}
+              →{data.hiddenLinks.in}
             </Txt>
           ) : null}
           {data.hiddenLinks.out > 0 ? (
             <Txt as="span" variant="meta" style={{ color: LINK_EDGE_COLOR }}>
-              ↑{data.hiddenLinks.out}
+              {data.hiddenLinks.out}→
             </Txt>
           ) : null}
         </span>
@@ -455,19 +459,22 @@ function graphBounds(nodes: Array<{ position: { x: number; y: number }; width?: 
 
 const LEGEND_SWATCH = 'knowledge-circle inline-block size-3 shrink-0 rounded-full border-2';
 
+/** The line styles the graph draws, which its legend names. */
+type EdgeStyleKey = 'out' | 'in' | 'mention' | 'link' | 'grant' | 'dot-parent' | 'parent';
+
 /** What the circles, lines and badge mean. */
 function GraphLegend({
-  grants,
-  links,
-  directions,
+  drawn,
+  counts,
   dots,
   focused,
   levels,
   branches,
 }: {
-  grants: boolean;
-  links: boolean;
-  directions: boolean;
+  /** The line styles on screen right now; the legend explains those and only those. */
+  drawn: ReadonlySet<EdgeStyleKey>;
+  /** Some circle carries an in/out link badge. */
+  counts: boolean;
   dots: boolean;
   /** A page is focused, drawn larger and ringed at the centre. */
   focused: boolean;
@@ -548,37 +555,51 @@ function GraphLegend({
           </Txt>
         </li>
       ) : null}
-      {directions ? (
+      {drawn.has('out') || drawn.has('in') ? (
         <>
-          <li className="flex items-center gap-2" data-testid="knowledge-legend-out">
-            <svg width="16" height="8" aria-hidden className="shrink-0">
-              <line x1="0" y1="4" x2="12" y2="4" stroke={LINK_EDGE_COLOR} strokeWidth="1.5" />
-              <polygon points="11,1 16,4 11,7" fill={LINK_EDGE_COLOR} />
-            </svg>
-            <Txt as="span" variant="meta" tone="muted">
-              Links out of the selected page
-            </Txt>
-          </li>
-          <li className="flex items-center gap-2" data-testid="knowledge-legend-in">
-            <svg width="16" height="8" aria-hidden className="shrink-0">
-              <line x1="0" y1="4" x2="12" y2="4" stroke="var(--chart-orange)" strokeWidth="1.5" strokeDasharray="3 2" />
-              <polygon points="11,1 16,4 11,7" fill="var(--chart-orange)" />
-            </svg>
-            <Txt as="span" variant="meta" tone="muted">
-              Links into it
-            </Txt>
-          </li>
+          {drawn.has('out') ? (
+            <li className="flex items-center gap-2" data-testid="knowledge-legend-out">
+              <svg width="16" height="8" aria-hidden className="shrink-0">
+                <line x1="0" y1="4" x2="12" y2="4" stroke={LINK_EDGE_COLOR} strokeWidth="1.5" />
+                <polygon points="11,1 16,4 11,7" fill={LINK_EDGE_COLOR} />
+              </svg>
+              <Txt as="span" variant="meta" tone="muted">
+                Links out of the selected page
+              </Txt>
+            </li>
+          ) : null}
+          {drawn.has('in') ? (
+            <li className="flex items-center gap-2" data-testid="knowledge-legend-in">
+              <svg width="16" height="8" aria-hidden className="shrink-0">
+                <line
+                  x1="0"
+                  y1="4"
+                  x2="12"
+                  y2="4"
+                  stroke="var(--chart-orange)"
+                  strokeWidth="1.5"
+                  strokeDasharray="3 2"
+                />
+                <polygon points="11,1 16,4 11,7" fill="var(--chart-orange)" />
+              </svg>
+              <Txt as="span" variant="meta" tone="muted">
+                Links into it
+              </Txt>
+            </li>
+          ) : null}
         </>
       ) : null}
-      <li className="flex items-center gap-2">
-        <svg width="12" height="4" aria-hidden className="shrink-0">
-          <line x1="0" y1="2" x2="12" y2="2" stroke={MENTION_EDGE_COLOR} strokeWidth="2" />
-        </svg>
-        <Txt as="span" variant="meta" tone="muted">
-          Mentioned in notes
-        </Txt>
-      </li>
-      {links ? (
+      {drawn.has('mention') ? (
+        <li className="flex items-center gap-2" data-testid="knowledge-legend-mention">
+          <svg width="12" height="4" aria-hidden className="shrink-0">
+            <line x1="0" y1="2" x2="12" y2="2" stroke={MENTION_EDGE_COLOR} strokeWidth="2" />
+          </svg>
+          <Txt as="span" variant="meta" tone="muted">
+            Mentioned in notes
+          </Txt>
+        </li>
+      ) : null}
+      {drawn.has('link') ? (
         <li className="flex items-center gap-2">
           <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-link">
             <line x1="0" y1="4" x2="12" y2="4" {...LINK_EDGE_STYLE} />
@@ -589,23 +610,48 @@ function GraphLegend({
           </Txt>
         </li>
       ) : null}
-      <li className="flex items-center gap-2">
-        <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-parent-arrow">
-          <line x1="0" y1="4" x2="14" y2="4" {...PARENT_EDGE_STYLE} strokeDasharray="3 2" />
-          <polyline
-            points="10,1 14,4 10,7"
-            fill="none"
-            stroke={PARENT_ARROW_COLOR}
-            strokeWidth="1.25"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-        <Txt as="span" variant="meta" tone="muted">
-          Parent → child
-        </Txt>
-      </li>
-      {grants ? (
+      {drawn.has('dot-parent') ? (
+        <li className="flex items-center gap-2" data-testid="knowledge-legend-dot-parent">
+          <svg width="16" height="4" aria-hidden className="shrink-0">
+            <line x1="0" y1="2" x2="16" y2="2" {...DOT_PARENT_EDGE_STYLE} strokeOpacity={0.5} />
+          </svg>
+          <Txt as="span" variant="meta" tone="muted">
+            Child page (dot)
+          </Txt>
+        </li>
+      ) : null}
+      {drawn.has('parent') ? (
+        <li className="flex items-center gap-2">
+          <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-parent-arrow">
+            <line x1="0" y1="4" x2="14" y2="4" {...PARENT_EDGE_STYLE} strokeDasharray="3 2" />
+            <polyline
+              points="10,1 14,4 10,7"
+              fill="none"
+              stroke={PARENT_ARROW_COLOR}
+              strokeWidth="1.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          <Txt as="span" variant="meta" tone="muted">
+            Parent → child
+          </Txt>
+        </li>
+      ) : null}
+      {counts ? (
+        <li className="flex items-center gap-2" data-testid="knowledge-legend-link-counts">
+          <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
+            →4
+          </Txt>
+          <Txt as="span" variant="meta" style={{ color: LINK_EDGE_COLOR }}>
+            14→
+          </Txt>
+          <Txt as="span" variant="meta" tone="muted">
+            Links in, links out (not drawn)
+          </Txt>
+        </li>
+      ) : null}
+      {drawn.has('grant') ? (
         <li className="flex items-center gap-2">
           <svg width="16" height="8" aria-hidden className="shrink-0" data-testid="knowledge-legend-grant">
             <line x1="0" y1="4" x2="12" y2="4" {...GRANT_EDGE_STYLE} strokeDasharray="4 2 1 2" strokeWidth="1.5" />
@@ -648,7 +694,7 @@ export interface KnowledgePageGraphProps {
   /** Access grants between scopes, drawn from each principal scope to the scope it reaches. */
   grants?: readonly KnowledgeScopeGrantPayload[];
   selectedPageId?: string | null;
-  /** Per page, links into and out of it that the graph doesn't draw; shown as ↓in ↑out on full circles. */
+  /** Per page, links into and out of it that the graph doesn't draw; shown as `→in out→` on full circles. */
   hiddenLinks?: ReadonlyMap<string, { in: number; out: number }>;
   /** Every link between pages, drawn or not: hovering a page draws its own, and tooltips count them. */
   knownLinks?: readonly KnowledgePageEdge[];
@@ -705,31 +751,56 @@ function KnowledgePageGraphInner({
     const withPlaceholders = granted.placeholders.length ? [...pages, ...granted.placeholders] : pages;
     return { graphPages: withPlaceholders, allEdges: [...pageGraphEdges(pages, edges), ...granted.edges] };
   }, [pages, edges, grants]);
+  const linkSource = knownLinks ?? edges;
+  const { linkCounts, hoverLinks } = useMemo(() => {
+    const counts = new Map<string, { in: number; out: number }>();
+    const touching = new Map<string, KnowledgePageEdge[]>();
+    const pairs = new Set<string>();
+    for (const edge of linkSource) {
+      if (edge.kind !== 'mention' && edge.kind !== 'link') continue;
+      if (edge.source === edge.target || pairs.has(`${edge.source}\u0000${edge.target}`)) continue;
+      pairs.add(`${edge.source}\u0000${edge.target}`);
+      const out = counts.get(edge.source) ?? { in: 0, out: 0 };
+      out.out++;
+      counts.set(edge.source, out);
+      const into = counts.get(edge.target) ?? { in: 0, out: 0 };
+      into.in++;
+      counts.set(edge.target, into);
+    }
+    for (const edge of linkSource) {
+      if (edge.kind !== 'mention' && edge.kind !== 'link') continue;
+      for (const id of [edge.source, edge.target]) touching.set(id, [...(touching.get(id) ?? []), edge]);
+    }
+    return { linkCounts: counts, hoverLinks: touching };
+  }, [linkSource]);
   // The focused page sits at the centre with its parent and children around it as full circles; pages
   // farther out are dots on outer rings, inside their branch's slice. A last overlap pass is the only force.
-  const dotSize = showCounts ? KNOWLEDGE_COUNTED_DOT_SIZE : KNOWLEDGE_DOT_SIZE;
   const laidOut = useMemo(() => {
     const shape = graphShape(graphPages, selectedPageId ?? null);
     const colors = branchColors(graphPages, shape);
     const flow = toPageFlow(graphPages, allEdges);
     for (const node of flow.nodes) {
-      if (shape.form.get(node.id) === 'dot') node.data.size = dotSize;
-      else if (node.id === selectedPageId) node.data.size = Math.round(node.data.size * FOCUSED_SCALE);
+      // With counts on, only a dot that has a count grows to fit it; the rest stay small, so linked pages stand out.
+      if (shape.form.get(node.id) === 'dot') {
+        const links = linkCounts.get(node.id);
+        const counted = showCounts && !isChildPlaceholder(node.data.page) && !!links && links.in + links.out > 0;
+        node.data.size = counted ? KNOWLEDGE_COUNTED_DOT_SIZE : KNOWLEDGE_DOT_SIZE;
+      } else if (node.id === selectedPageId) node.data.size = Math.round(node.data.size * FOCUSED_SCALE);
     }
     const sizes = new Map(flow.nodes.map(node => [node.id, node.data.size]));
-    const radial = radialLayout(graphPages, shape, page => sizes.get(page.id) ?? dotSize);
+    const radial = radialLayout(graphPages, shape, page => sizes.get(page.id) ?? KNOWLEDGE_DOT_SIZE);
     const positions = runLayout(
       flow.nodes.map(node => ({
         id: node.id,
         size: node.data.size,
-        padding: node.data.size === dotSize ? 4 : 24,
+        padding: shape.form.get(node.id) === 'dot' ? 4 : 24,
         initial: radial.get(node.id),
       })),
       [],
       { ticks: 0 },
     );
     return { nodes: flow.nodes, edges: flow.edges, positions, shape, colors };
-  }, [graphPages, allEdges, selectedPageId, dotSize]);
+  }, [graphPages, allEdges, selectedPageId, linkCounts, showCounts]);
   const pageById = useMemo(() => new Map(graphPages.map(page => [page.id, page])), [graphPages]);
   const drawnLevels = useMemo(() => {
     const kinds = new Set<GraphLevel>();
@@ -769,28 +840,6 @@ function KnowledgePageGraphInner({
   }, [graphPages]);
   // The page under the pointer, if any: its own lines show and the rest of the graph fades.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const linkSource = knownLinks ?? edges;
-  const { linkCounts, hoverLinks } = useMemo(() => {
-    const counts = new Map<string, { in: number; out: number }>();
-    const touching = new Map<string, KnowledgePageEdge[]>();
-    const pairs = new Set<string>();
-    for (const edge of linkSource) {
-      if (edge.kind !== 'mention' && edge.kind !== 'link') continue;
-      if (edge.source === edge.target || pairs.has(`${edge.source}\u0000${edge.target}`)) continue;
-      pairs.add(`${edge.source}\u0000${edge.target}`);
-      const out = counts.get(edge.source) ?? { in: 0, out: 0 };
-      out.out++;
-      counts.set(edge.source, out);
-      const into = counts.get(edge.target) ?? { in: 0, out: 0 };
-      into.in++;
-      counts.set(edge.target, into);
-    }
-    for (const edge of linkSource) {
-      if (edge.kind !== 'mention' && edge.kind !== 'link') continue;
-      for (const id of [edge.source, edge.target]) touching.set(id, [...(touching.get(id) ?? []), edge]);
-    }
-    return { linkCounts: counts, hoverLinks: touching };
-  }, [linkSource]);
   // A hovered page's links to pages that are drawn but whose lines aren't, up to a cap.
   const hoverExtra = useMemo(() => {
     if (!hoveredId) return [];
@@ -862,13 +911,14 @@ function KnowledgePageGraphInner({
       }),
     [laidOut, selectedPageId, pinned, neighbours, childrenUndrawn, pageById, hiddenLinks, linkCounts, showCounts],
   );
-  const flowEdges = useMemo(() => {
+  const { flowEdges, drawnEdgeStyles } = useMemo(() => {
+    const drawn = new Set<EdgeStyleKey>();
     const sizes = new Map(laidOut.nodes.map(node => [node.id, node.data.size]));
     const circle = (id: string): Circle => {
       const center = laidOut.positions.get(id) ?? { x: 0, y: 0 };
       return { ...center, r: (sizes.get(id) ?? 0) / 2 };
     };
-    return [...laidOut.edges, ...hoverExtra].map((edge): Edge<RimEdgeData> => {
+    const flowEdges = [...laidOut.edges, ...hoverExtra].map((edge): Edge<RimEdgeData> => {
       const mention = edge.data?.kind === 'mention';
       const grant = edge.data?.kind === 'grant';
       const link = edge.data?.kind === 'link';
@@ -883,6 +933,7 @@ function KnowledgePageGraphInner({
               ? 'in'
               : undefined
           : undefined;
+      drawn.add(direction ?? (mention ? 'mention' : grant ? 'grant' : link ? 'link' : toDot ? 'dot-parent' : 'parent'));
       return {
         ...edge,
         type: 'rim',
@@ -919,6 +970,7 @@ function KnowledgePageGraphInner({
                   : PARENT_ARROW,
       };
     });
+    return { flowEdges, drawnEdgeStyles: drawn as ReadonlySet<EdgeStyleKey> };
   }, [laidOut, hoverExtra, onMentionSelect, neighbours, emphasisId]);
   const pagesById = useMemo(() => new Map(pages.map(page => [page.id, page])), [pages]);
   const reactFlow = useReactFlow();
@@ -1041,16 +1093,10 @@ function KnowledgePageGraphInner({
         levels={drawnLevels}
         focused={!!selectedPageId && laidOut.positions.has(selectedPageId)}
         dots={[...laidOut.shape.form.values()].includes('dot')}
-        grants={allEdges.some(edge => edge.kind === 'grant')}
-        links={allEdges.some(edge => edge.kind === 'link')}
-        directions={
-          !!selectedPageId &&
-          allEdges.some(
-            edge =>
-              (edge.kind === 'link' || edge.kind === 'mention') &&
-              (edge.source === selectedPageId || edge.target === selectedPageId),
-          )
-        }
+        drawn={drawnEdgeStyles}
+        counts={[...(hiddenLinks ?? [])].some(
+          ([id, hidden]) => laidOut.shape.form.get(id) === 'full' && (hidden.in > 0 || hidden.out > 0),
+        )}
       />
       <ReactFlow
         nodes={nodes}
