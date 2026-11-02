@@ -7,6 +7,12 @@
 import type { KnowledgePagePayload } from '../pageTypes';
 import { comparePagePosition } from './pageTree';
 
+/** Why a page far from the focus still draws as a labelled circle. */
+export type GraphLevel = 'scope' | 'ancestor';
+
+/** Most scopes and ancestors beyond the first ring that draw as circles; any more fall back to dots. */
+export const HIGHER_LEVEL_CAP = 10;
+
 /** Full circles carry a label; dots are small coloured markers that name themselves on hover. */
 export type GraphNodeForm = 'full' | 'dot';
 
@@ -38,6 +44,8 @@ export interface GraphShape {
   branch: Map<string, string>;
   /** The page each one was reached from, walking out from the focus. */
   via: Map<string, string | null>;
+  /** Pages that sit above others and always draw as labelled circles: scopes, and the focus's ancestors. */
+  level: Map<string, GraphLevel>;
   /** The page the layout centres on; `null` when several root scopes share the centre. */
   center: string | null;
 }
@@ -91,12 +99,28 @@ export function graphShape(pages: readonly KnowledgePagePayload[], focusId: stri
     for (const child of children.get(id) ?? []) visit(child.id, id, at + 1, branch.get(id));
   }
 
+  // Scopes and the path up from the focus are the graph's higher levels: they read as circles, not dots.
+  const level = new Map<string, GraphLevel>();
+  for (let up = focusId ? byId.get(focusId)?.parentId : undefined; up && !level.has(up);) {
+    const above = byId.get(up);
+    if (!above) break;
+    level.set(above.id, above.isScope ? 'scope' : 'ancestor');
+    up = above.parentId && above.parentId !== above.id ? above.parentId : undefined;
+  }
+  for (const page of live) {
+    if (page.isScope && !isScopeGroup(page) && !isChildPlaceholder(page) && depth.has(page.id)) {
+      level.set(page.id, 'scope');
+    }
+  }
   const form = new Map<string, GraphNodeForm>();
+  let farCircles = 0;
   for (const page of live) {
     const at = depth.get(page.id);
-    form.set(page.id, at !== undefined && at <= FULL_CIRCLE_DEPTH && !isChildPlaceholder(page) ? 'full' : 'dot');
+    const near = at !== undefined && at <= FULL_CIRCLE_DEPTH && !isChildPlaceholder(page);
+    const higher = at !== undefined && level.has(page.id) && !isChildPlaceholder(page);
+    form.set(page.id, near || (higher && farCircles++ < HIGHER_LEVEL_CAP) ? 'full' : 'dot');
   }
-  return { depth, form, branch, via, center };
+  return { depth, form, branch, via, level, center };
 }
 
 type Point = { x: number; y: number };

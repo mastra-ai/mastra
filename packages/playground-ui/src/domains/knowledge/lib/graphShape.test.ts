@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { KnowledgePagePayload } from '../pageTypes';
 import {
   GRAPH_CHILD_CAP,
+  HIGHER_LEVEL_CAP,
   PLACEHOLDER_CAP,
   WANTED_CIRCLE_CAP,
   graphShape,
@@ -77,12 +78,47 @@ describe('graphShape', () => {
     });
   });
 
+  describe('higher levels', () => {
+    it("draws the focus's ancestors and every scope as circles however far they sit", () => {
+      const shape = graphShape(pages, 'draft');
+      expect(shape.form.get('blog')).toBe('full');
+      expect(shape.form.get('site')).toBe('full');
+      expect(shape.level.get('blog')).toBe('ancestor');
+      expect(shape.level.get('site')).toBe('scope');
+      // Not above the focus, so still dots.
+      expect(shape.form.get('docs')).toBe('dot');
+      expect(shape.form.get('guide')).toBe('dot');
+      expect(shape.level.has('docs')).toBe(false);
+    });
+
+    it("draws a scope that is not on the focus's path as a circle too", () => {
+      const other = page('other', null, { address: 'resource:docs' });
+      const shape = graphShape([...pages, other, page('far', 'other')], 'draft');
+      expect(shape.form.get('other')).toBe('dot');
+      const reached = graphShape([...pages, page('nested', 'guide', { isScope: true, address: 'thread:1' })], 'draft');
+      expect(reached.form.get('nested')).toBe('full');
+      expect(reached.level.get('nested')).toBe('scope');
+    });
+
+    it('keeps the number of far circles bounded', () => {
+      const scopes = Array.from({ length: 15 }, (_, index) =>
+        page(`s${String(index).padStart(2, '0')}`, 'guide', { isScope: true, address: `thread:${index}` }),
+      );
+      const shape = graphShape([...pages, ...scopes], 'draft');
+      // The path up (blog, site) counts against the cap with the scopes.
+      const circles = ['blog', 'site', ...scopes.map(scope => scope.id)].filter(id => shape.form.get(id) === 'full');
+      expect(circles).toHaveLength(HIGHER_LEVEL_CAP);
+    });
+  });
+
   describe('when a dot is focused', () => {
-    it('grows it into a full circle and shrinks what is now far away', () => {
+    it('grows it into a full circle, keeping the pages above it as circles', () => {
       const shape = graphShape(pages, 'draft');
       expect(shape.form.get('draft')).toBe('full');
       expect(shape.form.get('post-1')).toBe('full');
-      expect(shape.form.get('blog')).toBe('dot');
+      // Two links up, so no longer a neighbour, but still above the focus: a circle, not a dot.
+      expect(shape.form.get('blog')).toBe('full');
+      expect(shape.level.get('blog')).toBe('ancestor');
     });
   });
 

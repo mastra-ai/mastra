@@ -15,7 +15,7 @@ import {
   useStore,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { Maximize, Pin } from 'lucide-react';
+import { ArrowUpToLine, Layers, Maximize, Pin } from 'lucide-react';
 import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
@@ -28,7 +28,7 @@ import {
   isScopeGroup,
   radialLayout,
 } from '../lib/graphShape';
-import type { GraphNodeForm } from '../lib/graphShape';
+import type { GraphLevel, GraphNodeForm } from '../lib/graphShape';
 import { runLayout } from '../lib/layout';
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
 import { grantGraph, pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
@@ -115,10 +115,24 @@ type PageNodeData = PageFlowNode['data'] & {
   links?: { in: number; out: number };
   /** Write the dot's links in and out inside it. */
   showCount?: boolean;
+  /** A scope or an ancestor of the focus: a circle that says it sits above other pages. */
+  level?: GraphLevel;
 };
 
 /** Most a tooltip is enlarged to offset a zoomed-out graph. */
 const TOOLTIP_MAX_SCALE = 3;
+
+/** The mark on a circle for a page that sits above others: layers for a scope, an up arrow for an ancestor page. */
+function LevelIcon({ level }: { level: GraphLevel }) {
+  const Icon = level === 'scope' ? Layers : ArrowUpToLine;
+  return (
+    <Icon
+      aria-hidden
+      data-testid={`knowledge-level-icon-${level}`}
+      className="mr-1 inline-block size-3 align-text-bottom"
+    />
+  );
+}
 
 /** A page far from the focus: a small coloured dot that names itself on hover. */
 function DotNode({ data }: { data: PageNodeData }) {
@@ -255,6 +269,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
           style={page.isScope ? { color: 'var(--chart-blue)' } : undefined}
           data-testid={page.isScope ? 'knowledge-scope-caption' : 'knowledge-page-caption'}
         >
+          {data.level ? <LevelIcon level={data.level} /> : null}
           {kind}
         </Txt>
         <Txt as="span" variant="label" tone="ink" className="pointer-events-none line-clamp-3 max-w-full break-words">
@@ -447,6 +462,7 @@ function GraphLegend({
   directions,
   dots,
   focused,
+  levels,
   branches,
 }: {
   grants: boolean;
@@ -455,6 +471,8 @@ function GraphLegend({
   dots: boolean;
   /** A page is focused, drawn larger and ringed at the centre. */
   focused: boolean;
+  /** Which kinds of higher-level circle are drawn, to explain their icons. */
+  levels: GraphLevel[];
   /** The branches dots are coloured by, each named for the circle it hangs under. */
   branches: Array<{ id: string; name: string; color: string }>;
 }) {
@@ -469,6 +487,22 @@ function GraphLegend({
           Scope
         </Txt>
       </li>
+      {levels.includes('scope') ? (
+        <li className="flex items-center gap-2" data-testid="knowledge-legend-level-scope">
+          <Layers aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+          <Txt as="span" variant="meta" tone="muted">
+            Scope, above its pages
+          </Txt>
+        </li>
+      ) : null}
+      {levels.includes('ancestor') ? (
+        <li className="flex items-center gap-2" data-testid="knowledge-legend-level-ancestor">
+          <ArrowUpToLine aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+          <Txt as="span" variant="meta" tone="muted">
+            Page above the focus
+          </Txt>
+        </li>
+      ) : null}
       <li className="flex items-center gap-2">
         <span className={LEGEND_SWATCH} style={{ ...PAGE_STYLE }} aria-hidden />
         <Txt as="span" variant="meta" tone="muted">
@@ -697,6 +731,11 @@ function KnowledgePageGraphInner({
     return { nodes: flow.nodes, edges: flow.edges, positions, shape, colors };
   }, [graphPages, allEdges, selectedPageId, dotSize]);
   const pageById = useMemo(() => new Map(graphPages.map(page => [page.id, page])), [graphPages]);
+  const drawnLevels = useMemo(() => {
+    const kinds = new Set<GraphLevel>();
+    for (const [id, level] of laidOut.shape.level) if (laidOut.shape.form.get(id) === 'full') kinds.add(level);
+    return [...kinds];
+  }, [laidOut]);
   // Each dot takes its branch's colour; the legend says which circle each colour hangs under.
   const dotBranches = useMemo(() => {
     const seen = new Map<string, { id: string; name: string; color: string }>();
@@ -817,6 +856,7 @@ function KnowledgePageGraphInner({
             ref: pageRef(node.data.page, pageById),
             links: linkCounts.get(node.id),
             showCount: showCounts,
+            level: laidOut.shape.form.get(node.id) === 'full' ? laidOut.shape.level.get(node.id) : undefined,
           },
         };
       }),
@@ -998,6 +1038,7 @@ function KnowledgePageGraphInner({
     >
       <GraphLegend
         branches={dotBranches}
+        levels={drawnLevels}
         focused={!!selectedPageId && laidOut.positions.has(selectedPageId)}
         dots={[...laidOut.shape.form.values()].includes('dot')}
         grants={allEdges.some(edge => edge.kind === 'grant')}

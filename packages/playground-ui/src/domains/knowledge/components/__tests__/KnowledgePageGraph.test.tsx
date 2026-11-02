@@ -193,6 +193,32 @@ describe('KnowledgePageGraph', () => {
     });
   });
 
+  describe('higher-level circles', () => {
+    const legend = () => within(screen.getByRole('list', { name: 'Legend' }));
+    const nested = [
+      page('org', null, { name: 'Acme', address: 'org:acme' }),
+      page('support', 'org', { name: 'Support', key: 'support' }),
+      page('ticket', 'support', { name: 'Ticket', key: 'ticket' }),
+    ];
+
+    it('marks a scope with a layers icon and says so in the legend', () => {
+      renderGraph();
+      const org = document.querySelector('[data-page-id="org"]') as HTMLElement;
+      expect(within(org).getByTestId('knowledge-level-icon-scope')).toBeTruthy();
+      expect(legend().getByTestId('knowledge-legend-level-scope')).toBeTruthy();
+      expect(legend().queryByTestId('knowledge-legend-level-ancestor')).toBeNull();
+    });
+
+    it('marks the pages above the focus with an up icon, and leaves the focus and its children bare', () => {
+      renderGraph({ pages: nested, selectedPageId: 'ticket' });
+      const support = document.querySelector('[data-page-id="support"]') as HTMLElement;
+      expect(within(support).getByTestId('knowledge-level-icon-ancestor')).toBeTruthy();
+      const ticket = document.querySelector('[data-page-id="ticket"]') as HTMLElement;
+      expect(within(ticket).queryByTestId('knowledge-level-icon-ancestor')).toBeNull();
+      expect(legend().getByTestId('knowledge-legend-level-ancestor')).toBeTruthy();
+    });
+  });
+
   describe('the focused page', () => {
     const width = (id: string) =>
       Number.parseFloat(document.querySelector<HTMLElement>(`.react-flow__node[data-id="${id}"]`)?.style.width ?? '');
