@@ -10,6 +10,14 @@ import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast } from './declarations';
+import {
+  KNOWLEDGE_READ_BODY_TOKENS,
+  KNOWLEDGE_READ_OUTLINE_ENTRIES,
+  knowledgeBodyMatches,
+  knowledgeBodyOutline,
+  knowledgeBodySection,
+  knowledgeBodyWindow,
+} from './page-body';
 import { knowledgePageRefs } from './page-refs';
 import type { KnowledgePageRefs } from './page-refs';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
@@ -265,27 +273,137 @@ function searchTool(host: KnowledgePageToolHost) {
                 },
           ),
         ),
+        ...(hits.length === max
+          ? {
+              more: [
+                max < MAX_LIMIT
+                  ? `results: showing the top ${max}; there may be more. Search again with a higher limit (up to ${MAX_LIMIT}), a narrower query, or browse with knowledge_list.`
+                  : `results: showing the top ${max}, the most one search returns. Narrow the query or scope, or browse with knowledge_list.`,
+              ],
+            }
+          : {}),
       };
     },
   });
+}
+
+/** What `knowledge_read` returns of a body: the whole of it, its outline, a section or matches, a window at a time. */
+function bodyView(
+  body: string,
+  input: { outline?: boolean; section?: string; match?: string; bodyOffset: number; more: string[] },
+): { body?: string; outline?: ReturnType<typeof knowledgeBodyOutline>; sections?: string[] } {
+  const { more } = input;
+  if (!body) return {};
+  if (input.outline) {
+    const outline = knowledgeBodyOutline(body);
+    if (outline.length > KNOWLEDGE_READ_OUTLINE_ENTRIES) {
+      more.push(
+        `outline: showing ${KNOWLEDGE_READ_OUTLINE_ENTRIES} of ${outline.length} headings. Read a section to see the headings under it.`,
+      );
+    }
+    if (!outline.length) more.push('outline: the body has no headings. Read it by bodyOffset instead.');
+    return { outline: outline.slice(0, KNOWLEDGE_READ_OUTLINE_ENTRIES) };
+  }
+  let text = body;
+  let again = '';
+  let sections: string[] | undefined;
+  if (input.section) {
+    const found = knowledgeBodySection(body, input.section);
+    if ('candidates' in found) {
+      const headings = found.candidates.map(title => `"${title}"`).join(', ');
+      throw new Error(
+        `knowledge_read: no section titled "${input.section}". ${headings ? `Headings include: ${headings}.` : 'The body has no headings.'}`,
+      );
+    }
+    text = body.slice(found.section.start, found.section.end);
+    again = `section: ${JSON.stringify(input.section)}, `;
+  } else if (input.match) {
+    const found = knowledgeBodyMatches(body, input.match);
+    if (!found.text) {
+      more.push(`match: no section contains ${JSON.stringify(input.match)}.`);
+      return { sections: [] };
+    }
+    text = found.text;
+    sections = found.sections;
+    again = `match: ${JSON.stringify(input.match)}, `;
+  }
+  const window = knowledgeBodyWindow(text, input.bodyOffset);
+  if (window.remainingTokens > 0) {
+    more.push(
+      `body: truncated at character ${window.end} of ${window.total}, about ${window.remainingTokens} more tokens. Read again with ${again}bodyOffset: ${window.end} for the rest.`,
+    );
+  } else if (window.start > 0) {
+    more.push(`body: showing characters ${window.start}–${window.end} of ${window.total}, the end.`);
+  }
+  return { ...(window.text ? { body: window.text } : {}), ...(sections ? { sections } : {}) };
 }
 
 function readTool(host: KnowledgePageToolHost) {
   return createTool({
     id: 'knowledge_read',
     description:
-      'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists the scopes this run holds.',
+      'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists the scopes this run holds. ' +
+      `A body returns at most ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens at a time; for a long page, ask for its \`outline\` of headings, then read one \`section\`, or only the sections that \`match\` a term. ` +
+      'Anything cut short is listed in `more` with how to get the rest.',
     inputSchema: {
       type: 'object',
       properties: {
         page: { type: 'string', minLength: 1, description: pageRefDescription },
         cursor: { type: 'string', minLength: 1, description: "The previous result's nextCursor, for more notes." },
-        limit: { ...limitSchema, description: 'Maximum notes and children. Defaults to 10.' },
+        mentionedInCursor: {
+          type: 'string',
+          minLength: 1,
+          description: "The previous result's mentionedInCursor, for more notes that mention this page.",
+        },
+        outline: {
+          type: 'boolean',
+          description: "Return the body's headings with their sizes in tokens instead of the body.",
+        },
+        section: {
+          type: 'string',
+          minLength: 1,
+          description:
+            'Return only the section under this heading (its title, or a unique part of it), subsections included.',
+        },
+        match: {
+          type: 'string',
+          minLength: 1,
+          description:
+            'Return only the sections whose text contains this term (case-insensitive), each with its heading.',
+        },
+        bodyOffset: {
+          type: 'integer',
+          minimum: 0,
+          description:
+            'Where to start in the body (or in the chosen section or matches), in characters; `more` gives it when a body is cut short. Defaults to 0.',
+        },
+        limit: { ...limitSchema, description: 'Maximum notes, children and mentioning notes. Defaults to 10.' },
       },
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, context) => {
-      const { page: ref, cursor, limit: requested } = input as { page?: string; cursor?: string; limit?: number };
+      const {
+        page: ref,
+        cursor,
+        mentionedInCursor,
+        outline,
+        section,
+        match,
+        bodyOffset = 0,
+        limit: requested,
+      } = input as {
+        page?: string;
+        cursor?: string;
+        mentionedInCursor?: string;
+        outline?: boolean;
+        section?: string;
+        match?: string;
+        bodyOffset?: number;
+        limit?: number;
+      };
+      if ([outline, section, match].filter(Boolean).length > 1) {
+        throw new Error('knowledge_read: pass at most one of outline, section and match.');
+      }
       const run = await start(host, context);
       const limit = limitOf(requested);
       if (!ref) {
@@ -305,12 +423,14 @@ function readTool(host: KnowledgePageToolHost) {
       const [notes, children, mentioning] = await Promise.all([
         run.storage.listNotes({ pageId: page.id, read: run.read, cursor, limit }),
         run.storage.listChildPages({ parentId: page.id, read: run.read, limit }),
-        run.storage.listNotesMentioning({ pageId: page.id, read: run.read, limit }),
+        run.storage.listNotesMentioning({ pageId: page.id, read: run.read, cursor: mentionedInCursor, limit }),
       ]);
+      let childScopesCut = false;
       let childScopes: Array<{ address?: string; name: string; description?: string; restricted?: true }> = [];
       if (page.isScope) {
         const ownsParent = (await run.roleOn(page)) === 'owner';
-        const { pages } = await run.storage.listChildScopes({ parentId: page.id, limit });
+        const { pages, nextCursor } = await run.storage.listChildScopes({ parentId: page.id, limit });
+        childScopesCut = !!nextCursor;
         childScopes = pages.flatMap(scope => {
           const readable = knowledgeScopeReadable(scope, run.read);
           if (!readable && !ownsParent) return [];
@@ -333,11 +453,25 @@ function readTool(host: KnowledgePageToolHost) {
         ...children.pages,
         ...mentionPages.filter((p): p is KnowledgePage => p !== null),
       ]);
+      const ownRef = addresses.refs.get(page.id) ?? page.id;
+      const more: string[] = [];
+      const view = bodyView(page.body ?? '', { outline, section, match, bodyOffset, more });
+      if (notes.nextCursor) more.push(`notes: more than ${limit}. Read again with cursor: "${notes.nextCursor}".`);
+      if (children.nextCursor) {
+        more.push(
+          `children: more than ${limit}. List them with knowledge_list from: "${ownRef}", cursor: "${children.nextCursor}".`,
+        );
+      }
+      if (childScopesCut)
+        more.push(`childScopes: more than ${limit}. List them with knowledge_list from: "${ownRef}".`);
+      if (mentioning.nextCursor) {
+        more.push(`mentionedIn: more than ${limit}. Read again with mentionedInCursor: "${mentioning.nextCursor}".`);
+      }
       return {
         page: {
           ...pageSummary(page, addresses),
           version: page.version,
-          ...(page.body ? { body: page.body } : {}),
+          ...view,
         },
         notes: await noteSummaries(run, notes.notes, mentionCache),
         ...(notes.nextCursor ? { nextCursor: notes.nextCursor } : {}),
@@ -347,6 +481,8 @@ function readTool(host: KnowledgePageToolHost) {
           ...note,
           page: mentionPages[i] ? pageSummary(mentionPages[i]!, addresses) : undefined,
         })),
+        ...(mentioning.nextCursor ? { mentionedInCursor: mentioning.nextCursor } : {}),
+        ...(more.length ? { more } : {}),
       };
     },
   });
