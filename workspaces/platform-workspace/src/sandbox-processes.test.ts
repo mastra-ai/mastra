@@ -252,7 +252,7 @@ describe('PlatformSandbox.processes', () => {
 
   // The SDK's deadline cuts the output stream, not the process, which then
   // dies unseen on its next write. Timeouts are enforced by killing instead.
-  it("never puts a deadline on a process's output stream", async () => {
+  it("puts a deadline on a process's output stream only as a backstop for its timeout", async () => {
     const { sandbox } = makeSandbox(vi.fn().mockResolvedValueOnce(created()).mockResolvedValue(e2bLease()));
     await (await sandbox.processes!.spawn('true')).wait();
     await (await sandbox.processes!.spawn('true', { timeout: 1_000 })).wait();
@@ -264,7 +264,8 @@ describe('PlatformSandbox.processes', () => {
     );
     await (await bounded.processes.spawn('true')).wait();
 
-    expect(vm.timeouts).toEqual([0, 0, 0]);
+    // The sandbox's own timeout isn't a default for processes.
+    expect(vm.timeouts).toEqual([0, 6_000, 0]);
   });
 
   it('keeps streaming after the lease the process started with expires', async () => {

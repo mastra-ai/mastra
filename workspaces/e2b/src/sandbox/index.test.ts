@@ -1078,12 +1078,13 @@ describe('E2BSandbox', () => {
     // past it the process keeps running with nothing reading its output, and
     // dies unseen on its next write. Timeouts are enforced by killing instead.
     describe('timeouts', () => {
+      const deadlines: number[] = [];
       const runForever = () => {
         const killed: number[] = [];
+        deadlines.length = 0;
         mockSandbox.commands.run.mockImplementation(async (_cmd: string, opts?: any) => {
-          const handle = { pid: 4242, wait: () => new Promise(() => {}), kill: vi.fn() };
-          expect(opts?.timeoutMs).toBe(0);
-          return handle;
+          deadlines.push(opts?.timeoutMs);
+          return { pid: 4242, wait: () => new Promise(() => {}), kill: vi.fn() };
         });
         (mockSandbox.commands as any).kill = vi.fn(async (pid: number) => {
           killed.push(pid);
@@ -1112,6 +1113,8 @@ describe('E2BSandbox', () => {
         expect(killed).toEqual([]);
         await vi.advanceTimersByTimeAsync(1);
         expect(killed).toEqual([4242]);
+        // E2B stops it a little later on its own if the host is gone.
+        expect(deadlines).toEqual([killsAt + 5_000]);
       });
 
       // A dev server started in the background is meant to keep running.
@@ -1124,6 +1127,7 @@ describe('E2BSandbox', () => {
         await sandbox.processes.spawn('npm run dev');
         await vi.advanceTimersByTimeAsync(24 * 60 * 60_000);
         expect(killed).toEqual([]);
+        expect(deadlines).toEqual([0]);
       });
 
       it('stops a background process at the timeout it was given', async () => {
@@ -1137,6 +1141,7 @@ describe('E2BSandbox', () => {
         expect(killed).toEqual([]);
         await vi.advanceTimersByTimeAsync(1);
         expect(killed).toEqual([4242]);
+        expect(deadlines).toEqual([185_000]);
       });
     });
   });

@@ -41,6 +41,13 @@ export interface CommandsApi {
 export const ATTACH_TIMEOUT_MS = 0;
 
 /**
+ * How long after a process's timeout the sandbox stops it on its own. The
+ * manager stops it first and reports the timeout; this is the backstop for
+ * when the manager is gone, e.g. the host restarted.
+ */
+export const SANDBOX_TIMEOUT_SLACK_MS = 5_000;
+
+/**
  * Output callbacks for `run`/`connect` that hold output until the handle
  * exists. The SDK's handle reads events from construction, before `run()`
  * returns, so output that arrives with the start event reaches the
@@ -117,13 +124,20 @@ export class CommandsApiProcessHandle extends ProcessHandle {
       this.timedOutAfter = ms;
       void this.kill()
         .then(killed => {
-          if (!killed) this.timedOutAfter = undefined;
+          if (killed) this.emitTimeoutMessage();
+          else this.timedOutAfter = undefined;
         })
         .catch(() => {
           this.timedOutAfter = undefined;
         });
     }, ms);
     this.timeoutTimer.unref?.();
+  }
+
+  /** Say why the process stopped, once, the way the local sandbox does. */
+  private emitTimeoutMessage(): void {
+    const message = `Process timed out after ${this.timedOutAfter}ms`;
+    if (!this.stderr.includes(message)) this.emitStderr(`\n${message}`);
   }
 
   /** Wait for the process to exit. Providers whose output stream can drop while the process runs override this. */
@@ -135,8 +149,7 @@ export class CommandsApiProcessHandle extends ProcessHandle {
     const result = await this.waitUntimed();
     clearTimeout(this.timeoutTimer);
     if (this.timedOutAfter === undefined) return result;
-    const timeoutMsg = `Process timed out after ${this.timedOutAfter}ms`;
-    if (!this.stderr.includes(timeoutMsg)) this.emitStderr(`\n${timeoutMsg}`);
+    this.emitTimeoutMessage();
     return { ...result, success: false, exitCode: 124, stderr: this.stderr, killed: true, timedOut: true };
   }
 
@@ -253,6 +266,7 @@ export abstract class CommandsApiProcessManager<
     const envs = Object.fromEntries(
       Object.entries({ ...options.env }).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
+    const timeout = options.timeout ?? this.defaultTimeout;
     return this.runCommands('spawn', async commands => {
       const output = outputUntilHandled();
       const inner = await commands.run(command, {
@@ -265,15 +279,15 @@ export abstract class CommandsApiProcessManager<
         // The SDK's `timeoutMs` is a deadline on the output stream, not the
         // process: without one it falls back to 60s, and once it passes the
         // process can live on with nothing reading its output, dying unseen
-        // on its next write. So the stream stays open and the timeout is
-        // enforced below.
-        timeoutMs: 0,
+        // on its next write. So without a timeout the stream stays open. With
+        // one, the manager stops the process (below) and the stream deadline
+        // comes a little later, as a backstop if the manager is gone.
+        timeoutMs: timeout ? timeout + SANDBOX_TIMEOUT_SLACK_MS : 0,
         onStdout: output.onStdout,
         onStderr: output.onStderr,
       });
       const handle = output.handledBy(this.createHandle(inner, options.stdinMode, options));
       this._tracked.set(handle.pid, handle);
-      const timeout = options.timeout ?? this.defaultTimeout;
       if (timeout) handle.expireAfter(timeout);
       return handle;
     });
