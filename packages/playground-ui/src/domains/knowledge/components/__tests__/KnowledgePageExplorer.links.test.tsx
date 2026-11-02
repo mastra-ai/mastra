@@ -1,0 +1,167 @@
+// @vitest-environment jsdom
+import { fireEvent, screen, within } from '@testing-library/react';
+import { useState } from 'react';
+import { beforeAll, describe, expect, it } from 'vitest';
+
+import { renderWithProviders } from '../../../../test/render';
+import type { KnowledgeNotePayload, KnowledgePagePayload } from '../../pageTypes';
+import type {
+  KnowledgeExplorerGraph,
+  KnowledgeExplorerPageDetail,
+  KnowledgeExplorerQueryState,
+  KnowledgeExplorerSource,
+  KnowledgeExplorerView,
+} from '../KnowledgePageExplorer';
+import { KnowledgePageExplorer } from '../KnowledgePageExplorer';
+
+function page(id: string, parentId: string | null, extra: Partial<KnowledgePagePayload> = {}): KnowledgePagePayload {
+  return {
+    id,
+    scopeId: 'docs',
+    parentId,
+    isScope: parentId === null,
+    position: 'a0',
+    name: id,
+    version: 1,
+    createdBy: { author: 'host' },
+    updatedBy: { author: 'host' },
+    createdAt: '2026-11-01T00:00:00.000Z',
+    updatedAt: '2026-11-01T00:00:00.000Z',
+    ...extra,
+  };
+}
+
+const docs = page('docs', null, { name: 'Mastra docs', address: 'docs:mastra' });
+const workflows = page('workflows', 'docs', { name: 'Workflows', key: 'workflows' });
+const suspend = page('suspend', 'workflows', { name: 'Suspend and resume', key: 'suspend-and-resume' });
+const overview = page('overview', 'docs', {
+  name: 'Overview',
+  key: 'overview',
+  position: 'a1',
+  body: [
+    'Pause a run with [[docs:mastra#workflows/suspend-and-resume]], or read [[Workflows]] first.',
+    '',
+    'Not written yet: [[docs:mastra#workflows/human-in-the-loop]].',
+    '',
+    'Escaped: [[<img src=x onerror="window.__pwned=1">]]',
+    '',
+    'Inline `[[docs:mastra#workflows]]` stays code.',
+    '',
+    '```',
+    '[[docs:mastra#workflows]]',
+    '```',
+  ].join('\n'),
+});
+
+const pathNote: KnowledgeNotePayload = {
+  id: 'n1',
+  pageId: 'overview',
+  text: 'Moved to [[docs:mastra#workflows/suspend-and-resume]]',
+  stampScopeIds: [],
+  mentions: ['suspend'],
+  provenance: { author: 'docs-agent' },
+  createdAt: '2026-11-01T00:00:00.000Z',
+  updatedAt: '2026-11-01T00:00:00.000Z',
+};
+
+const all = [docs, workflows, suspend, overview];
+const ok = <T,>(data: T): KnowledgeExplorerQueryState<T> => ({ data, isPending: false, isError: false, error: null });
+const idle: KnowledgeExplorerQueryState<never> = { isPending: false, isError: false, error: null };
+
+function detail(pageId: string): KnowledgeExplorerPageDetail {
+  const target = all.find(candidate => candidate.id === pageId) ?? overview;
+  const ancestors = target.parentId === 'workflows' ? [docs, workflows] : target.parentId ? [docs] : [];
+  return { page: target, notes: target === overview ? [pathNote] : [], ancestors, related: [] };
+}
+
+const source: KnowledgeExplorerSource = {
+  usePage: pageId => (pageId ? ok(detail(pageId)) : idle),
+  useSearch: () => ({ data: { results: [] } }),
+};
+
+const graph: KnowledgeExplorerGraph = { pages: all, edges: [], pinnedIds: [], truncated: false };
+
+function Host({ initial, initialView }: { initial: string | null; initialView: KnowledgeExplorerView }) {
+  const [selected, setSelected] = useState<string | null>(initial);
+  const [view, setView] = useState<KnowledgeExplorerView>(initialView);
+  return (
+    <>
+      <output data-testid="selected">{selected}</output>
+      <KnowledgePageExplorer
+        graph={graph}
+        source={source}
+        selectedPageId={selected}
+        onSelect={setSelected}
+        view={view}
+        onViewChange={setView}
+      />
+    </>
+  );
+}
+
+beforeAll(() => {
+  window.ResizeObserver ??= class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+});
+
+describe('KnowledgePageExplorer body links', () => {
+  describe('when an open page body links other pages with [[ref]]', () => {
+    const body = () => within(screen.getByTestId('knowledge-page-body'));
+
+    it('draws a nested scope#path link as the target page, and opens it on click', () => {
+      renderWithProviders(<Host initial="overview" initialView="page" />);
+      const link = body().getByRole('button', { name: 'Suspend and resume' });
+      expect(link.getAttribute('title')).toBe('docs:mastra#workflows/suspend-and-resume');
+      fireEvent.click(link);
+      expect(screen.getByTestId('selected').textContent).toBe('suspend');
+    });
+
+    it('links a ref by page name too', () => {
+      renderWithProviders(<Host initial="overview" initialView="page" />);
+      expect(body().getByRole('button', { name: 'Workflows' })).toBeTruthy();
+    });
+
+    it('shows a ref no loaded page answers to as quiet text, not a link', () => {
+      renderWithProviders(<Host initial="overview" initialView="page" />);
+      const unresolved = body().getAllByTestId('knowledge-body-link-unresolved');
+      expect(unresolved.map(element => element.tagName)).toEqual(['SPAN']);
+      expect(unresolved[0]?.textContent).toBe('docs:mastra#workflows/human-in-the-loop');
+    });
+
+    it('lets no markup in a ref reach the page', () => {
+      const { container } = renderWithProviders(<Host initial="overview" initialView="page" />);
+      expect(container.querySelector('[data-testid="knowledge-page-body"] img')).toBeNull();
+      expect((window as { __pwned?: number }).__pwned).toBeUndefined();
+    });
+
+    it('leaves refs inside inline code and code blocks as written', () => {
+      renderWithProviders(<Host initial="overview" initialView="page" />);
+      expect(body().getAllByTestId('knowledge-body-link')).toHaveLength(2);
+      expect(body().getByText('[[docs:mastra#workflows]]', { selector: 'code' })).toBeTruthy();
+    });
+  });
+
+  describe('when a note mentions a page by its scope#path', () => {
+    it('links the mention to the page the server resolved', () => {
+      renderWithProviders(<Host initial="overview" initialView="page" />);
+      const notes = within(screen.getByRole('region', { name: 'Notes' }));
+      fireEvent.click(notes.getByRole('button', { name: 'docs:mastra#workflows/suspend-and-resume' }));
+      expect(screen.getByTestId('selected').textContent).toBe('suspend');
+    });
+  });
+
+  describe('when the graph shows pages whose bodies link each other', () => {
+    it('draws a body-link line from the linking page to each page it links', () => {
+      const { container } = renderWithProviders(<Host initial={null} initialView="graph" />);
+      const lines = [...container.querySelectorAll('.react-flow__edge')]
+        .map(edge => edge.getAttribute('data-id'))
+        .filter(id => id?.startsWith('link:'))
+        .sort();
+      expect(lines).toEqual(['link:overview->suspend', 'link:overview->workflows']);
+      expect(screen.getByTestId('knowledge-legend-link')).toBeTruthy();
+    });
+  });
+});
