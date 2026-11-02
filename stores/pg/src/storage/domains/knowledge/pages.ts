@@ -1219,6 +1219,23 @@ export class PgKnowledgePages implements KnowledgePageStore {
     return this.#noteOutput(rows, limit);
   }
 
+  async countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (!ids.length) return counts;
+    const params = new Params();
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT p."parentId" AS "parentId", count(*)::int AS "count" FROM ${this.#pages} p JOIN ${this.#pages} s ON s."id" = p."scopeId"
+       WHERE p."parentId" = ANY(${params.add(ids)}::text[]) AND NOT p."isScope" AND p."deletedAt" IS NULL AND ${filter.readable('s')}
+       GROUP BY p."parentId"`,
+      params.values,
+    );
+    for (const row of rows) counts[row.parentId as string] = Number(row.count);
+    return counts;
+  }
+
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
     const ids = [...new Set(input.pageIds)];
     const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));

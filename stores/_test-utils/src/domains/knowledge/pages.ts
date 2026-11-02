@@ -1344,6 +1344,31 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         });
         expect(await store.countNotes({ pageIds: [], read: read(['org:acme']) })).toEqual({});
       });
+
+      it('counts the child pages a reader can see under each parent in one call', async () => {
+        const acme = await scope('org:acme', ORG);
+        const team = await scope('team:acme:support', ORG, acme.id);
+        const guides = await page(acme.id, 'guides');
+        await page(guides.id, 'install');
+        await page(guides.id, 'login');
+        const gone = await page(guides.id, 'gone');
+        await store.deletePage({ id: gone.id, expectedVersion: gone.version, deletedBy: 'agent:alex' });
+        const leaf = await page(acme.id, 'leaf');
+        await page(team.id, 'roster');
+
+        // Child scopes are not child pages; deleted pages don't count.
+        expect(
+          await store.countChildPages({
+            parentIds: [acme.id, guides.id, guides.id, leaf.id, 'missing'],
+            read: read(['org:acme', 'team:acme:support']),
+          }),
+        ).toEqual({ [acme.id]: 2, [guides.id]: 2, [leaf.id]: 0, missing: 0 });
+        // A reader who can't read the child scope sees none of its pages.
+        expect(await store.countChildPages({ parentIds: [team.id], read: read(['org:acme']) })).toEqual({
+          [team.id]: 0,
+        });
+        expect(await store.countChildPages({ parentIds: [], read: read(['org:acme']) })).toEqual({});
+      });
     });
   });
 }

@@ -1162,6 +1162,20 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     return this.#noteOutput(rows, limit);
   }
 
+  async countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (ids.length === 0) return counts;
+    const readable = pageReadable('p', input.read);
+    const rows = await this.#query(
+      this.#read,
+      `SELECT p.parentId AS parentId, COUNT(*) AS total FROM ${T.pages} p WHERE p.parentId IN ${JV} AND p.isScope = 0 AND p.deletedAt IS NULL AND ${readable.sql} GROUP BY p.parentId`,
+      [jsonList(ids), ...readable.args],
+    );
+    for (const row of rows) counts[String(row.parentId)] = Number(row.total);
+    return counts;
+  }
+
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
     const ids = [...new Set(input.pageIds)];
     const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));

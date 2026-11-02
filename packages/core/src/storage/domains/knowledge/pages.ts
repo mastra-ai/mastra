@@ -626,6 +626,12 @@ export interface KnowledgePageStore {
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput>;
+  /**
+   * How many readable live ordinary child pages each parent has, keyed by parent id; one call for all
+   * the parents. Counts the pages {@link listChildPages} would list. Parents with none map to 0;
+   * duplicate ids count once.
+   */
+  countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>>;
   /** Readable live ordinary pages, optionally in one scope and by name prefix, by name then id. */
   listPages(input: {
     read: KnowledgeReadScope;

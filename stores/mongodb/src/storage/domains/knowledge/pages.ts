@@ -1260,6 +1260,23 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     return this.#noteOutput(rows, limit);
   }
 
+  async countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (!ids.length) return counts;
+    const readable = await this.#readable(input.read);
+    const rows = await (
+      await this.#c('pages')
+    )
+      .aggregate([
+        { $match: { parentId: { $in: ids }, ...notScope, ...live, ...this.#inScopes('scopeId', readable) } },
+        { $group: { _id: '$parentId', count: { $sum: 1 } } },
+      ])
+      .toArray();
+    for (const row of rows) counts[row._id as string] = row.count as number;
+    return counts;
+  }
+
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
     const ids = [...new Set(input.pageIds)];
     const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));

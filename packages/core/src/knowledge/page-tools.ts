@@ -352,6 +352,194 @@ function readTool(host: KnowledgePageToolHost) {
   });
 }
 
+const LIST_DEFAULT_LIMIT = 50;
+const LIST_MAX_LIMIT = 100;
+const LIST_MAX_DEPTH = 3;
+
+/** One entry of a `knowledge_list` result. */
+interface ListEntry {
+  ref: string;
+  name: string;
+  description?: string;
+  /** 1 for the starting point's children, 2 for theirs, and so on. */
+  depth: number;
+  /** Readable child pages, plus readable child scopes for a scope. */
+  children: number;
+  scope?: true;
+}
+
+/** A child's ref built from its parent's: `<scope>#<key>` under a scope, `<parent ref>/<key>` deeper, else its id. */
+function childRef(parent: KnowledgePage, parentRef: string, child: KnowledgePage): string {
+  if (child.isScope) return child.address ?? child.id;
+  if (!child.key || (!parent.isScope && parentRef === parent.id)) return child.id;
+  return parent.isScope ? `${parentRef}#${child.key}` : `${parentRef}/${child.key}`;
+}
+
+function listTool(host: KnowledgePageToolHost) {
+  return createTool({
+    id: 'knowledge_list',
+    description:
+      'List the page tree under a starting point: each child with its ref (pass it to knowledge_read or knowledge_list), name, description and how many children it has. ' +
+      'Without `from`, lists the scopes this run can read. Use it to find your way around a scope before searching or reading.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        from: { type: 'string', minLength: 1, description: `Where to start. ${pageRefDescription}` },
+        depth: {
+          type: 'integer',
+          minimum: 1,
+          maximum: LIST_MAX_DEPTH,
+          description: `How many levels below the starting point to list, up to ${LIST_MAX_DEPTH}. Defaults to 1.`,
+        },
+        limit: {
+          type: 'integer',
+          minimum: 1,
+          maximum: LIST_MAX_LIMIT,
+          description: `Maximum entries. Defaults to ${LIST_DEFAULT_LIMIT}.`,
+        },
+        cursor: {
+          type: 'string',
+          minLength: 1,
+          description: "The previous result's nextCursor, for the next entries at depth 1.",
+        },
+      },
+      additionalProperties: false,
+    } satisfies JSONSchema7,
+    execute: async (input, context) => {
+      const {
+        from,
+        depth: requestedDepth,
+        limit: requestedLimit,
+        cursor,
+      } = input as {
+        from?: string;
+        depth?: number;
+        limit?: number;
+        cursor?: string;
+      };
+      const run = await start(host, context);
+      const depth = Math.min(Math.max(requestedDepth ?? 1, 1), LIST_MAX_DEPTH);
+      const limit = Math.min(Math.max(requestedLimit ?? LIST_DEFAULT_LIMIT, 1), LIST_MAX_LIMIT);
+
+      /** Readable scopes directly under a scope page; unreadable ones are left out entirely. */
+      const childScopes = async (parentId: string): Promise<KnowledgePage[]> => {
+        const out: KnowledgePage[] = [];
+        let next: string | undefined;
+        do {
+          const { pages, nextCursor } = await run.storage.listChildScopes({
+            parentId,
+            cursor: next,
+            limit: LIST_MAX_LIMIT,
+          });
+          out.push(...pages.filter(scope => knowledgeScopeReadable(scope, run.read)));
+          next = nextCursor;
+        } while (next);
+        return out;
+      };
+
+      let origin: KnowledgePage | undefined;
+      let originRef: string | undefined;
+      let roots: KnowledgePage[];
+      let nextCursor: string | undefined;
+      if (!from) {
+        if (cursor) throw new Error('knowledge_list: a cursor needs the `from` it came from.');
+        const held = await run.storage.getScopesByAddress(run.principals);
+        const order = (scope: KnowledgePage) => run.principals.indexOf(scope.address ?? '');
+        roots = held.filter(scope => knowledgeScopeReadable(scope, run.read)).sort((a, b) => order(a) - order(b));
+      } else {
+        origin = await run.pageOrCloseMatches(from);
+        originRef = (await pageRefs(run, [origin])).refs.get(origin.id) ?? origin.id;
+        // A scope's readable child scopes lead its first page and don't count against the limit;
+        // child pages continue by cursor.
+        const scopes = origin.isScope && !cursor ? await childScopes(origin.id) : [];
+        const pages = await run.storage.listChildPages({ parentId: origin.id, read: run.read, cursor, limit });
+        roots = [...scopes, ...pages.pages];
+        nextCursor = pages.nextCursor;
+      }
+
+      type Node = { page: KnowledgePage; ref: string; depth: number; children: number; below: Node[] };
+      const nodeOf = (page: KnowledgePage, ref: string, level: number): Node => ({
+        page,
+        ref,
+        depth: level,
+        children: 0,
+        below: [],
+      });
+      const top = roots.map(page =>
+        nodeOf(page, origin && originRef ? childRef(origin, originRef, page) : (page.address ?? page.id), 1),
+      );
+      let budget = Math.max(limit - top.length, 0);
+      let truncated = false;
+      let level = top;
+      for (let current = 1; current <= depth && level.length; current++) {
+        const pageCounts = await run.storage.countChildPages({
+          parentIds: level.map(node => node.page.id),
+          read: run.read,
+        });
+        const scopeChildren = new Map<string, KnowledgePage[]>();
+        for (const node of level) {
+          if (node.page.isScope) scopeChildren.set(node.page.id, await childScopes(node.page.id));
+          node.children = (pageCounts[node.page.id] ?? 0) + (scopeChildren.get(node.page.id)?.length ?? 0);
+        }
+        if (current === depth) break;
+        const nextLevel: Node[] = [];
+        for (const node of level) {
+          if (!node.children) continue;
+          if (budget <= 0) {
+            truncated = true;
+            break;
+          }
+          const scopes = (scopeChildren.get(node.page.id) ?? []).slice(0, budget);
+          budget -= scopes.length;
+          const pages =
+            budget > 0
+              ? (
+                  await run.storage.listChildPages({
+                    parentId: node.page.id,
+                    read: run.read,
+                    limit: Math.min(budget, LIST_MAX_LIMIT),
+                  })
+                ).pages
+              : [];
+          budget -= pages.length;
+          node.below = [...scopes, ...pages].map(child =>
+            nodeOf(child, childRef(node.page, node.ref, child), current + 1),
+          );
+          if (node.below.length < node.children) truncated = true;
+          nextLevel.push(...node.below);
+        }
+        level = nextLevel;
+      }
+
+      const entries: ListEntry[] = [];
+      const flatten = (nodes: Node[]) => {
+        for (const node of nodes) {
+          entries.push({
+            ref: node.ref,
+            name: node.page.name,
+            ...(node.page.description ? { description: node.page.description } : {}),
+            depth: node.depth,
+            children: node.children,
+            ...(node.page.isScope ? { scope: true as const } : {}),
+          });
+          flatten(node.below);
+        }
+      };
+      flatten(top);
+      return {
+        ...(origin ? { from: { ref: originRef!, name: origin.name } } : {}),
+        entries,
+        ...(nextCursor ? { nextCursor } : {}),
+        ...(truncated
+          ? {
+              more: `Stopped listing deeper levels at ${limit} entries: list an entry by its ref to see the rest of its children.`,
+            }
+          : {}),
+      };
+    },
+  });
+}
+
 type PageInput = {
   op: 'write' | 'move' | 'merge' | 'delete';
   page?: string;
@@ -663,6 +851,7 @@ export function buildKnowledgePageTools(
 ): Tools {
   const tools: Tools = {};
   if (groups.read) {
+    tools.knowledge_list = listTool(host);
     tools.knowledge_search = searchTool(host);
     tools.knowledge_read = readTool(host);
   }

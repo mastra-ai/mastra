@@ -401,6 +401,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     return { pages: items.map(clone), ...(nextCursor ? { nextCursor } : {}) };
   }
 
+  async countChildPages(input: Parameters<Store['countChildPages']>[0]) {
+    const counts: Record<string, number> = Object.fromEntries(input.parentIds.map(id => [id, 0]));
+    for (const page of this.#pages.values()) {
+      if (page.parentId === null || !(page.parentId in counts)) continue;
+      if (page.isScope || page.deletedAt || !this.#pageReadable(page, input.read)) continue;
+      counts[page.parentId]! += 1;
+    }
+    return counts;
+  }
+
   async listPages(input: Parameters<Store['listPages']>[0]) {
     const prefix = input.namePrefix === undefined ? undefined : canonicalKnowledgeName(input.namePrefix);
     const pages = [...this.#pages.values()]
