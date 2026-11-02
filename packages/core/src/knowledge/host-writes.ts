@@ -196,7 +196,7 @@ export async function removeKnowledgePage(
     }
     throw error;
   }
-  await embed(host, index => index.remove([`page:${page.id}`]));
+  await embed(host, index => index.removePage(page.id));
   return deleted;
 }
 

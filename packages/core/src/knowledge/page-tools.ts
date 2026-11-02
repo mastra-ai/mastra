@@ -1202,7 +1202,7 @@ function pageTool(host: KnowledgePageToolHost) {
           }
           throw error;
         }
-        await reindex(host, index => index.remove([`page:${page.id}`]));
+        await reindex(host, index => index.removePage(page.id));
         return done(deleted);
       }
 
@@ -1243,7 +1243,7 @@ function pageTool(host: KnowledgePageToolHost) {
         targetId: target.id,
         provenance,
       });
-      await reindex(host, index => index.remove([`page:${page.id}`]));
+      await reindex(host, index => index.removePage(page.id));
       return done(merged);
     },
   });

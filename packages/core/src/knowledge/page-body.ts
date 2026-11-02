@@ -257,6 +257,92 @@ function isLowSurrogate(code: number): boolean {
   return code >= 0xdc00 && code <= 0xdfff;
 }
 
+/**
+ * Most estimated tokens of one page chunk the semantic index embeds, page name and description
+ * included. Well under common embedder limits (8,191 for OpenAI's), since the estimate can run low.
+ */
+export const KNOWLEDGE_EMBED_CHUNK_TOKENS = 2_000;
+/** Estimated tokens each chunk repeats from the end of the one before it. */
+export const KNOWLEDGE_EMBED_CHUNK_OVERLAP_TOKENS = 150;
+
+/**
+ * Splits `body` into pieces of at most `maxTokens` estimated tokens, breaking between paragraphs
+ * and before headings (never inside fenced code unless one block alone is too big), each piece
+ * starting with about `overlapTokens` from the end of the one before. A body that fits is one piece.
+ */
+export function knowledgeBodyChunks(
+  body: string,
+  maxTokens = KNOWLEDGE_EMBED_CHUNK_TOKENS,
+  overlapTokens = KNOWLEDGE_EMBED_CHUNK_OVERLAP_TOKENS,
+): string[] {
+  if (estimateTokenCount(body) <= maxTokens) return [body];
+  const room = Math.max(maxTokens - overlapTokens, 1);
+
+  // Paragraphs and fenced blocks, with a break before each heading.
+  const blocks: Array<{ text: string; heading: boolean }> = [];
+  let lines: string[] = [];
+  let heading = false;
+  let fence: string | undefined;
+  const flush = () => {
+    if (lines.some(line => line.trim())) blocks.push({ text: lines.join('\n'), heading });
+    lines = [];
+    heading = false;
+  };
+  for (const line of body.split('\n')) {
+    const fenced = FENCE.exec(line)?.[1];
+    if (fence === undefined && !fenced && !line.trim()) {
+      flush();
+      continue;
+    }
+    if (fence === undefined && !fenced && HEADING.test(line)) {
+      flush();
+      heading = true;
+    }
+    if (fenced) fence = fence === undefined ? fenced : fence === fenced ? undefined : fence;
+    lines.push(line);
+  }
+  flush();
+
+  // A block too big for one chunk is cut by tokens.
+  const pieces = blocks.flatMap(block => {
+    if (estimateTokenCount(block.text) <= room) return [block];
+    const cut: Array<{ text: string; heading: boolean }> = [];
+    for (let rest = block.text, first = true; rest; first = false) {
+      const piece = estimateTokenCount(rest) > room ? sliceByTokens(rest, 0, room) : rest;
+      const size = piece.length || 1;
+      cut.push({ text: rest.slice(0, size), heading: first && block.heading });
+      rest = rest.slice(size);
+    }
+    return cut;
+  });
+
+  const chunks: string[] = [];
+  let current: string[] = [];
+  let tokens = 0;
+  const close = () => {
+    if (!current.length) return;
+    const text = current.join('\n\n');
+    chunks.push(text);
+    const tail = overlapTokens > 0 ? sliceByTokens(text, -overlapTokens) : '';
+    current = tail ? [tail] : [];
+    tokens = estimateTokenCount(tail);
+  };
+  let fresh = true;
+  for (const piece of pieces) {
+    const size = estimateTokenCount(piece.text);
+    // Start a new chunk when this one is full, or at a heading once it's half full.
+    if (!fresh && (tokens + size > maxTokens || (piece.heading && tokens > maxTokens / 2))) {
+      close();
+      fresh = true;
+    }
+    current.push(piece.text);
+    tokens += size;
+    fresh = false;
+  }
+  if (!fresh) close();
+  return chunks;
+}
+
 /** Longest a line runs in a heading skeleton before it is cut with `…`. */
 const SKELETON_LINE_CHARS = 200;
 
