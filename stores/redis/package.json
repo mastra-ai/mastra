@@ -42,7 +42,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "ioredis": "^6.0.0",
     "tsdown": "0.23.1",
     "tsx": "catalog:",

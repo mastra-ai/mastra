@@ -36,7 +36,7 @@
     "@types/node": "22.19.15",
     "tsdown": "0.23.1",
     "typescript": "catalog:",
-    "vitest": "^4.1.12",
+    "vitest": "^5.0.5",
     "zod": "catalog:"
   },
   "peerDependencies": {

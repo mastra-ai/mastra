@@ -40,14 +40,14 @@ catalog:
   '@microsoft/api-extractor': ^7.59.4
   '@stryker-mutator/core': 10.0.0
   '@stryker-mutator/vitest-runner': 10.0.0
-  '@vitest/coverage-v8': 4.1.12
-  '@vitest/ui': 4.1.12
+  '@vitest/coverage-v8': 5.0.5
+  '@vitest/ui': 5.0.5
   date-fns: 4.4.0
   lucide-react: ^1.61.0
   react: ^19.3.1
   react-dom: ^19.3.1
   typescript: ^7.0.2
-  vitest: 4.1.12
+  vitest: 5.0.5
   zod: ^4.6.7
   tsx: ^4.23.15
   oxfmt: 0.59.0
@@ -439,8 +439,8 @@ overrides:
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   # Round 2 2026-09-18: clear remaining Dependabot + raise Aikido-visible floors
   image-size@<=2.0.2: 2.0.4
-  '@vitest/mocker@>=2.1.0 <4.1.12': 4.1.12
-  vitest@>=2.1.0 <4.1.12: 4.1.12
+  '@vitest/mocker@>=2.1.0 <4.1.12': 5.0.5
+  vitest@>=2.1.0 <4.1.12: 5.0.5
   jose@>=4.14.0 <6.2.12: 6.2.12
   '@noble/hashes@>=1.0.0 <1.8.0': 1.8.0
   '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0

@@ -11,7 +11,7 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "changesets-changelog-github-local": "^1.0.1",
-    "dotenv": "17.4.2",
+    "dotenv": "18.0.9",
     "husky": "^9.1.7",
     "lint-staged": "^16.4.0",
     "madge": "^8.0.0",
