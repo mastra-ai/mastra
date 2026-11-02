@@ -888,10 +888,22 @@ function writtenBody(args: PageInput, page: KnowledgePage): string | undefined {
     if (args.expectedVersion === undefined) {
       throw new Error('A bodyRange write needs expectedVersion, the version the range was read at.');
     }
-    const { start, end } = args.bodyRange;
+    const { start, end, of } = args.bodyRange;
+    if (args.expectedVersion === page.version && of !== stored.length) {
+      throw new Error(
+        `This bodyRange is from a body of ${of} characters, but this page's body has ${stored.length}. Read this page again for its own range.`,
+      );
+    }
     if (args.expectedVersion === page.version && (start > end || end > stored.length)) {
       throw new Error(
         `bodyRange ${start}–${end} is outside the body, which has ${stored.length} characters. Read the page again for a current range.`,
+      );
+    }
+    // No read returns the whole of a body this long, so a range covering all of it can't come from one.
+    if (start === 0 && end >= stored.length && estimateTokenCount(stored) > KNOWLEDGE_READ_BODY_TOKENS) {
+      throw new Error(
+        `bodyRange ${start}–${end} covers this page's whole body (${stored.length} characters), but no knowledge_read returns all of a body this long, so the text can't be all of it. ` +
+          'Edit it part by part: write each part back with the bodyRange its read returned.',
       );
     }
     return stored.slice(0, start) + args.body + stored.slice(end);
@@ -899,15 +911,15 @@ function writtenBody(args: PageInput, page: KnowledgePage): string | undefined {
   if (args.body !== undefined && estimateTokenCount(stored) > KNOWLEDGE_READ_BODY_TOKENS) {
     throw new Error(
       `This page's body is ${stored.length} characters, more than one knowledge_read returns, and a body write replaces all of it. ` +
-        'Pass the bodyRange your read returned to replace just that part (with expectedVersion), ' +
-        `or bodyRange {start: 0, end: ${stored.length}} to replace the whole body.`,
+        'Write back only the part you read, with the bodyRange that read returned and its expectedVersion; ' +
+        'read other parts with bodyOffset or section and write each back with its own bodyRange.',
     );
   }
   return args.body;
 }
 
 type PageInput = {
-  bodyRange?: { start: number; end: number };
+  bodyRange?: { start: number; end: number; of: number };
   op: 'write' | 'move' | 'merge' | 'delete';
   page?: string;
   scope?: string;
@@ -958,9 +970,13 @@ function pageTool(host: KnowledgePageToolHost) {
         bodyRange: {
           type: 'object',
           description:
-            'Edit: the bodyRange a knowledge_read returned with part of a body. `body` then replaces only characters start to end. Needs expectedVersion.',
-          properties: { start: { type: 'integer', minimum: 0 }, end: { type: 'integer', minimum: 0 } },
-          required: ['start', 'end'],
+            'Edit: the bodyRange a knowledge_read returned with part of a body, passed back unchanged. `body` then replaces only characters start to end. Needs expectedVersion.',
+          properties: {
+            start: { type: 'integer', minimum: 0 },
+            end: { type: 'integer', minimum: 0 },
+            of: { type: 'integer', minimum: 0 },
+          },
+          required: ['start', 'end', 'of'],
         },
         expectedVersion: {
           type: 'integer',

@@ -14,7 +14,7 @@ Every Knowledge read result now lists anything it cut short in `more`, with how 
 
 A whole-page read keeps a page's notes, and the notes on other pages that mention it, only while each list stays under 1,000 tokens. A longer list is left out and counted in `more`; read it on its own with `notes: true` or `mentionedIn: true`. A read with `cursor` or `mentionedInCursor` now returns only those notes, without repeating the body.
 
-A read that returns only part of a body (a truncated window or a section) also returns that part's `bodyRange`. `knowledge_page` accepts the same `bodyRange` with `expectedVersion` and replaces only that part of the body. A `knowledge_page` body write without `bodyRange` is refused when the stored body is longer than one read returns, because the writer can only have seen part of it and writing that back would drop the rest.
+A read that returns only part of a body (a truncated window or a section) also returns that part's `bodyRange`. `knowledge_page` accepts the same `bodyRange` with `expectedVersion` and replaces only that part of the body. A `knowledge_page` body write without `bodyRange` is refused when the stored body is longer than one read returns, because the writer can only have seen part of it and writing that back would drop the rest. A `bodyRange` must be passed back as the read returned it (including `of`, the body length it was read from), and one covering the whole of a long body is refused, since no read returns all of it.
 
 ```ts
 const { page } = await knowledge_read({ page: 'docs:acme#models/anthropic', section: 'Setup' });

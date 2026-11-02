@@ -85,6 +85,48 @@ describe('writing back a long page read in part', () => {
     expect(whole).toBe(body);
   });
 
+  it('refuses a whole-body range on a long page, so following the refusal never drops the tail', async () => {
+    const { knowledge, call } = setup();
+    const body = referenceBody();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
+    const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
+    const refusal = await call('knowledge_page', {
+      op: 'write',
+      page: 'docs:acme#anthropic',
+      body: read.page.body,
+      expectedVersion: read.page.version,
+    }).catch((error: Error) => error.message);
+    expect(refusal).not.toMatch(/start: 0/);
+    expect(refusal).not.toMatch(/whole body/);
+
+    await expect(
+      call('knowledge_page', {
+        op: 'write',
+        page: 'docs:acme#anthropic',
+        body: read.page.body,
+        bodyRange: { start: 0, end: body.length, of: body.length },
+        expectedVersion: read.page.version,
+      }),
+    ).rejects.toThrow(/part by part/);
+
+    // What the refusal says to do: write back the part with the bodyRange its read returned.
+    await call('knowledge_page', {
+      op: 'write',
+      page: 'docs:acme#anthropic',
+      body: read.page.body,
+      bodyRange: read.page.bodyRange,
+      expectedVersion: read.page.version,
+    });
+    let whole = '';
+    for (let offset = 0; ;) {
+      const part = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: offset });
+      whole += part.page.body;
+      if (!part.page.bodyRange || part.page.bodyRange.end >= part.page.bodyRange.of) break;
+      offset = part.page.bodyRange.end;
+    }
+    expect(whole).toBe(body);
+  });
+
   it('writes just the part a read returned when the write echoes its bodyRange', async () => {
     const { knowledge, call } = setup();
     const body = referenceBody();
@@ -137,10 +179,32 @@ describe('writing back a long page read in part', () => {
         op: 'write',
         page: 'docs:acme#anthropic',
         body: 'x',
-        bodyRange: { start: 10, end: 10_000_000 },
+        bodyRange: { ...read.page.bodyRange, end: 10_000_000 },
         expectedVersion: read.page.version,
       }),
-    ).rejects.toThrow(/bodyRange/);
+    ).rejects.toThrow(/outside the body/);
+  });
+
+  it("refuses a bodyRange read from another page's body", async () => {
+    const { knowledge, call } = setup();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody() });
+    await knowledge.upsertPage({
+      scope: 'docs:acme',
+      path: 'openai',
+      name: 'OpenAI',
+      body: referenceBody() + '\n\nMore.',
+    });
+    const other = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: 100 });
+    const target = await call('knowledge_read', { page: 'docs:acme#openai' });
+    await expect(
+      call('knowledge_page', {
+        op: 'write',
+        page: 'docs:acme#openai',
+        body: other.page.body,
+        bodyRange: other.page.bodyRange,
+        expectedVersion: target.page.version,
+      }),
+    ).rejects.toThrow(/Read this page again for its own range/);
   });
 
   it('still writes a short page whole without a bodyRange', async () => {
