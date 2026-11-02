@@ -44,13 +44,12 @@ const LAB_ALIASES: Record<string, string> = {
   llama: 'meta',
   mistralai: 'mistral',
   gemini: 'google',
-  'google-vertex': 'google',
   alibaba: 'qwen',
   moonshot: 'moonshotai',
   jev: 'typesafe',
 };
 
-/** Model names, for rows a router served (OpenRouter, Codex) or rows without a provider. */
+/** Model names, for rows a host served (OpenRouter, Groq, Bedrock) or rows without a provider. */
 const MODEL_LABS: [RegExp, string][] = [
   [/^claude/, 'anthropic'],
   [/^(gpt|o[1345](-|$)|chatgpt|codex)/, 'openai'],
@@ -67,8 +66,31 @@ const MODEL_LABS: [RegExp, string][] = [
   [/^kimi/, 'moonshotai'],
 ];
 
-/** Providers that route to other labs' models, so the model tells the lab. */
-const ROUTERS = new Set(['openrouter', 'codex', 'mastra', 'netlify']);
+/** Providers that serve other labs' models (routers, inference hosts, clouds), so the model tells the lab. */
+const HOSTS = new Set([
+  'openrouter',
+  'codex',
+  'mastra',
+  'netlify',
+  'vercel',
+  'groq',
+  'together',
+  'togetherai',
+  'fireworks',
+  'fireworks-ai',
+  'deepinfra',
+  'cerebras',
+  'sambanova',
+  'hyperbolic',
+  'novita',
+  'nebius',
+  'baseten',
+  'azure',
+  'bedrock',
+  'amazon-bedrock',
+  'google-vertex',
+  'vertex',
+]);
 
 const cleanLab = (id: string) => {
   const [v = id] = id.toLowerCase().split('.');
@@ -76,21 +98,22 @@ const cleanLab = (id: string) => {
 };
 
 /**
- * The lab behind a series: its provider, or for routed rows the model's `lab/` prefix or name.
+ * The lab behind a series: its provider, or for rows a host served the model's `lab/` prefix or name.
  *
  * @example
  * seriesLab('anthropic.messages', 'claude-opus-5-5') // 'anthropic'
  * seriesLab('openrouter', 'meta-llama/llama-4-scout') // 'meta'
+ * seriesLab('groq', 'llama-4-maverick') // 'meta'
  * seriesLab(undefined, 'gpt-5-mini') // 'openai'
  */
 export function seriesLab(provider?: string | null, model?: string | null): string | undefined {
   const lab = provider ? cleanLab(provider) : undefined;
-  if (lab && !ROUTERS.has(lab)) return lab;
+  if (lab && !HOSTS.has(lab)) return lab;
   if (!model) return lab;
   const parts = model.toLowerCase().split('/');
   const name = parts.pop() ?? '';
   const prefix = parts.pop();
-  if (prefix && !ROUTERS.has(cleanLab(prefix))) return cleanLab(prefix);
+  if (prefix && !HOSTS.has(cleanLab(prefix))) return cleanLab(prefix);
   return MODEL_LABS.find(([re]) => re.test(name))?.[1] ?? lab;
 }
 

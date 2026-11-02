@@ -8,7 +8,10 @@ describe('seriesLab', () => {
     expect(seriesLab('meta-llama', 'llama-4-maverick')).toBe('meta');
   });
 
-  it('reads routed rows from the model prefix, then the model name', () => {
+  it('reads rows a host served from the model prefix, then the model name', () => {
+    expect(seriesLab('groq', 'llama-4-maverick')).toBe('meta');
+    expect(seriesLab('amazon-bedrock', 'claude-sonnet-5-5')).toBe('anthropic');
+    expect(seriesLab('google-vertex', 'gemini-3.5-pro')).toBe('google');
     expect(seriesLab('openrouter', 'meta-llama/llama-4-scout')).toBe('meta');
     expect(seriesLab('openrouter', 'gpt-5-mini')).toBe('openai');
     expect(seriesLab(undefined, 'gemini-3.5-pro')).toBe('google');
