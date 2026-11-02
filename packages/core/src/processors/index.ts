@@ -1042,6 +1042,11 @@ export {
 
 export * from './processors';
 export { CyberRefusalHandler } from './cyber-refusal-handler';
+export type {
+  CyberRefusalFallbackContext,
+  CyberRefusalFallbackModel,
+  CyberRefusalHandlerOptions,
+} from './cyber-refusal-handler';
 export { PrefillErrorHandler } from './prefill-error-handler';
 export { UnsupportedFileHandler } from './unsupported-file-handler';
 export {

@@ -256,3 +256,109 @@ describe('CyberRefusalHandler recovery mid-loop', () => {
     expect(await result.finishReason).toBe('content-filter');
   });
 });
+
+describe('CyberRefusalHandler fallback models', () => {
+  function createFallbackAgent(
+    model: MockLanguageModelV2,
+    fallbackModels: ConstructorParameters<typeof CyberRefusalHandler>[0]['fallbackModels'],
+  ) {
+    const handler = new CyberRefusalHandler({ fallbackModels });
+    return new Agent({
+      id: 'cyber-refusal-fallback-agent',
+      name: 'Cyber Refusal Fallback Agent',
+      instructions: 'You are a coding agent',
+      model: [{ model, maxRetries: 0 }],
+      tools: {
+        readFile: createTool({
+          id: 'readFile',
+          description: 'Read a file',
+          inputSchema: z.object({ path: z.string() }),
+          execute: async ({ path }) => `contents of ${path}`,
+        }),
+      },
+      inputProcessors: [handler],
+      outputProcessors: [handler],
+      errorProcessors: [handler],
+      errorProcessorDefaults: false,
+      maxProcessorRetries: 5,
+    });
+  }
+
+  async function run(agent: Agent, prompt = 'Fix the failing test') {
+    const result = await agent.stream(prompt, { maxSteps: 10 });
+    const chunks: any[] = [];
+    for await (const chunk of result.fullStream) chunks.push(chunk);
+    return { result, chunks };
+  }
+
+  it('switches to the fallback when an Anthropic cyber stop survives the nudge', async () => {
+    const primary = createScriptedModel([{ tool: 'a.ts' }, { cyberStop: true }, { cyberStop: true }]);
+    const fallback = createScriptedModel([{ text: 'Done on the fallback.' }]);
+
+    const { result } = await run(createFallbackAgent(primary.model, [fallback.model]));
+
+    expect(await result.text).toBe('Done on the fallback.');
+    expect(primary.prompts).toHaveLength(3);
+    expect(fallback.prompts).toHaveLength(1);
+    // The fallback picks up the run with the tool work done before the refusal.
+    expect(toolResultIds(fallback.prompts[0])).toEqual(['a.ts']);
+  });
+
+  it('switches to the fallback when an OpenAI cyber_policy refusal survives the nudge', async () => {
+    const primary = createScriptedModel([{ tool: 'a.ts' }, { refuse: true }, { refuse: true }]);
+    const fallback = createScriptedModel([{ text: 'Done on the fallback.' }]);
+
+    const { result, chunks } = await run(createFallbackAgent(primary.model, [fallback.model]));
+
+    expect(await result.text).toBe('Done on the fallback.');
+    expect(primary.prompts).toHaveLength(3);
+    expect(fallback.prompts).toHaveLength(1);
+    expect(toolResultIds(fallback.prompts[0])).toEqual(['a.ts']);
+    expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
+  });
+
+  it('keeps the fallback for the rest of the run and starts the next run on the agent model', async () => {
+    const primary = createScriptedModel([{ cyberStop: true }, { cyberStop: true }, { text: 'Primary again.' }]);
+    const fallback = createScriptedModel([{ tool: 'b.ts' }, { text: 'Done on the fallback.' }]);
+    const agent = createFallbackAgent(primary.model, [fallback.model]);
+
+    const first = await run(agent);
+    expect(await first.result.text).toBe('Done on the fallback.');
+    expect(primary.prompts).toHaveLength(2);
+    expect(fallback.prompts).toHaveLength(2);
+
+    const second = await run(agent, 'Next task');
+    expect(await second.result.text).toBe('Primary again.');
+    expect(primary.prompts).toHaveLength(3);
+    expect(fallback.prompts).toHaveLength(2);
+  });
+
+  it('asks a fallback function for each model in turn and stops when it returns none', async () => {
+    const primary = createScriptedModel([{ cyberStop: true }, { cyberStop: true }]);
+    const first = createScriptedModel([{ cyberStop: true }]);
+    const second = createScriptedModel([{ cyberStop: true }]);
+    const attempts: number[] = [];
+
+    const { result } = await run(
+      createFallbackAgent(primary.model, ({ attempt }) => {
+        attempts.push(attempt);
+        return [first.model, second.model][attempt];
+      }),
+    );
+
+    expect(attempts).toEqual([0, 1, 2]);
+    expect(primary.prompts).toHaveLength(2);
+    expect(first.prompts).toHaveLength(1);
+    expect(second.prompts).toHaveLength(1);
+    expect(await result.finishReason).toBe('content-filter');
+  });
+
+  it('ends the turn as before when no fallback is configured', async () => {
+    const primary = createScriptedModel([{ cyberStop: true }, { cyberStop: true }]);
+
+    const { result } = await run(createFallbackAgent(primary.model, undefined));
+
+    expect(primary.prompts).toHaveLength(2);
+    expect(await result.finishReason).toBe('content-filter');
+  });
+});
