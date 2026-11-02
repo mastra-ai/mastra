@@ -9,9 +9,20 @@ The graph also draws these body links as thin green lines between pages, with a 
 
 `MarkdownRenderer` accepts optional `remarkPlugins` and `components` props, added after its built-in ones, so a host can render custom syntax without losing the renderer's escaping.
 
-```tsx
-<MarkdownRenderer remarkPlugins={[remarkKnowledgeLinks]} components={{ span: BodySpan }}>
-  {page.body}
-</MarkdownRenderer>
-```
+A host supplies the span: `remarkKnowledgeLinks` marks each `[[ref]]` as a span carrying the ref under `KNOWLEDGE_REF_PROPERTY`, and `knowledgePageRefIndex(pages)` resolves it against the pages the host has loaded.
 
+```tsx
+import { knowledgePageRefIndex } from '@mastra/playground-ui/domains/knowledge/lib/pageRefs';
+import { KNOWLEDGE_REF_PROPERTY, remarkKnowledgeLinks } from '@mastra/playground-ui/domains/knowledge/lib/remarkKnowledgeLinks';
+
+const index = knowledgePageRefIndex(pages);
+const RefSpan = ({ node, children }) => {
+  const ref = node?.properties?.[KNOWLEDGE_REF_PROPERTY];
+  const target = typeof ref === 'string' ? index.resolve(ref) : undefined;
+  return target ? <a href={`#${target.id}`}>{target.name}</a> : <span>{children}</span>;
+};
+
+<MarkdownRenderer remarkPlugins={[remarkKnowledgeLinks]} components={{ span: RefSpan }}>
+  {page.body}
+</MarkdownRenderer>;
+```
