@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createSampleMessageV2, createSampleThread } from '@internal/storage-test-utils';
 import { SPAN_SCHEMA, TABLE_SPANS } from '@mastra/core/storage';
 import type { MemoryStorage, StorageColumn, TABLE_NAMES } from '@mastra/core/storage';
@@ -508,9 +509,10 @@ export function pgTests() {
       });
 
       beforeEach(async () => {
-        testThreadId = `thread-${Date.now()}`;
-        testResourceId = `resource-${Date.now()}`;
-        testMessageId = `msg-${Date.now()}`;
+        // Date.now() alone collides when consecutive tests start in the same millisecond.
+        testThreadId = `thread-${randomUUID()}`;
+        testResourceId = `resource-${randomUUID()}`;
+        testMessageId = `msg-${randomUUID()}`;
       });
 
       it('should use createdAtZ over createdAt for messages when both exist', async () => {

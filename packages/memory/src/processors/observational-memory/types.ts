@@ -1014,18 +1014,6 @@ export interface ObservationDebugEvent {
 /**
  * Configuration for ObservationalMemory
  */
-export interface ReflectionCommittedContext {
-  parentThreadId: string;
-  resourceId: string;
-  observations: string;
-  requestContext?: RequestContext;
-  mainAgent?: ProcessorContext['agent'];
-  sendStateSignal?: ProcessorContext['sendStateSignal'];
-  writer?: ProcessorStreamWriter;
-  abortSignal?: AbortSignal;
-  observabilityContext?: ObservabilityContext;
-}
-
 export interface ObservationalMemoryConfig {
   /**
    * Storage adapter for persisting observations.
@@ -1126,8 +1114,8 @@ export interface ObservationalMemoryConfig {
    * @deprecated The `scope` option is deprecated. `'resource'` will be removed in a future release because it
    * works much worse than thread scope for prompt caching and agent understanding, leaving `'thread'` (already
    * the default) as the only scope. Omit this option to use thread scope. For cross-thread recall, enable
-   * `retrieval`; for durable facts across threads, use resource-scoped working memory. A new knowledge and
-   * subconscious memory primitive will replace resource scope.
+   * `retrieval`; for durable facts across threads, use resource-scoped working memory. A new Knowledge
+   * primitive will replace resource scope.
    */
   scope?: 'resource' | 'thread';
 
@@ -1218,9 +1206,6 @@ export interface ObservationalMemoryConfig {
    * to opt reflections into provider-change activation.
    */
   activateOnProviderChange?: boolean;
-
-  /** @internal Runs Subconscious reflection work only after a reflection is durably committed. */
-  onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
 
   /** @internal Parent Mastra instance for custom gateway model resolution. */
   mastra?: Mastra;

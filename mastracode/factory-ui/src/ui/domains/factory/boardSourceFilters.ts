@@ -9,7 +9,7 @@ export const BOARD_SOURCE_OPTIONS = [
   { value: 'jira', label: 'Jira' },
   { value: 'incidentio', label: 'incident.io' },
   { value: 'manual', label: 'Manual' },
-];
+] as const;
 
 type BoardSourceFilters = Pick<BoardFilterState, 'source' | 'linearProject'>;
 

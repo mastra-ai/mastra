@@ -265,7 +265,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       for await (const textPart of response.textStream) {
         expect(textPart === previousText).toBe(false);
         previousText = textPart;
-        finalText = finalText + previousText;
+        finalText += previousText;
         expect(textPart).toBeDefined();
       }
 
@@ -2237,21 +2237,20 @@ describe('Agent Tests', () => {
               ],
               warnings: [],
             };
-          } else {
-            // Step 1: With structuredOutput - return object
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              content: [
-                {
-                  type: 'text' as const,
-                  text: JSON.stringify({ sentiment: 'positive', score: 0.9 }),
-                },
-              ],
-              warnings: [],
-            };
           }
+          // Step 1: With structuredOutput - return object
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [
+              {
+                type: 'text' as const,
+                text: JSON.stringify({ sentiment: 'positive', score: 0.9 }),
+              },
+            ],
+            warnings: [],
+          };
         },
         doStream: async () => {
           throw new Error('Not implemented');
@@ -2526,16 +2525,15 @@ describe('Agent Tests', () => {
               ],
               warnings: [],
             };
-          } else {
-            // Second call: return text (stop)
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              finishReason: 'stop',
-              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-              content: [{ type: 'text' as const, text: 'Done' }],
-              warnings: [],
-            };
           }
+          // Second call: return text (stop)
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            finishReason: 'stop',
+            usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+            content: [{ type: 'text' as const, text: 'Done' }],
+            warnings: [],
+          };
         },
         doStream: async () => {
           throw new Error('Not implemented');

@@ -295,6 +295,36 @@ describe.each(ENGINES)('declarative step runtime ($name engine)', ({ evented }) 
     }
   });
 
+  it('streams progress from a tool used as a workflow step (#28564)', async () => {
+    const progressTool = createTool({
+      id: 'progress-tool',
+      description: 'Doubles a number while reporting progress',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ doubled: z.number() }),
+      execute: async ({ value }, context) => {
+        await context.writer?.custom({ type: 'data-progress', data: { value } });
+        return { doubled: value * 2 };
+      },
+    });
+    const wf = createWorkflow({
+      id: 'rt-progress-tool',
+      inputSchema: z.object({ value: z.number() }),
+      outputSchema: z.object({ doubled: z.number() }),
+    })
+      .then(createStep(progressTool))
+      .commit();
+    bind(wf);
+
+    const run = await wf.createRun();
+    const events = [];
+    for await (const event of run.stream({ inputData: { value: 5 } }).fullStream) {
+      events.push(event);
+    }
+
+    expect(events).toContainEqual(expect.objectContaining({ type: 'data-progress', data: { value: 5 } }));
+    expect(events).toContainEqual(expect.objectContaining({ type: 'workflow-finish' }));
+  });
+
   it('createStep() of a spread-copied tool executes with (inputData, context)', async () => {
     // Without marker-based detection the spread copy falls through to the
     // StepParams branch, whose execute passes the whole params object as the

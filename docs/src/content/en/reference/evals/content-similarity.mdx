@@ -21,14 +21,16 @@ The `createContentSimilarityScorer()` function accepts a single options object w
     type: 'boolean',
     required: false,
     defaultValue: 'true',
-    description: 'Whether to ignore case differences when comparing strings.',
+    description:
+      'Whether to ignore case differences when comparing strings. Defaults to `true` only when no options object is passed. If you pass an options object, an omitted value is treated as `false`.',
   },
   {
     name: 'ignoreWhitespace',
     type: 'boolean',
     required: false,
     defaultValue: 'true',
-    description: 'Whether to normalize whitespace when comparing strings.',
+    description:
+      'Whether to normalize whitespace when comparing strings. Defaults to `true` only when no options object is passed. If you pass an options object, an omitted value is treated as `false`.',
   },
 ]}
 />

@@ -36,26 +36,26 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "gemma4-31b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "gemma4-31b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3.8-27b": [
-      {
-        "type": "toggle"
       }
     ]
   }

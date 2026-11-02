@@ -708,23 +708,30 @@ export class Agent extends BaseResource {
     return this.requestSignalRoute(`/agents/${this.agentId}/queue-signal`, params);
   }
 
-  async subscribeToThread(params: SubscribeAgentThreadParams): Promise<
+  async subscribeToThread<WITH_RUN_STATUS extends boolean = false>(
+    params: SubscribeAgentThreadParams & { withRunStatus?: WITH_RUN_STATUS },
+  ): Promise<
     Response & {
-      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+      processDataStream: (options: ProcessAgentThreadStreamOptions<WITH_RUN_STATUS>) => Promise<void>;
       abort: (options?: Pick<AbortAgentThreadParams, 'clearPendingSignals'>) => Promise<boolean>;
       unsubscribe: () => void;
     }
   > {
-    const { resourceId, threadId, withInitialHistory } = params;
+    const { resourceId, threadId, withInitialHistory, withRunStatus } = params;
     const requestSubscription = () =>
       this.request(`/agents/${this.agentId}/threads/subscribe`, {
         method: 'POST',
-        body: { resourceId, threadId, ...(withInitialHistory ? { withInitialHistory } : {}) },
+        body: {
+          resourceId,
+          threadId,
+          ...(withInitialHistory ? { withInitialHistory } : {}),
+          ...(withRunStatus ? { withRunStatus } : {}),
+        },
         stream: true,
       }) as Promise<Response>;
 
     const streamResponse = (await requestSubscription()) as Response & {
-      processDataStream: (options: ProcessAgentThreadStreamOptions) => Promise<void>;
+      processDataStream: (options: ProcessAgentThreadStreamOptions<WITH_RUN_STATUS>) => Promise<void>;
       abort: (options?: Pick<AbortAgentThreadParams, 'clearPendingSignals'>) => Promise<boolean>;
       unsubscribe: () => void;
     };
@@ -749,7 +756,10 @@ export class Agent extends BaseResource {
       }
     };
 
-    streamResponse.processDataStream = async ({ onChunk, reconnect }: ProcessAgentThreadStreamOptions) => {
+    streamResponse.processDataStream = async ({
+      onChunk,
+      reconnect,
+    }: ProcessAgentThreadStreamOptions<WITH_RUN_STATUS>) => {
       if (unsubscribed) return;
       processStarted = true;
       processAbortController = new AbortController();

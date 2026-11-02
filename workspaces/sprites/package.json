@@ -1,6 +1,6 @@
 {
   "name": "@mastra/sprites",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Fly.io Sprites sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -31,14 +31,14 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@fly/sprites": "^0.2.3"
+    "@fly/sprites": "^0.2.4"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.5",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",

@@ -299,7 +299,7 @@ describe('executeCommandTool data chunks', () => {
       const result = await execute({ command: 'node', args: ['slow.js'], timeout: null, cwd: null }, context);
 
       expect(result).toBe(
-        'stdout:\nLog #1\nLog #2\n\nstderr:\nwarning: cleanup incomplete\n\nError: Process timed out after 4000ms',
+        'stdout:\nLog #1\nLog #2\n\nstderr:\nwarning: cleanup incomplete\n\nError: Process timed out after 4000ms\nExit code: -1',
       );
     });
 
@@ -312,7 +312,7 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'nonexistent', args: [], timeout: null, cwd: null }, context);
 
-      expect(result).toBe('Error: Command not found');
+      expect(result).toBe('Error: Command not found\nExit code: -1');
     });
 
     it('returns accumulated stderr + error when only stderr before throw', async () => {
@@ -325,7 +325,7 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'test', args: [], timeout: null, cwd: null }, context);
 
-      expect(result).toBe('stderr:\nwarning: something bad\n\nError: killed');
+      expect(result).toBe('stderr:\nwarning: something bad\n\nError: killed\nExit code: -1');
     });
 
     it('returns "(no output)" for successful command with empty stdout', async () => {
@@ -458,7 +458,7 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'flood', args: [], timeout: null, cwd: null, tail: 0 }, context);
 
-      expect(result.endsWith('Error: boom')).toBe(true);
+      expect(result.endsWith('Error: boom\nExit code: -1')).toBe(true);
       // 1 MiB cap per stream, so the 16 MiB streamed stays far out of the result.
       expect(result.length).toBeLessThan(4 * 1024 * 1024);
       expect(result).toContain('[stdout: the first ');
@@ -475,7 +475,7 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'fail', args: [], timeout: null, cwd: null }, context);
 
-      expect(result).toBe('before error\n\nError: boom');
+      expect(result).toBe('before error\n\nError: boom\nExit code: -1');
 
       // Streamed stdout is the partial output
       const stdoutChunks = getChunks(writerCustom, 'data-sandbox-stdout');
@@ -644,7 +644,7 @@ describe('executeCommandTool data chunks', () => {
 
       const result = await execute({ command: 'echo started; sleep 10', timeout: null, cwd: null }, context);
 
-      expect(result).toBe(`started\n\n${cancelledNote}\nError: process terminated`);
+      expect(result).toBe(`started\n\n${cancelledNote}\nError: process terminated\nExit code: -1`);
     });
 
     it('preserves provider uncertainty when observation is aborted but remote work may continue', async () => {
@@ -656,7 +656,9 @@ describe('executeCommandTool data chunks', () => {
       const result = await execute({ command: 'deploy', timeout: null, cwd: null }, context);
 
       expect(result).not.toMatch(/so it was killed/);
-      expect(result).toBe(`partial\n\n${cancelledNote}\nError: Observation aborted. Remote work may still be running.`);
+      expect(result).toBe(
+        `partial\n\n${cancelledNote}\nError: Observation aborted. Remote work may still be running.\nExit code: -1`,
+      );
     });
 
     function abortOnExitChunk(writerCustom: ReturnType<typeof vi.fn>, controller: AbortController) {
@@ -698,7 +700,7 @@ describe('executeCommandTool data chunks', () => {
       const result = await execute({ command: 'pnpm test', timeout: null, cwd: null }, context);
 
       expect(controller.signal.aborted).toBe(true);
-      expect(result).toBe('Error: connection reset');
+      expect(result).toBe('Error: connection reset\nExit code: -1');
     });
   });
 

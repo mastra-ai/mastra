@@ -9,6 +9,7 @@ import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
 import { OpenErrorsInLogsButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import type { ChartCardProps } from './chart-card';
 import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
@@ -18,14 +19,20 @@ const SERIES = [{ dataKey: 'failureRate', label: 'Failed runs', color: CHART_COL
 const axisPercent = (ratio: number) => `${Math.round(ratio * 100)}%`;
 
 /** Share of agent runs that failed, per bucket; a point opens the failed runs' traces. */
-export type FailureRateCardProps = {
+export type FailureRateCardProps<V extends string = string> = {
   /** Called from the "View errors in Logs" button. */
   onViewErrors?: () => void;
   /** Called with the time range of the clicked bar or point. */
   onTimeRangeClick?: (range: TimeRange) => void;
+  /** Switches to a sibling view from the title (Agent runs uses it). */
+  titleMenu?: ChartCardProps<V>['titleMenu'];
 };
 
-export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateCardProps) {
+export function FailureRateCard<V extends string = string>({
+  onViewErrors,
+  onTimeRangeClick,
+  titleMenu,
+}: FailureRateCardProps<V>) {
   const { data = [], isLoading, isError, isPlaceholderData } = useMetricsActivity();
   const { timestamp } = useMetricsFilters();
   const { stepHours } = bucketPlan(timestamp.start, timestamp.end);
@@ -36,7 +43,7 @@ export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateC
 
   const layout = {
     title: 'Failure rate',
-    description: 'Share of agent runs that failed.',
+    titleMenu,
     actions: onViewErrors && <OpenErrorsInLogsButton onClick={onViewErrors} />,
     toolbar: (
       <MetricsCard.Toolbar>
@@ -56,9 +63,8 @@ export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateC
   return (
     <ChartCard
       {...layout}
-      summary={
-        <MetricsCard.Summary value={formatPercent(runs > 0 ? failed / runs : 0)} label="failed" isLoading={isLoading} />
-      }
+      total={formatPercent(runs > 0 ? failed / runs : 0)}
+      isLoading={isLoading}
       isUpdating={isPlaceholderData}
     >
       <ChartArea isEmpty={!isLoading && runs === 0} emptyMessage="No agent runs in this range.">

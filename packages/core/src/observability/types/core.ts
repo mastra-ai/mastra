@@ -166,8 +166,13 @@ export type ObservabilityEvent = TracingEvent | LogEvent | MetricEvent | ScoreEv
 /** Signal whose event was dropped by the observability exporter pipeline. */
 export type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback';
 
-/** Reason an observability event was dropped by the exporter pipeline. */
-export type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted';
+/**
+ * Reason an observability event was dropped by the exporter pipeline.
+ *
+ * `span-not-updatable`: a span update or end reached storage, but no unended span
+ * with that ID was stored (it was never persisted, or it had already ended).
+ */
+export type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted' | 'span-not-updatable';
 
 /** Sanitized error details for observability drop events. */
 export interface ObservabilityDropError {

@@ -63,6 +63,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
     textFormat,
     textDisplay,
     typingStatus,
+    toolApprovers,
     toolDisplay: topLevelToolDisplay,
   } = channelConfig;
   const topLevel = {
@@ -73,6 +74,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
     textFormat,
     textDisplay,
     typingStatus,
+    toolApprovers,
     toolDisplay: topLevelToolDisplay,
   };
   const filteredTopLevel = Object.fromEntries(Object.entries(topLevel).filter(([, value]) => value !== undefined));

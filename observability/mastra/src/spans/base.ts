@@ -20,6 +20,7 @@ import type {
   TracingPolicy,
   CorrelationContext,
   SpanLink,
+  SpanOutcomeFields,
 } from '@mastra/core/observability';
 
 import { ModelSpanTracker } from '../model-tracing';
@@ -58,11 +59,11 @@ const LINEAGE_KEYS = [
   'rootEntityVersionId',
 ] as const satisfies readonly (keyof SpanEntityLineage)[];
 
-/** Copy only the lineage fields that have values, so spans don't carry undefined keys */
 function ownEntityVersionId(span: AnySpan): string | undefined {
   return span instanceof BaseSpan ? span.ownEntityVersionId : undefined;
 }
 
+/** Copy only the lineage fields that have values, so spans don't carry undefined keys */
 function definedLineage(source: SpanEntityLineage): SpanEntityLineage {
   const lineage: SpanEntityLineage = {};
   for (const key of LINEAGE_KEYS) {
@@ -72,6 +73,11 @@ function definedLineage(source: SpanEntityLineage): SpanEntityLineage {
     }
   }
   return lineage;
+}
+
+function modelPair(attributes: unknown): { model?: string; provider?: string } {
+  const { model, provider } = (attributes ?? {}) as { model?: unknown; provider?: unknown };
+  return typeof model === 'string' && model && typeof provider === 'string' && provider ? { model, provider } : {};
 }
 
 /**
@@ -169,6 +175,20 @@ export function getExternalParentId(options: CreateSpanOptions<any>): string | u
   return parent.id;
 }
 
+/**
+ * Vercel AI Gateway reports which provider served a step, and any provider
+ * attempts that failed first, only in `providerMetadata.gateway.routing`.
+ * Read it defensively so a throwing getter never skips the strip below.
+ */
+function readGatewayRouting(providerMetadata: unknown): unknown {
+  try {
+    const gateway = isPlainRecord(providerMetadata) ? providerMetadata.gateway : undefined;
+    return isPlainRecord(gateway) ? gateway.routing : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export abstract class BaseSpan<TType extends SpanType = any> implements Span<TType> {
   public abstract id: string;
   public abstract traceId: string;
@@ -185,6 +205,9 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public observabilityInstance: ObservabilityInstance;
   public input?: any;
   public output?: any;
+  public outcome?: SpanOutcomeFields['outcome'];
+  public stopReason?: SpanOutcomeFields['stopReason'];
+  public stopReasonContext?: SpanOutcomeFields['stopReasonContext'];
   public errorInfo?: {
     message: string;
     id?: string;
@@ -209,6 +232,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   protected parentSpanId?: string;
   /** Parent from an external tracing system (ambient OTel / dd-trace span) that Mastra did not create; carried for external correlation, not part of Mastra's own parent/child linkage */
   public externalParentSpanId?: string;
+  public resumedFromSpanId?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
@@ -236,6 +260,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * live `parent`, so its original ancestors are only known from the cached export.
    */
   protected restoredLineage?: SpanEntityLineage;
+  private restoredIsRootSpan?: boolean;
   /**
    * Version declared for this span's own entity, or inherited from a parent span
    * of the same entity. Unlike `metadata.entityVersionId`, never an ancestor's
@@ -259,6 +284,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Get serialization options from observability instance config
     const observabilityConfig = observabilityInstance.getConfig();
     this.deepCleanOptions = mergeSerializationOptions(observabilityConfig.serializationOptions);
+    this.applyOutcome(options);
 
     this.name = options.name;
     this.type = options.type;
@@ -302,6 +328,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
     this.links = validLinks(options.links);
+    this.resumedFromSpanId = options.resumedFromSpanId;
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
     const entityParent = this.getParentSpan(false);
     this.entityType = options.entityType ?? entityParent?.entityType;
@@ -368,9 +395,13 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
 
     try {
-      const prepared = { ...value };
+      const prepared: Record<string, unknown> = { ...value };
+      const gatewayRouting = readGatewayRouting(prepared.providerMetadata);
       delete prepared.providerMetadata;
       delete prepared.experimental_providerMetadata;
+      if (gatewayRouting !== undefined) {
+        prepared.providerMetadata = { gateway: { routing: gatewayRouting } };
+      }
       return prepared as T;
     } catch {
       return value;
@@ -378,24 +409,55 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   }
 
   // Methods for span lifecycle
+  /** Preserve explicitly supplied native fields; never derive results from payloads/errors. */
+  protected applyOutcome(options: SpanOutcomeFields): void {
+    if (this.endTime) return;
+    if (options.outcome !== undefined) {
+      this.outcome = options.outcome;
+      this.stopReason = options.stopReason ?? null;
+      this.stopReasonContext =
+        options.stopReasonContext == null ? null : deepClean(options.stopReasonContext, this.deepCleanOptions);
+      return;
+    }
+    if (options.stopReason !== undefined && options.stopReason !== this.stopReason) this.stopReasonContext = null;
+    if (options.stopReason !== undefined) this.stopReason = options.stopReason;
+    if (options.stopReasonContext !== undefined) {
+      this.stopReasonContext =
+        options.stopReasonContext == null ? null : deepClean(options.stopReasonContext, this.deepCleanOptions);
+    }
+  }
+
   /** End the span */
   abstract end(options?: EndSpanOptions<TType>): void;
 
-  /** End the span and any descendant spans that are still open, applying `options` to each */
+  /** Forward options to open descendants, with interruption outcomes for cascading termination. */
   endTree(options?: EndSpanOptions<TType>): void {
-    if (this.#openChildren) {
-      for (const child of [...this.#openChildren]) {
-        child.endTree(options as EndSpanOptions<any>);
-      }
-    }
+    this.endOpenDescendants(options, true);
     this.end(options);
   }
 
-  /** Close any still-open descendant spans without applying options to them */
-  protected endOpenDescendants(): void {
+  /** Preserve completed children; only known cascading termination interrupts open work. */
+  protected endOpenDescendants(options?: EndSpanOptions<TType>, forwardOptions = false): void {
+    const outcome = options?.outcome !== undefined ? options.outcome : this.outcome;
+    const stopReason = options?.stopReason !== undefined ? options.stopReason : this.stopReason;
+    const stopReasonContext =
+      options?.stopReasonContext !== undefined ? options.stopReasonContext : this.stopReasonContext;
+    const interrupts =
+      outcome === 'abort' || outcome === 'interrupted' || (outcome === 'limit' && stopReason === 'timeout');
+    // endTree(options) forwards payload/attributes; end({ endTree: true }) does not.
+    // Native outcomes follow their own rules: generic cleanup never copies a parent's result.
+    const forwarded = forwardOptions ? { ...options } : {};
+    delete forwarded.outcome;
+    delete forwarded.stopReason;
+    delete forwarded.stopReasonContext;
     if (this.#openChildren) {
       for (const child of [...this.#openChildren]) {
-        child.endTree();
+        const childOptions = {
+          ...forwarded,
+          ...(interrupts ? { outcome: 'interrupted', stopReason, stopReasonContext } : {}),
+        } as EndSpanOptions<SpanType>;
+        if (forwardOptions) child.endTree(childOptions);
+        else child.end({ ...childOptions, endTree: true });
       }
     }
   }
@@ -460,7 +522,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /** Returns `TRUE` if the span is the root span of a trace */
   get isRootSpan(): boolean {
-    return !this.parent;
+    return this.restoredIsRootSpan ?? !this.parent;
   }
 
   /** Returns `TRUE` if the span is a valid span (not a NO-OP Span) */
@@ -552,10 +614,13 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * Restore the parent and root entity a span had before it was exported and
    * rebuilt (durable execution), so it and its new children keep their lineage.
    */
-  public restoreEntityLineage(cached: SpanEntityLineage & Pick<SpanSnapshot<SpanType>, 'ownEntityVersionId'>): void {
+  public restoreEntityLineage(
+    cached: SpanEntityLineage & Pick<SpanSnapshot<SpanType>, 'ownEntityVersionId'> & { isRootSpan?: boolean },
+  ): void {
     // Snapshots from older versions lack this. Their metadata version may belong to an
     // ancestor entity, so treat ownership as unknown rather than guess.
     this.ownEntityVersionId = cached.ownEntityVersionId ?? undefined;
+    this.restoredIsRootSpan = cached.isRootSpan;
     const lineage = definedLineage(cached);
     if (Object.keys(lineage).length > 0) {
       this.restoredLineage = lineage;
@@ -632,7 +697,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       entityType: this.entityType,
       entityId: this.entityId,
       entityName: this.entityName,
-      entityVersionId: getMetadataString('entityVersionId'),
+      entityVersionId: this.ownEntityVersionId,
       ...parentLineage,
       ...rootLineage,
       userId: getMetadataString('userId'),
@@ -660,6 +725,8 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Checked again here because links can be set on the span after it starts
     const links = validLinks(this.links);
     const correlation = this.getCorrelationContext();
+    // Measured once on the inference that streamed the first chunk and copied up as an attribute.
+    const timeToFirstTokenMs = (this.attributes as { timeToFirstTokenMs?: unknown } | undefined)?.timeToFirstTokenMs;
 
     return {
       id: this.id,
@@ -676,13 +743,20 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       input: hideInput ? undefined : this.input,
       output: hideOutput ? undefined : this.output,
       errorInfo: this.errorInfo,
+      ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
+      ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
+      ...(this.stopReasonContext !== undefined ? { stopReasonContext: this.stopReasonContext } : {}),
       requestContext: this.requestContext,
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
+      ...(correlation.entityVersionId ? { entityVersionId: correlation.entityVersionId } : {}),
       ...definedLineage(correlation),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
+      ...(this.resumedFromSpanId !== undefined ? { resumedFromSpanId: this.resumedFromSpanId } : {}),
+      ...modelPair(this.attributes),
+      ...(typeof timeToFirstTokenMs === 'number' ? { timeToFirstTokenMs } : {}),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
       ...(links ? { links } : {}),
       // Tags are only included for root spans, and a nested run does not own the trace
@@ -693,7 +767,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
   public snapshot(): SpanSnapshot<TType> {
     return {
-      ...this.exportSpan(),
+      ...this.exportSpan(this.observabilityInstance.getConfig().includeInternalSpans),
       ownEntityVersionId: this.ownEntityVersionId ?? null,
       ...(this.traceState ? { traceState: this.traceState } : {}),
     };

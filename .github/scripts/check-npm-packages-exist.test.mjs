@@ -106,6 +106,27 @@ test('private packages are not checked', async t => {
   assert.match(result.stdout, /No publishable packages to check/);
 });
 
+test('repeated --pnpm-filter checks the union of every filter and nothing else', async t => {
+  const cwd = makeWorkspace(t, [{ name: '@mastra/first' }, { name: '@mastra/second' }, { name: '@mastra/excluded' }]);
+  const filters = ['--pnpm-filter', '@mastra/first', '--pnpm-filter', '@mastra/second'];
+
+  // @mastra/excluded is missing on npm, but it is outside both filters.
+  const allSelectedExist = await startRegistry(t, { '/@mastra%2ffirst': 200, '/@mastra%2fsecond': 200 });
+  const passing = await run(t, cwd, allSelectedExist, filters);
+  assert.equal(passing.status, 0, passing.stderr);
+  assert.match(passing.stdout, /All 2 publishable package\(s\) exist on npm/);
+
+  const firstMissing = await startRegistry(t, { '/@mastra%2fsecond': 200 });
+  const failingFirst = await run(t, cwd, firstMissing, filters);
+  assert.equal(failingFirst.status, 1);
+  assert.match(failingFirst.stderr, /@mastra\/first .* has never been published to npm/);
+
+  const secondMissing = await startRegistry(t, { '/@mastra%2ffirst': 200 });
+  const failingSecond = await run(t, cwd, secondMissing, filters);
+  assert.equal(failingSecond.status, 1);
+  assert.match(failingSecond.stderr, /@mastra\/second .* has never been published to npm/);
+});
+
 test('--since only checks packages whose package.json changed vs the ref', async t => {
   const cwd = makeWorkspace(t, pkgs);
   const git = args => spawnSync('git', args, { cwd, encoding: 'utf8' });

@@ -61,7 +61,6 @@ export const AgentBuilderStarter = () => {
       });
     } catch {
       toast.error('Failed to start a new agent');
-      return;
     }
   };
 

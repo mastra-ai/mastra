@@ -7,18 +7,19 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import {
   AgentRunsCard,
-  FailureRateCard,
+  DistinctIdsCard,
   LatencyCard,
   MetricsGrid,
-  MetricsKpis,
   ScoresCard,
   TokenUsageCard,
   TraceVolumeCard,
+  BreakdownCard,
   UsageCard,
 } from '@mastra/playground-ui/domains/metrics/components';
 import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
+import { useMetricsLayout } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-layout';
 import {
   applyMetricsPropertyFilterTokens,
   createMetricsFilterBarFields,
@@ -240,27 +241,58 @@ function MetricsContent() {
 function MetricsCards() {
   const { openTraces, openLogs } = useMetricsDrilldownNavigation();
   const agent = EntityType.AGENT;
+  const layout = useMetricsLayout();
+
+  const agentRuns = (
+    <AgentRunsCard
+      onTimeRangeClick={range => openTraces({ rootEntityType: agent, window: range })}
+      onViewErrors={() => openLogs({ rootEntityType: agent, status: 'error' })}
+      onFailureTimeRangeClick={range => openTraces({ rootEntityType: agent, status: 'error', window: range })}
+    />
+  );
+  const latency = (
+    <LatencyCard
+      onViewTraces={rootEntityType => openTraces({ rootEntityType })}
+      onTimeRangeClick={range => openTraces({ window: range })}
+    />
+  );
+  // Older servers (no trace and span aggregates): the cards before the unified layout.
+  const usage = (
+    <UsageCard
+      onViewTraces={() => openTraces()}
+      onAgentClick={entityName => openTraces({ rootEntityType: agent, entityName })}
+      onModelClick={model => openTraces({ model })}
+      onThreadClick={threadId => openTraces({ threadId })}
+    />
+  );
+
+  const tokenUsage = (
+    <TokenUsageCard onViewTraces={() => openTraces()} onTimeRangeClick={range => openTraces({ window: range })} />
+  );
+
+  // Four charts in two rows, then the breakdown: usage and health first, who caused them below.
+  if (layout === 'unified') {
+    return (
+      <div className="grid content-start gap-4 pb-6">
+        <MetricsGrid columns={2}>
+          <MetricsGrid.Item>{tokenUsage}</MetricsGrid.Item>
+          <MetricsGrid.Item>{agentRuns}</MetricsGrid.Item>
+          <MetricsGrid.Item>{latency}</MetricsGrid.Item>
+          <MetricsGrid.Item>
+            <DistinctIdsCard onTimeRangeClick={openTraces} />
+          </MetricsGrid.Item>
+        </MetricsGrid>
+        <BreakdownCard onRowClick={openTraces} />
+      </div>
+    );
+  }
 
   return (
     <div className="grid content-start gap-4 pb-6">
-      <MetricsKpis />
-      <TokenUsageCard onViewTraces={() => openTraces()} onTimeRangeClick={range => openTraces({ window: range })} />
-      <MetricsGrid columns={3}>
-        <MetricsGrid.Item>
-          <AgentRunsCard onTimeRangeClick={range => openTraces({ rootEntityType: agent, window: range })} />
-        </MetricsGrid.Item>
-        <MetricsGrid.Item>
-          <FailureRateCard
-            onViewErrors={() => openLogs({ rootEntityType: agent, status: 'error' })}
-            onTimeRangeClick={range => openTraces({ rootEntityType: agent, status: 'error', window: range })}
-          />
-        </MetricsGrid.Item>
-        <MetricsGrid.Item span={2} className="@7xl:col-span-1">
-          <LatencyCard
-            onViewTraces={rootEntityType => openTraces({ rootEntityType })}
-            onTimeRangeClick={range => openTraces({ window: range })}
-          />
-        </MetricsGrid.Item>
+      {tokenUsage}
+      <MetricsGrid columns={2}>
+        <MetricsGrid.Item>{agentRuns}</MetricsGrid.Item>
+        <MetricsGrid.Item>{latency}</MetricsGrid.Item>
       </MetricsGrid>
       <MetricsGrid columns={2}>
         <MetricsGrid.Item>
@@ -270,14 +302,7 @@ function MetricsCards() {
             onEntityClick={(rootEntityType, entityName) => openTraces({ rootEntityType, entityName })}
           />
         </MetricsGrid.Item>
-        <MetricsGrid.Item>
-          <UsageCard
-            onViewTraces={() => openTraces()}
-            onAgentClick={entityName => openTraces({ rootEntityType: agent, entityName })}
-            onModelClick={model => openTraces({ model })}
-            onThreadClick={threadId => openTraces({ threadId })}
-          />
-        </MetricsGrid.Item>
+        <MetricsGrid.Item>{usage}</MetricsGrid.Item>
       </MetricsGrid>
       <ScoresCard />
     </div>

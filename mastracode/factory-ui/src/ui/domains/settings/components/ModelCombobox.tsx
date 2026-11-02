@@ -5,6 +5,7 @@ import { Box, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { DEFAULT_SOURCE_LABELS } from '../../chat/services/thinkingLevels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 
@@ -61,6 +62,7 @@ export function ModelCombobox({
   value,
   onValueChange,
   auto,
+  fallbackModelId,
   placeholder,
   disabled,
   className,
@@ -72,6 +74,7 @@ export function ModelCombobox({
   value: string;
   onValueChange: (value: string) => void;
   auto?: { effectiveModelId?: string | null };
+  fallbackModelId?: string;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
@@ -101,7 +104,11 @@ export function ModelCombobox({
       options={options}
       value={value}
       onValueChange={onValueChange}
-      placeholder={placeholder ?? 'Select model…'}
+      placeholder={
+        fallbackModelId
+          ? `${formatModelName(fallbackModelId)} · ${DEFAULT_SOURCE_LABELS['built-in']}`
+          : (placeholder ?? 'Select model…')
+      }
       searchPlaceholder="Search models…"
       emptyText="No matching model."
       allowCustomValue

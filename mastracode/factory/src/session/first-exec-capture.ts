@@ -119,7 +119,7 @@ export function observeSessionFirstExec(
         void sourceControl.sessions
           .markFirstMeaningfulExec({ sessionId: session.identity.getId() })
           .catch(error => console.warn('[Factory first-exec capture] Unable to persist first exec time.', error));
-        return;
+        break;
       }
     }
   });

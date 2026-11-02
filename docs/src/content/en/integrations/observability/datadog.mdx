@@ -272,6 +272,8 @@ This indicates a Node.js version compatibility issue with `dd-trace`'s native mo
 When using bundlers like esbuild, webpack, or the Mastra CLI bundler, you may need to mark `dd-trace` and its dependencies as external:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   bundler: {
     externals: [
@@ -377,6 +379,9 @@ Import and initialize `dd-trace` at the very top of your application's entry fil
 Add the `DatadogBridge` to your Mastra observability config:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Observability } from '@mastra/observability'
+
 export const mastra = new Mastra({
   observability: new Observability({
     configs: {

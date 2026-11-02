@@ -5,7 +5,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 
-import { createMastraCode } from '@mastra/code-sdk';
+import { createMastraCode, resolveSubagentsSetting } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { RemoteController } from '@mastra/code-sdk/factory/remote-controller';
@@ -26,6 +26,12 @@ import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-d
 import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
+import {
+  activeBrowserGeneration,
+  closeActiveBrowser,
+  discardBrowser,
+  replaceActiveBrowser,
+} from './browser-lifecycle.js';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
 import { initialMessageOptions, pipedInputConflict, takeInitialPrompt, takePackFlag } from './initial-prompt.js';
 import {
@@ -39,7 +45,6 @@ import {
   shouldRejectResumeWithoutTTY,
   shouldRunHeadless,
 } from './resume-command.js';
-import { resolveTuiSubagents } from './subagent-settings.js';
 import { applyThemePreference, normalizeThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
@@ -193,7 +198,7 @@ async function bootLocal(
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
-    subagents: resolveTuiSubagents(settings.preferences.subagentsEnabled),
+    subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
     ...(initialState ? { initialState: initialState as never } : {}),
   });
@@ -266,9 +271,16 @@ async function bootLocal(
   if (settings.browser.enabled) {
     // Captured once: the Stagehand instance is fixed at launch and shared by every thread.
     const chatModelId = session.model.get();
+    // The TUI is already running, so /browser can replace the browser while this one loads.
+    const startGeneration = activeBrowserGeneration();
     void loadBrowser(chatModelId)
-      .then(browser => {
+      .then(async browser => {
         if (!browser) return;
+        if (activeBrowserGeneration() !== startGeneration) {
+          await discardBrowser(browser);
+          return;
+        }
+        if (!(await replaceActiveBrowser(browser))) return;
         controller.setBrowser(browser);
         void session.state
           .set({
@@ -283,6 +295,10 @@ async function bootLocal(
 
 const asyncCleanup = (): Promise<void> => {
   cleanupPromise ??= (async () => {
+    // A local browser is a detached process holding its profile lock; left
+    // running, it breaks the next launch on that profile. Start closing it first
+    // so it finishes inside the shutdown deadline whatever the steps below take.
+    const browserClosed = closeActiveBrowser();
     releaseAllThreadLocks();
     // Release thread claims before the slow teardown below, so a restarted
     // session can claim its thread (and peers can reach it) right away.
@@ -307,7 +323,7 @@ const asyncCleanup = (): Promise<void> => {
     // Release this process's notification dispatch leases before the pubsub that holds them closes.
     await stopNotificationDispatch?.().catch(() => {});
     remoteSession?.disconnect();
-    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals()]);
+    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), browserClosed]);
     // Mastra owns the workspaces and must destroy them to stop retained language
     // servers before storage is closed.
     await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);

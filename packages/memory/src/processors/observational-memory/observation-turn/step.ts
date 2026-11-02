@@ -65,6 +65,7 @@ export class ObservationStep {
    * builds system message, filters observed.
    */
   async prepare(contextPressure?: number): Promise<StepContext> {
+    this.turn.abortSignal?.throwIfAborted();
     if (this._prepared) throw new Error(`Step ${this.stepNumber} already prepared`);
 
     const { threadId, resourceId, messageList } = this.turn;
@@ -85,6 +86,7 @@ export class ObservationStep {
     const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
     if (this.stepNumber === 0) {
       const activation = await om.activate({
+        abortSignal: this.turn.abortSignal,
         threadId,
         resourceId,
         checkThreshold: true,
@@ -105,6 +107,7 @@ export class ObservationStep {
           threadId,
           resourceId,
           recordId: activation.record.id,
+          abortSignal: this.turn.abortSignal,
         });
         await this.turn.refreshRecord();
       }
@@ -116,6 +119,7 @@ export class ObservationStep {
       const preReflectGeneration = record.generationCount;
       const obsTokens = record.observationTokenCount ?? 0;
       await om.reflector.maybeReflect({
+        abortSignal: this.turn.abortSignal,
         record,
         observationTokens: obsTokens,
         threadId,
@@ -203,6 +207,7 @@ export class ObservationStep {
       // records the boundary and this interval doesn't re-trigger every step.
       const deferred = candidates.length > 0 && safeCandidates.length === 0;
       if (safeCandidates.length > 0) {
+        this.turn.abortSignal?.throwIfAborted();
         om.sealMessagesForBuffering(safeCandidates);
 
         try {
@@ -213,6 +218,7 @@ export class ObservationStep {
           );
         }
 
+        this.turn.abortSignal?.throwIfAborted();
         if (this.turn.memory) {
           await this.turn.memory.persistMessages(safeCandidates);
         }
@@ -406,6 +412,7 @@ export class ObservationStep {
               resourceId,
               recordId: obsResult.record.id,
               activatedMessageIds: obsResult.activatedMessageIds,
+              abortSignal: this.turn.abortSignal,
             });
           }
 
@@ -515,7 +522,7 @@ export class ObservationStep {
     // chunk — skip the wait so an in-flight buffer op (Observer call, indexing) or
     // reflection buffer op doesn't block the activation swap.
     if (!inAsyncObservationBand) {
-      await om.waitForBuffering(threadId, resourceId);
+      await om.waitForBuffering(threadId, resourceId, undefined, this.turn.abortSignal);
     }
     await this.turn.refreshRecord();
 
@@ -547,6 +554,7 @@ export class ObservationStep {
     let activated = false;
     while ((status.shouldObserve || force) && status.canActivate) {
       const activation = await om.activate({
+        abortSignal: this.turn.abortSignal,
         threadId,
         resourceId,
         record: this.turn.record,
@@ -600,6 +608,7 @@ export class ObservationStep {
       // running a redundant sync reflection from scratch.
       const preReflectionRecord = this.turn.record;
       await om.reflector.maybeReflect({
+        abortSignal: this.turn.abortSignal,
         record: preReflectionRecord,
         observationTokens: preReflectionRecord.observationTokenCount ?? 0,
         threadId,
@@ -645,6 +654,7 @@ export class ObservationStep {
     let obsResult;
     try {
       obsResult = await om.observe({
+        abortSignal: this.turn.abortSignal,
         threadId,
         resourceId,
         messages: pendingMessages,
@@ -699,6 +709,7 @@ export class ObservationStep {
         messageToSeal = undefined;
       }
       const messagesToSeal = messageToSeal ? [messageToSeal] : [];
+      this.turn.abortSignal?.throwIfAborted();
       om.sealMessagesForBuffering(messagesToSeal);
 
       // Suppress the response-id rotation when this step seeded the response message:

@@ -1,5 +1,5 @@
 import type { GetObservabilityCapabilitiesResponse, QuerySpansInput, QuerySpansResult } from '@mastra/client-js';
-import { TRACES_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
+import { OBSERVABILITY_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/observability/list-polling';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -126,7 +126,7 @@ function setSpansHandlers(
 describe('Spans page', () => {
   // jsdom has no layout, so the list virtualizer sees a zero-height scroll container and
   // renders no rows. Report a fixed viewport so rows materialize.
-  let layoutStubs: { rect: ReturnType<typeof vi.spyOn>; resizeObserver: typeof ResizeObserver };
+  let layoutStubs: { rects: ReturnType<typeof vi.spyOn>[]; resizeObserver: typeof ResizeObserver };
   beforeEach(() => {
     const originalResizeObserver = globalThis.ResizeObserver;
     class LayoutResizeObserver {
@@ -153,12 +153,17 @@ describe('Spans page', () => {
     }
     globalThis.ResizeObserver = LayoutResizeObserver;
     layoutStubs = {
-      rect: vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+      rects: [
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+        // The virtualizer sizes its scroll container from clientWidth/clientHeight.
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800),
+        vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600),
+      ],
       resizeObserver: originalResizeObserver,
     };
   });
   afterEach(() => {
-    layoutStubs.rect.mockRestore();
+    layoutStubs.rects.forEach(stub => stub.mockRestore());
     globalThis.ResizeObserver = layoutStubs.resizeObserver;
     vi.useRealTimers();
     focusManager.setFocused(undefined);
@@ -384,7 +389,8 @@ describe('Spans page', () => {
       renderPage('/spans?traceId=trace-1&spanId=span-2');
 
       const panel = within(getSidePanel());
-      expect(await panel.findByRole('region', { name: 'Span details' })).toBeTruthy();
+      expect(await panel.findByRole('region', { name: 'tool: get-weather' })).toBeTruthy();
+      fireEvent.click(panel.getByRole('tab', { name: /^Output/ }));
       expect(await panel.findByText('Weather API timed out')).toBeTruthy();
     });
   });
@@ -395,7 +401,7 @@ describe('Spans page', () => {
 
       renderPage('/spans?traceId=trace-1&spanId=span-2');
       const panel = within(getSidePanel());
-      await panel.findByText('Weather API timed out');
+      await panel.findByRole('region', { name: 'tool: get-weather' });
       fireEvent.click(screen.getByRole('link', { name: 'Open bare spans page' }));
 
       await waitFor(() => expect(panel.queryByRole('region', { name: 'Span details' })).toBeNull());
@@ -410,7 +416,7 @@ describe('Spans page', () => {
       renderPage();
       fireEvent.click(await screen.findByText('tool: get-weather'));
       const panel = within(getSidePanel());
-      await panel.findByText('Weather API timed out');
+      await panel.findByRole('region', { name: 'tool: get-weather' });
       fireEvent.click(panel.getByRole('button', { name: 'Go to trace' }));
 
       expect(screen.getByTestId('location').textContent).toBe('/traces?traceId=trace-1&spanId=span-2');
@@ -467,7 +473,7 @@ describe('Spans page', () => {
       fireEvent.click(panel.getByRole('button', { name: 'Go to next span' }));
 
       await waitFor(() => expect(panel.queryByText('session-weather-42')).toBeNull());
-      expect(await panel.findByText('Weather API timed out')).toBeTruthy();
+      expect(await panel.findByRole('region', { name: 'tool: get-weather' })).toBeTruthy();
     });
 
     it('moves the URL to the next span', async () => {
@@ -521,7 +527,7 @@ describe('Spans page', () => {
       renderPage();
       await screen.findByText('Failed to load spans');
       serverDown = false;
-      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS));
+      await act(() => vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS));
 
       expect(await screen.findByText('agent run: weather')).toBeTruthy();
     });
@@ -541,7 +547,7 @@ describe('Spans page', () => {
       renderPage();
       await screen.findByText('Failed to load spans');
       const requestsAfterFailure = requests.length;
-      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3));
+      await act(() => vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS * 3));
 
       expect(requests).toHaveLength(requestsAfterFailure);
     });

@@ -10,7 +10,10 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
+import { factoryWorkItemUrl } from '../links.js';
 import { transitionBodySchema } from '../routes/contracts.js';
 import type { FactoryTransitionService } from '../rules/transition-service.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
@@ -41,7 +44,8 @@ import type { FactoryToolScope } from './scope.js';
 
 export interface FactoryWorkItemToolDependencies {
   workItems: WorkItemsStorage;
-  boards: BoardRegistry;
+  /** A fixed registry, or the per-project boards. */
+  boards: BoardRegistry | ProjectBoardSource;
   /** Governed stage moves; filing and moving items refuse while it is unavailable. */
   transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
@@ -68,6 +72,12 @@ function briefItem(item: WorkItemRow) {
     number: workItemNumber(item),
     title: truncate(item.title, MAX_TEXT),
     stage: workItemStage(item),
+    url:
+      factoryWorkItemUrl({
+        factoryProjectId: item.factoryProjectId,
+        board: boardForWorkItem(item),
+        workItemId: item.id,
+      }) ?? null,
   };
 }
 
@@ -158,7 +168,7 @@ export function createFactoryWorkItemTools(
         if (repository) await requireRepository(repository);
         const created = await createFactoryWorkItem({
           workItems: deps.workItems,
-          boards: deps.boards,
+          boards: await toBoardSource(deps.boards).load(project),
           transitionService: deps.transitionService,
           audit,
           ...project,
@@ -317,7 +327,14 @@ export function createFactoryWorkItemTools(
         'Retry one failed Factory run once its cause is fixed. Refused when the failure cannot be fixed by retrying or the item has moved on.',
       inputSchema: z.object({ decisionId }).strict(),
       execute: async ({ decisionId }) =>
-        settled(await retryFactoryDecision({ workItems: deps.workItems, boards: deps.boards, ...project, decisionId })),
+        settled(
+          await retryFactoryDecision({
+            workItems: deps.workItems,
+            boards: await toBoardSource(deps.boards).load(project),
+            ...project,
+            decisionId,
+          }),
+        ),
     }),
 
     factory_dismiss_decision: createTool({

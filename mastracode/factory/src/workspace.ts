@@ -7,6 +7,8 @@ import type { getDynamicWorkspace, WorkspaceSkillExtension } from '@mastra/code-
 import { DEFAULT_CONFIG_DIR } from '@mastra/code-sdk/constants';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import { InlineSkillSource } from '@mastra/core/skills';
+import type { InlineSkill } from '@mastra/core/skills';
 import { LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import type {
   FactorySandbox,
@@ -57,6 +59,7 @@ import {
 } from './session/environment-state-processor.js';
 import type { SessionEnvironmentRepositoryState } from './session/environment-state-processor.js';
 import type { FactoryProject, FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import type { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import type { SourceControlSession, SourceControlStorageHandle } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import { instrumentMethods, timed, timedPhase } from './timing.js';
@@ -78,14 +81,17 @@ export const BUNDLED_FACTORY_SKILLS_PATH =
 /**
  * Resolve the consumer repo's local Factory skills root, if any. Checked in
  * addition to the bundled skills so projects can add (or override) Factory
- * skills without patching the installed package. Candidates cover the cwd
- * variants the dev server runs with (`repo root`, `--dir src/mastra` which
- * runs with cwd `src/mastra/public`), then the platform build output when
- * the server runs from its parent directory.
+ * skills without patching the installed package. Skills live in
+ * `src/mastra/factory-skills`; `src/mastra/public/factory-skills` is the older
+ * location and still works. Candidates cover the cwd variants the dev server
+ * runs with (`repo root`, `mastra dev` which runs with cwd `src/mastra/public`),
+ * then the platform build output when the server runs from its parent directory.
  */
 export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): string | undefined {
   const candidates = [
+    join(cwd, 'src', 'mastra', 'factory-skills'),
     join(cwd, 'src', 'mastra', 'public', 'factory-skills'),
+    ...(path.basename(cwd) === 'public' ? [join(cwd, '..', 'factory-skills')] : []),
     join(cwd, 'public', 'factory-skills'),
     join(cwd, 'factory-skills'),
     join(cwd, 'output', 'factory-skills'),
@@ -94,7 +100,7 @@ export function resolveLocalFactorySkillsPath(cwd: string = process.cwd()): stri
     candidate => path.normalize(candidate) !== path.normalize(BUNDLED_FACTORY_SKILLS_PATH) && existsSync(candidate),
   );
 }
-const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
+export const FACTORY_SKILLS_MOUNT = path.resolve(path.parse(process.cwd()).root, '__mastracode_factory_skills__');
 export const FACTORY_SKILL_NAMES = new Set([
   'configure-factory-rules',
   'factory-complete-issue',
@@ -142,9 +148,54 @@ export async function rescanFactorySkills(skills: NonNullable<Workspace['skills'
   await pending;
 }
 
+/**
+ * Serves `createSkill()` skills under mount-relative paths (`<name>/SKILL.md`),
+ * the layout the other Factory skill layers use.
+ */
+class CodeSkillSource implements SkillSource {
+  readonly #inline: InlineSkillSource;
+  readonly #names: string[];
+
+  constructor(skills: readonly InlineSkill[]) {
+    this.#inline = new InlineSkillSource([...skills]);
+    this.#names = skills.map(skill => skill.name);
+  }
+
+  #inlinePath(relativePath: string): string {
+    return `inline/${relativePath.split(path.sep).join('/')}`;
+  }
+
+  async exists(relativePath: string): Promise<boolean> {
+    if (relativePath === '') return this.#names.length > 0;
+    return this.#inline.exists(this.#inlinePath(relativePath));
+  }
+
+  stat(relativePath: string): Promise<SkillSourceStat> {
+    return this.#inline.stat(this.#inlinePath(relativePath));
+  }
+
+  readFile(relativePath: string): Promise<string | Buffer> {
+    return this.#inline.readFile(this.#inlinePath(relativePath));
+  }
+
+  async readdir(relativePath: string): Promise<SkillSourceEntry[]> {
+    if (relativePath === '') return this.#names.map(name => ({ name, type: 'directory' as const }));
+    return this.#inline.readdir(this.#inlinePath(relativePath));
+  }
+}
+
+/** A project's edited SKILL.md, served in place of the original's. */
+export interface FactorySkillOverride {
+  content: string;
+  updatedAt: Date;
+}
+
+const NO_SKILL_OVERRIDES: ReadonlyMap<string, FactorySkillOverride> = new Map();
+
 export class FactorySkillSource implements SkillSource {
   readonly #bundledSource = new LocalSkillSource({ basePath: BUNDLED_FACTORY_SKILLS_PATH });
   readonly #localSource: LocalSkillSource | undefined;
+  readonly #codeSource: CodeSkillSource | undefined;
   readonly #fallbackSkillRoots: Set<string>;
 
   constructor(
@@ -153,9 +204,21 @@ export class FactorySkillSource implements SkillSource {
     localSkillsPath: string | undefined = resolveLocalFactorySkillsPath(),
     /** Evaluated per call because a session's bound role changes across stages. */
     readonly isReviewSession: () => Promise<boolean> = () => Promise.resolve(true),
+    /** Skills passed as `MastraFactory({ skills })`; they win over local and bundled skills of the same name. */
+    codeSkills: readonly InlineSkill[] = [],
+    /** The session project's edited SKILL.md files by skill name; read per call so saves and reverts apply on the next scan. */
+    readonly skillOverrides: () => Promise<ReadonlyMap<string, FactorySkillOverride>> = () =>
+      Promise.resolve(NO_SKILL_OVERRIDES),
   ) {
     this.#localSource = localSkillsPath ? new LocalSkillSource({ basePath: localSkillsPath }) : undefined;
+    this.#codeSource = codeSkills.length > 0 ? new CodeSkillSource(codeSkills) : undefined;
     this.#fallbackSkillRoots = new Set(fallbackSkillRoots.map(skillPath => path.normalize(skillPath)));
+  }
+
+  /** A code skill owns its whole directory, so a same-named folder skill never mixes in files. */
+  async #ownedByCode(relativePath: string): Promise<boolean> {
+    const skillName = relativePath.split(path.sep)[0];
+    return !!skillName && !!this.#codeSource && (await this.#codeSource.exists(skillName));
   }
 
   #isFactoryPath(skillPath: string): boolean {
@@ -174,16 +237,29 @@ export class FactorySkillSource implements SkillSource {
     return !(await this.isReviewSession());
   }
 
-  /** Pick the layer serving this mount-relative path: local wins when it has the entry. */
-  async #layerFor(relativePath: string): Promise<LocalSkillSource> {
+  /** Pick the layer serving this mount-relative path: code skills, then local entries, then bundled. */
+  async #layerFor(relativePath: string): Promise<SkillSource> {
+    if (await this.#ownedByCode(relativePath)) return this.#codeSource!;
     if (this.#localSource && (await this.#localSource.exists(relativePath))) return this.#localSource;
     return this.#bundledSource;
+  }
+
+  /**
+   * The edit replacing this path, when it is a skill's SKILL.md. Only the instructions are
+   * edited; the skill's other files still come from its layer. `exists` and `readdir` never
+   * consult edits, so an edit whose skill was removed from the app is never discovered.
+   */
+  async #overrideFor(relativePath: string): Promise<FactorySkillOverride | undefined> {
+    const [skillName, file, ...rest] = relativePath.split(path.sep);
+    if (!skillName || file !== 'SKILL.md' || rest.length > 0) return undefined;
+    return (await this.skillOverrides()).get(skillName);
   }
 
   async exists(skillPath: string): Promise<boolean> {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.exists(skillPath);
     const relative = this.#factoryPath(skillPath);
     if (await this.#isHiddenReviewPath(relative)) return false;
+    if (await this.#ownedByCode(relative)) return this.#codeSource!.exists(relative);
     if (this.#localSource && (await this.#localSource.exists(relative))) return true;
     return this.#bundledSource.exists(relative);
   }
@@ -192,6 +268,16 @@ export class FactorySkillSource implements SkillSource {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.stat(skillPath);
     const relative = this.#factoryPath(skillPath);
     if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+    const override = await this.#overrideFor(relative);
+    if (override) {
+      return {
+        name: 'SKILL.md',
+        type: 'file',
+        size: Buffer.byteLength(override.content),
+        createdAt: override.updatedAt,
+        modifiedAt: override.updatedAt,
+      };
+    }
     return (await this.#layerFor(relative)).stat(relative);
   }
 
@@ -199,6 +285,8 @@ export class FactorySkillSource implements SkillSource {
     if (!this.#isFactoryPath(skillPath)) return this.fallback.readFile(skillPath);
     const relative = this.#factoryPath(skillPath);
     if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+    const override = await this.#overrideFor(relative);
+    if (override) return override.content;
     return (await this.#layerFor(relative)).readFile(relative);
   }
 
@@ -206,19 +294,24 @@ export class FactorySkillSource implements SkillSource {
     if (this.#isFactoryPath(skillPath)) {
       const relative = this.#factoryPath(skillPath);
       if (await this.#isHiddenReviewPath(relative)) throw skillSourceEnoent(skillPath);
+      if (relative !== '' && (await this.#ownedByCode(relative))) return this.#codeSource!.readdir(relative);
       const [bundledExists, localExists] = await Promise.all([
         this.#bundledSource.exists(relative),
         this.#localSource?.exists(relative) ?? Promise.resolve(false),
       ]);
-      if (!bundledExists && !localExists) throw skillSourceEnoent(skillPath);
-      const [bundledEntries, localEntries] = await Promise.all([
+      if (!bundledExists && !localExists && !(relative === '' && this.#codeSource)) {
+        throw skillSourceEnoent(skillPath);
+      }
+      const [bundledEntries, localEntries, codeEntries] = await Promise.all([
         bundledExists ? this.#bundledSource.readdir(relative) : [],
         localExists ? this.#localSource!.readdir(relative) : [],
+        relative === '' && this.#codeSource ? this.#codeSource.readdir('') : [],
       ]);
       const merged = new Map<string, SkillSourceEntry>();
       for (const entry of bundledEntries) merged.set(entry.name, entry);
-      // Local entries override bundled names.
+      // Local entries override bundled names; code skills override both.
       for (const entry of localEntries) merged.set(entry.name, entry);
+      for (const entry of codeEntries) merged.set(entry.name, entry);
       const entries = [...merged.values()];
       if (relative !== '' || (await this.isReviewSession())) return entries;
       return entries.filter(entry => !REVIEW_ONLY_FACTORY_SKILLS.has(entry.name));
@@ -232,12 +325,13 @@ export class FactorySkillSource implements SkillSource {
   }
 
   /**
-   * Names the Factory mount serves: bundled skills plus the app's local skills.
+   * Names the Factory mount serves: bundled skills plus the app's code and local skills.
    * Repository skills with these names are hidden so they cannot collide with
    * Factory's copy. Recomputed per scan so skill refreshes pick up local changes.
    */
   async #reservedNames(): Promise<Set<string>> {
     const reserved = new Set(FACTORY_SKILL_NAMES);
+    for (const entry of (await this.#codeSource?.readdir('')) ?? []) reserved.add(entry.name);
     if (!this.#localSource) return reserved;
     try {
       for (const entry of await this.#localSource.readdir('')) {
@@ -302,12 +396,23 @@ class UnmaterializedAwareSkillSource implements SkillSource {
   }
 }
 
-function createFactorySkillExtension(isReviewSession: () => Promise<boolean>): WorkspaceSkillExtension {
+function createFactorySkillExtension(
+  isReviewSession: () => Promise<boolean>,
+  codeSkills: readonly InlineSkill[],
+  skillOverrides: () => Promise<ReadonlyMap<string, FactorySkillOverride>>,
+): WorkspaceSkillExtension {
   return {
     id: 'web-factory',
     paths: [FACTORY_SKILLS_MOUNT],
     createSource: (fallback, fallbackSkillRoots) =>
-      new FactorySkillSource(fallback, fallbackSkillRoots, resolveLocalFactorySkillsPath(), isReviewSession),
+      new FactorySkillSource(
+        fallback,
+        fallbackSkillRoots,
+        resolveLocalFactorySkillsPath(),
+        isReviewSession,
+        codeSkills,
+        skillOverrides,
+      ),
   };
 }
 
@@ -355,6 +460,10 @@ export interface CreateWorkspaceFactoryOptions {
   projects?: Pick<FactoryProjectsStorage, 'get'>;
   /** Runtime workspace/token registrations invalidated when a session retires. */
   workspaceRegistry?: FactoryWorkspaceRegistry;
+  /** App skills from `MastraFactory({ skills })`, served on the Factory skill mount. */
+  skills?: readonly InlineSkill[];
+  /** Per-project SKILL.md edits served over the Factory skills of each session's project. */
+  skillOverrides?: Pick<SkillOverridesStorage, 'ensureReady' | 'revision' | 'snapshot'>;
 }
 
 type WorkspaceUnregister = () => Promise<void> | void;
@@ -432,6 +541,8 @@ export interface SessionEnvironmentRepo {
 
 /** The session's factory environment, resolved from the project and its `inEnvironment` links. */
 export interface SessionEnvironment {
+  /** The factory's display name. */
+  factoryName: string;
   repos: SessionEnvironmentRepo[];
   workspaceSetupCommand: string | undefined;
   /** Only an absolute root is passed on; the templates reject anything else. */
@@ -517,6 +628,7 @@ export async function resolveProjectEnvironment(
   }
   const workdir = project.sandboxWorkingDirectory?.trim();
   return {
+    factoryName: project.name,
     repos,
     workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
     workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
@@ -556,7 +668,7 @@ export function environmentSandboxContext(
 }
 
 export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = {}) {
-  const { sandbox: sandboxConfig, github, projects, workItems } = options;
+  const { sandbox: sandboxConfig, github, projects, workItems, skillOverrides } = options;
   const sourceControls: WorkspaceSourceControlProvider[] =
     options.sourceControls ??
     (github
@@ -582,13 +694,24 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
   // observe the same Workspace object even when no Mastra registry is wired
   // (the registry stays the source of truth when present).
   const constructedWorkspaces = new Map<string, Workspace>();
-  // Review-skill visibility last used to populate each workspace's skill cache.
-  const skillCacheReviewState = new Map<string, boolean>();
-  const skillCacheRefreshes = new Map<string, Promise<void>>();
+  // Review-skill visibility and override revision last used to populate each workspace's skill cache.
+  const skillCacheState = new Map<string, string>();
+  const skillCacheRefreshes = new Map<string, Promise<number>>();
   // The review check of the latest request to resolve each workspace. The skill
   // source outlives the request that built it, so it must gate on this rather
   // than on the context it was constructed with.
   const skillReviewChecks = new Map<string, () => Promise<boolean>>();
+  // The project skill edits each workspace's skill source serves, and the
+  // override revision they were read at. Loaded on first use, so building a
+  // workspace never suspends between the reuse check and construction.
+  const skillOverrideStates = new Map<
+    string,
+    Promise<{ revision: number; overrides: ReadonlyMap<string, FactorySkillOverride> }>
+  >();
+  // The revision recorded when skill edits could not be read. No stored
+  // revision equals it, so the next reuse that reads one rescans and retries.
+  const UNREAD_SKILL_OVERRIDES = -1;
+  const skillCacheKey = (isReview: boolean, revision: number) => `${isReview ? 'review' : 'work'}@${revision}`;
 
   const resolve = async ({ requestContext, mastra, skillExtension }: DynamicWorkspaceContext) => {
     const ctx = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
@@ -811,6 +934,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             factorySandbox.create(
               {
                 sessionId: session.id,
+                ...(session.factoryProjectId ? { factoryId: session.factoryProjectId } : {}),
+                ...(resolvedEnvironment ? { factoryName: resolvedEnvironment.factoryName } : {}),
                 // Physical VM id persisted from a prior start (undefined on first
                 // start). Providers that reattach by physical id use it to resume the
                 // original VM instead of provisioning a replacement.
@@ -843,10 +968,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // stack a wrapper per call. Factory's setup runs first: a hook the
           // callback installed itself expects a prepared workspace.
           sandbox.setOnStart(previous => async args => {
-            await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
-              await setupHook(args);
-            });
-            await previous?.(args);
+            try {
+              await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
+                await setupHook(args);
+              });
+              await previous?.(args);
+            } catch (error) {
+              // Core reports the logical sandbox id, which survives a recreate,
+              // so the provider's VM id is the only handle for its logs.
+              const physicalId = args.sandbox.sandboxId;
+              if (physicalId && error instanceof Error) error.message += ` (provider sandbox ${physicalId})`;
+              throw error;
+            }
           });
           // Only a freshly constructed instance starts eagerly; the start itself
           // waits for this resolver to finish because the start hook reads
@@ -938,11 +1071,52 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     };
     const effectiveSkillExtension =
       skillExtension ??
-      createFactorySkillExtension((): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)());
+      createFactorySkillExtension(
+        (): Promise<boolean> => (skillReviewChecks.get(workspaceId) ?? isReviewSession)(),
+        options.skills ?? [],
+        async () => (await (skillOverrideStates.get(workspaceId) ?? loadSkillOverrides())).overrides,
+      );
     const extensionId = effectiveSkillExtension ? `-${effectiveSkillExtension.id}` : '';
     const workspaceId: string = `${WORKSPACE_ID_PREFIX}-${projectRepository.id}-${session.id}${extensionId}`;
     const workspaceGeneration = workspaceRegistry.generation(session.sessionId);
     if (!skillExtension) skillReviewChecks.set(workspaceId, isReviewSession);
+    // A caller-supplied skill extension owns its own skills, so edits only apply to Factory's.
+    const overrideScope =
+      skillOverrides && !skillExtension ? { orgId: session.orgId, projectId: connection.factoryProjectId } : undefined;
+    // Edits are optional: like `isReviewSession`, a storage failure degrades to
+    // the original skills instead of failing the workspace or hiding skills.
+    const readOverrides = async <T>(read: () => Promise<T>): Promise<T | undefined> => {
+      try {
+        await skillOverrides!.ensureReady();
+        return await read();
+      } catch (error) {
+        console.warn('[Mastra Factory] Could not read project skill edits; serving the original skills', {
+          factoryProjectId: connection.factoryProjectId,
+          error,
+        });
+        return undefined;
+      }
+    };
+    const currentOverrideRevision = async () =>
+      overrideScope
+        ? ((await readOverrides(() => skillOverrides!.revision(overrideScope))) ?? UNREAD_SKILL_OVERRIDES)
+        : 0;
+    const loadSkillOverrides = () => {
+      const loading = (async () => {
+        if (!overrideScope) return { revision: 0, overrides: NO_SKILL_OVERRIDES };
+        const snapshot = await readOverrides(() => skillOverrides!.snapshot(overrideScope));
+        if (!snapshot) return { revision: UNREAD_SKILL_OVERRIDES, overrides: NO_SKILL_OVERRIDES };
+        return {
+          revision: snapshot.revision,
+          overrides: new Map(
+            snapshot.overrides.map(o => [o.skillName, { content: o.content, updatedAt: o.updatedAt }] as const),
+          ),
+        };
+      })();
+      skillOverrideStates.set(workspaceId, loading);
+      return loading;
+    };
+    const loadedOverrideRevision = async () => (await skillOverrideStates.get(workspaceId))?.revision;
     const configDir = DEFAULT_CONFIG_DIR;
 
     const getRepositoryAccess = () =>
@@ -1105,7 +1279,7 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           if (evicted && githubTokenInjectors.get(workspaceId) === registered) {
             githubTokenInjectors.delete(workspaceId);
             constructedWorkspaces.delete(workspaceId);
-            skillCacheReviewState.delete(workspaceId);
+            skillCacheState.delete(workspaceId);
           }
         }
         throw error;
@@ -1128,6 +1302,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       existing.setToolsConfig(MASTRACODE_WORKSPACE_TOOLS);
       // The skill cache does not recheck the source on get(), so rescan when the
       // session's role flips; otherwise a cached review skill outlives the review binding.
+      // Likewise when the project's skill-override revision moves: a save or revert
+      // must reach the next session on this workspace, not wait for a staleness walk.
       if (!skillExtension) {
         // An outside rescan makes the recorded role untrustworthy. Wait for it to
         // settle first, so the refresh below starts a scan for the current role
@@ -1138,11 +1314,15 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           await outside;
           if (rescannedOutsideResolver.get(existing.skills!) === outside)
             rescannedOutsideResolver.delete(existing.skills!);
-          skillCacheReviewState.delete(workspaceId);
+          skillCacheState.delete(workspaceId);
           return true;
         };
         await consumeOutsideRescan();
-        let isReview = await isReviewSession();
+        const readTarget = async () => {
+          const [isReview, revision] = await Promise.all([isReviewSession(), currentOverrideRevision()]);
+          return { isReview, revision };
+        };
+        let target = await readTarget();
         // Concurrent reuses share one refresh, and the state is recorded only
         // once the rescan succeeds. Wait out any in-flight rescan (it may have
         // been started for the opposite role) and re-read the role afterwards.
@@ -1150,22 +1330,32 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const inFlight = skillCacheRefreshes.get(workspaceId);
           if (inFlight) {
             await inFlight;
-            isReview = await isReviewSession();
+            target = await readTarget();
             continue;
           }
           if (await consumeOutsideRescan()) {
-            isReview = await isReviewSession();
+            target = await readTarget();
             continue;
           }
-          if (skillCacheReviewState.get(workspaceId) === isReview) break;
-          const target = isReview;
+          if (skillCacheState.get(workspaceId) === skillCacheKey(target.isReview, target.revision)) break;
+          const { isReview, revision } = target;
           const pending = (async () => {
+            const served =
+              (await loadedOverrideRevision()) === revision ? revision : (await loadSkillOverrides()).revision;
             await existing.skills?.refresh();
-            skillCacheReviewState.set(workspaceId, target);
+            // Record the revision the source actually serves; a save landing after
+            // `readTarget` makes the next check rescan rather than skip it.
+            skillCacheState.set(workspaceId, skillCacheKey(isReview, served));
+            return served;
           })().finally(() => skillCacheRefreshes.delete(workspaceId));
           skillCacheRefreshes.set(workspaceId, pending);
-          await pending;
-          isReview = await isReviewSession();
+          const served = await pending;
+          // The snapshot could not be read, so this refresh served the original
+          // skills. Re-reading the target would refresh again for as long as the
+          // failure lasts; the unread sentinel stays recorded so a later
+          // resolution retries.
+          if (served === UNREAD_SKILL_OVERRIDES) break;
+          target = await readTarget();
         }
       }
       // A materialization kicked off by another caller may still be running.
@@ -1313,7 +1503,6 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             dir: entry.dir,
             branch: null,
             defaultBranch: repo.defaultBranch,
-            position: repo.position,
             setupStatus: repo.setupCommand ? 'ok' : 'skipped',
           };
           states.push(state);
@@ -1526,6 +1715,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
     // point, and a concurrent resolution for the same session must observe this
     // workspace rather than build a second one.
     constructedWorkspaces.set(workspaceId, workspace);
+    // A workspace evicted and rebuilt under this id reads the project's edits afresh.
+    skillOverrideStates.delete(workspaceId);
     // Retirement is registered against the workspace itself rather than the
     // sandbox: construction is eager while the VM start is lazy, so a session
     // retired before its first tool call still has a workspace (and possibly a
@@ -1537,8 +1728,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
       async () => {
         githubTokenInjectors.delete(workspaceId);
         constructedWorkspaces.delete(workspaceId);
-        skillCacheReviewState.delete(workspaceId);
+        skillCacheState.delete(workspaceId);
         skillReviewChecks.delete(workspaceId);
+        skillOverrideStates.delete(workspaceId);
         // Retirement drops the memoized session sandbox so a later re-open
         // constructs (and the provider resolves) fresh instead of reusing an
         // instance whose VM the retirement path may stop or destroy.

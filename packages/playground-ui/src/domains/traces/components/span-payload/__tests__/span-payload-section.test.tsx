@@ -22,7 +22,7 @@ describe('SpanPayloadSection', () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });
-    it('clips the whole box and lets the user expand and collapse it, in both views', () => {
+    it('clips the preview and lets the user expand and collapse it, but never clips the JSON', () => {
       const { container } = render(
         <SpanPayloadSection title="Input" raw={{ a: 1 }}>
           <p>Long content</p>
@@ -35,7 +35,9 @@ describe('SpanPayloadSection', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Collapse' }));
       expect(clip()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
       fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
-      expect(clip()?.querySelector<HTMLElement>('[data-slot="collapsible-box-clip"]')?.style.maxHeight).toBe('220px');
+      // The JSON folds its nested values instead.
+      expect(clip()).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Expand' })).toBeNull();
       expect(container.querySelector('[data-slot="span-payload-json"]')).toBeTruthy();
     });
 

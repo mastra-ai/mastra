@@ -31,6 +31,7 @@ describe('durable workflow failed-status error surfacing', () => {
     });
     const agent = new AgentType({ agent: baseAgent, pubsub });
     vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+      runs: new Map(),
       createRun: vi.fn().mockResolvedValue({
         start: vi.fn().mockResolvedValue({ status: 'failed', error: { message: 'preparation exploded' } }),
       }),
@@ -71,6 +72,7 @@ describe('durable workflow failed-status error surfacing', () => {
     });
     const agent = new AgentType({ agent: baseAgent, pubsub });
     vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+      runs: new Map(),
       createRun: vi.fn().mockResolvedValue({
         start: vi.fn().mockResolvedValue({
           status: 'failed',

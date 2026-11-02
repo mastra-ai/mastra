@@ -4,13 +4,12 @@ import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFeedRoster } from './useFeedRoster';
-import { fetchAuditEvents } from '../../factory/services/audit';
+import { fetchAuditEvents, MAX_AUDIT_PAGE_SIZE } from '../../factory/services/audit';
 import type { FactoryMentionMember } from '../../factory/services/members';
 import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { auditOwnerChanges, auditRunIntervals } from '../services/sessionTrack';
 import type { OwnerChange, RunInterval } from '../services/sessionTrack';
 
-const MAX_AUDIT_PAGE_SIZE = 200;
 const TRAIL_STALE_TIME = 15_000;
 
 /** The agent runs and ownership changes the audit trail recorded for one session, and who the people in it are. */

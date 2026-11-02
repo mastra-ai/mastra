@@ -122,6 +122,8 @@ When a run has no trace (observability not configured), the decision is derived 
 **Eligibility filters**: The optional `filter` parameter uses a declarative predicate over the run context to restrict scorer eligibility. Because filtering occurs before sampling, `sampling.rate` applies only to matching runs:
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 export const myAgent = new Agent({
   // ...
   scorers: {

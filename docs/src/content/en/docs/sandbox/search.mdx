@@ -56,6 +56,8 @@ BM25 scores documents by term frequency and document length. It needs no externa
 To tune term-frequency saturation and document-length normalization, pass `k1` and `b`:
 
 ```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: {
@@ -145,6 +147,8 @@ const workspace = new Workspace({
 Configure both BM25 and vector search to combine keyword and semantic results:
 
 ```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
@@ -158,6 +162,8 @@ const workspace = new Workspace({
 The vector index name defaults to a sanitized version of the workspace ID followed by `_search`. Set `searchIndexName` when you need a stable or shared name:
 
 ```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   vectorStore: pineconeVector,
@@ -279,6 +285,8 @@ const workspace = new Workspace({
 The index tool accepts the same supplied `path`, `content`, and optional metadata as `workspace.index()`. Because it can trigger embedding calls and vector-store writes, require approval when agents shouldn't mutate the index without review:
 
 ```typescript title="src/mastra/workspaces.ts"
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,
@@ -332,6 +340,9 @@ Top-level `await` keeps module startup pending until initialization finishes. Wh
 Each `autoIndexPaths` entry can be a file, directory, or glob pattern. Recursive directory and glob traversal is limited to ten levels:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { Workspace, LocalFilesystem } from '@mastra/core/workspace'
+
 const workspace = new Workspace({
   filesystem: new LocalFilesystem({ basePath: './workspace' }),
   bm25: true,

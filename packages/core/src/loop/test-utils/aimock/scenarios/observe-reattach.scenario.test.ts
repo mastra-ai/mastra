@@ -166,7 +166,6 @@ describeForAllEngines(
       }, 15000);
     }
     // COR-1409: normal and filesystem agents do not expose observe().
-    // #28175: Inngest observe lacks detach() and idleTimeoutMs support.
   },
-  { skip: ['normal', 'fs', 'inngest'] },
+  { skip: ['normal', 'fs'] },
 );

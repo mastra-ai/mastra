@@ -47,6 +47,9 @@ When a log call happens inside a traced operation (an agent run, workflow step, 
 To get machine-parseable JSON on stdout, configure `PinoLogger` with `prettyPrint: false`, pretty printing is enabled by default and produces human-readable text instead of JSON:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+import { PinoLogger } from '@mastra/loggers'
+
 export const mastra = new Mastra({
   logger: new PinoLogger({ name: 'Mastra', level: 'info', prettyPrint: false }),
 })

@@ -8,19 +8,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "kimi-for-coding": [
+    "k3-256k": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "k3.1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "k3-256k": [
+    "kimi-for-coding": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -30,6 +24,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "k3.1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

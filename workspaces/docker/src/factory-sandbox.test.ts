@@ -157,6 +157,14 @@ describe('DockerFactorySandbox', () => {
     expect((created as any)._env).toEqual({ CI: '1' });
   });
 
+  it('resolves an env function per session so a credential reaches one factory only', () => {
+    const sandbox = new DockerFactorySandbox({
+      env: ctx => (ctx.factoryId === 'fac-platform' ? { TOKEN: 't' } : {}),
+    });
+    expect((sandbox.create({ ...context(), factoryId: 'fac-platform' }, {}) as any)._env).toEqual({ TOKEN: 't' });
+    expect((sandbox.create({ ...context(), factoryId: 'fac-mastra' }, {}) as any)._env).toEqual({});
+  });
+
   it('runs the template under the configured working directory when the context names none', async () => {
     const sandbox = new DockerFactorySandbox({ workingDirectory: '/srv/repos' });
     const created = sandbox.create(context(), {});

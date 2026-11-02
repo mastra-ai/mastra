@@ -11,6 +11,7 @@ import {
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -21,7 +22,6 @@ import {
   useUpdateOMThresholds,
 } from '../../../../hooks/use-om';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
@@ -102,17 +102,21 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
 export function OMSection({
   sessionId,
   factoryId,
+  threadId,
+  resourceId,
   models,
 }: {
   sessionId?: string;
   factoryId?: string;
+  threadId?: string;
+  resourceId?: string;
   models: AvailableModelOption[];
 }) {
-  const omQuery = useOMQuery(sessionId, factoryId);
-  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId);
-  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId);
-  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId);
-  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId);
+  const omQuery = useOMQuery(sessionId, factoryId, threadId, resourceId);
+  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId, threadId, resourceId);
+  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId, threadId, resourceId);
+  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId, threadId, resourceId);
+  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId, threadId, resourceId);
 
   const busy =
     observerMutation.isPending ||
@@ -134,7 +138,30 @@ export function OMSection({
   };
 
   if (omQuery.isPending) {
-    return <SkeletonRows label="Loading observational-memory settings" rows={2} rowClassName="h-14 w-full" />;
+    return (
+      <div role="status" aria-label="Loading observational-memory settings">
+        <div aria-hidden className="@container flex flex-col gap-3">
+          <ol className="flex flex-col">
+            <OMRow as="li" rail="node" label="Messages" />
+            <OMRow as="li" rail="edge" label="Observe after">
+              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
+            </OMRow>
+            <OMRow as="li" rail="node" label="Observer">
+              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
+            </OMRow>
+            <OMRow as="li" rail="edge" label="Reflect after">
+              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
+            </OMRow>
+            <OMRow as="li" rail="node" label="Reflector">
+              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
+            </OMRow>
+          </ol>
+          <OMRow rail="none" label="Attachments">
+            <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
+          </OMRow>
+        </div>
+      </div>
+    );
   }
 
   if (omQuery.data === undefined) {
