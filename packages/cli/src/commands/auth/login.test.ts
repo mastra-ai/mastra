@@ -269,6 +269,8 @@ describe('login() server lifecycle', () => {
 
         await expect(loginPromise).resolves.toMatchObject({ token: 'test-token', organizationId: 'org-1' });
         expect(terminal.setRawMode).toHaveBeenLastCalledWith(false);
+        // A stdin left flowing would keep `mastra auth login` from exiting.
+        expect(process.stdin.pause).toHaveBeenCalled();
       } finally {
         terminal.restore();
       }
