@@ -85,3 +85,30 @@ describe.each(SUBSCRIPTIONS)('$name subscription requests', ({ name, id, url, bu
     });
   });
 });
+
+// On a flaky connection (plane wifi) the token endpoint can't be reached, errors,
+// or answers with a captive-portal page. The saved sign-in is still good, so the
+// request must say Anthropic is unreachable instead of asking to sign in again.
+describe.each([
+  { label: 'is unreachable', response: () => HttpResponse.error(), detail: /fetch failed/ },
+  { label: 'is down', response: () => new HttpResponse('upstream down', { status: 503 }), detail: /503/ },
+  {
+    label: 'answers with a captive-portal page',
+    response: () => new HttpResponse('<html>Sign in to the wifi</html>', { headers: { 'content-type': 'text/html' } }),
+    detail: /unreadable/,
+  },
+])('Anthropic subscription requests when the sign-in server $label', ({ response, detail }) => {
+  it('say Anthropic could not be reached and keep the saved sign-in', async () => {
+    storage.set('anthropic', { type: 'oauth', access: 'expired', refresh: 'still-valid', expires: 0 });
+    server.use(http.post('https://console.anthropic.com/v1/oauth/token', response));
+
+    const error = await buildAnthropicOAuthFetch({ authStorage: storage })(
+      'https://api.anthropic.com/v1/messages',
+    ).catch((caught: unknown) => caught as Error);
+
+    expect(error.name).not.toBe('ProviderAuthRequiredError');
+    expect(error.message).toMatch(/^Couldn't reach Anthropic to renew the sign-in/);
+    expect(error.message).toMatch(detail);
+    expect(storage.get('anthropic')).toMatchObject({ type: 'oauth', refresh: 'still-valid' });
+  });
+});
