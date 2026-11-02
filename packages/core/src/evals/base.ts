@@ -1067,9 +1067,10 @@ class MastraScorer<
         ...(prepared.targetSpanId ? { targetSpanId: prepared.targetSpanId } : {}),
       },
       // The scorer run is its own trace, so the scored target's hide flags do not reach it
-      // through span parentage. Starting the trace with them hides the scorer run, its steps,
-      // and any judge model spans, which all carry the scored data.
-      ...(hideInput || hideOutput ? { tracingOptions: { hideInput, hideOutput } } : {}),
+      // through span parentage. Its spans don't split along the target's input/output: the
+      // run's span input holds the scored output, step inputs and judge prompts hold both, and
+      // the reason can quote either. So hiding either side hides both sides of this trace.
+      ...(hideInput || hideOutput ? { tracingOptions: { hideInput: true, hideOutput: true } } : {}),
       mastra: this.#mastra,
     });
     const run: ScorerRun<TInput, TRunOutput> & { runId: string; scoreTraceId?: string } = {
