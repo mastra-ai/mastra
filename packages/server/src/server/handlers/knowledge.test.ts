@@ -10,6 +10,8 @@ import { deriveAction, extractResource } from '../server-adapter/routes/permissi
 import {
   GET_KNOWLEDGE_ACTIVITY_ROUTE,
   GET_KNOWLEDGE_GRAPH_ROUTE,
+  GET_KNOWLEDGE_LINK_COUNTS_ROUTE,
+  GET_KNOWLEDGE_PAGE_LINKS_ROUTE,
   GET_KNOWLEDGE_PAGE_ROUTE,
   GET_KNOWLEDGE_TREE_ROUTE,
   LIST_KNOWLEDGE_ROUTE,
@@ -184,6 +186,84 @@ describe('Knowledge read routes', () => {
       expect(graph.grants).toEqual([
         { principal: 'org:acme', principalId: acme.id, target: support.id, role: 'viewer' },
       ]);
+    });
+  });
+
+  describe('page links', () => {
+    /** Refunds links out to Roadmap in its body, and a new page links in; the UI has loaded none of them. */
+    async function linked() {
+      const world = await setup();
+      const store = await world.mastra.listKnowledge().main!.getStorage();
+      const billing = await store.createPage({ parentId: world.support.id, name: 'Billing', provenance });
+      await store.replacePageBodyLinks({
+        pageId: world.refunds.id,
+        links: [{ ref: 'Roadmap', toPageId: world.roadmap.id, count: 2 }],
+      });
+      await store.replacePageBodyLinks({
+        pageId: billing.id,
+        links: [{ ref: 'Refunds', toPageId: world.refunds.id, count: 1 }],
+      });
+      return { ...world, billing };
+    }
+
+    it('counts the links in and out of pages, from the store, for any pages asked about', async () => {
+      const { mastra, refunds, roadmap } = await linked();
+      const { counts } = await call(GET_KNOWLEDGE_LINK_COUNTS_ROUTE, {
+        mastra,
+        knowledgeKey: 'main',
+        pageId: [refunds.id, roadmap.id, 'missing'],
+      });
+      // Refunds: Billing links in, Roadmap out plus the note mention to Roadmap (one distinct page).
+      expect(counts[refunds.id]).toEqual({ in: 1, out: 1 });
+      expect(counts[roadmap.id]).toEqual({ in: 1, out: 0 });
+      expect(counts.missing).toEqual({ in: 0, out: 0 });
+    });
+
+    it("lists one page's links with the pages at their other ends", async () => {
+      const { mastra, refunds, roadmap, billing } = await linked();
+      const links = await call(GET_KNOWLEDGE_PAGE_LINKS_ROUTE, { mastra, knowledgeKey: 'main', pageId: refunds.id });
+      expect(
+        links.edges.map((edge: { fromPageId: string; toPageId: string }) => [edge.fromPageId, edge.toPageId]),
+      ).toEqual(
+        expect.arrayContaining([
+          [refunds.id, roadmap.id],
+          [billing.id, refunds.id],
+        ]),
+      );
+      expect(names(links.pages).sort()).toEqual(['Billing', 'Roadmap']);
+      expect(links.truncated).toBe(false);
+      const out = await call(GET_KNOWLEDGE_PAGE_LINKS_ROUTE, {
+        mastra,
+        knowledgeKey: 'main',
+        pageId: refunds.id,
+        direction: 'out',
+      });
+      expect(names(out.pages)).toEqual(['Roadmap']);
+    });
+
+    it('shows a caller no link to, from or count for a page it cannot read', async () => {
+      const { mastra, refunds, roadmap } = await linked();
+      const knowledge = mastra.listKnowledge().main as unknown as Record<string, unknown>;
+      knowledge.readScopeFor = vi.fn(async (principals: string[]) => ({
+        addresses: principals,
+        prefixes: [],
+        children: [],
+      }));
+      (mastra as any).getServer = () => ({ auth: { authenticateToken: async () => ({ id: 'u1' }) } });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'u1' });
+      requestContext.set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, ['team:acme:support']);
+      const args = { mastra, requestContext, knowledgeKey: 'main' };
+      const { counts } = await call(GET_KNOWLEDGE_LINK_COUNTS_ROUTE, { ...args, pageId: [refunds.id, roadmap.id] });
+      expect(counts[roadmap.id]).toEqual({ in: 0, out: 0 });
+      expect(counts[refunds.id].out).toBe(0);
+      const own = await call(GET_KNOWLEDGE_PAGE_LINKS_ROUTE, { ...args, pageId: refunds.id });
+      expect(names(own.pages)).not.toContain('Roadmap');
+      expect(await call(GET_KNOWLEDGE_PAGE_LINKS_ROUTE, { ...args, pageId: roadmap.id })).toEqual({
+        edges: [],
+        pages: [],
+        truncated: false,
+      });
     });
   });
 
