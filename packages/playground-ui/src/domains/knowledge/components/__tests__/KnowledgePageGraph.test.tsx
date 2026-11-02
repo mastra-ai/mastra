@@ -132,6 +132,36 @@ describe('KnowledgePageGraph', () => {
     });
   });
 
+  describe("the focused page's parent", () => {
+    const line = (id: string) => document.querySelector(`[data-id="${id}"]`);
+
+    it('is labelled Parent on its circle, with the up icon', async () => {
+      renderGraph({ selectedPageId: 'refunds' });
+      const nodes = await screen.findAllByTestId('knowledge-page-node');
+      const parent = nodes.find(n => n.dataset.pageId === 'org');
+      if (!parent) throw new Error('parent not drawn');
+      expect(within(parent).getByTestId('knowledge-scope-caption').textContent).toBe('Parent scope');
+      const child = nodes.find(n => n.dataset.pageId === 'refunds');
+      expect(child && within(child).getByTestId('knowledge-page-caption').textContent).toBe('Page');
+    });
+
+    it('is joined to the focus by its own solid line, not the dashed child line, and the legend says so', async () => {
+      renderGraph({ selectedPageId: 'refunds' });
+      await screen.findAllByTestId('knowledge-page-node');
+      const up = line('parent:org->refunds') as SVGElement | null;
+      expect(up).toBeTruthy();
+      const path = up?.querySelector('path');
+      expect(path?.getAttribute('stroke-dasharray') ?? path?.style.strokeDasharray ?? '').toBe('');
+      expect(screen.getByTestId('knowledge-legend-up').textContent).toBe('Parent of the focused page');
+    });
+
+    it('is not singled out when nothing above the focus is drawn', async () => {
+      renderGraph({ selectedPageId: 'org' });
+      await screen.findAllByTestId('knowledge-page-node');
+      expect(screen.queryByTestId('knowledge-legend-up')).toBeNull();
+    });
+  });
+
   describe('legend', () => {
     it('explains circles, lines and the pin', () => {
       renderGraph();

@@ -58,6 +58,10 @@ const PARENT_EDGE_STYLE = {
   strokeDasharray: '4 4',
   strokeWidth: 1.25,
 };
+// The line from the focused page's parent: solid cyan with a closed head, apart from every child's dashed grey one.
+const UP_EDGE_COLOR = 'var(--chart-cyan)';
+const UP_EDGE_STYLE = { stroke: UP_EDGE_COLOR, strokeWidth: 2.25 };
+const UP_ARROW = { type: MarkerType.ArrowClosed, color: UP_EDGE_COLOR, width: 14, height: 14 };
 const MENTION_EDGE_COLOR = 'var(--chart-blue)';
 // An open chevron in the dashed line's muted tone, at the child end: distinct from a mention's filled blue head.
 const PARENT_ARROW_COLOR = 'var(--muted-foreground)';
@@ -122,6 +126,8 @@ type PageNodeData = PageFlowNode['data'] & {
   showCount?: boolean;
   /** A scope or an ancestor of the focus: a circle that says it sits above other pages. */
   level?: GraphLevel;
+  /** The focused page's parent: its circle says so. */
+  isParent?: boolean;
 };
 
 /** `4 links in, 14 links out`: what the arrows in a link badge say, for its label and a dot's tooltip. */
@@ -380,7 +386,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
           data-testid={page.isScope ? 'knowledge-scope-caption' : 'knowledge-page-caption'}
         >
           {data.level ? <LevelIcon level={data.level} /> : null}
-          {rest ? 'More' : kind}
+          {rest ? 'More' : data.isParent ? (page.isScope ? 'Parent scope' : 'Parent') : kind}
         </Txt>
         <Txt as="span" variant="label" tone="ink" className="pointer-events-none line-clamp-3 max-w-full break-words">
           {page.isScope && page.address && !group ? <BreakAtColons text={page.address} /> : page.name}
@@ -567,7 +573,7 @@ function graphBounds(nodes: Array<{ position: { x: number; y: number }; width?: 
 const LEGEND_SWATCH = 'knowledge-circle inline-block size-3 shrink-0 rounded-full border-2';
 
 /** The line styles the graph draws, which its legend names. */
-type EdgeStyleKey = 'out' | 'in' | 'mention' | 'link' | 'grant' | 'dot-parent' | 'parent';
+type EdgeStyleKey = 'out' | 'in' | 'mention' | 'link' | 'grant' | 'dot-parent' | 'parent' | 'up';
 
 /** What the circles, lines and badge mean. */
 function GraphLegend({
@@ -724,6 +730,17 @@ function GraphLegend({
           </svg>
           <Txt as="span" variant="meta" tone="muted">
             Child page (dot)
+          </Txt>
+        </li>
+      ) : null}
+      {drawn.has('up') ? (
+        <li className="flex items-center gap-2" data-testid="knowledge-legend-up">
+          <svg width="16" height="8" aria-hidden className="shrink-0">
+            <line x1="0" y1="4" x2="12" y2="4" {...UP_EDGE_STYLE} />
+            <polygon points="9,1 15,4 9,7" fill={UP_EDGE_COLOR} />
+          </svg>
+          <Txt as="span" variant="meta" tone="muted">
+            Parent of the focused page
           </Txt>
         </li>
       ) : null}
@@ -916,6 +933,11 @@ function KnowledgePageGraphInner({
     return { nodes: flow.nodes, edges: flow.edges, positions, shape, colors };
   }, [graphPages, allEdges, selectedPageId, centerId, linkCounts, showCounts]);
   const pageById = useMemo(() => new Map(graphPages.map(page => [page.id, page])), [graphPages]);
+  // The page above whatever the graph is centred on, if it is drawn.
+  const focusParentId = useMemo(() => {
+    const parentId = laidOut.shape.center ? pageById.get(laidOut.shape.center)?.parentId : undefined;
+    return parentId && laidOut.positions.has(parentId) ? parentId : null;
+  }, [laidOut, pageById]);
   const drawnLevels = useMemo(() => {
     const kinds = new Set<GraphLevel>();
     for (const [id, level] of laidOut.shape.level) if (laidOut.shape.form.get(id) === 'full') kinds.add(level);
@@ -1024,10 +1046,22 @@ function KnowledgePageGraphInner({
             links: linkCounts.get(node.id),
             showCount: showCounts,
             level: laidOut.shape.form.get(node.id) === 'full' ? laidOut.shape.level.get(node.id) : undefined,
+            isParent: node.id === focusParentId,
           },
         };
       }),
-    [laidOut, selectedPageId, pinned, neighbours, childrenUndrawn, pageById, hiddenLinks, linkCounts, showCounts],
+    [
+      laidOut,
+      selectedPageId,
+      pinned,
+      neighbours,
+      childrenUndrawn,
+      pageById,
+      hiddenLinks,
+      linkCounts,
+      showCounts,
+      focusParentId,
+    ],
   );
   const { flowEdges, drawnEdgeStyles } = useMemo(() => {
     const drawn = new Set<EdgeStyleKey>();
@@ -1051,7 +1085,11 @@ function KnowledgePageGraphInner({
               ? 'in'
               : undefined
           : undefined;
-      drawn.add(direction ?? (mention ? 'mention' : grant ? 'grant' : link ? 'link' : toDot ? 'dot-parent' : 'parent'));
+      const up = !mention && !grant && !link && edge.source === focusParentId && edge.target === laidOut.shape.center;
+      drawn.add(
+        direction ??
+          (up ? 'up' : mention ? 'mention' : grant ? 'grant' : link ? 'link' : toDot ? 'dot-parent' : 'parent'),
+      );
       return {
         ...edge,
         type: 'rim',
@@ -1068,28 +1106,32 @@ function KnowledgePageGraphInner({
           ? { ...DIRECTION_EDGE_STYLE[direction], strokeWidth: mention ? 2 : 1.5 }
           : mention
             ? { stroke: MENTION_EDGE_COLOR, strokeWidth: Math.min(1.5 + (edge.data?.count ?? 1) * 0.5, 4) }
-            : grant
-              ? GRANT_EDGE_STYLE
-              : link
-                ? LINK_EDGE_STYLE
-                : toDot
-                  ? DOT_PARENT_EDGE_STYLE
-                  : PARENT_EDGE_STYLE,
+            : up
+              ? UP_EDGE_STYLE
+              : grant
+                ? GRANT_EDGE_STYLE
+                : link
+                  ? LINK_EDGE_STYLE
+                  : toDot
+                    ? DOT_PARENT_EDGE_STYLE
+                    : PARENT_EDGE_STYLE,
         markerEnd: direction
           ? DIRECTION_ARROW[direction]
-          : mention
-            ? { type: MarkerType.ArrowClosed, color: MENTION_EDGE_COLOR, width: 14, height: 14 }
-            : grant
-              ? GRANT_ARROW
-              : link
-                ? LINK_ARROW
-                : toDot
-                  ? undefined
-                  : PARENT_ARROW,
+          : up
+            ? UP_ARROW
+            : mention
+              ? { type: MarkerType.ArrowClosed, color: MENTION_EDGE_COLOR, width: 14, height: 14 }
+              : grant
+                ? GRANT_ARROW
+                : link
+                  ? LINK_ARROW
+                  : toDot
+                    ? undefined
+                    : PARENT_ARROW,
       };
     });
     return { flowEdges, drawnEdgeStyles: drawn as ReadonlySet<EdgeStyleKey> };
-  }, [laidOut, hoverExtra, onMentionSelect, neighbours, emphasisId]);
+  }, [laidOut, hoverExtra, onMentionSelect, neighbours, emphasisId, focusParentId]);
   const pagesById = useMemo(() => new Map(pages.map(page => [page.id, page])), [pages]);
   const reactFlow = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
