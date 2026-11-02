@@ -10,6 +10,7 @@ import type { Author, FetchOptions, Message, Thread } from 'chat';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import { Agent } from '../../agent';
+import { MessageList } from '../../agent/message-list';
 import type { MastraDBMessage } from '../../agent/message-list';
 import type { AgentSignalInput } from '../../agent/signals';
 import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
@@ -23,6 +24,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
+import { ChatChannelProcessor } from '../processor';
 import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler, ResolveResourceId } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
@@ -182,6 +184,26 @@ describe('AgentChannels', () => {
     it('skips when the user already provided a ChatChannelProcessor', () => {
       const userProcessor = { id: 'chat-channel-context', processInputStep: () => undefined } as any;
       expect(agentChannels.getInputProcessors([userProcessor])).toEqual([]);
+    });
+
+    it('binds a ChatChannelProcessor the agent configured itself, so a restored run keeps hidden text', async () => {
+      const channels = new AgentChannels({
+        adapters: { slack: { adapter: createMockAdapter('slack'), textDisplay: 'hidden' } },
+      } as any);
+      const configured = new ChatChannelProcessor();
+      expect(channels.getInputProcessors([configured])).toEqual([]);
+
+      // A run restored from a snapshot keeps its JSON-safe `channel` entry but no render context.
+      const requestContext = new RequestContext();
+      requestContext.set('channel', { platform: 'slack', eventType: 'message', userId: 'U1' });
+      const messageList = new MessageList({});
+      await configured.processInputStep({ messageList, requestContext, state: {}, tools: {} } as any);
+      const prompt = messageList
+        .getSystemMessages('chat-channel-context')
+        .map(m => m.content)
+        .join('\n');
+
+      expect(prompt).toContain('Your text replies are not posted');
     });
   });
 

@@ -34,10 +34,15 @@ type ResolvedChannel = { channel: ChannelContext; textHidden: boolean };
  */
 export class ChatChannelProcessor {
   readonly id = 'chat-channel-context';
-  readonly #channels?: ChannelThreadResolver;
+  #channels?: ChannelThreadResolver;
 
   constructor(channels?: ChannelThreadResolver) {
     this.#channels = channels;
+  }
+
+  /** @internal Lets `AgentChannels` bind an instance the agent configured itself. */
+  _bindChannels(channels: ChannelThreadResolver): void {
+    this.#channels ??= channels;
   }
 
   async processInputStep({

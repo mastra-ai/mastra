@@ -167,6 +167,11 @@ export class ChatChannelOutputProcessor {
     this.#agentChannels = agentChannels;
   }
 
+  /** @internal Lets `AgentChannels` bind an instance the agent configured itself. */
+  _bindChannels(agentChannels: AgentChannels): void {
+    this.#agentChannels ??= agentChannels;
+  }
+
   async processOutputStream({
     part,
     state,
