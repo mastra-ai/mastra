@@ -1635,13 +1635,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
    * reads every card of the project every few seconds, and cloning thousands of rows per poll
    * costs more than the query the cache saves. Callers must not mutate the result.
    */
-  async listShared({
-    orgId,
-    factoryProjectId,
-  }: {
-    orgId: string;
-    factoryProjectId: string;
-  }): Promise<readonly Card[]> {
+  async listShared({ orgId, factoryProjectId }: { orgId: string; factoryProjectId: string }): Promise<readonly Card[]> {
     return (await this.#listCached(orgId, factoryProjectId)).items;
   }
 
