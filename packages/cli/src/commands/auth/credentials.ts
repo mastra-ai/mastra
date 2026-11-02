@@ -265,8 +265,9 @@ function listenForInput({ onSkip, onPaste }: { onSkip?: () => void; onPaste: (te
       return;
     }
 
+    // A paste arrives as chunks starting with the full scheme; a single keypress never does.
     buffer += data;
-    if (!buffer.startsWith('http') && !'http'.startsWith(buffer)) {
+    if (!buffer.startsWith('http')) {
       buffer = '';
       if (onSkip) {
         cleanup();

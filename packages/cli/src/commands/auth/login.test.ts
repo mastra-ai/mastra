@@ -221,7 +221,7 @@ describe('login() server lifecycle', () => {
     ).rejects.toThrow();
   });
 
-  it('skips login when any key is pressed', async () => {
+  it.each(['x', 'h'])('skips login when a key is pressed (%s)', async key => {
     const stdin = mockTerminal();
     try {
       const { login, LoginCancelledError } = await import('./credentials.js');
@@ -233,7 +233,7 @@ describe('login() server lifecycle', () => {
         },
         { timeout: 5000 },
       );
-      process.stdin.emit('data', Buffer.from('x'));
+      process.stdin.emit('data', Buffer.from(key));
 
       await expect(loginPromise).rejects.toBeInstanceOf(LoginCancelledError);
       expect(stdin.setRawMode).toHaveBeenNthCalledWith(1, true);
