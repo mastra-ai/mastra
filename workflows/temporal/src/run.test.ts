@@ -2,6 +2,7 @@ import { mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createStep, createWorkflow as createLocalWorkflow } from '@mastra/core/workflows';
+import { ApplicationFailure, CancelledFailure, WorkflowFailedError } from '@temporalio/client';
 import type { Client } from '@temporalio/client';
 import { proxyActivities } from '@temporalio/workflow';
 import { describe, expect, it, vi } from 'vitest';
@@ -285,5 +286,90 @@ describe('TemporalRun', () => {
     expect(getHandle).toHaveBeenCalledWith('test-run');
     expect(run.workflowRunStatus).toBe('pending');
     expect(run.abortController.signal.aborted).toBe(false);
+  });
+});
+
+// The errors `handle.result()` throws for a failed or canceled Temporal workflow.
+function workflowFailed(message: string, cause: Error) {
+  return new WorkflowFailedError(message, cause, 'NON_RETRYABLE_FAILURE' as never);
+}
+
+// #24018: hooks used to be accepted and never called.
+describe('TemporalRun lifecycle hooks', () => {
+  function createHookedWorkflow(start: unknown) {
+    const hooks = { onStart: vi.fn(), onFinish: vi.fn(), onError: vi.fn() };
+    const workflow = createWorkflow(
+      { id: 'test-workflow', options: hooks },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    return { hooks, workflow };
+  }
+
+  it.each([
+    { outcome: 'success', settle: () => Promise.resolve({ result: { value: 6 } }), status: 'success', onError: false },
+    {
+      outcome: 'failure',
+      settle: () =>
+        Promise.reject(workflowFailed('Workflow execution failed', ApplicationFailure.nonRetryable('step failed'))),
+      status: 'failed',
+      onError: true,
+    },
+    {
+      outcome: 'cancellation',
+      settle: () =>
+        Promise.reject(workflowFailed('Workflow execution cancelled', new CancelledFailure('Workflow canceled'))),
+      status: 'canceled',
+      onError: false,
+    },
+  ])(
+    'start() reports a $outcome to onFinish, and to onError only for failures',
+    async ({ settle, status, onError }) => {
+      const { hooks, workflow } = createHookedWorkflow(async () => ({ result: settle }));
+      const run = await workflow.createRun({ runId: 'test-run' });
+
+      const result = await run.start({ inputData: { value: 5 } });
+
+      expect(result.status).toBe(status);
+      expect(hooks.onFinish).toHaveBeenCalledOnce();
+      expect(hooks.onFinish).toHaveBeenCalledWith(
+        expect.objectContaining({ status, runId: 'test-run', workflowId: 'test-workflow' }),
+      );
+      expect(hooks.onError).toHaveBeenCalledTimes(onError ? 1 : 0);
+    },
+  );
+
+  it.each(['start', 'startAsync'] as const)(
+    '%s() rejects without starting the workflow when onStart throws',
+    async method => {
+      const start = vi.fn();
+      const { hooks, workflow } = createHookedWorkflow(start);
+      hooks.onStart.mockRejectedValue(new Error('quota exceeded'));
+      const run = await workflow.createRun({ runId: 'test-run' });
+
+      await expect(run[method]({ inputData: {} })).rejects.toThrow('quota exceeded');
+
+      expect(hooks.onStart).toHaveBeenCalledWith(expect.objectContaining({ runId: 'test-run' }));
+      expect(start).not.toHaveBeenCalled();
+      expect(hooks.onFinish).not.toHaveBeenCalled();
+    },
+  );
+
+  it('startAsync() runs onFinish and onError once the workflow fails in the background', async () => {
+    let fail!: (error: Error) => void;
+    const settled = new Promise<never>((_, reject) => {
+      fail = reject;
+    });
+    const start = vi.fn(async () => ({ result: () => settled }));
+    const { hooks, workflow } = createHookedWorkflow(start);
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await expect(run.startAsync({ inputData: {} })).resolves.toEqual({ runId: 'test-run' });
+    expect(start).toHaveBeenCalledOnce();
+    expect(hooks.onFinish).not.toHaveBeenCalled();
+
+    fail(workflowFailed('Workflow execution failed', ApplicationFailure.nonRetryable('step failed')));
+
+    await vi.waitFor(() => expect(hooks.onError).toHaveBeenCalledOnce());
+    expect(hooks.onFinish).toHaveBeenCalledWith(expect.objectContaining({ status: 'failed', runId: 'test-run' }));
   });
 });
