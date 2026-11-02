@@ -3,7 +3,7 @@ import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { Route, Routes, useLocation } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import KnowledgePage from '..';
 import {
   emptyKnowledgeGraph,
@@ -354,6 +354,60 @@ describe('Knowledge page', () => {
       expect(screen.queryByText('Failed to load Knowledge')).toBeNull();
       expect(screen.getByRole('tree')).toBeTruthy();
       expect(screen.getByTestId('location-search').textContent).toContain('page=page-payments');
+    });
+  });
+
+  describe('when the tab is hidden while the change stream is open', () => {
+    const setVisibility = (state: DocumentVisibilityState) => {
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state });
+      document.dispatchEvent(new Event('visibilitychange'));
+    };
+    afterEach(() => setVisibility('visible'));
+
+    function withCountedStream() {
+      const streams = { opened: 0, closed: 0 };
+      server.use(
+        http.get(`${api}/main/events`, ({ request }) => {
+          streams.opened += 1;
+          request.signal.addEventListener('abort', () => (streams.closed += 1), { once: true });
+          const body = new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(new TextEncoder().encode(': connected\n\n'));
+            },
+          });
+          return new HttpResponse(body, { headers: { 'Content-Type': 'text/event-stream' } });
+        }),
+      );
+      return streams;
+    }
+
+    it('closes the stream so it holds no connection', async () => {
+      withInstance();
+      const streams = withCountedStream();
+      renderPage();
+      expect(await screen.findByRole('tree')).toBeTruthy();
+      await waitFor(() => expect(streams.opened).toBe(1), { timeout: 5_000 });
+      setVisibility('hidden');
+      await waitFor(() => expect(streams.closed).toBe(1));
+    });
+
+    it('reopens it and shows what changed when the tab is shown again', async () => {
+      withInstance();
+      const streams = withCountedStream();
+      let view = paymentsPageView;
+      server.use(http.get(`${api}/main/pages/page-payments`, () => HttpResponse.json(view)));
+      renderPage('/knowledge?page=page-payments');
+      const detail = await screen.findByRole('region', { name: 'Selected page' });
+      expect(await within(detail).findByText('Retries card charges three times before failing.')).toBeTruthy();
+      await waitFor(() => expect(streams.opened).toBe(1), { timeout: 5_000 });
+      setVisibility('hidden');
+      await waitFor(() => expect(streams.closed).toBe(1));
+      view = paymentsPageViewAfterEdit;
+      setVisibility('visible');
+      await waitFor(() => expect(streams.opened).toBe(2));
+      expect(
+        await within(detail).findByText('Card charges now retry five times.', {}, { timeout: 2_000 }),
+      ).toBeTruthy();
     });
   });
 

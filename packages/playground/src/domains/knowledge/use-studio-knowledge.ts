@@ -9,7 +9,7 @@ import type {
 import type { KnowledgeExplorerTreeRequest } from '@mastra/playground-ui/domains/knowledge/components/KnowledgePageExplorer';
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, skipToken, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 
 const MIN_SEARCH_LENGTH = 2;
 
@@ -40,16 +40,29 @@ function sleep(ms: number, signal: AbortSignal) {
   });
 }
 
+function onVisibilityChange(notify: () => void) {
+  document.addEventListener('visibilitychange', notify);
+  return () => document.removeEventListener('visibilitychange', notify);
+}
+const pageVisible = () => document.visibilityState !== 'hidden';
+
 /**
  * Follows the instance's change stream and refetches the open Knowledge queries when a change arrives.
  * Returns whether the stream is connected, so the queries poll only while it isn't.
+ *
+ * The stream holds an HTTP connection open, and a browser allows about six per host over HTTP/1.1. With
+ * Studio's own reload stream, every open tab held two, so a few tabs left a new tab's requests queued
+ * forever. A hidden tab closes its stream, and reconnects and refetches when it is shown again.
  */
 export function useKnowledgeLiveUpdates(knowledgeKey: string | undefined): boolean {
   const client = useMastraClient();
   const queryClient = useQueryClient();
   const [live, setLive] = useState(false);
+  const visible = useSyncExternalStore(onVisibilityChange, pageVisible, () => true);
+  // Only the first connection of the page can skip the catch-up refetch.
+  const connectedBefore = useRef(false);
   useEffect(() => {
-    if (!knowledgeKey) return;
+    if (!knowledgeKey || !visible) return;
     const abort = new AbortController();
     let debounce: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {
@@ -60,11 +73,12 @@ export function useKnowledgeLiveUpdates(knowledgeKey: string | undefined): boole
       );
     };
     void (async () => {
-      for (let connects = 0; !abort.signal.aborted;) {
+      while (!abort.signal.aborted) {
         try {
           const reader = (await client.getKnowledge(knowledgeKey).events({ signal: abort.signal })).getReader();
-          // Writes may have landed while the stream was down.
-          if (connects++ > 0) refresh();
+          // Writes may have landed while the stream was down or the tab was hidden.
+          if (connectedBefore.current) refresh();
+          connectedBefore.current = true;
           setLive(true);
           while (!(await reader.read()).done) refresh();
         } catch (error) {
@@ -84,7 +98,7 @@ export function useKnowledgeLiveUpdates(knowledgeKey: string | undefined): boole
       clearTimeout(debounce);
       setLive(false);
     };
-  }, [client, queryClient, knowledgeKey]);
+  }, [client, queryClient, knowledgeKey, visible]);
   return live;
 }
 
