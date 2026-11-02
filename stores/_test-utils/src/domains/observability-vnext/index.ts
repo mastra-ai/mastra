@@ -214,6 +214,8 @@ export async function writeTraceQueryFixture(
       rootEntityName: span.rootEntityName ?? null,
       model: span.model ?? null,
       provider: span.provider ?? null,
+      timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
+      timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
       tags: span.tags,
       attributes: span.attributes,
       metadata: span.metadata,

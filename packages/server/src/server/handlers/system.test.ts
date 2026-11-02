@@ -38,6 +38,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   spanQueryOutcomeFields: false,
   spanAggregate: false,
   spanAggregateModelDimensions: false,
+  aggregateTimeToFirstMeasures: false,
   feedback: false,
 };
 
@@ -711,6 +712,26 @@ describe('System Handlers', () => {
 
           expect(await capabilitiesFor(new SpanAggregateStore())).toMatchObject({
             spanAggregateModelDimensions: supported,
+          });
+        },
+      );
+
+      it.each([
+        { features: ['trace-aggregate', 'aggregate-time-to-first-measures'], supported: true },
+        { features: ['span-aggregate', 'aggregate-time-to-first-measures'], supported: true },
+        { features: ['trace-aggregate', 'span-aggregate'], supported: false },
+        { features: ['aggregate-time-to-first-measures'], supported: false },
+      ] as const)(
+        'reports time-to-first aggregate measures for $features as $supported',
+        async ({ features, supported }) => {
+          class AggregateStore extends BaseObservabilityStore {
+            getFeatures() {
+              return features;
+            }
+          }
+
+          expect(await capabilitiesFor(new AggregateStore())).toMatchObject({
+            aggregateTimeToFirstMeasures: supported,
           });
         },
       );

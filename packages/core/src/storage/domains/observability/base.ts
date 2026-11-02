@@ -138,6 +138,8 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  *   trace aggregate `groupBy`/`countDistinct`, both fields in `spans.some`/`spans.none` predicates, and the root
  *   span's `outcome`, `stopReason` and `stopReasonContext` on trace rows
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
+ * - `aggregate-time-to-first-measures`: `timeToFirstToken.*` and `timeToFirstChunk.*` measures in
+ *   `aggregateTraces` (root span value) and `aggregateSpans` (each span's value)
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
  * - `feedback`: the feedback CRUD, review-status and analytics methods
@@ -173,7 +175,8 @@ export type ObservabilityStorageFeature =
   | 'trace-query-time-to-first-token'
   | 'trace-query-time-to-first-token-sort'
   | 'span-query-outcome-fields'
-  | 'trace-query-outcome-fields';
+  | 'trace-query-outcome-fields'
+  | 'aggregate-time-to-first-measures';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).

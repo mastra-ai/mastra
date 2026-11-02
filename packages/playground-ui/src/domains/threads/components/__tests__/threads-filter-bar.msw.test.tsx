@@ -84,7 +84,7 @@ describe('ThreadsFilterBar', () => {
     it('labels the input for threads', async () => {
       await renderBar([]);
 
-      expect(getFilterInput().getAttribute('placeholder')).toBe('Filter threads…');
+      expect(getFilterInput().getAttribute('placeholder')).toBe('Filter threads');
     });
   });
 });

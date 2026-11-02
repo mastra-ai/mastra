@@ -101,10 +101,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
-    ? 'Give feedback on this plan…'
+    ? 'Give feedback on this plan'
     : liveRun
-      ? 'Steer the agent…'
-      : 'Ask Mastra Code…';
+      ? 'Steer the agent'
+      : 'Ask Mastra Code';
   const placeholder = initializingPlaceholder ?? normalPlaceholder;
   const sendTitle = chatPreparing ? 'Initializing session…' : startingDraft ? 'Starting session…' : undefined;
 
