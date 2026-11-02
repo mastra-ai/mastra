@@ -83,7 +83,7 @@ A long page doesn't come back whole. A read returns at most 5,000 tokens of body
 { "page": "org:acme#policies/refund", "section": "Damaged items" }
 ```
 
-A page's notes, and the notes on other pages that mention it, come with a whole read while each list stays under 1,000 tokens. A longer list is counted in `more` instead, and the agent reads it with `notes: true` or `mentionedIn: true`. See [`knowledge_read`](/reference/knowledge/knowledge-tools#knowledge_read) for every option.
+A whole read fetches up to `limit` of a page's notes, and of the notes on other pages that mention it. Each list comes along while it stays under 1,000 tokens. A longer one is left out and noted in `more` instead, and the agent reads it with `notes: true` or `mentionedIn: true`. See [`knowledge_read`](/reference/knowledge/knowledge-tools#knowledge_read) for every option.
 
 All three need `viewer`.
 
