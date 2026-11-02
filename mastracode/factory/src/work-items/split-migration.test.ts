@@ -511,6 +511,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
   it('leaves inert claims in legacy storage without copying them into split records', async () => {
     const { storage, workItems } = await createStorage(backend);
     const cards = await seed(workItems);
+    await seedLegacy(storage);
     const id = cards.get('github issue')!;
     await storage.ops.updateMany('work_items', { id }, { claim_key: 'github:issue:10:42' });
 

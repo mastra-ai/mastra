@@ -17,6 +17,7 @@ import {
   WorkItemsStorage,
 } from './base.js';
 import type { WorkItemStageEntry } from './base.js';
+import { Cards } from './cards.js';
 
 const input = {
   externalSource: {
@@ -1223,7 +1224,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
 
       const a = await upsert('project-a');
       // A card filed while claims were enforced still carries its claim value.
-      await storage.ops.updateMany('work_items', { id: a.item.id }, { claim_key: 'jira:issue:X' });
+      const legacy = (await new Cards(storage.ops).findOne({ id: a.item.id }))!;
+      delete legacy.work_item;
+      delete legacy.work_item_sources;
+      await storage.ops.insertOne('work_items', { ...legacy, claim_key: 'jira:issue:X' });
 
       const b = await upsert('project-b');
       expect(b.created).toBe(true);
@@ -1233,9 +1237,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(await cards('project-b')).toHaveLength(1);
 
       const rowA = await storage.ops.findOne<{ claim_key: string | null }>('work_items', { id: a.item.id });
-      const rowB = await storage.ops.findOne<{ claim_key: string | null }>('work_items', { id: b.item.id });
+      const rowB = await storage.ops.findOne('factory_board_items', { id: b.item.id });
       expect(rowA?.claim_key).toBe('jira:issue:X');
-      expect(rowB?.claim_key).toBeNull();
+      expect(rowB).not.toHaveProperty('claim_key');
     });
   },
 );

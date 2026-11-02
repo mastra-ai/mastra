@@ -36,7 +36,6 @@ export type CardInsert = Pick<
   | 'board'
   | 'external_source'
   | 'source_key'
-  | 'claim_key'
   | 'parent_work_item_id'
   | 'title'
   | 'stages'
@@ -105,7 +104,7 @@ function joinCard(
 function boardColumns(patch: Partial<WorkItemDbRow>, { filter = false } = {}): Partial<BoardItemDbRecord> {
   const columns: Record<string, unknown> = {};
   for (const [column, value] of Object.entries(patch)) {
-    if ((column === 'id' && !filter) || PROJECTED_COLUMNS.has(column)) continue;
+    if ((column === 'id' && !filter) || column === 'claim_key' || PROJECTED_COLUMNS.has(column)) continue;
     if (column === 'parent_work_item_id') columns.parent_board_item_id = value;
     else if (BOARD_COLUMNS.has(column)) columns[column] = value;
     else throw new Error(`[cards] unknown card column '${column}'.`);
@@ -121,8 +120,7 @@ export class Cards {
   ) {}
 
   async #where(where: CollectionWhere): Promise<CollectionWhere | null> {
-    const { source_key: sourceKey, claim_key: claimKey, ...rest } = where;
-    if (claimKey !== undefined && claimKey !== null) return null;
+    const { source_key: sourceKey, ...rest } = where;
     const boardWhere = boardColumns(rest as Partial<WorkItemDbRow>, { filter: true }) as CollectionWhere;
     if (sourceKey === undefined) return boardWhere;
     const scope: CollectionWhere = {};
@@ -206,6 +204,7 @@ export class Cards {
     if (this.legacyMode) return this.ops.insertOne<WorkItemDbRow>(WORK_ITEMS_SCHEMA.name, card);
     const rows = splitCardRows(
       {
+        claim_key: null,
         triage_type: null,
         autonomy_armed_at: null,
         plans_preapproved_at: null,

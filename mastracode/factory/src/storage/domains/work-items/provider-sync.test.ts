@@ -263,13 +263,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
 
   it('deduplicates sources per project without persisting or enforcing legacy cross-project claims', async () => {
     const { storage, workItems, scope, item } = await setup();
-    const input = { title: item.title, externalSource: item.externalSource!, claimKey: 'retired-shared-claim' };
+    const input = { title: item.title, externalSource: item.externalSource! };
     const reused = await workItems.upsert({ ...scope, input });
     const second = await workItems.upsert({ ...scope, factoryProjectId: 'another-project', input });
-    expect(reused).toMatchObject({ created: false, item: { id: item.id, claimKey: null } });
-    expect(second).toMatchObject({ created: true, item: { claimKey: null } });
+    expect(reused).toMatchObject({ created: false, item: { id: item.id } });
+    expect(second.created).toBe(true);
     expect(second.item.id).not.toBe(item.id);
-    expect(await workItems.getByClaimKey({ orgId: scope.orgId, claimKey: input.claimKey })).toBeNull();
+    for (const card of [reused.item, second.item]) expect(card).not.toHaveProperty('claimKey');
     for (const card of [item, reused.item, second.item]) {
       expect(card.workItem).not.toHaveProperty('kind');
       for (const source of card.workItem.sources) expect(source).not.toHaveProperty('kind');
@@ -287,7 +287,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
             expect(row).not.toHaveProperty(column);
           }
         }
-        for (const column of ['kind', 'comment_count', 'feed_activity_at']) expect(row).not.toHaveProperty(column);
+        for (const column of ['kind', 'claim_key', 'comment_count', 'feed_activity_at'])
+          expect(row).not.toHaveProperty(column);
       }
     }
   });
