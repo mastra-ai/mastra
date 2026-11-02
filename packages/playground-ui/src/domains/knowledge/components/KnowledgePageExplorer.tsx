@@ -843,6 +843,7 @@ export function KnowledgePageExplorer({
                 grants={graph.grants}
                 selectedPageId={selectedPageId}
                 hiddenLinks={linkView.hidden}
+                knownLinks={knownLinks}
                 onPreview={page => {
                   if (isChildPlaceholder(page) && page.parentId) previewParent(page.parentId);
                 }}

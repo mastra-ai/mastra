@@ -107,11 +107,15 @@ type PageNodeData = PageFlowNode['data'] & {
   path: string;
   /** Links into and out of the page that aren't drawn. */
   hiddenLinks?: { in: number; out: number };
+  /** Where a page is addressed, e.g. `org:acme#policies/refunds`, for a dot's tooltip. */
+  ref?: string;
+  /** All links into and out of the page, drawn or not, for a dot's tooltip. */
+  links?: { in: number; out: number };
 };
 
 /** A page far from the focus: a small coloured dot that names itself on hover. */
 function DotNode({ data }: { data: PageNodeData }) {
-  const { page, size, dimmed, color, path } = data;
+  const { page, size, dimmed, color, path, ref, links } = data;
   const [hover, setHover] = useState(false);
   const standIn = isChildPlaceholder(page);
   const group = isScopeGroup(page);
@@ -119,7 +123,12 @@ function DotNode({ data }: { data: PageNodeData }) {
   const hint = standIn ? 'Hover or click to load them' : group ? 'Click to show them' : null;
   const children =
     !hint && page.childCount ? `${childCountLabel(page)} ${page.childCount === 1 ? 'child' : 'children'}` : null;
-  const label = [page.name, hint ?? path, children].filter(Boolean).join(' · ');
+  const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
+  const linkText =
+    links && (links.in > 0 || links.out > 0)
+      ? `${links.in} ${links.in === 1 ? 'link' : 'links'} in · ${links.out} out`
+      : null;
+  const label = [page.name, hint ?? path, children, linkText].filter(Boolean).join(' · ');
   return (
     <div
       data-testid="knowledge-page-dot"
@@ -154,11 +163,21 @@ function DotNode({ data }: { data: PageNodeData }) {
           ) : (
             <>
               <Txt as="span" variant="meta" tone="muted">
-                {path}
+                {ref ? `${kind} · ${ref}` : kind}
               </Txt>
+              {path ? (
+                <Txt as="span" variant="meta" tone="muted">
+                  {path}
+                </Txt>
+              ) : null}
               {children ? (
                 <Txt as="span" variant="meta" tone="muted">
                   {children}
+                </Txt>
+              ) : null}
+              {linkText ? (
+                <Txt as="span" variant="meta" tone="muted">
+                  {linkText}
                 </Txt>
               ) : null}
             </>
@@ -260,6 +279,24 @@ function pagePath(page: KnowledgePagePayload, byId: ReadonlyMap<string, Knowledg
     up = up.parentId ? byId.get(up.parentId) : undefined;
   }
   return names.join(' › ');
+}
+
+/** How the page is addressed: its scope's address, then the keys down to it. Scopes are just their address. */
+function pageRef(page: KnowledgePagePayload, byId: ReadonlyMap<string, KnowledgePagePayload>): string | undefined {
+  if (page.isScope) return page.address;
+  const keys: string[] = [];
+  const seen = new Set<string>();
+  for (
+    let at: KnowledgePagePayload | undefined = page;
+    at && !seen.has(at.id);
+    at = at.parentId ? byId.get(at.parentId) : undefined
+  ) {
+    seen.add(at.id);
+    if (at.isScope) return at.address ? `${at.address}#${keys.reverse().join('/')}` : undefined;
+    if (!at.key) return undefined;
+    keys.push(at.key);
+  }
+  return undefined;
 }
 
 function isPlaceholder(page: KnowledgePagePayload): boolean {
@@ -497,6 +534,8 @@ function GraphLegend({
 
 /** How far the pointer may move between press and release and still count as a click, not a pan. */
 const CLICK_SLOP_PX = 4;
+/** Most links a hovered page draws that aren't drawn already. */
+const HOVER_LINK_CAP = 40;
 
 export interface KnowledgePageGraphProps {
   pages: KnowledgePagePayload[];
@@ -508,6 +547,8 @@ export interface KnowledgePageGraphProps {
   selectedPageId?: string | null;
   /** Per page, links into and out of it that the graph doesn't draw; shown as ↓in ↑out on full circles. */
   hiddenLinks?: ReadonlyMap<string, { in: number; out: number }>;
+  /** Every link between pages, drawn or not: hovering a page draws its own, and tooltips count them. */
+  knownLinks?: readonly KnowledgePageEdge[];
   /** The pointer rests on a dot or stand-in: a host can load what it stands for. */
   onPreview?: (page: KnowledgePagePayload) => void;
   /** A page that wasn't selected was clicked, tapped, or activated with Enter or Space: select it. */
@@ -545,6 +586,7 @@ function KnowledgePageGraphInner({
   grants,
   selectedPageId,
   hiddenLinks,
+  knownLinks,
   onPreview,
   onSelect,
   onOpen,
@@ -599,10 +641,56 @@ function KnowledgePageGraphInner({
         .map(page => page.id),
     );
   }, [graphPages]);
-  // With a page selected, everything more than one line away fades so its neighbourhood reads at a glance.
+  // The page under the pointer, if any: its own lines show and the rest of the graph fades.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const linkSource = knownLinks ?? edges;
+  const { linkCounts, hoverLinks } = useMemo(() => {
+    const counts = new Map<string, { in: number; out: number }>();
+    const touching = new Map<string, KnowledgePageEdge[]>();
+    const pairs = new Set<string>();
+    for (const edge of linkSource) {
+      if (edge.kind !== 'mention' && edge.kind !== 'link') continue;
+      if (edge.source === edge.target || pairs.has(`${edge.source}\u0000${edge.target}`)) continue;
+      pairs.add(`${edge.source}\u0000${edge.target}`);
+      const out = counts.get(edge.source) ?? { in: 0, out: 0 };
+      out.out++;
+      counts.set(edge.source, out);
+      const into = counts.get(edge.target) ?? { in: 0, out: 0 };
+      into.in++;
+      counts.set(edge.target, into);
+    }
+    for (const edge of linkSource) {
+      if (edge.kind !== 'mention' && edge.kind !== 'link') continue;
+      for (const id of [edge.source, edge.target]) touching.set(id, [...(touching.get(id) ?? []), edge]);
+    }
+    return { linkCounts: counts, hoverLinks: touching };
+  }, [linkSource]);
+  // A hovered page's links to pages that are drawn but whose lines aren't, up to a cap.
+  const hoverExtra = useMemo(() => {
+    if (!hoveredId) return [];
+    const drawnIds = new Set(laidOut.nodes.map(node => node.id));
+    const have = new Set(laidOut.edges.map(edge => edge.id));
+    const extra: PageFlowEdge[] = [];
+    for (const edge of hoverLinks.get(hoveredId) ?? []) {
+      const id = `${edge.kind}:${edge.source}->${edge.target}`;
+      if (have.has(id) || !drawnIds.has(edge.source) || !drawnIds.has(edge.target)) continue;
+      have.add(id);
+      extra.push({ id, source: edge.source, target: edge.target, data: { kind: edge.kind, count: edge.count ?? 1 } });
+      if (extra.length >= HOVER_LINK_CAP) break;
+    }
+    return extra;
+  }, [hoveredId, hoverLinks, laidOut]);
+  const emphasisId = hoveredId && laidOut.positions.has(hoveredId) ? hoveredId : (selectedPageId ?? null);
+  // With a page selected or hovered, everything more than one line away fades so its neighbourhood reads at a glance.
   const neighbours = useMemo(
-    () => (selectedPageId && laidOut.positions.has(selectedPageId) ? pageNeighbourIds(selectedPageId, allEdges) : null),
-    [selectedPageId, laidOut, allEdges],
+    () =>
+      emphasisId && laidOut.positions.has(emphasisId)
+        ? pageNeighbourIds(emphasisId, [
+            ...allEdges,
+            ...hoverExtra.map(edge => ({ kind: edge.data?.kind ?? 'link', source: edge.source, target: edge.target })),
+          ] as KnowledgePageEdge[])
+        : null,
+    [emphasisId, laidOut, allEdges, hoverExtra],
   );
   // Each circle's size is known from the layout, so hand it to React Flow as the node's fixed size. Left to
   // React Flow's own DOM measurement, a production Studio sometimes never got one and every node stayed
@@ -639,10 +727,12 @@ function KnowledgePageGraphInner({
             badge: childrenUndrawn.has(node.id) ? childCountLabel(node.data.page) : undefined,
             path: pagePath(node.data.page, pageById),
             hiddenLinks: laidOut.shape.form.get(node.id) === 'full' ? hiddenLinks?.get(node.id) : undefined,
+            ref: pageRef(node.data.page, pageById),
+            links: linkCounts.get(node.id),
           },
         };
       }),
-    [laidOut, selectedPageId, pinned, neighbours, childrenUndrawn, pageById, hiddenLinks],
+    [laidOut, selectedPageId, pinned, neighbours, childrenUndrawn, pageById, hiddenLinks, linkCounts],
   );
   const flowEdges = useMemo(() => {
     const sizes = new Map(laidOut.nodes.map(node => [node.id, node.data.size]));
@@ -650,7 +740,7 @@ function KnowledgePageGraphInner({
       const center = laidOut.positions.get(id) ?? { x: 0, y: 0 };
       return { ...center, r: (sizes.get(id) ?? 0) / 2 };
     };
-    return laidOut.edges.map((edge): Edge<RimEdgeData> => {
+    return [...laidOut.edges, ...hoverExtra].map((edge): Edge<RimEdgeData> => {
       const mention = edge.data?.kind === 'mention';
       const grant = edge.data?.kind === 'grant';
       const link = edge.data?.kind === 'link';
@@ -658,10 +748,10 @@ function KnowledgePageGraphInner({
       const toDot = laidOut.shape.form.get(edge.target) === 'dot';
       // A link touching the selected page reads by direction: out of it or into it.
       const direction =
-        (mention || link) && selectedPageId
-          ? edge.source === selectedPageId
+        (mention || link) && emphasisId
+          ? edge.source === emphasisId
             ? 'out'
-            : edge.target === selectedPageId
+            : edge.target === emphasisId
               ? 'in'
               : undefined
           : undefined;
@@ -701,7 +791,7 @@ function KnowledgePageGraphInner({
                   : PARENT_ARROW,
       };
     });
-  }, [laidOut, onMentionSelect, neighbours, selectedPageId]);
+  }, [laidOut, hoverExtra, onMentionSelect, neighbours, emphasisId]);
   const pagesById = useMemo(() => new Map(pages.map(page => [page.id, page])), [pages]);
   const reactFlow = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -846,8 +936,10 @@ function KnowledgePageGraphInner({
         nodesDraggable={false}
         onPaneClick={onPaneClick}
         onNodeMouseEnter={(_: unknown, node: PageFlowNode) => {
+          setHoveredId(node.id);
           if (laidOut.shape.form.get(node.id) === 'dot') onPreview?.(node.data.page);
         }}
+        onNodeMouseLeave={() => setHoveredId(null)}
         onNodeClick={(_: unknown, node: PageFlowNode) => {
           if (!isPlaceholder(node.data.page)) activate(node.data.page);
         }}

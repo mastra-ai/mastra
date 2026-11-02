@@ -210,12 +210,55 @@ describe('KnowledgePageGraph', () => {
 
     it('names a farther page, its path and how many children it has on hover', () => {
       renderGraph({ pages: deep });
-      expect(hoverDot('ticket')).toBe('TicketAcme › Support4 children');
+      expect(hoverDot('ticket')).toBe('TicketPageAcme › Support4 children');
     });
 
     it('tells how to open a collapsed group of scopes rather than counting it twice', () => {
       renderGraph({ pages: deep });
       expect(hoverDot('group:support:thread')).toBe('3 thread scopesAcme › Support · Click to show them');
+    });
+
+    describe('when a dot has links', () => {
+      const linked = [
+        page('org', null, { name: 'Acme', address: 'org:acme' }),
+        page('support', 'org', { name: 'Support', isScope: true, address: 'team:support' }),
+        page('ticket', 'support', { name: 'Ticket', key: 'ticket' }),
+        page('faq', 'support', { name: 'FAQ', key: 'faq' }),
+        page('other', 'support', { name: 'Other', key: 'other' }),
+      ];
+      const known = [
+        { kind: 'link' as const, source: 'ticket', target: 'faq', count: 1 },
+        { kind: 'mention' as const, source: 'other', target: 'ticket', count: 2 },
+        { kind: 'link' as const, source: 'faq', target: 'other', count: 1 },
+      ];
+      const line = (id: string) => document.querySelector(`[data-id="${id}"]`);
+      const dot = (id: string) =>
+        document.querySelector<HTMLElement>(`[data-testid="knowledge-page-dot"][data-page-id="${id}"]`) as HTMLElement;
+
+      it('shows its kind, address and how many links go in and out', () => {
+        renderGraph({ pages: linked, knownLinks: known });
+        expect(hoverDot('ticket')).toBe('TicketPage · team:support#ticketorg:acme › team:support1 link in · 1 out');
+      });
+
+      it("draws no body-link lines until a dot is hovered, then draws that dot's own", () => {
+        renderGraph({ pages: linked, knownLinks: known });
+        expect(line('link:ticket->faq')).toBeNull();
+        fireEvent.mouseEnter(dot('ticket'));
+        expect(line('link:ticket->faq')).toBeTruthy();
+        expect(line('mention:other->ticket')).toBeTruthy();
+        expect(line('link:faq->other')).toBeNull();
+      });
+
+      it('fades dots it is not connected to, and puts them back when the pointer leaves', () => {
+        const withFar = [...linked, page('far', 'support', { name: 'Far', key: 'far' })];
+        renderGraph({ pages: withFar, knownLinks: known });
+        fireEvent.mouseEnter(dot('ticket'));
+        expect(dot('faq').style.opacity).toBe('1');
+        expect(dot('far').style.opacity).toBe('0.35');
+        fireEvent.mouseLeave(dot('ticket'));
+        expect(dot('far').style.opacity).toBe('1');
+        expect(line('link:ticket->faq')).toBeNull();
+      });
     });
   });
 });
