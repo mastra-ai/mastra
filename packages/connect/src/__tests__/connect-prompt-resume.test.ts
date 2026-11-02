@@ -45,8 +45,8 @@ function platform(connections: () => Array<Record<string, unknown>>) {
   };
 }
 
-/** Model that asks for Linear on its first step and answers on its second. */
-function linearRequestingModel() {
+/** Model that calls `request_connection` with `input` on its first step and answers on its second. */
+function connectionRequestingModel(input: string) {
   const prompts: unknown[] = [];
   const model = new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
@@ -58,7 +58,7 @@ function linearRequestingModel() {
                 type: 'tool-call' as const,
                 toolCallId: 'call-1',
                 toolName: 'request_connection',
-                input: '{"provider":"linear"}',
+                input,
                 providerExecuted: false,
               },
               {
@@ -87,8 +87,11 @@ function linearRequestingModel() {
   return { model, prompts };
 }
 
-async function agentWithConnectTools(connections: () => Array<Record<string, unknown>>) {
-  const { model, prompts } = linearRequestingModel();
+async function agentWithConnectTools(
+  connections: () => Array<Record<string, unknown>>,
+  requestInput = '{"provider":"linear"}',
+) {
+  const { model, prompts } = connectionRequestingModel(requestInput);
   const agent = new Agent({
     id: 'connect-agent',
     name: 'Connect Agent',
@@ -179,6 +182,32 @@ describe('request_connection under an agent', () => {
   describe('when the requested provider is already connected', () => {
     it('answers right away without pausing the run', async () => {
       const { agent } = await agentWithConnectTools(() => [linearConnection(null)]);
+
+      const stream = await agent.stream('List my Linear issues');
+      const types: string[] = [];
+      for await (const chunk of stream.fullStream) types.push(chunk.type);
+
+      expect(types).not.toContain('tool-call-suspended');
+      expect(types).toContain('tool-result');
+    });
+  });
+
+  describe('when the agent names no provider', () => {
+    it('lists the connectable providers without pausing the run', async () => {
+      const { agent } = await agentWithConnectTools(() => [], '{}');
+
+      const stream = await agent.stream('Connect something');
+      const types: string[] = [];
+      for await (const chunk of stream.fullStream) types.push(chunk.type);
+
+      expect(types).not.toContain('tool-call-suspended');
+      expect(types).toContain('tool-result');
+    });
+  });
+
+  describe('when the agent names a provider that is not connectable', () => {
+    it('lists the connectable providers without pausing the run, so the agent can correct itself', async () => {
+      const { agent } = await agentWithConnectTools(() => [], '{"provider":"linaer"}');
 
       const stream = await agent.stream('List my Linear issues');
       const types: string[] = [];

@@ -82,9 +82,10 @@ export function buildConnectPromptTool({
     description:
       'Ask the current user to connect a provider account (e.g. Linear, Slack). ' +
       'Call this when a task needs a provider whose tools are unavailable because no account is connected, ' +
-      'or when the user asks to connect one. The call renders a connect prompt in the UI and waits until ' +
-      'the user connects; its result then says whether the connection succeeded. Do not fabricate links. ' +
-      'Pass `provider` to request one specific provider; omit it to list everything the user can connect.',
+      'or when the user asks to connect one. Do not fabricate links. Pass `provider` to request one ' +
+      'specific provider: the call renders a connect prompt in the UI and waits until the user connects, ' +
+      'and its result then says whether the connection succeeded. Omit `provider` to list everything the ' +
+      'user can connect without waiting; an unknown provider also returns that list.',
     inputSchema: z.object({
       provider: z
         .string()
@@ -136,8 +137,10 @@ export function buildConnectPromptTool({
         };
       }
 
-      // Nothing to wait for: the requested provider already works.
-      if (requested && payload.providers[0]?.connected) return payload;
+      // Only a specific, not-yet-connected provider is worth waiting for. An
+      // omitted or unknown provider returns the list right away so the agent
+      // can correct itself, and a connected one already works.
+      if (!requested || payload.providers[0]?.connected) return payload;
 
       // Pause the run until the user connects; the chat UI resumes it with the
       // settled provider so the agent continues without a user message.
