@@ -54,8 +54,16 @@ export type EvalScoresAssertion = {
 
 async function attachMetaToCurrentTest(result: RunEvalsResult): Promise<void> {
   try {
-    const { TestRunner } = await import('vitest');
-    const task = TestRunner.getCurrentTest();
+    const vitest = await import('vitest');
+    // Vitest >= 4.1 (including 5)
+    let task = (vitest as any).TestRunner?.getCurrentTest?.();
+    if (!task) {
+      // Vitest 3.x / 4.0. `vitest/suite` doesn't exist in Vitest 5, so keep the specifier
+      // out of reach of TypeScript and the bundler.
+      const suiteEntry = 'vitest/suite';
+      const suite = await import(/* @vite-ignore */ suiteEntry);
+      task = suite.getCurrentTest?.();
+    }
     if (task?.meta) {
       task.meta.mastraEval = toEvalMeta(result);
     }
