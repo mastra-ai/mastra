@@ -83,6 +83,17 @@ describe('DateTimeRangePicker (custom range popover)', () => {
     expect(screen.getByRole('group', { name: 'Custom date range' }).getAttribute('aria-invalid')).toBeNull();
   });
 
+  it('asks for a time instead of applying an end whose time field was cleared', () => {
+    const onDateRangeChange = vi.fn();
+    renderCustom({ dateFrom: new Date(2026, 8, 1, 8, 0), dateTo: new Date(2026, 8, 20, 18, 0), onDateRangeChange });
+
+    fireEvent.change(screen.getByLabelText('End time'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(screen.getByRole('alert').textContent).toContain('Enter a time for the start and end');
+    expect(onDateRangeChange).not.toHaveBeenCalled();
+  });
+
   it('rejects a custom range wider than maxRangeMs', () => {
     const onDateRangeChange = vi.fn();
     renderCustom({

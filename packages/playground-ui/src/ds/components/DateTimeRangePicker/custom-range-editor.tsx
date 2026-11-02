@@ -13,12 +13,14 @@ function formatDays(ms: number): string {
   return `${days} day${days === 1 ? '' : 's'}`;
 }
 
-/** The draft day at the draft `HH:mm` time, or the bare day when the time doesn't parse. */
+/** The draft day at the draft `HH:mm` time, or the start of the day when the time doesn't parse. */
 function combineDateAndTime(date: Date | undefined, timeStr: string): Date | undefined {
   if (!date) return undefined;
   const combined = parse(timeStr, 'HH:mm', startOfDay(date));
-  return isValid(combined) ? combined : date;
+  return isValid(combined) ? combined : startOfDay(date);
 }
+
+const isTime = (timeStr: string) => isValid(parse(timeStr, 'HH:mm', new Date()));
 
 /** The left month of the two: the start's month when the range spans months, else the month before the end. */
 function firstShownMonth(from: Date | undefined, to: Date | undefined): Date | undefined {
@@ -68,10 +70,13 @@ export function CustomRangeEditor({
     fromDate !== undefined && toDate !== undefined && toDate.getTime() - fromDate.getTime() > (maxRangeMs ?? Infinity);
   const firstDay = minDate ? startOfDay(minDate) : undefined;
   const rangeTooEarly = fromDate !== undefined && firstDay !== undefined && fromDate < firstDay;
-  const rangeInvalid = rangeReversed || rangeTooWide || rangeTooEarly;
+  // A cleared time field would otherwise apply that end at midnight without saying so.
+  const timeMissing = (range?.from && !isTime(draftTimeFrom)) || (range?.to && !isTime(draftTimeTo));
+  const rangeInvalid = timeMissing || rangeReversed || rangeTooWide || rangeTooEarly;
   // Shown after a failed Apply, and gone as soon as the drafts form a valid range again.
   let error: string | undefined;
-  if (applyAttempted && rangeReversed) error = 'Start date/time must be before end date/time';
+  if (applyAttempted && timeMissing) error = 'Enter a time for the start and end';
+  else if (applyAttempted && rangeReversed) error = 'Start date/time must be before end date/time';
   else if (applyAttempted && rangeTooWide) error = `Range cannot be longer than ${formatDays(maxRangeMs ?? 0)}`;
   else if (applyAttempted && firstDay && rangeTooEarly)
     error = `Range cannot start before ${format(firstDay, 'MMM d, yyyy')}`;
