@@ -3794,6 +3794,41 @@ LIMIT 1`,
       expect(result.scores).toHaveLength(1);
       expect(result.scores[0]!.traceId).toBe('trace-ss-1');
     });
+
+    it('pages through scores with tied timestamps and values in a stable order', async () => {
+      const timestamp = new Date();
+      const scoreIds = ['tied-score-a', 'tied-score-b', 'tied-score-c', 'tied-score-d', 'tied-score-e'];
+      for (const scoreId of scoreIds) {
+        await storage.createScore({
+          score: {
+            scoreId,
+            timestamp,
+            traceId: 'trace-tied-scores',
+            spanId: null,
+            scorerId: 'tied-order',
+            score: 0.5,
+            reason: null,
+            metadata: null,
+          },
+        });
+      }
+
+      const pageIds = async (orderBy?: { field: 'timestamp' | 'score'; direction: 'ASC' | 'DESC' }) => {
+        const ids: string[] = [];
+        for (let page = 0; page < 3; page++) {
+          const result = await storage.listScores({
+            filters: { scorerId: 'tied-order' },
+            pagination: { page, perPage: 2 },
+            ...(orderBy && { orderBy }),
+          });
+          ids.push(...result.scores.map(score => score.scoreId));
+        }
+        return ids;
+      };
+
+      expect(await pageIds()).toEqual([...scoreIds].reverse());
+      expect(await pageIds({ field: 'score', direction: 'ASC' })).toEqual(scoreIds);
+    });
   });
 
   // ==========================================================================
