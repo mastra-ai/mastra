@@ -166,8 +166,13 @@ function DotNode({ data }: { data: PageNodeData }) {
       {hover ? (
         <div
           role="tooltip"
-          className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex w-max max-w-72 -translate-x-1/2 flex-col rounded-md border border-border bg-surface-overlay-strong px-2 py-1 shadow-overlay"
+          className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex w-max max-w-72 -translate-x-1/2 flex-col rounded-md border border-border bg-card px-2 py-1 shadow-overlay"
         >
+          <span
+            data-testid="knowledge-tooltip-tail"
+            aria-hidden
+            className="absolute top-full left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-r border-b border-border bg-card"
+          />
           <Txt as="span" variant="label" tone="ink">
             {page.name}
           </Txt>
@@ -253,7 +258,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
         <span
           data-testid="knowledge-hidden-links"
           title={`${data.hiddenLinks.in} ${data.hiddenLinks.in === 1 ? 'link' : 'links'} in and ${data.hiddenLinks.out} out not drawn`}
-          className="absolute top-0 left-1/2 flex -translate-x-1/2 -translate-y-1/3 gap-1 rounded-full border border-border bg-surface-overlay-strong px-1.5 shadow-raised"
+          className="absolute top-0 left-1/2 flex -translate-x-1/2 -translate-y-1/3 gap-1 rounded-full border border-border bg-card px-1.5 shadow-raised"
         >
           {data.hiddenLinks.in > 0 ? (
             <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
@@ -271,7 +276,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
         <span
           data-testid="knowledge-child-count-badge"
           aria-label={`${badge} children, not all drawn`}
-          className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/3 rounded-full border border-border bg-surface-overlay-strong px-1.5 shadow-raised"
+          className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/3 rounded-full border border-border bg-card px-1.5 shadow-raised"
         >
           <Txt as="span" variant="meta" tone="ink">
             {badge}

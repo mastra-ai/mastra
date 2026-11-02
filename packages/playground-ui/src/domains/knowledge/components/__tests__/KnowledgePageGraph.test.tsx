@@ -208,6 +208,23 @@ describe('KnowledgePageGraph', () => {
       return within(dot).getByRole('tooltip').textContent;
     };
 
+    it('draws its tooltip on a solid background with a tail pointing down at the dot', () => {
+      renderGraph({ pages: deep });
+      hoverDot('ticket');
+      const tip = screen.getByRole('tooltip');
+      expect(tip.className).toContain('bg-card');
+      expect(tip.className).not.toMatch(/bg-surface-overlay|bg-card\//);
+      const tail = within(tip).getByTestId('knowledge-tooltip-tail');
+      expect(tail.className).toContain('top-full');
+      expect(tail.className).toContain('bg-card');
+    });
+
+    it('draws the child count badge on a solid background', () => {
+      renderGraph({ pages: [page('org', null, { name: 'Acme', childCount: 4 }), page('a', 'org')] });
+      const badge = screen.getByTestId('knowledge-child-count-badge');
+      expect(badge.className).toContain('bg-card');
+    });
+
     it('says in the legend which circle each dot colour hangs under', () => {
       renderGraph({ pages: deep });
       const rows = within(screen.getByRole('list', { name: 'Legend' })).getAllByTestId('knowledge-legend-branch');
