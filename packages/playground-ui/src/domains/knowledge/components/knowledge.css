@@ -45,6 +45,21 @@
   }
 }
 
+/* With a page hovered or selected, everything but its neighbourhood fades. It fades the node's content, not
+   the node: the node's own opacity belongs to the view change, and a short fade keeps pointing responsive. */
+.knowledge-graph .react-flow__node > *,
+.knowledge-graph .react-flow__edge {
+  transition: opacity 150ms ease-out;
+}
+
+.knowledge-graph[data-emphasis] .react-flow__node:not(.knowledge-neighbour) > * {
+  opacity: 0.35;
+}
+
+.knowledge-graph[data-emphasis] .react-flow__edge:not(.knowledge-neighbour) {
+  opacity: 0.2;
+}
+
 /* A hovered dot's tooltip sits above every other circle. */
 .knowledge-graph .react-flow__node:hover {
   z-index: 1000 !important;

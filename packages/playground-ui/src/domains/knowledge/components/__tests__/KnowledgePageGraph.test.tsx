@@ -490,15 +490,41 @@ describe('KnowledgePageGraph', () => {
         for (const spy of spies) spy.mockRestore();
       });
 
+      const lit = (id: string) => dot(id).closest('.react-flow__node')?.classList.contains('knowledge-neighbour');
+      const emphasised = () => document.querySelector('.knowledge-graph')?.hasAttribute('data-emphasis');
+
       it('fades dots it is not connected to, and puts them back when the pointer leaves', () => {
         const withFar = [...linked, page('far', 'support', { name: 'Far', key: 'far' })];
         renderGraph({ pages: withFar, knownLinks: known });
         fireEvent.mouseEnter(dot('ticket'));
-        expect(dot('faq').style.opacity).toBe('1');
-        expect(dot('far').style.opacity).toBe('0.35');
+        expect(emphasised()).toBe(true);
+        expect(lit('faq')).toBe(true);
+        expect(lit('far')).toBe(false);
         fireEvent.mouseLeave(dot('ticket'));
-        expect(dot('far').style.opacity).toBe('1');
+        expect(emphasised()).toBe(false);
+        expect(lit('far')).toBe(false);
         expect(line('link:ticket->faq')).toBeNull();
+      });
+
+      it('touches only the hovered page and its neighbours, not every node in the graph', () => {
+        const many = Array.from({ length: 40 }, (_, i) => page(`p${i}`, 'support', { name: `P${i}`, key: `p${i}` }));
+        const { container } = renderGraph({ pages: [...linked, ...many], knownLinks: known });
+        const nodes = [...container.querySelectorAll<HTMLElement>('.react-flow__node')];
+        const touched = new Set<Element>();
+        const observer = new MutationObserver(records => {
+          for (const record of records)
+            touched.add(record.target.nodeType === 1 ? (record.target as Element) : record.target.parentElement!);
+        });
+        observer.observe(container, { subtree: true, attributes: true, childList: true, characterData: true });
+        fireEvent.mouseEnter(dot('ticket'));
+        observer.takeRecords().forEach(record => touched.add(record.target as Element));
+        observer.disconnect();
+        // Fading is the container's attribute plus a mark on the few neighbours; the other nodes are untouched.
+        const untouched = nodes.filter(
+          node => !node.classList.contains('knowledge-neighbour') && ![...touched].some(el => node.contains(el)),
+        );
+        expect(nodes.length).toBeGreaterThan(40);
+        expect(untouched.length).toBeGreaterThanOrEqual(nodes.length - 6);
       });
     });
   });

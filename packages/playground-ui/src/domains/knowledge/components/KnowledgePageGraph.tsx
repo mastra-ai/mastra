@@ -111,7 +111,6 @@ function pinBadgeStyle(size: number) {
 
 type PageNodeData = PageFlowNode['data'] & {
   pinned: boolean;
-  dimmed: boolean;
   form: GraphNodeForm;
   /** A dot's colour: its branch around the focus. */
   color?: string;
@@ -211,7 +210,7 @@ function LevelIcon({ level }: { level: GraphLevel }) {
 
 /** A page far from the focus: a small coloured dot that names itself on hover. */
 function DotNode({ data }: { data: PageNodeData }) {
-  const { page, size, dimmed, color, path, ref, links } = data;
+  const { page, size, color, path, ref, links } = data;
   const [hover, setHover] = useState(false);
   const dotRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
@@ -272,7 +271,7 @@ function DotNode({ data }: { data: PageNodeData }) {
       data-page-type={standIn ? 'stand-in' : group ? 'group' : page.isScope ? 'scope' : 'page'}
       aria-label={label}
       className="relative cursor-pointer transition-opacity"
-      style={{ width: size, height: size, opacity: dimmed ? 0.35 : standIn ? 0.5 : 1 }}
+      style={{ width: size, height: size, opacity: standIn ? 0.5 : undefined }}
       onPointerEnter={() => setHover(true)}
       onPointerLeave={() => setHover(false)}
     >
@@ -361,7 +360,7 @@ const CIRCLE_TEXT_SHARE = 0.74;
 /** A scope or page: its kind on top, its name below, both inside the circle; far pages draw as dots. */
 function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeData }>) {
   if (data.form === 'dot') return <DotNode data={data} />;
-  const { page, size, selected, pinned, dimmed, badge } = data;
+  const { page, size, selected, pinned, badge } = data;
   const group = isScopeGroup(page);
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
   const placeholder = isPlaceholder(page);
@@ -375,7 +374,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       data-page-id={page.id}
       data-page-type={placeholder ? 'placeholder' : rest ? 'rest' : group ? 'group' : page.isScope ? 'scope' : 'page'}
       className={`relative transition-opacity ${placeholder || rest ? 'cursor-default' : 'cursor-pointer'}`}
-      style={{ width: size, height: size, opacity: dimmed ? 0.35 : 1 }}
+      style={{ width: size, height: size }}
       title={
         placeholder
           ? `${kind} · ${page.address} · nothing written to it yet`
@@ -525,7 +524,7 @@ function PinBadge({ size }: { size: number }) {
   );
 }
 
-type RimEdgeData = PageFlowEdge['data'] & { from: Circle; to: Circle; dimmed: boolean };
+type RimEdgeData = PageFlowEdge['data'] & { from: Circle; to: Circle };
 interface Circle {
   x: number;
   y: number;
@@ -554,13 +553,7 @@ function RimEdgeComponent({ id, data, style, markerEnd }: EdgeProps<Edge<RimEdge
   const path = `M ${x1} ${y1} L ${x2} ${y2}`;
   return (
     <>
-      <BaseEdge
-        id={id}
-        path={path}
-        style={{ ...style, opacity: data.dimmed ? 0.2 : 1 }}
-        markerEnd={markerEnd}
-        interactionWidth={mention ? 20 : 0}
-      />
+      <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} interactionWidth={mention ? 20 : 0} />
       {data.kind === 'grant' && data.role ? (
         // A wide invisible path over the line, so hovering it names the access level.
         <path
@@ -832,6 +825,29 @@ function GraphLegend({
 
 /** How far the pointer may move between press and release and still count as a click, not a pan. */
 const CLICK_SLOP_PX = 4;
+/** Marks the nodes and lines that stay lit while the rest of the graph fades (see knowledge.css). */
+const NEIGHBOUR_CLASS = 'knowledge-neighbour';
+
+/**
+ * The same edge objects while their content is unchanged. Pointing at a page changes the style of the
+ * few lines touching it; handing React Flow fresh objects for every line would redraw them all.
+ */
+function useStableEdges<E extends Edge>(edges: E[]): E[] {
+  const seen = useRef(new Map<string, { sig: string; edge: E }>());
+  return useMemo(() => {
+    const next = new Map<string, { sig: string; edge: E }>();
+    const result = edges.map(edge => {
+      const sig = JSON.stringify(edge);
+      const before = seen.current.get(edge.id);
+      const entry = before && before.sig === sig ? before : { sig, edge };
+      next.set(edge.id, entry);
+      return entry.edge;
+    });
+    seen.current = next;
+    return result;
+  }, [edges]);
+}
+
 /** The focused page's circle is this much larger than its neighbours'. */
 const FOCUSED_SCALE = 1.2;
 /** Most branch colours the legend names; the rest are counted. */
@@ -1067,7 +1083,6 @@ function KnowledgePageGraphInner({
             ...node.data,
             selected: node.id === selectedPageId,
             pinned: pinned.has(node.id),
-            dimmed: !!neighbours && !neighbours.has(node.id),
             form: laidOut.shape.form.get(node.id) ?? 'full',
             color: laidOut.colors.get(laidOut.shape.branch.get(node.id) ?? ''),
             badge: childrenUndrawn.has(node.id) ? childCountLabel(node.data.page) : undefined,
@@ -1081,20 +1096,9 @@ function KnowledgePageGraphInner({
           },
         };
       }),
-    [
-      laidOut,
-      selectedPageId,
-      pinned,
-      neighbours,
-      childrenUndrawn,
-      pageById,
-      hiddenLinks,
-      linkCounts,
-      showCounts,
-      focusParentId,
-    ],
+    [laidOut, selectedPageId, pinned, childrenUndrawn, pageById, hiddenLinks, linkCounts, showCounts, focusParentId],
   );
-  const { flowEdges, drawnEdgeStyles } = useMemo(() => {
+  const { flowEdges: builtEdges, drawnEdgeStyles } = useMemo(() => {
     const drawn = new Set<EdgeStyleKey>();
     const sizes = new Map(laidOut.nodes.map(node => [node.id, node.data.size]));
     const circle = (id: string): Circle => {
@@ -1105,7 +1109,6 @@ function KnowledgePageGraphInner({
       const mention = edge.data?.kind === 'mention';
       const grant = edge.data?.kind === 'grant';
       const link = edge.data?.kind === 'link';
-      const dimmed = !!neighbours && !(neighbours.has(edge.source) && neighbours.has(edge.target));
       const toDot = laidOut.shape.form.get(edge.target) === 'dot';
       // A link touching the selected page reads by direction: out of it or into it.
       const direction =
@@ -1130,7 +1133,6 @@ function KnowledgePageGraphInner({
           ...(edge.data?.role ? { role: edge.data.role } : {}),
           from: circle(edge.source),
           to: circle(edge.target),
-          dimmed,
         },
         ...(mention && onMentionSelect ? { className: 'cursor-pointer' } : {}),
         style: direction
@@ -1162,7 +1164,28 @@ function KnowledgePageGraphInner({
       };
     });
     return { flowEdges, drawnEdgeStyles: drawn as ReadonlySet<EdgeStyleKey> };
-  }, [laidOut, hoverExtra, onMentionSelect, neighbours, emphasisId, focusParentId]);
+  }, [laidOut, hoverExtra, onMentionSelect, emphasisId, focusParentId]);
+  const flowEdges = useStableEdges(builtEdges);
+  // Dimming is CSS: the container says something is emphasised, and only the page's neighbourhood is
+  // marked. Pointing at a page then changes a few nodes and lines, not all of them.
+  const emphasisedNodes = useMemo(
+    () =>
+      neighbours
+        ? nodes.map(node => (neighbours.has(node.id) ? { ...node, className: NEIGHBOUR_CLASS } : node))
+        : nodes,
+    [nodes, neighbours],
+  );
+  const emphasisedEdges = useMemo(
+    () =>
+      neighbours
+        ? flowEdges.map(edge =>
+            neighbours.has(edge.source) && neighbours.has(edge.target)
+              ? { ...edge, className: [edge.className, NEIGHBOUR_CLASS].filter(Boolean).join(' ') }
+              : edge,
+          )
+        : flowEdges,
+    [flowEdges, neighbours],
+  );
   const pagesById = useMemo(() => new Map(pages.map(page => [page.id, page])), [pages]);
   const reactFlow = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1173,7 +1196,7 @@ function KnowledgePageGraphInner({
   // counts nodes it has measured in the DOM: in a production Studio it measured none, so the view never
   // moved. State is read through a ref so a refetch with the same selection never moves the view.
   // Pages that just left the view stay a moment, fading, so a refocus reads as a change and not a cut.
-  const drawnNodes = useLeavingNodes(nodes, prefersMotion());
+  const drawnNodes = useLeavingNodes(emphasisedNodes, prefersMotion());
   const fitState = useRef({ nodes, allEdges, selectedPageId, centerId, reactFlow });
   fitState.current = { nodes, allEdges, selectedPageId, centerId, reactFlow };
   // Set when a fit found the pane 0×0, so the next non-zero size fits even if it matches the last one seen.
@@ -1290,6 +1313,7 @@ function KnowledgePageGraphInner({
     <div
       ref={containerRef}
       className="knowledge-graph relative size-full"
+      data-emphasis={neighbours ? 'on' : undefined}
       data-testid="knowledge-page-graph"
       onKeyDown={onKeyDown}
       onPointerDownCapture={event => {
@@ -1308,7 +1332,7 @@ function KnowledgePageGraphInner({
       />
       <ReactFlow
         nodes={drawnNodes}
-        edges={flowEdges}
+        edges={emphasisedEdges}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onInit={() => {

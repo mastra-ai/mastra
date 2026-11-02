@@ -292,7 +292,10 @@ describe('KnowledgePageExplorer page view', () => {
     it('clears the selection on a click on empty canvas', async () => {
       const { container } = renderWithProviders(<Host />);
       fireEvent.click(await escalationNode());
-      expect(graphNodes().some(node => node.style.opacity === '0.35')).toBe(true);
+      expect(document.querySelector('.knowledge-graph')?.getAttribute('data-emphasis')).toBe('on');
+      expect(
+        graphNodes().some(node => !node.closest('.react-flow__node')?.classList.contains('knowledge-neighbour')),
+      ).toBe(true);
 
       const pane = container.querySelector('.react-flow__pane');
       if (!pane) throw new Error('no graph pane');
@@ -302,7 +305,7 @@ describe('KnowledgePageExplorer page view', () => {
       // Unfocused again, it may shrink back to a dot; either way nothing marks it selected.
       expect((await escalationNode()).querySelector('[data-selected]')).toBeNull();
       expect(screen.queryByRole('treeitem', { selected: true })).toBeNull();
-      expect(graphNodes().every(node => node.style.opacity === '1')).toBe(true);
+      expect(document.querySelector('.knowledge-graph')?.hasAttribute('data-emphasis')).toBe(false);
       expect(screen.getByTestId('view').textContent).toBe('graph');
     });
 
