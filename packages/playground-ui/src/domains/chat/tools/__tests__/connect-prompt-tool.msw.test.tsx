@@ -1,11 +1,20 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
+import { useAgent } from '@mastra/react/hooks/agents';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConnectPromptTool } from '../connect-prompt-tool';
-import { connectPromptPayload, connectPromptSession, connectPromptStatusActive } from './fixtures/connect-prompt';
+import {
+  connectAgentBeforeLinear,
+  connectAgentWithLinear,
+  connectPromptPayload,
+  connectPromptSession,
+  connectPromptStatusActive,
+} from './fixtures/connect-prompt';
+import type { ChatSendArgs } from '@/domains/chat/context/chat-context';
+import { ChatRunningContext, ChatSendContext } from '@/domains/chat/context/chat-context';
 import { server } from '@/test/msw-server';
 
 // The Nango frontend SDK opens real windows and websockets, so it is the one
@@ -32,14 +41,53 @@ vi.mock('@nangohq/frontend', async importOriginal => {
 
 const BASE_URL = 'http://localhost:4111';
 
-function renderConnectPrompt({ output, readOnly }: { output: unknown; readOnly?: boolean }) {
+/** The agent's tool list as the chat page's tools panel reads it. */
+function AgentToolNames() {
+  const { data } = useAgent({ agentId: connectAgentBeforeLinear.id });
+  return (
+    <ul aria-label="Agent tools">{data ? Object.keys(data.tools).map(name => <li key={name}>{name}</li>) : null}</ul>
+  );
+}
+
+function renderConnectPrompt({
+  output,
+  readOnly,
+  isRunning = false,
+}: {
+  output: unknown;
+  readOnly?: boolean;
+  isRunning?: boolean;
+}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
+  const sent: ChatSendArgs[] = [];
+  const send = (args: ChatSendArgs) => {
+    sent.push(args);
+  };
+  const tree = (running: boolean) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <ConnectPromptTool output={output} readOnly={readOnly} />
+        <ChatRunningContext.Provider value={{ isRunning: running, cancelRun: () => {}, canSendWhileStreaming: false }}>
+          <ChatSendContext.Provider value={{ send }}>
+            <ConnectPromptTool output={output} readOnly={readOnly} />
+          </ChatSendContext.Provider>
+        </ChatRunningContext.Provider>
       </QueryClientProvider>
-    </MastraReactProvider>,
+    </MastraReactProvider>
+  );
+  const result = render(tree(isRunning));
+  return { ...result, sent, setRunning: (running: boolean) => result.rerender(tree(running)) };
+}
+
+/** Serves a headless Linear flow whose status poll settles active. */
+function linearConnectsHeadlessly() {
+  server.use(
+    http.post(`${BASE_URL}/connect/linear/sessions`, () => HttpResponse.json(connectPromptSession)),
+    http.get(launchPath, () =>
+      HttpResponse.json({ sessionToken: 'nango_connect_session_t1', expiresAt: connectPromptSession.expiresAt }),
+    ),
+    http.get(`${BASE_URL}/connect/connections/${connectPromptSession.connectionId}/status`, () =>
+      HttpResponse.json(connectPromptStatusActive),
+    ),
   );
 }
 
@@ -114,6 +162,62 @@ describe('ConnectPromptTool', () => {
     });
   });
 
+  describe('when the connection activates', () => {
+    it('continues the agent turn with a follow-up message', async () => {
+      linearConnectsHeadlessly();
+
+      const { sent } = renderConnectPrompt({ output: connectPromptPayload });
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+
+      await waitFor(() => expect(sent).toEqual([{ message: "I've connected Linear." }]));
+    });
+
+    it('refreshes the agent so its tool list shows the new provider tools', async () => {
+      let linearActive = false;
+      linearConnectsHeadlessly();
+      server.use(
+        http.get(`${BASE_URL}/connect/connections/${connectPromptSession.connectionId}/status`, () => {
+          linearActive = true;
+          return HttpResponse.json(connectPromptStatusActive);
+        }),
+        http.get(`${BASE_URL}/api/agents/${connectAgentBeforeLinear.id}`, () =>
+          HttpResponse.json(linearActive ? connectAgentWithLinear : connectAgentBeforeLinear),
+        ),
+      );
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <MastraReactProvider baseUrl={BASE_URL}>
+          <QueryClientProvider client={queryClient}>
+            <AgentToolNames />
+            <ConnectPromptTool output={connectPromptPayload} />
+          </QueryClientProvider>
+        </MastraReactProvider>,
+      );
+      const tools = await screen.findByRole('list', { name: 'Agent tools' });
+      await waitFor(() => expect(tools.textContent).toContain('request_connection'));
+      expect(tools.textContent).not.toContain('linear_list_issues');
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+
+      await waitFor(() => expect(tools.textContent).toContain('linear_list_issues'));
+    });
+  });
+
+  describe('when the connection activates while the agent is still responding', () => {
+    it('waits for the turn to finish before continuing it', async () => {
+      linearConnectsHeadlessly();
+
+      const { sent, setRunning } = renderConnectPrompt({ output: connectPromptPayload, isRunning: true });
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull());
+      expect(sent).toEqual([]);
+
+      setRunning(false);
+
+      await waitFor(() => expect(sent).toEqual([{ message: "I've connected Linear." }]));
+    });
+  });
+
   describe('when a provider requires auth parameters that chat cannot collect', () => {
     it('uses the hosted flow instead of starting invalid headless authorization', async () => {
       const popup = { location: { href: '' }, close: vi.fn(), closed: false };
@@ -159,10 +263,12 @@ describe('ConnectPromptTool', () => {
       const { AuthError } = await import('@nangohq/frontend');
       nangoMocks.auth.mockRejectedValueOnce(new AuthError('closed', 'window_closed'));
 
-      renderConnectPrompt({ output: connectPromptPayload });
+      const { sent } = renderConnectPrompt({ output: connectPromptPayload });
       fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
       const alert = await screen.findByRole('alert');
+      // Nothing to continue with: the agent turn is left alone.
+      expect(sent).toEqual([]);
       expect(alert.textContent).toMatch(/window was closed/i);
       // The flow settled, so the action is available to retry.
       expect((screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement).disabled).toBe(false);

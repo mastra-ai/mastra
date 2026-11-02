@@ -1,5 +1,7 @@
 import { CheckIcon } from 'lucide-react';
-import type { ConnectPromptPayload } from '@/domains/connect';
+import { useEffect, useRef } from 'react';
+import { useChatRunning, useChatSend } from '@/domains/chat/context/chat-context';
+import type { ConnectPromptPayload, SettledConnect } from '@/domains/connect';
 import { isConnectPromptPayload, ProviderLogo, usePendingConnect } from '@/domains/connect';
 import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList';
@@ -22,6 +24,8 @@ export interface ConnectPromptToolProps {
  * the mounted `/connect` routes, drives the OAuth flow in a popup through the
  * server's launch gate (which verifies this browser owns the pending session
  * before redirecting to the vendor), and polls until the connection settles.
+ * Once it activates, the card sends a follow-up message so the agent carries
+ * on with the task instead of waiting for the user to prompt it again.
  */
 export const ConnectPromptTool = ({ output, readOnly = false }: ConnectPromptToolProps) => {
   if (!isConnectPromptPayload(output)) return null;
@@ -30,6 +34,18 @@ export const ConnectPromptTool = ({ output, readOnly = false }: ConnectPromptToo
 
 const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayload; readOnly: boolean }) => {
   const { pending, connect, connectedProviders, isCreating, createError, settled } = usePendingConnect();
+  const send = useChatSend();
+  const { isRunning } = useChatRunning();
+  const continuedRef = useRef<SettledConnect | null>(null);
+
+  // Continue the turn once per activation. A connection that lands while the
+  // agent is still responding waits for that turn to end.
+  useEffect(() => {
+    if (readOnly || settled?.status !== 'active' || isRunning || continuedRef.current === settled) return;
+    continuedRef.current = settled;
+    const provider = payload.providers.find(candidate => candidate.id === settled.provider);
+    void send({ message: `I've connected ${provider?.displayName ?? settled.provider}.` });
+  }, [readOnly, settled, isRunning, payload.providers, send]);
 
   const errorMessage =
     createError?.message ??

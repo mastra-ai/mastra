@@ -116,6 +116,20 @@ describe('ConnectionsPage', () => {
     });
   });
 
+  describe('when the connect surface probe is still in flight', () => {
+    it('shows the loading table instead of a bare spinner', async () => {
+      server.use(
+        // Never resolves within the test: the page is still detecting the surface.
+        http.get(`${BASE_URL}/connect/providers`, () => new Promise<never>(() => {})),
+      );
+
+      renderPage();
+
+      const table = await screen.findByRole('table', { name: 'Connections' });
+      expect(table.getAttribute('aria-busy')).toBe('true');
+    });
+  });
+
   describe('when the connections request is still in flight', () => {
     it('shows loading tables instead of fake empty states', async () => {
       server.use(
