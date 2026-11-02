@@ -48,6 +48,13 @@ describe('getGoogleVertexModelCatalog', () => {
     const { getGoogleVertexModelCatalog } = await import('../google-vertex.js');
     await expect(getGoogleVertexModelCatalog()).resolves.toContainEqual({ id: 'gemini-3.8-flash' });
   });
+
+  it('uses the fallback when models.dev returns no Vertex models', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ 'google-vertex': { models: {} } }));
+
+    const { getGoogleVertexModelCatalog } = await import('../google-vertex.js');
+    await expect(getGoogleVertexModelCatalog()).resolves.toContainEqual({ id: 'gemini-3.8-flash' });
+  });
 });
 
 describe('GoogleVertexGateway', () => {

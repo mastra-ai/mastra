@@ -30,9 +30,13 @@ async function fetchGoogleVertexModels(signal: AbortSignal): Promise<GoogleVerte
     throw new Error(`models.dev returned ${response.status}`);
   }
   const data = (await response.json()) as Record<string, { models?: Record<string, unknown> }>;
-  return Object.keys(data[GOOGLE_VERTEX_PROVIDER_ID]?.models ?? {})
+  const models = Object.keys(data[GOOGLE_VERTEX_PROVIDER_ID]?.models ?? {})
     .sort()
     .map(id => ({ id }));
+  if (models.length === 0) {
+    throw new Error('models.dev returned no Google Vertex models');
+  }
+  return models;
 }
 
 export async function getGoogleVertexModelCatalog(): Promise<GoogleVertexModelEntry[]> {
