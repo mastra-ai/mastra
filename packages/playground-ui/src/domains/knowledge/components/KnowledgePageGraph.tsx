@@ -130,6 +130,8 @@ type PageNodeData = PageFlowNode['data'] & {
   ref?: string;
   /** All links into and out of the page, drawn or not, for a dot's tooltip. */
   links?: { in: number; out: number };
+  /** Of `links`, how many go to pages the graph doesn't draw; only on the page under the pointer. */
+  notShown?: number;
   /** Write the dot's links in and out inside it. */
   showCount?: boolean;
   /** A scope or an ancestor of the focus: a circle that says it sits above other pages. */
@@ -141,9 +143,10 @@ type PageNodeData = PageFlowNode['data'] & {
 };
 
 /** `4 links in, 14 links out`: what the arrows in a link badge say, for its label and a dot's tooltip. */
-function linkCountsText(links: { in: number; out: number }): string {
+function linkCountsText(links: { in: number; out: number }, notShown = 0): string {
   const noun = (count: number) => (count === 1 ? 'link' : 'links');
-  return `${links.in} ${noun(links.in)} in, ${links.out} ${noun(links.out)} out`;
+  const text = `${links.in} ${noun(links.in)} in, ${links.out} ${noun(links.out)} out`;
+  return notShown > 0 ? `${text} (${notShown} not shown)` : text;
 }
 
 /** How long a focus change loads before the graph says so. */
@@ -223,7 +226,7 @@ function LevelIcon({ level }: { level: GraphLevel }) {
 
 /** A page far from the focus: a small coloured dot that names itself on hover. */
 function DotNode({ data }: { data: PageNodeData }) {
-  const { page, size, color, path, ref, links } = data;
+  const { page, size, color, path, ref, links, notShown } = data;
   const [hover, setHover] = useState(false);
   const dotRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
@@ -238,7 +241,7 @@ function DotNode({ data }: { data: PageNodeData }) {
   const children =
     !hint && page.childCount ? `${childCountLabel(page)} ${page.childCount === 1 ? 'child' : 'children'}` : null;
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
-  const linkText = links && (links.in > 0 || links.out > 0) ? linkCountsText(links) : null;
+  const linkText = links && (links.in > 0 || links.out > 0) ? linkCountsText(links, notShown) : null;
   const label = [page.name, hint ?? path, children, linkText].filter(Boolean).join(' · ');
   // Pick the side that covers the least: not another page or dot, not the highlighted lines, not the legend or Back.
   useLayoutEffect(() => {
@@ -320,13 +323,13 @@ function DotNode({ data }: { data: PageNodeData }) {
           role="tooltip"
           ref={tipRef}
           data-side={side}
-          className={`pointer-events-none absolute ${placement.tip} flex w-max max-w-72 flex-col rounded-md border border-border bg-card px-2 py-1 shadow-overlay`}
+          className={`pointer-events-none absolute ${placement.tip} border-border bg-card shadow-overlay flex w-max max-w-72 flex-col rounded-md border px-2 py-1`}
           style={{ transform: `${placement.transform} scale(${tipScale})`, transformOrigin: placement.origin }}
         >
           <span
             data-testid="knowledge-tooltip-tail"
             aria-hidden
-            className={`absolute size-2 rotate-45 border-border bg-card ${placement.tail}`}
+            className={`border-border bg-card absolute size-2 rotate-45 ${placement.tail}`}
           />
           <Txt as="span" variant="label" tone="ink">
             {page.name}
@@ -397,7 +400,9 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
               ? `${page.name}: click to show them`
               : page.isScope && page.address
                 ? `${kind} · ${page.address}`
-                : page.name
+                : data.links && data.links.in + data.links.out > 0
+                  ? `${page.name} · ${linkCountsText(data.links, data.notShown)}`
+                  : page.name
       }
     >
       <div
@@ -443,7 +448,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
           data-testid="knowledge-hidden-links"
           title={linkCountsText(data.hiddenLinks)}
           aria-label={linkCountsText(data.hiddenLinks)}
-          className="absolute bottom-full left-1/2 -mb-1 flex -translate-x-1/2 gap-1 rounded-full border border-border bg-card px-1.5 shadow-raised"
+          className="border-border bg-card shadow-raised absolute bottom-full left-1/2 -mb-1 flex -translate-x-1/2 gap-1 rounded-full border px-1.5"
         >
           {data.hiddenLinks.in > 0 ? (
             <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
@@ -461,7 +466,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
         <span
           data-testid="knowledge-child-count-badge"
           aria-label={`${badge} children, not all drawn`}
-          className="absolute top-full left-1/2 -mt-1 -translate-x-1/2 rounded-full border border-border bg-card px-1.5 shadow-raised"
+          className="border-border bg-card shadow-raised absolute top-full left-1/2 -mt-1 -translate-x-1/2 rounded-full border px-1.5"
         >
           <Txt as="span" variant="meta" tone="ink">
             {badge}
@@ -532,7 +537,7 @@ function PinBadge({ size }: { size: number }) {
   return (
     <span
       data-testid="knowledge-pin-badge"
-      className="absolute flex items-center justify-center rounded-full bg-badge-amber-strong text-badge-amber-foreground shadow-raised"
+      className="bg-badge-amber-strong text-badge-amber-foreground shadow-raised absolute flex items-center justify-center rounded-full"
       style={style}
       aria-label="Pinned"
     >
@@ -649,7 +654,7 @@ function GraphLegend({
   return (
     <ul
       aria-label="Legend"
-      className="pointer-events-none absolute top-2 left-2 z-10 flex flex-col gap-1 rounded-md border border-border bg-card/90 px-2 py-1.5 shadow-raised"
+      className="border-border bg-card/90 shadow-raised pointer-events-none absolute top-2 left-2 z-10 flex flex-col gap-1 rounded-md border px-2 py-1.5"
     >
       <li className="flex items-center gap-2">
         <span className={LEGEND_SWATCH} style={{ ...SCOPE_STYLE }} aria-hidden />
@@ -659,7 +664,7 @@ function GraphLegend({
       </li>
       {levels.includes('scope') ? (
         <li className="flex items-center gap-2" data-testid="knowledge-legend-level-scope">
-          <Layers aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+          <Layers aria-hidden className="text-muted-foreground size-3 shrink-0" />
           <Txt as="span" variant="meta" tone="muted">
             Scope, above its pages
           </Txt>
@@ -667,7 +672,7 @@ function GraphLegend({
       ) : null}
       {levels.includes('ancestor') ? (
         <li className="flex items-center gap-2" data-testid="knowledge-legend-level-ancestor">
-          <ArrowUpToLine aria-hidden className="size-3 shrink-0 text-muted-foreground" />
+          <ArrowUpToLine aria-hidden className="text-muted-foreground size-3 shrink-0" />
           <Txt as="span" variant="meta" tone="muted">
             Page above the focus
           </Txt>
@@ -693,7 +698,7 @@ function GraphLegend({
       ) : null}
       {dots || linkEnds ? (
         <li className="flex items-center gap-2" data-testid="knowledge-legend-dot">
-          <span className="inline-block size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
+          <span className="bg-muted-foreground inline-block size-2 shrink-0 rounded-full" aria-hidden />
           <Txt as="span" variant="meta" tone="muted">
             Page in another branch
           </Txt>
@@ -839,7 +844,7 @@ function GraphLegend({
       ) : null}
       <li className="flex items-center gap-2">
         <span
-          className="flex size-3 shrink-0 items-center justify-center rounded-full bg-badge-amber-strong text-badge-amber-foreground"
+          className="bg-badge-amber-strong text-badge-amber-foreground flex size-3 shrink-0 items-center justify-center rounded-full"
           aria-hidden
         >
           <Pin size={8} />
@@ -904,6 +909,10 @@ export interface KnowledgePageGraphProps {
   nearIds?: ReadonlySet<string>;
   /** False while the pages the selected page needs are loading: the graph keeps its last layout until they are in. */
   settled?: boolean;
+  /** Exact links into and out of pages, from the store; they replace the counts taken from `knownLinks`. */
+  exactLinkCounts?: ReadonlyMap<string, { in: number; out: number }>;
+  /** The page under the pointer, or null: a host can fetch that page's links. */
+  onHover?: (pageId: string | null) => void;
   /** Write each dot's total of links in and out inside it. */
   showCounts?: boolean;
   /** The pointer rests on a dot or stand-in: a host can load what it stands for. */
@@ -992,6 +1001,8 @@ function KnowledgePageGraphInner({
   hiddenLinks,
   knownLinks,
   nearIds,
+  exactLinkCounts,
+  onHover,
   showCounts,
   onPreview,
   onSelect,
@@ -1030,8 +1041,10 @@ function KnowledgePageGraphInner({
         else touching.set(id, [edge]);
       }
     }
+    // Counts from the store cover pages whose links go to pages that were never loaded.
+    for (const [id, exact] of exactLinkCounts ?? []) counts.set(id, exact);
     return { linkCounts: counts, hoverLinks: touching };
-  }, [linkSource]);
+  }, [linkSource, exactLinkCounts]);
   // The focused page sits at the centre with its parent and children around it as full circles; pages
   // farther out are dots on outer rings, inside their branch's slice. A last overlap pass is the only force.
   const laidOut = useMemo(() => {
@@ -1114,6 +1127,7 @@ function KnowledgePageGraphInner({
   }, [graphPages]);
   // The page under the pointer, if any: its own lines show and the rest of the graph fades.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
+  useEffect(() => onHover?.(hoveredId), [hoveredId, onHover]);
   // A hovered page's links to pages that are drawn but whose lines aren't, up to a cap.
   const hoverExtra = useMemo(() => {
     if (!hoveredId) return [];
@@ -1129,6 +1143,18 @@ function KnowledgePageGraphInner({
     }
     return extra;
   }, [hoveredId, hoverLinks, laidOut]);
+  // Of the hovered page's links, those with no line drawn: the other end is off screen, or past the cap.
+  const hoveredNotShown = useMemo(() => {
+    const total = hoveredId ? linkCounts.get(hoveredId) : undefined;
+    if (!hoveredId || !total) return 0;
+    const pairs = new Set<string>();
+    for (const edge of [...laidOut.edges, ...hoverExtra]) {
+      const kind = edge.data?.kind;
+      if ((kind !== 'mention' && kind !== 'link') || (edge.source !== hoveredId && edge.target !== hoveredId)) continue;
+      pairs.add(`${edge.source}\u0000${edge.target}`);
+    }
+    return Math.max(0, total.in + total.out - pairs.size);
+  }, [hoveredId, linkCounts, laidOut, hoverExtra]);
   const emphasisId = hoveredId && laidOut.positions.has(hoveredId) ? hoveredId : (selectedPageId ?? null);
   // With a page selected or hovered, everything more than one line away fades so its neighbourhood reads at a glance.
   const neighbours = useMemo(
@@ -1177,6 +1203,7 @@ function KnowledgePageGraphInner({
             hiddenLinks: laidOut.shape.form.get(node.id) === 'full' ? hiddenLinks?.get(node.id) : undefined,
             ref: pageRef(node.data.page, pageById),
             links: linkCounts.get(node.id),
+            notShown: node.id === hoveredId ? hoveredNotShown : undefined,
             showCount: showCounts,
             level: laidOut.shape.form.get(node.id) === 'full' ? laidOut.shape.level.get(node.id) : undefined,
             isParent: node.id === focusParentId,
@@ -1184,7 +1211,19 @@ function KnowledgePageGraphInner({
           },
         };
       }),
-    [laidOut, selectedPageId, pinned, childrenUndrawn, pageById, hiddenLinks, linkCounts, showCounts, focusParentId],
+    [
+      laidOut,
+      selectedPageId,
+      pinned,
+      childrenUndrawn,
+      pageById,
+      hiddenLinks,
+      linkCounts,
+      showCounts,
+      focusParentId,
+      hoveredId,
+      hoveredNotShown,
+    ],
   );
   const { flowEdges: builtEdges, drawnEdgeStyles } = useMemo(() => {
     const drawn = new Set<EdgeStyleKey>();

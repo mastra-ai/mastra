@@ -506,6 +506,24 @@ describe('KnowledgePageGraph', () => {
         expect(hoverDot('ticket')).toBe('TicketPage · team:support#ticketorg:acme › team:support1 link in, 1 link out');
       });
 
+      it('uses the store counts over the loaded ones, and says how many links lead to pages not drawn', () => {
+        const onHover = vi.fn();
+        renderGraph({
+          pages: linked,
+          knownLinks: known,
+          exactLinkCounts: new Map([['ticket', { in: 1, out: 7 }]]),
+          onHover,
+        });
+        fireEvent.mouseEnter(dot('ticket'));
+        fireEvent.pointerEnter(dot('ticket'));
+        expect(within(dot('ticket')).getByRole('tooltip').textContent).toContain(
+          '1 link in, 7 links out (6 not shown)',
+        );
+        expect(onHover).toHaveBeenLastCalledWith('ticket');
+        fireEvent.mouseLeave(dot('ticket'));
+        expect(onHover).toHaveBeenLastCalledWith(null);
+      });
+
       it("draws no body-link lines until a dot is hovered, then draws that dot's own", () => {
         renderGraph({ pages: linked, knownLinks: known });
         expect(line('link:ticket->faq')).toBeNull();

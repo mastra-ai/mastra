@@ -66,6 +66,12 @@ export interface KnowledgeExplorerQueryState<T> {
   error: Error | null;
 }
 
+export interface KnowledgeExplorerPageLinks {
+  edges: Array<{ fromPageId: string; toPageId: string; kind: 'body' | 'note'; count: number }>;
+  pages: KnowledgePagePayload[];
+  truncated: boolean;
+}
+
 /** One request for a tree level: `parentId: null` for the root scopes. */
 export interface KnowledgeExplorerTreeRequest {
   parentId: string | null;
@@ -91,6 +97,14 @@ export interface KnowledgeExplorerSource {
    * links to loaded pages are drawn. A key the host can't resolve should come back as an error.
    */
   useLinkedPages?: (keys: string[]) => Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>>;
+  /**
+   * Exact links into and out of each page (by `[[ref]]` or note mention), counted over the whole store, for
+   * the pages the graph draws. Without it, or when it errors (a server with no link index answers 501), the
+   * graph counts only the links between pages it has loaded.
+   */
+  useLinkCounts?: (pageIds: string[]) => KnowledgeExplorerQueryState<Record<string, { in: number; out: number }>>;
+  /** One page's links with the pages at their other ends; fetched for the page under the pointer. Null disables it. */
+  usePageLinks?: (pageId: string | null) => KnowledgeExplorerQueryState<KnowledgeExplorerPageLinks>;
   /** A page's recent activity, newest first. */
   useActivity?: (pageId: string) => KnowledgeExplorerQueryState<KnowledgeExplorerActivity>;
 }
@@ -189,6 +203,34 @@ const FOCUS_HISTORY_CAP = 50;
 const noTreeLevels = () => [];
 const noKeys: string[] = [];
 const noLinkedPages = (): Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>> => [];
+const noLinkQuery = <T,>(): KnowledgeExplorerQueryState<T> => ({ isPending: false, isError: false, error: null });
+/** Longest a pointer rests on a page before its links are fetched, so sweeping across the graph fetches none. */
+const HOVER_FETCH_DELAY_MS = 150;
+
+/** Per page, the links into and out of it that none of `shown` draws, given the exact totals. */
+function undrawnLinks(
+  exact: ReadonlyMap<string, { in: number; out: number }>,
+  shown: readonly KnowledgePageEdge[],
+): Map<string, { in: number; out: number }> {
+  const drawn = new Map<string, { in: number; out: number }>();
+  const pairs = new Set<string>();
+  for (const edge of shown) {
+    if (edge.kind === 'parent' || pairs.has(`${edge.source}\u0000${edge.target}`)) continue;
+    pairs.add(`${edge.source}\u0000${edge.target}`);
+    const out = drawn.get(edge.source) ?? { in: 0, out: 0 };
+    out.out++;
+    drawn.set(edge.source, out);
+    const into = drawn.get(edge.target) ?? { in: 0, out: 0 };
+    into.in++;
+    drawn.set(edge.target, into);
+  }
+  const hidden = new Map<string, { in: number; out: number }>();
+  for (const [id, total] of exact) {
+    const seen = drawn.get(id) ?? { in: 0, out: 0 };
+    hidden.set(id, { in: Math.max(0, total.in - seen.in), out: Math.max(0, total.out - seen.out) });
+  }
+  return hidden;
+}
 const noActivity = (): KnowledgeExplorerQueryState<KnowledgeExplorerActivity> => ({
   isPending: false,
   isError: false,
@@ -230,7 +272,7 @@ function MoreButton({ onClick, label = 'Load more' }: { onClick: () => void; lab
   return (
     <button
       type="button"
-      className="self-start text-caption text-muted-foreground hover:text-foreground"
+      className="text-caption text-muted-foreground hover:text-foreground self-start"
       onClick={onClick}
     >
       {label}
@@ -307,13 +349,13 @@ function ChildPages({
           <li key={child.id} className="flex flex-col">
             <button
               type="button"
-              className="text-left text-body font-medium text-info-indicator hover:underline"
+              className="text-body text-info-indicator text-left font-medium hover:underline"
               onClick={() => onPageClick(child)}
             >
               {child.name}
             </button>
             {child.description ? (
-              <span className="truncate text-caption text-muted-foreground">{child.description}</span>
+              <span className="text-caption text-muted-foreground truncate">{child.description}</span>
             ) : null}
           </li>
         ))}
@@ -358,7 +400,7 @@ function MentionPopup({
       role="dialog"
       aria-label={`${mention.source.name} mentions ${mention.target.name}`}
       data-testid="knowledge-mention-popup"
-      className="absolute z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-2 overflow-hidden rounded-lg border border-border bg-card p-3 shadow-overlay"
+      className="border-border bg-card shadow-overlay absolute z-20 flex w-80 max-w-[calc(100%-1rem)] flex-col gap-2 overflow-hidden rounded-lg border p-3"
       style={mentionPopupPlacement(mention)}
     >
       <div className="flex items-start gap-2">
@@ -377,7 +419,7 @@ function MentionPopup({
         <button
           type="button"
           aria-label="Close"
-          className="rounded p-0.5 text-muted-foreground hover:bg-fill hover:text-foreground"
+          className="text-muted-foreground hover:bg-fill hover:text-foreground rounded p-0.5"
           onClick={onClose}
         >
           <X size={14} aria-hidden />
@@ -432,7 +474,7 @@ function SelectedPage({
     [detail.data, pagesById],
   );
 
-  if (detail.isPending) return <p className="text-ui-md p-4 text-muted-foreground">Loading page…</p>;
+  if (detail.isPending) return <p className="text-ui-md text-muted-foreground p-4">Loading page…</p>;
   if (detail.isError || !detail.data) {
     const notFound = isNotFound(detail.error);
     return (
@@ -489,7 +531,7 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
       <input
         aria-label="Search knowledge"
         placeholder="Search pages and notes"
-        className="text-ui-md h-8 w-full rounded border border-border bg-card px-2"
+        className="text-ui-md border-border bg-card h-8 w-full rounded border px-2"
         value={query}
         onChange={event => setQuery(event.target.value)}
       />
@@ -497,13 +539,13 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
         <ul
           role="listbox"
           aria-label="Search results"
-          className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded border border-border bg-card shadow-raised"
+          className="border-border bg-card shadow-raised absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded border"
         >
           {pages.map(page => (
             <li key={page.id} role="option" aria-selected={false}>
               <button
                 type="button"
-                className="text-ui-md w-full px-2 py-1.5 text-left hover:bg-muted"
+                className="text-ui-md hover:bg-muted w-full px-2 py-1.5 text-left"
                 onClick={() => {
                   onSelect(page.id);
                   setQuery('');
@@ -788,6 +830,51 @@ export function KnowledgePageExplorer({
     in: linkView.more.in + focusLinks.unfetched.in,
     out: linkView.more.out + focusLinks.unfetched.out,
   };
+  // Exact counts for the pages the graph holds, in batches the host's route accepts; a failure (a
+  // server with no link index) leaves the counts to what the loaded pages show.
+  const countIds = useMemo(
+    () =>
+      drawn.pages
+        .filter(page => !isChildPlaceholder(page) && !isRestCircle(page) && !isScopeGroup(page))
+        .map(page => page.id)
+        .sort(),
+    [drawn.pages],
+  );
+  const counted = (source.useLinkCounts ?? noLinkQuery)(view === 'graph' ? countIds : []);
+  const exactCounts = useMemo(
+    () => (counted.isError || !counted.data ? undefined : new Map(Object.entries(counted.data))),
+    [counted.isError, counted.data],
+  );
+  const hiddenLinks = useMemo(
+    () => (exactCounts ? undrawnLinks(exactCounts, linkEdges) : linkView.hidden),
+    [exactCounts, linkEdges, linkView.hidden],
+  );
+  // The page under the pointer: once it rests there its real links are fetched and drawn to whichever
+  // ends are on screen; the rest are counted as not shown.
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [hoverFetchId, setHoverFetchId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!hoveredId) return setHoverFetchId(null);
+    const timer = setTimeout(() => setHoverFetchId(hoveredId), HOVER_FETCH_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [hoveredId]);
+  const hovered = (source.usePageLinks ?? noLinkQuery)(hoverFetchId);
+  const hoverEdges = useMemo<KnowledgePageEdge[]>(
+    () =>
+      hoverFetchId && hovered.data
+        ? hovered.data.edges.map(edge => ({
+            source: edge.fromPageId,
+            target: edge.toPageId,
+            kind: edge.kind === 'body' ? ('link' as const) : ('mention' as const),
+            count: edge.count,
+          }))
+        : [],
+    [hoverFetchId, hovered.data],
+  );
+  const graphLinks = useMemo(
+    () => (hoverEdges.length ? [...knownLinks, ...hoverEdges] : knownLinks),
+    [knownLinks, hoverEdges],
+  );
   // A clicked mention line shows the notes that make the mention; opening the page from there marks them.
   const [mention, setMention] = useState<MentionSelection | null>(null);
   const [marked, setMarked] = useState<{ source: string; target: string } | null>(null);
@@ -916,11 +1003,11 @@ export function KnowledgePageExplorer({
       ) : null}
       <div className="flex min-h-0 flex-1 flex-col gap-3 lg:flex-row">
         <aside
-          className={`min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card lg:flex lg:w-72 lg:flex-none lg:shrink-0 ${view === 'tree' ? 'flex' : 'hidden'}`}
+          className={`border-border bg-card min-h-0 w-full flex-1 flex-col overflow-hidden rounded-lg border lg:flex lg:w-72 lg:flex-none lg:shrink-0 ${view === 'tree' ? 'flex' : 'hidden'}`}
         >
           {focusScope ? (
             <div
-              className="flex items-center gap-2 border-b border-border bg-fill-subtle px-3 py-2"
+              className="border-border bg-fill-subtle flex items-center gap-2 border-b px-3 py-2"
               data-testid="knowledge-scope-focus"
             >
               <div className="flex min-w-0 flex-1 flex-col">
@@ -933,7 +1020,7 @@ export function KnowledgePageExplorer({
               </div>
               <button
                 type="button"
-                className="text-ui-sm shrink-0 rounded px-2 py-1 text-muted-foreground hover:bg-fill hover:text-foreground"
+                className="text-ui-sm text-muted-foreground hover:bg-fill hover:text-foreground shrink-0 rounded px-2 py-1"
                 onClick={() => setFocusScopeId(null)}
               >
                 All scopes
@@ -942,7 +1029,7 @@ export function KnowledgePageExplorer({
           ) : null}
           <div className="min-h-0 flex-1 overflow-auto">
             {source.useTreeLevels && lazy.rootsPending ? (
-              <p className="px-3 py-2 text-body text-muted-foreground">Loading pages…</p>
+              <p className="text-body text-muted-foreground px-3 py-2">Loading pages…</p>
             ) : (
               <KnowledgePageTree
                 key={focusScope ? focusScope.id : 'all'}
@@ -965,7 +1052,7 @@ export function KnowledgePageExplorer({
         {showPage ? (
           <section
             aria-label="Selected page"
-            className="min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border border-border bg-card"
+            className="border-border bg-card min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border"
           >
             <SelectedPage
               source={source}
@@ -977,7 +1064,7 @@ export function KnowledgePageExplorer({
           </section>
         ) : (
           <div
-            className={`relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-border bg-background lg:block lg:h-full ${view === 'graph' ? 'block' : 'hidden'}`}
+            className={`border-border bg-background relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border lg:block lg:h-full ${view === 'graph' ? 'block' : 'hidden'}`}
             data-testid="knowledge-graph-container"
           >
             {graphShown ? (
@@ -1025,8 +1112,10 @@ export function KnowledgePageExplorer({
                 grants={graph.grants}
                 selectedPageId={selectedPageId}
                 centerId={drawn.hub}
-                hiddenLinks={linkView.hidden}
-                knownLinks={knownLinks}
+                hiddenLinks={hiddenLinks}
+                knownLinks={graphLinks}
+                exactLinkCounts={exactCounts}
+                onHover={setHoveredId}
                 nearIds={focusLinkIds}
                 settled={graphSettled}
                 showCounts={dotCounts}

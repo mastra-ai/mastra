@@ -82,7 +82,7 @@ function AuthorMark({ author }: { author: string }) {
   return (
     <span
       aria-hidden
-      className="flex size-6 shrink-0 items-center justify-center rounded-full border border-border"
+      className="border-border flex size-6 shrink-0 items-center justify-center rounded-full border"
       style={{ background: `color-mix(in oklab, var(${hue}) 28%, var(--card))` }}
     >
       <Txt as="span" variant="meta" tone="ink">
@@ -125,7 +125,7 @@ function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
       type="button"
       data-testid="knowledge-body-link"
       title={ref}
-      className="rounded bg-badge-blue-subtle px-1 font-medium text-badge-blue-foreground hover:underline"
+      className="bg-badge-blue-subtle text-badge-blue-foreground rounded px-1 font-medium hover:underline"
       onClick={() => links.onPageClick(target)}
     >
       {target.name}
@@ -134,7 +134,7 @@ function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
     <span
       data-testid="knowledge-body-link-unresolved"
       title="No loaded page has this address"
-      className="rounded border border-dashed border-border px-1 text-muted-foreground"
+      className="border-border text-muted-foreground rounded border border-dashed px-1"
     >
       {ref}
     </span>
@@ -147,7 +147,7 @@ const BODY_COMPONENTS: Components = { span: BodySpan };
 function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
   return (
     <section aria-label={label} className="flex flex-col gap-3">
-      <div className="flex items-center gap-2 border-b border-border pb-2">
+      <div className="border-border flex items-center gap-2 border-b pb-2">
         <Txt as="h3" variant="eyebrow" tone="muted" className="uppercase">
           {label}
         </Txt>
@@ -172,7 +172,7 @@ function PageLink({
   return (
     <button
       type="button"
-      className="text-left font-medium text-info-indicator hover:underline"
+      className="text-info-indicator text-left font-medium hover:underline"
       onClick={() => onPageClick(page)}
     >
       {page.name}
@@ -224,7 +224,7 @@ export function KnowledgeNoteItem({
     <li
       ref={itemRef}
       data-highlighted={highlighted || undefined}
-      className={`flex gap-3 rounded-lg border border-border bg-card ${compact ? 'p-2' : 'p-3'}`}
+      className={`border-border bg-card flex gap-3 rounded-lg border ${compact ? 'p-2' : 'p-3'}`}
       style={highlighted ? { borderColor: 'var(--chart-blue)', boxShadow: '0 0 0 1px var(--chart-blue)' } : undefined}
     >
       {compact ? null : <AuthorMark author={note.provenance.author} />}
@@ -242,7 +242,7 @@ export function KnowledgeNoteItem({
             </Txt>
           ) : null}
         </div>
-        <p className="text-ui-md break-words text-foreground">
+        <p className="text-ui-md text-foreground break-words">
           {parseRecordSegments(note.text).map((segment, index) => {
             if (segment.type === 'text') return <span key={index}>{segment.value}</span>;
             const target = mentionTarget(segment.value);
@@ -250,7 +250,7 @@ export function KnowledgeNoteItem({
               <button
                 key={index}
                 type="button"
-                className="rounded bg-badge-blue-subtle px-1 font-medium text-badge-blue-foreground hover:underline"
+                className="bg-badge-blue-subtle text-badge-blue-foreground rounded px-1 font-medium hover:underline"
                 onClick={() => onPageClick(target)}
               >
                 {segment.value}
@@ -335,7 +335,7 @@ export function KnowledgePageDetail({
 
   return (
     <article aria-label={page.name} className="flex min-h-0 flex-col overflow-y-auto">
-      <header className="flex flex-col gap-3 border-b border-border bg-fill-subtle px-6 pt-5 pb-4">
+      <header className="border-border bg-fill-subtle flex flex-col gap-3 border-b px-6 pt-5 pb-4">
         {ancestors.length > 0 ? (
           <nav aria-label="Breadcrumb">
             <ol className="flex flex-wrap items-center gap-1">
@@ -343,7 +343,7 @@ export function KnowledgePageDetail({
                 <li key={ancestor.id} className="flex items-center gap-1">
                   <button
                     type="button"
-                    className="text-ui-sm rounded px-1 py-0.5 text-muted-foreground hover:bg-fill hover:text-foreground"
+                    className="text-ui-sm text-muted-foreground hover:bg-fill hover:text-foreground rounded px-1 py-0.5"
                     onClick={() => onPageClick(ancestor)}
                   >
                     {ancestor.name}
@@ -483,12 +483,12 @@ export function KnowledgePageDetail({
 
           {activity && activity.length > 0 ? (
             <Section label="Activity">
-              <ol className="relative flex flex-col gap-3 border-l border-border pl-4">
+              <ol className="border-border relative flex flex-col gap-3 border-l pl-4">
                 {activity.map(event => (
                   <li key={event.id} className="relative flex flex-col">
                     <span
                       aria-hidden
-                      className="absolute top-1.5 -left-5 size-2 rounded-full border border-border bg-card"
+                      className="border-border bg-card absolute top-1.5 -left-5 size-2 rounded-full border"
                     />
                     <Txt as="span" variant="body-sm" tone="ink">
                       {ACTIVITY_LABELS[event.action] ?? event.action}
