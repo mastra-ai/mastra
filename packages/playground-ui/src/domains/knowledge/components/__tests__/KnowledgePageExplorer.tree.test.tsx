@@ -273,6 +273,31 @@ describe('KnowledgePageExplorer tree with child counts', () => {
     });
   });
 
+  describe('when pages are focused one after another in the graph', () => {
+    const back = () => screen.queryByTestId('knowledge-graph-back');
+
+    it('offers no Back until there is a page to go back to', () => {
+      renderWithProviders(<Host requested={[]} />);
+      expect(back()).toBeNull();
+      fireEvent.click(row('Pricing'));
+      expect(back()).toBeNull();
+    });
+
+    it('goes back one focus at a time through the walk', () => {
+      renderWithProviders(<Host requested={[]} />);
+      fireEvent.click(row('site:mastra'));
+      fireEvent.click(row('Pricing'));
+      fireEvent.click(row('Articles'));
+      expect(row('Articles').getAttribute('aria-selected')).toBe('true');
+      fireEvent.click(back() as HTMLElement);
+      expect(row('Pricing').getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+      fireEvent.click(back() as HTMLElement);
+      expect(row('site:mastra').getAttribute('aria-selected')).toBe('true');
+      expect(back()).toBeNull();
+    });
+  });
+
   describe('when the server capped a count', () => {
     it('shows it as a lower bound in the tree', () => {
       renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);

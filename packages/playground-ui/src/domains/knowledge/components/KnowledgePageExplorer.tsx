@@ -1,5 +1,5 @@
-import { X } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, X } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { isChildPlaceholder, isScopeGroup, lazyGraph } from '../lib/graphShape';
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
@@ -164,6 +164,8 @@ function visibleLinks(
   }
   return { edges: [...unique.values()].filter(edge => shown.has(edgeKey(edge))), hidden, more };
 }
+/** How many earlier focuses Back remembers. */
+const FOCUS_HISTORY_CAP = 50;
 const noTreeLevels = () => [];
 const noActivity = (): KnowledgeExplorerQueryState<KnowledgeExplorerActivity> => ({
   isPending: false,
@@ -673,6 +675,27 @@ export function KnowledgePageExplorer({
   const graphShown = !narrow || view === 'graph';
   const highlightMentionOf = marked && marked.source === selectedPageId ? marked.target : undefined;
   const showPage = view === 'page' && !!selectedPageId;
+  // The pages focused before this one, most recent last, so Back retraces a walk through the levels.
+  const [history, setHistory] = useState<readonly string[]>([]);
+  const lastSelected = useRef<string | null>(selectedPageId);
+  const goingBack = useRef(false);
+  useEffect(() => {
+    const previous = lastSelected.current;
+    lastSelected.current = selectedPageId;
+    if (goingBack.current) {
+      goingBack.current = false;
+      return;
+    }
+    if (!previous || !selectedPageId || previous === selectedPageId) return;
+    setHistory(current => [...current.filter(id => id !== selectedPageId), previous].slice(-FOCUS_HISTORY_CAP));
+  }, [selectedPageId]);
+  const backTo = history.length ? history[history.length - 1] : undefined;
+  const goBack = () => {
+    if (!backTo) return;
+    goingBack.current = true;
+    setHistory(current => current.slice(0, -1));
+    onSelect(backTo);
+  };
   const openPage = (pageId: string) => {
     onSelect(pageId);
     onViewChange('page');
@@ -712,6 +735,18 @@ export function KnowledgePageExplorer({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <SearchBox source={source} onSelect={openAnywhere} />
+        {!showPage && backTo ? (
+          <button
+            type="button"
+            data-testid="knowledge-graph-back"
+            title="Back to the page you focused before this one"
+            className="text-ui-md flex items-center gap-1 rounded border border-border px-3 py-1"
+            onClick={goBack}
+          >
+            <ArrowLeft aria-hidden className="size-3.5" />
+            Back
+          </button>
+        ) : null}
         {!showPage ? (
           <button
             type="button"
