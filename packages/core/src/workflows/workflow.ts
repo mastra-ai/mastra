@@ -336,6 +336,65 @@ function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): Seri
   return undefined;
 }
 
+/** The id of the nested workflow that runs as step `stepId`, or undefined when the step is not a workflow. */
+function getNestedWorkflowId(graph: SerializedStepFlowEntry[], stepId: string): string | undefined {
+  const entry = findStepInGraph(graph, stepId) as any;
+  if (entry?.type === 'workflow') return entry.workflowId;
+  if (entry?.step?.type === 'workflow') return entry.step.workflowId;
+  if (entry?.step?.component === 'WORKFLOW') return stepId;
+  return undefined;
+}
+
+/**
+ * Cancels the suspended nested runs reachable from `snapshot`. A suspended nested run has no live execution for
+ * its parent's abort signal to reach, so only its persisted status changes. Descendants are canceled before their
+ * parent, so a nested run left suspended by a failed write is found again when cancel() is retried.
+ */
+async function cancelSuspendedNestedRuns(store: WorkflowsStorage, snapshot: WorkflowRunState): Promise<void> {
+  for (const [stepId, result] of Object.entries(snapshot.context)) {
+    if ((result as StepResult<any, any, any, any>)?.status !== 'suspended') {
+      continue;
+    }
+
+    const workflowName = getNestedWorkflowId(snapshot.serializedStepGraph, stepId);
+
+    if (!workflowName) {
+      continue;
+    }
+
+    const { suspendPayload, output } = result as any;
+    const meta = suspendPayload?.__workflow_meta;
+    // Foreach keeps one record per iteration: the default engine under foreachOutput, the evented engine as output.
+    const iterations: any[] = meta?.foreachOutput ?? (Array.isArray(output) ? output : []);
+
+    const runIds = [
+      meta?.runId,
+      ...iterations.map(iteration =>
+        iteration?.status === 'suspended' ? iteration.suspendPayload?.__workflow_meta?.runId : undefined,
+      ),
+    ];
+
+    for (const runId of new Set(runIds)) {
+      if (typeof runId !== 'string') {
+        continue;
+      }
+
+      const nested = await store.loadWorkflowSnapshot({ workflowName, runId });
+
+      if (nested?.status !== 'suspended') {
+        continue;
+      }
+
+      await cancelSuspendedNestedRuns(store, nested);
+      await store.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'canceled', expectedStatus: 'suspended' },
+      });
+    }
+  }
+}
+
 // ============================================
 // Overloads (Public API - clean types for consumers)
 // ============================================
@@ -3262,7 +3321,12 @@ export class Workflow<
     };
     const parentAbortCb = async () => {
       run.abortController.signal.removeEventListener('abort', nestedAbortCb);
-      await run.cancel();
+      // run.cancel() rejects when a nested snapshot can't be updated; an event listener has no caller to surface it to.
+      try {
+        await run.cancel();
+      } catch (error) {
+        mastra?.getLogger()?.error(`Failed to cancel nested workflow "${this.id}" run ${run.runId}`, error);
+      }
     };
     run.abortController.signal.addEventListener('abort', nestedAbortCb);
     abortSignal.addEventListener('abort', parentAbortCb);
@@ -3562,18 +3626,9 @@ export class Workflow<
     let finalSteps = {} as Record<string, StepResult<any, any, any, any>>;
 
     for (const step of Object.keys(steps)) {
-      const stepGraph = findStepInGraph(serializedStepGraph, step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
-      const nestedWorkflowEntry =
-        stepGraph?.type === 'workflow'
-          ? stepGraph
-          : (stepGraph as any)?.step?.type === 'workflow'
-            ? (stepGraph as any).step
-            : (stepGraph as any)?.step?.component === 'WORKFLOW'
-              ? { workflowId: step }
-              : undefined;
-      if (nestedWorkflowEntry) {
-        const nestedWorkflowId = nestedWorkflowEntry.workflowId as string;
+      const nestedWorkflowId = getNestedWorkflowId(serializedStepGraph, step);
+      if (nestedWorkflowId) {
         const stepResult = steps[step] as any;
         const nestedRunIdMetadata = stepResult?.metadata?.nestedRunId;
         const invocationResults = Array.isArray(stepResult) ? stepResult : undefined;
@@ -4012,13 +4067,25 @@ export class Run<
   }
 
   /**
+   * Cancels a canceled run's suspended nested runs. Running nested runs are canceled through the abort signal.
+   * @throws When reading this run's snapshot, or reading or updating a nested run's snapshot, fails.
+   */
+  protected async cancelSuspendedNestedRuns(): Promise<void> {
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
+    if (workflowsStore && snapshot?.status === 'canceled') await cancelSuspendedNestedRuns(workflowsStore, snapshot);
+  }
+
+  /**
    * Cancels the workflow execution.
-   * This aborts any running execution and updates the workflow status to 'canceled' in storage.
+   * This aborts any running execution and updates the workflow status to 'canceled' in storage,
+   * along with the status of its suspended nested workflow runs.
    * Runs that already finished (success, failed, canceled, tripwire, bailed) are left unchanged.
+   * Canceling an already canceled run cancels any of its nested runs that are still suspended.
    */
   async cancel() {
-    // Canceling a finished run is a no-op so its final status is preserved
-    if (await this.hasReachedTerminalStatus()) return;
+    // A finished run keeps its final status. A canceled one can still have suspended nested runs.
+    if (await this.hasReachedTerminalStatus()) return this.cancelSuspendedNestedRuns();
 
     // Abort any running execution and update in-memory status
     this.abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
@@ -4050,7 +4117,11 @@ export class Run<
     } catch {
       // Storage errors should not prevent cancellation from succeeding
       // The abort signal and in-memory status are already updated
+      // Nested runs are only canceled under a run stored as canceled, so there is nothing more to do
+      return;
     }
+
+    await this.cancelSuspendedNestedRuns();
   }
 
   async #validateSchema<TInput>(schema: StandardSchemaWithJSON<TInput>, data: TInput, type: string) {
