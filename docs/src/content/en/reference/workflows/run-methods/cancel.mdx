@@ -11,6 +11,8 @@ The `.cancel()` method cancels a workflow run, stopping execution and cleaning u
 
 This method aborts any running steps and updates the workflow status to 'canceled'. It works for both actively running workflows and suspended/waiting workflows.
 
+On the default and evented engines, nested workflow runs are canceled with their parent, including suspended ones. Calling `cancel()` on a run that is already canceled cancels any of its nested runs that are still suspended.
+
 ## Usage example
 
 ```typescript
@@ -40,7 +42,7 @@ await run.cancel()
     name: 'result',
     type: 'Promise<void>',
     description:
-      'A promise that resolves once cancellation is requested and, if storage is configured, the status update to canceled has been attempted. It does not wait for running steps to stop. Calling cancel() on a run that already finished leaves its status unchanged, except with the Inngest engine.',
+      'A promise that resolves once cancellation is requested and, if storage is configured, the status update to canceled has been attempted. It does not wait for running steps to stop. Calling cancel() on a run that already finished leaves its status unchanged, except with the Inngest engine. Rejects if a suspended nested workflow run cannot be read or updated in storage.',
   },
 ]}
 />
