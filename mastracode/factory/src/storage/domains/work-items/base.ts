@@ -3542,6 +3542,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
             ...applyUpdate({ current, userId, input: patch }),
           };
         },
+        // The card is handed to this second caller, so a concurrent creator's guarded rollback
+        // must see the reuse; pending rules keep their revision.
+        { touch: reuseMode === 'non-stage' },
       );
       return updated ? { item: toWorkItem(updated), created: false, previous } : null;
     };
@@ -3829,18 +3832,30 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     orgId,
     id,
     purgeRuleState = true,
+    expectedRevision,
+    expectedUpdatedAt,
   }: {
     orgId: string;
     id: string;
     purgeRuleState?: boolean;
+    /** Deletes only while the card is still at this revision; returns `null` and keeps it otherwise. */
+    expectedRevision?: number;
+    /** Likewise for the card's `updatedAt`, which a reuse of a sourced card moves without a new revision. */
+    expectedUpdatedAt?: Date;
   }): Promise<Card | null> {
-    const candidate = await new Cards(this.#db, this.#legacyMode).findOne({ org_id: orgId, id });
+    const where = {
+      org_id: orgId,
+      id,
+      ...(expectedRevision === undefined ? {} : { revision: expectedRevision }),
+      ...(expectedUpdatedAt === undefined ? {} : { updated_at: expectedUpdatedAt }),
+    };
+    const candidate = await new Cards(this.#db, this.#legacyMode).findOne(where);
     if (!candidate) return null;
 
     const removed = await this.#withProjectRelationTransaction(orgId, candidate.factory_project_id, async ops => {
-      const existing = await new Cards(ops, this.#legacyMode).findOne({ org_id: orgId, id });
+      const existing = await new Cards(ops, this.#legacyMode).findOne(where);
       if (!existing) return null;
-      const deleted = await new Cards(ops, this.#legacyMode).deleteMany({ org_id: orgId, id });
+      const deleted = await new Cards(ops, this.#legacyMode).deleteMany(where);
       if (deleted === 0) return null;
       await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
       await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id });
