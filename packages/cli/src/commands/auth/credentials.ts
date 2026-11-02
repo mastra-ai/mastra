@@ -226,7 +226,8 @@ function parseCallback(url: URL, state: string): CallbackResult | null {
   if (url.searchParams.get('state') !== state || !token || !userParam || !organizationId) return null;
 
   try {
-    const user = JSON.parse(decodeURIComponent(userParam)) as Credentials['user'];
+    const user = JSON.parse(decodeURIComponent(userParam)) as Credentials['user'] | null;
+    if (typeof user?.email !== 'string') return null;
     return { token, refreshToken: url.searchParams.get('refresh_token'), user, organizationId };
   } catch {
     return null;
@@ -306,13 +307,12 @@ async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): P
 
   const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}&state=${state}&source=${options.source ?? 'mastra-cli'}`;
 
+  // Always print the link: the opened browser may not be the one the user sees (SSH, containers, dev boxes).
+  console.info(`   Opening browser. If it doesn't open, visit:\n   ${loginUrl}\n`);
   try {
     openBrowser(loginUrl);
-    // Also print the link: the opened browser may not be the one the user sees (SSH, containers, dev boxes).
-    console.info(`   Opening browser. If it doesn't open, visit:\n   ${loginUrl}\n`);
   } catch {
-    console.info(`   Could not open browser automatically.`);
-    console.info(`   Open this URL manually: ${loginUrl}\n`);
+    console.info(`   Could not open browser automatically. Open the URL above.\n`);
     if (isWSL()) {
       console.info(`   Note: If login times out, ensure localhost forwarding is enabled in your .wslconfig.\n`);
     }

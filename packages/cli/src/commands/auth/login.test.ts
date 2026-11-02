@@ -422,6 +422,10 @@ describe('login() server lifecycle', () => {
     expect(response.status).toBe(400);
     expect(response.body).toContain('Login failed');
 
+    // A user that isn't an object would crash later when reading its email.
+    const nullUser = await sendCallback(port, { ...validParams, user: 'null', state });
+    expect(nullUser.status).toBe(400);
+
     // Server should still be listening (waiting for a valid callback).
     // Clean up by sending a valid callback.
     await sendCallback(port, { ...validParams, state });
