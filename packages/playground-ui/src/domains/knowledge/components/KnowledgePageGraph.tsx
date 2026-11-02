@@ -19,6 +19,7 @@ import { ArrowUpToLine, Layers, Maximize, Pin } from 'lucide-react';
 import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
+import { fitWords } from '../lib/circleText';
 import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
   KNOWLEDGE_DOT_HIT_MARGIN,
@@ -34,7 +35,7 @@ import {
 import type { GraphLevel, GraphNodeForm } from '../lib/graphShape';
 import { runLayout } from '../lib/layout';
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
-import { grantGraph, pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
+import { KNOWLEDGE_PAGE_SIZE, grantGraph, pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
 import { childCountLabel } from '../lib/pageTree';
 import { chooseTooltipSide } from '../lib/tooltipSide';
 import type { Box, TooltipPlacementInput, TooltipSide } from '../lib/tooltipSide';
@@ -351,6 +352,11 @@ function DotNode({ data }: { data: PageNodeData }) {
 }
 
 /** A scope or page: its kind on top, its name below, both inside the circle; far pages draw as dots. */
+/** Below this a circle uses the small type and two lines of name. */
+const COMPACT_CIRCLE_SIZE = 96;
+/** The share of a circle's width its text may use; a circle is narrower toward the top and bottom. */
+const CIRCLE_TEXT_SHARE = 0.74;
+
 function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeData }>) {
   if (data.form === 'dot') return <DotNode data={data} />;
   const { page, size, selected, pinned, dimmed, badge } = data;
@@ -358,6 +364,9 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
   const placeholder = isPlaceholder(page);
   const rest = isRestCircle(page);
+  // A smaller circle gets smaller type and fewer lines, and the text keeps to the width of the circle's middle.
+  const compact = size < COMPACT_CIRCLE_SIZE;
+  const fit = Math.max(4, Math.floor((size * CIRCLE_TEXT_SHARE) / (compact ? 6.5 : 7.5)));
   return (
     <div
       data-testid="knowledge-page-node"
@@ -378,23 +387,36 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       }
     >
       <div
-        className="knowledge-circle flex size-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-2 px-3 text-center shadow-raised"
+        className="knowledge-circle flex size-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-2 text-center shadow-raised"
         data-selected={selected || undefined}
-        style={placeholder || rest ? PLACEHOLDER_STYLE : page.isScope ? SCOPE_STYLE : PAGE_STYLE}
+        style={{
+          ...(placeholder || rest ? PLACEHOLDER_STYLE : page.isScope ? SCOPE_STYLE : PAGE_STYLE),
+          paddingInline: size * ((1 - CIRCLE_TEXT_SHARE) / 2),
+        }}
       >
         <Txt
           as="span"
           variant="meta"
           tone={page.isScope ? undefined : 'muted'}
-          className="pointer-events-none line-clamp-2 max-w-full tracking-wide uppercase"
+          className="pointer-events-none inline-flex max-w-full items-center justify-center gap-1 whitespace-nowrap uppercase"
           style={page.isScope ? { color: 'var(--chart-blue)' } : undefined}
           data-testid={page.isScope ? 'knowledge-scope-caption' : 'knowledge-page-caption'}
         >
           {data.level ? <LevelIcon level={data.level} /> : null}
-          {rest ? 'More' : data.isParent ? (page.isScope ? 'Parent scope' : 'Parent') : kind}
+          <span className="truncate">{rest ? 'More' : data.isParent ? 'Parent' : kind}</span>
         </Txt>
-        <Txt as="span" variant="label" tone="ink" className="pointer-events-none line-clamp-3 max-w-full break-words">
-          {page.isScope && page.address && !group ? <BreakAtColons text={page.address} /> : page.name}
+        <Txt
+          as="span"
+          variant={compact ? 'meta' : 'label'}
+          tone="ink"
+          className={`pointer-events-none max-w-full overflow-hidden [overflow-wrap:normal] ${compact ? 'line-clamp-2' : 'line-clamp-3'}`}
+          data-testid="knowledge-circle-name"
+        >
+          {page.isScope && page.address && !group ? (
+            <BreakAtColons text={fitWords(page.address, fit)} />
+          ) : (
+            fitWords(page.name, fit)
+          )}
         </Txt>
       </div>
       {pinned ? <PinBadge size={size} /> : null}
@@ -403,7 +425,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
           data-testid="knowledge-hidden-links"
           title={linkCountsText(data.hiddenLinks)}
           aria-label={linkCountsText(data.hiddenLinks)}
-          className="absolute top-0 left-1/2 flex -translate-x-1/2 -translate-y-1/3 gap-1 rounded-full border border-border bg-card px-1.5 shadow-raised"
+          className="absolute bottom-full left-1/2 -mb-1 flex -translate-x-1/2 gap-1 rounded-full border border-border bg-card px-1.5 shadow-raised"
         >
           {data.hiddenLinks.in > 0 ? (
             <Txt as="span" variant="meta" style={{ color: 'var(--chart-orange)' }}>
@@ -421,7 +443,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
         <span
           data-testid="knowledge-child-count-badge"
           aria-label={`${badge} children, not all drawn`}
-          className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/3 rounded-full border border-border bg-card px-1.5 shadow-raised"
+          className="absolute top-full left-1/2 -mt-1 -translate-x-1/2 rounded-full border border-border bg-card px-1.5 shadow-raised"
         >
           <Txt as="span" variant="meta" tone="ink">
             {badge}
@@ -918,6 +940,8 @@ function KnowledgePageGraphInner({
         const counted = showCounts && !isChildPlaceholder(node.data.page) && !!links && links.in + links.out > 0;
         node.data.size = counted ? KNOWLEDGE_COUNTED_DOT_SIZE : KNOWLEDGE_DOT_SIZE;
       } else if (node.id === shape.center) node.data.size = Math.round(node.data.size * FOCUSED_SCALE);
+      // Circles at one level share a size, scopes included, so the ring reads evenly.
+      else node.data.size = KNOWLEDGE_PAGE_SIZE;
     }
     // A page with dozens of children draws them smaller, so the ring stays a size that can be read and fitted.
     const ring = flow.nodes.filter(node => shape.depth.get(node.id) === 1 && shape.form.get(node.id) === 'full');

@@ -302,7 +302,7 @@ export const SIBLING_ROOT_CAP = 8;
 /** Children around a page that fit at full size; past this the circles shrink to make room. */
 export const CROWD_START = 16;
 /** Smallest a crowded ring's circles shrink to, as a fraction of their usual size. */
-export const CROWD_MIN_SCALE = 0.6;
+export const CROWD_MIN_SCALE = 0.7;
 
 /** How much to shrink each of `count` circles sharing a ring, so a page with dozens of children still fits. */
 export function crowdScale(count: number): number {

@@ -3,6 +3,7 @@ import { fireEvent, screen, within } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
+import { fitWords } from '../../lib/circleText';
 import { KNOWLEDGE_COUNTED_DOT_SIZE, KNOWLEDGE_DOT_HIT_MARGIN, KNOWLEDGE_DOT_SIZE } from '../../lib/graphShape';
 import type { KnowledgePagePayload } from '../../pageTypes';
 import { KnowledgePageGraph } from '../KnowledgePageGraph';
@@ -132,6 +133,52 @@ describe('KnowledgePageGraph', () => {
     });
   });
 
+  describe('the text in a circle', () => {
+    it('never breaks a word in the middle: a word wider than the circle is cut short with an ellipsis', () => {
+      expect(fitWords('Customer-facing escalation', 9)).toBe('Customer\u2026 escalati\u2026');
+      expect(fitWords('books', 10)).toBe('books');
+      expect(fitWords('site:mastra', 6)).toBe('site:mastra');
+      expect(fitWords('Get a custom demo', 8)).toBe('Get a custom demo');
+    });
+
+    it('keeps the whole page name in the tooltip, and the circle text to the circle', () => {
+      renderGraph({
+        pages: [
+          page('org', null, { name: 'Acme' }),
+          page('long', 'org', { name: 'Internationalisation-and-localisation' }),
+        ],
+        selectedPageId: 'org',
+      });
+      const node = document.querySelector('[data-testid="knowledge-page-node"][data-page-id="long"]') as HTMLElement;
+      expect(node.title).toBe('Internationalisation-and-localisation');
+      const name = within(node).getByTestId('knowledge-circle-name');
+      expect(name.textContent).toContain('\u2026');
+      expect(name.className).toContain('[overflow-wrap:normal]');
+    });
+
+    it('uses smaller type and two lines in a small circle, and larger type and three in a full-size one', () => {
+      renderGraph({
+        pages: [
+          page('org', null, { name: 'Acme' }),
+          ...Array.from({ length: 40 }, (_, i) =>
+            page(`p${i}`, 'org', { name: `Page ${i}`, position: String(i).padStart(2, '0') }),
+          ),
+        ],
+        selectedPageId: 'org',
+      });
+      const small = document.querySelector('[data-testid="knowledge-page-node"][data-page-id="p3"]') as HTMLElement;
+      expect(Number.parseFloat(small.style.width)).toBeLessThan(96);
+      expect(within(small).getByTestId('knowledge-circle-name').className).toContain('line-clamp-2');
+    });
+
+    it('puts the link and child badges outside the circle, so they never cover the kind label', () => {
+      renderGraph({ selectedPageId: 'refunds', hiddenLinks: new Map([['org', { in: 2, out: 3 }]]) });
+      const links = screen.getByTestId('knowledge-hidden-links');
+      expect(links.className).toContain('bottom-full');
+      expect(links.className).not.toContain('top-0');
+    });
+  });
+
   describe("the focused page's parent", () => {
     const line = (id: string) => document.querySelector(`[data-id="${id}"]`);
 
@@ -140,7 +187,7 @@ describe('KnowledgePageGraph', () => {
       const nodes = await screen.findAllByTestId('knowledge-page-node');
       const parent = nodes.find(n => n.dataset.pageId === 'org');
       if (!parent) throw new Error('parent not drawn');
-      expect(within(parent).getByTestId('knowledge-scope-caption').textContent).toBe('Parent scope');
+      expect(within(parent).getByTestId('knowledge-scope-caption').textContent).toBe('Parent');
       const child = nodes.find(n => n.dataset.pageId === 'refunds');
       expect(child && within(child).getByTestId('knowledge-page-caption').textContent).toBe('Page');
     });
@@ -257,10 +304,22 @@ describe('KnowledgePageGraph', () => {
     it('is drawn larger than the circles around it and named in the legend', () => {
       renderGraph({ selectedPageId: 'refunds' });
       expect(width('refunds')).toBeGreaterThan(108);
-      expect(width('org')).toBe(124);
+      expect(width('org')).toBe(108);
       expect(
         within(screen.getByRole('list', { name: 'Legend' })).getByTestId('knowledge-legend-focused').textContent,
       ).toBe('Focused page');
+    });
+
+    it('shares one size with every other circle at its level, scopes included', () => {
+      renderGraph({
+        pages: [
+          page('org', null, { name: 'Acme' }),
+          page('refunds', 'org', { name: 'Refunds' }),
+          page('other', 'org', { name: 'Other', position: 'b', isScope: true }),
+        ],
+        selectedPageId: 'org',
+      });
+      expect(width('other')).toBe(width('refunds'));
     });
 
     it('is not singled out when nothing is focused', () => {
