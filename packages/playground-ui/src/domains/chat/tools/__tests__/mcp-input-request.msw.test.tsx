@@ -9,6 +9,7 @@ import { ToolCard } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { BACKGROUND_TASK_ID, backgroundTask } from './fixtures/background-task';
 import {
+  confirmRequest,
   deferredSuspendedThread,
   foregroundSuspendedMetadata,
   foregroundSuspendedThread,
@@ -20,6 +21,7 @@ import {
   suspendedEvent,
 } from './fixtures/mcp-input-request';
 import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
+import type { McpInputRequestPayload } from '@/domains/chat/tools/mcp-input-request';
 import { TooltipProvider } from '@/ds/components/Tooltip';
 import { server } from '@/test/msw-server';
 import { renderHookWithProviders, renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -279,6 +281,54 @@ describe('a deferred call whose MCP task asks for input', () => {
       const request = await screen.findByTestId('mcp-input-request');
       expect(within(request).queryByRole('link')).toBeNull();
       expect(within(request).getByText(/can't answer/)).toBeTruthy();
+    });
+  });
+
+  describe("when the server's form is not the flat one the MCP spec allows", () => {
+    const askWith = (requestedSchema: Record<string, unknown>): McpInputRequestPayload => ({
+      ...confirmRequest,
+      requests: { confirm: { method: 'elicitation/create', params: { message: 'Fill this in', requestedSchema } } },
+    });
+    const nested = (depth: number): Record<string, unknown> =>
+      depth === 0 ? { type: 'string' } : { type: 'object', properties: { inner: nested(depth - 1) } };
+
+    it.each([
+      ['nested', nested(500)],
+      [
+        'too wide',
+        {
+          type: 'object',
+          properties: Object.fromEntries(Array.from({ length: 101 }, (_, i) => [`f${i}`, { type: 'string' }])),
+        },
+      ],
+    ])('does not draw a %s schema as a form', async (_, requestedSchema) => {
+      serveBackground(suspendedBackgroundTask(askWith(requestedSchema)));
+      renderWithProviders(<Shell props={deferredCall} />);
+
+      const request = await screen.findByTestId('mcp-input-request');
+      expect(within(request).getByText(/can't answer/)).toBeTruthy();
+      expect(within(request).queryByRole('button', { name: 'Accept' })).toBeNull();
+    });
+
+    it("draws the fields but never runs the server's pattern", async () => {
+      const backend = serveBackground(
+        suspendedBackgroundTask(
+          askWith({
+            type: 'object',
+            properties: { note: { type: 'string', pattern: '^(a+)+$', description: 'Note' } },
+          }),
+        ),
+      );
+      renderWithProviders(<Shell props={deferredCall} />);
+
+      const request = await screen.findByTestId('mcp-input-request');
+      fireEvent.change(within(request).getByRole('textbox'), { target: { value: `${'a'.repeat(40)}!` } });
+      fireEvent.click(within(request).getByRole('button', { name: 'Accept' }));
+
+      await waitFor(() => expect(backend.resumes).toHaveLength(1));
+      expect(backend.resumes[0]).toMatchObject({
+        resumeData: { inputResponses: { confirm: { action: 'accept', content: { note: `${'a'.repeat(40)}!` } } } },
+      });
     });
   });
 });

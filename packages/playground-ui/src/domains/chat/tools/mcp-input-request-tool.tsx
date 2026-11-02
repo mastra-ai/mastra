@@ -50,15 +50,57 @@ const httpUrl = (value: unknown): string | undefined => {
   }
 };
 
+/** More fields than any real question needs; a bigger form is not one Studio should draw. */
+const MAX_FORM_FIELDS = 100;
+const FIELD_TYPES = new Set(['string', 'number', 'integer', 'boolean']);
+// Keywords the MCP spec allows on a requested field. `pattern` isn't one: a server-chosen regex would
+// run against every keystroke.
+const FIELD_KEYS = [
+  'type',
+  'title',
+  'description',
+  'default',
+  'enum',
+  'enumNames',
+  'format',
+  'minLength',
+  'maxLength',
+  'minimum',
+  'maximum',
+];
+
+const isStringList = (value: unknown): value is string[] =>
+  Array.isArray(value) && value.every(item => typeof item === 'string');
+
+/**
+ * The MCP spec limits `requestedSchema` to a flat object of primitive fields. Keep only that shape, so a
+ * server can't hand Studio a deep or huge schema to convert; anything else isn't a form Studio draws.
+ */
+function formSchema(requested: Record<string, unknown>): Record<string, unknown> | undefined {
+  const { type, properties, required } = requested;
+  if (type !== 'object' || !isRecord(properties)) return undefined;
+  const entries = Object.entries(properties);
+  if (entries.length > MAX_FORM_FIELDS) return undefined;
+  const fields: Record<string, Record<string, unknown>> = {};
+  for (const [key, field] of entries) {
+    if (!isRecord(field) || typeof field.type !== 'string' || !FIELD_TYPES.has(field.type)) return undefined;
+    if (field.enum !== undefined && !isStringList(field.enum)) return undefined;
+    fields[key] = Object.fromEntries(
+      FIELD_KEYS.filter(name => field[name] !== undefined).map(name => [name, field[name]]),
+    );
+  }
+  return { type: 'object', properties: fields, ...(isStringList(required) ? { required } : {}) };
+}
+
 function viewRequest({ method, params }: McpInputRequest): RequestView {
   const message = typeof params?.message === 'string' ? params.message : undefined;
   if (method !== 'elicitation/create') return { kind: 'unsupported', message };
   // Only web links: a server-chosen `javascript:` URL must not become a clickable link.
   const url = params?.mode === 'url' ? httpUrl(params.url) : undefined;
   if (url) return { kind: 'url', message, url };
-  if (params?.mode !== 'url' && isRecord(params?.requestedSchema)) {
-    return { kind: 'form', message, schema: params.requestedSchema };
-  }
+  const schema =
+    params?.mode !== 'url' && isRecord(params?.requestedSchema) ? formSchema(params.requestedSchema) : undefined;
+  if (schema) return { kind: 'form', message, schema };
   return { kind: 'unsupported', message };
 }
 
