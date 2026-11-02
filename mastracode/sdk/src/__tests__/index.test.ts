@@ -714,12 +714,29 @@ describe('createMastraCode', () => {
     expect(resolveInputProcessors().map(processor => processor.id)).toContain('background-work-signals');
   });
 
-  it('forwards observability to the server-owned Mastra', async () => {
+  it('forwards observability to the server-owned Mastra when it exports somewhere', async () => {
     const { prepareAgentControllerMount } = await import('../index.js');
+    vi.stubEnv('MASTRACODE_CLOUD_ACCESS_TOKEN', 'mastracode-token');
 
-    const prepared = await prepareAgentControllerMount();
+    try {
+      const prepared = await prepareAgentControllerMount();
+      expect(prepared.mastraArgs.observability).toBe(prepared.base.observability);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 
-    expect(prepared.mastraArgs.observability).toBe(prepared.base.observability);
+  it('leaves observability to the host when Mastra Code has nowhere to export', async () => {
+    const { prepareAgentControllerMount } = await import('../index.js');
+    vi.stubEnv('MASTRACODE_CLOUD_ACCESS_TOKEN', '');
+
+    try {
+      const prepared = await prepareAgentControllerMount();
+      expect(prepared.base.observabilityExports).toBe(false);
+      expect(prepared.mastraArgs).not.toHaveProperty('observability');
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('configures server-owned background tasks only when enabled', async () => {
