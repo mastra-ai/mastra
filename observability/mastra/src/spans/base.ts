@@ -751,6 +751,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
       ...(correlation.entityVersionId ? { entityVersionId: correlation.entityVersionId } : {}),
+      ...(correlation.serviceName ? { serviceName: correlation.serviceName } : {}),
       ...definedLineage(correlation),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
