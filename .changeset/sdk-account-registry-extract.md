@@ -10,7 +10,8 @@ import { AuthStorage } from '@mastra/code-sdk/auth/storage';
 const storage = new AuthStorage();
 const [first, ...rest] = storage.listAccounts('anthropic');
 
-// Try the current first account last.
+// Move the first account to the end of the switch order.
+// Reordering does not change which account is active.
 if (first) {
   storage.reorderAccounts('anthropic', [...rest, first].map(account => account.id));
 }
