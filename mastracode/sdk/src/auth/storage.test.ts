@@ -994,6 +994,18 @@ describe('AuthStorage multi-account registry', () => {
     ]);
   });
 
+  it('keeps registry metadata out of a selected account credential', () => {
+    const entry = { ...accountRecord('r2', 'a2', { active: false }), identity: 'org-2', priority: 1 };
+    const { storage } = makeStorage({ [`accounts:${entry.id}`]: entry });
+
+    expect(storage.getAccountCredential(PROVIDER, entry.id)).toEqual({
+      type: 'oauth',
+      refresh: 'r2',
+      access: 'a2',
+      expires: entry.expires,
+    });
+  });
+
   it('logout removes the slot and every registered account', async () => {
     const { storage, authPath } = makeStorage();
     await storage.addAccount(PROVIDER, { refresh: 'r1', access: 'a1', expires: FUTURE });

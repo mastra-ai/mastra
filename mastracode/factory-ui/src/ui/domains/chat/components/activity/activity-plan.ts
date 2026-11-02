@@ -1,6 +1,7 @@
 import { groupConsecutive } from '@mastra/playground-ui/components/ai/tool-call';
 import type { ReasoningPart } from '@mastra/react/ui';
 
+import { routingNoticeText } from '../../services/routing-notice';
 import type { MessageEntry, SuspensionPrompt, TimelineEntry, ToolCall } from '../../services/transcript';
 import { messageEntryView } from '../message-entry-view';
 import { draws, hasVisibleText, renderableParts, toolFromInvocationPart } from '../transcript-parts';
@@ -73,7 +74,7 @@ function classifyPart(
       return TOOLS_DRAWN_AS_MESSAGES.has(toolName) || suspensions.has(toolCallId) ? 'ends' : 'joins';
     }
     default:
-      return 'ignored';
+      return routingNoticeText(part) === undefined ? 'ignored' : 'ends';
   }
 }
 

@@ -27,6 +27,7 @@ import type { CodexDeviceLoginPending } from '@mastra/code-sdk/auth/providers/op
 import { pollXAIDeviceLogin, startXAIDeviceLogin } from '@mastra/code-sdk/auth/providers/xai';
 import type { XAIDeviceLoginPending } from '@mastra/code-sdk/auth/providers/xai';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { getOAuthProvider } from '@mastra/code-sdk/auth/storage';
 import type { OAuthCredentials } from '@mastra/code-sdk/auth/types';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
@@ -34,7 +35,7 @@ import type { Context } from 'hono';
 
 import { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import type { LoginCredentialScope, LoginSessionKind, LoginSessionRow } from '../storage/domains/credentials/base.js';
-import { getAuthProviderId, resolveCredentialContext } from './provider-credentials.js';
+import { getAuthProviderId, loose, resolveCredentialContext } from './provider-credentials.js';
 import type { CredentialContext } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteDependencies } from './route.js';
@@ -152,10 +153,6 @@ const OAUTH_FLOWS: Record<string, OAuthFlow> = {
   },
 };
 
-function loose(c: unknown): Context {
-  return c as Context;
-}
-
 /**
  * Local-mode login sessions. Flows in local mode are single-process, so a
  * process-local libsql `:memory:` database (which already handles TTL
@@ -200,7 +197,13 @@ async function loadOwnedSession({
   return session;
 }
 
-/** Persist completed OAuth credentials — user-scoped unless the flow was started org-wide. */
+/**
+ * Persist completed OAuth credentials — user-scoped unless the flow was
+ * started org-wide. Signing in to a new subscription adds an account to the
+ * scope's pool and makes it active. Signing in to one the pool already holds
+ * (same provider identity, or the same refresh token for providers without
+ * one) updates that account in place, as mastracode's AuthStorage does.
+ */
 async function persistOAuthCredential({
   ctx,
   provider,
@@ -219,15 +222,39 @@ async function persistOAuthCredential({
   const authProviderId = getAuthProviderId(provider);
   if (ctx.mode === 'tenant') {
     const tenant = { orgId: ctx.orgId, ...(scope === 'org' ? {} : { userId: ctx.userId }) };
-    await ctx.storage.setCredential(tenant, authProviderId, {
-      type: 'oauth',
-      ...credentials,
+    const oauthProvider = getOAuthProvider(authProviderId);
+    const label = await accountLabel(authProviderId, credentials);
+    await ctx.storage.addAccount(tenant, authProviderId, {
+      credential: { type: 'oauth', ...credentials },
+      identity: accountIdentity(authProviderId, credentials),
+      ...(label ? { label } : {}),
+      providerName: oauthProvider?.name ?? authProviderId,
+      activate: true,
     });
     onCredentialsChanged(tenant);
     return;
   }
   if (!authStorage) throw new Error('Credential storage is not available');
   await authStorage.addAccount(authProviderId, credentials);
+}
+
+/** The provider's stable subscription identity for these credentials, when it exposes one. */
+function accountIdentity(authProviderId: string, credentials: OAuthCredentials): string | undefined {
+  try {
+    const identity = getOAuthProvider(authProviderId)?.getAccountIdentity?.(credentials);
+    return identity || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The provider's display label for the account (an email), when it exposes one. */
+async function accountLabel(authProviderId: string, credentials: OAuthCredentials): Promise<string | undefined> {
+  try {
+    return (await getOAuthProvider(authProviderId)?.getAccountLabel?.(credentials)) || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function readJsonBody(c: Context): Promise<Record<string, unknown>> {
@@ -502,8 +529,16 @@ export class OAuthRoutes extends Route<OAuthRoutesDeps> {
                 return c.json({ error: 'forbidden', message: 'Only org admins can remove an org-wide sign-in' }, 403);
               }
               const tenant = { orgId: ctx.orgId, ...(scope === 'org' ? {} : { userId: ctx.userId }) };
-              await ctx.storage.removeCredential(tenant, authProviderId);
-              onCredentialsChanged(tenant);
+              // Sign-out removes one OAuth account and never an API key in the
+              // same pool: the active account when it is OAuth, otherwise the
+              // first OAuth account in pool order. No OAuth account is a no-op.
+              const accounts = await ctx.storage.listAccounts(tenant, authProviderId);
+              const oauthAccounts = accounts.filter(account => account.type === 'oauth');
+              const target = oauthAccounts.find(account => account.active) ?? oauthAccounts[0];
+              if (target) {
+                await ctx.storage.removeAccount(tenant, target.id);
+                onCredentialsChanged(tenant);
+              }
             } else {
               if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
               authStorage.logout(authProviderId);

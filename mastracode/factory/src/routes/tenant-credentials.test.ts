@@ -214,6 +214,90 @@ describe('TenantCredentialStore', () => {
   });
 });
 
+describe('TenantCredentialStore provider pools', () => {
+  async function seedUserPool() {
+    const first = await seed.credentials.addAccount(USER_TENANT, 'anthropic', {
+      credential: { type: 'api_key', key: 'key-1' },
+      label: 'Team key',
+    });
+    const second = await seed.credentials.addAccount(USER_TENANT, 'anthropic', {
+      credential: FRESH_OAUTH,
+      label: 'Max',
+    });
+    return { first, second };
+  }
+
+  it('lists the routed pool as token-free metadata in switch order', async () => {
+    const { first, second } = await seedUserPool();
+    await seed.credentials.addAccount(ORG_TENANT, 'anthropic', { credential: { type: 'api_key', key: 'org-key' } });
+
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await store.ensureFresh();
+
+    const accounts = store.listAccounts('anthropic');
+    expect(accounts.map(account => account.id)).toEqual([first.id, second.id]);
+    expect(store.getActiveAccount('anthropic')?.id).toBe(first.id);
+    expect(JSON.stringify(accounts)).not.toMatch(/key-1|a-1|r-1/);
+  });
+
+  it('never rotates across pools: a factory store sees only the org pool', async () => {
+    await seedUserPool();
+    const org = await seed.credentials.addAccount(ORG_TENANT, 'anthropic', {
+      credential: { type: 'api_key', key: 'org-key' },
+    });
+
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'factory');
+    await store.ensureFresh();
+
+    expect(store.listAccounts('anthropic').map(account => account.id)).toEqual([org.id]);
+    await expect(store.activateAccount('anthropic')).resolves.toBeUndefined();
+  });
+
+  it('activates the next account, persists the pointer, and serves its credential synchronously', async () => {
+    const { first, second } = await seedUserPool();
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await store.ensureFresh();
+    expect(store.getAccountCredential('anthropic', second.id)).toBeUndefined();
+
+    await expect(store.activateAccount('anthropic')).resolves.toMatchObject({ id: second.id, active: true });
+
+    expect(store.getActiveAccount('anthropic')?.id).toBe(second.id);
+    expect(store.getAccountCredential('anthropic', second.id)).toEqual(FRESH_OAUTH);
+    const persisted = await seed.credentials.listAccounts(USER_TENANT, 'anthropic');
+    expect(persisted.find(account => account.active)?.id).toBe(second.id);
+    // Wraps once from the active account back to the first.
+    await expect(store.activateAccount('anthropic')).resolves.toMatchObject({ id: first.id });
+  });
+
+  it('getApiKey with an account id reads that account and never falls back to the active one', async () => {
+    const { first, second } = await seedUserPool();
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await store.ensureFresh();
+
+    await expect(store.getApiKey('anthropic', first.id)).resolves.toBe('key-1');
+    await expect(store.getApiKey('anthropic', second.id)).resolves.toBe('a-1');
+    await expect(store.getApiKey('anthropic', 'anthropic:unknown')).resolves.toBeUndefined();
+    expect(store.getAccountCredential('anthropic', 'anthropic:unknown')).toBeUndefined();
+  });
+
+  it('marks rate-limited accounts as cooling down and auth failures as auth-failed', async () => {
+    const { first, second } = await seedUserPool();
+    const store = new TenantCredentialStore(ORG, USER, seed.credentials, 'user');
+    await store.ensureFresh();
+
+    const before = Date.now();
+    await store.markAccountUnavailable('anthropic', first.id, 'rate-limit');
+    await store.markAccountUnavailable('anthropic', second.id, 'auth-failed');
+
+    const local = store.listAccounts('anthropic');
+    expect(local[0]).toMatchObject({ status: 'cooldown' });
+    expect(local[0]?.cooldownUntil).toBeGreaterThan(before);
+    expect(local[1]).toMatchObject({ status: 'auth-failed' });
+    const persisted = await seed.credentials.listAccounts(USER_TENANT, 'anthropic');
+    expect(persisted.map(account => account.status)).toEqual(['cooldown', 'auth-failed']);
+  });
+});
+
 describe('registerTenantCredentialResolver', () => {
   it('wires the SDK resolver to tenant stores derived from the request context', async () => {
     await seed.credentials.setCredential(USER_TENANT, 'openai', { type: 'api_key', key: 'user-key' });

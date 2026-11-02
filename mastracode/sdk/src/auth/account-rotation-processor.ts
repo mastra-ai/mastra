@@ -47,7 +47,7 @@ import {
 import type { AccountSwitchPartData, ModelFallbackPartData, PendingModelFallback } from './account-switch.js';
 import { ProviderAuthRequiredError, PROVIDER_AUTH_REQUIRED_ERROR } from './provider-auth-error.js';
 import { getOAuthProviders } from './storage.js';
-import type { CredentialStore, OAuthAccountRecord } from './types.js';
+import type { CredentialAccount, CredentialStore } from './types.js';
 
 // Re-exported so existing importers of the processor module keep working.
 export {
@@ -71,9 +71,24 @@ export type RotationCredentialStore = CredentialStore & {
    * deployed per-tenant stores provide it for their single credential.
    */
   forceRefreshActiveAccount?(providerId: string, accountInstanceId?: string): Promise<string | undefined>;
+  /**
+   * Record why an account was rotated away from, so other requests and
+   * replicas skip it: rate limits and exhausted quotas put it in cooldown,
+   * auth failures mark it auth-failed until the user re-authenticates.
+   * Optional — `AuthStorage` has no persisted status and omits it.
+   */
+  markAccountUnavailable?(
+    providerId: string,
+    accountInstanceId: string,
+    reason: 'rate-limit' | 'quota-exhausted' | 'auth-failed',
+  ): Promise<void>;
 };
 
-/** Rotatable providers = the OAuth provider registry; API-key-only providers never rotate. */
+/**
+ * Providers that rotate without a pool lookup: the OAuth provider registry.
+ * Any other provider rotates only when the credential store holds a pool for it
+ * (deployed stores pool API keys too), see `providerFromModelId`.
+ */
 const KNOWN_PROVIDER_IDS = new Set(getOAuthProviders().map(provider => provider.id));
 
 /** Hostname suffixes → provider ids, for `APICallError.url`. */
@@ -197,13 +212,42 @@ export function classifyRotationError(error: unknown): RotationClassification {
   return byKind ?? (isNetworkErrorLike(error) ? { kind: 'hop' } : { kind: 'never' });
 }
 
-/** Provider id off a router model id: `mastracode/<provider>/<model>` or `<provider>/<model>`. */
-export function providerFromModelId(modelId: string): string | undefined {
+/**
+ * Provider id off a router model id: `mastracode/<provider>/<model>` or
+ * `<provider>/<model>`. OAuth registry providers always resolve; any other
+ * provider resolves only when `hasPool` reports accounts for it, so an
+ * API-key provider without a pool keeps the never-rotate behaviour.
+ */
+export function providerFromModelId(modelId: string, hasPool?: (providerId: string) => boolean): string | undefined {
   const segments = normalizeLegacyModelId(modelId)
     .replace(/^mastracode\//, '')
     .split('/');
   const providerId = segments[0] ? getCredentialProviderId(segments[0]) : undefined;
-  return providerId && KNOWN_PROVIDER_IDS.has(providerId) ? providerId : undefined;
+  if (!providerId) return undefined;
+  return KNOWN_PROVIDER_IDS.has(providerId) || hasPool?.(providerId) ? providerId : undefined;
+}
+
+/** `hasPool` predicate for `providerFromModelId` backed by a credential store's account registry. */
+function storeHasPool(store: CredentialStore): (providerId: string) => boolean {
+  return providerId => (store.listAccounts?.(providerId).length ?? 0) > 0;
+}
+
+/**
+ * An account another request (or replica) recorded as unusable: auth-failed
+ * until re-authenticated, or in a cooldown that has not elapsed yet.
+ */
+function isAccountUnavailable(account: CredentialAccount, now = Date.now()): boolean {
+  if (account.status === 'auth-failed') return true;
+  return account.status === 'cooldown' && (account.cooldownUntil === undefined || account.cooldownUntil > now);
+}
+
+/**
+ * Stable reorder putting usable accounts first. Cooling-down accounts stay as
+ * a last resort (a cooldown is an estimate, not a provider verdict); the
+ * caller drops auth-failed accounts itself where retrying them is pointless.
+ */
+function preferAvailable<T extends CredentialAccount>(accounts: T[]): T[] {
+  return [...accounts.filter(a => !isAccountUnavailable(a)), ...accounts.filter(a => isAccountUnavailable(a))];
 }
 
 function providerFromHost(hostname: string): string | undefined {
@@ -218,7 +262,7 @@ function providerFromHost(hostname: string): string | undefined {
  * (`APICallError.url`, cause chain included), falling back to the router
  * model id. Unknown → undefined (caller treats as never-rotate).
  */
-export function providerFromError(error: unknown): string | undefined {
+export function providerFromError(error: unknown, hasPool?: (providerId: string) => boolean): string | undefined {
   const causeChain: object[] = [];
   let current: unknown = error;
   for (let depth = 0; current && depth < MAX_CAUSE_DEPTH; depth++) {
@@ -251,7 +295,7 @@ export function providerFromError(error: unknown): string | undefined {
   for (const item of causeChain) {
     const modelId = (item as { modelId?: unknown }).modelId;
     if (typeof modelId !== 'string') continue;
-    const providerId = providerFromModelId(modelId);
+    const providerId = providerFromModelId(modelId, hasPool);
     if (providerId) return providerId;
   }
   return undefined;
@@ -300,10 +344,11 @@ async function emitAccountSwitchPart(
  */
 function providerFromSession(
   args: Pick<ProcessAPIErrorArgs, 'requestContext'> | Pick<ProcessInputArgs, 'requestContext'>,
+  hasPool?: (providerId: string) => boolean,
 ): string | undefined {
   const controller = args.requestContext?.get('controller') as { session?: { modelId?: unknown } } | undefined;
   const modelId = controller?.session?.modelId;
-  return typeof modelId === 'string' ? providerFromModelId(modelId) : undefined;
+  return typeof modelId === 'string' ? providerFromModelId(modelId, hasPool) : undefined;
 }
 
 /**
@@ -363,6 +408,7 @@ function getRequestActiveAccount(
 
 function resolveAccountRoute(
   args: Pick<RoutingProcessorArgs, 'requestContext'>,
+  hasPool: (providerId: string) => boolean,
   explicit?: { id: string; modelId: string; accountId?: string },
 ): AccountRoute | null {
   const controller = getRoutingController(args);
@@ -386,7 +432,7 @@ function resolveAccountRoute(
       ? routeEntries.find(candidate => candidate.id === pending.toEntryId && candidate.modelId === pending.toModelId)
       : routeEntries.find(candidate => candidate.modelId === controller?.session?.modelId);
   if (!entry || typeof entry.id !== 'string' || typeof entry.modelId !== 'string') return null;
-  const providerId = providerFromModelId(entry.modelId);
+  const providerId = providerFromModelId(entry.modelId, hasPool);
   if (!providerId) return null;
   return {
     entryId: entry.id,
@@ -414,7 +460,7 @@ async function applyPreferredAccountRoute(
     (
       preferredId
         ? accounts.filter(account => account.id === preferredId)
-        : orderAccountsFromActive(accounts, active?.id)
+        : preferAvailable(orderAccountsFromActive(accounts, active?.id))
     ).find(account => !unavailable.has(account.id));
 
   for (const accountId of unavailable) tried.add(accountId);
@@ -430,7 +476,7 @@ async function applyPreferredAccountRoute(
   // Activate before recording the request-scoped selection: a failed
   // activation must not leave the selection claiming an account that never
   // became the provider's active credential.
-  const activated = store.activateAccount ? store.activateAccount(route.providerId, selected.id) : selected;
+  const activated = store.activateAccount ? await store.activateAccount(route.providerId, selected.id) : selected;
   if (!activated) {
     // Only a targeted route is out of options here. The exhausted marker is
     // request-wide and fails every credential read closed, so setting it for
@@ -498,28 +544,31 @@ export class AccountRotationProcessor implements Processor {
       return { retry: false };
     }
 
+    // Deployed requests resolve the tenant-scoped store; local mode keeps the
+    // host storage. Reading the host registry here would rotate or announce
+    // host accounts for a tenant request. Annotated as the rotation surface:
+    // `resolveCredentialStore` returns a plain CredentialStore, and the
+    // optional rotation hooks are used when the host provides them. Resolved
+    // before attribution: an API-key provider is rotatable exactly when this
+    // store holds a pool for it.
+    const store: RotationCredentialStore = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
+    store.reload();
+    const hasPool = storeHasPool(store);
+
     const cascade = await this.getModelRouteCascade(args);
     const currentEntry = cascade?.entries[cascade.position];
     const providerId =
-      providerFromError(error) ??
-      (currentEntry ? providerFromModelId(currentEntry.modelId) : undefined) ??
-      (cascade ? undefined : providerFromSession(args));
+      providerFromError(error, hasPool) ??
+      (currentEntry ? providerFromModelId(currentEntry.modelId, hasPool) : undefined) ??
+      (cascade ? undefined : providerFromSession(args, hasPool));
     if (!providerId) {
       await this.emitModelFallbackPart(args, classification.kind === 'hop' ? 'persistent-outage' : 'pool-exhausted');
       return { retry: false };
     }
 
-    // Deployed requests resolve the tenant-scoped store; local mode keeps the
-    // host storage. Reading the host registry here would rotate or announce
-    // host accounts for a tenant request. Annotated as the rotation surface:
-    // `resolveCredentialStore` returns a plain CredentialStore, and the 401
-    // path below uses the optional `forceRefreshActiveAccount` when the host
-    // provides it.
-    const store: RotationCredentialStore = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
-    store.reload();
     const accounts = store.listAccounts?.(providerId) ?? [];
     const active = getRequestActiveAccount(args, store, providerId);
-    const route = currentEntry ? resolveAccountRoute(args, currentEntry) : resolveAccountRoute(args);
+    const route = currentEntry ? resolveAccountRoute(args, hasPool, currentEntry) : resolveAccountRoute(args, hasPool);
 
     // Q7 bucket 2: force one refresh of the active instance before rotating.
     // A 401 usually means a fresh-but-rejected token; the forced refresh
@@ -575,7 +624,17 @@ export class AccountRotationProcessor implements Processor {
     // this provider's account count would falsely report exhaustion when an
     // earlier provider in the same request already used up accounts.
     const tried = getTriedInstances(state);
-    if (active) tried.add(active.id);
+    if (active) {
+      tried.add(active.id);
+      // Before switching, so a concurrent request or another replica reading
+      // the pool skips this account instead of hitting the same limit.
+      await store.markAccountUnavailable?.(providerId, active.id, classification.reason);
+    }
+    // An account already known to be auth-failed cannot serve this retry;
+    // count it as tried so exhaustion and candidate choice both skip it.
+    for (const account of accounts) {
+      if (account.status === 'auth-failed') tried.add(account.id);
+    }
     // The tried-set is request-global and shared across providers after a
     // route hop, so exhaustion must count only this provider's ids.
     const triedForProvider = accounts.filter(account => tried.has(account.id)).length;
@@ -585,10 +644,12 @@ export class AccountRotationProcessor implements Processor {
 
     // If the selected account was removed elsewhere, even a single survivor
     // is still untried. Resume from the freshly loaded global cursor.
-    const candidates = active ? accounts : orderAccountsFromActive(accounts, store.getActiveAccount?.(providerId)?.id);
+    const candidates = preferAvailable(
+      active ? accounts : orderAccountsFromActive(accounts, store.getActiveAccount?.(providerId)?.id),
+    );
     const nextCandidate = candidates.find(account => !tried.has(account.id));
 
-    const next = nextCandidate ? store.activateAccount?.(providerId, nextCandidate.id) : undefined;
+    const next = nextCandidate ? await store.activateAccount?.(providerId, nextCandidate.id) : undefined;
     if (!next) {
       return this.declarePoolUnavailable(args, providerId, 'pool-exhausted');
     }
@@ -755,9 +816,9 @@ export class AccountRotationProcessor implements Processor {
     }
     await controller?.setState?.({ [MODEL_FALLBACK_STATE_KEY]: pending });
     args.state.startNoticeEmitted = false;
-    const targetRoute = resolveAccountRoute(args, to);
+    const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
+    const targetRoute = resolveAccountRoute(args, storeHasPool(store), to);
     if (targetRoute) {
-      const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
       await applyPreferredAccountRoute(args, store, targetRoute).catch(() => undefined);
     }
     controller?.emitEvent?.({ type: 'info', message: modelFallbackNoticeText(data) });
@@ -829,7 +890,7 @@ export class AccountStartNoticeProcessor implements Processor {
     // the constructor's storage.
     const store = resolveCredentialStore(args.requestContext) ?? this.options.credentialStore;
 
-    const route = resolveAccountRoute(args);
+    const route = resolveAccountRoute(args, storeHasPool(store));
     if (!route) {
       store.reload();
       return args.messageList;

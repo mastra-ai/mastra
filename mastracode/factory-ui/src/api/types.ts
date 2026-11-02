@@ -9,6 +9,7 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
+import type { PoolAccountSummary } from '@mastra/code-sdk/auth/account-registry';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { z } from 'zod';
 import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
@@ -42,7 +43,7 @@ import type {
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
 
-export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, PoolAccountSummary };
 export type {
   ArtifactEntry,
   ArtifactListing,
@@ -68,6 +69,11 @@ export interface ProvidersResponse {
   providers: ProviderInfo[];
   /** Tenant mode: whether the caller may write org-wide keys. Absent locally. */
   orgKeyAdmin?: boolean;
+}
+
+/** A provider's account pool at one scope. Metadata only — never credentials. */
+export interface ProviderAccountsResponse {
+  accounts: PoolAccountSummary[];
 }
 
 export interface CustomProvidersResponse {

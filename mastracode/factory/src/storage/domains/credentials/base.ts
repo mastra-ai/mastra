@@ -30,7 +30,8 @@
  * any replica can complete or poll a flow started on another.
  */
 
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { defaultAccountLabel, findSameSubscription } from '@mastra/code-sdk/auth/account-registry';
 import type { AuthCredential, OAuthCredential } from '@mastra/code-sdk/auth/types';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mastra/core/storage';
@@ -95,7 +96,15 @@ export interface AddAccountInput {
    * appending a duplicate.
    */
   identity?: string;
-  /** Make the account active even when the pool already has an active account. */
+  /**
+   * Display name of the provider. A new account added without a `label` is
+   * named "<providerName> account N", as mastracode's AuthStorage names them.
+   */
+  providerName?: string;
+  /**
+   * Make the account active even when the pool already has an active account.
+   * Applies to a matched account too, as mastracode's AuthStorage does on re-login.
+   */
   activate?: boolean;
 }
 
@@ -339,6 +348,18 @@ function accountWhere(tenant: CredentialTenant, accountId: string): CollectionWh
 /** Filter selecting exactly the tenant's deprecated row for a provider (`null` = org row). */
 function legacyTenantWhere(tenant: CredentialTenant, provider: string): CollectionWhere {
   return { org_id: tenant.orgId, provider, user_id: tenant.userId ?? null };
+}
+
+/** The id mastracode's AuthStorage gave an account before ids were minted: a hash of its refresh token. */
+function legacyAccountIdFor(provider: string, refreshToken: string): string {
+  return `${provider}:${createHash('sha256').update(refreshToken).digest('hex').slice(0, 8)}`;
+}
+
+/** Whether two credentials are the same token set: same refresh token, or same API key. */
+function sameCredential(a: AuthCredential, b: AuthCredential): boolean {
+  if (a.type === 'oauth' && b.type === 'oauth') return a.refresh === b.refresh;
+  if (a.type === 'api_key' && b.type === 'api_key') return a.key === b.key;
+  return false;
 }
 
 function accountType(credential: AuthCredential): PoolAccountType {
@@ -627,10 +648,13 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Add an account to the scope's pool. With an `identity` already in the
-   * pool, that account's credential is replaced and its status reset instead
-   * of appending a duplicate. The account becomes active when the pool had no
-   * active account or `activate` is set.
+   * Add an account to the scope's pool, or update the one it already is.
+   * Matching follows mastracode's AuthStorage.addAccount: the provider
+   * identity, then the legacy id (a hash of the refresh token), then an
+   * account already holding the same credential. A matched account keeps its
+   * id, label, priority and active state; its credential is replaced and its
+   * status reset. A new account goes last in pool order and becomes active
+   * when `activate` is set or the pool had no active account.
    */
   async addAccount(tenant: CredentialTenant, provider: string, input: AddAccountInput): Promise<PoolAccountSummary> {
     const encrypted = await this.encryption.encrypt(input.credential);
@@ -638,33 +662,33 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     let accountId: string | undefined;
 
     for (let attempt = 0; attempt < 2 && !accountId; attempt++) {
-      if (input.identity) {
-        const existing = await this.#db.findOne<AccountDbRow>('model_provider_accounts', {
-          ...poolWhere(tenant, provider),
-          identity: input.identity,
-        });
-        if (existing) {
-          await this.#db.updateMany(
-            'model_provider_accounts',
-            { id: existing.id },
-            {
-              type,
-              data: encrypted,
-              ...(input.label ? { label: input.label } : {}),
-              status: 'ok',
-              cooldown_until: null,
-              refresh_failed_at: null,
-              updated_at: new Date(),
-            },
-          );
-          accountId = existing.id;
-          break;
-        }
+      const pool = await this.#listPool(tenant, provider);
+      const existing = await this.#findSameAccount(pool, provider, input);
+      if (existing) {
+        await this.#db.updateMany(
+          'model_provider_accounts',
+          { id: existing.id },
+          {
+            type,
+            data: encrypted,
+            ...(input.identity ? { identity: input.identity } : {}),
+            status: 'ok',
+            cooldown_until: null,
+            refresh_failed_at: null,
+            updated_at: new Date(),
+          },
+        );
+        accountId = existing.id;
+        break;
       }
       try {
         accountId = await this.#insertAccount(tenant, provider, {
           type,
-          label: input.label ?? input.identity ?? provider,
+          label:
+            input.label ??
+            (input.providerName ? defaultAccountLabel(input.providerName, pool.length + 1) : undefined) ??
+            input.identity ??
+            provider,
           identity: input.identity ?? null,
           data: encrypted,
         });
@@ -678,6 +702,29 @@ export class ModelCredentialsStorage extends FactoryStorageDomain {
     if (input.activate) await this.#setActive(tenant, provider, id);
     else await this.#ensureActive(tenant, provider);
     return (await this.listAccounts(tenant, provider)).find(row => row.id === id)!;
+  }
+
+  /** The pool account an incoming credential is the same subscription as, in mastracode's match order. */
+  async #findSameAccount(
+    pool: AccountDbRow[],
+    provider: string,
+    input: AddAccountInput,
+  ): Promise<AccountDbRow | undefined> {
+    const entries = await Promise.all(
+      pool.map(async row => ({
+        id: row.id,
+        active: false,
+        priority: row.priority,
+        ...(row.identity ? { identity: row.identity } : {}),
+        row,
+        credential: row.type === accountType(input.credential) ? await this.#decryptCredential(row.data) : undefined,
+      })),
+    );
+    return findSameSubscription(entries, {
+      identity: input.identity,
+      legacyId: input.credential.type === 'oauth' ? legacyAccountIdFor(provider, input.credential.refresh) : undefined,
+      sameCredential: entry => entry.credential !== undefined && sameCredential(entry.credential, input.credential),
+    })?.row;
   }
 
   /**

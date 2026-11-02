@@ -5,6 +5,7 @@
  * TTL cleanup on read.
  */
 
+import { createHash } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -348,7 +349,8 @@ describe('ModelCredentialsStorage account pools', () => {
       identity: 'acct-1',
       label: 'Work',
     });
-    expect(again).toMatchObject({ id: first.id, label: 'Work', status: 'ok', active: true });
+    // A match keeps the account's label; only the credential and status change.
+    expect(again).toMatchObject({ id: first.id, label: first.label, status: 'ok', active: true });
     expect(await store.getAccountCredential(alice, first.id)).toMatchObject({ access: 'at-v2' });
 
     await store.addAccount(alice, 'openai-codex', { credential: oauth('v3', Date.now() + 60_000), identity: 'acct-2' });
@@ -562,6 +564,120 @@ describe('ModelCredentialsStorage account priority', () => {
     // An empty list just renumbers the pool in its current order.
     await store.reorderAccounts(org, 'openai', []);
     expect((await store.listAccounts(org, 'openai')).map(acc => acc.id)).toEqual([ic, ia, id, ib]);
+  });
+
+  describe('re-adding an account matches it the way mastracode AuthStorage does', () => {
+    async function makeBackend() {
+      const backend = new LibSQLFactoryStorage({ id: 'credentials-test', url: ':memory:' });
+      const store = backend.registerDomain(new ModelCredentialsStorage());
+      await backend.init();
+      onTestFinished(() => backend.close());
+      return { backend, store };
+    }
+    const signIn = (refresh: string, access = `at-${refresh}`) => ({
+      type: 'oauth' as const,
+      access,
+      refresh,
+      expires: Date.now() + 60_000,
+    });
+
+    it('matches on provider identity even when the refresh token changed', async () => {
+      const { store } = await makeBackend();
+      const first = await store.addAccount(org, 'openai-codex', { credential: signIn('r-1'), identity: 'acct-1' });
+      const second = await store.addAccount(org, 'openai-codex', {
+        credential: signIn('r-2'),
+        identity: 'acct-2',
+        activate: true,
+      });
+
+      const again = await store.addAccount(org, 'openai-codex', {
+        credential: signIn('r-1b', 'at-new'),
+        identity: 'acct-1',
+        label: 'ignored on a match',
+        activate: true,
+      });
+      // Same id, label and priority; activate: true makes the matched account active again.
+      expect(again).toEqual({ ...first, active: true });
+      expect(await store.getAccountCredential(org, first.id)).toMatchObject({ access: 'at-new', refresh: 'r-1b' });
+      expect((await store.listAccounts(org, 'openai-codex')).map(a => [a.id, a.active])).toEqual([
+        [first.id, true],
+        [second.id, false],
+      ]);
+    });
+
+    it('matches the legacy id (refresh-token hash) of an account added before ids were minted', async () => {
+      const { backend, store } = await makeBackend();
+      const added = await store.addAccount(org, 'anthropic', { credential: signIn('r-legacy') });
+      const legacyId = `anthropic:${createHash('sha256').update('r-legacy').digest('hex').slice(0, 8)}`;
+      await backend.ops.updateMany('model_provider_accounts', { id: added.id }, { id: legacyId });
+      // Its stored credential has since rotated, so only the id ties it to the incoming tokens.
+      await store.setCredential(org, 'anthropic', signIn('r-rotated'));
+
+      await store.addAccount(org, 'anthropic', { credential: signIn('r-legacy', 'at-fresh'), activate: true });
+      const accounts = await store.listAccounts(org, 'anthropic');
+      expect(accounts.map(a => a.id)).toEqual([legacyId]);
+      expect(await store.getAccountCredential(org, legacyId)).toMatchObject({ access: 'at-fresh' });
+    });
+
+    it('leaves the active account alone when a match is re-added without activate', async () => {
+      const { store } = await makeBackend();
+      const first = await store.addAccount(org, 'openai-codex', { credential: signIn('r-1'), identity: 'acct-1' });
+      await store.addAccount(org, 'openai-codex', { credential: signIn('r-2'), identity: 'acct-2', activate: true });
+
+      const again = await store.addAccount(org, 'openai-codex', { credential: signIn('r-1b'), identity: 'acct-1' });
+      expect(again).toEqual({ ...first, active: false });
+    });
+
+    it('matches an identity-less provider on the same refresh token, keeping id, label and priority', async () => {
+      const { store } = await makeBackend();
+      const first = await store.addAccount(org, 'anthropic', {
+        credential: signIn('r-1'),
+        providerName: 'Anthropic',
+      });
+      await store.addAccount(org, 'anthropic', {
+        credential: signIn('r-2'),
+        providerName: 'Anthropic',
+        activate: true,
+      });
+
+      const again = await store.addAccount(org, 'anthropic', {
+        credential: signIn('r-1', 'at-reissued'),
+        providerName: 'Anthropic',
+        activate: true,
+      });
+      expect(again).toEqual({ ...first, active: true });
+      expect(await store.getAccountCredential(org, first.id)).toMatchObject({ access: 'at-reissued' });
+      expect(await store.listAccounts(org, 'anthropic')).toHaveLength(2);
+    });
+
+    it('adds a new account named "<Provider name> account N" when nothing matches', async () => {
+      const { store } = await makeBackend();
+      await store.addAccount(org, 'anthropic', { credential: signIn('r-1'), providerName: 'Anthropic' });
+      const second = await store.addAccount(org, 'anthropic', {
+        credential: signIn('r-2'),
+        providerName: 'Anthropic',
+        activate: true,
+      });
+
+      expect(second).toMatchObject({ label: 'Anthropic account 2', active: true, priority: 1 });
+      expect((await store.listAccounts(org, 'anthropic')).map(a => a.label)).toEqual([
+        'Anthropic account 1',
+        'Anthropic account 2',
+      ]);
+    });
+
+    it('tries identity before the refresh token', async () => {
+      const { store } = await makeBackend();
+      const byToken = await store.addAccount(org, 'openai-codex', { credential: signIn('r-shared') });
+      const byIdentity = await store.addAccount(org, 'openai-codex', {
+        credential: signIn('r-other'),
+        identity: 'acct-1',
+      });
+
+      await store.addAccount(org, 'openai-codex', { credential: signIn('r-shared', 'at-x'), identity: 'acct-1' });
+      expect(await store.getAccountCredential(org, byIdentity.id)).toMatchObject({ access: 'at-x' });
+      expect(await store.getAccountCredential(org, byToken.id)).toMatchObject({ access: 'at-r-shared' });
+    });
   });
 
   it('breaks priority ties by creation time', async () => {

@@ -13,7 +13,14 @@ import { splitMessageAttachments } from '@mastra/playground-ui/domains/chat/atta
 import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { MessageFactory } from '@mastra/react/ui';
-import type { FilePart, MessageRoleRenderers, ReasoningPart, TextPart, ToolInvocationPart } from '@mastra/react/ui';
+import type {
+  DataPart,
+  FilePart,
+  MessageRoleRenderers,
+  ReasoningPart,
+  TextPart,
+  ToolInvocationPart,
+} from '@mastra/react/ui';
 
 import { channelOrigin, messageAuthor } from '../services/message-author';
 import { replyCredentialLabel } from '../services/reply-credential';
@@ -31,6 +38,7 @@ import {
 } from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { RunErrorNotice } from './RunErrorNotice';
+import { RoutingNotice } from './RoutingNotice';
 import { ToolCard } from './tool/ToolCard';
 import { ToolFactory } from './ToolFactory';
 import {
@@ -255,6 +263,7 @@ export function MessageBubble({
       );
     },
     File: (part: FilePart) => <UserFilePartRenderer part={part} />,
+    Data: (part: DataPart) => <RoutingNotice part={part} />,
   };
 
   const view = messageEntryView(entry, parts);

@@ -67,6 +67,7 @@ import { buildFsRoutes } from './fs.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
+import { ProviderAccountRoutes } from './provider-accounts.js';
 import type { RouteAuth } from './route.js';
 import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
@@ -786,6 +787,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,
     }).routes(),
     ...new OAuthRoutes({
+      auth: deps.auth,
+      authStorage: deps.authStorage,
+      modelCredentials: deps.domains.modelCredentials,
+      onCredentialsChanged: invalidateTenantCredentialSnapshots,
+    }).routes(),
+    ...new ProviderAccountRoutes({
       auth: deps.auth,
       authStorage: deps.authStorage,
       modelCredentials: deps.domains.modelCredentials,

@@ -138,7 +138,7 @@ describe('provider method and scope are independent choices', () => {
     expect(await screen.findByRole('combobox')).toHaveValue('Claude Fable 5');
   });
 
-  it('warns that a personal API key replaces personal sign-in and saves only at user scope', async () => {
+  it("says a personal API key joins the provider's accounts and saves only at user scope", async () => {
     let saved = false;
     registerProvider(() => ({
       ...anthropic,
@@ -158,7 +158,7 @@ describe('provider method and scope are independent choices', () => {
     renderWithProviders(<PersonalProviderFactoryStep onContinue={vi.fn()} />);
     await user.click(await screen.findByRole('button', { name: 'Anthropic' }));
     const dialog = within(screen.getByRole('dialog'));
-    expect(dialog.getByText(/Only you can use this key.*replaces the provider sign-in/)).toBeInTheDocument();
+    expect(dialog.getByText(/Only you can use this key.*Adds this key to the provider's accounts/)).toBeInTheDocument();
     await user.type(dialog.getByLabelText('API key for Anthropic'), 'test-key');
     await user.click(dialog.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
