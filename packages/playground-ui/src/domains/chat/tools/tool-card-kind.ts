@@ -101,10 +101,16 @@ export function toolCardKind(
   if (isHiddenTool(toolName)) return 'hidden';
   // A question read back in history draws as a plain badge, but it is still a question: never folded away.
   if (toolName === 'ask_user') return 'ask_user';
-  // Built-in `request_connection` tool from `@mastra/connect`: a settled call renders
-  // as an interactive connect card; while running it falls back to a plain badge.
-  if (toolName === CONNECT_PROMPT_TOOL_NAME && isConnectPromptPayload(output)) return 'connect_prompt';
+  // Built-in `request_connection` tool from `@mastra/connect`: the run pauses on it with
+  // the prompt as its suspend payload, and the settled call keeps it as its result. Both
+  // render the connect card; a call with neither falls back to a plain badge.
   const { suspended } = toolInteraction(metadata, toolName, toolCallId);
+  if (
+    toolName === CONNECT_PROMPT_TOOL_NAME &&
+    (isConnectPromptPayload(output) || isConnectPromptPayload(suspended?.suspendPayload))
+  ) {
+    return 'connect_prompt';
+  }
   if (
     toolName === SUBMIT_PLAN_TOOL_ID ||
     hasSubmitPlanToolId(suspended?.suspendPayload) ||

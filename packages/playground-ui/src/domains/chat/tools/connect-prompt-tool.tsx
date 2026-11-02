@@ -1,7 +1,9 @@
 import { CheckIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
-import { useChatRunning, useChatSend } from '@/domains/chat/context/chat-context';
-import type { ConnectPromptPayload, SettledConnect } from '@/domains/connect';
+import type { MessageMetadata } from '../messages/message-metadata';
+import { toolInteraction } from './tool-card-kind';
+import { useToolCall } from '@/domains/chat/context/tool-call-context';
+import type { ConnectPromptPayload, ConnectPromptResume, SettledConnect } from '@/domains/connect';
 import { isConnectPromptPayload, ProviderLogo, usePendingConnect } from '@/domains/connect';
 import { Button } from '@/ds/components/Button';
 import { DataList } from '@/ds/components/DataList';
@@ -12,9 +14,30 @@ import { Icon } from '@/ds/icons/Icon';
 export { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
 
 export interface ConnectPromptToolProps {
+  toolName: string;
+  toolCallId: string;
   output: unknown;
+  metadata?: MessageMetadata;
   /** Historical rendering: show the card but suppress the connect action. */
   readOnly?: boolean;
+}
+
+/**
+ * The prompt this card renders: the finished call's result, or the payload
+ * the run paused with while it waits for the user to connect.
+ */
+function connectPromptFor({
+  toolName,
+  toolCallId,
+  output,
+  metadata,
+}: Pick<ConnectPromptToolProps, 'toolName' | 'toolCallId' | 'output' | 'metadata'>):
+  | { payload: ConnectPromptPayload; paused: boolean }
+  | undefined {
+  if (isConnectPromptPayload(output)) return { payload: output, paused: false };
+  const suspendPayload = toolInteraction(metadata, toolName, toolCallId).suspended?.suspendPayload;
+  if (isConnectPromptPayload(suspendPayload)) return { payload: suspendPayload, paused: true };
+  return undefined;
 }
 
 /**
@@ -24,28 +47,48 @@ export interface ConnectPromptToolProps {
  * the mounted `/connect` routes, drives the OAuth flow in a popup through the
  * server's launch gate (which verifies this browser owns the pending session
  * before redirecting to the vendor), and polls until the connection settles.
- * Once it activates, the card sends a follow-up message so the agent carries
- * on with the task instead of waiting for the user to prompt it again.
+ *
+ * The tool pauses the agent run while the card is up. Once the connection
+ * activates, the card resumes the paused call with the connected provider, so
+ * the agent continues with the tool's result rather than a chat message.
  */
-export const ConnectPromptTool = ({ output, readOnly = false }: ConnectPromptToolProps) => {
-  if (!isConnectPromptPayload(output)) return null;
-  return <ConnectPromptCard payload={output} readOnly={readOnly} />;
+export const ConnectPromptTool = ({
+  toolName,
+  toolCallId,
+  output,
+  metadata,
+  readOnly = false,
+}: ConnectPromptToolProps) => {
+  const prompt = connectPromptFor({ toolName, toolCallId, output, metadata });
+  if (!prompt) return null;
+  return (
+    <ConnectPromptCard toolCallId={toolCallId} payload={prompt.payload} paused={prompt.paused} readOnly={readOnly} />
+  );
 };
 
-const ConnectPromptCard = ({ payload, readOnly }: { payload: ConnectPromptPayload; readOnly: boolean }) => {
-  const { pending, connect, connectedProviders, isCreating, createError, settled } = usePendingConnect();
-  const send = useChatSend();
-  const { isRunning } = useChatRunning();
-  const continuedRef = useRef<SettledConnect | null>(null);
+interface ConnectPromptCardProps {
+  toolCallId: string;
+  payload: ConnectPromptPayload;
+  /** The run is waiting on this call, so an activation resumes it. */
+  paused: boolean;
+  readOnly: boolean;
+}
 
-  // Continue the turn once per activation. A connection that lands while the
-  // agent is still responding waits for that turn to end.
+const ConnectPromptCard = ({ toolCallId, payload, paused, readOnly }: ConnectPromptCardProps) => {
+  const { pending, connect, connectedProviders, isCreating, createError, settled } = usePendingConnect();
+  const { approveToolcall, isRunning, toolCallApprovals } = useToolCall();
+  const resumedRef = useRef<SettledConnect | null>(null);
+  const alreadyResumed = toolCallApprovals[toolCallId] !== undefined;
+
+  // Resume once per activation. A run that is still streaming can't be resumed
+  // yet, so an activation that lands mid-run waits for it to stop.
   useEffect(() => {
-    if (readOnly || settled?.status !== 'active' || isRunning || continuedRef.current === settled) return;
-    continuedRef.current = settled;
-    const provider = payload.providers.find(candidate => candidate.id === settled.provider);
-    void send({ message: `I've connected ${provider?.displayName ?? settled.provider}.` });
-  }, [readOnly, settled, isRunning, payload.providers, send]);
+    if (readOnly || !paused || alreadyResumed || isRunning) return;
+    if (settled?.status !== 'active' || resumedRef.current === settled) return;
+    resumedRef.current = settled;
+    const resume: ConnectPromptResume = { provider: settled.provider, status: 'active' };
+    approveToolcall(toolCallId, resume);
+  }, [readOnly, paused, alreadyResumed, isRunning, settled, approveToolcall, toolCallId]);
 
   const errorMessage =
     createError?.message ??

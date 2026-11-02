@@ -13,8 +13,8 @@ import {
   connectPromptSession,
   connectPromptStatusActive,
 } from './fixtures/connect-prompt';
-import type { ChatSendArgs } from '@/domains/chat/context/chat-context';
-import { ChatRunningContext, ChatSendContext } from '@/domains/chat/context/chat-context';
+import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
+import type { MessageMetadata } from '@/domains/chat/messages/message-metadata';
 import { server } from '@/test/msw-server';
 
 // The Nango frontend SDK opens real windows and websockets, so it is the one
@@ -49,33 +49,62 @@ function AgentToolNames() {
   );
 }
 
+const toolCallId = 'call-request-connection';
+
+/** Message metadata for a run paused on `request_connection` with this prompt. */
+function suspendedOn(payload: unknown): MessageMetadata {
+  return { suspendedTools: { [toolCallId]: { suspendPayload: payload, runId: 'run-1' } } };
+}
+
+/**
+ * Renders the card the way ToolCard does. By default the run is paused on the
+ * prompt (no output yet); pass `output` for a call that already finished.
+ */
 function renderConnectPrompt({
   output,
+  metadata = output === undefined ? suspendedOn(connectPromptPayload) : undefined,
   readOnly,
   isRunning = false,
+  toolCallApprovals = {},
+  children,
 }: {
-  output: unknown;
+  output?: unknown;
+  metadata?: MessageMetadata;
   readOnly?: boolean;
   isRunning?: boolean;
-}) {
+  toolCallApprovals?: Record<string, { status: 'approved' | 'declined' }>;
+  children?: React.ReactNode;
+} = {}) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const sent: ChatSendArgs[] = [];
-  const send = (args: ChatSendArgs) => {
-    sent.push(args);
-  };
+  const approveToolcall = vi.fn<(toolCallId: string, resumeData?: unknown) => void>();
   const tree = (running: boolean) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <ChatRunningContext.Provider value={{ isRunning: running, cancelRun: () => {}, canSendWhileStreaming: false }}>
-          <ChatSendContext.Provider value={{ send }}>
-            <ConnectPromptTool output={output} readOnly={readOnly} />
-          </ChatSendContext.Provider>
-        </ChatRunningContext.Provider>
+        <ToolCallProvider
+          approveToolcall={approveToolcall}
+          declineToolcall={vi.fn()}
+          approveToolcallGenerate={vi.fn()}
+          declineToolcallGenerate={vi.fn()}
+          approveNetworkToolcall={vi.fn()}
+          declineNetworkToolcall={vi.fn()}
+          isRunning={running}
+          toolCallApprovals={toolCallApprovals}
+          networkToolCallApprovals={{}}
+        >
+          {children}
+          <ConnectPromptTool
+            toolName="request_connection"
+            toolCallId={toolCallId}
+            output={output}
+            metadata={metadata}
+            readOnly={readOnly}
+          />
+        </ToolCallProvider>
       </QueryClientProvider>
     </MastraReactProvider>
   );
   const result = render(tree(isRunning));
-  return { ...result, sent, setRunning: (running: boolean) => result.rerender(tree(running)) };
+  return { ...result, approveToolcall, setRunning: (running: boolean) => result.rerender(tree(running)) };
 }
 
 /** Serves a headless Linear flow whose status poll settles active. */
@@ -105,9 +134,9 @@ afterEach(() => {
 });
 
 describe('ConnectPromptTool', () => {
-  describe('when the tool output is a connect-prompt payload', () => {
+  describe('when the run is paused on a connect prompt', () => {
     it('renders each provider with its connection state', async () => {
-      renderConnectPrompt({ output: connectPromptPayload });
+      renderConnectPrompt();
 
       const card = await screen.findByRole('region', { name: 'Connect an account' });
       expect(card.textContent).toContain('Linear');
@@ -118,7 +147,16 @@ describe('ConnectPromptTool', () => {
     });
   });
 
-  describe('when the output is not a connect-prompt payload', () => {
+  describe('when the call finished with a connect-prompt result', () => {
+    it('renders the providers from the result', async () => {
+      renderConnectPrompt({ output: { ...connectPromptPayload, message: 'Linear connected successfully.' } });
+
+      const card = await screen.findByRole('region', { name: 'Connect an account' });
+      expect(card.textContent).toContain('Linear');
+    });
+  });
+
+  describe('when neither the output nor the pause carries a connect-prompt payload', () => {
     it('renders nothing', () => {
       const { container } = renderConnectPrompt({ output: { anything: true } });
       expect(container.innerHTML).toBe('');
@@ -127,7 +165,7 @@ describe('ConnectPromptTool', () => {
 
   describe('when rendering read-only history', () => {
     it('disables the connect action', async () => {
-      renderConnectPrompt({ output: connectPromptPayload, readOnly: true });
+      renderConnectPrompt({ readOnly: true });
       const button = await screen.findByRole('button', { name: 'Connect' });
       expect((button as HTMLButtonElement).disabled).toBe(true);
     });
@@ -146,7 +184,7 @@ describe('ConnectPromptTool', () => {
         ),
       );
 
-      renderConnectPrompt({ output: connectPromptPayload });
+      renderConnectPrompt();
       fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
       // The poll settles active and the row flips to connected.
@@ -163,13 +201,16 @@ describe('ConnectPromptTool', () => {
   });
 
   describe('when the connection activates', () => {
-    it('continues the agent turn with a follow-up message', async () => {
+    it('resumes the paused tool with the connected provider instead of sending a chat message', async () => {
       linearConnectsHeadlessly();
 
-      const { sent } = renderConnectPrompt({ output: connectPromptPayload });
+      const { approveToolcall } = renderConnectPrompt();
       fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
-      await waitFor(() => expect(sent).toEqual([{ message: "I've connected Linear." }]));
+      await waitFor(() =>
+        expect(approveToolcall).toHaveBeenCalledWith(toolCallId, { provider: 'linear', status: 'active' }),
+      );
+      expect(approveToolcall).toHaveBeenCalledTimes(1);
     });
 
     it('refreshes the agent so its tool list shows the new provider tools', async () => {
@@ -184,15 +225,7 @@ describe('ConnectPromptTool', () => {
           HttpResponse.json(linearActive ? connectAgentWithLinear : connectAgentBeforeLinear),
         ),
       );
-      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-      render(
-        <MastraReactProvider baseUrl={BASE_URL}>
-          <QueryClientProvider client={queryClient}>
-            <AgentToolNames />
-            <ConnectPromptTool output={connectPromptPayload} />
-          </QueryClientProvider>
-        </MastraReactProvider>,
-      );
+      renderConnectPrompt({ children: <AgentToolNames /> });
       const tools = await screen.findByRole('list', { name: 'Agent tools' });
       await waitFor(() => expect(tools.textContent).toContain('request_connection'));
       expect(tools.textContent).not.toContain('linear_list_issues');
@@ -203,18 +236,44 @@ describe('ConnectPromptTool', () => {
     });
   });
 
-  describe('when the connection activates while the agent is still responding', () => {
-    it('waits for the turn to finish before continuing it', async () => {
+  describe('when the connection activates while the agent is still running', () => {
+    it('waits for the run to stop before resuming', async () => {
       linearConnectsHeadlessly();
 
-      const { sent, setRunning } = renderConnectPrompt({ output: connectPromptPayload, isRunning: true });
+      const { approveToolcall, setRunning } = renderConnectPrompt({ isRunning: true });
       fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull());
-      expect(sent).toEqual([]);
+      expect(approveToolcall).not.toHaveBeenCalled();
 
       setRunning(false);
 
-      await waitFor(() => expect(sent).toEqual([{ message: "I've connected Linear." }]));
+      await waitFor(() =>
+        expect(approveToolcall).toHaveBeenCalledWith(toolCallId, { provider: 'linear', status: 'active' }),
+      );
+    });
+  });
+
+  describe('when the paused call was already resumed', () => {
+    it('does not resume it again', async () => {
+      linearConnectsHeadlessly();
+
+      const { approveToolcall } = renderConnectPrompt({ toolCallApprovals: { [toolCallId]: { status: 'approved' } } });
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull());
+
+      expect(approveToolcall).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the call already finished and the user connects from its card', () => {
+    it('has nothing to resume', async () => {
+      linearConnectsHeadlessly();
+
+      const { approveToolcall } = renderConnectPrompt({ output: connectPromptPayload });
+      fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull());
+
+      expect(approveToolcall).not.toHaveBeenCalled();
     });
   });
 
@@ -240,7 +299,7 @@ describe('ConnectPromptTool', () => {
         ],
       };
 
-      renderConnectPrompt({ output });
+      renderConnectPrompt({ metadata: suspendedOn(output) });
       fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
       await waitFor(() => expect(popup.location.href).toBe(launchPath));
@@ -263,12 +322,12 @@ describe('ConnectPromptTool', () => {
       const { AuthError } = await import('@nangohq/frontend');
       nangoMocks.auth.mockRejectedValueOnce(new AuthError('closed', 'window_closed'));
 
-      const { sent } = renderConnectPrompt({ output: connectPromptPayload });
+      const { approveToolcall } = renderConnectPrompt();
       fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
       const alert = await screen.findByRole('alert');
-      // Nothing to continue with: the agent turn is left alone.
-      expect(sent).toEqual([]);
+      // The run stays paused so the user can retry.
+      expect(approveToolcall).not.toHaveBeenCalled();
       expect(alert.textContent).toMatch(/window was closed/i);
       // The flow settled, so the action is available to retry.
       expect((screen.getByRole('button', { name: 'Connect' }) as HTMLButtonElement).disabled).toBe(false);
@@ -288,7 +347,7 @@ describe('ConnectPromptTool', () => {
         ),
       );
 
-      renderConnectPrompt({ output: connectPromptPayload });
+      renderConnectPrompt();
       fireEvent.click(await screen.findByRole('button', { name: 'Connect' }));
 
       const link = await screen.findByRole('link', { name: 'Open the connect window' });

@@ -33,7 +33,21 @@ export interface ConnectPromptPayload {
   /** Echoed when the agent asked for one specific provider and it is connectable. */
   requestedProvider?: string;
   providers: ConnectPromptProvider[];
+  /** Outcome for the model once a paused prompt resumes, e.g. "Linear connected successfully." */
+  message?: string;
 }
+
+/**
+ * What a chat UI resumes a paused `request_connection` call with once the
+ * user's connection settles. The tool re-checks the platform rather than
+ * trusting it, so a stale or forged resume can't report a false success.
+ */
+export const connectPromptResumeSchema = z.object({
+  provider: z.string().min(1),
+  status: z.literal('active'),
+});
+
+export type ConnectPromptResume = z.infer<typeof connectPromptResumeSchema>;
 
 export interface ConnectPromptInputs {
   catalog: IntegrationCatalogEntry[];
@@ -68,8 +82,8 @@ export function buildConnectPromptTool({
     description:
       'Ask the current user to connect a provider account (e.g. Linear, Slack). ' +
       'Call this when a task needs a provider whose tools are unavailable because no account is connected, ' +
-      'or when the user asks to connect one. The result renders as a connect prompt in the UI — ' +
-      'tell the user to use it, and do not fabricate links. ' +
+      'or when the user asks to connect one. The call renders a connect prompt in the UI and waits until ' +
+      'the user connects; its result then says whether the connection succeeded. Do not fabricate links. ' +
       'Pass `provider` to request one specific provider; omit it to list everything the user can connect.',
     inputSchema: z.object({
       provider: z
@@ -77,7 +91,8 @@ export function buildConnectPromptTool({
         .optional()
         .describe('Provider id to request (e.g. "linear"). Omit to list all connectable providers.'),
     }),
-    execute: async (input): Promise<ConnectPromptPayload> => {
+    resumeSchema: connectPromptResumeSchema,
+    execute: async (input, context): Promise<ConnectPromptPayload> => {
       const { catalog, connections, allowlist } = await loadInputs();
 
       // Provider ids are compared case-insensitively because catalog ids are
@@ -104,12 +119,31 @@ export function buildConnectPromptTool({
       const requestedId = input.provider?.toLowerCase();
       const requested =
         requestedId === undefined ? undefined : connectable.find(entry => entry.id.toLowerCase() === requestedId);
-      if (requested) {
-        return { type: 'connect-prompt', requestedProvider: requested.id, providers: [toProvider(requested)] };
-      }
-      // Unknown or omitted provider: return the full connectable set so the
+      // Unknown or omitted provider: list the full connectable set so the
       // agent can correct itself instead of failing.
-      return { type: 'connect-prompt', providers: connectable.map(toProvider) };
+      const payload: ConnectPromptPayload = requested
+        ? { type: 'connect-prompt', requestedProvider: requested.id, providers: [toProvider(requested)] }
+        : { type: 'connect-prompt', providers: connectable.map(toProvider) };
+
+      const agent = context?.agent;
+      const resumed = agent?.resumeData as ConnectPromptResume | undefined;
+      if (resumed) {
+        const provider = payload.providers.find(entry => entry.id.toLowerCase() === resumed.provider.toLowerCase());
+        const name = provider?.displayName ?? resumed.provider;
+        return {
+          ...payload,
+          message: provider?.connected ? `${name} connected successfully.` : `${name} is not connected yet.`,
+        };
+      }
+
+      // Nothing to wait for: the requested provider already works.
+      if (requested && payload.providers[0]?.connected) return payload;
+
+      // Pause the run until the user connects; the chat UI resumes it with the
+      // settled provider so the agent continues without a user message.
+      // Outside an agent run there is nothing to resume, so return the prompt.
+      if (agent?.suspend) await agent.suspend(payload);
+      return payload;
     },
   });
 }

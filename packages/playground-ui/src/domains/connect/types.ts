@@ -112,6 +112,14 @@ export interface ConnectPromptPayload {
   type: 'connect-prompt';
   requestedProvider?: string;
   providers: ConnectPromptProvider[];
+  /** Outcome for the model once a paused prompt resumes, e.g. "Linear connected successfully." */
+  message?: string;
+}
+
+/** What the card resumes a paused `request_connection` call with once a connection activates. */
+export interface ConnectPromptResume {
+  provider: string;
+  status: 'active';
 }
 
 /** Narrows an arbitrary tool output to a connect-prompt payload. */
