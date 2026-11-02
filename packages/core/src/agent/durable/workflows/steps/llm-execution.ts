@@ -89,7 +89,7 @@ import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../uti
 import { createRunMessageList } from '../../utils/run-message-list';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
-import { baseIterationStateSchema, durableOptionsSchema } from '../shared/schemas';
+import { baseIterationStateSchema, durableOptionsSchema, responseRecordSchema } from '../shared/schemas';
 
 /**
  * Detect a run-level budget expiry (`modelSettings.timeout.totalMs`, #21724
@@ -236,7 +236,7 @@ const durableLLMOutputSchema = z.object({
   // Time to first token of the inference that streamed that chunk; kept with it
   timeToFirstTokenMs: z.number().optional(),
   // Provider id and serving model of the response, only when the provider sent one
-  response: z.object({ id: z.string().optional(), modelId: z.string().optional() }).optional(),
+  response: responseRecordSchema.optional(),
 });
 
 /**
