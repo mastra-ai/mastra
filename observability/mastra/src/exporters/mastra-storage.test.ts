@@ -2029,4 +2029,33 @@ describe('MastraStorageExporter service name', () => {
       await mastra.shutdown();
     }
   });
+
+  it('stores a service name set on update or end when the row is written at span end', async () => {
+    const storage = new InMemoryStore();
+    const observability = new Observability({
+      configs: {
+        default: { serviceName: 'checkout-api', exporters: [new MastraStorageExporter({ strategy: 'insert-only' })] },
+      },
+    });
+    const mastra = new Mastra({ storage, observability, logger: false });
+    try {
+      const tracing = observability.getDefaultInstance()!;
+      const updated = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'updated agent' });
+      updated.update({ metadata: { serviceName: 'billing-api' } });
+      updated.end();
+      const ended = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'ended agent' });
+      ended.end({ metadata: { serviceName: 'refunds-api' } });
+      await tracing.flush();
+
+      const store = (await storage.getStore('observability'))!;
+      expect((await store.getTrace({ traceId: updated.traceId }))?.spans.map(span => span.serviceName)).toEqual([
+        'billing-api',
+      ]);
+      expect((await store.getTrace({ traceId: ended.traceId }))?.spans.map(span => span.serviceName)).toEqual([
+        'refunds-api',
+      ]);
+    } finally {
+      await mastra.shutdown();
+    }
+  });
 });
