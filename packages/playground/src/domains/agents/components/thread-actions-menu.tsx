@@ -6,10 +6,11 @@ export interface ThreadActionsMenuProps {
   onUnpin?: () => void;
   onRename?: () => void;
   onDelete?: () => void;
+  onReplay?: () => void;
 }
 
-export const ThreadActionsMenu = ({ onPin, onUnpin, onRename, onDelete }: ThreadActionsMenuProps) => {
-  if (!onPin && !onUnpin && !onRename && !onDelete) return null;
+export const ThreadActionsMenu = ({ onPin, onUnpin, onRename, onDelete, onReplay }: ThreadActionsMenuProps) => {
+  if (!onPin && !onUnpin && !onRename && !onDelete && !onReplay) return null;
 
   return (
     <DropdownMenu>
@@ -17,6 +18,7 @@ export const ThreadActionsMenu = ({ onPin, onUnpin, onRename, onDelete }: Thread
         <EllipsisVertical />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" finalFocus={false}>
+        {onReplay && <DropdownMenu.Item onClick={onReplay}>Create replay dataset</DropdownMenu.Item>}
         {onPin && (
           <DropdownMenu.Item onClick={onPin}>
             <Pin />

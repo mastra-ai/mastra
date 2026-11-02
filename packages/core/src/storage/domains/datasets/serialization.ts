@@ -69,8 +69,10 @@ function findSerializationIssue(
   return undefined;
 }
 
-type SerializableDatasetItemPayload = Partial<Omit<DatasetItemPayload, 'scorerIds'>> &
-  Pick<UpdateDatasetItemInput, 'scorerIds'>;
+type SerializableDatasetItemPayload = Partial<
+  Omit<DatasetItemPayload, 'scorerIds' | 'memorySeed' | 'toolMockMatchMode'>
+> &
+  Pick<UpdateDatasetItemInput, 'scorerIds' | 'memorySeed' | 'toolMockMatchMode'>;
 
 export function validateDatasetItemPayloadSerialization(payload: SerializableDatasetItemPayload, path: string): void {
   const ancestors = new WeakMap<object, string>();

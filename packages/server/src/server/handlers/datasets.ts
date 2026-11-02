@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import * as coreDatasets from '@mastra/core/datasets';
 import { MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { resolveModelConfig } from '@mastra/core/llm';
@@ -11,6 +12,9 @@ import type { StatusCode } from '../http-exception';
 import { successResponseSchema } from '../schemas/common';
 import {
   datasetIdPathParams,
+  itemsFromThreadBodySchema,
+  itemsFromThreadResponseSchema,
+  replayPreviewResponseSchema,
   datasetAndExperimentIdPathParams,
   experimentIdPathParams,
   datasetExperimentAndItemIdPathParams,
@@ -57,7 +61,83 @@ import {
   submitExperimentResultBodySchema,
 } from '../schemas/datasets';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import type { Context } from '../types';
 import { handleError } from './error';
+import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId } from './utils';
+
+async function replaySource({
+  mastra,
+  requestContext,
+  agentId,
+  threadId,
+  resourceId,
+  historyLimit,
+  mode,
+}: Context & { requestContext: RequestContext } & z.infer<typeof itemsFromThreadBodySchema>) {
+  if (typeof coreDatasets.datasetItemsFromThread !== 'function')
+    throw new HTTPException(501, {
+      message: 'Replay datasets require a newer @mastra/core with thread replay support.',
+    });
+  const agent = mastra.getAgent(agentId);
+  const memory = await agent.getMemory({ requestContext });
+  if (!memory) throw new HTTPException(400, { message: 'This agent has no memory to replay.' });
+  const effectiveThreadId = getEffectiveThreadId(requestContext, threadId)!;
+  const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
+  const thread = await memory.getThreadById({ threadId: effectiveThreadId });
+  if (!thread) throw new HTTPException(404, { message: 'Replay source thread not found.' });
+  await enforceThreadAccess({ mastra, requestContext, threadId: effectiveThreadId, thread, effectiveResourceId });
+  const items = await coreDatasets.datasetItemsFromThread({
+    memory,
+    threadId: effectiveThreadId,
+    resourceId: effectiveResourceId,
+    historyLimit,
+    mode,
+  });
+  return {
+    items,
+    turnCount: items[0]?.metadata.replay.turnCount ?? 0,
+    ...(mode === 'conversation'
+      ? {}
+      : { historyLimit: historyLimit ?? memory.getMergedThreadConfig().lastMessages ?? 10 }),
+  };
+}
+
+export const PREVIEW_REPLAY_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/replay/preview',
+  responseType: 'json',
+  bodySchema: itemsFromThreadBodySchema,
+  responseSchema: replayPreviewResponseSchema,
+  summary: 'Preview replay turns',
+  description: 'Counts completed turns without creating dataset items',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async params => {
+    assertDatasetsAvailable();
+    const { turnCount, historyLimit } = await replaySource(params);
+    return { turnCount, ...(historyLimit !== undefined ? { historyLimit } : {}) };
+  },
+});
+
+export const ITEMS_FROM_THREAD_ROUTE = createRoute({
+  method: 'POST',
+  path: '/datasets/:datasetId/items/from-thread',
+  responseType: 'json',
+  pathParamSchema: datasetIdPathParams,
+  bodySchema: itemsFromThreadBodySchema,
+  responseSchema: itemsFromThreadResponseSchema,
+  summary: 'Create replay items from a thread',
+  description: 'Creates replay items from completed turns, optionally grouped into one conversation',
+  tags: ['Datasets'],
+  requiresAuth: true,
+  handler: async params => {
+    assertDatasetsAvailable();
+    const dataset = await params.mastra.datasets.get({ id: params.datasetId });
+    const { items, turnCount } = await replaySource(params);
+    const added = items.length ? await dataset.addItems({ items }) : [];
+    return { itemIds: added.map(item => item.id), turnCount };
+  },
+});
 
 // Result rows don't store targetType; attach the parent experiment's so clients can narrow `output`.
 type ExperimentResultResponse = z.infer<typeof experimentResultResponseSchema>;
@@ -469,6 +549,8 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        toolMockMatchMode,
+        memorySeed,
         scorerIds,
       } = params as {
         externalId?: string | null;
@@ -480,6 +562,8 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory?: unknown;
         toolMocks?: DatasetItemToolMock[];
         unmockedToolPolicy?: 'allow' | 'deny';
+        toolMockMatchMode?: 'ordered' | 'lookup';
+        memorySeed?: { workingMemory?: string };
         scorerIds?: string[];
       };
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -493,6 +577,8 @@ export const ADD_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        toolMockMatchMode,
+        memorySeed,
         scorerIds,
       });
     } catch (error) {
@@ -569,6 +655,8 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        toolMockMatchMode,
+        memorySeed,
         scorerIds,
       } = params as {
         input?: unknown;
@@ -578,6 +666,8 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         expectedTrajectory?: unknown;
         toolMocks?: DatasetItemToolMock[];
         unmockedToolPolicy?: 'allow' | 'deny';
+        toolMockMatchMode?: 'ordered' | 'lookup';
+        memorySeed?: { workingMemory?: string };
         scorerIds?: string[] | null;
       };
       const ds = await mastra.datasets.get({ id: datasetId });
@@ -595,6 +685,8 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         expectedTrajectory,
         toolMocks,
         unmockedToolPolicy,
+        toolMockMatchMode,
+        memorySeed,
         scorerIds,
       });
     } catch (error) {
@@ -897,6 +989,8 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds,
         version,
         agentVersion,
+        toolMockMatchMode,
+        unmockedToolPolicy,
         agentModel,
         maxConcurrency,
         provenance,
@@ -914,6 +1008,8 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
+        toolMockMatchMode?: 'ordered' | 'lookup';
+        unmockedToolPolicy?: 'allow' | 'deny';
         agentModel?: { provider: string; modelId: string };
         maxConcurrency?: number;
         provenance?: {
@@ -972,6 +1068,8 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorers: scorerIds,
         version,
         agentVersion,
+        toolMockMatchMode,
+        unmockedToolPolicy,
         agentModel: agentModel ? `${agentModel.provider}/${agentModel.modelId}` : undefined,
         maxConcurrency,
         provenance,
@@ -1437,6 +1535,8 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
           expectedTrajectory?: unknown;
           toolMocks?: DatasetItemToolMock[];
           unmockedToolPolicy?: 'allow' | 'deny';
+          toolMockMatchMode?: 'ordered' | 'lookup';
+          memorySeed?: { workingMemory?: string };
           scorerIds?: string[];
           metadata?: Record<string, unknown>;
           source?: DatasetItemSource;

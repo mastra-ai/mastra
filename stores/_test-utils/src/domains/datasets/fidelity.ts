@@ -32,6 +32,36 @@ const jsonValues = [
 ];
 
 export function createDatasetFidelityTests(getStorage: () => DatasetsStorage) {
+  it('preserves replay seeds and matching policy through versions, batches, and clearing', async () => {
+    const storage = getStorage();
+    const dataset = await storage.createDataset({ name: 'replay' });
+    const replay = {
+      memorySeed: { workingMemory: '{"name":"Ada"}' },
+      toolMockMatchMode: 'lookup' as const,
+      source: { type: 'thread' as const, referenceId: 'golden' },
+    };
+    const item = await storage.addItem({ datasetId: dataset.id, input: 'Hello', ...replay });
+    expect(await storage.getItemById({ id: item.id })).toMatchObject(replay);
+    const updated = await storage.updateItem({ datasetId: dataset.id, id: item.id, input: 'Updated' });
+    expect(updated).toMatchObject(replay);
+    expect(
+      (await storage.listItems({ datasetId: dataset.id, pagination: { page: 0, perPage: 10 } })).items[0],
+    ).toMatchObject(replay);
+    expect((await storage.getItemsByVersion({ datasetId: dataset.id, version: item.datasetVersion }))[0]).toMatchObject(
+      replay,
+    );
+    await storage.updateItem({ datasetId: dataset.id, id: item.id, memorySeed: null, toolMockMatchMode: null });
+    const cleared = await storage.getItemById({ id: item.id });
+    expect(cleared?.memorySeed).toBeUndefined();
+    expect(cleared?.toolMockMatchMode).toBeUndefined();
+    expect(
+      (await storage.getItemHistory(item.id)).find(row => row.datasetVersion === item.datasetVersion),
+    ).toMatchObject(replay);
+    const batch = await storage.batchInsertItems({ datasetId: dataset.id, items: [{ input: 'Batch', ...replay }] });
+    expect(batch[0]).toMatchObject(replay);
+    expect(await storage.getItemById({ id: batch[0]!.id })).toMatchObject(replay);
+  });
+
   it('returns the same optional configuration after creation, lookup, and listing', async () => {
     const storage = getStorage();
     const dataset = await storage.createDataset({ name: 'empty' });

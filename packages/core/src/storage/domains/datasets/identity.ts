@@ -13,6 +13,8 @@ const payloadFields = [
   'groundTruth',
   'expectedTrajectory',
   'toolMocks',
+  'memorySeed',
+  'toolMockMatchMode',
   'unmockedToolPolicy',
   'scorerIds',
   'requestContext',

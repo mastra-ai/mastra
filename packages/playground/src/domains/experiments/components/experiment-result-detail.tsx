@@ -115,7 +115,7 @@ export function ExperimentResultDetail({
         scores={scores}
         onScoreClick={handleScoreClick}
         featuredScoreId={featuredScoreId}
-        onShowTrace={result?.traceId ? () => showTrace(result.traceId) : undefined}
+        onShowTrace={traceId => showTrace(traceId ?? result?.traceId)}
         feedbackTabSlot={
           withFeedback ? ({ traceId }) => <TraceFeedbackTab key={traceId} traceId={traceId} /> : undefined
         }

@@ -306,7 +306,7 @@ export type ToolCallStep = TrajectoryStepBase & {
   /** Arguments passed to the tool */
   toolArgs?: Record<string, unknown>;
   /** Result returned by the tool */
-  toolResult?: Record<string, unknown>;
+  toolResult?: unknown;
   /** Whether the tool call succeeded */
   success?: boolean;
 };
@@ -316,7 +316,7 @@ export type McpToolCallStep = TrajectoryStepBase & {
   /** Arguments passed to the MCP tool */
   toolArgs?: Record<string, unknown>;
   /** Result returned by the MCP tool */
-  toolResult?: Record<string, unknown>;
+  toolResult?: unknown;
   /** The MCP server that handled this tool call */
   mcpServer?: string;
   /** Whether the tool call succeeded */
@@ -328,7 +328,7 @@ export type ProviderToolCallStep = TrajectoryStepBase & {
   /** Arguments passed to the server-side tool */
   toolArgs?: Record<string, unknown>;
   /** Result returned by the server-side tool */
-  toolResult?: Record<string, unknown>;
+  toolResult?: unknown;
   /** Whether the tool call succeeded */
   success?: boolean;
 };

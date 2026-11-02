@@ -9,10 +9,11 @@ import { useDatasetExperiment, useDatasetExperimentResults, useExperiment } from
 import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
+import { sideDurationMs } from '@/domains/experiments/components/comparison/build-comparison-rows';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
 import { ExperimentHeaderActions } from '@/domains/experiments/components/experiment-header-actions';
 import { ExperimentItemSidePanel } from '@/domains/experiments/components/experiment-item-side-panel';
@@ -27,6 +28,7 @@ import {
   ExperimentCrumbStatusIcon,
 } from '@/domains/experiments/experiment-crumb';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
+import { compareReplayOutputs, replayContext } from '@/domains/experiments/utils/replay';
 import { navCrumb } from '@/domains/navigation/crumbs';
 import type { CrumbDef } from '@/domains/navigation/crumbs';
 
@@ -77,11 +79,12 @@ function ExperimentPage() {
   const isSettled = experiment?.status === 'completed' || experiment?.status === 'failed';
 
   const {
-    data: results,
+    data: unsortedResults,
     isLoading: resultsLoading,
     setEndOfListElement,
     isFetchingNextPage,
     hasNextPage,
+    fetchNextPage,
   } = useDatasetExperimentResults({
     datasetId,
     experimentId: experimentId ?? '',
@@ -89,7 +92,22 @@ function ExperimentPage() {
     queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) && isSettled },
   });
 
+  const hasReplayResults = unsortedResults?.some(result => replayContext(result.output));
+  // A turn's completion time can differ from its position in the recording.
+  // Fetch remaining pages so replay navigation spans the whole conversation.
+  useEffect(() => {
+    if (hasReplayResults && hasNextPage && !isFetchingNextPage) void fetchNextPage();
+  }, [hasReplayResults, hasNextPage, isFetchingNextPage, fetchNextPage]);
+
   const { supportsMetrics } = useObservabilityStorageCapabilities();
+  const results = unsortedResults?.slice().sort((a, b) => compareReplayOutputs(a.output, b.output));
+  const hasConversations = results?.some(result => replayContext(result.output)?.mode === 'conversation');
+  const itemDurations = results?.map(sideDurationMs).filter((duration): duration is number => duration !== null);
+  const itemDurationMs = hasConversations
+    ? !hasNextPage && itemDurations?.length === results?.length && itemDurations?.length
+      ? itemDurations.reduce((sum, duration) => sum + duration, 0) / itemDurations.length
+      : null
+    : undefined;
   const experimentMetrics = useExperimentMetrics({
     experimentId,
     experimentStatus: experiment?.status,
@@ -178,7 +196,7 @@ function ExperimentPage() {
           <h1 className="sr-only">{experimentId}</h1>
           {isSettled ? (
             <div className="grid content-start gap-4">
-              <ExperimentKpis experiment={experiment} metrics={experimentMetrics} />
+              <ExperimentKpis experiment={experiment} metrics={experimentMetrics} itemDurationMs={itemDurationMs} />
               <div className="grid content-start gap-1">
                 <ExperimentResultsBulkActions selection={selection} />
                 <ExperimentResultsSection

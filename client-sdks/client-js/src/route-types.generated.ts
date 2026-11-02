@@ -1959,11 +1959,7 @@ type InputShared_Type_96 = {
         [key: string]: unknown;
       }
     | undefined;
-  toolResult?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
+  toolResult?: unknown | undefined;
   success?: boolean | undefined;
 };
 
@@ -1984,11 +1980,7 @@ type InputShared_Type_97 = {
         [key: string]: unknown;
       }
     | undefined;
-  toolResult?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
+  toolResult?: unknown | undefined;
   mcpServer?: string | undefined;
   success?: boolean | undefined;
 };
@@ -2224,7 +2216,7 @@ type InputShared_Type_111 = {
 
 type InputShared_Type_112 = {
   /** How this item was created */
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+  type: 'csv' | 'json' | 'thread' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   /** Reference identifier (e.g., trace id, csv filename) */
   referenceId?: string | undefined;
 };
@@ -4481,7 +4473,7 @@ type Shared_Type_88 = {
 
 type Shared_Type_89 = {
   /** How this item was created */
-  type: 'csv' | 'json' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
+  type: 'csv' | 'json' | 'thread' | 'trace' | 'llm' | 'experiment-result' | 'candidate-screener';
   /** Reference identifier (e.g., trace id, csv filename) */
   referenceId?: string | undefined;
 };
@@ -4496,6 +4488,12 @@ type Shared_Type_90 = {
   expectedTrajectory?: unknown | undefined;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: (Shared_Type_88[] | undefined) | null;
+  memorySeed?:
+    | ({
+        workingMemory?: string | undefined;
+      } | null)
+    | undefined;
+  toolMockMatchMode?: (('ordered' | 'lookup') | null) | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: (('allow' | 'deny') | undefined) | null;
   scorerIds?: (string[] | undefined) | null;
@@ -4571,11 +4569,25 @@ type Shared_Type_92 = {
 };
 
 type Shared_Type_93 = {
+  toolName: string;
+  args: unknown;
+  reason: 'not-recorded' | 'args-mismatch' | 'exhausted';
+  closestArgs?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+type Shared_Type_94 = {
   served: {
     mockIndex: number;
+    callIndex?: number | undefined;
     toolName: string;
     args: unknown;
   }[];
+  matchMode?: ('ordered' | 'lookup') | undefined;
+  misses?: Shared_Type_93[] | undefined;
   unconsumed: {
     mockIndex: number;
     toolName: string;
@@ -4594,9 +4606,285 @@ type Shared_Type_93 = {
     | undefined;
 };
 
-type Shared_Type_94 = {
+type Shared_Type_95 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'tool_call';
+  toolArgs?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  toolResult?: unknown | undefined;
+  success?: boolean | undefined;
+};
+
+type Shared_Type_96 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'mcp_tool_call';
+  toolArgs?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  toolResult?: unknown | undefined;
+  mcpServer?: string | undefined;
+  success?: boolean | undefined;
+};
+
+type Shared_Type_97 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'model_generation';
+  modelId?: string | undefined;
+  promptTokens?: number | undefined;
+  completionTokens?: number | undefined;
+  finishReason?: string | undefined;
+};
+
+type Shared_Type_98 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'agent_run';
+  agentId?: string | undefined;
+};
+
+type Shared_Type_99 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'workflow_step';
+  stepId?: string | undefined;
+  status?: string | undefined;
+  output?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+};
+
+type Shared_Type_100 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'workflow_run';
+  workflowId?: string | undefined;
+  status?: string | undefined;
+};
+
+type Shared_Type_101 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'workflow_conditional';
+  conditionCount?: number | undefined;
+  selectedSteps?: string[] | undefined;
+};
+
+type Shared_Type_102 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'workflow_parallel';
+  branchCount?: number | undefined;
+  parallelSteps?: string[] | undefined;
+};
+
+type Shared_Type_103 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'workflow_loop';
+  loopType?: string | undefined;
+  totalIterations?: number | undefined;
+};
+
+type Shared_Type_104 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'workflow_sleep';
+  sleepDurationMs?: number | undefined;
+  sleepType?: string | undefined;
+};
+
+type Shared_Type_105 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'workflow_wait_event';
+  eventName?: string | undefined;
+  eventReceived?: boolean | undefined;
+};
+
+type Shared_Type_106 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType: 'processor_run';
+  processorId?: string | undefined;
+};
+
+type Shared_Type_107 =
+  | Shared_Type_95
+  | Shared_Type_96
+  | Shared_Type_97
+  | Shared_Type_98
+  | Shared_Type_99
+  | Shared_Type_100
+  | Shared_Type_101
+  | Shared_Type_102
+  | Shared_Type_103
+  | Shared_Type_104
+  | Shared_Type_105
+  | Shared_Type_106;
+
+type Shared_Type_108 = {
+  /** Step name to match */
+  name: string;
+  durationMs?: number | undefined;
+  metadata?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  /** Nested trajectory expectation (untyped at this depth) */
+  children?: unknown | undefined;
+  stepType?: undefined | undefined;
+};
+
+type Shared_Type_109 = {
+  /** Expected steps for accuracy checking */
+  steps?: (Shared_Type_107 | Shared_Type_108)[] | undefined;
+  /** How to compare step ordering (default: relaxed) */
+  ordering?: ('strict' | 'relaxed' | 'unordered') | undefined;
+  /** Whether to allow repeated steps (default: true) */
+  allowRepeatedSteps?: boolean | undefined;
+  /** Maximum number of steps allowed */
+  maxSteps?: number | undefined;
+  /** Maximum total tokens across all model_generation steps */
+  maxTotalTokens?: number | undefined;
+  /** Maximum total duration in milliseconds */
+  maxTotalDurationMs?: number | undefined;
+  /** Whether to penalize redundant calls (same tool + same args consecutively, default: true) */
+  noRedundantCalls?: boolean | undefined;
+  /** Tool names that should never appear */
+  blacklistedTools?: string[] | undefined;
+  /** Tool name sequences that should never appear */
+  blacklistedSequences?: string[][] | undefined;
+  /** Maximum retries per tool before penalizing (default: 2) */
+  maxRetriesPerTool?: number | undefined;
+};
+
+type Shared_Type_110 = {
+  mode?: ('turns' | 'conversation') | undefined;
+  sourceThreadId?: string | undefined;
+  turnIndex?: number | undefined;
+  turnCount: number;
+  /** Expected trajectory configuration for trajectory scoring */
+  expectedTrajectory?: (Shared_Type_109 | undefined) | null;
+  memorySeed?:
+    | {
+        workingMemory?: string | undefined;
+      }
+    | undefined;
+};
+
+type Shared_Type_111 = {
   text?: string | undefined;
   reasoningText?: string | undefined;
+  workingMemory?: (string | null) | undefined;
+  durationMs?: number | undefined;
+  replay?: Shared_Type_110 | undefined;
   object?: unknown | undefined;
   toolCalls?:
     | {
@@ -4634,43 +4922,90 @@ type Shared_Type_94 = {
   [x: string]: unknown;
 };
 
-type Shared_Type_95 = {
-  id: string;
-  experimentId: string;
-  itemId: string;
-  itemDatasetVersion: number | null;
-  input: unknown;
-  groundTruth: unknown | null;
-  metadata?:
-    | (
-        | {
-            [key: string]: unknown;
-          }
-        | undefined
-      )
-    | null;
-  expectedTrajectory?: unknown | undefined;
-  error: {
-    message: string;
-    stack?: string | undefined;
-    code?: string | undefined;
-  } | null;
-  startedAt: Date;
-  completedAt: Date;
-  retryCount: number;
-  attempt?: number | undefined;
-  traceId: string | null;
-  status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
-  tags?: (string[] | null) | undefined;
-  comment?: (string | null) | undefined;
-  /** Diagnostic receipt for item-level tool mocks */
-  toolMockReport?: (Shared_Type_93 | undefined) | null;
-  createdAt: Date;
-  targetType: 'agent';
-  output: Shared_Type_94 | null;
+type Shared_Type_112 = {
+  scorerId: string;
+  scorerName: string;
+  score: number | null;
+  reason: string | null;
+  error: string | null;
+  notScorable?:
+    | {
+        step: string;
+        reason?: string | undefined;
+      }
+    | undefined;
+  targetScope?: ('span' | 'trajectory') | undefined;
+  failedStep?: string | undefined;
+  completedSteps?: string[] | undefined;
 };
 
-type Shared_Type_96 = {
+type Shared_Type_113 = {
+  turnIndex: number;
+  sourceMessageId?: string | undefined;
+  unresolvedToolCalls?: string[] | undefined;
+  input: unknown;
+  groundTruth?: unknown | undefined;
+  /** Expected trajectory configuration for trajectory scoring */
+  expectedTrajectory?: (Shared_Type_109 | undefined) | null;
+  output: Shared_Type_111 | null;
+  workingMemoryBefore?: (string | null) | undefined;
+  /** Diagnostic receipt for item-level tool mocks */
+  toolMockReport?: Shared_Type_94 | undefined;
+  scores: Shared_Type_112[];
+  traceId: string | null;
+  durationMs: number;
+  error: {
+    message: string;
+    stack?: string | undefined;
+    code?: string | undefined;
+  } | null;
+};
+
+type Shared_Type_114 = {
+  text?: string | undefined;
+  reasoningText?: string | undefined;
+  workingMemory?: (string | null) | undefined;
+  durationMs?: number | undefined;
+  replay?: Shared_Type_110 | undefined;
+  object?: unknown | undefined;
+  toolCalls?:
+    | {
+        [key: string]: unknown;
+      }[]
+    | undefined;
+  toolResults?:
+    | {
+        [key: string]: unknown;
+      }[]
+    | undefined;
+  sources?:
+    | {
+        [key: string]: unknown;
+      }[]
+    | undefined;
+  files?:
+    | {
+        [key: string]: unknown;
+      }[]
+    | undefined;
+  usage?:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  traceId?: (string | null) | undefined;
+  error?:
+    | ({
+        message?: string | undefined;
+        stack?: string | undefined;
+        [x: string]: unknown;
+      } | null)
+    | undefined;
+  turns?: Shared_Type_113[] | undefined;
+  [x: string]: unknown;
+};
+
+type Shared_Type_115 = {
   id: string;
   experimentId: string;
   itemId: string;
@@ -4700,7 +5035,43 @@ type Shared_Type_96 = {
   tags?: (string[] | null) | undefined;
   comment?: (string | null) | undefined;
   /** Diagnostic receipt for item-level tool mocks */
-  toolMockReport?: (Shared_Type_93 | undefined) | null;
+  toolMockReport?: (Shared_Type_94 | undefined) | null;
+  createdAt: Date;
+  targetType: 'agent';
+  output: Shared_Type_114 | null;
+};
+
+type Shared_Type_116 = {
+  id: string;
+  experimentId: string;
+  itemId: string;
+  itemDatasetVersion: number | null;
+  input: unknown;
+  groundTruth: unknown | null;
+  metadata?:
+    | (
+        | {
+            [key: string]: unknown;
+          }
+        | undefined
+      )
+    | null;
+  expectedTrajectory?: unknown | undefined;
+  error: {
+    message: string;
+    stack?: string | undefined;
+    code?: string | undefined;
+  } | null;
+  startedAt: Date;
+  completedAt: Date;
+  retryCount: number;
+  attempt?: number | undefined;
+  traceId: string | null;
+  status?: (('needs-review' | 'reviewed' | 'complete') | null) | undefined;
+  tags?: (string[] | null) | undefined;
+  comment?: (string | null) | undefined;
+  /** Diagnostic receipt for item-level tool mocks */
+  toolMockReport?: (Shared_Type_94 | undefined) | null;
   createdAt: Date;
   targetType: 'scorer';
   output: {
@@ -4711,7 +5082,7 @@ type Shared_Type_96 = {
   } | null;
 };
 
-type Shared_Type_97 = {
+type Shared_Type_117 = {
   id: string;
   experimentId: string;
   itemId: string;
@@ -4741,13 +5112,13 @@ type Shared_Type_97 = {
   tags?: (string[] | null) | undefined;
   comment?: (string | null) | undefined;
   /** Diagnostic receipt for item-level tool mocks */
-  toolMockReport?: (Shared_Type_93 | undefined) | null;
+  toolMockReport?: (Shared_Type_94 | undefined) | null;
   createdAt: Date;
   targetType: ('workflow' | 'processor') | null;
   output: unknown | null;
 };
 
-type Shared_Type_98 = {
+type Shared_Type_118 = {
   id: string;
   status: 'pending' | 'running' | 'suspended' | 'completed' | 'failed' | 'cancelled' | 'timed_out';
   toolName: string;
@@ -4775,7 +5146,7 @@ type Shared_Type_98 = {
   suspendPayload?: unknown | undefined;
 };
 
-type Shared_Type_99 =
+type Shared_Type_119 =
   | {
       kind: 'custom';
       provider: string;
@@ -4786,7 +5157,7 @@ type Shared_Type_99 =
       modelId?: string | undefined;
     };
 
-type Shared_Type_100 =
+type Shared_Type_120 =
   | {
       kind: 'custom';
       provider: string;
@@ -4797,7 +5168,7 @@ type Shared_Type_100 =
       modelId: string;
     };
 
-type Shared_Type_101 = {
+type Shared_Type_121 = {
   behavior?: ('deliver' | 'persist' | 'discard') | undefined;
   attributes?:
     | {
@@ -4806,7 +5177,7 @@ type Shared_Type_101 = {
     | undefined;
 };
 
-type Shared_Type_102 = {
+type Shared_Type_122 = {
   behavior?: ('wake' | 'persist' | 'discard') | undefined;
   attributes?:
     | {
@@ -4825,7 +5196,7 @@ type Shared_Type_102 = {
   requireClaimedOwner?: boolean | undefined;
 };
 
-type Shared_Type_103 = {
+type Shared_Type_123 = {
   id: string;
   agentId: string;
   workflowId?: undefined | undefined;
@@ -4847,8 +5218,8 @@ type Shared_Type_103 = {
         [key: string]: (string | number | boolean | null) | undefined;
       }
     | undefined;
-  ifActive?: Shared_Type_101 | undefined;
-  ifIdle?: Shared_Type_102 | undefined;
+  ifActive?: Shared_Type_121 | undefined;
+  ifIdle?: Shared_Type_122 | undefined;
   providerOptions?:
     | {
         [key: string]: unknown;
@@ -4863,7 +5234,7 @@ type Shared_Type_103 = {
   updatedAt: number;
 };
 
-type Shared_Type_104 = {
+type Shared_Type_124 = {
   status:
     | 'running'
     | 'success'
@@ -4882,7 +5253,7 @@ type Shared_Type_104 = {
   error?: string | undefined;
 };
 
-type Shared_Type_105 = {
+type Shared_Type_125 = {
   id: string;
   workflowId: string;
   agentId?: undefined | undefined;
@@ -4892,7 +5263,7 @@ type Shared_Type_105 = {
   nextFireAt: number;
   lastFireAt?: number | undefined;
   lastRunId?: string | undefined;
-  lastRun?: Shared_Type_104 | undefined;
+  lastRun?: Shared_Type_124 | undefined;
   inputData?: unknown | undefined;
   initialState?: unknown | undefined;
   requestContext?:
@@ -4910,7 +5281,7 @@ type Shared_Type_105 = {
   updatedAt: number;
 };
 
-type Shared_Type_106 = {
+type Shared_Type_126 = {
   /** Installation identifier */
   id: string;
   /** Platform identifier */
@@ -20785,6 +21156,12 @@ export type PostDatasetsDatasetIdItems_Body = {
   expectedTrajectory?: (InputShared_Type_110 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: InputShared_Type_111[] | undefined;
+  memorySeed?:
+    | {
+        workingMemory?: string | undefined;
+      }
+    | undefined;
+  toolMockMatchMode?: ('ordered' | 'lookup') | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** IDs of scorers selected for this item */
@@ -20827,6 +21204,74 @@ export interface PostDatasetsDatasetIdItems_RouteContract {
 }
 
 // ============================================================================
+// Route: POST /datasets/:datasetId/items/from-thread
+// ============================================================================
+export type PostDatasetsDatasetIdItemsFromThread_PathParams = GetDatasetsDatasetId_PathParams;
+
+export type PostDatasetsDatasetIdItemsFromThread_Body = {
+  agentId: string;
+  threadId: string;
+  resourceId?: string | undefined;
+  historyLimit?: (number | false) | undefined;
+  mode?: ('turns' | 'conversation') | undefined;
+};
+
+export type PostDatasetsDatasetIdItemsFromThread_Response = {
+  itemIds: string[];
+  turnCount: number;
+};
+
+export type PostDatasetsDatasetIdItemsFromThread_Request = Simplify<
+  (PostDatasetsDatasetIdItemsFromThread_PathParams extends never
+    ? {}
+    : { params: PostDatasetsDatasetIdItemsFromThread_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostDatasetsDatasetIdItemsFromThread_Body extends never
+      ? {}
+      : {} extends PostDatasetsDatasetIdItemsFromThread_Body
+        ? { body?: PostDatasetsDatasetIdItemsFromThread_Body }
+        : { body: PostDatasetsDatasetIdItemsFromThread_Body })
+>;
+
+export interface PostDatasetsDatasetIdItemsFromThread_RouteContract {
+  pathParams: PostDatasetsDatasetIdItemsFromThread_PathParams;
+  queryParams: never;
+  body: PostDatasetsDatasetIdItemsFromThread_Body;
+  request: PostDatasetsDatasetIdItemsFromThread_Request;
+  response: PostDatasetsDatasetIdItemsFromThread_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /datasets/replay/preview
+// ============================================================================
+export type PostDatasetsReplayPreview_Body = PostDatasetsDatasetIdItemsFromThread_Body;
+
+export type PostDatasetsReplayPreview_Response = {
+  turnCount: number;
+  historyLimit?: (number | false) | undefined;
+};
+
+export type PostDatasetsReplayPreview_Request = Simplify<
+  (never extends never ? {} : { params: never }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostDatasetsReplayPreview_Body extends never
+      ? {}
+      : {} extends PostDatasetsReplayPreview_Body
+        ? { body?: PostDatasetsReplayPreview_Body }
+        : { body: PostDatasetsReplayPreview_Body })
+>;
+
+export interface PostDatasetsReplayPreview_RouteContract {
+  pathParams: never;
+  queryParams: never;
+  body: PostDatasetsReplayPreview_Body;
+  request: PostDatasetsReplayPreview_Request;
+  response: PostDatasetsReplayPreview_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: POST /datasets/:datasetId/items/batch
 // ============================================================================
 export type PostDatasetsDatasetIdItemsBatch_PathParams = GetDatasetsDatasetId_PathParams;
@@ -20840,6 +21285,12 @@ export type PostDatasetsDatasetIdItemsBatch_Body = {
     expectedTrajectory?: (InputShared_Type_110 | undefined) | null;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: InputShared_Type_111[] | undefined;
+    memorySeed?:
+      | {
+          workingMemory?: string | undefined;
+        }
+      | undefined;
+    toolMockMatchMode?: ('ordered' | 'lookup') | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: ('allow' | 'deny') | undefined;
     scorerIds?: string[] | undefined;
@@ -20962,6 +21413,12 @@ export type PatchDatasetsDatasetIdItemsItemId_Body = {
   expectedTrajectory?: (InputShared_Type_110 | undefined) | null;
   /** Ordered item-level static tool mocks served in place of executing the real tool */
   toolMocks?: InputShared_Type_111[] | undefined;
+  memorySeed?:
+    | ({
+        workingMemory?: string | undefined;
+      } | null)
+    | undefined;
+  toolMockMatchMode?: (('ordered' | 'lookup') | null) | undefined;
   /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
   unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** IDs of scorers selected for this item */
@@ -21115,6 +21572,12 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
     expectedTrajectory?: unknown | undefined;
     /** Ordered item-level static tool mocks served in place of executing the real tool */
     toolMocks?: (Shared_Type_88[] | undefined) | null;
+    memorySeed?:
+      | ({
+          workingMemory?: string | undefined;
+        } | null)
+      | undefined;
+    toolMockMatchMode?: (('ordered' | 'lookup') | null) | undefined;
     /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
     unmockedToolPolicy?: (('allow' | 'deny') | undefined) | null;
     scorerIds?: (string[] | undefined) | null;
@@ -21388,6 +21851,9 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   scorerIds?: string[] | undefined;
   /** Pin to specific dataset version */
   version?: number | undefined;
+  toolMockMatchMode?: ('ordered' | 'lookup') | undefined;
+  /** Policy for undeclared tool calls. 'allow' runs them live; 'deny' fails the experiment item */
+  unmockedToolPolicy?: ('allow' | 'deny') | undefined;
   /** Agent version ID to use for experiment */
   agentVersion?: string | undefined;
   /** Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Passed per call; the agent itself is not changed and the model is not stored on the experiment. */
@@ -21475,7 +21941,7 @@ export type PostDatasetsDatasetIdExperiments_Response = {
     completedAt: Date;
     retryCount: number;
     /** Diagnostic receipt for item-level tool mocks */
-    toolMockReport?: (Shared_Type_93 | undefined) | null;
+    toolMockReport?: (Shared_Type_94 | undefined) | null;
     scores: {
       scorerId: string;
       scorerName: string;
@@ -21531,7 +21997,7 @@ export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body = {
 };
 
 export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Response = {
-  result: Shared_Type_95 | Shared_Type_96 | Shared_Type_97;
+  result: Shared_Type_115 | Shared_Type_116 | Shared_Type_117;
   scores: {
     scorerId: string;
     scorerName: string;
@@ -21621,9 +22087,9 @@ export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Body = {
 };
 
 export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Response =
-  | Shared_Type_95
-  | Shared_Type_96
-  | Shared_Type_97;
+  | Shared_Type_115
+  | Shared_Type_116
+  | Shared_Type_117;
 
 export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Request = Simplify<
   (PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams extends never
@@ -21792,7 +22258,7 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams = {
 };
 
 export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Response = {
-  results: (Shared_Type_95 | Shared_Type_96 | Shared_Type_97)[];
+  results: (Shared_Type_115 | Shared_Type_116 | Shared_Type_117)[];
   pagination: {
     total: number;
     page: number;
@@ -22088,7 +22554,7 @@ export type GetBackgroundTasks_QueryParams = {
 };
 
 export type GetBackgroundTasks_Response = {
-  tasks: Shared_Type_98[];
+  tasks: Shared_Type_118[];
   total: number;
 };
 
@@ -22118,7 +22584,7 @@ export type GetBackgroundTasksBackgroundTaskId_PathParams = {
   backgroundTaskId: string;
 };
 
-export type GetBackgroundTasksBackgroundTaskId_Response = Shared_Type_98;
+export type GetBackgroundTasksBackgroundTaskId_Response = Shared_Type_118;
 
 export type GetBackgroundTasksBackgroundTaskId_Request = Simplify<
   (GetBackgroundTasksBackgroundTaskId_PathParams extends never
@@ -22167,8 +22633,8 @@ export type GetEditorBuilderSettings_Response = {
           | {
               models?:
                 | {
-                    allowed?: Shared_Type_99[] | undefined;
-                    default?: Shared_Type_100 | undefined;
+                    allowed?: Shared_Type_119[] | undefined;
+                    default?: Shared_Type_120 | undefined;
                   }
                 | undefined;
               tools?:
@@ -22195,8 +22661,8 @@ export type GetEditorBuilderSettings_Response = {
     | {
         active: boolean;
         pickerVisible?: boolean | undefined;
-        allowed?: Shared_Type_99[] | undefined;
-        default?: Shared_Type_100 | undefined;
+        allowed?: Shared_Type_119[] | undefined;
+        default?: Shared_Type_120 | undefined;
       }
     | undefined;
   picker?:
@@ -22233,8 +22699,8 @@ export type GetEditorWorkflowBuilderSettings_Response = {
     | {
         active: boolean;
         pickerVisible?: boolean | undefined;
-        allowed?: Shared_Type_99[] | undefined;
-        default?: Shared_Type_100 | undefined;
+        allowed?: Shared_Type_119[] | undefined;
+        default?: Shared_Type_120 | undefined;
       }
     | undefined;
 };
@@ -23069,7 +23535,7 @@ export type GetSchedules_QueryParams = {
 };
 
 export type GetSchedules_Response = {
-  schedules: (Shared_Type_103 | Shared_Type_105)[];
+  schedules: (Shared_Type_123 | Shared_Type_125)[];
 };
 
 export type GetSchedules_Request = Simplify<
@@ -23098,7 +23564,7 @@ export type GetSchedulesScheduleId_PathParams = {
   scheduleId: string;
 };
 
-export type GetSchedulesScheduleId_Response = Shared_Type_103 | Shared_Type_105;
+export type GetSchedulesScheduleId_Response = Shared_Type_123 | Shared_Type_125;
 
 export type GetSchedulesScheduleId_Request = Simplify<
   (GetSchedulesScheduleId_PathParams extends never ? {} : { params: GetSchedulesScheduleId_PathParams }) &
@@ -23314,7 +23780,7 @@ export type GetSchedulesScheduleIdTriggers_Response = {
           [key: string]: unknown;
         }
       | undefined;
-    run?: Shared_Type_104 | undefined;
+    run?: Shared_Type_124 | undefined;
   }[];
 };
 
@@ -23450,7 +23916,7 @@ export type GetChannelsPlatformInstallations_PathParams = {
   platform: string;
 };
 
-export type GetChannelsPlatformInstallations_Response = Shared_Type_106[];
+export type GetChannelsPlatformInstallations_Response = Shared_Type_126[];
 
 export type GetChannelsPlatformInstallations_Request = Simplify<
   (GetChannelsPlatformInstallations_PathParams extends never
@@ -23538,7 +24004,7 @@ export type PostChannelsPlatformAgentIdReconcile_PathParams = {
   agentId: string;
 };
 
-export type PostChannelsPlatformAgentIdReconcile_Response = Shared_Type_106 | null;
+export type PostChannelsPlatformAgentIdReconcile_Response = Shared_Type_126 | null;
 
 export type PostChannelsPlatformAgentIdReconcile_Request = Simplify<
   (PostChannelsPlatformAgentIdReconcile_PathParams extends never
@@ -25461,6 +25927,8 @@ export interface RouteTypes {
   'DELETE /datasets/:datasetId': DeleteDatasetsDatasetId_RouteContract;
   'GET /datasets/:datasetId/items': GetDatasetsDatasetIdItems_RouteContract;
   'POST /datasets/:datasetId/items': PostDatasetsDatasetIdItems_RouteContract;
+  'POST /datasets/:datasetId/items/from-thread': PostDatasetsDatasetIdItemsFromThread_RouteContract;
+  'POST /datasets/replay/preview': PostDatasetsReplayPreview_RouteContract;
   'POST /datasets/:datasetId/items/batch': PostDatasetsDatasetIdItemsBatch_RouteContract;
   'DELETE /datasets/:datasetId/items/batch': DeleteDatasetsDatasetIdItemsBatch_RouteContract;
   'GET /datasets/:datasetId/items/:itemId': GetDatasetsDatasetIdItemsItemId_RouteContract;
@@ -25998,11 +26466,17 @@ export interface Client {
     DELETE: DeleteDatasetsDatasetIdItemsBatch_RouteContract;
     POST: PostDatasetsDatasetIdItemsBatch_RouteContract;
   };
+  '/datasets/:datasetId/items/from-thread': {
+    POST: PostDatasetsDatasetIdItemsFromThread_RouteContract;
+  };
   '/datasets/:datasetId/versions': {
     GET: GetDatasetsDatasetIdVersions_RouteContract;
   };
   '/datasets/cluster-failures': {
     POST: PostDatasetsClusterFailures_RouteContract;
+  };
+  '/datasets/replay/preview': {
+    POST: PostDatasetsReplayPreview_RouteContract;
   };
   '/editor/builder/infrastructure': {
     GET: GetEditorBuilderInfrastructure_RouteContract;
