@@ -713,7 +713,7 @@ export const mastra = new Mastra({
 **Type:** `boolean`\
 **Default:** `false`
 
-Enables source map generation for the bundled output.
+Enables source map generation for the bundled output. When it's enabled, `mastra dev` and `mastra start` run the server with Node's `--enable-source-maps` flag, so stack traces point at your source files.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

@@ -121,7 +121,7 @@ export function TraceColumnsMenu({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenu.Trigger disabled={disabled} variant="ghost" size="icon-md" tooltip="Columns">
+        <DropdownMenu.Trigger disabled={disabled} size="icon-sm" tooltip="Columns">
           <Columns3Icon aria-hidden />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="start" className="min-w-56">

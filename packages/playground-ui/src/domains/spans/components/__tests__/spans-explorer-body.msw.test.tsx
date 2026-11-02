@@ -31,8 +31,12 @@ import type { SpanSelection } from '../span-detail-panel';
 import { SpansExplorerBody } from '../spans-explorer-body';
 import type { SpansExplorerPanelArgs } from '../spans-explorer-body';
 import { OBSERVABILITY_LIST_POLL_INTERVAL_MS } from '@/domains/observability/list-polling';
+import { savedViewFromSearchParams } from '@/domains/observability/saved-view-state';
+import { SavedViewsProvider } from '@/domains/observability/saved-views';
+import type { SavedViewsSource } from '@/domains/observability/saved-views';
+import { createInMemorySavedViewsSource } from '@/domains/observability/saved-views/__tests__/fixtures/in-memory-source';
 import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
-import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '@/domains/traces/trace-list-columns';
+import { DEFAULT_TRACE_COLUMN_PREFERENCES, TRACE_COLUMN_CATALOGS } from '@/domains/traces/trace-list-columns';
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -62,8 +66,11 @@ const renderBody = (selection?: SpanSelection) => {
   return { onSelectionChange, renderPanel };
 };
 
-/** The body inside a stand-in router whose URL starts as `initial`; returns each list query sent. */
-const renderBodyAtUrl = (initial: string) => {
+/**
+ * The body inside a stand-in router whose URL starts as `initial`, under a saved views store when
+ * one is given; returns each list query sent.
+ */
+const renderBodyAtUrl = (initial: string, savedViews?: SavedViewsSource) => {
   const queries: QuerySpansInput[] = [];
   server.use(
     http.post(SPANS_QUERY_URL, async ({ request }) => {
@@ -73,7 +80,7 @@ const renderBodyAtUrl = (initial: string) => {
       return HttpResponse.json(spanRowsPage);
     }),
   );
-  renderWithProviders(
+  const body = (
     <SearchParamsHost initial={initial}>
       {urlState => (
         <SpansExplorerBody
@@ -83,7 +90,16 @@ const renderBodyAtUrl = (initial: string) => {
           urlState={urlState}
         />
       )}
-    </SearchParamsHost>,
+    </SearchParamsHost>
+  );
+  renderWithProviders(
+    savedViews ? (
+      <SavedViewsProvider source={savedViews} queryKeyScope={['test']}>
+        {body}
+      </SavedViewsProvider>
+    ) : (
+      body
+    ),
   );
   return { queries };
 };
@@ -234,15 +250,14 @@ describe('SpansExplorerBody', () => {
   });
 
   describe('when the store returns span rows', () => {
-    it('puts the Columns button ahead of the filters', async () => {
+    it('puts the Columns button after the filters', async () => {
       setHandlers(spanRowsPage);
 
       renderBody();
       const columns = await screen.findByRole('button', { name: 'Columns' });
 
-      const dateChip = document.querySelector('[data-slot="filter-bar-chip"]');
-      if (!dateChip) throw new Error('date chip not rendered');
-      expect(columns.compareDocumentPosition(dateChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const timeRange = screen.getByRole('group', { name: 'Time range', hidden: true });
+      expect(columns.compareDocumentPosition(timeRange) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     });
 
     it('lists each span', async () => {
@@ -583,6 +598,55 @@ describe('SpansExplorerBody', () => {
       expect(screen.getByRole('button', { name: 'Start, sorted descending, sort ascending' })).toBeTruthy();
     });
   });
+
+  describe('saved views', () => {
+    const URL_BY_HAND = 'filter.name=tool%3A+get-weather&datePreset=last-24h&sort=startedAt&dir=asc';
+
+    it('shows no saved views when the host does not store them', async () => {
+      setHandlers(spanRowsPage);
+      renderBodyAtUrl(URL_BY_HAND);
+      await screen.findByText('agent run: weather');
+
+      expect(screen.queryByLabelText(/^View: /)).toBeNull();
+    });
+
+    it('applying a view queries and shows what the user gets by setting it by hand', async () => {
+      setHandlers(spanRowsPage);
+      const state = savedViewFromSearchParams('spans', new URLSearchParams(URL_BY_HAND), {
+        columns: { visibleColumns: ['type', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+      });
+      const source = createInMemorySavedViewsSource([{ name: 'Weather tools', state }]);
+      const { queries } = renderBodyAtUrl('', source);
+      await screen.findByText('agent run: weather');
+
+      fireEvent.click(await screen.findByLabelText(/^View: /));
+      fireEvent.click(await screen.findByRole('option', { name: 'Weather tools' }));
+
+      await waitFor(() => expect(screen.getByTestId('search-params').textContent).toBe(URL_BY_HAND));
+      await waitFor(() => expect(JSON.stringify(queries.at(-1)?.where)).toContain('"tool: get-weather"'));
+      expect(queries.at(-1)?.orderBy).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+      await openColumnsMenu();
+      const input = await screen.findByRole('menuitemcheckbox', { name: 'Input' });
+      expect(input.getAttribute('aria-checked')).toBe('false');
+    });
+
+    it('saves the filters, sort, range and columns on screen', async () => {
+      setHandlers(spanRowsPage);
+      const source = createInMemorySavedViewsSource();
+      renderBodyAtUrl(URL_BY_HAND, source);
+      await screen.findByText('agent run: weather');
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Save as new view' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save view' }));
+
+      await waitFor(() => expect(source.records()).toHaveLength(1));
+      expect(source.records()[0]?.state).toEqual(
+        savedViewFromSearchParams('spans', new URLSearchParams(URL_BY_HAND), {
+          columns: TRACE_COLUMN_CATALOGS.spans.defaults,
+        }),
+      );
+    });
+  });
 });
 
 type SpanQueryBody = { timeRange: { from: string; to: string }; where?: unknown; orderBy?: Array<{ field: string }> };
@@ -695,9 +759,8 @@ describe('SpansExplorerBody histogram', () => {
       await screen.findByRole('region', { name: 'Spans over time' });
       onAggregate.mockClear();
 
-      const dateChip = document.querySelector<HTMLElement>('[data-slot="filter-bar-chip"]');
-      if (!dateChip) throw new Error('date chip not rendered');
-      fireEvent.click(within(dateChip).getByRole('button', { name: 'Value: Last 7 days', hidden: true }));
+      const picker = screen.getByRole('group', { name: 'Time range', hidden: true });
+      fireEvent.click(within(picker).getByRole('button', { name: 'Last 7 days', hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
 
       await waitFor(() => expect(onAggregate).toHaveBeenCalled());
@@ -747,7 +810,7 @@ describe('SpansExplorerBody histogram', () => {
       const reset = onAggregate.mock.lastCall?.[0].timeRange;
       expect(Date.parse(reset.to) - Date.parse(reset.from)).toBe(7 * 24 * 60 * 60 * 1000);
       expect(onSpanQuery.mock.lastCall?.[0].timeRange).toEqual(reset);
-      expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
 
@@ -755,7 +818,7 @@ describe('SpansExplorerBody histogram', () => {
     const span = (timeRange?: { from: string; to: string }) =>
       timeRange ? Date.parse(timeRange.to) - Date.parse(timeRange.from) : undefined;
     const pickPreset = async (current: string, next: string) => {
-      fireEvent.click(screen.getByRole('button', { name: `Value: ${current}`, hidden: true }));
+      fireEvent.click(screen.getByRole('button', { name: current, hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: next, hidden: true }));
     };
     const zoomIn = async () => {
@@ -780,7 +843,7 @@ describe('SpansExplorerBody histogram', () => {
 
       await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
       expect(span(onSpanQuery.mock.lastCall?.[0].timeRange)).toBe(DAY);
-      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
     });
 
     it('resets nested zooms back to the range picked before the first one', async () => {
@@ -794,10 +857,10 @@ describe('SpansExplorerBody histogram', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
 
       await waitFor(() => expect(span(onAggregate.mock.lastCall?.[0].timeRange)).toBe(DAY));
-      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
     });
 
-    it('resets to the default range once the zoom is undone', async () => {
+    it('offers no reset once the zoom is undone back to a preset', async () => {
       setHistogramHandlers();
       await renderSettled();
       await pickPreset('Last 7 days', 'Last 24 hours');
@@ -805,10 +868,9 @@ describe('SpansExplorerBody histogram', () => {
       await zoomIn();
 
       fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
-      await screen.findByRole('button', { name: 'Value: Last 24 hours' });
-      fireEvent.click(screen.getByRole('button', { name: 'Reset time range' }));
 
-      expect(await screen.findByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
+      // The × stands in for a custom range only; a preset changes through the picker's menu.
+      expect(await screen.findByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
   });
