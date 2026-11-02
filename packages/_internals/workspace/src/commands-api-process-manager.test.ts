@@ -5,7 +5,7 @@ import { MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { CommandsApiProcessManager } from './commands-api-process-manager';
+import { CommandsApiProcessManager, SANDBOX_TIMEOUT_SLACK_MS } from './commands-api-process-manager';
 import type { CommandsApi, CommandsApiHandle, CommandsApiOperation } from './commands-api-process-manager';
 
 /** Shaped like the E2B SDK's CommandExitError. */
@@ -39,9 +39,15 @@ class HostCommands implements CommandsApi {
    * reads events from construction, before `run()` returns.
    */
   outputBeforeStart = false;
+  /** The stream deadline each `run` was given. */
+  readonly runTimeouts: Array<number | undefined> = [];
 
-  async run(command: string, opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string> }) {
+  async run(
+    command: string,
+    opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string>; timeoutMs?: number },
+  ) {
     this.calls.push('run');
+    this.runTimeouts.push(opts.timeoutMs);
     // Own process group, so kill() takes down what `sh -c` forked too. Killing
     // only `sh` leaves e.g. dash's forked `sleep` holding the pipes open, and
     // `close` (which `done` waits on) never fires.
@@ -66,6 +72,14 @@ class HostCommands implements CommandsApi {
       child.on('close', (code, signal) => resolve(code ?? (signal ? 137 : 1))),
     );
     this.children.set(child.pid!, { child, cmd: command, listeners, done });
+    // The connection deadline. On a Platform sandbox the process outlives it,
+    // but nothing reads its output any more: its next write kills it.
+    if (opts.timeoutMs) {
+      setTimeout(() => {
+        child.stdout!.destroy();
+        child.stderr!.destroy();
+      }, opts.timeoutMs);
+    }
     if (this.outputBeforeStart) await this.firstOutput(child);
     return this.handle(child.pid!, done, () => ({ stdout, stderr }));
   }
@@ -213,6 +227,52 @@ describe('CommandsApiProcessManager', () => {
     const kills = commands.calls.filter(call => call === 'kill').length;
     expect(await handle.kill()).toBe(false);
     expect(commands.calls.filter(call => call === 'kill')).toHaveLength(kills);
+  });
+
+  // A dev server started with a timeout used to lose its output stream when
+  // the timeout passed, then die silently on its next log line (a Vite preview
+  // went down on a later hot-reload update, and its handle still said running).
+  it('stops a process when its timeout runs out, and reports the exit', async () => {
+    const processes = setup();
+    const started = Date.now();
+    const handle = await processes.spawn('echo started; sleep 1.5; echo late; sleep 30', { timeout: 500 });
+
+    await until(() => handle.stdout === 'started\n');
+    await new Promise(resolve => setTimeout(resolve, 1000 - (Date.now() - started)));
+
+    expect(handle.exitCode).toBe(124);
+    // Said as soon as it's stopped, for a caller that reads output without waiting.
+    expect(handle.stderr).toContain('Process timed out after 500ms');
+    expect(processes.operations).toContain('kill');
+    expect((await processes.list()).find(proc => proc.pid === handle.pid)).toMatchObject({ running: false });
+    expect(await handle.wait()).toMatchObject({
+      success: false,
+      exitCode: 124,
+      timedOut: true,
+      stdout: 'started\n',
+      stderr: expect.stringContaining('Process timed out after 500ms'),
+    });
+  });
+
+  // If the manager is gone (e.g. the host restarted) the sandbox still stops a
+  // process with a timeout, a little after the manager would have.
+  it('gives the sandbox a backstop deadline a little after the timeout', async () => {
+    const processes = setup();
+    await (await processes.spawn('true')).wait();
+    await (await processes.spawn('true', { timeout: 500 })).wait();
+
+    // The first falls back to this manager's 5s default.
+    expect(commands.runTimeouts).toEqual([5_000 + SANDBOX_TIMEOUT_SLACK_MS, 500 + SANDBOX_TIMEOUT_SLACK_MS]);
+  });
+
+  it('leaves a process alone once it exits before its timeout', async () => {
+    const processes = setup();
+    const handle = await processes.spawn('echo done', { timeout: 300 });
+    expect(await handle.wait()).toMatchObject({ success: true, exitCode: 0 });
+    await new Promise(resolve => setTimeout(resolve, 400));
+
+    expect(processes.operations).not.toContain('kill');
+    expect(handle.exitCode).toBe(0);
   });
 
   it('writes stdin through runCommands, and refuses when stdin was detached', async () => {

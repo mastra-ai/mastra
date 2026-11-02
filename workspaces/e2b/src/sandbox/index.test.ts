@@ -15,7 +15,7 @@
 
 import { createSandboxLifecycleTests, createMountOperationsTests } from '@internal/workspace-test-utils';
 import { SandboxError, SandboxUnsupportedFeatureError } from '@mastra/core/workspace';
-import { describe, it, expect, vi, beforeEach, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, beforeAll, afterAll } from 'vitest';
 
 import { createRepoTemplate } from '../utils/repo-template';
 import type { RepoTemplateOptions } from '../utils/repo-template';
@@ -1074,42 +1074,75 @@ describe('E2BSandbox', () => {
       );
     });
 
-    it('fills in a provider default timeout when the caller omits one', async () => {
-      // Regression: an undefined timeoutMs reaches the E2B SDK, which falls back
-      // to its private 60s connection deadline and kills any longer command.
-      const sandbox = new E2BSandbox();
-      await sandbox._start();
+    // The SDK's timeoutMs is a deadline on the output stream, not the process:
+    // past it the process keeps running with nothing reading its output, and
+    // dies unseen on its next write. Timeouts are enforced by killing instead.
+    describe('timeouts', () => {
+      const deadlines: number[] = [];
+      const runForever = () => {
+        const killed: number[] = [];
+        deadlines.length = 0;
+        mockSandbox.commands.run.mockImplementation(async (_cmd: string, opts?: any) => {
+          deadlines.push(opts?.timeoutMs);
+          return { pid: 4242, wait: () => new Promise(() => {}), kill: vi.fn() };
+        });
+        (mockSandbox.commands as any).kill = vi.fn(async (pid: number) => {
+          killed.push(pid);
+          return true;
+        });
+        return killed;
+      };
 
-      await sandbox.executeCommand('echo', ['test']);
+      afterEach(() => {
+        delete (mockSandbox.commands as any).kill;
+        vi.useRealTimers();
+      });
 
-      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
-        expect.any(String),
-        expect.objectContaining({ timeoutMs: 300_000 }),
-      );
-    });
+      it.each([
+        ['the provider default', {}, undefined, 300_000],
+        ['the configured sandbox timeout', { timeout: 900_000 }, undefined, 900_000],
+        ['a per-command timeout over the default', { timeout: 900_000 }, 5_000, 5_000],
+      ])('stops a command run to completion after %s', async (_name, config, timeout, killsAt) => {
+        const killed = runForever();
+        const sandbox = new E2BSandbox(config);
+        await sandbox._start();
+        vi.useFakeTimers();
 
-    it('uses the configured sandbox timeout as the per-command default', async () => {
-      const sandbox = new E2BSandbox({ timeout: 900_000 });
-      await sandbox._start();
+        void sandbox.executeCommand!('npm test', [], timeout ? { timeout } : {});
+        await vi.advanceTimersByTimeAsync(killsAt - 1);
+        expect(killed).toEqual([]);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(killed).toEqual([4242]);
+        // E2B stops it a little later on its own if the host is gone.
+        expect(deadlines).toEqual([killsAt + 5_000]);
+      });
 
-      await sandbox.executeCommand('echo', ['test']);
+      // A dev server started in the background is meant to keep running.
+      it('gives a background process no default timeout', async () => {
+        const killed = runForever();
+        const sandbox = new E2BSandbox({ timeout: 900_000 });
+        await sandbox._start();
+        vi.useFakeTimers();
 
-      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
-        expect.any(String),
-        expect.objectContaining({ timeoutMs: 900_000 }),
-      );
-    });
+        await sandbox.processes.spawn('npm run dev');
+        await vi.advanceTimersByTimeAsync(24 * 60 * 60_000);
+        expect(killed).toEqual([]);
+        expect(deadlines).toEqual([0]);
+      });
 
-    it('per-command timeout still wins over the default', async () => {
-      const sandbox = new E2BSandbox({ timeout: 900_000 });
-      await sandbox._start();
+      it('stops a background process at the timeout it was given', async () => {
+        const killed = runForever();
+        const sandbox = new E2BSandbox();
+        await sandbox._start();
+        vi.useFakeTimers();
 
-      await sandbox.executeCommand('echo', ['test'], { timeout: 5_000 });
-
-      expect(mockSandbox.commands.run).toHaveBeenLastCalledWith(
-        expect.any(String),
-        expect.objectContaining({ timeoutMs: 5_000 }),
-      );
+        await sandbox.processes.spawn('npm test', { timeout: 180_000 });
+        await vi.advanceTimersByTimeAsync(179_999);
+        expect(killed).toEqual([]);
+        await vi.advanceTimersByTimeAsync(1);
+        expect(killed).toEqual([4242]);
+        expect(deadlines).toEqual([185_000]);
+      });
     });
   });
 
