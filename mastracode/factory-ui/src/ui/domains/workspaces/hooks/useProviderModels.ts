@@ -17,6 +17,8 @@ function preferredFactoryModel(providerId: string): string | undefined {
       return 'openai/gpt-5.6-sol';
     case 'anthropic':
       return 'anthropic/claude-fable-5';
+    case 'mastra':
+      return 'mastra/anthropic/claude-fable-5';
     default:
       return undefined;
   }

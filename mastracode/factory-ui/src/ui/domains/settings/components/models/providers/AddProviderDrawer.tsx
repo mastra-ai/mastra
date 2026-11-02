@@ -15,7 +15,11 @@ import { Box } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
-import { useStartProviderOAuth } from '../../../../../../hooks/use-providers';
+import {
+  MASTRA_GATEWAY_PROVIDER,
+  useConnectMastraGateway,
+  useStartProviderOAuth,
+} from '../../../../../../hooks/use-providers';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import {
   CREDENTIAL_LABEL,
@@ -39,8 +43,12 @@ function matchesSearch(provider: ProviderInfo, query: string): boolean {
   );
 }
 
+function isGateway(provider: ProviderInfo): boolean {
+  return provider.provider === MASTRA_GATEWAY_PROVIDER;
+}
+
 function takesApiKey(provider: ProviderInfo): boolean {
-  return provider.source !== 'deployment';
+  return provider.source !== 'deployment' && !isGateway(provider);
 }
 
 function connectionLabel(provider: ProviderInfo, scope: CredentialScope): string | undefined {
@@ -74,18 +82,30 @@ export function AddProviderDrawer({
 }) {
   const isMobile = useIsMobile();
   const startOAuthMutation = useStartProviderOAuth();
+  const connectGatewayMutation = useConnectMastraGateway();
   const [search, setSearch] = useState('');
   const query = search.trim().toLowerCase();
-  const sorted = providers.toSorted((left, right) => left.provider.localeCompare(right.provider));
-  const signInProviders = sorted.filter(provider => provider.oauth?.supported === true);
+  // The Mastra Gateway connects in one click, so it leads the default list.
+  const sorted = providers.toSorted(
+    (left, right) => Number(isGateway(right)) - Number(isGateway(left)) || left.provider.localeCompare(right.provider),
+  );
+  const signInProviders = sorted.filter(provider => isGateway(provider) || provider.oauth?.supported === true);
   const shown = query ? sorted.filter(provider => matchesSearch(provider, query)) : signInProviders;
   const keyOnlyCount = providers.filter(provider => provider.oauth?.supported !== true && takesApiKey(provider)).length;
-  const startingProvider = startOAuthMutation.isPending ? startOAuthMutation.variables.provider : undefined;
+  const startingProvider = startOAuthMutation.isPending
+    ? startOAuthMutation.variables.provider
+    : connectGatewayMutation.isPending
+      ? MASTRA_GATEWAY_PROVIDER
+      : undefined;
 
   const signIn = (provider: ProviderInfo) => {
     startOAuthMutation.mutate(signInRequest(provider, requestScope), {
       onSuccess: session => onOAuthStarted(provider.provider, session),
     });
+  };
+
+  const connectGateway = () => {
+    connectGatewayMutation.mutate({ scope: requestScope }, { onSuccess: onClose });
   };
 
   const closeUnlessStarting = (nextOpen: boolean) => {
@@ -96,6 +116,7 @@ export function AddProviderDrawer({
     if (nextOpen) return;
     setSearch('');
     startOAuthMutation.reset();
+    connectGatewayMutation.reset();
   };
 
   return (
@@ -136,7 +157,7 @@ export function AddProviderDrawer({
                   provider={provider}
                   credentialScope={credentialScope}
                   startingProvider={startingProvider}
-                  onSignIn={() => signIn(provider)}
+                  onSignIn={() => (isGateway(provider) ? connectGateway() : signIn(provider))}
                   onAddKey={() => onAddKey(provider)}
                 />
               ))}
@@ -147,9 +168,9 @@ export function AddProviderDrawer({
               {keyOnlyCount} more take an API key. Type to find one.
             </Txt>
           )}
-          {startOAuthMutation.error && (
+          {(startOAuthMutation.error ?? connectGatewayMutation.error) && (
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-              {startOAuthMutation.error.message}
+              {(startOAuthMutation.error ?? connectGatewayMutation.error)?.message}
             </Txt>
           )}
         </DrawerBody>
@@ -172,7 +193,9 @@ function AddProviderRow({
   onAddKey: () => void;
 }) {
   const displayName = providerDisplayName(provider.provider);
-  const label = connectionLabel(provider, credentialScope);
+  const label =
+    connectionLabel(provider, credentialScope) ??
+    (isGateway(provider) ? 'Any model, on your Mastra account’s credits' : undefined);
   const starting = startingProvider !== undefined;
   return (
     <li className="flex min-h-12 items-center gap-3 py-2 pr-2 pl-3">
@@ -190,6 +213,17 @@ function AddProviderRow({
       {takesApiKey(provider) && (
         <Button size="sm" aria-label={`Add API key for ${displayName}`} disabled={starting} onClick={onAddKey}>
           API key
+        </Button>
+      )}
+      {isGateway(provider) && !credentialAt(provider, credentialScope) && (
+        <Button
+          size="sm"
+          variant="primary"
+          aria-label={`Connect ${displayName}`}
+          disabled={starting}
+          onClick={onSignIn}
+        >
+          {startingProvider === provider.provider ? 'Connecting…' : 'Connect'}
         </Button>
       )}
       {provider.oauth?.supported === true && (

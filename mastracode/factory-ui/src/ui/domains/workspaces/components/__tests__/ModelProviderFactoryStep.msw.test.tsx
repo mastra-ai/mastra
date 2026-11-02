@@ -84,6 +84,87 @@ describe('Model provider onboarding', () => {
     });
   });
 
+  describe('when Factory is signed in with a Mastra account', () => {
+    function registerGatewayHandlers({ remainingCredits }: { remainingCredits: number }) {
+      let connected = false;
+      const connectBodies: unknown[] = [];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: [
+              { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: [] } },
+              connected
+                ? { provider: 'mastra', source: 'stored-org', orgKey: true, orgCredential: 'api_key' }
+                : { provider: 'mastra', source: 'none', orgKey: false },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: connected
+              ? ['anthropic/claude-sonnet-4.6', 'anthropic/claude-fable-5'].map(modelName => ({
+                  id: `mastra/${modelName}`,
+                  provider: 'mastra',
+                  modelName,
+                  hasApiKey: true,
+                }))
+              : [],
+          }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/config/providers/mastra/connect`, async ({ request }) => {
+          connectBodies.push(await request.json());
+          connected = true;
+          return HttpResponse.json({ ok: true, defaultModelId: 'mastra/anthropic/claude-fable-5' });
+        }),
+        http.get(`${TEST_BASE_URL}/web/config/providers/mastra/credits`, () =>
+          HttpResponse.json({
+            remaining: remainingCredits,
+            unlimited: false,
+            addCreditsUrl: 'https://projects.mastra.ai/add-credits/org-1',
+          }),
+        ),
+      );
+      return { connectBodies };
+    }
+
+    it('connects the Mastra Gateway in one click and starts on its default model', async () => {
+      registerAuthHandler();
+      const { connectBodies } = registerGatewayHandlers({ remainingCredits: 5 });
+      const onComplete = vi.fn();
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
+
+      expect(await screen.findByText('Recommended')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Mastra Gateway' })).not.toBeInTheDocument();
+      await user.click(screen.getByRole('button', { name: 'Use Mastra Gateway' }));
+
+      await user.click(await screen.findByRole('button', { name: 'Continue' }));
+      expect(connectBodies).toEqual([{ scope: 'org' }]);
+      expect(onComplete).toHaveBeenCalledWith({
+        providerId: 'mastra',
+        method: 'api_key',
+        modelId: 'mastra/anthropic/claude-fable-5',
+      });
+      expect(screen.queryByText('No gateway credits left')).not.toBeInTheDocument();
+    });
+
+    it('links to Add credits when the organization has no gateway credits left', async () => {
+      registerAuthHandler();
+      registerGatewayHandlers({ remainingCredits: 0 });
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      await user.click(await screen.findByRole('button', { name: 'Use Mastra Gateway' }));
+
+      expect(await screen.findByText('No gateway credits left')).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Add credits' })).toHaveAttribute(
+        'href',
+        'https://projects.mastra.ai/add-credits/org-1',
+      );
+    });
+  });
+
   describe('when creating a custom provider', () => {
     function registerCustomProviderHandlers() {
       let created = false;

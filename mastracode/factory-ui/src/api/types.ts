@@ -166,6 +166,21 @@ export interface SaveProviderKeyResponse {
   provider?: ProviderInfo;
 }
 
+export interface ConnectMastraGatewayResponse {
+  ok: true;
+  provider?: ProviderInfo;
+  /** The gateway model a Factory starts on. */
+  defaultModelId: string;
+}
+
+export interface MastraGatewayCredits {
+  /** Remaining credits in dollars. */
+  remaining: number;
+  unlimited: boolean;
+  /** Platform page where the organization adds credits. */
+  addCreditsUrl: string;
+}
+
 export interface OAuthStartResponse {
   sessionId: string;
   kind: 'paste-code' | 'device-code';
@@ -177,9 +192,7 @@ export interface OAuthStartResponse {
 }
 
 export type OAuthPollResponse =
-  | { status: 'pending'; nextPollMs: number }
-  | { status: 'complete' }
-  | { status: 'failed'; error: string };
+  { status: 'pending'; nextPollMs: number } | { status: 'complete' } | { status: 'failed'; error: string };
 
 export interface UpdateOMResponse {
   ok: true;

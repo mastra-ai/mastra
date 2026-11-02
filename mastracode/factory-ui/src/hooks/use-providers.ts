@@ -5,6 +5,8 @@ import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
+  ConnectMastraGatewayResponse,
+  MastraGatewayCredits,
   OAuthPollResponse,
   OAuthStartResponse,
   ProviderInfo,
@@ -71,6 +73,31 @@ export function useSaveProviderKey() {
         ...(scope !== undefined ? { scope } : {}),
       }),
     onSuccess: () => invalidateCredentialDependentQueries(queryClient),
+  });
+}
+
+/** Catalog provider id of Mastra Gateway models (`mastra/<provider>/<model>`). */
+export const MASTRA_GATEWAY_PROVIDER = 'mastra';
+
+/** Create a Mastra Gateway key for the caller's Mastra organization and store it in the scope. */
+export function useConnectMastraGateway() {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ scope }: { scope?: 'user' | 'org' }) =>
+      client.post<ConnectMastraGatewayResponse>(`/web/config/providers/${MASTRA_GATEWAY_PROVIDER}/connect`, {
+        ...(scope !== undefined ? { scope } : {}),
+      }),
+    onSuccess: () => invalidateCredentialDependentQueries(queryClient),
+  });
+}
+
+export function useMastraGatewayCreditsQuery({ enabled }: { enabled: boolean }) {
+  const { client } = useApiConfig();
+  return useQuery({
+    queryKey: queryKeys.mastraGatewayCredits(),
+    queryFn: () => client.get<MastraGatewayCredits>(`/web/config/providers/${MASTRA_GATEWAY_PROVIDER}/credits`),
+    enabled,
   });
 }
 
