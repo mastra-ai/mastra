@@ -1027,6 +1027,57 @@ describe('model-route fallback parts', () => {
     expect(seeded.storage.getActiveAccount(PROVIDER)?.id).toBe(seeded.accountA.id);
   });
 
+  it('does not announce a hop when the session model is not the route head', async () => {
+    // getDynamicModel gives core one model here (the session model isn't
+    // route[0]), so a hop announced now would point at a model core can't reach.
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'openai/gpt-5.6-sol',
+      entries: [
+        { id: 'pack-a', label: 'A', modelId: 'anthropic/claude-sonnet-4-5' },
+        { id: 'pack-b', label: 'B', modelId: 'openai/gpt-5.6-sol' },
+        { id: 'pack-c', label: 'C', modelId: 'anthropic/claude-fable-5' },
+      ],
+    });
+    const refusal = apiError(400, {
+      url: 'https://api.openai.com/v1/responses',
+      message: 'This content was flagged for possible cybersecurity risk.',
+    });
+    const args = makeArgs({ error: refusal, requestContext: route.requestContext, retryCount: 1 });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    expect(await processor.hasNextModelRouteEntry(args as never)).toBe(false);
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(args.writer.custom).not.toHaveBeenCalledWith(expect.objectContaining({ type: MODEL_FALLBACK_PART_TYPE }));
+    expect(route.state[MODEL_FALLBACK_STATE_KEY]).toBeUndefined();
+  });
+
+  it('does not announce a hop when the pending entry and pending model disagree', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-sonnet-4-5',
+      entries: [
+        { id: 'pack-a', label: 'A', modelId: 'anthropic/claude-sonnet-4-5' },
+        { id: 'pack-b', label: 'B', modelId: 'openai/gpt-5.6-sol' },
+        { id: 'pack-c', label: 'C', modelId: 'anthropic/claude-fable-5' },
+      ],
+    });
+    // Pending says "run pack-b" but names another model, so getDynamicModel
+    // runs that model alone.
+    route.state.mastracodePendingModelFallback = {
+      fromEntryId: 'pack-a',
+      toEntryId: 'pack-b',
+      toModelId: 'openai/gpt-4.1',
+      threadId: 'thread-1',
+      reason: 'refusal',
+      at: '2026-11-02T00:00:00.000Z',
+    };
+    const args = makeArgs({ requestContext: route.requestContext });
+    const processor = new AccountRotationProcessor({ credentialStore: seeded.storage, maxProcessorRetries: 22 });
+
+    expect(await processor.hasNextModelRouteEntry(args as never)).toBe(false);
+  });
+
   it('surfaces a cyber_policy refusal on the last route entry without a TripWire', async () => {
     const seeded = await makeTwoAccountStorage();
     const route = makeRouteContext({
