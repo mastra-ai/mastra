@@ -326,17 +326,20 @@ function bodyView(
       more.push(`match: no section contains ${JSON.stringify(input.match)}.`);
       return { sections: [] };
     }
-    // Match extracts mark where they sit in the whole body; an offset past the extract is one of those.
-    if (input.bodyOffset > found.text.length) {
+    // With match, bodyOffset is a body character (as the extract's markers name), so read on in the body.
+    if (input.bodyOffset > 0) {
       text = body;
     } else {
       text = found.text;
       sections = found.sections;
-      again = `match: ${JSON.stringify(input.match)}, `;
     }
   }
   const window = knowledgeBodyWindow(text, input.bodyOffset);
-  if (window.remainingTokens > 0) {
+  if (window.remainingTokens > 0 && sections) {
+    more.push(
+      `body: the matching parts run past ${window.end} of ${window.total} characters, about ${window.remainingTokens} more tokens. Match a narrower term, or read a section by its heading.`,
+    );
+  } else if (window.remainingTokens > 0) {
     more.push(
       `body: truncated at character ${window.end} of ${window.total}, about ${window.remainingTokens} more tokens. Read again with ${again}bodyOffset: ${window.end} for the rest.`,
     );
@@ -383,7 +386,7 @@ function readTool(host: KnowledgePageToolHost) {
           type: 'integer',
           minimum: 0,
           description:
-            'Where to start in the body (or in the chosen section or matches), in characters; `more` gives it when a body is cut short. Defaults to 0.',
+            'Where to start, in characters: in the chosen section, else in the body (with `match`, this reads on in the body from a `[… body character N …]` marker). `more` gives it when a body is cut short. Defaults to 0.',
         },
         limit: { ...limitSchema, description: 'Maximum notes, children and mentioning notes. Defaults to 10.' },
       },

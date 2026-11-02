@@ -152,6 +152,28 @@ describe('knowledge_read on long pages', () => {
     const fromMatch = await call('knowledge_read', { page: 'docs:acme#podcast', match: 'steinberger', bodyOffset: at });
     expect(fromMatch.page.body).toBe(from.page.body);
 
+    const runs = lines.map((line, i) => ([5, 40, 80].includes(i) ? `${line} Zebraword appears here.` : line));
+    await knowledge.upsertPage({
+      scope: 'docs:acme',
+      path: 'runs',
+      name: 'Runs',
+      body: `# Page\n\n## Transcript\n\n${runs.join('\n\n')}`,
+    });
+    const matched = await call('knowledge_read', { page: 'docs:acme#runs', match: 'zebraword' });
+    const markers = [...matched.page.body.matchAll(/\[… body character (\d+) …\]/g)].map(m => Number(m[1]));
+    expect(markers).toHaveLength(3);
+    expect(markers[0]).toBeLessThan(matched.page.body.length);
+    for (const marker of markers) {
+      const plain = await call('knowledge_read', { page: 'docs:acme#runs', bodyOffset: marker });
+      const withMatch = await call('knowledge_read', {
+        page: 'docs:acme#runs',
+        match: 'zebraword',
+        bodyOffset: marker,
+      });
+      expect(withMatch.page.body).toBe(plain.page.body);
+      expect(plain.page.body.startsWith(runs[[4, 39, 79][markers.indexOf(marker)]!]!)).toBe(true);
+    }
+
     const heading = `# Page\n\n## Zebraword notes\n\n${lines.join('\n\n')}`;
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'heading', name: 'Heading', body: heading });
     const inHeading = await call('knowledge_read', { page: 'docs:acme#heading', match: 'zebraword' });
