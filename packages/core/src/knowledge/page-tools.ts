@@ -303,7 +303,12 @@ function leftOut(count: number, hasMore: boolean, noun: string): string {
 function bodyView(
   body: string,
   input: { outline?: boolean; section?: string; match?: string; bodyOffset: number; more: string[] },
-): { body?: string; outline?: ReturnType<typeof knowledgeBodyOutline>; sections?: string[] } {
+): {
+  body?: string;
+  bodyRange?: KnowledgeBodyRange;
+  outline?: ReturnType<typeof knowledgeBodyOutline>;
+  sections?: string[];
+} {
   const { more } = input;
   if (!body) {
     if (input.outline || input.section || input.match) more.push('body: the page has no body.');
@@ -320,6 +325,7 @@ function bodyView(
     return { outline: outline.slice(0, KNOWLEDGE_READ_OUTLINE_ENTRIES) };
   }
   let text = body;
+  let base = 0;
   let again = '';
   let sections: string[] | undefined;
   if (input.section) {
@@ -331,6 +337,7 @@ function bodyView(
       );
     }
     text = body.slice(found.section.start, found.section.end);
+    base = found.section.start;
     again = `section: ${JSON.stringify(input.section)}, `;
   } else if (input.match) {
     const found = knowledgeBodyMatches(body, input.match);
@@ -358,8 +365,20 @@ function bodyView(
   } else if (window.start > 0) {
     more.push(`body: showing characters ${window.start}–${window.end} of ${window.total}, the end.`);
   }
-  return { ...(window.text ? { body: window.text } : {}), ...(sections ? { sections } : {}) };
+  // Where a contiguous part sits in the body, so a write can replace just that part.
+  const range =
+    !sections && (base > 0 || window.start > 0 || base + window.end < body.length)
+      ? { start: base + window.start, end: base + window.end, of: body.length }
+      : undefined;
+  return {
+    ...(window.text ? { body: window.text } : {}),
+    ...(range ? { bodyRange: range } : {}),
+    ...(sections ? { sections } : {}),
+  };
 }
+
+/** Characters `start` to `end` of a body of `of` characters, as `knowledge_read` returns it for a part. */
+type KnowledgeBodyRange = { start: number; end: number; of: number };
 
 function readTool(host: KnowledgePageToolHost) {
   return createTool({
@@ -857,7 +876,38 @@ function listTool(host: KnowledgePageToolHost) {
   });
 }
 
+/**
+ * The body a write stores. With `bodyRange`, its part spliced into the body read at
+ * `expectedVersion`. Without one, a body longer than one read returns is refused: the writer can
+ * only have seen part of it, and writing that part back would drop the rest.
+ */
+function writtenBody(args: PageInput, page: KnowledgePage): string | undefined {
+  const stored = page.body ?? '';
+  if (args.bodyRange) {
+    if (args.body === undefined) throw new Error('bodyRange needs body: the text that replaces that part.');
+    if (args.expectedVersion === undefined) {
+      throw new Error('A bodyRange write needs expectedVersion, the version the range was read at.');
+    }
+    const { start, end } = args.bodyRange;
+    if (args.expectedVersion === page.version && (start > end || end > stored.length)) {
+      throw new Error(
+        `bodyRange ${start}–${end} is outside the body, which has ${stored.length} characters. Read the page again for a current range.`,
+      );
+    }
+    return stored.slice(0, start) + args.body + stored.slice(end);
+  }
+  if (args.body !== undefined && estimateTokenCount(stored) > KNOWLEDGE_READ_BODY_TOKENS) {
+    throw new Error(
+      `This page's body is ${stored.length} characters, more than one knowledge_read returns, and a body write replaces all of it. ` +
+        'Pass the bodyRange your read returned to replace just that part (with expectedVersion), ' +
+        `or bodyRange {start: 0, end: ${stored.length}} to replace the whole body.`,
+    );
+  }
+  return args.body;
+}
+
 type PageInput = {
+  bodyRange?: { start: number; end: number };
   op: 'write' | 'move' | 'merge' | 'delete';
   page?: string;
   scope?: string;
@@ -900,7 +950,18 @@ function pageTool(host: KnowledgePageToolHost) {
         },
         name: { type: 'string', minLength: 1 },
         description: { type: 'string', description: 'A short synopsis (about 100 tokens). Empty clears it.' },
-        body: { type: 'string', description: 'The curated long-form summary, in markdown.' },
+        body: {
+          type: 'string',
+          description:
+            'The curated long-form summary, in markdown. Replaces the whole body, or with `bodyRange` only that part.',
+        },
+        bodyRange: {
+          type: 'object',
+          description:
+            'Edit: the bodyRange a knowledge_read returned with part of a body. `body` then replaces only characters start to end. Needs expectedVersion.',
+          properties: { start: { type: 'integer', minimum: 0 }, end: { type: 'integer', minimum: 0 } },
+          required: ['start', 'end'],
+        },
         expectedVersion: {
           type: 'integer',
           minimum: 1,
@@ -938,7 +999,7 @@ function pageTool(host: KnowledgePageToolHost) {
             expectedVersion: args.expectedVersion ?? page.version,
             name: args.name,
             description: args.description,
-            body: args.body,
+            body: writtenBody(args, page),
             provenance,
           });
           await reindex(host, index => index.indexPage(updated));

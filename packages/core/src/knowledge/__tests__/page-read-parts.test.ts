@@ -15,7 +15,7 @@ function setup() {
     tools: true,
     scopes: {
       ...memory,
-      'docs:$orgId': { belongsTo: 'org:$orgId', access: [{ principal: 'org:$orgId', role: 'viewer' }] },
+      'docs:$orgId': { belongsTo: 'org:$orgId', access: [{ principal: 'org:$orgId', role: 'editor' }] },
     },
   });
   const tools = knowledge.createTools();
@@ -56,6 +56,102 @@ function referenceBody(options = 60) {
   );
   return lines.join('\n');
 }
+
+describe('writing back a long page read in part', () => {
+  it('refuses a body written back from a truncated read, and leaves the page as it was', async () => {
+    const { knowledge, call } = setup();
+    const body = referenceBody();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
+    const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
+    expect(read.page.body.length).toBeLessThan(body.length);
+
+    await expect(
+      call('knowledge_page', {
+        op: 'write',
+        page: 'docs:acme#anthropic',
+        body: read.page.body + '\n\nOne more line.',
+        expectedVersion: read.page.version,
+      }),
+    ).rejects.toThrow(/more than one knowledge_read returns.*bodyRange/s);
+    const after = await call('knowledge_read', { page: 'docs:acme#anthropic', match: 'Models' });
+    expect(after.page.version).toBe(read.page.version);
+    let whole = '';
+    for (let offset = 0; ;) {
+      const part = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: offset });
+      whole += part.page.body;
+      if (!part.page.bodyRange || part.page.bodyRange.end >= part.page.bodyRange.of) break;
+      offset = part.page.bodyRange.end;
+    }
+    expect(whole).toBe(body);
+  });
+
+  it('writes just the part a read returned when the write echoes its bodyRange', async () => {
+    const { knowledge, call } = setup();
+    const body = referenceBody();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
+
+    const window = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: 100 });
+    expect(window.page.bodyRange).toEqual({ start: 100, end: 100 + window.page.body.length, of: body.length });
+    const edited = window.page.body.replace('option3 setting', 'option3 SETTING');
+    const written = await call('knowledge_page', {
+      op: 'write',
+      page: 'docs:acme#anthropic',
+      body: edited,
+      bodyRange: window.page.bodyRange,
+      expectedVersion: window.page.version,
+    });
+
+    const section = await call('knowledge_read', { page: 'docs:acme#anthropic', section: 'Setup' });
+    expect(section.page.bodyRange.start).toBe(body.indexOf('## Setup'));
+    await call('knowledge_page', {
+      op: 'write',
+      page: 'docs:acme#anthropic',
+      body: '## Setup\n\nSet ANTHROPIC_API_KEY, or pass apiKey.\n\n',
+      bodyRange: section.page.bodyRange,
+      expectedVersion: written.page.version,
+    });
+
+    let whole = '';
+    for (let offset = 0; ;) {
+      const part = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: offset });
+      whole += part.page.body;
+      if (!part.page.bodyRange || part.page.bodyRange.end >= part.page.bodyRange.of) break;
+      offset = part.page.bodyRange.end;
+    }
+    expect(whole).toBe(
+      body
+        .replace('option3 setting', 'option3 SETTING')
+        .replace('## Setup\n\nSet ANTHROPIC_API_KEY.\n\n', '## Setup\n\nSet ANTHROPIC_API_KEY, or pass apiKey.\n\n'),
+    );
+  });
+
+  it('a bodyRange write needs the version it was read at, and a range inside the body', async () => {
+    const { knowledge, call } = setup();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody() });
+    const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
+    await expect(
+      call('knowledge_page', { op: 'write', page: 'docs:acme#anthropic', body: 'x', bodyRange: read.page.bodyRange }),
+    ).rejects.toThrow(/expectedVersion/);
+    await expect(
+      call('knowledge_page', {
+        op: 'write',
+        page: 'docs:acme#anthropic',
+        body: 'x',
+        bodyRange: { start: 10, end: 10_000_000 },
+        expectedVersion: read.page.version,
+      }),
+    ).rejects.toThrow(/bodyRange/);
+  });
+
+  it('still writes a short page whole without a bodyRange', async () => {
+    const { knowledge, call } = setup();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'short', name: 'Short', body: 'Old body.' });
+    const read = await call('knowledge_read', { page: 'docs:acme#short' });
+    expect(read.page.bodyRange).toBeUndefined();
+    const written = await call('knowledge_page', { op: 'write', page: 'docs:acme#short', body: 'New body.' });
+    expect(written.page.version).toBe(read.page.version + 1);
+  });
+});
 
 describe('knowledge_read on long pages', () => {
   it('caps the body by tokens, says how much is left, and continues from bodyOffset to the end', async () => {
