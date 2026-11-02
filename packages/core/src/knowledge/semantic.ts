@@ -51,7 +51,10 @@ export class KnowledgeSemanticIndex {
   async indexPage(page: KnowledgePage): Promise<void> {
     if (page.isScope || page.deletedAt) return this.removePage(page.id);
     const head = sliceByTokens([page.name, page.description].filter(Boolean).join('\n'), 0, MAX_HEAD_TOKENS);
-    const room = KNOWLEDGE_EMBED_CHUNK_TOKENS - estimateTokenCount(head) - 1;
+    const room = Math.max(
+      KNOWLEDGE_EMBED_CHUNK_TOKENS - estimateTokenCount(head) - 1,
+      KNOWLEDGE_EMBED_CHUNK_TOKENS / 2,
+    );
     const chunks = page.body ? knowledgeBodyChunks(page.body, room).slice(0, KNOWLEDGE_MAX_PAGE_CHUNKS) : [''];
     const ids = pageChunkIds(page.id, 0, chunks.length);
     const embeddings: number[][] = [];
