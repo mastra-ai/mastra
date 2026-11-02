@@ -51,7 +51,7 @@ async function writeTemporalWorkflowShim(projectRoot: string): Promise<void> {
   await writeFile(
     path.join(temporalWorkflowDir, 'index.js'),
     `
-      export { ApplicationFailure, isCancellation } from ${JSON.stringify(import.meta.resolve('@temporalio/workflow'))};
+      export { ApplicationFailure, TemporalFailure, isCancellation } from ${JSON.stringify(import.meta.resolve('@temporalio/workflow'))};
       const getMock = () => globalThis.__temporalWorkflowMock;
       export const executeChild = (...args) => getMock().executeChild(...args);
       export const proxyActivities = (...args) => getMock().proxyActivities(...args);

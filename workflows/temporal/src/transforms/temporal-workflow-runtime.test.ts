@@ -5,16 +5,20 @@ const proxyActivities = vi.fn();
 const sleep = vi.fn(async () => {});
 const logInfo = vi.fn();
 
-vi.mock('@temporalio/workflow', async importOriginal => ({
-  ApplicationFailure: (await importOriginal<typeof import('@temporalio/workflow')>()).ApplicationFailure,
-  isCancellation: () => false,
-  executeChild,
-  proxyActivities,
-  sleep,
-  log: {
-    info: logInfo,
-  },
-}));
+vi.mock('@temporalio/workflow', async importOriginal => {
+  const { ApplicationFailure, TemporalFailure } = await importOriginal<typeof import('@temporalio/workflow')>();
+  return {
+    ApplicationFailure,
+    TemporalFailure,
+    isCancellation: () => false,
+    executeChild,
+    proxyActivities,
+    sleep,
+    log: {
+      info: logInfo,
+    },
+  };
+});
 
 describe('temporal workflow runtime helper module', () => {
   beforeEach(() => {
@@ -110,7 +114,7 @@ describe('temporal workflow runtime helper module', () => {
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
     const workflow = createWorkflow('mapped-workflow').map(mappingId).commit();
 
-    await expect(workflow({ inputData: { value: 21 } })).rejects.toMatchObject({ cause: error });
+    await expect(workflow({ inputData: { value: 21 } })).rejects.toBe(error);
   });
 
   it.each([1, 5, 0])('forwards an activity retry policy with maximumAttempts %s', async maximumAttempts => {
@@ -128,7 +132,7 @@ describe('temporal workflow runtime helper module', () => {
     const { createWorkflow } = await import('./temporal-workflow-runtime.mjs');
     const workflow = createWorkflow('failing-workflow', { retry }).then('failing').commit();
 
-    await expect(workflow({ inputData: {} })).rejects.toMatchObject({ cause: failure });
+    await expect(workflow({ inputData: {} })).rejects.toBe(failure);
     expect(proxyActivities).toHaveBeenCalledWith({ startToCloseTimeout: '1 minute', retry });
     expect(failingStep).toHaveBeenCalledTimes(1);
   });

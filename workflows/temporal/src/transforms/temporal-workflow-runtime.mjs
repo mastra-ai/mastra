@@ -1,4 +1,12 @@
-import { ApplicationFailure, executeChild, isCancellation, proxyActivities, log, sleep } from '@temporalio/workflow';
+import {
+  ApplicationFailure,
+  TemporalFailure,
+  executeChild,
+  isCancellation,
+  proxyActivities,
+  log,
+  sleep,
+} from '@temporalio/workflow';
 
 // The step error an Activity or child Workflow put in its failure details. Failures without them
 // (timeouts, Activities from an older Worker) give the innermost cause's type and message.
@@ -54,7 +62,9 @@ export class TemporalExecutionEngine {
         result = await this.executeEntry(entry, result, stepResults);
       }
     } catch (error) {
-      if (isCancellation(error)) {
+      // An error that isn't a Temporal failure comes from Workflow code. It fails only the Workflow
+      // Task, which Temporal retries, so a fixed Worker can still finish the run.
+      if (isCancellation(error) || !(error instanceof TemporalFailure)) {
         throw error;
       }
 

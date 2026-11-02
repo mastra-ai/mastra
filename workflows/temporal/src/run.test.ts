@@ -16,14 +16,18 @@ import { init } from './index';
 
 // The Temporal SDK cannot load under the repository's protobufjs override, so the
 // worker sandbox is replaced by calling the generated workflow module directly.
-vi.mock('@temporalio/workflow', async importOriginal => ({
-  ApplicationFailure: (await importOriginal<typeof import('@temporalio/workflow')>()).ApplicationFailure,
-  isCancellation: () => false,
-  executeChild: vi.fn(),
-  proxyActivities: vi.fn(),
-  sleep: vi.fn(),
-  log: { info: vi.fn() },
-}));
+vi.mock('@temporalio/workflow', async importOriginal => {
+  const { ApplicationFailure, TemporalFailure } = await importOriginal<typeof import('@temporalio/workflow')>();
+  return {
+    ApplicationFailure,
+    TemporalFailure,
+    isCancellation: () => false,
+    executeChild: vi.fn(),
+    proxyActivities: vi.fn(),
+    sleep: vi.fn(),
+    log: { info: vi.fn() },
+  };
+});
 
 // Temporal's default payload converter sends workflow arguments and results as JSON.
 function overTheWire<T>(value: T): T {
