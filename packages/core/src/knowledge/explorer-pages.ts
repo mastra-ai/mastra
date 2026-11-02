@@ -146,7 +146,6 @@ export interface KnowledgePageView {
   mentionedBy: KnowledgeNote[];
 }
 
-/** One page with its notes, pin and the pages they reference. Null when `read` can't see the page. */
 /**
  * A page by id, or by the reference a tool result names it with: a scope address (`site:mastra`) or
  * `<scope>#<key>[/<key>…]`. Read-gated like the id lookup: an unreadable scope or page is not found.
@@ -163,6 +162,7 @@ async function pageByIdOrRef(store: KnowledgePageStore, ref: string, read: Knowl
   return store.getPageByPath({ scopeId: scope.id, path: parsed.path, read });
 }
 
+/** One page with its notes, pin and the pages they reference. Null when `read` can't see the page. */
 export async function readKnowledgePage(
   store: KnowledgePageStore,
   input: { pageId: string; read: KnowledgeReadScope; noteCursor?: string; noteLimit?: number },
