@@ -22,9 +22,9 @@ Text limits are counted in tokens. Counts are estimates, so treat the numbers as
 | Page nesting | 10 levels |
 | Pages in one move, counting everything under the moved page | 500 |
 | `knowledge_search` results, and notes and child pages per `knowledge_read` | 10 by default, up to 50 |
-| Page body per `knowledge_read` | 1,000 tokens |
+| Page body or `match` results per `knowledge_read` | 1,000 tokens by default, at least 100 |
 | Notes, and notes mentioning the page, kept in a whole `knowledge_read` | 1,000 tokens per list |
-| `knowledge_list` entries | 50 by default, up to 100, and about 1,000 tokens; 3 levels deep |
+| `knowledge_list` entries | 50 by default, up to 100, and about 1,000 tokens by default; 3 levels deep |
 | Embedding chunks per page, for search by meaning | 100, of about 2,000 tokens each |
 | Pinned context per turn | 500 tokens by default, up to 2000 |
 | Pinned pages per turn | 20 by default |
@@ -33,4 +33,4 @@ A write over a limit fails, and the model gets the error as the tool result. Too
 
 Page bodies have no token limit. `knowledge_read` returns a long body in parts, and an agent [edits it one part at a time](/docs/knowledge/agents-and-tools#write-pages) by line `range`. Pinned page bodies are cut to fit the pinned-context budget. See [pins](/docs/knowledge/pins#what-a-run-receives).
 
-Change the pin limits with `pinnedContext: { maxPins, maxTokens }` on `Knowledge`. A `maxTokens` above 2000 throws when you construct it.
+Change the read cap with `tools: { read: { maxTokens } }`. See [Set how much one read returns](/docs/knowledge/setup#set-how-much-one-read-returns). Change the pin limits with `pinnedContext: { maxPins, maxTokens }` on `Knowledge`. A `maxTokens` above 2000 throws when you construct it.

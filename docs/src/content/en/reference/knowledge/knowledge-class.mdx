@@ -73,9 +73,9 @@ export const knowledge = new Knowledge({
   },
   {
     name: 'tools',
-    type: 'boolean | { read?: boolean; write?: boolean }',
+    type: 'boolean | { read?: boolean | { maxTokens?: number }; write?: boolean }',
     description:
-      'Tools an attached agent gets. `true` gives `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first three, `{ write: true }` the last two. Off by default.',
+      'Tools an attached agent gets. `true` gives `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first three, `{ write: true }` the last two. `{ read: { maxTokens } }` turns on read and sets the most tokens one `knowledge_read` body or `match` result and one `knowledge_list` result returns: 1,000 by default, at least 100. Off by default. See [Set how much one read returns](/docs/knowledge/setup#set-how-much-one-read-returns).',
     isOptional: true,
     defaultValue: 'false',
   },

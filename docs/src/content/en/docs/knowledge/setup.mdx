@@ -86,10 +86,24 @@ Tools are off by default, so an agent with Knowledge attached gets nothing until
 | `tools` | Tools the agent gets |
 | - | - |
 | `true` | `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_page`, `knowledge_note` |
-| `{ read: true }` | `knowledge_list`, `knowledge_search`, `knowledge_read` |
+| `{ read: true }` or `{ read: { maxTokens } }` | `knowledge_list`, `knowledge_search`, `knowledge_read` |
 | `{ write: true }` | `knowledge_page`, `knowledge_note`, for agents that only ingest |
 
 Set `pinnedContext: true` to add `knowledge_pin` and deliver pinned pages every turn. See [pins](/docs/knowledge/pins).
+
+### Set how much one read returns
+
+`knowledge_read` returns at most 1,000 tokens of a page body or of `match` results at a time, and `knowledge_list` about 1,000 tokens of entries. The tools say in `more` how to read on. Raise the cap for models with large context windows or pages with long sections, and lower it for small models:
+
+```typescript
+const knowledge = new Knowledge({
+  id: 'docs',
+  scopes,
+  tools: { read: { maxTokens: 3000 }, write: true },
+})
+```
+
+`maxTokens` must be a whole number of at least 100. A line-range edit covers at most what one read returns under this cap. The 1,000-token limit on notes kept in a whole read doesn't change.
 
 The tools only offer what a run's roles allow at call time. Turning on `write` doesn't let a run write anywhere it has no role.
 
