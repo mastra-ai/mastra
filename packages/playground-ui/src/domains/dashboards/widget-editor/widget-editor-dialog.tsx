@@ -169,45 +169,69 @@ function WidgetEditorForm({ initial, creating, takenIds, scorers, scope, onSave 
           if (encoded.widget && issues.length === 0) onSave(encoded.widget);
         }}
       >
-        <DialogHeader className="pt-0 pr-12 pb-3">
+        {/* The kind is the widget's, shared by every view: it sits with the title, above the tabs. */}
+        <DialogHeader className="flex-row items-center gap-3 pt-0 pr-12 pb-3">
           <DialogTitle className="sr-only">{creating ? 'Add widget' : 'Edit widget'}</DialogTitle>
-          <TitleInput
-            aria-label="Widget title"
-            placeholder="Untitled widget"
-            aria-invalid={triedSave && !draft.title.trim() ? true : undefined}
-            {...register('title')}
-          />
+          <div className="min-w-0 flex-1">
+            <TitleInput
+              aria-label="Widget title"
+              placeholder="Untitled widget"
+              aria-invalid={triedSave && !draft.title.trim() ? true : undefined}
+              {...register('title')}
+            />
+          </div>
+          {hasMetrics && !draft.kindPicked && (
+            <Txt variant="caption" tone="muted">
+              Suggested for these metrics
+            </Txt>
+          )}
+          <SegmentedControl
+            aria-label="Widget kind"
+            size="sm"
+            value={kind}
+            onValueChange={value => {
+              setValue('kind', value, { shouldDirty: true });
+              setValue('kindPicked', true, { shouldDirty: true });
+            }}
+          >
+            {kinds.map(k => (
+              <SegmentedControlItem key={k.value} value={k.value}>
+                {k.label}
+              </SegmentedControlItem>
+            ))}
+          </SegmentedControl>
         </DialogHeader>
-        <DialogBody layout="fill" flush>
-          <div className="grid min-h-0 flex-1 grid-cols-1 border-t border-border md:grid-cols-2">
+        <DialogBody layout="fill" flush className="gap-0">
+          {/* The tabs span the form and the preview: both show the active view. */}
+          <div className="border-y border-border px-5 py-3">
+            <ViewTabs
+              labels={views.map(v => v.label)}
+              active={active}
+              onActiveChange={setActive}
+              onAdd={() => {
+                setViews([...views, emptyView(nextViewLabel(views))]);
+                setActive(views.length);
+              }}
+              onRename={(index, label) => setViews(views.map((v, i) => (i === index ? { ...v, label } : v)))}
+              onDuplicate={index => {
+                const source = views[index];
+                if (!source) return;
+                // Metric keys only need to be unique within a view, so the copy keeps them.
+                const copy = { ...structuredClone(source), label: copyLabel(source.label, views) };
+                setViews([...views.slice(0, index + 1), copy, ...views.slice(index + 1)]);
+                setActive(index + 1);
+              }}
+              onDelete={index => {
+                setViews(views.filter((_, i) => i !== index));
+                setActive(Math.max(0, Math.min(active, views.length - 2)));
+              }}
+            />
+          </div>
+          <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-2">
             <div className="flex min-h-0 flex-col">
-              <div className="px-5 py-3">
-                <ViewTabs
-                  labels={views.map(v => v.label)}
-                  active={active}
-                  onActiveChange={setActive}
-                  onAdd={() => {
-                    setViews([...views, emptyView(nextViewLabel(views))]);
-                    setActive(views.length);
-                  }}
-                  onRename={(index, label) => setViews(views.map((v, i) => (i === index ? { ...v, label } : v)))}
-                  onDuplicate={index => {
-                    const source = views[index];
-                    if (!source) return;
-                    // Metric keys only need to be unique within a view, so the copy keeps them.
-                    const copy = { ...structuredClone(source), label: copyLabel(source.label, views) };
-                    setViews([...views.slice(0, index + 1), copy, ...views.slice(index + 1)]);
-                    setActive(index + 1);
-                  }}
-                  onDelete={index => {
-                    setViews(views.filter((_, i) => i !== index));
-                    setActive(Math.max(0, Math.min(active, views.length - 2)));
-                  }}
-                />
-              </div>
               <ScrollArea className="min-h-0 flex-1" mask>
                 <ScrollAreaViewport className="h-full">
-                  <div className="px-5 pb-4">
+                  <div className="p-5">
                     <ViewEditor
                       key={active}
                       index={active}
@@ -220,29 +244,7 @@ function WidgetEditorForm({ initial, creating, takenIds, scorers, scope, onSave 
                 </ScrollAreaViewport>
               </ScrollArea>
             </div>
-            <div className="flex min-h-0 flex-col gap-4 bg-surface-panel px-5 py-3">
-              <div className="flex flex-wrap items-center gap-3">
-                <SegmentedControl
-                  aria-label="Widget kind"
-                  size="sm"
-                  value={kind}
-                  onValueChange={value => {
-                    setValue('kind', value, { shouldDirty: true });
-                    setValue('kindPicked', true, { shouldDirty: true });
-                  }}
-                >
-                  {kinds.map(k => (
-                    <SegmentedControlItem key={k.value} value={k.value}>
-                      {k.label}
-                    </SegmentedControlItem>
-                  ))}
-                </SegmentedControl>
-                {hasMetrics && !draft.kindPicked && (
-                  <Txt variant="caption" tone="muted">
-                    Suggested for these metrics
-                  </Txt>
-                )}
-              </div>
+            <div className="flex min-h-0 flex-col border-border bg-surface-panel p-5 md:border-l">
               <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
                 {/* my-auto rather than justify-center: a card taller than the box still scrolls from its top. */}
                 <div className="my-auto">
