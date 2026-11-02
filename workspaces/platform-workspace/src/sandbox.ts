@@ -538,8 +538,8 @@ export class PlatformSandbox extends MastraSandbox {
 
   /**
    * Port URLs for a running sandbox. Ports are private by default: anyone
-   * with access to the sandbox's project can open a port's URL in a browser
-   * after signing in to the platform, and anyone else is turned away. The URL
+   * in the sandbox's organization can open a port's URL in a browser after
+   * signing in to the platform, and anyone else is turned away. The URL
    * doesn't expire, so it's the one to share.
    */
   readonly networking: SandboxNetworking = {

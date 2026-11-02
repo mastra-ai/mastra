@@ -4063,7 +4063,7 @@ describe('PlatformSandbox networking', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("is null on Railway sandboxes, which don't serve their ports", async () => {
+  it("is null on sandboxes whose provider doesn't serve ports", async () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'railway');
     const { sandbox, fetchMock } = makeSandbox();
     await sandbox._start();
