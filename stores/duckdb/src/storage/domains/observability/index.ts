@@ -101,6 +101,7 @@ import type {
 import type { DuckDBConnection } from '../../db/index';
 import {
   aggregateTimeToFirstFeatures,
+  contextFieldFeatures,
   outcomeFeatures,
   spanAggregateFeatures,
   spanQueryFeatures,
@@ -285,6 +286,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'trace-query-tenant-scope',
         'feedback',
         'trace-query-context-ids',
+        ...contextFieldFeatures,
         ...timingFeatures,
         ...outcomeFeatures,
         'trace-query-root-span-fields',
@@ -314,6 +316,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'trace-query-tenant-scope',
       'feedback',
       'trace-query-context-ids',
+      ...contextFieldFeatures,
       ...timingFeatures,
       ...outcomeFeatures,
       'trace-query-root-span-fields',

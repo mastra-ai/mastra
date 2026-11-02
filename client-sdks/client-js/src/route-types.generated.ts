@@ -3822,6 +3822,8 @@ type Shared_Type_67 = {
   traceQueryRootDuration: boolean;
   /** `runId`, `sessionId`, `userId` and `organizationId` predicates in trace and thread queries */
   traceQueryContextIds: boolean;
+  /** `requestId`, `serviceName` and `experimentId` predicates in trace and thread queries */
+  traceQueryContextFields: boolean;
   /** `timeToFirstChunkMs` in trace and span query results, and predicates on it in trace, thread and span queries */
   traceQueryTimeToFirstChunk: boolean;
   /** Root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct` */

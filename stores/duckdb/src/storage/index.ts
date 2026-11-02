@@ -17,6 +17,7 @@ import type {
 } from './domains/observability/index';
 import {
   aggregateTimeToFirstFeatures,
+  contextFieldFeatures,
   outcomeFeatures,
   spanAggregateFeatures,
   spanQueryFeatures,
@@ -48,6 +49,7 @@ const DUCKDB_OBSERVABILITY_FEATURES = [
   'trace-query-tenant-scope',
   'feedback',
   'trace-query-context-ids',
+  ...contextFieldFeatures,
   ...timingFeatures,
   ...outcomeFeatures,
   'trace-query-root-span-fields',
@@ -75,6 +77,7 @@ const DUCKDB_OBSERVABILITY_DELTA_FEATURES = [
   'trace-query-tenant-scope',
   'feedback',
   'trace-query-context-ids',
+  ...contextFieldFeatures,
   ...timingFeatures,
   ...outcomeFeatures,
   'trace-query-root-span-fields',
