@@ -9,6 +9,7 @@ import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.js';
 import { ProjectRoutes } from './projects.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
@@ -990,6 +991,56 @@ describe('intake configuration', () => {
       );
       expect(items.get(routed.id)).toMatchObject({ board: 'work', stages: ['intake'] });
       expect(items.get(labelled.id)).toMatchObject({ board: 'release', stages: ['queued'] });
+    });
+
+    it("doesn't mark a card as route-placed when filing its source again reuses it", async () => {
+      const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+      const input = {
+        title: 'Fix login',
+        metadata: { labels: ['release'] },
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue' as const,
+          externalId: 'github-issue:32',
+          url: 'https://github.com/acme/app/issues/32',
+        },
+      };
+      const existing = (
+        await seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: project.id,
+          input: { ...input, board: 'work', stages: ['intake'], sessions: {} },
+        })
+      ).item;
+      // The default route matches this unstamped GitHub issue, so filing it anew without a board would route it.
+      const again = await createFactoryWorkItem({
+        workItems: seed.workItems,
+        boards: boardRegistry,
+        transitionService: undefined,
+        audit: async () => {},
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: project.id,
+        input,
+        intakeRoutes: seed.boards,
+      });
+      expect(again).toMatchObject({ status: 'reused', item: { id: existing.id } });
+      if (again.status !== 'reused') return;
+      expect(again.item.metadata).toEqual(existing.metadata);
+
+      const response = await put({
+        integrationId: 'github',
+        factoryProjectId: project.id,
+        label: 'release',
+        board: 'release',
+      });
+
+      expect(await response.json()).toMatchObject({ relocated: { moved: 1, skipped: 0 } });
+      expect(await seed.workItems.getForProject('org1', project.id, existing.id)).toMatchObject({
+        board: 'release',
+        stages: ['queued'],
+      });
     });
 
     it.each([

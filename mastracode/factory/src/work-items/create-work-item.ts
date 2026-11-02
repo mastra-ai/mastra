@@ -98,13 +98,23 @@ export async function createFactoryWorkItem({
       ...input,
       board: boardId,
       stages: initialStages,
-      ...(placement ? { metadata: { ...input.metadata, [INTAKE_ROUTE_METADATA_KEY]: placement.routeId } } : {}),
     },
     reuseMode: 'non-stage',
   });
+  // A reused card keeps its own placement, so only a card this call created records the route.
   if (!result.created) return { status: 'reused', item: result.item };
 
-  const created = result.item;
+  const created = placement
+    ? ((
+        await workItems.update({
+          orgId,
+          id: result.item.id,
+          userId,
+          patch: { metadata: { [INTAKE_ROUTE_METADATA_KEY]: placement.routeId } },
+          expectedRevision: result.item.revision,
+        })
+      )?.item ?? result.item)
+    : result.item;
   if (!transitionService) {
     await workItems.delete({ orgId, id: created.id });
     return {
