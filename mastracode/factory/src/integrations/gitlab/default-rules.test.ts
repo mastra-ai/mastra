@@ -20,7 +20,7 @@ describe('GitLab issue re-triage', () => {
   describe.each([['issueCommented'], ['issueUpdated']] as const)('%s', event => {
     const rule = defaultGitLabRules[event]!;
 
-    it.each([['intake'], ['triage'], ['planning']])('re-triages a Work card in %s', stage => {
+    it.each([['triage'], ['planning']])('re-triages a Work card in %s', stage => {
       expect(rule(context(event, [stage]))).toMatchObject({
         type: 'invokeSkill',
         role: 'triage',
@@ -28,7 +28,7 @@ describe('GitLab issue re-triage', () => {
       });
     });
 
-    it.each([['execute'], ['review'], ['done'], ['canceled']])('does not re-triage a Work card in %s', stage => {
+    it.each([['intake'], ['execute'], ['review'], ['done'], ['canceled']])('does not re-triage a Work card in %s', stage => {
       expect(rule(context(event, [stage]))).toBeUndefined();
     });
 

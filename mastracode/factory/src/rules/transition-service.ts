@@ -19,12 +19,7 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
-import {
-  externallyAuthoredWorkItem,
-  factoryRuleSourceForWorkItem,
-  isFactoryRuleStage,
-  workItemSource,
-} from './types.js';
+import { factoryRuleSourceForWorkItem, isFactoryRuleStage, workItemSource } from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   assertFactoryDecisionTarget,
@@ -517,20 +512,6 @@ export class FactoryTransitionService {
           }
           if (policy?.accept && !isHumanTransition(request)) {
             throw new Error('Board policy requested unauthorized acceptance.');
-          }
-          // External content can steer a bound agent; board allowance cannot bypass this guard.
-          if (
-            request.actor.type === 'agent' &&
-            !board.isWorking(fromStage) &&
-            entersWorking &&
-            externallyAuthoredWorkItem(item)
-          ) {
-            return {
-              outcome: 'rejected' as const,
-              code: 'approval_required',
-              reason:
-                'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
-            };
           }
           const selfReviewEnabled =
             request.board === 'work' && this.#selfReviewEnabled

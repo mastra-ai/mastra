@@ -10,6 +10,7 @@ import { z } from 'zod';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
 import type { IntegrationTools } from '../integrations/base.js';
@@ -46,6 +47,8 @@ export interface FactoryWorkItemToolDependencies {
   workItems: WorkItemsStorage;
   /** A fixed registry, or the per-project boards. */
   boards: BoardRegistry | ProjectBoardSource;
+  /** The project's intake routes, which place a filed card. */
+  intakeRoutes?: IntakeRoutesReader;
   /** Governed stage moves; filing and moving items refuse while it is unavailable. */
   transitionService: Pick<FactoryTransitionService, 'transition'> | undefined;
   /** Writes audit rows with an explicit actor; tool calls have no HTTP request to read one from. */
@@ -151,7 +154,7 @@ export function createFactoryWorkItemTools(
     factory_create_work_item: createTool({
       id: 'factory_create_work_item',
       description:
-        "File a new work item on this Factory's Work board for the person you are working with. It lands in the board's first phase, exactly like pressing New card, and this session follows it. Check factory_list_work_items for an existing item first. Name the repository when the Factory links more than one; runs refuse to start on a card that doesn't say which.",
+        "File a new work item on this Factory's Work board (or wherever the project's intake routes send it) for the person you are working with. It enters its board's first phase, or the phase an intake route names, and this session follows it. Check factory_list_work_items for an existing item first. Name the repository when the Factory links more than one; runs refuse to start on a card that doesn't say which.",
       inputSchema: z
         .object({
           title: z.string().trim().min(1).max(512).describe('Short title, as it should read on the card.'),
@@ -170,6 +173,7 @@ export function createFactoryWorkItemTools(
           workItems: deps.workItems,
           boards: await toBoardSource(deps.boards).load(project),
           transitionService: deps.transitionService,
+          intakeRoutes: deps.intakeRoutes,
           audit,
           ...project,
           userId: scope.userId,
