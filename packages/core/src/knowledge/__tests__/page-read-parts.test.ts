@@ -107,7 +107,20 @@ describe('writing back a long page read in part', () => {
         bodyRange: { start: 0, end: body.length, of: body.length },
         expectedVersion: read.page.version,
       }),
-    ).rejects.toThrow(/part by part/);
+    ).rejects.toThrow(/wider than one knowledge_read/);
+    // Near misses: one character short of the whole body, and two windows' text written as one.
+    const second = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: read.page.bodyRange.end });
+    for (const end of [body.length - 1, second.page.bodyRange.end]) {
+      await expect(
+        call('knowledge_page', {
+          op: 'write',
+          page: 'docs:acme#anthropic',
+          body: read.page.body,
+          bodyRange: { start: 0, end, of: body.length },
+          expectedVersion: read.page.version,
+        }),
+      ).rejects.toThrow(/wider than one knowledge_read/);
+    }
 
     // What the refusal says to do: write back the part with the bodyRange its read returned.
     await call('knowledge_page', {

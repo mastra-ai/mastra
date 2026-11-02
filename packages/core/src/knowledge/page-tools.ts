@@ -899,11 +899,14 @@ function writtenBody(args: PageInput, page: KnowledgePage): string | undefined {
         `bodyRange ${start}–${end} is outside the body, which has ${stored.length} characters. Read the page again for a current range.`,
       );
     }
-    // No read returns the whole of a body this long, so a range covering all of it can't come from one.
-    if (start === 0 && end >= stored.length && estimateTokenCount(stored) > KNOWLEDGE_READ_BODY_TOKENS) {
+    // No read returns more than this much of a body, so a wider range can't be one a read gave.
+    if (
+      args.expectedVersion === page.version &&
+      estimateTokenCount(stored.slice(start, end)) > KNOWLEDGE_READ_BODY_TOKENS
+    ) {
       throw new Error(
-        `bodyRange ${start}–${end} covers this page's whole body (${stored.length} characters), but no knowledge_read returns all of a body this long, so the text can't be all of it. ` +
-          'Edit it part by part: write each part back with the bodyRange its read returned.',
+        `bodyRange ${start}–${end} is wider than one knowledge_read returns, so it can't be the range a read gave you. ` +
+          'Edit the body part by part: write each part back with the bodyRange its own read returned.',
       );
     }
     return stored.slice(0, start) + args.body + stored.slice(end);
