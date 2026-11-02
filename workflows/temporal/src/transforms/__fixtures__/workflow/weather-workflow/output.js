@@ -198,7 +198,9 @@ class TemporalExecutionEngine {
           });
           // Waits for every branch, as a local run does, so a failed run keeps the others' records.
           const settled = await Promise.allSettled(entry.steps.map(step => this.executeEntry(step, inputData, stepResults)));
-          const rejected = settled.find(outcome => outcome.status === 'rejected');
+          const failures = settled.filter(outcome => outcome.status === 'rejected');
+          // A cancelled run ends Canceled, whatever the order of a failed branch and a cancelled one.
+          const rejected = failures.find(outcome => isCancellation(outcome.reason)) ?? failures[0];
           if (rejected) {
             throw rejected.reason;
           }
