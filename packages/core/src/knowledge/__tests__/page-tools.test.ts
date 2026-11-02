@@ -445,7 +445,7 @@ describe('Knowledge page tools (spec §10 scenarios, in-memory store)', () => {
 
     await admin().page({ op: 'write', scope: 'org:acme', name: 'Roadmap' });
     await admin().page({ op: 'write', scope: 'team:acme:support', name: 'Roadmap' });
-    await expect(admin().read('Roadmap')).rejects.toThrow(/ambiguous; use one of these ids/);
+    await expect(admin().read('Roadmap')).rejects.toThrow(/ambiguous; use one of these refs/);
     expect((await sales().read('Roadmap')).page.scope).toBe('org:acme');
   });
 

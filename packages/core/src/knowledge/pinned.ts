@@ -1,8 +1,9 @@
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
-import { MAX_KNOWLEDGE_PAGE_DEPTH, parseKnowledgePageRef } from '../storage/domains/knowledge';
+import { parseKnowledgePageRef } from '../storage/domains/knowledge';
 import type { KnowledgeListedPin, KnowledgePage } from '../storage/domains/knowledge';
 import { knowledgeScopeAddress } from './declarations';
 import type { CompiledKnowledgeScopes } from './declarations';
+import { knowledgePageRefs } from './page-refs';
 import type { KnowledgeRun } from './run';
 
 export const PINNED_KNOWLEDGE_STATE_ID = 'knowledge';
@@ -240,40 +241,14 @@ async function pinLabels(
   pages: KnowledgePage[],
 ): Promise<{ labels: Map<string, PinLabel>; scopes: Map<string, string> }> {
   const labels = new Map<string, PinLabel>();
-  const scopes = new Map<string, string>();
-  if (pages.length === 0) return { labels, scopes };
-  const known = new Map(pages.map(page => [page.id, page]));
+  if (pages.length === 0) return { labels, scopes: new Map() };
   // An adapter older than countNotes (or a failing count) must not cost the pins themselves.
   const counts = run.storage
-    .countNotes({ pageIds: [...known.keys()], read: run.read })
+    .countNotes({ pageIds: pages.map(page => page.id), read: run.read })
     .catch((): Record<string, number> | undefined => undefined);
-  const walk = async () => {
-    for (let level = 0; level <= MAX_KNOWLEDGE_PAGE_DEPTH; level++) {
-      const missing = [
-        ...new Set(
-          [...known.values()]
-            .filter(page => !page.isScope && page.parentId && !known.has(page.parentId))
-            .map(page => page.parentId!),
-        ),
-      ];
-      if (missing.length === 0) break;
-      const found = await run.storage.getPages({ ids: missing, read: run.read });
-      if (found.length === 0) break;
-      for (const page of found) known.set(page.id, page);
-    }
-  };
-  const [noteCounts] = await Promise.all([counts, walk()]);
-  for (const page of known.values()) if (page.isScope && page.address) scopes.set(page.id, page.address);
+  const [noteCounts, { refs, scopes }] = await Promise.all([counts, knowledgePageRefs(run.storage, run.read, pages)]);
   for (const page of pages) {
-    const path: string[] = [];
-    let current: KnowledgePage | undefined = page;
-    while (current && !current.isScope && current.key) {
-      path.unshift(current.key);
-      current = current.parentId ? known.get(current.parentId) : undefined;
-    }
-    const address = current?.isScope ? current.address : undefined;
-    const ref = address ? (path.length > 0 ? `${address}#${path.join('/')}` : address) : page.id;
-    labels.set(page.id, { ref, notes: noteCounts ? (noteCounts[page.id] ?? 0) : undefined });
+    labels.set(page.id, { ref: refs.get(page.id)!, notes: noteCounts ? (noteCounts[page.id] ?? 0) : undefined });
   }
   return { labels, scopes };
 }

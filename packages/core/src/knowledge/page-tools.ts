@@ -10,6 +10,8 @@ import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast } from './declarations';
+import { knowledgePageRefs } from './page-refs';
+import type { KnowledgePageRefs } from './page-refs';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
 import type { KnowledgeRunContext } from './run';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
@@ -69,23 +71,18 @@ async function start(host: KnowledgePageToolHost, context: unknown): Promise<Kno
   return KnowledgeRun.start(host.runtime, await host.getStorage(), context as KnowledgeRunContext | undefined);
 }
 
-/** Scope addresses by page id, for showing where results live. */
-async function scopeAddresses(run: KnowledgeRun, pages: KnowledgePage[]): Promise<Map<string, string>> {
-  const addresses = new Map<string, string>();
-  for (const page of pages) {
-    if (addresses.has(page.scopeId)) continue;
-    const scope = page.isScope ? page : await run.storage.getPage({ id: page.scopeId, read: run.read });
-    if (scope?.address) addresses.set(page.scopeId, scope.address);
-  }
-  return addresses;
+/** Full refs and scope addresses for pages a response shows. */
+function pageRefs(run: KnowledgeRun, pages: KnowledgePage[]): Promise<KnowledgePageRefs> {
+  return knowledgePageRefs(run.storage, run.read, pages);
 }
 
-function pageSummary(page: KnowledgePage, addresses: Map<string, string>) {
+/** A page as tools show it; `ref` is the full ref `knowledge_read` takes (scope address, `<scope>#<key>/<key>…`, or id). */
+function pageSummary(page: KnowledgePage, { refs, scopes }: KnowledgePageRefs) {
   return {
     id: page.id,
     name: page.name,
-    ...(page.isScope ? { address: page.address } : { scope: addresses.get(page.scopeId) }),
-    ...(page.key ? { key: page.key } : {}),
+    ref: refs.get(page.id) ?? page.id,
+    ...(page.isScope ? { address: page.address } : { scope: scopes.get(page.scopeId) }),
     ...(page.description ? { description: page.description } : {}),
   };
 }
@@ -251,7 +248,7 @@ function searchTool(host: KnowledgePageToolHost) {
           .slice(0, max)
           .map(entry => entry.hit);
       }
-      const addresses = await scopeAddresses(
+      const addresses = await pageRefs(
         run,
         hits.map(hit => hit.page),
       );
@@ -304,7 +301,7 @@ function readTool(host: KnowledgePageToolHost) {
         };
       }
 
-      const page = await run.page(ref);
+      const page = await run.pageOrCloseMatches(ref);
       const [notes, children, mentioning] = await Promise.all([
         run.storage.listNotes({ pageId: page.id, read: run.read, cursor, limit }),
         run.storage.listChildPages({ parentId: page.id, read: run.read, limit }),
@@ -331,7 +328,7 @@ function readTool(host: KnowledgePageToolHost) {
         mentioning.notes.map(note => run.storage.getPage({ id: note.pageId, read: run.read })),
       );
       const mentionCache: MentionCache = new Map();
-      const addresses = await scopeAddresses(run, [
+      const addresses = await pageRefs(run, [
         page,
         ...children.pages,
         ...mentionPages.filter((p): p is KnowledgePage => p !== null),
@@ -412,11 +409,9 @@ function pageTool(host: KnowledgePageToolHost) {
       const args = input as PageInput;
       const run = await start(host, context);
       const { storage, provenance } = run;
-      const addresses = new Map<string, string>();
-      const done = async (page: KnowledgePage) => {
-        for (const [id, address] of await scopeAddresses(run, [page])) addresses.set(id, address);
-        return { page: { ...pageSummary(page, addresses), version: page.version } };
-      };
+      const done = async (page: KnowledgePage) => ({
+        page: { ...pageSummary(page, await pageRefs(run, [page])), version: page.version },
+      });
 
       if (args.op === 'write') {
         if (args.page) {
