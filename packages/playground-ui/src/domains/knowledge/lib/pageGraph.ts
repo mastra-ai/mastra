@@ -9,6 +9,41 @@ import type { Edge, Node } from '@xyflow/react';
 
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 
+/** Children a focused page adds to the graph at most; the rest are counted, not drawn. */
+export const GRAPH_CHILD_CAP = 24;
+
+/**
+ * The graph's pages plus, for each page focused in it (in focus order), up to `cap` of its loaded
+ * children the graph didn't have. `hiddenChildren` says, per focused page whose children have
+ * loaded, how many of its children are still not drawn (from its `childCount` when the server
+ * sent one). A focused page the graph doesn't hold adds nothing.
+ */
+export function graphWithChildren(
+  pages: KnowledgePagePayload[],
+  focusedIds: readonly string[],
+  loadedPages: KnowledgePagePayload[],
+  loadedParents: ReadonlySet<string>,
+  cap = GRAPH_CHILD_CAP,
+): { pages: KnowledgePagePayload[]; hiddenChildren: Map<string, number> } {
+  const known = new Map(pages.map(page => [page.id, page]));
+  const extra: KnowledgePagePayload[] = [];
+  const hiddenChildren = new Map<string, number>();
+  for (const parentId of focusedIds) {
+    const parent = known.get(parentId);
+    if (!parent || !loadedParents.has(parentId)) continue;
+    const children = loadedPages.filter(
+      page => page.parentId === parentId && page.id !== parentId && !page.deletedAt && !page.mergedInto,
+    );
+    for (const child of children.filter(page => !known.has(page.id)).slice(0, cap)) {
+      known.set(child.id, child);
+      extra.push(child);
+    }
+    const drawn = children.filter(page => known.has(page.id)).length;
+    hiddenChildren.set(parentId, Math.max(0, (parent.childCount ?? children.length) - drawn));
+  }
+  return { pages: extra.length ? [...pages, ...extra] : pages, hiddenChildren };
+}
+
 /**
  * Edges among loaded, live pages: a parent edge for every loaded parent, and
  * the given mention and body-link edges merged per kind and source → target

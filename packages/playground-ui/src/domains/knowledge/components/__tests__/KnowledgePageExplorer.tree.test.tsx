@@ -55,7 +55,7 @@ function detail(pageId: string): KnowledgeExplorerPageDetail {
   return { page: target, notes: [], ancestors, related: [] };
 }
 
-function Host({ requested }: { requested: KnowledgeExplorerTreeRequest[] }) {
+function Host({ requested, siteChildCount }: { requested: KnowledgeExplorerTreeRequest[]; siteChildCount?: number }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<KnowledgeExplorerView>('graph');
   const source: KnowledgeExplorerSource = {
@@ -71,7 +71,12 @@ function Host({ requested }: { requested: KnowledgeExplorerTreeRequest[] }) {
       <output data-testid="view">{view}</output>
       <KnowledgePageExplorer
         // The graph loaded only the first pages; the articles are outside it.
-        graph={{ pages: [site, pricing], edges: [], pinnedIds: [], truncated: true }}
+        graph={{
+          pages: [siteChildCount === undefined ? site : { ...site, childCount: siteChildCount }, pricing],
+          edges: [],
+          pinnedIds: [],
+          truncated: true,
+        }}
         source={source}
         selectedPageId={selected}
         onSelect={setSelected}
@@ -161,6 +166,49 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       fireEvent.click(row('site:mastra'));
       expect(screen.getByTestId('view').textContent).toBe('graph');
       expect(row('site:mastra').getAttribute('aria-selected')).toBe('true');
+    });
+  });
+
+  describe('when a page is focused in the graph', () => {
+    const parentLines = (container: HTMLElement) =>
+      [...container.querySelectorAll('.react-flow__edge')]
+        .map(edge => edge.getAttribute('data-id'))
+        .filter(id => id?.startsWith('parent:'))
+        .sort();
+
+    it('adds the children the graph had not loaded, joined to it', () => {
+      const { container } = renderWithProviders(<Host requested={[]} />);
+      expect(parentLines(container)).toEqual(['parent:site->pricing']);
+      fireEvent.click(row('site:mastra'));
+      expect(parentLines(container)).toEqual(['parent:site->articles', 'parent:site->pricing']);
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+    });
+
+    it('keeps going down: focusing an added child adds its children too', () => {
+      const { container } = renderWithProviders(<Host requested={[]} />);
+      fireEvent.click(row('site:mastra'));
+      fireEvent.click(row('Articles'));
+      expect(parentLines(container)).toEqual([
+        'parent:articles->first',
+        'parent:articles->second',
+        'parent:site->articles',
+        'parent:site->pricing',
+      ]);
+      expect(screen.getByTestId('view').textContent).toBe('graph');
+    });
+
+    it('counts the children it still does not draw', () => {
+      renderWithProviders(<Host requested={[]} siteChildCount={5} />);
+      fireEvent.click(row('site:mastra'));
+      expect(screen.getByTestId('knowledge-graph-more-children').textContent).toBe(
+        '+3 more pages under site:mastra not drawn. Open the tree to see them all.',
+      );
+    });
+
+    it('says nothing more when every child is drawn', () => {
+      renderWithProviders(<Host requested={[]} />);
+      fireEvent.click(row('site:mastra'));
+      expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
     });
   });
 });

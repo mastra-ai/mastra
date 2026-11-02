@@ -1,6 +1,7 @@
 import { X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
+import { graphWithChildren } from '../lib/pageGraph';
 import { bodyLinkEdges } from '../lib/pageRefs';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
 
@@ -436,6 +437,8 @@ function useLazyTree(
   source: KnowledgeExplorerSource,
   graph: KnowledgeExplorerGraph,
   selected: KnowledgeExplorerPageDetail | undefined,
+  // Pages focused in the graph: their first level of children loads too, so the graph can draw them.
+  graphOpened: readonly string[],
 ) {
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [more, setMore] = useState<ReadonlyMap<string, string[]>>(() => new Map());
@@ -445,8 +448,9 @@ function useLazyTree(
       list.push({ parentId: id });
       for (const cursor of more.get(id) ?? []) list.push({ parentId: id, cursor });
     }
+    for (const id of graphOpened) if (!expanded.has(id)) list.push({ parentId: id });
     return list;
-  }, [expanded, more]);
+  }, [expanded, more, graphOpened]);
   const levels = (source.useTreeLevels ?? noTreeLevels)(requests);
 
   const { pages, loaded, nextCursor } = useMemo(() => {
@@ -492,7 +496,14 @@ function useLazyTree(
   }, [nextCursor]);
   const onExpandedChange = useCallback((ids: ReadonlySet<string>) => setExpanded(new Set(ids)), []);
 
-  return { pages, mayHaveChildren, loadMore, onExpandedChange, rootsPending: levels[0]?.isPending ?? false };
+  return {
+    pages,
+    loaded,
+    mayHaveChildren,
+    loadMore,
+    onExpandedChange,
+    rootsPending: levels[0]?.isPending ?? false,
+  };
 }
 
 /**
@@ -510,13 +521,26 @@ export function KnowledgePageExplorer({
   view,
   onViewChange,
 }: KnowledgePageExplorerProps) {
-  const pagesById = useMemo(() => new Map(graph.pages.map(page => [page.id, page])), [graph.pages]);
+  const selected = source.usePage(selectedPageId);
+  // Pages focused in the graph, in order. Each one's first children load and join the graph (capped),
+  // so a page the initial graph left out appears under its parent without reloading the graph.
+  const [graphOpened, setGraphOpened] = useState<readonly string[]>([]);
+  const lazy = useLazyTree(source, graph, selected.data, graphOpened);
+  const drawn = useMemo(
+    () => graphWithChildren(graph.pages, graphOpened, lazy.pages, lazy.loaded),
+    [graph.pages, graphOpened, lazy.pages, lazy.loaded],
+  );
+  const pagesById = useMemo(() => new Map(drawn.pages.map(page => [page.id, page])), [drawn.pages]);
+  useEffect(() => {
+    if (view !== 'graph' || !selectedPageId || !pagesById.has(selectedPageId)) return;
+    setGraphOpened(current => (current.includes(selectedPageId) ? current : [...current, selectedPageId]));
+  }, [view, selectedPageId, pagesById]);
   // A scope picked in the tree narrows the tree and the graph to that scope and what sits under it.
   const [focusScopeId, setFocusScopeId] = useState<string | null>(null);
-  // Lines between pages: mentions the server found in notes, and `[[links]]` in the loaded pages' bodies.
+  // Lines between pages: mentions the server found in notes, and `[[links]]` in the drawn pages' bodies.
   const linkEdges = useMemo(
-    () => [...graph.edges.filter(edge => edge.kind === 'mention'), ...bodyLinkEdges(graph.pages)],
-    [graph.edges, graph.pages],
+    () => [...graph.edges.filter(edge => edge.kind === 'mention'), ...bodyLinkEdges(drawn.pages)],
+    [graph.edges, drawn.pages],
   );
   // A clicked mention line shows the notes that make the mention; opening the page from there marks them.
   const [mention, setMention] = useState<MentionSelection | null>(null);
@@ -527,8 +551,6 @@ export function KnowledgePageExplorer({
   const narrow = useIsMobile(1024);
   const graphShown = !narrow || view === 'graph';
   const highlightMentionOf = marked && marked.source === selectedPageId ? marked.target : undefined;
-  const selected = source.usePage(selectedPageId);
-  const lazy = useLazyTree(source, graph, selected.data);
   const showPage = view === 'page' && !!selectedPageId;
   const openPage = (pageId: string) => {
     onSelect(pageId);
@@ -544,7 +566,7 @@ export function KnowledgePageExplorer({
   };
   // Pages reached from outside the tree (search, links, mentions) clear a focus they fall outside of.
   const openAnywhere = (pageId: string) => {
-    if (focusScopeId && !withinScope([...lazy.pages, ...graph.pages], focusScopeId).some(page => page.id === pageId)) {
+    if (focusScopeId && !withinScope([...lazy.pages, ...drawn.pages], focusScopeId).some(page => page.id === pageId)) {
       setFocusScopeId(null);
     }
     openPage(pageId);
@@ -554,9 +576,11 @@ export function KnowledgePageExplorer({
     : undefined;
   const treePages = withinScope(source.useTreeLevels ? lazy.pages : graph.pages, focusScope ? focusScopeId : null);
   const graphPages = useMemo(
-    () => withinScope(graph.pages, focusScope ? focusScopeId : null),
-    [graph.pages, focusScope, focusScopeId],
+    () => withinScope(drawn.pages, focusScope ? focusScopeId : null),
+    [drawn.pages, focusScope, focusScopeId],
   );
+  const focusedInGraph = view === 'graph' && selectedPageId ? pagesById.get(selectedPageId) : undefined;
+  const hiddenChildren = focusedInGraph ? (drawn.hiddenChildren.get(focusedInGraph.id) ?? 0) : 0;
   const views: Array<{ value: KnowledgeExplorerView; label: string; narrowOnly?: boolean }> = [
     { value: 'tree', label: 'Tree', narrowOnly: true },
     { value: 'graph', label: 'Graph' },
@@ -591,6 +615,12 @@ export function KnowledgePageExplorer({
       {graph.truncated && !showPage ? (
         <p className="text-ui-sm text-muted-foreground">
           The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
+        </p>
+      ) : null}
+      {hiddenChildren > 0 ? (
+        <p className="text-ui-sm text-muted-foreground" data-testid="knowledge-graph-more-children">
+          +{hiddenChildren} more {hiddenChildren === 1 ? 'page' : 'pages'} under {focusedInGraph?.name} not drawn. Open
+          the tree to see them all.
         </p>
       ) : null}
       {selectedPageId && !showPage && isNotFound(selected.error) ? (
