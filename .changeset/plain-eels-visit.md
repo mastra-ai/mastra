@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fix nested workflow data parts missing from durable agent history before suspension (#29013)
+Keep nested workflow questions in durable agent history when a tool pauses, so the question remains available after suspension (#29013)

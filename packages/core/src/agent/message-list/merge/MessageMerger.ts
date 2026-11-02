@@ -354,6 +354,9 @@ export class MessageMerger {
       let key = keys.get(part);
       if (key === undefined) {
         key = CacheKeyGenerator.fromDBParts([part]);
+        if (part.type.startsWith('data-') && 'id' in part && typeof part.id === 'string') {
+          key += `|id:${JSON.stringify(part.id)}`;
+        }
         keys.set(part, key);
       }
       return key;

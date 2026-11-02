@@ -824,6 +824,18 @@ export function createDurableToolCallStep() {
 
       // Remote workers have no registry message list; persist updates through the recovered resume list.
       const doFlush = async (messagesToFlush = messageList ?? resumeMessageList) => {
+        if (!messagesToFlush && processorDataParts.length) {
+          const invocation = [...(contextMessageList?.get.all.db() ?? [])].reverse().find(hasInvocation);
+          if (invocation) {
+            // Replayed context is not new output. Seed only the invocation that owns the
+            // questions, so adding data parts marks that one message for persistence.
+            messagesToFlush = createRunMessageList({
+              mastra,
+              threadId: state?.threadId,
+              resourceId: state?.resourceId,
+            }).add(invocation, 'memory');
+          }
+        }
         if (
           saveQueueManager &&
           messagesToFlush &&

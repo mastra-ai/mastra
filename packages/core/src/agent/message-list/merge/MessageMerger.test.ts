@@ -101,6 +101,15 @@ describe('MessageMerger insertion positions', () => {
     ]);
   });
 
+  it('preserves distinct data parts with the same payload and deduplicates repeated IDs', () => {
+    const question = (id: string): Part => ({ type: 'data-question', id, data: { prompt: 'Continue?' } });
+    const list = merge([tool('c1'), question('q1')], [tool('c1', true), question('q1'), question('q2')]);
+    expectParts(list, [tool('c1', true), question('q1'), question('q2')]);
+
+    list.add(message([tool('c1', true), question('q1'), question('q2')]), 'response');
+    expectParts(list, [tool('c1', true), question('q1'), question('q2')]);
+  });
+
   it('does not duplicate parts on repeated updates', () => {
     const incoming = [tool('c1', true), text('A'), text('B')];
     const list = merge([step, tool('c1')], incoming);
