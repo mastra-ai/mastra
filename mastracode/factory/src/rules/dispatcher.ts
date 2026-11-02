@@ -1571,7 +1571,7 @@ export class FactoryDecisionDispatcher {
    */
   async #resumeRoutedCard(
     record: FactoryDeferredDecisionRecord,
-    existing: WorkItemRow,
+    existing: Card,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     boards: BoardRegistry,
   ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
@@ -1592,7 +1592,7 @@ export class FactoryDecisionDispatcher {
   }
 
   #keepRoutedCard(
-    existing: WorkItemRow,
+    existing: Card,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     boards: BoardRegistry,
   ): Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }> {
