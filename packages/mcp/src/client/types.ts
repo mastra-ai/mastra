@@ -430,6 +430,11 @@ export interface MCPInputRequestSuspendPayload {
   /** The MCP task id issued by the server, which the answers are sent to. */
   taskId: string;
   createdAt: string;
+  /**
+   * When the call suspended on these requests. Unlike `createdAt`, it differs for each time the same task
+   * asks again, so a UI can tell a new request from one it already answered.
+   */
+  requestedAt: string;
   /** The requests still waiting for an answer, keyed as the server sent them. */
   requests: MCPTaskInputRequests;
 }

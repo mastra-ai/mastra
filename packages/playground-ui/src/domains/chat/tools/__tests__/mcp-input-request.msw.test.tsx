@@ -88,9 +88,11 @@ const deferredCall: ToolCardProps = {
 const Shell = ({
   props,
   approveToolcall = () => {},
+  toolCallApprovals = {},
 }: {
   props: ToolCardProps;
   approveToolcall?: (toolCallId: string, resumeData?: unknown) => void;
+  toolCallApprovals?: { [toolCallId: string]: { status: 'approved' | 'declined' } };
 }) => (
   <MemoryRouter>
     <TooltipProvider>
@@ -102,7 +104,7 @@ const Shell = ({
         approveNetworkToolcall={() => {}}
         declineNetworkToolcall={() => {}}
         isRunning={false}
-        toolCallApprovals={{}}
+        toolCallApprovals={toolCallApprovals}
         networkToolCallApprovals={{}}
       >
         <ToolCard {...props} />
@@ -113,6 +115,9 @@ const Shell = ({
 
 /** Shorter than the chip's 2s poll, so a change seen within it came from the answer, not a poll. */
 const BEFORE_NEXT_POLL_MS = 1000;
+
+const FIRST_ASKED_AT = '2026-10-27T12:00:05.000Z';
+const SECOND_ASKED_AT = '2026-10-27T12:01:10.000Z';
 
 const card = () => screen.queryByTestId('mcp-input-request');
 const chipText = () => screen.getByTestId('mcp-task-chip').textContent;
@@ -355,6 +360,39 @@ describe('a foreground call whose MCP task asks for input', () => {
     expect(approveToolcall).toHaveBeenCalledWith('call-1', { inputResponses: { confirm: { action: 'decline' } } });
     expect(backend.reads).toBe(0);
     expect(backend.resumes).toHaveLength(0);
+  });
+
+  it('takes a fresh answer when the same call asks the same question again', async () => {
+    serveBackground(suspendedBackgroundTask());
+    const approveToolcall = vi.fn<(toolCallId: string, resumeData?: unknown) => void>();
+    const asked = (requestedAt: string): ToolCardProps => ({
+      ...foregroundCall,
+      metadata: foregroundSuspendedMetadata({ ...confirmRequest, requestedAt }),
+    });
+    const { rerender } = renderWithProviders(<Shell props={asked(FIRST_ASKED_AT)} approveToolcall={approveToolcall} />);
+
+    const first = await screen.findByTestId('mcp-input-request');
+    fireEvent.change(within(first).getByRole('textbox'), { target: { value: 'draft numbers' } });
+    fireEvent.click(within(first).getByRole('button', { name: 'Accept' }));
+    await waitFor(() => expect(approveToolcall).toHaveBeenCalledTimes(1));
+
+    // The run resumed and the server asked `confirm` again. The chat still lists the call as approved.
+    rerender(
+      <Shell
+        props={asked(SECOND_ASKED_AT)}
+        approveToolcall={approveToolcall}
+        toolCallApprovals={{ 'call-1': { status: 'approved' } }}
+      />,
+    );
+
+    const second = await screen.findByTestId('mcp-input-request');
+    const note = within(second).getByRole<HTMLInputElement>('textbox');
+    expect(note.value).toBe('');
+    expect(within(second).getByRole('button', { name: 'Decline' })).toHaveProperty('disabled', false);
+    fireEvent.click(within(second).getByRole('button', { name: 'Decline' }));
+
+    await waitFor(() => expect(approveToolcall).toHaveBeenCalledTimes(2));
+    expect(approveToolcall).toHaveBeenLastCalledWith('call-1', { inputResponses: { confirm: { action: 'decline' } } });
   });
 
   it('finds its suspension saved under the tool name while the run is live', async () => {

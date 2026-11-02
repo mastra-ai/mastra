@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useToolCall } from '../../context/tool-call-context';
 import type { McpInputRequestPayload } from '../mcp-input-request';
 import { McpInputRequestTool } from '../mcp-input-request-tool';
@@ -14,14 +15,24 @@ export function ForegroundMcpInputRequest({
   payload: McpInputRequestPayload;
   readOnly?: boolean;
 }) {
-  const { approveToolcall, isRunning, toolCallApprovals } = useToolCall();
-  const answered = toolCallApprovals?.[toolCallId]?.status === 'approved';
+  const { approveToolcall, isRunning } = useToolCall();
+  // Not `toolCallApprovals`: it keeps the call approved after the first answer, which would lock the
+  // form when the same call suspends again. This state starts over with each suspension's key.
+  const [sent, setSent] = useState(false);
   return (
     <McpInputRequestTool
       payload={payload}
       readOnly={readOnly}
-      isSubmitting={isRunning || answered}
-      onSubmit={resumeData => approveToolcall(toolCallId, resumeData)}
+      isSubmitting={isRunning || sent}
+      onSubmit={async resumeData => {
+        setSent(true);
+        try {
+          await approveToolcall(toolCallId, resumeData);
+        } catch (error) {
+          setSent(false);
+          throw error;
+        }
+      }}
     />
   );
 }

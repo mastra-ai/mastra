@@ -1525,7 +1525,8 @@ const payload: MCPInputRequestSuspendPayload = {
   serverName: 'reports',
   toolName: 'approve_and_send',
   taskId: 'Zx81…', // the MCP task the answers go to
-  createdAt: '2026-10-30T10:00:00.000Z',
+  createdAt: '2026-10-30T10:00:00.000Z', // when the task was created
+  requestedAt: '2026-10-30T10:00:04.000Z', // when the call suspended; new each time the task asks again
   requests: {
     approve: {
       method: 'elicitation/create',

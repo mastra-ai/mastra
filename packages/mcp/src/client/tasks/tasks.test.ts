@@ -338,6 +338,7 @@ describe('MCPClient answering MCP task input from the agent chat', () => {
           toolName: 'confirm',
           taskId,
           createdAt: expect.any(String),
+          requestedAt: expect.any(String),
           requests: {
             approve: {
               method: 'elicitation/create',
@@ -390,6 +391,9 @@ describe('MCPClient answering MCP task input from the agent chat', () => {
     expect(second).toBeUndefined();
     expect(suspensions[1]).toMatchObject({ taskId: suspensions[0]!.taskId, toolName: 'confirm_twice' });
     expect(Object.keys(suspensions[1]!.requests)).toEqual(['confirm']);
+    // Same task, so the same createdAt; requestedAt tells the second request from the first.
+    expect(suspensions[1]!.createdAt).toBe(suspensions[0]!.createdAt);
+    expect(suspensions[1]!.requestedAt).not.toBe(suspensions[0]!.requestedAt);
 
     const done = await call(
       'confirm_twice',

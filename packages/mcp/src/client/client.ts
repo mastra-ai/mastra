@@ -2059,6 +2059,7 @@ export class InternalMastraMCPClient extends MastraBase {
           toolName,
           taskId: terminal.taskId,
           createdAt: terminal.createdAt,
+          requestedAt: new Date().toISOString(),
           requests: terminal.inputRequests,
         });
         return undefined;

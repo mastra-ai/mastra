@@ -14,6 +14,8 @@ export interface McpInputRequestPayload {
   toolName: string;
   taskId: string;
   createdAt: string;
+  /** When the call suspended; new each time the same task asks again, unlike `createdAt`. */
+  requestedAt?: string;
   requests: Record<string, McpInputRequest>;
 }
 

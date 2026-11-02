@@ -177,7 +177,13 @@ export const ToolCardInner = ({
               status={status}
               mcpInputRequest={payload}
             />
-            <ForegroundMcpInputRequest toolCallId={toolCallId} payload={payload} readOnly={readOnly} />
+            {/* The card stays mounted across a call's suspensions, so a new one must start with no answers. */}
+            <ForegroundMcpInputRequest
+              key={payload.requestedAt ?? payload.createdAt}
+              toolCallId={toolCallId}
+              payload={payload}
+              readOnly={readOnly}
+            />
           </>
         );
       }

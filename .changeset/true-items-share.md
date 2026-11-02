@@ -12,4 +12,4 @@ await agent.resumeStream(
 );
 ```
 
-If the server asks again, the call suspends again. A configured `inputRequests` handler still answers first, and a direct `tool.execute()` call without an agent or workflow still fails as before. See [#28986](https://github.com/mastra-ai/mastra/issues/28986).
+If the server asks again, the call suspends again with a new `requestedAt`, so a UI can tell the new request from the one it already answered. A configured `inputRequests` handler still answers first, and a direct `tool.execute()` call without an agent or workflow still fails as before. See [#28986](https://github.com/mastra-ai/mastra/issues/28986).

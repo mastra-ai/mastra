@@ -17,6 +17,7 @@ const SuspendPayloadSchema = z.object({
   toolName: z.string(),
   taskId: z.string().min(1),
   createdAt: z.string(),
+  requestedAt: z.string().optional(),
   requests: TaskInputRequestsSchema,
 });
 
