@@ -80,7 +80,7 @@ The `channels` property accepts a `ChannelConfig` object with the following fiel
     isOptional: true,
     defaultValue: 'true',
     description:
-      'Whether `getTools()` returns the channel-specific tools (`add_reaction`, `remove_reaction`). Set to `false` for models that do not support function calling. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }`. They work on any run in a channel-backed thread, including runs that did not start from a chat message, such as a schedule or a Studio prompt.',
+      'Whether `getTools()` returns the channel-specific tools (`add_reaction`, `remove_reaction`, `read_attachment`). Set to `false` for models that do not support function calling. Channel tools are never added to the agent automatically — pass them explicitly via `tools: { ...channels.getTools() }`. They work on any run in a channel-backed thread, including runs that did not start from a chat message, such as a schedule or a Studio prompt.',
   },
   {
     name: 'state',
@@ -718,7 +718,7 @@ The `ResolveThreadIdContext` passed to the function:
 
 Controls which attachment types (images, video, PDFs, etc.) are sent as file parts to the model. Types that don't match are described as text summaries so the agent knows about the file without crashing models that reject unsupported types.
 
-Text-like attachments that don't match (`text/*`, JSON, YAML, XML, and similar) are downloaded through the adapter's authenticated fetch when one is available (for example, Slack private files) and given to the agent as text. Contents over 128 KB are truncated. Files the adapter reports as larger than 10 MB aren't downloaded.
+Text-like attachments that don't match (`text/*`, JSON, YAML, XML, and similar) are downloaded through the adapter's authenticated fetch when one is available (for example, Slack private files) and given to the agent as text. Contents over 128 KB are truncated. Files the adapter reports as larger than 10 MB aren't downloaded. When the agent has the `read_attachment` tool, the header of a truncated file includes its URL so the agent can read the rest.
 
 The default (`['image/png', 'image/jpeg', 'image/webp', 'application/pdf']`) matches the formats supported by major vision models. Override `inlineMedia` to expand the list (e.g. `['image/*', 'audio/*']`) or replace it entirely with a predicate function.
 
@@ -732,6 +732,16 @@ Supported glob patterns:
 | `application/pdf` | Exact type match |
 
 For platforms with private CDNs (e.g. Slack), attachments are fetched with authenticated credentials from the Chat SDK. For platforms with public CDNs (e.g. Discord), the URL is passed directly to the model.
+
+## Reading attachments
+
+The `read_attachment` tool from `getTools()` downloads a file shared in the current conversation each time it's called and returns one chunk of it. Nothing is written to the workspace. The tool only reads files attached to messages in the current thread; any other URL is refused without a download.
+
+Like the other channel tools, it's only available when you pass it to the agent with `tools: { ...channels.getTools() }`.
+
+The tool takes the attachment `url`, plus an optional byte `offset` and `length` (at most 128 KiB per call). It returns `{ name, mimeType, size, offset, encoding, content, nextOffset }`.
+
+Text files come back as UTF-8, with chunks ending on a character boundary. Other files come back as base64. Pass `nextOffset` to read the next chunk. Files larger than 10 MB aren't downloaded.
 
 ## Inline links
 

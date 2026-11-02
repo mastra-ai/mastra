@@ -216,14 +216,17 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   /**
-   * `attach_file`, and `reply_in_thread` when reply text is hidden, on runs
-   * whose session is linked to a Slack thread. The tools find the thread to
-   * post into when they are called.
+   * `attach_file`, `read_attachment`, and `reply_in_thread` when reply text is
+   * hidden, on runs whose session is linked to a Slack thread. The tools find
+   * the thread to post into or read from when they are called.
    */
   async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
     if (!(await isSlackThread(requestContext, this.#deps))) return {};
+    // Reads files shared in the thread from Slack on each call; nothing is saved.
+    const readAttachment = this.#channels?.()?.getTools().read_attachment;
     return {
       ...createShareFileTool(requestContext, this.#deps),
+      ...(readAttachment ? { read_attachment: readAttachment } : {}),
       ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
     };
   }

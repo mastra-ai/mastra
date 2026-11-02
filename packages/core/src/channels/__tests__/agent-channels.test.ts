@@ -106,13 +106,9 @@ describe('AgentChannels', () => {
   });
 
   describe('getTools', () => {
-    it('generates reaction tools', () => {
+    it('generates reaction and attachment tools', () => {
       const tools = agentChannels.getTools();
-      const toolNames = Object.keys(tools);
-
-      expect(toolNames).toContain('add_reaction');
-      expect(toolNames).toContain('remove_reaction');
-      expect(toolNames).toHaveLength(2);
+      expect(Object.keys(tools).sort()).toEqual(['add_reaction', 'read_attachment', 'remove_reaction']);
     });
 
     it('returns no tools when tools: false', () => {
@@ -3750,7 +3746,7 @@ describe('thread history', () => {
       { type: 'text', text: 'message 0' },
       {
         type: 'text',
-        text: `[Attached file: server.log (text/plain)]\n${log.slice(0, 128 * 1024)}\n[Truncated: showing the first 131072 of ${log.length} bytes]`,
+        text: `[Attached file: server.log (text/plain) — https://files.slack.com/files-pri/T1-F1/server.log]\n${log.slice(0, 128 * 1024)}\n[Truncated: showing the first 131072 of ${log.length} bytes]`,
       },
     ]);
   });
@@ -4129,6 +4125,8 @@ describe('per-sender handler runs end to end', () => {
       workspace?: Workspace;
       maxAttachmentStorageBytes?: number;
       resolveResourceId?: ResolveResourceId;
+      /** Mount the channel tools and have the model call this one before answering. */
+      toolCall?: { name: string; arguments: Record<string, unknown> };
     } = {},
   ) {
     const { Mastra } = await import('../../mastra');
@@ -4138,6 +4136,9 @@ describe('per-sender handler runs end to end', () => {
     const llm = new LLMock({ port: 0 });
     await llm.start();
     llms.push(llm);
+    if (options.toolCall) {
+      llm.on({ endpoint: 'chat', hasToolResult: false }, { toolCalls: [{ id: 'call-1', ...options.toolCall }] });
+    }
     llm.onMessage(/[\s\S]*/, { content: 'Hello' });
     const model = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` }).chat(
       'gpt-4o-mini',
@@ -4192,6 +4193,7 @@ describe('per-sender handler runs end to end', () => {
       model,
       memory: new MockMemory({ storage, options: { lastMessages: 50 } }),
       channels,
+      ...(options.toolCall ? { tools: channels.getTools() } : {}),
       ...(options.workspace ? { workspace: options.workspace } : {}),
     });
     const mastra = new Mastra({ storage, agents: { agent } });
@@ -4444,6 +4446,63 @@ describe('per-sender handler runs end to end', () => {
     expect(userTurn).toContain('[Attached file: metrics.csv (text/csv)]\\nid,value\\nlatency_p99,412');
     expect(userTurn).toContain('[Attachment unavailable: gone.json (application/json)');
     expect(userTurn).not.toContain('files.slack.com');
+  });
+
+  describe('read_attachment', () => {
+    const csvUrl = 'https://files.slack.com/files-pri/T1-F1/goodreads_library_export.csv';
+    // Multi-byte titles, so a chunk boundary can land inside a character.
+    // Kept small: the model mock stops recording request bodies over ~128 KiB.
+    const csvBody = ['id,title', ...Array.from({ length: 300 }, (_, i) => `${i},Café ☕ ${i}`)].join('\n') + '\n';
+
+    async function readWith(args: Record<string, unknown>) {
+      const h = await createHarness({ hold: false, toolCall: { name: 'read_attachment', arguments: args } });
+      const fetchData = vi.fn().mockResolvedValue(Buffer.from(csvBody));
+      const upload = makeMessage({
+        id: 'upload',
+        threadId: THREAD_ID,
+        text: '@TestBot what are my top books?',
+        author: userA,
+        attachments: [
+          { type: 'file', mimeType: 'text/csv', name: 'goodreads_library_export.csv', url: csvUrl, fetchData },
+        ],
+        metadata: { dateSent: new Date(BASE_TIME), edited: false },
+      });
+      // The platform's copy of the thread is where the tool finds the file.
+      h.adapter.fetchMessages = vi.fn().mockResolvedValue({ messages: [upload], nextCursor: undefined });
+      await h.deliver(upload);
+      const toolMessage = h.prompts.at(-1)?.find(m => m.role === 'tool');
+      const content = String(toolMessage?.content);
+      // A failed call comes back as the error text rather than JSON.
+      return { h, fetchData, result: content.startsWith('{') ? JSON.parse(content) : content };
+    }
+
+    it('reads a file shared in the conversation in chunks without splitting characters', async () => {
+      // Byte 1 008 sits inside a ☕, so the chunk stops before that character.
+      const first = await readWith({ url: csvUrl, length: 1008 });
+      expect(first.result).toMatchObject({
+        mimeType: 'text/csv',
+        encoding: 'utf8',
+        offset: 0,
+        size: Buffer.byteLength(csvBody),
+      });
+      expect(first.result.content.startsWith('id,title\n0,Café ☕ 0\n')).toBe(true);
+      expect(Buffer.byteLength(first.result.content)).toBe(1006);
+      expect(first.result.nextOffset).toBe(Buffer.byteLength(first.result.content));
+
+      const second = await readWith({ url: csvUrl, offset: first.result.nextOffset });
+      expect(second.result.offset).toBe(first.result.nextOffset);
+      expect(first.result.content + second.result.content).toBe(csvBody);
+      expect(second.result.nextOffset).toBeUndefined();
+    });
+
+    it('refuses a file that was not shared in the conversation and never downloads it', async () => {
+      const { result, fetchData } = await readWith({ url: 'https://files.slack.com/files-pri/T1-F9/payroll.csv' });
+      expect(result).toEqual(
+        expect.stringContaining('No file with the URL https://files.slack.com/files-pri/T1-F9/payroll.csv'),
+      );
+      // Only the inbound inline copy fetched the shared file; the refused read fetched nothing.
+      expect(fetchData).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('binary attachments that need an authenticated fetch (#28907)', () => {

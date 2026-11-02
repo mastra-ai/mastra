@@ -95,6 +95,12 @@ function channelLines(ctx: ChannelContext, textHidden: boolean, tools: Record<st
     );
   }
 
+  if (tools && 'read_attachment' in tools) {
+    lines.push(
+      'Attached files shown with a URL can be read with the `read_attachment` tool, including the rest of a truncated file.',
+    );
+  }
+
   if (ctx.isDM) {
     lines.push('This is a direct message (DM) conversation.');
     if (ctx.userName || ctx.userId) {
