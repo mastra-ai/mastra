@@ -1,10 +1,10 @@
-import { KNOWLEDGE_READ_BODY_TOKENS } from '../page-body';
 import { describe, expect, it } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
+import { KNOWLEDGE_READ_BODY_TOKENS } from '../page-body';
 
 const memory = knowledgeMemoryScopes();
 

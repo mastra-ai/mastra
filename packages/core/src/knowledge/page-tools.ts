@@ -305,7 +305,7 @@ function leftOut(count: number, hasMore: boolean, noun: string): string {
 const KNOWLEDGE_READ_MATCH_CONTEXT = 2;
 const KNOWLEDGE_READ_MATCH_CONTEXT_MAX = 20;
 
-const linePositionSchema = {
+const linePositionSchema: JSONSchema7 = {
   type: 'object',
   properties: {
     line: { type: 'integer', minimum: 1 },
@@ -313,7 +313,7 @@ const linePositionSchema = {
   },
   required: ['line'],
   additionalProperties: false,
-} as const;
+};
 
 /** How `from` was given, for telling the reader how to go on. */
 function fromText(at: KnowledgeLinePosition): string {
