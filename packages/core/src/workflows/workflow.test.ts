@@ -65,11 +65,6 @@ createWorkflowTestSuite({
 
   getStorage: () => sharedStorage,
 
-  beforeAll: async () => {
-    vi.unmock('crypto');
-    vi.unmock('node:crypto');
-  },
-
   afterAll: async () => {
     // Nothing to cleanup
   },

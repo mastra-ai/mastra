@@ -13,6 +13,8 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { ProjectRoutes } from './projects.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
+vi.mock('../integrations/github/commits.js', () => ({ getBranchHead: vi.fn(async () => 'f'.repeat(40)) }));
+
 const projectRoutes = (
   seed: FactoryStorageTestSeed,
   versionControlIntegrationIds?: string[],
@@ -1303,8 +1305,6 @@ describe('ProjectRoutes', () => {
 
     describe('builds', () => {
       const SHA = 'f'.repeat(40);
-      vi.mock('../integrations/github/commits.js', () => ({ getBranchHead: vi.fn(async () => 'f'.repeat(40)) }));
-
       type Settings = Record<string, unknown>;
       class BuildingSandbox extends FactorySandbox<Settings> {
         readonly provider = 'building';
