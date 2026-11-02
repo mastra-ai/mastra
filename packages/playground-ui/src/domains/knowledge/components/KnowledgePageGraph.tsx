@@ -16,7 +16,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { ArrowUpToLine, Layers, Maximize, Pin } from 'lucide-react';
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 
 import {
@@ -33,6 +33,8 @@ import { runLayout } from '../lib/layout';
 import type { PageFlowEdge, PageFlowNode } from '../lib/pageGraph';
 import { grantGraph, pageGraphEdges, pageNeighbourIds, toPageFlow } from '../lib/pageGraph';
 import { childCountLabel } from '../lib/pageTree';
+import { chooseTooltipSide } from '../lib/tooltipSide';
+import type { Box, TooltipPlacementInput, TooltipSide } from '../lib/tooltipSide';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 
 import { Txt } from '@/ds/components/Txt';
@@ -128,6 +130,61 @@ function linkCountsText(links: { in: number; out: number }): string {
 /** Most a tooltip is enlarged to offset a zoomed-out graph. */
 const TOOLTIP_MAX_SCALE = 3;
 
+/** Screen-space box of an element. */
+function boxOf(el: Element): Box {
+  const { left, top, right, bottom } = el.getBoundingClientRect();
+  return { left, top, right, bottom };
+}
+
+/** The highlighted lines of the graph as screen-space segments, where the browser can measure them. */
+function drawnLines(root: Element): TooltipPlacementInput['lines'] {
+  const lines: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> = [];
+  for (const path of root.querySelectorAll<SVGPathElement>('.react-flow__edge-path')) {
+    if (typeof path.getTotalLength !== 'function' || typeof path.getScreenCTM !== 'function') continue;
+    const matrix = path.getScreenCTM();
+    if (!matrix) continue;
+    const length = path.getTotalLength();
+    const start = path.getPointAtLength(0);
+    const end = path.getPointAtLength(length);
+    lines.push({
+      from: {
+        x: matrix.a * start.x + matrix.c * start.y + matrix.e,
+        y: matrix.b * start.x + matrix.d * start.y + matrix.f,
+      },
+      to: { x: matrix.a * end.x + matrix.c * end.y + matrix.e, y: matrix.b * end.x + matrix.d * end.y + matrix.f },
+    });
+  }
+  return lines;
+}
+
+/** Where a tooltip sits against its dot, and which way it grows from it. */
+const TOOLTIP_PLACEMENT: Record<TooltipSide, { tip: string; transform: string; origin: string; tail: string }> = {
+  top: {
+    tip: 'bottom-full left-1/2 mb-2',
+    transform: 'translateX(-50%)',
+    origin: 'bottom center',
+    tail: 'top-full left-1/2 -translate-x-1/2 -translate-y-1/2 border-r border-b',
+  },
+  bottom: {
+    tip: 'top-full left-1/2 mt-2',
+    transform: 'translateX(-50%)',
+    origin: 'top center',
+    tail: 'bottom-full left-1/2 -translate-x-1/2 translate-y-1/2 border-l border-t',
+  },
+  right: {
+    tip: 'left-full top-1/2 ml-2',
+    transform: 'translateY(-50%)',
+    origin: 'center left',
+    tail: 'right-full top-1/2 translate-x-1/2 -translate-y-1/2 border-l border-b',
+  },
+  left: {
+    tip: 'right-full top-1/2 mr-2',
+    transform: 'translateY(-50%)',
+    origin: 'center right',
+    tail: 'left-full top-1/2 -translate-x-1/2 -translate-y-1/2 border-r border-t',
+  },
+};
+
 /** The mark on a circle for a page that sits above others: layers for a scope, an up arrow for an ancestor page. */
 function LevelIcon({ level }: { level: GraphLevel }) {
   const Icon = level === 'scope' ? Layers : ArrowUpToLine;
@@ -144,6 +201,9 @@ function LevelIcon({ level }: { level: GraphLevel }) {
 function DotNode({ data }: { data: PageNodeData }) {
   const { page, size, dimmed, color, path, ref, links } = data;
   const [hover, setHover] = useState(false);
+  const dotRef = useRef<HTMLDivElement>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const [side, setSide] = useState<TooltipSide>('top');
   // The graph is often zoomed far out; the tooltip is scaled back up so it stays as readable as the page.
   const zoom = useStore(state => state.transform[2]);
   const tipScale = Math.min(Math.max(1 / zoom, 1), TOOLTIP_MAX_SCALE);
@@ -156,8 +216,40 @@ function DotNode({ data }: { data: PageNodeData }) {
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
   const linkText = links && (links.in > 0 || links.out > 0) ? linkCountsText(links) : null;
   const label = [page.name, hint ?? path, children, linkText].filter(Boolean).join(' · ');
+  // Pick the side that covers the least: not the focused page, not the highlighted lines, not the legend or Back.
+  useLayoutEffect(() => {
+    const dot = dotRef.current;
+    const tip = tipRef.current;
+    const graph = dot?.closest('.knowledge-graph');
+    if (!hover || !dot || !tip || !graph) return;
+    const dotBox = boxOf(dot);
+    const tipBox = boxOf(tip);
+    const scaledWidth = tip.offsetWidth * tipScale;
+    const scaledHeight = tip.offsetHeight * tipScale;
+    if (!scaledWidth || !scaledHeight) return;
+    const obstacles = [
+      ...graph.querySelectorAll('[data-testid="knowledge-page-node"]'),
+      ...(graph.parentElement ?? graph).querySelectorAll(
+        '[aria-label="Legend"], [data-testid="knowledge-graph-back"], .react-flow__controls',
+      ),
+    ]
+      .map(boxOf)
+      .filter(box => box.right > box.left && !(box.left === tipBox.left && box.top === tipBox.top));
+    setSide(
+      chooseTooltipSide({
+        dot: dotBox,
+        tip: { width: scaledWidth, height: scaledHeight },
+        gap: 8,
+        bounds: boxOf(graph),
+        obstacles,
+        lines: drawnLines(graph),
+      }),
+    );
+  }, [hover, tipScale]);
+  const placement = TOOLTIP_PLACEMENT[side];
   return (
     <div
+      ref={dotRef}
       data-testid="knowledge-page-dot"
       data-page-id={page.id}
       data-page-type={standIn ? 'stand-in' : group ? 'group' : page.isScope ? 'scope' : 'page'}
@@ -190,13 +282,15 @@ function DotNode({ data }: { data: PageNodeData }) {
       {hover ? (
         <div
           role="tooltip"
-          className="pointer-events-none absolute bottom-full left-1/2 mb-2 flex w-max max-w-72 flex-col rounded-md border border-border bg-card px-2 py-1 shadow-overlay"
-          style={{ transform: `translateX(-50%) scale(${tipScale})`, transformOrigin: 'bottom center' }}
+          ref={tipRef}
+          data-side={side}
+          className={`pointer-events-none absolute ${placement.tip} flex w-max max-w-72 flex-col rounded-md border border-border bg-card px-2 py-1 shadow-overlay`}
+          style={{ transform: `${placement.transform} scale(${tipScale})`, transformOrigin: placement.origin }}
         >
           <span
             data-testid="knowledge-tooltip-tail"
             aria-hidden
-            className="absolute top-full left-1/2 size-2 -translate-x-1/2 -translate-y-1/2 rotate-45 border-r border-b border-border bg-card"
+            className={`absolute size-2 rotate-45 border-border bg-card ${placement.tail}`}
           />
           <Txt as="span" variant="label" tone="ink">
             {page.name}

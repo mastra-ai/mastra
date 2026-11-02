@@ -363,6 +363,36 @@ describe('KnowledgePageGraph', () => {
         expect(legend.queryByTestId('knowledge-legend-in')).toBeNull();
       });
 
+      it('puts the tooltip on the side that does not cover the focused page', () => {
+        renderGraph({ pages: linked, knownLinks: known });
+        const target = dot('ticket');
+        const focusNode = document.querySelector<HTMLElement>('[data-testid="knowledge-page-node"]') as HTMLElement;
+        const rect = (left: number, top: number, w: number, h: number) =>
+          ({
+            left,
+            top,
+            right: left + w,
+            bottom: top + h,
+            width: w,
+            height: h,
+            x: left,
+            y: top,
+            toJSON: () => ({}),
+          }) as DOMRect;
+        const spies = [
+          vi.spyOn(target, 'getBoundingClientRect').mockReturnValue(rect(500, 400, 14, 14)),
+          vi.spyOn(focusNode, 'getBoundingClientRect').mockReturnValue(rect(450, 280, 100, 100)),
+          vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(200),
+          vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(80),
+        ];
+        const graph = target.closest('.knowledge-graph') as HTMLElement;
+        vi.spyOn(graph, 'getBoundingClientRect').mockReturnValue(rect(0, 0, 1000, 800));
+        fireEvent.mouseEnter(target);
+        fireEvent.pointerEnter(target);
+        expect(within(target).getByRole('tooltip').dataset.side).toBe('bottom');
+        for (const spy of spies) spy.mockRestore();
+      });
+
       it('fades dots it is not connected to, and puts them back when the pointer leaves', () => {
         const withFar = [...linked, page('far', 'support', { name: 'Far', key: 'far' })];
         renderGraph({ pages: withFar, knownLinks: known });
