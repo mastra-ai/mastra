@@ -303,7 +303,7 @@ afterEach(async () => {
   window.sessionStorage.clear();
 });
 
-async function composerInput(placeholder = 'Enter your message...') {
+async function composerInput(placeholder = 'Enter your message') {
   await screen.findByPlaceholderText(placeholder);
   await waitFor(() => expect(screen.queryByText('Restoring draft…')).toBeNull());
   return screen.getByPlaceholderText<HTMLTextAreaElement>(placeholder);
@@ -611,7 +611,7 @@ describe('Standalone thread page', () => {
         const client = new QueryClient({ defaultOptions: { queries: { retry: false, retryOnMount } } });
         renderAt(path, client);
         await screen.findByText('Failed to check authentication');
-        expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+        expect(screen.queryByPlaceholderText('Enter your message')).toBeNull();
         server.use(http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false })));
         await act(async () => {
           await client.invalidateQueries({ queryKey: ['auth', 'capabilities'] });
@@ -761,7 +761,7 @@ describe('Standalone thread page', () => {
       fireEvent.change(input, { target: { value: 'Pasta draft' } });
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/thread-2`));
       expect((await composerInput()).value).toBe('');
-      fireEvent.change(screen.getByPlaceholderText('Enter your message...'), { target: { value: 'Sushi draft' } });
+      fireEvent.change(screen.getByPlaceholderText('Enter your message'), { target: { value: 'Sushi draft' } });
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/${THREAD_ID}`));
       expect((await composerInput()).value).toBe('Pasta draft');
     });
@@ -1436,7 +1436,7 @@ describe('Standalone thread page', () => {
       expect(screen.getByText(/may have been renamed or removed/)).not.toBeNull();
       expect(screen.getByRole('button', { name: 'Reload' })).not.toBeNull();
       expect(screen.getByRole('link', { name: 'Choose agent' })).not.toBeNull();
-      expect(screen.queryByPlaceholderText('Enter your message...')).toBeNull();
+      expect(screen.queryByPlaceholderText('Enter your message')).toBeNull();
     });
 
     it('lets the user leave the dead chat and choose an agent', async () => {

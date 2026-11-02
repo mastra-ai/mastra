@@ -176,7 +176,7 @@ export const JsonObjectEditor = ({
               <FieldLabel className="sr-only">{label} preset</FieldLabel>
               <Select value={selectedPreset} onValueChange={handlePresetChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Select a preset..." />
+                  <SelectValue placeholder="Select a preset" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__custom__">Custom</SelectItem>

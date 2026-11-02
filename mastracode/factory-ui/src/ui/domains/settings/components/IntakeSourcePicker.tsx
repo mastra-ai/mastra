@@ -216,7 +216,7 @@ function SourcePickerDrawer({
           <SearchInput
             ref={searchInput}
             label={`Search ${label}`}
-            placeholder="Search…"
+            placeholder="Search"
             value={query}
             onValueChange={setQuery}
             className="w-full"
