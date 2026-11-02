@@ -5,14 +5,20 @@ const proxyActivities = vi.fn();
 const sleep = vi.fn(async () => {});
 const logInfo = vi.fn();
 
-vi.mock('@temporalio/workflow', () => ({
-  executeChild,
-  proxyActivities,
-  sleep,
-  log: {
-    info: logInfo,
-  },
-}));
+vi.mock('@temporalio/workflow', async importOriginal => {
+  const { ApplicationFailure, TemporalFailure } = await importOriginal<typeof import('@temporalio/workflow')>();
+  return {
+    ApplicationFailure,
+    TemporalFailure,
+    isCancellation: () => false,
+    executeChild,
+    proxyActivities,
+    sleep,
+    log: {
+      info: logInfo,
+    },
+  };
+});
 
 describe('temporal workflow runtime helper module', () => {
   beforeEach(() => {

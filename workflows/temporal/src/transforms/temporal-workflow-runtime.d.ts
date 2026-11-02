@@ -17,6 +17,22 @@ export interface WorkflowExecutionResult {
   stepMeta?: Record<string, { startedAt: number; endedAt: number }>;
 }
 
+/** The first detail of a failed step's ApplicationFailure, set by MastraPlugin's Activities. */
+export interface StepFailureDetails {
+  /** The step's error as serialized by Mastra, with its own fields. */
+  error: { name?: string; message: string } & Record<string, unknown>;
+  tripwire?: { reason: string; retry?: boolean; metadata?: Record<string, unknown>; processorId?: string };
+}
+
+/** The first detail of the ApplicationFailure a failed run ends with. */
+export interface WorkflowFailureDetails extends StepFailureDetails {
+  /** Outputs of the steps that finished, as in a successful result. */
+  steps: Record<string, unknown>;
+  stepMeta?: WorkflowExecutionResult['stepMeta'];
+  /** Times are present when the run records `stepMeta`. */
+  failedSteps: Record<string, StepFailureDetails & { startedAt?: number; endedAt?: number }>;
+}
+
 export type StepEntry = {
   type: 'step';
   step: { id: string };

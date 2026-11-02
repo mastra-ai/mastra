@@ -1,5 +1,31 @@
-import { proxyActivities, log, sleep, executeChild } from '@temporalio/workflow';
+import { proxyActivities, isCancellation, TemporalFailure, ApplicationFailure, log, sleep, executeChild } from '@temporalio/workflow';
 
+// The step error an Activity or child Workflow put in its failure details. Failures without them
+// (timeouts, Activities from an older Worker) give the innermost cause's type and message.
+function readStepFailure(error) {
+  let current = error;
+  while (current) {
+    const details = current.details?.[0];
+    if (details?.error) {
+      return {
+        error: details.error,
+        ...(details.tripwire && {
+          tripwire: details.tripwire
+        })
+      };
+    }
+    if (!current.cause) {
+      break;
+    }
+    current = current.cause;
+  }
+  return {
+    error: {
+      name: current?.type ?? current?.name ?? 'Error',
+      message: current?.message ?? String(error)
+    }
+  };
+}
 class TemporalExecutionEngine {
   startToCloseTimeout;
   activityHandle;
@@ -30,10 +56,36 @@ class TemporalExecutionEngine {
     // Step times let start() build Mastra step records. Only recorded on request so runs that
     // never read them (startAsync, runs started before the field existed) keep their result size.
     this.stepMeta = params.recordStepMeta ? {} : undefined;
+    this.failedSteps = {};
     let result = params.input;
     const stepResults = {};
-    for (const entry of params.graph.steps) {
-      result = await this.executeEntry(entry, result, stepResults);
+    try {
+      for (const entry of params.graph.steps) {
+        result = await this.executeEntry(entry, result, stepResults);
+      }
+    } catch (error) {
+      // An error that isn't a Temporal failure comes from Workflow code. It fails only the Workflow
+      // Task, which Temporal retries, so a fixed Worker can still finish the run.
+      if (isCancellation(error) || !(error instanceof TemporalFailure)) {
+        throw error;
+      }
+
+      // The run still fails in Temporal. The details let start() return step records and the
+      // step's own error, which a thrown ActivityFailure would lose.
+      const failure = readStepFailure(error);
+      throw ApplicationFailure.create({
+        message: failure.error.message,
+        type: failure.error.name,
+        cause: error,
+        details: [{
+          ...failure,
+          steps: stepResults,
+          failedSteps: this.failedSteps,
+          ...(this.stepMeta && {
+            stepMeta: this.stepMeta
+          })
+        }]
+      });
     }
     return {
       status: 'success',
@@ -51,7 +103,19 @@ class TemporalExecutionEngine {
   // Workflow Task time, which replay reads from history.
   async timed(stepResults, id, run) {
     const startedAt = Date.now();
-    const out = await run();
+    let out;
+    try {
+      out = await run();
+    } catch (error) {
+      this.failedSteps[id] = {
+        ...readStepFailure(error),
+        ...(this.stepMeta && {
+          startedAt,
+          endedAt: Date.now()
+        })
+      };
+      throw error;
+    }
     stepResults[id] = out;
     if (this.stepMeta) {
       this.stepMeta[id] = {
@@ -132,10 +196,15 @@ class TemporalExecutionEngine {
           log.info('parallel', {
             steps: entry.steps.map(entryId)
           });
-          const results = await Promise.all(entry.steps.map(step => this.executeEntry(step, inputData, stepResults)));
+          // Waits for every branch, as a local run does, so a failed run keeps the others' records.
+          const settled = await Promise.allSettled(entry.steps.map(step => this.executeEntry(step, inputData, stepResults)));
+          const rejected = settled.find(outcome => outcome.status === 'rejected');
+          if (rejected) {
+            throw rejected.reason;
+          }
           const out = {};
           entry.steps.forEach((step, i) => {
-            out[entryId(step)] = results[i];
+            out[entryId(step)] = settled[i].value;
           });
           return out;
         }
