@@ -413,7 +413,8 @@ When using the `headers` option, the markdown strategy ignores all general optio
     name: 'minSize',
     type: 'number',
     isOptional: true,
-    description: 'Minimum size of each chunk',
+    description:
+      'Target minimum size of each chunk. Chunks smaller than this, such as the last group of a split array or object, are still kept so no data is discarded.',
   },
   {
     name: 'ensureAscii',

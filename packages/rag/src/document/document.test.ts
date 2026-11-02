@@ -2529,6 +2529,59 @@ describe('MDocument', () => {
         ).toBe(true);
       });
     });
+
+    describe('minSize does not drop data', () => {
+      it('keeps array items when a completed group is smaller than minSize', async () => {
+        const doc = MDocument.fromJSON(JSON.stringify({ items: ['aaaa', 'bbbb', 'c'] }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 24, minSize: 20 });
+
+        expect(doc.getText().flatMap(text => JSON.parse(text).items)).toEqual(['aaaa', 'bbbb', 'c']);
+      });
+
+      it('keeps nested object fields when a completed chunk is smaller than minSize', async () => {
+        const doc = MDocument.fromJSON(JSON.stringify({ item: { a: 'aaaa', b: 'bbbb', c: 'c' } }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 28, minSize: 25 });
+
+        const merged = doc
+          .getText()
+          .map(text => JSON.parse(text).item)
+          .reduce((acc, curr) => ({ ...acc, ...curr }), {});
+        expect(merged).toEqual({ a: 'aaaa', b: 'bbbb', c: 'c' });
+      });
+
+      it('returns chunks for a nonempty document with the default minSize', async () => {
+        const doc = MDocument.fromJSON(JSON.stringify({ items: ['aaaa', 'bbbb', 'c'] }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 24 });
+
+        expect(doc.getText().length).toBeGreaterThan(0);
+        expect(doc.getText().flatMap(text => JSON.parse(text).items)).toEqual(['aaaa', 'bbbb', 'c']);
+      });
+
+      it('keeps every array item with the default minSize at a typical maxSize', async () => {
+        const items = Array.from({ length: 150 }, (_, i) => ({ id: i, name: `item-${i}` }));
+        const doc = MDocument.fromJSON(JSON.stringify({ items }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 2000 });
+
+        const texts = doc.getText();
+        const ids = texts.flatMap(text => JSON.parse(text).items.map((item: { id: number }) => item.id));
+        expect(ids).toEqual(items.map(item => item.id));
+        for (const text of texts) {
+          expect(text.length).toBeLessThanOrEqual(2000);
+        }
+      });
+
+      it('keeps every array item when minSize is larger than maxSize', async () => {
+        const doc = MDocument.fromJSON(JSON.stringify({ items: ['one', 'two', 'three', 'four', 'five'] }));
+
+        await doc.chunk({ strategy: 'json', maxSize: 30, minSize: 1000 });
+
+        expect(doc.getText().flatMap(text => JSON.parse(text).items)).toEqual(['one', 'two', 'three', 'four', 'five']);
+      });
+    });
   });
 
   describe('chunkToken', () => {
