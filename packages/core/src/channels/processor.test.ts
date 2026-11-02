@@ -193,6 +193,24 @@ describe('ChatChannelProcessor', () => {
       expect(prompt(linked)).toBe(prompt(inbound));
     });
 
+    it('keeps hidden text on a run restored without its render context', async () => {
+      const inbound = createArgs({ channel });
+      inbound.requestContext!.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { textDisplay: 'hidden' });
+      await new ChatChannelProcessor().processInputStep(inbound);
+
+      // Durable snapshots keep `channel` but drop the render context.
+      const restored = createArgs({ channel });
+      await new ChatChannelProcessor({
+        buildChannelContextForThread: async () => null,
+        _textDisplayFor: platform => (platform === 'slack' ? 'hidden' : undefined),
+      }).processInputStep(restored);
+
+      const prompt = (args: ProcessInputStepArgs) =>
+        String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+      expect(prompt(restored)).toContain('Your text replies are not posted');
+      expect(prompt(restored)).toBe(prompt(inbound));
+    });
+
     it('looks the thread up once per run, and adds nothing for a thread with no channel', async () => {
       const lookup = vi.fn(async () => null);
       const processor = new ChatChannelProcessor({ buildChannelContextForThread: lookup });

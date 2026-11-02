@@ -12,6 +12,7 @@ interface ChannelThreadResolver {
   buildChannelContextForThread(
     threadId: string,
   ): Promise<{ channel: ChannelContext; render: ChatChannelRenderContext } | null>;
+  _textDisplayFor?(platform: string): ChatChannelRenderContext['textDisplay'];
 }
 
 type ResolvedChannel = { channel: ChannelContext; textHidden: boolean };
@@ -62,7 +63,9 @@ export class ChatChannelProcessor {
     const channel = requestContext?.get('channel') as ChannelContext | undefined;
     if (channel) {
       const render = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-      return { channel, textHidden: render?.textDisplay === 'hidden' };
+      // Snapshots of a run drop the render context, so fall back to the adapter config.
+      const textDisplay = render ? render.textDisplay : this.#channels?._textDisplayFor?.(channel.platform);
+      return { channel, textHidden: textDisplay === 'hidden' };
     }
 
     // Resolved once per run; `null` remembers a thread that isn't channel-backed.

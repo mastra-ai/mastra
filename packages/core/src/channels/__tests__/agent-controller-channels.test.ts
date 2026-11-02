@@ -1212,6 +1212,37 @@ describe('AgentControllerChannels', () => {
       );
     }, 30_000);
 
+    it('addresses a restored run to its requester, not to whoever wrote in the thread last', async () => {
+      const { adapter, mastra, channels } = await createSetup({});
+      const chatThread = createChatThread(adapter, 'discord:t-requester');
+      const message = { ...createMessage('m-1', 'hello'), raw: { team_id: 'T1' } };
+      await (channels as any).processChatMessage(chatThread, message, mastra, new RequestContext());
+      const memoryStore = await mastra.getStorage()!.getStore('memory');
+      const { threads } = await memoryStore!.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'discord:t-requester' } },
+        perPage: 1,
+      });
+
+      adapter.stream = vi.fn(async (_threadId: string, stream: AsyncIterable<string>) => {
+        for await (const _ of stream);
+        return { id: 'streamed-1', threadId: 'discord:t-requester', raw: {} };
+      });
+      const render = await channels.buildRenderContextForThread(threads[0]!.id, { userId: 'user-2', userName: 'ada' });
+      await render!.chatThread.post(
+        (async function* () {
+          yield 'hi';
+        })(),
+      );
+
+      expect(adapter.stream).toHaveBeenCalledWith(
+        'discord:t-requester',
+        expect.anything(),
+        expect.objectContaining({ recipientUserId: 'user-2', recipientTeamId: 'T1' }),
+      );
+      render!.onApprovalPosted('tool-call-9', { runId: 'run-9' } as any);
+      expect((channels as any).pendingApprovalCards.get('tool-call-9')).toMatchObject({ requesterId: 'user-2' });
+    }, 30_000);
+
     for (const isDM of [true, false]) {
       it(`gives a run that did not start from a message the same system prompt as one that did (${isDM ? 'DM' : 'thread'})`, async () => {
         const systemPrompts: string[] = [];

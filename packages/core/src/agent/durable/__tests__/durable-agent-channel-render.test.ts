@@ -13,6 +13,7 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, vi } from 'vitest';
 import { z } from 'zod';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '../../../channels/output-processor';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
@@ -22,6 +23,7 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { prepareForDurableExecution } from '../preparation';
 import { globalRunRegistry } from '../run-registry';
 
 const PLATFORM = 'demo';
@@ -289,6 +291,37 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
 
     await drain(await durableAgent.stream('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID } }));
 
+    expect(postMessage).toHaveBeenCalled();
+  });
+
+  /**
+   * An inbound message stashes a live render context (adapter, thread, `wrapStream`) on the request
+   * context. It must stay out of the persisted workflow input: a JSON copy is a method-less husk a
+   * restored run would mistake for live, and it would put the adapter (and its credentials) in storage.
+   */
+  it('keeps the live render context out of the persisted run', async () => {
+    const { agent, durableAgent, postMessage } = await channelBackedAgent('channel-render-durable-live');
+    const live = await agent.getChannels()!.buildRenderContextForThread(THREAD_ID);
+    expect(live?.wrapStream).toBeTypeOf('function');
+    const requestContext = new RequestContext<any>([
+      [CHAT_CHANNEL_RENDER_CONTEXT_KEY, live],
+      ['tenantId', 'tenant-1'],
+    ]);
+
+    const preparation = await prepareForDurableExecution({
+      agent,
+      messages: 'hi',
+      options: { memory: { thread: THREAD_ID, resource: RESOURCE_ID } },
+      optionsAreResolved: true,
+      requestContext,
+    });
+    expect(preparation.workflowInput.requestContextEntries).toEqual(expect.objectContaining({ tenantId: 'tenant-1' }));
+    expect(preparation.workflowInput.requestContextEntries).not.toHaveProperty(CHAT_CHANNEL_RENDER_CONTEXT_KEY);
+
+    // The run itself still renders, rebuilding the context from the thread where it needs to.
+    await drain(
+      await durableAgent.stream('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, requestContext }),
+    );
     expect(postMessage).toHaveBeenCalled();
   });
 

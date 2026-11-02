@@ -164,6 +164,7 @@ describe('ChatChannelOutputProcessor', () => {
       const restored = new Map<string, unknown>([
         [CHAT_CHANNEL_RENDER_CONTEXT_KEY, JSON.parse(JSON.stringify({ ...live, chatThread: { id: chatThread.id } }))],
         ['MastraMemory', { thread: { id: 'mastra-thread-1' } }],
+        ['channel', { platform: 'test', eventType: 'message', userId: 'U-requester', userName: 'ada' }],
       ]);
       const requestContext = { get: (key: string) => restored.get(key) } as any;
       const state: Record<string, unknown> = {};
@@ -175,7 +176,7 @@ describe('ChatChannelOutputProcessor', () => {
         await processor.processOutputStream({ part, state, requestContext } as any);
       }
 
-      expect(buildForThread).toHaveBeenCalledWith('mastra-thread-1');
+      expect(buildForThread).toHaveBeenCalledWith('mastra-thread-1', { userId: 'U-requester', userName: 'ada' });
       expect(calls.filter(c => c.kind === 'post')).toEqual([{ kind: 'post', arg: { markdown: 'Hello' } }]);
     });
   });

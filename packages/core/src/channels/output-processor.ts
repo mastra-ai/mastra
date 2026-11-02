@@ -9,7 +9,7 @@ import type { AgentChannels } from './agent-channels';
 import { runStaticDriver } from './chat-driver-static';
 import { runStreamingDriver } from './chat-driver-streaming';
 import type { PendingApprovalRecord } from './stream-helpers';
-import type { ChannelAdapterBaseConfig, ToolDisplay, ToolDisplayFn } from './types';
+import type { ChannelAdapterBaseConfig, ChannelContext, ToolDisplay, ToolDisplayFn } from './types';
 
 /**
  * Per-run render dependencies stashed onto `requestContext` by
@@ -242,7 +242,13 @@ export class ChatChannelOutputProcessor {
 
     const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
     if (this.#agentChannels && threadId) {
-      const rebuilt = await this.#agentChannels.buildRenderContextForThread(threadId);
+      // Inbound runs restored from a snapshot keep their JSON-safe channel
+      // context; its sender is the run's requester.
+      const channel = requestContext?.get('channel') as ChannelContext | undefined;
+      const rebuilt = await this.#agentChannels.buildRenderContextForThread(
+        threadId,
+        channel?.userId ? { userId: channel.userId, userName: channel.userName } : undefined,
+      );
       // Cache `null` too, so a non-channel thread isn't re-resolved per chunk.
       state.render = rebuilt ?? null;
       return rebuilt ?? undefined;
