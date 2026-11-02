@@ -55,7 +55,17 @@ const OBSERVABILITY_TRACE_QUERY_OUTCOME_FIELDS_STORAGE_FEATURE = 'trace-query-ou
 const OUTCOME_FIELDS = new Set(['outcome', 'stopReason']);
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
-const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
+const OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE = 'trace-query-context-fields';
+// Trace and span context fields, keyed by the storage feature that added their SQL.
+const TRACE_QUERY_CONTEXT_FIELD_FEATURES = new Map([
+  ['runId', OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE],
+  ['sessionId', OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE],
+  ['userId', OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE],
+  ['organizationId', OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE],
+  ['requestId', OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE],
+  ['serviceName', OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE],
+  ['experimentId', OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE],
+]);
 const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE = 'trace-query-time-to-first-chunk';
 const TRACE_QUERY_TIME_TO_FIRST_CHUNK_FIELDS = new Set(['timeToFirstChunkMs']);
 const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_TOKEN_STORAGE_FEATURE = 'trace-query-time-to-first-token';
@@ -392,24 +402,22 @@ function usesField(
   return fields.has(predicate.field);
 }
 
-export function supportsObservabilityTraceQueryContextIds(observabilityStore: ObservabilityStorage) {
-  return getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE) === true;
+/** Whether the store can serve `path` in trace and span predicates. Fields outside the context table always can. */
+export function supportsObservabilityTraceQueryContextField(observabilityStore: ObservabilityStorage, path: string) {
+  const feature = TRACE_QUERY_CONTEXT_FIELD_FEATURES.get(path);
+  return feature === undefined || getFeatures(observabilityStore)?.includes(feature) === true;
 }
 
-export function isTraceQueryContextIdField(path: string): boolean {
-  return TRACE_QUERY_CONTEXT_ID_FIELDS.has(path);
-}
-
-export function assertObservabilityTraceQueryContextIdsSupported(
+export function assertObservabilityTraceQueryContextFieldsSupported(
   observabilityStore: ObservabilityStorage,
   predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
 ) {
-  if (
-    !usesField(predicate, TRACE_QUERY_CONTEXT_ID_FIELDS) ||
-    supportsObservabilityTraceQueryContextIds(observabilityStore)
-  ) {
-    return;
-  }
+  const unsupported = new Set(
+    [...TRACE_QUERY_CONTEXT_FIELD_FEATURES.keys()].filter(
+      field => !supportsObservabilityTraceQueryContextField(observabilityStore, field),
+    ),
+  );
+  if (!usesField(predicate, unsupported)) return;
 
   throw new HTTPException(501, {
     message: 'Context identifier predicates are not supported by the configured observability store',
@@ -655,6 +663,7 @@ export type ObservabilityStorageCapabilities = {
   traceQuery: boolean;
   traceQueryRootDuration: boolean;
   traceQueryContextIds: boolean;
+  traceQueryContextFields: boolean;
   traceQueryTimeToFirstChunk: boolean;
   traceQueryRootSpanFields: boolean;
   traceQueryRootEntityId: boolean;
@@ -694,6 +703,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQuery: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
+  traceQueryContextFields: false,
   traceQueryTimeToFirstChunk: false,
   traceQueryRootSpanFields: false,
   traceQueryRootEntityId: false,
@@ -783,6 +793,8 @@ export function getObservabilityStorageCapabilities(
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE),
     traceQueryContextIds:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE),
+    traceQueryContextFields:
+      (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_CONTEXT_FIELDS_STORAGE_FEATURE),
     traceQueryTimeToFirstChunk:
       (traceQuery || threadQuery || spanQuery) &&
       declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE),
