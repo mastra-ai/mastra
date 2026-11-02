@@ -24,6 +24,12 @@ await mastra.backgroundTaskManager.resume(taskId, { approved: true }, { suspende
 
 **The agent reports a deferred task's result after its stream ends.** When a deferred background task finishes and no `untilIdle` stream is open for its thread, the agent now gets a `background-task` notification signal on the thread. An idle thread wakes and the agent reports the outcome; a run already active on the thread gets the signal on its next model request. Before, the result was only written to memory and waited for the next user message. This covers `stream()` calls without `untilIdle` and tasks resumed after they suspended, for example an MCP task answered from the chat. Streams using `untilIdle` are unchanged: they still run their own follow-up turn, and no signal is sent. Cancelling or aborting an `untilIdle` stream still means no reply for the tasks it was waiting for.
 
-**A run woken by a signal no longer waits for its background tasks.** A run that a signal starts on an idle thread used to run with `untilIdle` on, so it stayed open until every task it dispatched finished. It now ends after its own turn, and each task wakes the thread when it finishes. Pass `untilIdle: true` in `ifIdle.streamOptions` to keep the old behavior. Channels and agent controller sessions pass it, so channel replies and session runs still wait for background tasks.
+**Opt in to ending woken runs after their turn.** A run that a signal starts on an idle thread still stays open until the background tasks it dispatched finish. Set the temporary `wokenRunsEndAfterTurn` option to end it after its own turn instead; each task then wakes the thread when it finishes. A signal's own `ifIdle.streamOptions.untilIdle` takes precedence either way.
 
-**Turn off the completion signal.** Set `notifyAgentOnFinish: false` in the `backgroundTasks` config when your app sends its own completion signal, for example from `onTaskComplete`.
+```typescript
+new Mastra({ backgroundTasks: { enabled: true, wokenRunsEndAfterTurn: true } });
+```
+
+In the next major release, ending after the turn becomes the only behavior and `wokenRunsEndAfterTurn` is removed. Pass `untilIdle: true` in `ifIdle.streamOptions` to keep a woken run open; channels and agent controller sessions already do.
+
+**Turn off the completion signal.** Set `notifyAgentOnFinish: false` in the `backgroundTasks` config when your app sends its own completion signal, for example from `onTaskComplete`. With `wokenRunsEndAfterTurn` also on, your app must report the tasks of woken runs itself.

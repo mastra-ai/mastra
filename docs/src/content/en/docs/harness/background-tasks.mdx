@@ -208,7 +208,22 @@ When a deferred task finishes and no `untilIdle` stream is open for its thread, 
 - If an `untilIdle` stream is open for the thread, no signal is sent, because that stream runs its own follow-up turn.
 - If the caller cancelled or aborted the `untilIdle` stream that was waiting for the task, no signal is sent either: stopping the stream means the caller doesn't want a reply for that work. A task that suspended and is answered later isn't covered by this, because the stream stopped waiting for it when it suspended.
 
-A run that a signal starts on an idle thread, such as a message sent with `agent.sendSignal()`, ends after its own turn instead of waiting for the tasks it dispatched. Those tasks report back with this signal when they finish. To keep a woken run open until its tasks finish, pass `untilIdle: true` in `ifIdle.streamOptions`. Agent controller sessions and channels pass it by default.
+A run that a signal starts on an idle thread, such as a message sent with `agent.sendSignal()`, stays open until the tasks it dispatched finish, and reports them itself. To end woken runs after their own turn instead, set the temporary `wokenRunsEndAfterTurn` option. Their tasks then report back with this signal when they finish:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  backgroundTasks: {
+    enabled: true,
+    wokenRunsEndAfterTurn: true,
+  },
+})
+```
+
+A signal's own `ifIdle.streamOptions.untilIdle` takes precedence over the option in both directions. In the next major release, ending after the turn becomes the only behavior and `wokenRunsEndAfterTurn` is removed. To keep a woken run open after that, pass `untilIdle: true` in `ifIdle.streamOptions`. Agent controller sessions and channels already pass it.
+
+If you combine `wokenRunsEndAfterTurn` with `notifyAgentOnFinish: false`, nothing reports the tasks of a woken run, so your app has to send the completion itself.
 
 If your app sends its own completion signal, for example from `onTaskComplete`, set `notifyAgentOnFinish: false` on the Mastra `backgroundTasks` config so the agent isn't told twice:
 

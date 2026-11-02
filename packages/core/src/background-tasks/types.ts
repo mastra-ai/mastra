@@ -351,6 +351,17 @@ export interface BackgroundTaskManagerConfig {
    * its own completion signal, for example from `onTaskComplete`. Default: `true`.
    */
   notifyAgentOnFinish?: boolean;
+  /**
+   * Whether a run that a signal starts on an idle thread ends after its own turn
+   * instead of staying open until the background tasks it dispatched finish. Its
+   * deferred tasks then report through the `background-task` signal (see
+   * `notifyAgentOnFinish`). A signal's own `ifIdle.streamOptions.untilIdle`
+   * takes precedence. Default: `false`.
+   *
+   * Temporary: in the next major, ending after the turn becomes the only behavior and this
+   * option is removed. Pass `untilIdle: true` in `ifIdle.streamOptions` to keep a run open.
+   */
+  wokenRunsEndAfterTurn?: boolean;
   /** Optional callback invoked when a task completes (in addition to stream + message list injection) */
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */

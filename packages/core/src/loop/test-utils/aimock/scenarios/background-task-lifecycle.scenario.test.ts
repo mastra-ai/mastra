@@ -875,47 +875,129 @@ describeForAllEngines(
       ]);
     }
 
-    it('ends a signal-woken run without waiting for its deferred task, then wakes the thread when it finishes (#28986)', async () => {
+    async function wakeWithDeferredResearch(opts: {
+      key: string;
+      topic: string;
+      wokenRunsEndAfterTurn?: boolean;
+      untilIdle?: boolean;
+    }) {
       let release!: () => void;
       const gate = new Promise<void>(resolve => (release = resolve));
       const memory = new MockMemory();
       const llm = getMock();
-      const thread = { threadId: 'bg-signal-thread', resourceId: 'bg-signal-user' };
-      const prompt = 'Research fusion over a signal';
+      const thread = { threadId: `bg-signal-${opts.key}-thread`, resourceId: `bg-signal-${opts.key}-user` };
+      const prompt = `Research ${opts.topic} over a signal`;
       const shared = await createSharedAgent(llm, {
         tools: { research: makeResearchTool(gate) },
         agentBackgroundTasks: { tools: { research: true } },
-        backgroundTasks: BG_CONFIG,
+        backgroundTasks: { ...BG_CONFIG, wokenRunsEndAfterTurn: opts.wokenRunsEndAfterTurn },
         memory,
         engine,
       });
-      onReportTurns(llm, prompt, {
-        dispatch: { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: 'fusion' } }] },
-        ack: 'Started the fusion research.',
-        report: 'The fusion research is finished.',
-      });
-
-      const sent = shared.agent.sendSignal(
-        { type: 'user-message', contents: prompt },
-        { ...thread, ifIdle: { behavior: 'wake', streamOptions: { stopWhen: stepCountIs(3) } as any } },
+      const report = `The ${opts.topic} research is finished.`;
+      // The report turn is keyed on the task's real result reaching the model, which happens either
+      // inside the woken run (untilIdle) or in the turn the finish signal wakes.
+      const mentions = (req: unknown, text: string) => JSON.stringify(req).includes(text);
+      const result = 'Research complete on';
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => mentions(req, prompt) && !hasToolResult(req) },
+        { toolCalls: [{ id: 'call-bg-1', name: 'research', arguments: { topic: opts.topic } }] },
       );
-      const accepted = await sent.accepted;
+      llm.on(
+        {
+          endpoint: 'chat',
+          predicate: (req: unknown) => mentions(req, prompt) && hasToolResult(req) && !mentions(req, result),
+        },
+        { content: `Started the ${opts.topic} research.` },
+      );
+      llm.on(
+        { endpoint: 'chat', predicate: (req: unknown) => mentions(req, prompt) && mentions(req, result) },
+        {
+          content: report,
+        },
+      );
+
+      const streamOptions = {
+        stopWhen: stepCountIs(3),
+        ...(opts.untilIdle !== undefined && { untilIdle: opts.untilIdle }),
+      };
+      const accepted = await shared.agent.sendSignal(
+        { type: 'user-message', contents: prompt },
+        { ...thread, ifIdle: { behavior: 'wake', streamOptions: streamOptions as any } },
+      ).accepted;
       expect(accepted.action).toBe('wake');
+      // Drain the full stream: an `untilIdle` run's stream spans its background tasks' follow-up turns.
+      const consumed = (async () => {
+        for await (const _ of (accepted as any).output.fullStream) {
+          // drain
+        }
+      })();
+      const taskId = async () =>
+        (await shared.mastra.backgroundTaskManager!.listTasks({ threadId: thread.threadId })).tasks[0]?.id;
+      const requests = () => requestsMentioning(llm, prompt);
+      const finished = () => waitFor(storedText(memory, thread), s => s.includes(report));
+      return { release, consumed, taskId, requests, finished, topic: opts.topic };
+    }
 
-      // The woken run ends after its own turn; the task keeps running in the background.
-      expect(await settlesWithin((accepted as any).output.consumeStream(), 5_000)).toBe(true);
-      const [task] = (await shared.mastra.backgroundTaskManager!.listTasks({ threadId: thread.threadId })).tasks;
-      expect(task?.status).toBe('running');
-      expect(requestsMentioning(llm, prompt)).toHaveLength(2);
+    type WokenRun = Awaited<ReturnType<typeof wakeWithDeferredResearch>>;
 
-      release();
-      await waitFor(storedText(memory, thread), s => s.includes('The fusion research is finished.'));
-      const requests = requestsMentioning(llm, prompt);
+    async function expectWokenRunWaitsAndReports(run: WokenRun) {
+      // The woken run stays open while its deferred task runs.
+      expect(await settlesWithin(run.consumed, 1_000)).toBe(false);
+      expect(run.requests()).toHaveLength(2);
+
+      run.release();
+      expect(await settlesWithin(run.consumed, 10_000)).toBe(true);
+      await run.finished();
+      const requests = run.requests();
       expect(requests).toHaveLength(3);
-      expect(toolResultSentToModel(requests[2])).toEqual({ summary: 'Research complete on "fusion"' });
+      expect(toolResultSentToModel(requests[2])).toEqual({ summary: `Research complete on "${run.topic}"` });
+      // Reported inside the woken run, so no finish signal is sent.
+      expect(JSON.stringify((requests[2]!.body as any).messages)).not.toContain(
+        `Background task ${await run.taskId()}`,
+      );
+    }
+
+    async function expectWokenRunEndsThenSignalReports(run: WokenRun) {
+      // The woken run ends after its own turn; the task keeps running in the background.
+      expect(await settlesWithin(run.consumed, 5_000)).toBe(true);
+      expect(run.requests()).toHaveLength(2);
+
+      run.release();
+      await run.finished();
+      const requests = run.requests();
+      expect(requests).toHaveLength(3);
+      expect(toolResultSentToModel(requests[2])).toEqual({ summary: `Research complete on "${run.topic}"` });
       // Reported by the finish signal, not by the woken run waiting for the task.
       expect(JSON.stringify((requests[2]!.body as any).messages)).toContain(
-        `Background task ${task!.id} for tool call call-bg-1 (research) has completed`,
+        `Background task ${await run.taskId()} for tool call call-bg-1 (research) has completed`,
+      );
+    }
+
+    it('keeps a signal-woken run open until its deferred task finishes, and reports it in that run', async () => {
+      await expectWokenRunWaitsAndReports(await wakeWithDeferredResearch({ key: 'default', topic: 'fusion' }));
+    }, 30_000);
+
+    it('ends a signal-woken run after its turn when the app opts in, then wakes the thread when the task finishes (#28986)', async () => {
+      await expectWokenRunEndsThenSignalReports(
+        await wakeWithDeferredResearch({ key: 'opt-in', topic: 'fission', wokenRunsEndAfterTurn: true }),
+      );
+    }, 30_000);
+
+    it("lets a signal's untilIdle: false end its woken run after its turn (#28986)", async () => {
+      await expectWokenRunEndsThenSignalReports(
+        await wakeWithDeferredResearch({ key: 'signal-opt-in', topic: 'plasma', untilIdle: false }),
+      );
+    }, 30_000);
+
+    it("lets a signal's untilIdle: true keep its woken run open when the app opts in (#28986)", async () => {
+      await expectWokenRunWaitsAndReports(
+        await wakeWithDeferredResearch({
+          key: 'signal-opt-out',
+          topic: 'lasers',
+          wokenRunsEndAfterTurn: true,
+          untilIdle: true,
+        }),
       );
     }, 30_000);
 
