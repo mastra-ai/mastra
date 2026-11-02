@@ -16,6 +16,7 @@ import {
   knowledgeScopeReadable,
   MAX_KNOWLEDGE_MOVE_PAGES,
   MAX_KNOWLEDGE_PAGE_DEPTH,
+  MAX_KNOWLEDGE_PAGE_LINKS,
   MAX_KNOWLEDGE_PAGE_LIST_LIMIT,
 } from './pages';
 import type {
@@ -23,6 +24,10 @@ import type {
   KnowledgePage,
   KnowledgePageActivityAction,
   KnowledgePageActivityEvent,
+  KnowledgePageBodyLink,
+  KnowledgePageLinkCounts,
+  KnowledgePageLinkEdge,
+  KnowledgePageLinkKind,
   KnowledgePageSearchHit,
   KnowledgePageStore,
   KnowledgePin,
@@ -49,6 +54,8 @@ function paginate<T>(items: T[], cursor: string | undefined, limit: number | und
   return { items: slice, nextCursor: start + size < items.length ? String(start + size) : undefined };
 }
 
+const compareCodeUnits = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
 const byPosition = (a: KnowledgePage, b: KnowledgePage) =>
   a.position < b.position ? -1 : a.position > b.position ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 const byName = (a: KnowledgePage, b: KnowledgePage) =>
@@ -70,13 +77,15 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   #notes = new Map<string, KnowledgeNote>();
   #pins = new Map<string, KnowledgePin>();
   #activity: KnowledgePageActivityEvent[] = [];
+  #bodyLinks = new Map<string, KnowledgePageBodyLink[]>();
   #clock = 0;
 
-  /** Drops every page, note, pin and event. */
+  /** Drops every page, note, pin, body link and event. */
   clear(): void {
     this.#pages.clear();
     this.#notes.clear();
     this.#pins.clear();
+    this.#bodyLinks.clear();
     this.#activity = [];
   }
 
@@ -413,6 +422,87 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       counts[page.parentId]! += 1;
     }
     return counts;
+  }
+
+  async replacePageBodyLinks(input: Parameters<Store['replacePageBodyLinks']>[0]) {
+    if (input.links.length === 0) this.#bodyLinks.delete(input.pageId);
+    else
+      this.#bodyLinks.set(
+        input.pageId,
+        input.links.map(link => ({ ...link })),
+      );
+  }
+
+  async listPageBodyLinkSources(input: Parameters<Store['listPageBodyLinkSources']>[0]) {
+    const refs = new Set(input.refs ?? []);
+    const targets = new Set(input.toPageIds ?? []);
+    const sources: string[] = [];
+    for (const [pageId, links] of this.#bodyLinks) {
+      const matches = links.some(link => (link.toPageId === null ? refs.has(link.ref) : targets.has(link.toPageId)));
+      if (matches) sources.push(pageId);
+    }
+    return sources;
+  }
+
+  /** Every resolved link both of whose ends are live and readable, and not a self-link. */
+  #visibleLinks(read: KnowledgeReadScope, kinds: KnowledgePageLinkKind[] | undefined): KnowledgePageLinkEdge[] {
+    const wanted = new Set(kinds ?? ['body', 'note']);
+    const live = (id: string) => {
+      const page = this.#pages.get(id);
+      return !!page && !page.deletedAt && this.#pageReadable(page, read);
+    };
+    const edges = new Map<string, KnowledgePageLinkEdge>();
+    const add = (fromPageId: string, toPageId: string, kind: KnowledgePageLinkKind, count: number) => {
+      if (fromPageId === toPageId || !live(fromPageId) || !live(toPageId)) return;
+      const key = `${fromPageId}\u0000${toPageId}\u0000${kind}`;
+      const edge = edges.get(key);
+      if (edge) edge.count += count;
+      else edges.set(key, { fromPageId, toPageId, kind, count });
+    };
+    if (wanted.has('body')) {
+      for (const [pageId, links] of this.#bodyLinks) {
+        for (const link of links) if (link.toPageId !== null) add(pageId, link.toPageId, 'body', link.count);
+      }
+    }
+    if (wanted.has('note')) {
+      for (const note of this.#notes.values()) {
+        if (note.deletedAt || !this.#noteVisible(note, read)) continue;
+        for (const pageId of new Set(note.mentions)) add(note.pageId, pageId, 'note', 1);
+      }
+    }
+    return [...edges.values()];
+  }
+
+  async countPageLinks(input: Parameters<Store['countPageLinks']>[0]) {
+    const linked = new Map<string, { in: Set<string>; out: Set<string> }>(
+      input.pageIds.map(id => [id, { in: new Set<string>(), out: new Set<string>() }]),
+    );
+    for (const edge of this.#visibleLinks(input.read, input.kinds)) {
+      linked.get(edge.fromPageId)?.out.add(edge.toPageId);
+      linked.get(edge.toPageId)?.in.add(edge.fromPageId);
+    }
+    return Object.fromEntries(
+      [...linked].map(([id, sets]) => [id, { in: sets.in.size, out: sets.out.size }]),
+    ) as Record<string, KnowledgePageLinkCounts>;
+  }
+
+  async listPageLinks(input: Parameters<Store['listPageLinks']>[0]) {
+    const ids = new Set(input.pageIds);
+    const direction = input.direction ?? 'both';
+    const limit = input.limit ?? 1_000;
+    if (!Number.isInteger(limit) || limit < 1) throw new RangeError('Knowledge link limit must be a positive integer');
+    const kindOrder = (kind: KnowledgePageLinkKind) => (kind === 'body' ? 0 : 1);
+    return this.#visibleLinks(input.read, input.kinds)
+      .filter(
+        edge => (direction !== 'in' && ids.has(edge.fromPageId)) || (direction !== 'out' && ids.has(edge.toPageId)),
+      )
+      .sort(
+        (a, b) =>
+          compareCodeUnits(a.fromPageId, b.fromPageId) ||
+          compareCodeUnits(a.toPageId, b.toPageId) ||
+          kindOrder(a.kind) - kindOrder(b.kind),
+      )
+      .slice(0, Math.min(limit, MAX_KNOWLEDGE_PAGE_LINKS));
   }
 
   async listPages(input: Parameters<Store['listPages']>[0]) {

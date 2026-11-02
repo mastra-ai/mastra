@@ -1447,5 +1447,173 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(await store.countChildPages({ parentIds: [], read: read(['org:acme']) })).toEqual({});
       });
     });
+
+    describe('links', () => {
+      const ACME = read(['org:acme']);
+      const BOTH = read(['org:acme', 'org:secret']);
+      const body = (toPageId: string | null, ref: string, count = 1) => ({ ref, toPageId, count });
+      const sorted = (values: string[]) => [...values].sort();
+
+      it('replaces a page body links and lists them out and in, one edge per page pair', async () => {
+        const acme = await scope('org:acme', ORG);
+        const a = await page(acme.id, 'a');
+        const b = await page(acme.id, 'b');
+        const c = await page(acme.id, 'c');
+        await store.replacePageBodyLinks({
+          pageId: a.id,
+          links: [body(b.id, 'b', 2), body(c.id, 'org:acme#c'), body(null, 'nowhere')],
+        });
+        await store.replacePageBodyLinks({ pageId: b.id, links: [body(c.id, 'c')] });
+
+        expect(await store.listPageLinks({ pageIds: [a.id], read: ACME, direction: 'out' })).toEqual(
+          [
+            { fromPageId: a.id, toPageId: b.id, kind: 'body', count: 2 },
+            { fromPageId: a.id, toPageId: c.id, kind: 'body', count: 1 },
+          ].sort((x, y) => (x.toPageId < y.toPageId ? -1 : 1)),
+        );
+        expect(await store.listPageLinks({ pageIds: [c.id], read: ACME, direction: 'in' })).toEqual(
+          [
+            { fromPageId: a.id, toPageId: c.id, kind: 'body', count: 1 },
+            { fromPageId: b.id, toPageId: c.id, kind: 'body', count: 1 },
+          ].sort((x, y) => (x.fromPageId < y.fromPageId ? -1 : 1)),
+        );
+        expect(await store.countPageLinks({ pageIds: [a.id, b.id, c.id, a.id, 'missing'], read: ACME })).toEqual({
+          [a.id]: { in: 0, out: 2 },
+          [b.id]: { in: 1, out: 1 },
+          [c.id]: { in: 2, out: 0 },
+          missing: { in: 0, out: 0 },
+        });
+
+        // Replacing drops what the new list leaves out; an empty list clears the page.
+        await store.replacePageBodyLinks({ pageId: a.id, links: [body(c.id, 'c')] });
+        expect(await store.countPageLinks({ pageIds: [a.id, b.id], read: ACME })).toEqual({
+          [a.id]: { in: 0, out: 1 },
+          [b.id]: { in: 0, out: 1 },
+        });
+        await store.replacePageBodyLinks({ pageId: a.id, links: [] });
+        expect(await store.listPageLinks({ pageIds: [a.id], read: ACME })).toEqual([]);
+        expect(await store.countPageLinks({ pageIds: [], read: ACME })).toEqual({});
+        expect(await store.listPageLinks({ pageIds: [], read: ACME })).toEqual([]);
+      });
+
+      it('never counts or lists a link whose other end the reader cannot see', async () => {
+        const acme = await scope('org:acme', ORG);
+        const secret = await scope('org:secret', ORG);
+        const open = await page(acme.id, 'open');
+        const hidden = await page(secret.id, 'hidden');
+        await store.replacePageBodyLinks({ pageId: open.id, links: [body(hidden.id, 'hidden')] });
+        await store.replacePageBodyLinks({ pageId: hidden.id, links: [body(open.id, 'open')] });
+
+        expect(await store.countPageLinks({ pageIds: [open.id, hidden.id], read: ACME })).toEqual({
+          [open.id]: { in: 0, out: 0 },
+          // Unreadable ids look exactly like missing ones.
+          [hidden.id]: { in: 0, out: 0 },
+        });
+        expect(await store.listPageLinks({ pageIds: [open.id, hidden.id], read: ACME })).toEqual([]);
+        expect(await store.countPageLinks({ pageIds: [open.id], read: BOTH })).toEqual({
+          [open.id]: { in: 1, out: 1 },
+        });
+        expect(await store.listPageLinks({ pageIds: [open.id], read: BOTH })).toHaveLength(2);
+        // Prefix entries gate the same way as addresses.
+        expect(
+          await store.countPageLinks({ pageIds: [open.id], read: read([], [{ declaration: ORG, prefix: '' }]) }),
+        ).toEqual({ [open.id]: { in: 1, out: 1 } });
+      });
+
+      it('hides links to and from deleted pages, and self-links', async () => {
+        const acme = await scope('org:acme', ORG);
+        const a = await page(acme.id, 'a');
+        const b = await page(acme.id, 'b');
+        const gone = await page(acme.id, 'gone');
+        await store.replacePageBodyLinks({ pageId: a.id, links: [body(gone.id, 'gone'), body(a.id, 'a')] });
+        await store.replacePageBodyLinks({ pageId: gone.id, links: [body(b.id, 'b')] });
+        await store.deletePage({ id: gone.id, expectedVersion: gone.version, deletedBy: 'agent:alex' });
+
+        expect(await store.countPageLinks({ pageIds: [a.id, b.id], read: ACME })).toEqual({
+          [a.id]: { in: 0, out: 0 },
+          [b.id]: { in: 0, out: 0 },
+        });
+        expect(await store.listPageLinks({ pageIds: [a.id, b.id, gone.id], read: ACME })).toEqual([]);
+        // The rows stay until core clears them: the sources are still findable.
+        expect(await store.listPageBodyLinkSources({ toPageIds: [gone.id] })).toEqual([a.id]);
+      });
+
+      it('counts note mentions as note links, only through notes the reader can see', async () => {
+        const acme = await scope('org:acme', ORG);
+        const secret = await scope('org:secret', ORG);
+        const a = await page(acme.id, 'a');
+        const b = await page(acme.id, 'b');
+        const note = (pageId: string, stampScopeIds: string[], mentions: string[]) =>
+          store.addNote({ pageId, text: 'fact', stampScopeIds, mentions, provenance: alex });
+        await note(a.id, [acme.id], [b.id]);
+        await note(a.id, [acme.id], [b.id]);
+        // Stamped where the reader can't see it.
+        await note(a.id, [secret.id], [b.id]);
+        // Mentions a page the reader can't see, which hides the whole note.
+        await note(a.id, [acme.id], [b.id, (await page(secret.id, 'hidden')).id]);
+        const removed = await note(b.id, [acme.id], [a.id]);
+        await store.removeNote({ id: removed.id, deletedBy: 'agent:alex', provenance: alex });
+        await store.replacePageBodyLinks({ pageId: a.id, links: [body(b.id, 'b')] });
+
+        expect(await store.listPageLinks({ pageIds: [a.id], read: ACME, direction: 'out' })).toEqual([
+          { fromPageId: a.id, toPageId: b.id, kind: 'body', count: 1 },
+          { fromPageId: a.id, toPageId: b.id, kind: 'note', count: 2 },
+        ]);
+        // Distinct pages: a body link and a note link to b count once.
+        expect(await store.countPageLinks({ pageIds: [a.id, b.id], read: ACME })).toEqual({
+          [a.id]: { in: 0, out: 1 },
+          [b.id]: { in: 1, out: 0 },
+        });
+        expect(await store.countPageLinks({ pageIds: [a.id], read: ACME, kinds: ['note'] })).toEqual({
+          [a.id]: { in: 0, out: 1 },
+        });
+        expect(await store.listPageLinks({ pageIds: [a.id], read: ACME, kinds: ['body'] })).toEqual([
+          { fromPageId: a.id, toPageId: b.id, kind: 'body', count: 1 },
+        ]);
+        expect(
+          (await store.listPageLinks({ pageIds: [b.id], read: BOTH, kinds: ['note'], direction: 'in' }))[0],
+        ).toEqual({ fromPageId: a.id, toPageId: b.id, kind: 'note', count: 4 });
+      });
+
+      it('finds the source pages of unresolved refs and of links to given pages', async () => {
+        const acme = await scope('org:acme', ORG);
+        const a = await page(acme.id, 'a');
+        const b = await page(acme.id, 'b');
+        const c = await page(acme.id, 'c');
+        await store.replacePageBodyLinks({ pageId: a.id, links: [body(null, 'later'), body(c.id, 'c')] });
+        await store.replacePageBodyLinks({ pageId: b.id, links: [body(null, 'later'), body(null, 'org:acme#x')] });
+        // A resolved row never matches by ref.
+        await store.replacePageBodyLinks({ pageId: c.id, links: [body(a.id, 'later')] });
+
+        expect(sorted(await store.listPageBodyLinkSources({ refs: ['later'] }))).toEqual(sorted([a.id, b.id]));
+        expect(await store.listPageBodyLinkSources({ refs: ['org:acme#x', 'nothing'] })).toEqual([b.id]);
+        expect(await store.listPageBodyLinkSources({ toPageIds: [c.id] })).toEqual([a.id]);
+        expect(sorted(await store.listPageBodyLinkSources({ refs: ['org:acme#x'], toPageIds: [a.id] }))).toEqual(
+          sorted([b.id, c.id]),
+        );
+        expect(await store.listPageBodyLinkSources({})).toEqual([]);
+        expect(await store.listPageBodyLinkSources({ refs: [], toPageIds: [] })).toEqual([]);
+      });
+
+      it('caps listed edges at limit, in from, to, kind order', async () => {
+        const acme = await scope('org:acme', ORG);
+        const hub = await page(acme.id, 'hub');
+        const spokes = [];
+        for (let i = 0; i < 5; i++) spokes.push(await page(acme.id, `spoke ${i}`));
+        await store.replacePageBodyLinks({ pageId: hub.id, links: spokes.map(s => body(s.id, s.name)) });
+
+        const all = await store.listPageLinks({ pageIds: [hub.id], read: ACME });
+        expect(all.map(edge => edge.toPageId)).toEqual(sorted(spokes.map(s => s.id)));
+        expect(await store.listPageLinks({ pageIds: [hub.id], read: ACME, limit: 2 })).toEqual(all.slice(0, 2));
+      });
+
+      it('dangerouslyClearAll clears links', async () => {
+        const acme = await scope('org:acme', ORG);
+        const a = await page(acme.id, 'a');
+        await store.replacePageBodyLinks({ pageId: a.id, links: [body(null, 'later')] });
+        await store.dangerouslyClearAll();
+        expect(await store.listPageBodyLinkSources({ refs: ['later'] })).toEqual([]);
+      });
+    });
   });
 }
