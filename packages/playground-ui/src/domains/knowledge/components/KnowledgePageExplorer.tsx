@@ -521,14 +521,17 @@ function useLazyTree(
   }, [expanded, more, graphOpened]);
   const levels = (source.useTreeLevels ?? noTreeLevels)(requests);
 
-  const { pages, loaded, nextCursor } = useMemo(() => {
+  const { pages, loaded, failed, nextCursor } = useMemo(() => {
+    const failedIds = new Set<string>();
     const byId = new Map<string, KnowledgePagePayload>();
     const loadedIds = new Set<string>();
     const next = new Map<string, string>();
     levels.forEach((level, index) => {
       const request = requests[index];
-      if (!request || !level.data) return;
+      if (!request) return;
       const key = request.parentId ?? KNOWLEDGE_TREE_ROOT;
+      if (level.isError) failedIds.add(key);
+      if (!level.data) return;
       loadedIds.add(key);
       for (const page of level.data.pages) byId.set(page.id, page);
       if (level.data.nextCursor) next.set(key, level.data.nextCursor);
@@ -538,7 +541,7 @@ function useLazyTree(
     for (const page of [...(selected?.ancestors ?? []), ...(selected ? [selected.page] : [])]) {
       if (!byId.has(page.id)) byId.set(page.id, page);
     }
-    return { pages: [...byId.values()], loaded: loadedIds, nextCursor: next };
+    return { pages: [...byId.values()], loaded: loadedIds, failed: failedIds, nextCursor: next };
   }, [levels, requests, selected]);
 
   // With the whole graph loaded, its structure is complete: only pages with children get a chevron.
@@ -568,6 +571,7 @@ function useLazyTree(
   return {
     pages,
     loaded,
+    failed,
     mayHaveChildren,
     loadMore,
     onExpandedChange,
@@ -621,6 +625,8 @@ export function KnowledgePageExplorer({
           },
     [lazyMode, lazy.pages, lazy.loaded, selectedPageId, openGroups, graph.pages],
   );
+  // The pages the focus needs are in (or failed to load): only then does the graph move to the new focus.
+  const graphSettled = !lazyMode || drawnGraph.wanted.every(id => lazy.loaded.has(id) || lazy.failed.has(id));
   useEffect(() => {
     if (!lazyMode || view === 'page') return;
     const next = [...new Set([...drawnGraph.wanted, ...previewed])];
@@ -900,6 +906,7 @@ export function KnowledgePageExplorer({
                 centerId={drawn.hub}
                 hiddenLinks={linkView.hidden}
                 knownLinks={knownLinks}
+                settled={graphSettled}
                 showCounts={dotCounts}
                 onPreview={page => {
                   if (isChildPlaceholder(page) && page.parentId) previewParent(page.parentId);

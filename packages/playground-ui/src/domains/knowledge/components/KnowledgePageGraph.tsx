@@ -138,6 +138,11 @@ function linkCountsText(links: { in: number; out: number }): string {
   return `${links.in} ${noun(links.in)} in, ${links.out} ${noun(links.out)} out`;
 }
 
+/** How long a focus change loads before the graph says so. */
+const LOADING_HINT_DELAY_MS = 150;
+/** How long it holds the old layout for pages that never arrive before drawing what it has. */
+const LOADING_RELEASE_MS = 4000;
+
 /** Most a tooltip is enlarged to offset a zoomed-out graph. */
 const TOOLTIP_MAX_SCALE = 3;
 
@@ -869,6 +874,8 @@ export interface KnowledgePageGraphProps {
   hiddenLinks?: ReadonlyMap<string, { in: number; out: number }>;
   /** Every link between pages, drawn or not: hovering a page draws its own, and tooltips count them. */
   knownLinks?: readonly KnowledgePageEdge[];
+  /** False while the pages the selected page needs are loading: the graph keeps its last layout until they are in. */
+  settled?: boolean;
   /** Write each dot's total of links in and out inside it. */
   showCounts?: boolean;
   /** The pointer rests on a dot or stand-in: a host can load what it stands for. */
@@ -894,9 +901,54 @@ export interface KnowledgePageGraphProps {
  * parent links as faint edges and mentions as solid ones. The first layout is deterministic for the same pages; later updates start from where pages already sit.
  */
 export function KnowledgePageGraph(props: KnowledgePageGraphProps) {
+  const { settled = true } = props;
+  // While the pages a new focus needs are still loading, the graph keeps showing what it had: laying out
+  // the new focus on old data would animate to the wrong place and then jump when the data landed. The
+  // views change once, from the old layout to the new, when the data is in.
+  const held = useRef(props);
+  // A request that never answers must not pin the graph to the old view: past a deadline it draws what it has.
+  const [released, setReleased] = useState(false);
+  const holding = !settled && !released;
+  if (!holding) held.current = props;
+  const shown = !holding
+    ? props
+    : {
+        ...props,
+        pages: held.current.pages,
+        edges: held.current.edges,
+        pinnedIds: held.current.pinnedIds,
+        grants: held.current.grants,
+        selectedPageId: held.current.selectedPageId,
+        centerId: held.current.centerId,
+        hiddenLinks: held.current.hiddenLinks,
+        knownLinks: held.current.knownLinks,
+      };
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (settled) {
+      setSlow(false);
+      setReleased(false);
+      return;
+    }
+    const hint = setTimeout(() => setSlow(true), LOADING_HINT_DELAY_MS);
+    const deadline = setTimeout(() => setReleased(true), LOADING_RELEASE_MS);
+    return () => {
+      clearTimeout(hint);
+      clearTimeout(deadline);
+    };
+  }, [settled, props.selectedPageId]);
   return (
     <ReactFlowProvider>
-      <KnowledgePageGraphInner {...props} />
+      <KnowledgePageGraphInner {...shown} />
+      {slow && holding ? (
+        <p
+          role="status"
+          data-testid="knowledge-graph-loading"
+          className="text-ui-sm pointer-events-none absolute bottom-3 left-1/2 z-10 -translate-x-1/2 rounded border border-border bg-card px-3 py-1 text-muted-foreground shadow-overlay"
+        >
+          Loading pages…
+        </p>
+      ) : null}
     </ReactFlowProvider>
   );
 }

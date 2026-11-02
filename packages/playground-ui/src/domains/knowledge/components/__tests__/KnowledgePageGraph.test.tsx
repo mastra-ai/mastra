@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, screen, within } from '@testing-library/react';
+import { act, fireEvent, screen, within } from '@testing-library/react';
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
@@ -49,6 +49,61 @@ describe('KnowledgePageGraph', () => {
     it('says there are none', () => {
       renderWithProviders(<KnowledgePageGraph pages={[]} edges={[]} onSelect={() => {}} />);
       expect(screen.getByText('No pages yet.')).toBeTruthy();
+    });
+  });
+
+  describe('when the pages a new focus needs are still loading', () => {
+    const moved = [...pages, page('billing', 'org', { name: 'Billing' })];
+    const graph = (props: Partial<Parameters<typeof KnowledgePageGraph>[0]>) => (
+      <div style={{ width: 800, height: 600 }}>
+        <KnowledgePageGraph pages={pages} edges={[]} onSelect={() => {}} {...props} />
+      </div>
+    );
+    const ids = () => [...document.querySelectorAll('.react-flow__node')].map(node => node.getAttribute('data-id'));
+
+    it('keeps the layout it had, and moves to the new focus once, when the data is in', () => {
+      const { rerender } = renderWithProviders(graph({ selectedPageId: 'org' }));
+      expect(ids().sort()).toEqual(['org', 'refunds']);
+      rerender(graph({ pages: moved, selectedPageId: 'billing', settled: false }));
+      expect(ids().sort()).toEqual(['org', 'refunds']);
+      expect(
+        document
+          .querySelector<HTMLElement>('[data-selected="true"]')
+          ?.closest('[data-testid="knowledge-page-node"]')
+          ?.getAttribute('data-page-id'),
+      ).toBe('org');
+      rerender(graph({ pages: moved, selectedPageId: 'billing', settled: true }));
+      expect(ids().sort()).toEqual(['billing', 'org', 'refunds']);
+    });
+
+    it('draws what it has after a deadline when the pages never arrive', () => {
+      vi.useFakeTimers();
+      try {
+        const { rerender } = renderWithProviders(graph({ selectedPageId: 'org' }));
+        rerender(graph({ pages: moved, selectedPageId: 'billing', settled: false }));
+        expect(ids().sort()).toEqual(['org', 'refunds']);
+        act(() => void vi.advanceTimersByTime(4100));
+        expect(ids().sort()).toEqual(['billing', 'org', 'refunds']);
+        expect(screen.queryByTestId('knowledge-graph-loading')).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('says it is loading only after 150ms, and stops when the data is in', () => {
+      vi.useFakeTimers();
+      try {
+        const { rerender } = renderWithProviders(graph({ settled: false }));
+        expect(screen.queryByTestId('knowledge-graph-loading')).toBeNull();
+        act(() => void vi.advanceTimersByTime(149));
+        expect(screen.queryByTestId('knowledge-graph-loading')).toBeNull();
+        act(() => void vi.advanceTimersByTime(2));
+        expect(screen.getByTestId('knowledge-graph-loading')).toBeTruthy();
+        rerender(graph({ settled: true }));
+        expect(screen.queryByTestId('knowledge-graph-loading')).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
@@ -513,7 +568,11 @@ describe('KnowledgePageGraph', () => {
         const touched = new Set<Element>();
         const observer = new MutationObserver(records => {
           for (const record of records)
-            touched.add(record.target.nodeType === 1 ? (record.target as Element) : record.target.parentElement!);
+            touched.add(
+              record.target.nodeType === 1
+                ? (record.target as Element)
+                : (record.target.parentElement ?? document.body),
+            );
         });
         observer.observe(container, { subtree: true, attributes: true, childList: true, characterData: true });
         fireEvent.mouseEnter(dot('ticket'));
