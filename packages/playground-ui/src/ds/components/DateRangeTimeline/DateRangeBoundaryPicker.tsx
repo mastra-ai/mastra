@@ -23,7 +23,9 @@ export function DateRangeBoundaryPicker({ boundary, value, min, max, onSelect }:
   const selectedDate = parseDate(value);
   const firstDate = parseDate(min) ?? selectedDate;
   const lastDate = parseDate(max) ?? selectedDate;
-  const formattedDate = selectedDate ? format(selectedDate, 'MMM d, yyyy') : value;
+  const formattedDate = selectedDate
+    ? selectedDate.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+    : value;
 
   function handleSelect(date?: Date) {
     if (!date) return;

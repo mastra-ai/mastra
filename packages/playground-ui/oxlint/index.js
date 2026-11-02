@@ -13,6 +13,7 @@
 //   playground-ui/txt-tone           ink on <Txt> is its `tone` prop, not a text-* colour class
 //   playground-ui/font-mono          mono comes from <Txt font="mono">, <InlineCode> or <CodeBlock>
 //   playground-ui/no-barrel-imports  import from an exact @mastra/playground-ui subpath, not a broad barrel
+//   playground-ui/date-locale        dates and times follow the browser locale, not a pinned locale or clock
 
 // Each option is { selector, message }: report every node an esquery selector matches.
 function selectorRule(selectors) {
@@ -178,6 +179,81 @@ const noBarrelImports = selectorRule(() =>
   ]).map(selector => ({ selector, message: BARREL_MESSAGE })),
 );
 
+// --- date-locale ---------------------------------------------------------------------------------------
+// Dates and times follow the viewer's browser locale: `2:05 PM` in en-US, `14:05` in en-GB. Reported:
+//   a locale literal       d.toLocaleTimeString('en-US'), new Intl.DateTimeFormat('en-US')
+//   a forced clock         { hour12: false }, { hourCycle: 'h23' }
+//   a date-fns pattern     format(d, 'PP p'), format(d, 'MMM d'), which is always English in US order
+// No locale, `undefined` or `[]` pick the browser's; a variable is the caller's call. date-fns patterns
+// starting with `yyyy-MM` are data (API params, ISO strings), not text people read, and pass.
+const DATE_LOCALE_MESSAGE =
+  'Dates follow the browser locale: use formatDate / formatClock from @mastra/playground-ui/utils/date-format, or pass no locale (undefined).';
+const DATE_LOCALE_METHODS = new Set(['toLocaleDateString', 'toLocaleTimeString']);
+const DATE_OPTION_KEYS = new Set([
+  'weekday',
+  'era',
+  'year',
+  'month',
+  'day',
+  'hour',
+  'minute',
+  'second',
+  'dateStyle',
+  'timeStyle',
+]);
+const DATE_FNS_FORMATTERS = new Set(['format', 'formatDate']);
+
+const propertyName = node =>
+  node.type === 'Identifier' ? node.name : node.type === 'Literal' ? node.value : undefined;
+
+const isPinnedLocale = node =>
+  (node?.type === 'Literal' && typeof node.value === 'string') ||
+  node?.type === 'TemplateLiteral' ||
+  (node?.type === 'ArrayExpression' && node.elements.length > 0);
+
+const hasDateOptions = node =>
+  node?.type === 'ObjectExpression' &&
+  node.properties.some(property => property.type === 'Property' && DATE_OPTION_KEYS.has(propertyName(property.key)));
+
+function dateLocale(context) {
+  const formatters = new Set();
+  const report = node => context.report({ node, message: DATE_LOCALE_MESSAGE });
+  return {
+    ImportDeclaration(node) {
+      if (!/^date-fns(\/format)?$/.test(node.source.value)) return;
+      for (const specifier of node.specifiers) {
+        if (specifier.type === 'ImportSpecifier' && DATE_FNS_FORMATTERS.has(specifier.imported.name))
+          formatters.add(specifier.local.name);
+      }
+    },
+    CallExpression(node) {
+      const [first, second] = node.arguments;
+      const { callee } = node;
+      if (callee.type === 'Identifier' && formatters.has(callee.name)) {
+        if (second?.type === 'Literal' && typeof second.value === 'string' && !second.value.startsWith('yyyy-MM'))
+          report(second);
+        return;
+      }
+      if (callee.type !== 'MemberExpression' || !isPinnedLocale(first)) return;
+      const method = propertyName(callee.property);
+      if (DATE_LOCALE_METHODS.has(method) || (method === 'toLocaleString' && hasDateOptions(second))) report(first);
+    },
+    NewExpression(node) {
+      const { callee } = node;
+      const isDateTimeFormat =
+        callee.type === 'MemberExpression' &&
+        callee.object.type === 'Identifier' &&
+        callee.object.name === 'Intl' &&
+        propertyName(callee.property) === 'DateTimeFormat';
+      if (isDateTimeFormat && isPinnedLocale(node.arguments[0])) report(node.arguments[0]);
+    },
+    Property(node) {
+      const name = propertyName(node.key);
+      if (name === 'hour12' || name === 'hourCycle') report(node);
+    },
+  };
+}
+
 const plugin = {
   meta: { name: 'playground-ui' },
   rules: {
@@ -186,6 +262,7 @@ const plugin = {
     'txt-tone': { meta: { type: 'suggestion', schema: false }, create: txtTone },
     'font-mono': { meta: { type: 'suggestion', schema: false }, create: fontMono },
     'no-barrel-imports': { meta: { type: 'suggestion', schema: false }, create: noBarrelImports },
+    'date-locale': { meta: { type: 'suggestion', schema: false }, create: dateLocale },
   },
 };
 
@@ -197,6 +274,7 @@ export const recommended = {
   'playground-ui/txt-tone': 'error',
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
+  'playground-ui/date-locale': 'error',
 };
 
 export default plugin;

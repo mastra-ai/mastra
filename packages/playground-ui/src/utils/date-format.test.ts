@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDate, formatMoment, formatShortDate, formatTimestampPrecise, toDate } from './date-format';
+import { formatClock, formatDate, formatMoment, formatShortDate, formatTimestampPrecise, toDate } from './date-format';
 
 const NOW = new Date('2026-09-24T18:00:00.000Z');
 const TODAY = new Date('2026-09-24T14:32:00.000Z');
@@ -153,6 +153,32 @@ describe('formatDate', () => {
       expect(formatDate(undefined, 'date-time')).toBeUndefined();
       expect(formatDate('not-a-date', 'date')).toBeUndefined();
     });
+  });
+});
+
+describe('formatClock', () => {
+  const ON_THE_HOUR = new Date('2026-09-24T14:00:00.000Z');
+  const timeZone = 'UTC';
+
+  it('drops the minutes on the hour with a 12-hour clock', () => {
+    expect(formatClock(ON_THE_HOUR, { locale: 'en-US', timeZone })).toBe('2 PM');
+    expect(formatClock(TODAY, { locale: 'en-US', timeZone })).toBe('2:32 PM');
+  });
+
+  it('keeps the minutes on the hour with a 24-hour clock', () => {
+    expect(formatClock(ON_THE_HOUR, { locale: 'en-GB', timeZone })).toBe('14:00');
+    expect(formatClock(TODAY, { locale: 'en-GB', timeZone })).toBe('14:32');
+  });
+
+  it('pads the hour after midnight with a 24-hour clock', () => {
+    expect(formatClock(new Date('2026-09-24T00:05:00.000Z'), { locale: 'en-GB', timeZone })).toBe('00:05');
+    expect(formatDate(new Date('2026-09-24T00:05:07.000Z'), 'time-seconds', { locale: 'en-GB', timeZone })).toBe(
+      '00:05:07',
+    );
+  });
+
+  it('returns undefined when unusable', () => {
+    expect(formatClock('not-a-date')).toBeUndefined();
   });
 });
 

@@ -1,4 +1,3 @@
-import { format } from 'date-fns';
 import { parseDate } from './lib/date-range-timeline';
 import type { TimelineTick } from './lib/date-range-timeline';
 import { Txt } from '@/ds/components/Txt/Txt';
@@ -11,7 +10,7 @@ interface DateRangeTicksProps {
 
 function formatBoundaryDate(value: string) {
   const date = parseDate(value);
-  return date ? format(date, 'MMM d, yyyy') : value;
+  return date ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : value;
 }
 
 export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {

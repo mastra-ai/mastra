@@ -33,7 +33,7 @@ const METRIC_LABEL: Record<Exclude<ChangeMetric, 'count'>, string> = {
 };
 
 const fmtMoment = (d: Date) =>
-  d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+  d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 const fmtRange = ({ start, end }: { start: Date; end: Date }) => `${fmtMoment(start)} – ${fmtMoment(end)}`;
 
 /** The % Change column's tooltip: which figure it compares, and both ranges' dates. */

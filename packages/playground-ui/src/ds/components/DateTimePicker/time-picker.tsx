@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
 import { cn } from '@/lib/utils';
+import { usesTwelveHourClock } from '@/utils/date-format';
 
 export type TimePickerProps = {
   defaultValue?: string;
@@ -12,11 +13,15 @@ export type TimePickerProps = {
 const hourOptions = ['12', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11'];
 const minuteOptions = ['00', '15', '30', '45', '59'];
 const timePeriodOptions = ['AM', 'PM'];
+// On a 24-hour clock the hour list is 00–23 and AM/PM is implied by it; the value stays `h:mm AM`.
+const hour24Options = Array.from({ length: 24 }, (_, h) => h.toString().padStart(2, '0'));
+const to24 = (hour: string, period: string) => (Number(hour) % 12) + (period === 'PM' ? 12 : 0);
 
 export function TimePicker({ defaultValue, onValueChange, className, label = 'Time' }: TimePickerProps) {
   const [hour, setHour] = useState<string>('12');
   const [minute, setMinute] = useState<string>('00');
   const [timePeriod, setTimePeriod] = useState('AM');
+  const twelveHour = usesTwelveHourClock();
 
   useEffect(() => {
     if (defaultValue) {
@@ -48,6 +53,16 @@ export function TimePicker({ defaultValue, onValueChange, className, label = 'Ti
     onValueChange(`${nextHour}:${minute} ${timePeriod}`.trim());
   };
 
+  const handleHour24Change = (val: string) => {
+    const h = Number(val);
+    if (!(h >= 0 && h < 24)) return;
+    const nextHour = (h % 12 || 12).toString();
+    const nextPeriod = h < 12 ? 'AM' : 'PM';
+    setHour(nextHour);
+    setTimePeriod(nextPeriod);
+    onValueChange(`${nextHour}:${minute} ${nextPeriod}`);
+  };
+
   const handleMinuteChange = (val: string) => {
     const nextMinute = minuteOptions[+val];
     if (nextMinute === undefined) return;
@@ -64,15 +79,26 @@ export function TimePicker({ defaultValue, onValueChange, className, label = 'Ti
 
   return (
     <div role="group" aria-label={label} className={cn('flex items-center gap-2', className)}>
-      <TimePartSelect label="Hour" options={hourOptions} value={hour} onValueChange={handleHourChange} />
+      {twelveHour ? (
+        <TimePartSelect label="Hour" options={hourOptions} value={hour} onValueChange={handleHourChange} />
+      ) : (
+        <TimePartSelect
+          label="Hour"
+          options={hour24Options}
+          value={hour24Options[to24(hour, timePeriod)] ?? ''}
+          onValueChange={handleHour24Change}
+        />
+      )}
       :
       <TimePartSelect label="Minute" options={minuteOptions} value={minute} onValueChange={handleMinuteChange} />
-      <TimePartSelect
-        label="AM or PM"
-        options={timePeriodOptions}
-        value={timePeriod}
-        onValueChange={handleTimePeriodChange}
-      />
+      {twelveHour && (
+        <TimePartSelect
+          label="AM or PM"
+          options={timePeriodOptions}
+          value={timePeriod}
+          onValueChange={handleTimePeriodChange}
+        />
+      )}
     </div>
   );
 }

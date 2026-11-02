@@ -1,5 +1,7 @@
 /** Axis and tooltip labels for chart buckets, shared by the Metrics and Requests charts. */
 
+import { formatClock } from '@/utils/date-format';
+
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 
@@ -17,24 +19,23 @@ export type BucketLabels = {
   time: string;
 };
 
-const fmtDay = (d: Date) => d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-const fmtHour = (d: Date) => d.toLocaleTimeString('en-US', { hour: 'numeric' });
+const fmtDay = (d: Date) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+const fmtHour = (d: Date) => formatClock(d) ?? '';
 
 export function bucketLabels(ts: number, stepHours: number, multiDay: boolean): BucketLabels {
   const d = new Date(ts);
   // Daily buckets are UTC days (see `bucketStart`), so they're named by their UTC date.
   if (stepHours >= 24) {
-    const day = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    const day = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', timeZone: 'UTC' });
     return {
       ts,
       label: day,
       edgeLabel: day,
-      time: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }),
+      time: d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC' }),
     };
   }
-  const time = d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric' });
   const edgeLabel = `${fmtDay(d)}, ${fmtHour(d)}`;
-  if (!multiDay) return { ts, label: fmtHour(d), edgeLabel, time };
+  if (!multiDay) return { ts, label: fmtHour(d), edgeLabel, time: edgeLabel };
   // Over several days the axis labels midnights with the day alone, other ticks with the hour.
-  return { ts, label: d.getHours() === 0 ? fmtDay(d) : edgeLabel, edgeLabel, time };
+  return { ts, label: d.getHours() === 0 ? fmtDay(d) : edgeLabel, edgeLabel, time: edgeLabel };
 }

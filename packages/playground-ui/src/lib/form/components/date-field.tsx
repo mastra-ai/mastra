@@ -1,5 +1,5 @@
 import type { AutoFormFieldProps } from '@autoform/react';
-import { format, isValid } from 'date-fns';
+import { isValid } from 'date-fns';
 import { CalendarIcon, X } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import { Button } from '@/ds/components/Button';
@@ -53,7 +53,7 @@ export const DateField: React.FC<AutoFormFieldProps> = ({ inputProps, field }) =
           icon={<CalendarIcon />}
         >
           {value ? (
-            <span className="text-foreground">{format(value, 'PPP')}</span>
+            <span className="text-foreground">{value.toLocaleDateString(undefined, { dateStyle: 'long' })}</span>
           ) : (
             <span className="text-muted-foreground">Pick a date</span>
           )}
