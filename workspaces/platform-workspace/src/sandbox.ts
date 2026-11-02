@@ -299,6 +299,9 @@ export type CaptureCheckpointResult =
   | { status: 'coalesced'; checkpointName: string }
   | { status: 'skipped'; reason: 'no-checkpoint-name-configured' | 'sandbox-not-running' };
 
+/** E2B's sandbox control port (envd). Never a preview. */
+const E2B_CONTROL_PORT = 49983;
+
 /**
  * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
  * (Railway destroy, quota reclamation, etc.). The client cannot recover from
@@ -310,9 +313,6 @@ export type CaptureCheckpointResult =
  * instance are cleared, so the next `ensureRunning()` on a reused instance
  * will re-provision cleanly.
  */
-/** E2B's sandbox control port (envd). Never a preview. */
-const E2B_CONTROL_PORT = 49983;
-
 export class SandboxDestroyedError extends Error {
   readonly sandboxId: string | undefined;
   readonly command: string;
