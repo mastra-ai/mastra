@@ -1,7 +1,8 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { describe, expect, it } from 'vitest';
-import { contextPressure, snapshotContextRequest } from '../context-pressure';
+import { z } from 'zod';
+import { contextPressure, countToolDefinitions, snapshotContextRequest } from '../context-pressure';
 import { TokenCounter } from '../token-counter';
 
 const counter = new TokenCounter();
@@ -19,13 +20,38 @@ const message: MastraDBMessage = {
 const anchor = { request: snapshot([message]), inputTokens: 10_000, outputTokens: 2_000, outputEstimate: 100 };
 
 describe('context usage anchors', () => {
+  it('does not count tagged system messages (OM observations) or tool definitions as message pressure', () => {
+    const observations = 'Observed: '.concat('the user prefers short answers. '.repeat(400));
+    const withObservations = (step: number, toolTokens = 0) => {
+      const list = new MessageList();
+      list.add([message], 'memory');
+      list.addSystem({ role: 'system', content: observations }, 'observational-memory');
+      return snapshotContextRequest(list, step, 'provider/model', counter, toolTokens);
+    };
+    const tools = {
+      read: { description: 'Read a file', inputSchema: z.object({ path: z.string().describe('File path') }) },
+    };
+    const toolTokens = countToolDefinitions(tools, counter);
+    expect(toolTokens).toBeGreaterThan(10);
+    const request = withObservations(0, toolTokens);
+    expect(request.fixedTokens).toBeGreaterThan(counter.countString(observations));
+    // The provider charged observations + tools + one 100 token message and 50 tokens of output.
+    const inputTokens = request.fixedTokens + 100;
+    const pressure = contextPressure(
+      { request, inputTokens, outputTokens: 50, outputEstimate: 100 },
+      withObservations(1, toolTokens),
+      100,
+    );
+    expect(pressure).toBe(150);
+  });
+
   it('uses input and output once, estimating only additions after output-step', () => {
     const current = snapshot(
       [message, { ...message, id: 'new', content: { format: 2, parts: [{ type: 'text', text: 'new result' }] } }],
       1,
     );
-    expect(contextPressure(anchor, current, 150)).toBe(12_050);
-    expect(contextPressure(anchor, current, 80)).toBe(12_000);
+    expect(contextPressure(anchor, current, 150)).toBe(12_050 - anchor.request.fixedTokens);
+    expect(contextPressure(anchor, current, 80)).toBe(12_000 - anchor.request.fixedTokens);
     expect(contextPressure(undefined, current, 150)).toBeUndefined();
   });
 

@@ -18,7 +18,7 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { isContextOverflowError } from './context-overflow';
-import { contextPressure, snapshotContextRequest } from './context-pressure';
+import { contextPressure, countToolDefinitions, snapshotContextRequest } from './context-pressure';
 import type { ContextRequest, ContextUsageAnchor } from './context-pressure';
 import { omDebug } from './debug';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
@@ -415,6 +415,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             `${model.provider}/${model.modelId}`,
             counter,
           );
+          state.__omToolTokens = countToolDefinitions(args.tools, counter);
           const pressure = contextPressure(
             state.__omContextAnchor as ContextUsageAnchor | undefined,
             current,
@@ -423,7 +424,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           // Consume the measurement once. In particular, an overflow retry or an activation
           // cannot resurrect the pre-compaction anchor from the completed steps array.
           delete state.__omContextAnchor;
-          ctx = await step.prepare(pressure === undefined ? undefined : Math.max(0, pressure - current.fixedTokens));
+          ctx = await step.prepare(pressure === undefined ? undefined : Math.max(0, pressure));
         } catch (error) {
           // Map observation errors through abort (processor-specific concern)
           const err = error instanceof Error ? error : new Error(String(error));
@@ -518,6 +519,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       args.stepNumber,
       `${args.model.provider}/${args.model.modelId}`,
       this.engine.getTokenCounter(),
+      (args.state.__omToolTokens as number | undefined) ?? 0,
     );
   }
 
