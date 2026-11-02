@@ -5,12 +5,7 @@ import {
   knowledgeSearchWords,
 } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
-import {
-  createKnowledgeUlid,
-  KnowledgeConflictError,
-  KnowledgeNotFoundError,
-  MAX_KNOWLEDGE_PAGE_LINKS,
-} from '@mastra/core/storage';
+import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
   AddKnowledgeNoteInput,
   CreateKnowledgePageInput,
@@ -1371,6 +1366,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   }): Promise<KnowledgePageLinkEdge[]> {
     const limit = input.limit ?? 1_000;
     if (!Number.isInteger(limit) || limit < 1) throw new RangeError('Knowledge link limit must be a positive integer');
+    const core = await loadPagesCore();
     const ids = [...new Set(input.pageIds)];
     if (!ids.length) return [];
     const params = new Params();
@@ -1378,7 +1374,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const edges = this.#visibleLinkEdges(filter, params, ids, input.direction ?? 'both', input.kinds);
     const rows = await this.#rows(
       this.#client,
-      `SELECT * FROM (${edges}) e ORDER BY "fromPageId" COLLATE "C", "toPageId" COLLATE "C", CASE "kind" WHEN 'body' THEN 0 ELSE 1 END LIMIT ${Math.min(limit, MAX_KNOWLEDGE_PAGE_LINKS)}`,
+      `SELECT * FROM (${edges}) e ORDER BY "fromPageId" COLLATE "C", "toPageId" COLLATE "C", CASE "kind" WHEN 'body' THEN 0 ELSE 1 END LIMIT ${Math.min(limit, core.MAX_KNOWLEDGE_PAGE_LINKS)}`,
       params.values,
     );
     return rows.map(row => ({

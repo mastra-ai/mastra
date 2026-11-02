@@ -5,12 +5,7 @@ import {
   knowledgeSearchWords,
 } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
-import {
-  createKnowledgeUlid,
-  KnowledgeConflictError,
-  KnowledgeNotFoundError,
-  MAX_KNOWLEDGE_PAGE_LINKS,
-} from '@mastra/core/storage';
+import { createKnowledgeUlid, KnowledgeConflictError, KnowledgeNotFoundError } from '@mastra/core/storage';
 import type {
   AddKnowledgeNoteInput,
   CreateKnowledgePageInput,
@@ -1318,12 +1313,13 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
   }): Promise<KnowledgePageLinkEdge[]> {
     const limit = input.limit ?? 1_000;
     if (!Number.isInteger(limit) || limit < 1) throw new RangeError('Knowledge link limit must be a positive integer');
+    const core = await loadPagesCore();
     const ids = [...new Set(input.pageIds)];
     if (ids.length === 0) return [];
     const edges = this.#visibleLinkEdges(ids, input.read, input.direction ?? 'both', input.kinds);
     const rows = await this.#query(
       this.#read,
-      `SELECT * FROM (${edges.sql}) e ORDER BY fromPageId, toPageId, (kind = 'note') LIMIT ${Math.min(limit, MAX_KNOWLEDGE_PAGE_LINKS)}`,
+      `SELECT * FROM (${edges.sql}) e ORDER BY fromPageId, toPageId, (kind = 'note') LIMIT ${Math.min(limit, core.MAX_KNOWLEDGE_PAGE_LINKS)}`,
       edges.args,
     );
     return rows.map(row => ({
