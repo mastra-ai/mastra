@@ -149,10 +149,7 @@ describe('defineBoard phase fields', () => {
         externalSource: null,
         metadata: { labels: [label] },
         stages: ['backlog'],
-        workItem: {
-          ...createProviderWorkItemForTests({ id: 'item-1', title: 'Fix', source: null, metadata: null }),
-          labels: [label],
-        },
+        workItem: createProviderWorkItemForTests({ id: 'item-1', title: 'Fix', source: null, metadata: null }),
       });
     const lowEffort = facts('effort:low');
     const highEffort = facts('effort:high');
