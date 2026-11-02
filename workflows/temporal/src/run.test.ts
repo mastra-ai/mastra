@@ -228,10 +228,14 @@ describe('TemporalRun', () => {
           Object.entries(steps).map(([stepId, step]) => [stepId, (step as { status?: string }).status ?? step]),
         );
 
+      // Fails the test if a fixture stops failing, which would make both runs succeed alike.
+      const expectedStatus = { failing: 'failed', parallel: 'failed', tripwire: 'tripwire' } as const;
+
       for (const id of ['failing', 'parallel', 'tripwire'] as const) {
         const expected = await (await local[id]!.createRun()).start({ inputData: { value: 5 } });
         const actual = await (await temporal[id].createRun()).start({ inputData: { value: 5 } });
 
+        expect(expected.status).toBe(expectedStatus[id]);
         expect(statuses(actual.steps)).toEqual(statuses(expected.steps));
         expect(actual.status).toBe(expected.status);
         if (expected.status === 'failed' && actual.status === 'failed') {
