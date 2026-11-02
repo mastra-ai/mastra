@@ -105,6 +105,23 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     expect((await workItems.get({ ...scope, id: item.id }))?.workItem.labels).toEqual(['fixed']);
   });
 
+  it.each([
+    { title: 'Retitled issue' },
+    { title: 'Retitled issue', metadata: { labels: ['fixed'] } },
+    { metadata: { labels: ['fixed'] } },
+  ])('returns the persisted sourced card after a facts-only refresh: %j', async patch => {
+    const { workItems, scope, item } = await setup();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const refreshed = await workItems.syncCard({ ...scope, id: item.id, patch });
+      expect(refreshed?.item).toMatchObject({
+        id: item.id,
+        title: patch.title ?? item.title,
+        workItem: { labels: patch.metadata?.labels ?? item.workItem.labels },
+      });
+      expect(refreshed?.item).toEqual(await workItems.get({ ...scope, id: item.id }));
+    }
+  });
+
   it('refreshes Factory-native work without manufacturing an external source', async () => {
     const { storage, workItems, scope } = await setup();
     const { item } = await workItems.upsert({ ...scope, input: { title: 'Manual task', stages: ['intake'] } });

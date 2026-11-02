@@ -8,3 +8,12 @@ Improved provider ingestion so source facts refresh independently of board stage
 const [card] = await workItems.list({ orgId, factoryProjectId });
 console.log(card.workItem.key, card.workItem.state, card.workItem.labels);
 ```
+
+This changes the metadata read contract: provider labels are no longer on `card.metadata`.
+
+```ts
+// Before
+const labels = card.metadata?.labels;
+// After
+const labels = card.workItem.labels;
+```
