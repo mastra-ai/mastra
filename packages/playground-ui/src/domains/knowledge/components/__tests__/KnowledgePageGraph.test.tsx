@@ -249,6 +249,16 @@ describe('KnowledgePageGraph', () => {
         expect(line('link:faq->other')).toBeNull();
       });
 
+      it('writes the total of its links in and out inside each dot, only when asked, and not on a dot with none', () => {
+        const withFar = [...linked, page('far', 'support', { name: 'Far', key: 'far' })];
+        const { unmount } = renderGraph({ pages: withFar, knownLinks: known });
+        expect(document.querySelector('[data-testid="knowledge-dot-count"]')).toBeNull();
+        unmount();
+        renderGraph({ pages: withFar, knownLinks: known, showCounts: true });
+        expect(within(dot('ticket')).getByTestId('knowledge-dot-count').textContent).toBe('2');
+        expect(within(dot('far')).queryByTestId('knowledge-dot-count')).toBeNull();
+      });
+
       it('fades dots it is not connected to, and puts them back when the pointer leaves', () => {
         const withFar = [...linked, page('far', 'support', { name: 'Far', key: 'far' })];
         renderGraph({ pages: withFar, knownLinks: known });

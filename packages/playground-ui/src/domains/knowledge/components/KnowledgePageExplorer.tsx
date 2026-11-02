@@ -598,6 +598,7 @@ export function KnowledgePageExplorer({
   const [previewed, setPreviewed] = useState<readonly string[]>([]);
   const [openGroups, setOpenGroups] = useState<ReadonlySet<string>>(() => new Set());
   const [allLinks, setAllLinks] = useState(false);
+  const [dotCounts, setDotCounts] = useState(false);
   const lazy = useLazyTree(source, graph, selected.data, graphOpened);
   // With tree levels the graph loads like the tree: the focus (or the root scopes) and what sits around
   // it, never the whole instance. Without them it draws the host's bounded graph as it is.
@@ -759,6 +760,18 @@ export function KnowledgePageExplorer({
             All links
           </button>
         ) : null}
+        {!showPage ? (
+          <button
+            type="button"
+            aria-pressed={dotCounts}
+            data-testid="knowledge-graph-dot-counts"
+            title="Write how many links go in and out of each dot inside it"
+            className="text-ui-md rounded border border-border px-3 py-1 aria-pressed:bg-muted"
+            onClick={() => setDotCounts(current => !current)}
+          >
+            Link counts
+          </button>
+        ) : null}
         <div role="group" aria-label="View" className="flex rounded border border-border">
           {views.map(option => (
             <button
@@ -879,6 +892,7 @@ export function KnowledgePageExplorer({
                 selectedPageId={selectedPageId}
                 hiddenLinks={linkView.hidden}
                 knownLinks={knownLinks}
+                showCounts={dotCounts}
                 onPreview={page => {
                   if (isChildPlaceholder(page) && page.parentId) previewParent(page.parentId);
                 }}

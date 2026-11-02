@@ -19,6 +19,7 @@ import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } fro
 import type { CSSProperties } from 'react';
 
 import {
+  KNOWLEDGE_COUNTED_DOT_SIZE,
   KNOWLEDGE_DOT_SIZE,
   branchColors,
   graphShape,
@@ -111,6 +112,8 @@ type PageNodeData = PageFlowNode['data'] & {
   ref?: string;
   /** All links into and out of the page, drawn or not, for a dot's tooltip. */
   links?: { in: number; out: number };
+  /** Write the dot's links in and out inside it. */
+  showCount?: boolean;
 };
 
 /** A page far from the focus: a small coloured dot that names itself on hover. */
@@ -147,7 +150,19 @@ function DotNode({ data }: { data: PageNodeData }) {
           borderColor: color ?? 'var(--muted-foreground)',
           borderStyle: standIn ? 'dashed' : 'solid',
         }}
-      />
+      >
+        {data.showCount && !standIn && !group && links && links.in + links.out > 0 ? (
+          <Txt
+            as="span"
+            variant="meta"
+            data-testid="knowledge-dot-count"
+            className="flex size-full items-center justify-center"
+            style={{ color: 'var(--background)' }}
+          >
+            {links.in + links.out}
+          </Txt>
+        ) : null}
+      </div>
       {hover ? (
         <div
           role="tooltip"
@@ -549,6 +564,8 @@ export interface KnowledgePageGraphProps {
   hiddenLinks?: ReadonlyMap<string, { in: number; out: number }>;
   /** Every link between pages, drawn or not: hovering a page draws its own, and tooltips count them. */
   knownLinks?: readonly KnowledgePageEdge[];
+  /** Write each dot's total of links in and out inside it. */
+  showCounts?: boolean;
   /** The pointer rests on a dot or stand-in: a host can load what it stands for. */
   onPreview?: (page: KnowledgePagePayload) => void;
   /** A page that wasn't selected was clicked, tapped, or activated with Enter or Space: select it. */
@@ -587,6 +604,7 @@ function KnowledgePageGraphInner({
   selectedPageId,
   hiddenLinks,
   knownLinks,
+  showCounts,
   onPreview,
   onSelect,
   onOpen,
@@ -601,27 +619,28 @@ function KnowledgePageGraphInner({
   }, [pages, edges, grants]);
   // The focused page sits at the centre with its parent and children around it as full circles; pages
   // farther out are dots on outer rings, inside their branch's slice. A last overlap pass is the only force.
+  const dotSize = showCounts ? KNOWLEDGE_COUNTED_DOT_SIZE : KNOWLEDGE_DOT_SIZE;
   const laidOut = useMemo(() => {
     const shape = graphShape(graphPages, selectedPageId ?? null);
     const colors = branchColors(graphPages, shape);
     const flow = toPageFlow(graphPages, allEdges);
     for (const node of flow.nodes) {
-      if (shape.form.get(node.id) === 'dot') node.data.size = KNOWLEDGE_DOT_SIZE;
+      if (shape.form.get(node.id) === 'dot') node.data.size = dotSize;
     }
     const sizes = new Map(flow.nodes.map(node => [node.id, node.data.size]));
-    const radial = radialLayout(graphPages, shape, page => sizes.get(page.id) ?? KNOWLEDGE_DOT_SIZE);
+    const radial = radialLayout(graphPages, shape, page => sizes.get(page.id) ?? dotSize);
     const positions = runLayout(
       flow.nodes.map(node => ({
         id: node.id,
         size: node.data.size,
-        padding: node.data.size === KNOWLEDGE_DOT_SIZE ? 4 : 24,
+        padding: node.data.size === dotSize ? 4 : 24,
         initial: radial.get(node.id),
       })),
       [],
       { ticks: 0 },
     );
     return { nodes: flow.nodes, edges: flow.edges, positions, shape, colors };
-  }, [graphPages, allEdges, selectedPageId]);
+  }, [graphPages, allEdges, selectedPageId, dotSize]);
   const pageById = useMemo(() => new Map(graphPages.map(page => [page.id, page])), [graphPages]);
 
   const pinned = useMemo(() => new Set(pinnedIds), [pinnedIds]);
@@ -729,10 +748,11 @@ function KnowledgePageGraphInner({
             hiddenLinks: laidOut.shape.form.get(node.id) === 'full' ? hiddenLinks?.get(node.id) : undefined,
             ref: pageRef(node.data.page, pageById),
             links: linkCounts.get(node.id),
+            showCount: showCounts,
           },
         };
       }),
-    [laidOut, selectedPageId, pinned, neighbours, childrenUndrawn, pageById, hiddenLinks, linkCounts],
+    [laidOut, selectedPageId, pinned, neighbours, childrenUndrawn, pageById, hiddenLinks, linkCounts, showCounts],
   );
   const flowEdges = useMemo(() => {
     const sizes = new Map(laidOut.nodes.map(node => [node.id, node.data.size]));

@@ -14,6 +14,8 @@ export type GraphNodeForm = 'full' | 'dot';
 export const FULL_CIRCLE_DEPTH = 1;
 /** A dot's diameter. */
 export const KNOWLEDGE_DOT_SIZE = 14;
+/** A dot's diameter when it carries its link count. */
+export const KNOWLEDGE_COUNTED_DOT_SIZE = 22;
 
 const PLACEHOLDER_PREFIX = 'more:';
 const GROUP_PREFIX = 'group:';
