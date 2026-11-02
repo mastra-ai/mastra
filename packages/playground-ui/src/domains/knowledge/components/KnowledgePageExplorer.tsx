@@ -736,18 +736,6 @@ export function KnowledgePageExplorer({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <SearchBox source={source} onSelect={openAnywhere} />
-        {!showPage && backTo ? (
-          <button
-            type="button"
-            data-testid="knowledge-graph-back"
-            title="Back to the page you focused before this one"
-            className="text-ui-md flex items-center gap-1 rounded border border-border px-3 py-1"
-            onClick={goBack}
-          >
-            <ArrowLeft aria-hidden className="size-3.5" />
-            Back
-          </button>
-        ) : null}
         {!showPage ? (
           <button
             type="button"
@@ -883,6 +871,19 @@ export function KnowledgePageExplorer({
             className={`relative min-h-0 min-w-0 flex-1 overflow-hidden rounded-lg border border-border bg-background lg:block lg:h-full ${view === 'graph' ? 'block' : 'hidden'}`}
             data-testid="knowledge-graph-container"
           >
+            {graphShown ? (
+              <button
+                type="button"
+                data-testid="knowledge-graph-back"
+                aria-label="Back"
+                title={backTo ? 'Back to the page you focused before this one' : 'Back (nothing to go back to yet)'}
+                disabled={!backTo}
+                className="absolute top-3 right-3 z-10 flex size-9 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-foreground shadow-overlay transition-colors hover:bg-fill-subtle disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card"
+                onClick={goBack}
+              >
+                <ArrowLeft aria-hidden className="size-4" />
+              </button>
+            ) : null}
             {graphShown ? (
               <KnowledgePageGraph
                 pages={graphPages}

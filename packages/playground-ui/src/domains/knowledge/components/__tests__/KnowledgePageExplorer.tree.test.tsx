@@ -284,13 +284,23 @@ describe('KnowledgePageExplorer tree with child counts', () => {
   });
 
   describe('when pages are focused one after another in the graph', () => {
-    const back = () => screen.queryByTestId('knowledge-graph-back');
+    const back = () => screen.getByRole('button', { name: 'Back' }) as HTMLButtonElement;
 
-    it('offers no Back until there is a page to go back to', () => {
+    it('shows Back disabled until there is a page to go back to', () => {
       renderWithProviders(<Host requested={[]} />);
-      expect(back()).toBeNull();
+      expect(back().disabled).toBe(true);
       fireEvent.click(row('Pricing'));
-      expect(back()).toBeNull();
+      expect(back().disabled).toBe(true);
+      fireEvent.click(row('Articles'));
+      expect(back().disabled).toBe(false);
+    });
+
+    it('floats Back over the graph, with a solid background and a pointer cursor', () => {
+      renderWithProviders(<Host requested={[]} />);
+      expect(screen.getByTestId('knowledge-graph-container').contains(back())).toBe(true);
+      expect(back().className).toMatch(/\bbg-card\b/);
+      expect(back().className).toMatch(/\bcursor-pointer\b/);
+      expect(back().className).toMatch(/\bhover:bg-fill-subtle\b/);
     });
 
     it('goes back one focus at a time through the walk', () => {
@@ -299,12 +309,12 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       fireEvent.click(row('Pricing'));
       fireEvent.click(row('Articles'));
       expect(row('Articles').getAttribute('aria-selected')).toBe('true');
-      fireEvent.click(back() as HTMLElement);
+      fireEvent.click(back());
       expect(row('Pricing').getAttribute('aria-selected')).toBe('true');
       expect(screen.getByTestId('view').textContent).toBe('graph');
-      fireEvent.click(back() as HTMLElement);
+      fireEvent.click(back());
       expect(row('site:mastra').getAttribute('aria-selected')).toBe('true');
-      expect(back()).toBeNull();
+      expect(back().disabled).toBe(true);
     });
   });
 
