@@ -82,7 +82,9 @@ describe('serializeStreamChunk', () => {
       const json = expectJson(
         serializeStreamChunk({
           type: 'error',
-          payload: { error: { id: 'TEST_ERROR', name: 'ProviderError', message: 'Provider unavailable', stack: 'at x' } },
+          payload: {
+            error: { id: 'TEST_ERROR', name: 'ProviderError', message: 'Provider unavailable', stack: 'at x' },
+          },
         }),
       );
       expect(JSON.parse(json).payload.error).toEqual({
