@@ -742,20 +742,27 @@ export class AgentChannels {
                 runId = stashed.runId;
                 toolName = stashed.toolName;
                 toolArgs = stashed.args;
-              } else {
+              }
+              // Cards posted by a run that didn't start from a platform message
+              // (a schedule fire, or a run restored from a snapshot) are stashed
+              // without a requester. Recover it from stored messages so the
+              // requester check below still applies.
+              if (!runId || (!requesterId && adapterConfig?.toolApprovers !== 'anyone')) {
                 const storage = mastra.getStorage();
                 const memoryStore = storage ? await storage.getStore('memory') : undefined;
-                if (!memoryStore) {
+                if (!memoryStore && !runId) {
                   throw new Error('Storage is required for tool approval lookups');
                 }
 
-                const { messages } = await memoryStore.listMessages({
-                  threadId: mastraThread.id,
-                  perPage: 50,
-                  orderBy: { field: 'createdAt', direction: 'DESC' },
-                });
+                const { messages } = memoryStore
+                  ? await memoryStore.listMessages({
+                      threadId: mastraThread.id,
+                      perPage: 50,
+                      orderBy: { field: 'createdAt', direction: 'DESC' },
+                    })
+                  : { messages: [] };
 
-                for (const [index, msg] of messages.entries()) {
+                findPending: for (const [index, msg] of messages.entries()) {
                   const pending = msg.content?.metadata?.pendingToolApprovals as
                     | Record<
                         string,
@@ -771,9 +778,9 @@ export class AgentChannels {
                   if (pending) {
                     for (const toolData of Object.values(pending)) {
                       if (toolData.toolCallId === toolCallId) {
-                        runId = toolData.parentRunId ?? toolData.runId;
-                        toolName = toolData.toolName;
-                        toolArgs = toolData.args;
+                        runId ??= toolData.parentRunId ?? toolData.runId;
+                        toolName ??= toolData.toolName;
+                        toolArgs ??= toolData.args;
                         // Recover the card's owner from the user turn that led to it
                         // (messages are newest-first). If that turn has messages from
                         // more than one author we can't tell who triggered the tool,
@@ -798,10 +805,9 @@ export class AgentChannels {
                           return;
                         }
                         requesterId ??= [...authors][0];
-                        break;
+                        break findPending;
                       }
                     }
-                    if (runId) break;
                   }
                 }
               }
