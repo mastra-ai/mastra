@@ -373,7 +373,7 @@ overrides:
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
   glob@<=10.5.0: 10.5.0
   body-parser@<2.4.0: 2.4.0
-  inngest: ^4.2.2
+  inngest: ^4.26.1
   fast-xml-parser@<5.5.7: ^5.10.1
   langsmith@<0.6.0: ^0.6.0
   lodash@<=4.17.23: ^4.18.0
