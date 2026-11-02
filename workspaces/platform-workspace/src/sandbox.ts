@@ -302,6 +302,19 @@ export type CaptureCheckpointResult =
 /** E2B's sandbox control port (envd). Never a preview. */
 const E2B_CONTROL_PORT = 49983;
 
+/** A sandbox preview cookie, in the shape browsers like Playwright accept. */
+export interface SandboxPreviewCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  /** Unix time in seconds. */
+  expires: number;
+  httpOnly: boolean;
+  secure: boolean;
+  sameSite: 'Lax';
+}
+
 /**
  * Thrown when `/exec-lease` returns 410 Gone — the sandbox has been destroyed
  * (Railway destroy, quota reclamation, etc.). The client cannot recover from
@@ -548,33 +561,48 @@ export class PlatformSandbox extends MastraSandbox {
   declare readonly networking?: SandboxNetworking;
 
   private readonly _networking: SandboxNetworking = {
-    getPortUrl: async (port: number): Promise<string | null> => {
-      if (!Number.isInteger(port) || port < 1 || port > 65_535 || port === E2B_CONTROL_PORT) return null;
-      const sandboxId = this.sandboxId;
-      if (!sandboxId) return null;
-      try {
-        // The proxy builds the address for the sandbox's region. The one-time
-        // sign-in link it comes with isn't needed here: it's single-use and
-        // expires after a minute, so dropping it costs nothing.
-        const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/preview-grants`, {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ port }),
-        });
-        const { url } = (await response.json()) as { url: string };
-        return `${new URL(url).origin}/`;
-      } catch (error) {
-        if (error instanceof PlatformApiError && error.status === 410) {
-          // Destroyed upstream: stop pointing at it, unless a new sandbox replaced it meanwhile.
-          if (this._sandboxId === sandboxId) this._clearDestroyedState(sandboxId);
-          return null;
-        }
-        // A platform that doesn't serve previews yet.
-        if (error instanceof PlatformApiError && error.status === 404) return null;
-        throw error;
-      }
-    },
+    getPortUrl: async (port: number): Promise<string | null> => (await this._previewGrant(port))?.url ?? null,
   };
+
+  /**
+   * A cookie that signs a browser you control, such as an agent's own
+   * browser, in to a port for an hour, so it opens the port's URL without
+   * signing in. Never share it.
+   *
+   * `null` in the same cases as `networking.getPortUrl()`.
+   */
+  async getPreviewCookie(port: number): Promise<SandboxPreviewCookie | null> {
+    return (await this._previewGrant(port))?.cookie ?? null;
+  }
+
+  private async _previewGrant(port: number): Promise<{ url: string; cookie: SandboxPreviewCookie } | null> {
+    if (!Number.isInteger(port) || port < 1 || port > 65_535 || port === E2B_CONTROL_PORT) return null;
+    // Only E2B-backed sandboxes serve their ports.
+    if (this._client.sandboxProvider !== 'e2b') return null;
+    const sandboxId = this.sandboxId;
+    if (!sandboxId) return null;
+    try {
+      // The proxy builds the address for the sandbox's region. The one-time
+      // sign-in link it comes with isn't needed here: it's single-use and
+      // expires after a minute, so dropping it costs nothing.
+      const response = await this._request(`/sandbox/${encodeURIComponent(sandboxId)}/preview-grants`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ port }),
+      });
+      const { url, cookie } = (await response.json()) as { url: string; cookie: SandboxPreviewCookie };
+      return { url: `${new URL(url).origin}/`, cookie };
+    } catch (error) {
+      if (error instanceof PlatformApiError && error.status === 410) {
+        // Destroyed upstream: stop pointing at it, unless a new sandbox replaced it meanwhile.
+        if (this._sandboxId === sandboxId) this._clearDestroyedState(sandboxId);
+        return null;
+      }
+      // A platform that doesn't serve previews yet.
+      if (error instanceof PlatformApiError && error.status === 404) return null;
+      throw error;
+    }
+  }
 
   private readonly _client: PlatformClient;
   private readonly _usesProviderRoutes: boolean;
