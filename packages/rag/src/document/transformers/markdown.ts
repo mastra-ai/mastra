@@ -124,21 +124,6 @@ export class MarkdownHeaderTransformer {
         continue;
       }
 
-      // Handle markdown tables
-      // A table line must contain at least one pipe character and not be empty
-      const isTableLine = strippedLine.includes('|') && strippedLine.length > 0;
-
-      if (isTableLine) {
-        if (!inTable) {
-          inTable = true;
-        }
-        currentContent.push(line);
-        continue;
-      } else if (inTable) {
-        // We were in a table but this line is not a table line, so the table has ended
-        inTable = false;
-      }
-
       let headerMatched = false;
       for (const [sep, name] of this.headersToSplitOn) {
         if (strippedLine.startsWith(sep) && (strippedLine.length === sep.length || strippedLine[sep.length] === ' ')) {
@@ -185,7 +170,19 @@ export class MarkdownHeaderTransformer {
         }
       }
 
-      if (!headerMatched) {
+      if (headerMatched) {
+        inTable = false;
+      } else {
+        // Handle table rows only after checking for configured headings containing pipes.
+        if (strippedLine.includes('|')) {
+          inTable = true;
+          currentContent.push(line);
+          continue;
+        }
+        if (inTable) {
+          inTable = false;
+        }
+
         if (strippedLine || this.returnEachLine) {
           currentContent.push(line);
 
