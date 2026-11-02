@@ -9,7 +9,10 @@ import { takeDelegationFailure } from '../../../../loop/shared/delegation-outcom
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
-import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
+import {
+  applyBackgroundToolExecution,
+  applyBackgroundToolResult,
+} from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
@@ -1711,7 +1714,9 @@ export function createDurableToolCallStep() {
                       invocationKind: isAgentTool ? 'agent' : 'tool',
                       disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
                     },
-                    ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
+                    ...(taskContext?.resumeData !== undefined
+                      ? { resumeData: taskContext.resumeData, suspendPayload: taskContext.suspendPayload }
+                      : {}),
                     // Framework-resolved delegated run id recovered from persisted
                     // suspension state (#23739) — never the model-authored one.
                     suspendedToolRunId: taskContext?.suspendedToolRunId,
@@ -1883,6 +1888,17 @@ export function createDurableToolCallStep() {
                 },
               });
               resolveReconciliation({});
+              if (info.disposition !== 'awaited' && state?.threadId && state?.resourceId) {
+                const owner = Object.values(mastra?.listAgents?.() ?? {}).find(agent => agent.id === initData.agentId);
+                void owner?.__notifyBackgroundTaskFinished({
+                  threadId: state.threadId,
+                  resourceId: state.resourceId,
+                  taskId: params.taskId,
+                  toolCallId: params.toolCallId,
+                  toolName: params.toolName,
+                  status: params.status === 'failed' ? 'failed' : 'completed',
+                });
+              }
             } catch (error) {
               resolveReconciliation({ error });
               throw error;
@@ -1892,18 +1908,19 @@ export function createDurableToolCallStep() {
           onExecution: async (params: any) => {
             if (!messageList) return;
 
-            messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
-              mode: 'stream',
-              backgroundTasks: {
-                [params.toolCallId]: {
-                  startedAt: params.startedAt,
-                  suspendedAt: params.suspendedAt,
-                  taskId: params.taskId,
-                },
-              },
+            await applyBackgroundToolExecution({
+              params,
+              args: cleanedArgs,
+              messageList,
+              transformChunk: chunk =>
+                applyToolPayloadTransformToChunk(chunk, {
+                  policy: toolPayloadTransform,
+                  tools: toolsForTransform,
+                  logger: logger as any,
+                }),
             });
 
-            // Flush to storage so the metadata update (especially suspendedAt)
+            // Flush to storage so the metadata update (especially an open suspension)
             // is persisted. Unlike the regular agent which has a single long-lived
             // messageList, the durable agent's workflow state is serialized before
             // this async callback fires, so we must flush directly.

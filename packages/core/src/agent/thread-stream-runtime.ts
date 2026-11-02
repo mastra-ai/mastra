@@ -7899,8 +7899,12 @@ export class AgentThreadStreamRuntime {
       try {
         const output = toModelOutput<OUTPUT>(
           await agent.stream(signal, {
+            // The woken run stays open until its background tasks finish, unless the app sets
+            // `backgroundTasks.wokenRunsEndAfterTurn`; its deferred tasks then report back through
+            // a `background-task` signal. The signal's own `untilIdle` wins either way.
+            // TODO(v2): make ending after the turn the default and remove `wokenRunsEndAfterTurn`.
+            untilIdle: !agent.getMastraInstance?.()?.backgroundTaskManager?.config.wokenRunsEndAfterTurn,
             ...(target.ifIdle?.streamOptions as any),
-            untilIdle: true,
             runId: reservedRunId,
             memory: withThreadMemory(target.ifIdle?.streamOptions?.memory, resourceId, threadId),
           }),
