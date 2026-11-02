@@ -25,8 +25,8 @@ export interface DatasetComboboxProps {
 export function DatasetCombobox({
   value,
   onValueChange,
-  placeholder = 'Select a dataset...',
-  searchPlaceholder = 'Search datasets...',
+  placeholder = 'Select a dataset',
+  searchPlaceholder = 'Search datasets',
   emptyText = 'No datasets found.',
   className,
   disabled = false,

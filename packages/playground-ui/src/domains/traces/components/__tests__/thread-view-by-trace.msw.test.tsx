@@ -704,11 +704,11 @@ describe('ThreadViewByTrace', () => {
       expect(screen.queryByRole('button', { name: 'Toggle feedback' })).toBeNull();
       expect(firstRow.queryByRole('tab', { name: /Spans/ })).toBeNull();
       expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('true');
-      expect(firstRow.queryByPlaceholderText('Leave feedback...')).toBeNull();
+      expect(firstRow.queryByPlaceholderText('Leave feedback')).toBeNull();
 
       fireEvent.click(await firstRow.findByRole('tab', { name: /Feedback/ }));
 
-      expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
+      expect(await firstRow.findByPlaceholderText('Leave feedback')).not.toBeNull();
       expect(firstRow.getByRole('tab', { name: /Messages/ }).getAttribute('aria-selected')).toBe('false');
       expect(firstRow.getByText('Chef agent run')).not.toBeNull();
     });
@@ -781,7 +781,7 @@ describe('ThreadViewByTrace', () => {
 
       fireEvent.click(firstRow.getByRole('tab', { name: 'Feedback' }));
 
-      expect(await firstRow.findByPlaceholderText('Leave feedback...')).not.toBeNull();
+      expect(await firstRow.findByPlaceholderText('Leave feedback')).not.toBeNull();
       await waitFor(() => expect(onFeedbackRequest).toHaveBeenCalled());
     });
 
@@ -801,7 +801,7 @@ describe('ThreadViewByTrace', () => {
       await screen.findByText('Chef agent run');
       fireEvent.click((await screen.findAllByRole('tab', { name: /Feedback/ }))[0]);
 
-      const input = await screen.findByPlaceholderText('Leave feedback...');
+      const input = await screen.findByPlaceholderText('Leave feedback');
       fireEvent.change(input, { target: { value: 'great turn' } });
       fireEvent.click(screen.getByRole('button', { name: 'Send feedback' }));
 

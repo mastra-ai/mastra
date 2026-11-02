@@ -148,7 +148,7 @@ export function FilterBarGroupEditor({
         {connector('input')}
         <FilterBarInput
           groupId={group.id}
-          placeholder="Add condition…"
+          placeholder="Add condition"
           onLeave={() => {
             focusAddFilter.current = true;
           }}
