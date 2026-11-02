@@ -41,13 +41,20 @@ export function DatePicker({ className, classNames, showOutsideDays = true, comp
         week: cn('mt-0.5 flex w-full', defaults.week),
         day: cn('group/day relative size-(--cell-size) p-0 text-center select-none', defaults.day),
         // The band is painted on the cells, behind the day buttons: half a cell behind
-        // each end, a full cell behind the days between, rounded at the week's edges.
+        // each end, a full cell behind the days between, rounded at the week's edges and
+        // where the month ends (next to a hidden spill-over day).
         range_start: cn(
-          'bg-linear-to-r from-transparent from-50% to-fill to-50% last:bg-none [&.rdp-range_end]:bg-none',
+          'bg-linear-to-r from-transparent from-50% to-fill to-50% last:bg-none [&.rdp-range_end]:bg-none [&:has(+.rdp-hidden)]:bg-none',
           defaults.range_start,
         ),
-        range_middle: cn('bg-fill first:rounded-l-full last:rounded-r-full', defaults.range_middle),
-        range_end: cn('bg-linear-to-l from-transparent from-50% to-fill to-50% first:bg-none', defaults.range_end),
+        range_middle: cn(
+          'bg-fill first:rounded-l-full last:rounded-r-full [&:has(+.rdp-hidden)]:rounded-r-full [.rdp-hidden+&]:rounded-l-full',
+          defaults.range_middle,
+        ),
+        range_end: cn(
+          'bg-linear-to-l from-transparent from-50% to-fill to-50% first:bg-none [.rdp-hidden+&]:bg-none',
+          defaults.range_end,
+        ),
         today: defaults.today,
         outside: defaults.outside,
         disabled: defaults.disabled,

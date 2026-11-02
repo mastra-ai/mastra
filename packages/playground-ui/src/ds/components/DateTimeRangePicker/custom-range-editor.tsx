@@ -22,6 +22,28 @@ function combineDateAndTime(date: Date | undefined, timeStr: string): Date | und
 
 const isTime = (timeStr: string) => isValid(parse(timeStr, 'HH:mm', new Date()));
 
+/** Why the drafts can't be applied, or `undefined` when they can. */
+function rangeProblem({
+  from,
+  to,
+  timesFilled,
+  maxRangeMs = Infinity,
+  firstDay,
+}: {
+  from: Date | undefined;
+  to: Date | undefined;
+  timesFilled: boolean;
+  maxRangeMs?: number;
+  firstDay: Date | undefined;
+}): string | undefined {
+  if (!timesFilled) return 'Enter a time for the start and end';
+  if (from && to && from > to) return 'Start date/time must be before end date/time';
+  if (from && to && to.getTime() - from.getTime() > maxRangeMs)
+    return `Range cannot be longer than ${formatDays(maxRangeMs)}`;
+  if (from && firstDay && from < firstDay) return `Range cannot start before ${format(firstDay, 'MMM d, yyyy')}`;
+  return undefined;
+}
+
 /** The left month of the two: the start's month when the range spans months, else the month before the end. */
 function firstShownMonth(from: Date | undefined, to: Date | undefined): Date | undefined {
   if (from && to && differenceInCalendarMonths(to, from) >= 1) return from;
@@ -65,24 +87,15 @@ export function CustomRangeEditor({
 
   const fromDate = combineDateAndTime(range?.from, draftTimeFrom);
   const toDate = combineDateAndTime(range?.to, draftTimeTo);
-  const rangeReversed = fromDate !== undefined && toDate !== undefined && fromDate.getTime() > toDate.getTime();
-  const rangeTooWide =
-    fromDate !== undefined && toDate !== undefined && toDate.getTime() - fromDate.getTime() > (maxRangeMs ?? Infinity);
   const firstDay = minDate ? startOfDay(minDate) : undefined;
-  const rangeTooEarly = fromDate !== undefined && firstDay !== undefined && fromDate < firstDay;
   // A cleared time field would otherwise apply that end at midnight without saying so.
-  const timeMissing = (range?.from && !isTime(draftTimeFrom)) || (range?.to && !isTime(draftTimeTo));
-  const rangeInvalid = timeMissing || rangeReversed || rangeTooWide || rangeTooEarly;
+  const timesFilled = (!range?.from || isTime(draftTimeFrom)) && (!range?.to || isTime(draftTimeTo));
+  const problem = rangeProblem({ from: fromDate, to: toDate, timesFilled, maxRangeMs, firstDay });
   // Shown after a failed Apply, and gone as soon as the drafts form a valid range again.
-  let error: string | undefined;
-  if (applyAttempted && timeMissing) error = 'Enter a time for the start and end';
-  else if (applyAttempted && rangeReversed) error = 'Start date/time must be before end date/time';
-  else if (applyAttempted && rangeTooWide) error = `Range cannot be longer than ${formatDays(maxRangeMs ?? 0)}`;
-  else if (applyAttempted && firstDay && rangeTooEarly)
-    error = `Range cannot start before ${format(firstDay, 'MMM d, yyyy')}`;
+  const error = applyAttempted ? problem : undefined;
 
   const apply = () => {
-    if (rangeInvalid) {
+    if (problem) {
       setApplyAttempted(true);
       return;
     }
@@ -100,6 +113,8 @@ export function CustomRangeEditor({
         <DatePicker
           mode="range"
           numberOfMonths={2}
+          // Side by side, a month's spill-over days repeat its neighbour's, range and all.
+          showOutsideDays={false}
           resetOnSelect
           selected={range}
           onSelect={setRange}
