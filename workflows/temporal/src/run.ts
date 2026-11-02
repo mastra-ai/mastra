@@ -1,15 +1,20 @@
 import type { RequestContext } from '@mastra/core/di';
+import { getErrorFromUnknown } from '@mastra/core/error';
 import { Run } from '@mastra/core/workflows';
 import type { Step, WorkflowResult, WorkflowRunStartOptions } from '@mastra/core/workflows';
+import { ApplicationFailure, WorkflowFailedError } from '@temporalio/client';
 import type { Client } from '@temporalio/client';
-import type { WorkflowExecutionResult } from './transforms/temporal-workflow-runtime';
+import type { WorkflowExecutionResult, WorkflowFailureDetails } from './transforms/temporal-workflow-runtime';
 import type { TemporalEngineType } from './types';
 import { toWorkflowType } from './utils';
 
 // Builds Mastra step records from the Temporal result. Iterates `stepMeta` rather than `steps`
 // because a step that returned undefined has no key in `steps` once serialized. A result without
 // `stepMeta` came from a Worker that predates it, so `steps` stays empty instead of guessing times.
-function toStepResults(input: unknown, { steps, stepMeta }: WorkflowExecutionResult): Record<string, unknown> {
+function toStepResults(
+  input: unknown,
+  { steps, stepMeta }: Pick<WorkflowExecutionResult, 'steps' | 'stepMeta'>,
+): Record<string, unknown> {
   if (!stepMeta) {
     return {};
   }
@@ -19,6 +24,20 @@ function toStepResults(input: unknown, { steps, stepMeta }: WorkflowExecutionRes
     records[stepId] = { status: 'success', output: steps[stepId], ...times };
   }
   return records;
+}
+
+// Runs failed by a Worker that predates these details return undefined.
+function toFailureDetails(error: unknown): WorkflowFailureDetails | undefined {
+  if (!(error instanceof WorkflowFailedError) || !(error.cause instanceof ApplicationFailure)) {
+    return undefined;
+  }
+
+  const details = error.cause.details?.[0] as Partial<WorkflowFailureDetails> | undefined;
+  return details?.error && details.steps && details.failedSteps ? (details as WorkflowFailureDetails) : undefined;
+}
+
+function toError(error: WorkflowFailureDetails['error']): Error {
+  return getErrorFromUnknown(error, { serializeStack: false });
 }
 
 type TemporalRunStartArgs<TState, TInput, TRequestContext> = {
@@ -92,6 +111,22 @@ export class TemporalRun<
         steps: toStepResults(input, result),
       } as WorkflowResult<TState, TInput, TOutput, TSteps>;
     } catch (error) {
+      const failure = toFailureDetails(error);
+
+      if (failure) {
+        const steps = toStepResults(input, failure);
+
+        for (const [stepId, { error: stepError, ...record }] of Object.entries(failure.failedSteps)) {
+          steps[stepId] = { status: 'failed', error: toError(stepError), ...record };
+        }
+
+        return (
+          failure.tripwire
+            ? { status: 'tripwire', input, tripwire: failure.tripwire, state: initialState, steps }
+            : { status: 'failed', input, error: toError(failure.error), state: initialState, steps }
+        ) as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      }
+
       return {
         status: 'failed',
         input: input as TInput,
