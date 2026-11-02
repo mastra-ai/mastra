@@ -32,14 +32,20 @@ export function serializeStreamChunk(chunk: unknown): SerializedStreamChunk {
 function withPlainPayloadError(chunk: unknown): unknown {
   if (!chunk || typeof chunk !== 'object' || !('payload' in chunk)) return chunk;
   const { payload } = chunk;
-  if (!payload || typeof payload !== 'object' || !('error' in payload) || !(payload.error instanceof Error)) {
-    return chunk;
-  }
+  if (!payload || typeof payload !== 'object' || !('error' in payload)) return chunk;
   const { error } = payload;
+  if (!(error instanceof Error)) return withoutStack(chunk, payload, error);
   const plain: Record<string, unknown> = { ...(curatedJson(error) ?? error), message: error.message };
   delete plain.stack;
   if (!plain.name && error.name !== 'Error') plain.name = error.name;
   return { ...chunk, payload: { ...payload, error: plain } };
+}
+
+/** An error that is already a plain object (a replayed one) is kept as is, minus its stack. */
+function withoutStack(chunk: object, payload: object, error: unknown): unknown {
+  if (!error || typeof error !== 'object' || Array.isArray(error) || !('stack' in error)) return chunk;
+  const { stack: _stack, ...rest } = error as Record<string, unknown>;
+  return { ...chunk, payload: { ...payload, error: rest } };
 }
 
 function curatedJson(error: Error): Record<string, unknown> | undefined {

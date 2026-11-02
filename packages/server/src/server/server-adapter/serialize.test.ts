@@ -78,6 +78,20 @@ describe('serializeStreamChunk', () => {
       expect(chunk.payload.error).toBe(error);
     });
 
+    it('sends no stack for an error that already arrives as a plain object, such as a replayed one', () => {
+      const json = expectJson(
+        serializeStreamChunk({
+          type: 'error',
+          payload: { error: { id: 'TEST_ERROR', name: 'ProviderError', message: 'Provider unavailable', stack: 'at x' } },
+        }),
+      );
+      expect(JSON.parse(json).payload.error).toEqual({
+        id: 'TEST_ERROR',
+        name: 'ProviderError',
+        message: 'Provider unavailable',
+      });
+    });
+
     describe('when the error class curates its own JSON', () => {
       class ProviderError extends Error {
         requestBodyValues = { apiKey: 'sk-live-secret' };
