@@ -54,18 +54,10 @@ export type EvalScoresAssertion = {
 
 async function attachMetaToCurrentTest(result: RunEvalsResult): Promise<void> {
   try {
-    const vitest = await import('vitest');
-    // Vitest >= 4.1
-    const task = (vitest as any).TestRunner?.getCurrentTest?.();
+    const { TestRunner } = await import('vitest');
+    const task = TestRunner.getCurrentTest();
     if (task?.meta) {
       task.meta.mastraEval = toEvalMeta(result);
-      return;
-    }
-    // Vitest 3.x / < 4.1
-    const suite = await import('vitest/suite');
-    const legacyTask = (suite as any).getCurrentTest?.();
-    if (legacyTask?.meta) {
-      legacyTask.meta.mastraEval = toEvalMeta(result);
     }
   } catch {
     // Outside a Vitest test context — assertion still works, reporter meta is skipped.

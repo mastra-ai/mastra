@@ -20,8 +20,8 @@ export interface EvalMatchers<R = unknown> {
 }
 
 declare module 'vitest' {
-  interface Assertion<T = any> extends EvalMatchers<T> {}
-  interface AsymmetricMatchersContaining extends EvalMatchers {}
+  // `Matchers` also feeds `AsymmetricMatchersContaining` and `expect.extend` typing.
+  interface Matchers<R, T> extends EvalMatchers<R> {}
 }
 
 function isRunEvalsResult(value: unknown): value is RunEvalsResult {
