@@ -141,10 +141,12 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
   override async dangerouslyReset(): Promise<void> {
     await withClientWriteLock(this.#client, async () => {
       await this.#client.batch(
-        [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences].map(table => ({
-          sql: `DROP TABLE IF EXISTS "${table}"`,
-          args: [],
-        })),
+        [...KNOWLEDGE_RESETTABLE_TABLE_NAMES, KNOWLEDGE_PAGE_TABLES.pinAudiences, KNOWLEDGE_PAGE_TABLES.links].map(
+          table => ({
+            sql: `DROP TABLE IF EXISTS "${table}"`,
+            args: [],
+          }),
+        ),
         'write',
       );
     });
@@ -249,6 +251,30 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['countChildPages']>[0],
   ): ReturnType<KnowledgePageStore['countChildPages']> {
     return this.#pages.countChildPages(input);
+  }
+
+  override replacePageBodyLinks(
+    input: Parameters<KnowledgePageStore['replacePageBodyLinks']>[0],
+  ): ReturnType<KnowledgePageStore['replacePageBodyLinks']> {
+    return this.#pages.replacePageBodyLinks(input);
+  }
+
+  override listPageBodyLinkSources(
+    input: Parameters<KnowledgePageStore['listPageBodyLinkSources']>[0],
+  ): ReturnType<KnowledgePageStore['listPageBodyLinkSources']> {
+    return this.#pages.listPageBodyLinkSources(input);
+  }
+
+  override countPageLinks(
+    input: Parameters<KnowledgePageStore['countPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['countPageLinks']> {
+    return this.#pages.countPageLinks(input);
+  }
+
+  override listPageLinks(
+    input: Parameters<KnowledgePageStore['listPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['listPageLinks']> {
+    return this.#pages.listPageLinks(input);
   }
 
   override countNotes(
