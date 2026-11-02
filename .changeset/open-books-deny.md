@@ -11,4 +11,4 @@ const user = requestContext.get(MASTRA_NORMALIZED_USER_KEY);
 // { id: 'user-123', name: 'Ada', email: 'ada@example.com', role: 'admin' }
 ```
 
-`@mastra/server` now requires `@mastra/core` 1.81.0 or later.
+`@mastra/server` now requires `@mastra/core` 1.82.0 or later.

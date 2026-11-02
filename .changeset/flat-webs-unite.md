@@ -12,4 +12,4 @@ const queryTool = createVectorQueryTool({
 });
 ```
 
-`@mastra/rag` now requires `@mastra/core` 1.81.0 or later.
+`@mastra/rag` now requires `@mastra/core` 1.82.0 or later.
