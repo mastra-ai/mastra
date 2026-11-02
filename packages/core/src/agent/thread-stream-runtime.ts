@@ -692,6 +692,8 @@ type AgentThreadRuntimeState = {
   abortedRunIds: Set<string>;
   resumeFencedRunIds: Set<string>;
   startingQueuedRunIds: Set<string>;
+  /** Run ids an idle `persist` signal holds while its storage write is pending. */
+  persistingIdleRunIds: Set<string>;
   /**
    * Active lease-renewal timers keyed by runId. Set when the owner
    * process wins the cross-process lease, cleared on release. Stored
@@ -939,6 +941,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     abortedRunIds: new Set(),
     resumeFencedRunIds: new Set(),
     startingQueuedRunIds: new Set(),
+    persistingIdleRunIds: new Set(),
     leaseRenewalTimers: new Map(),
     leaseOwners: new Map(),
     leaseDeadlines: new Map(),
@@ -1130,6 +1133,48 @@ export class AgentThreadStreamRuntime {
     if (record) return sameScopes(record.streamOptions?.scopes ?? [], scopes);
     if (!state.reservedRunScopes.has(runId)) return false;
     return sameScopes(state.reservedRunScopes.get(runId) ?? [], scopes);
+  }
+
+  /** Whether `runId` already names a run this runtime knows about (active, retained, reserved, queued or remote). */
+  #isRunIdInUse(state: AgentThreadRuntimeState, runId: string): boolean {
+    if (
+      state.threadRunsById.has(runId) ||
+      state.threadKeysByRunId.has(runId) ||
+      state.reservedRunScopes.has(runId) ||
+      state.remoteThreadKeysByRunId.has(runId) ||
+      state.startingQueuedRunIds.has(runId) ||
+      state.persistingIdleRunIds.has(runId) ||
+      state.preparedRunsById.has(runId)
+    ) {
+      return true;
+    }
+    for (const queue of state.pendingIdleSignalsByThread.values()) {
+      if (queue.some(pending => pending.runId === runId)) return true;
+    }
+    for (const draining of state.drainingIdleSignalsByThread.values()) {
+      if (draining.runId === runId) return true;
+    }
+    for (const queue of state.pendingContinuationsByThread.values()) {
+      if (queue.some(pending => pending.runId === runId)) return true;
+    }
+    return false;
+  }
+
+  /**
+   * The run id a signal-started run uses: the caller's `ifIdle.streamOptions.runId` when
+   * non-empty, else a fresh one (`agent.stream()` also replaces an empty id). A caller id naming a run already known here is refused.
+   */
+  #idleStartRunId(
+    state: AgentThreadRuntimeState,
+    requestedRunId: string | undefined,
+  ): { runId: string; refused?: undefined } | { runId?: undefined; refused: Promise<never> } {
+    if (!requestedRunId) return { runId: globalThis.crypto.randomUUID() };
+    if (!this.#isRunIdInUse(state, requestedRunId)) return { runId: requestedRunId };
+    const refused = Promise.reject(
+      new Error(`Run id "${requestedRunId}" is already in use; ifIdle.streamOptions.runId must name a new run.`),
+    );
+    void refused.catch(() => {});
+    return { refused };
   }
 
   #isSweptLeaseOwner(state: AgentThreadRuntimeState, runId: string): boolean {
@@ -4265,8 +4310,13 @@ export class AgentThreadStreamRuntime {
   ) {
     if (signal.transient) return;
 
-    await this.#persistSignal(agent, signal, resourceId, threadId, requestContext);
-    this.#broadcastPersistedSignal(state, pubsub, key, runId, agent.id, signal, resourceId, threadId);
+    state.persistingIdleRunIds.add(runId);
+    try {
+      await this.#persistSignal(agent, signal, resourceId, threadId, requestContext);
+      this.#broadcastPersistedSignal(state, pubsub, key, runId, agent.id, signal, resourceId, threadId);
+    } finally {
+      state.persistingIdleRunIds.delete(runId);
+    }
   }
 
   /**
@@ -7221,7 +7271,6 @@ export class AgentThreadStreamRuntime {
       id: signalInput.id ?? this.#generateSignalMessageId(agent, { resourceId, threadId }),
       acceptedAt,
     });
-    const queuedRunId = globalThis.crypto.randomUUID();
     // Preserve explicit cancellation, but don't inherit the active run's signal.
     const baseQueuedStreamOptions = target.ifIdle?.streamOptions ?? {
       ...activeRecord?.streamOptions,
@@ -7247,6 +7296,11 @@ export class AgentThreadStreamRuntime {
     if (activeRecord || state.activeThreadRunIds.has(key)) {
       // The queued run starts once the thread is idle, so idle delivery attributes apply.
       const queuedSignal = resolveDeliveryAttributes(signal, target.ifIdle?.attributes);
+      const queued = this.#idleStartRunId(state, target.ifIdle?.streamOptions?.runId);
+      if (queued.refused) {
+        return { signal: queuedSignal, accepted: queued.refused };
+      }
+      const queuedRunId = queued.runId;
       const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
       idleQueue.push({
         agent,
@@ -7610,7 +7664,11 @@ export class AgentThreadStreamRuntime {
       }
     }
 
-    runId = globalThis.crypto.randomUUID();
+    const idleStart = this.#idleStartRunId(state, target.ifIdle?.streamOptions?.runId);
+    if (idleStart.refused) {
+      return { signal, accepted: idleStart.refused };
+    }
+    runId = idleStart.runId;
     key ??= this.#threadKey(resourceId, threadId);
     if (idleBehavior === 'persist') {
       // Transient signals are never written to storage, so an idle `persist` behavior drops
