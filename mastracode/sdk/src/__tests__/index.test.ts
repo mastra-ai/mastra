@@ -98,6 +98,7 @@ const controllerOnSessionDeletedMock = vi.fn();
 const claimThreadOwnershipMock = vi.fn();
 const updateThreadPeerAdvertisementMock = vi.fn();
 const loadSettingsMock = vi.fn();
+const openLocalObservabilityStoreMock = vi.fn();
 const getAvailableModePacksMock = vi.fn(() => []);
 const getAvailableOmPacksMock = vi.fn(() => []);
 const controllerSubscribeMock = vi.fn();
@@ -320,6 +321,10 @@ vi.mock('@mastra/core/processors', () => ({
 }));
 
 const getDynamicInstructionsMock = vi.fn();
+
+vi.mock('../utils/local-observability.js', () => ({
+  openLocalObservabilityStore: openLocalObservabilityStoreMock,
+}));
 
 vi.mock('../agents/instructions.js', () => ({
   getDynamicInstructions: getDynamicInstructionsMock,
@@ -720,6 +725,25 @@ describe('createMastraCode', () => {
 
     try {
       const prepared = await prepareAgentControllerMount();
+      expect(prepared.mastraArgs.observability).toBe(prepared.base.observability);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('forwards observability to the server-owned Mastra when local tracing is on', async () => {
+    const { prepareAgentControllerMount } = await import('../index.js');
+    vi.stubEnv('MASTRACODE_CLOUD_ACCESS_TOKEN', '');
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      observability: { resources: {}, localTracing: true },
+    });
+    openLocalObservabilityStoreMock.mockResolvedValue({ store: { observability: {} } });
+
+    try {
+      const prepared = await prepareAgentControllerMount();
+      expect(openLocalObservabilityStoreMock).toHaveBeenCalled();
+      expect(prepared.base.observabilityExports).toBe(true);
       expect(prepared.mastraArgs.observability).toBe(prepared.base.observability);
     } finally {
       vi.unstubAllEnvs();
