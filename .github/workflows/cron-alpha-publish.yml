@@ -22,6 +22,7 @@ jobs:
     permissions:
       actions: read
       contents: read
+      id-token: write
     secrets: inherit
 
   notify-test-failure:
