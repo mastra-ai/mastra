@@ -85,6 +85,26 @@ describe('Knowledge read routes', () => {
     await expect(call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: 'missing' })).rejects.toMatchObject({ status: 404 });
   });
 
+  it('opens a page by the reference tool results name it with: a scope address or scope#key/path', async () => {
+    const { mastra, support } = await setup();
+    const store = await mastra.getKnowledge('main')!.getStorage();
+    const guide = await store.createPage({ parentId: support.id, key: 'guides', name: 'Guides', provenance });
+    const refundsGuide = await store.createPage({
+      parentId: guide.id,
+      key: 'refunds',
+      name: 'Refunds guide',
+      provenance,
+    });
+    const args = { mastra, knowledgeKey: 'main' };
+    expect((await call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: 'team:acme:support' })).page.id).toBe(support.id);
+    const page = await call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: 'team:acme:support#guides/refunds' });
+    expect(page.page.id).toBe(refundsGuide.id);
+    expect(names(page.ancestors)).toEqual(['Acme', 'Support', 'Guides']);
+    await expect(
+      call(GET_KNOWLEDGE_PAGE_ROUTE, { ...args, pageId: 'team:acme:support#guides/nowhere' }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
   it("labels scope pages with their declaration's displayLabel, params filled in, in the tree, page and graph", async () => {
     const { mastra, acme, refunds } = await setup({ 'org:$orgId': { displayLabel: '$orgId organization' } });
     const args = { mastra, knowledgeKey: 'main' };
@@ -356,6 +376,19 @@ describe('Knowledge read routes with app auth', () => {
     await expect(
       call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, requestContext: asCaller(undefined), knowledgeKey: 'main' }),
     ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it('404s a page by reference outside what the caller can read', async () => {
+    const { mastra } = await setupWithAuth();
+    const read = (pageId: string) =>
+      call(GET_KNOWLEDGE_PAGE_ROUTE, {
+        mastra,
+        requestContext: asCaller(['team:acme:support']),
+        knowledgeKey: 'main',
+        pageId,
+      });
+    expect((await read('team:acme:support')).page.name).toBe('Support');
+    await expect(read('team:acme:eng')).rejects.toMatchObject({ status: 404 });
   });
 
   it("reads only the pages the caller's principals can read", async () => {

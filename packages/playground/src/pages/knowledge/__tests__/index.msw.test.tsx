@@ -247,6 +247,24 @@ describe('Knowledge page', () => {
     });
   });
 
+  describe('when a chat card links a page by its reference', () => {
+    it('opens the page and puts its id in the URL', async () => {
+      withInstance();
+      server.use(
+        http.get(`${api}/main/pages/:ref`, ({ params }) =>
+          params.ref === 'org:acme#payments' || params.ref === 'page-payments'
+            ? HttpResponse.json(paymentsPageView)
+            : HttpResponse.json({ error: 'Not found' }, { status: 404 }),
+        ),
+      );
+      renderPage(`/knowledge?page=${encodeURIComponent('org:acme#payments')}&view=page`);
+      await screen.findByRole('region', { name: 'Selected page' });
+      await waitFor(() =>
+        expect(screen.getByTestId('location-search').textContent).toBe('?page=page-payments&view=page'),
+      );
+    });
+  });
+
   describe('when the server streams a change to the open page', () => {
     it('shows the new text as soon as the change arrives', async () => {
       withInstance();

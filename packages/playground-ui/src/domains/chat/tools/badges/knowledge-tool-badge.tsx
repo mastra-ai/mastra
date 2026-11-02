@@ -161,7 +161,7 @@ function asListEntry(value: unknown): ListEntry | undefined {
 
 const DEPTH_INDENT = ['', 'pl-4', 'pl-8'] as const;
 
-/** A `knowledge_list` result as an indented tree: name, ref, and how many children each entry has. */
+/** A `knowledge_list` result as an indented tree: each name links to its page (scopes to their scope page), with its ref and child count. */
 function ListTree({ entries }: { entries: ListEntry[] }) {
   return (
     <ul className="flex max-h-64 flex-col gap-1 overflow-auto" data-testid="knowledge-list-entries">
@@ -172,7 +172,7 @@ function ListTree({ entries }: { entries: ListEntry[] }) {
         >
           <div className="flex min-w-0 items-baseline gap-2">
             <Txt as="span" variant="label" className="truncate">
-              {entry.name}
+              <KnowledgePageLink pageRef={entry.ref}>{entry.name}</KnowledgePageLink>
             </Txt>
             {entry.ref !== entry.name ? <Meta>{entry.ref}</Meta> : null}
             {entry.children ? (

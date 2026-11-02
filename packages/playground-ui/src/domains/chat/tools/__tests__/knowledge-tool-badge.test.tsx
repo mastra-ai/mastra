@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToolCard } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { ChatRunningContext } from '@/domains/chat/context/chat-context';
+import { KnowledgeLinksProvider } from '@/domains/chat/knowledge/knowledge-links';
 import { toolCardKind } from '@/domains/chat/tools/tool-card-kind';
 import { foldsIntoGroup } from '@/domains/chat/tools/tool-groups';
 import type { LinkComponentProviderProps } from '@/lib/framework';
@@ -162,6 +163,38 @@ describe('Knowledge tool cards', () => {
     it('says so when nothing is under the starting point', () => {
       renderCard({ toolName: 'knowledge_list', input: { from: 'site:mastra#contact' }, output: { entries: [] } });
       expect(open().textContent).toContain('No pages under it');
+    });
+  });
+
+  describe('when knowledge_list entries are opened from the card', () => {
+    const output = {
+      entries: [
+        { ref: 'site:mastra', name: 'site:mastra', depth: 1, children: 45, scope: true },
+        { ref: 'site:mastra#topics/observability', name: 'Observability', depth: 2, children: 3 },
+        { ref: 'site:mastra#topics/observability/tracing', name: 'Tracing', depth: 3, children: 0 },
+      ],
+    };
+
+    it('links every entry, scope roots and nested pages, to its page and keeps the child count', () => {
+      renderCard({ toolName: 'knowledge_list', input: { depth: 3 }, output });
+      const badge = open();
+      const href = (name: string) => within(badge).getByRole('link', { name }).getAttribute('href');
+      expect(href('site:mastra')).toBe('/knowledge?page=site%3Amastra&view=page');
+      expect(href('Observability')).toBe('/knowledge?page=site%3Amastra%23topics%2Fobservability&view=page');
+      expect(href('Tracing')).toBe('/knowledge?page=site%3Amastra%23topics%2Fobservability%2Ftracing&view=page');
+      expect(within(badge).getAllByRole('listitem')[0]?.textContent).toContain('45 children');
+    });
+
+    it('shows entries as text in a host that opens pages only by id', () => {
+      render(
+        <KnowledgeLinksProvider pageHref={id => `/kb/${id}`}>
+          <ToolCard {...props({ toolName: 'knowledge_list', input: {}, output })} />
+        </KnowledgeLinksProvider>,
+        { wrapper: Providers },
+      );
+      const badge = open();
+      expect(within(badge).queryAllByRole('link')).toEqual([]);
+      expect(badge.textContent).toContain('Observability');
     });
   });
 
