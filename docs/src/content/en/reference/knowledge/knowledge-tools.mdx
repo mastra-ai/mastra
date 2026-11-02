@@ -110,28 +110,36 @@ Reads a page: its body, notes, child pages, and the notes on other pages that me
   {
     name: 'outline',
     type: 'boolean',
-    description: "Return the body's headings, each with its level and size in tokens, instead of the body.",
+    description: "Return the body's headings, each with its level, line and size in tokens, instead of the body.",
     isOptional: true,
   },
   {
     name: 'section',
     type: 'string',
-    description: 'Return only the section under this heading, subsections included. A unique part of the title works.',
+    description:
+      'Return only the section under this heading, subsections included, as numbered lines with their `range`. A unique part of the title works.',
     isOptional: true,
   },
   {
     name: 'match',
-    type: 'string',
-    description: 'Return only the sections whose text contains this term, case-insensitively, each with its heading.',
+    type: 'string | string[]',
+    description:
+      'Return only the lines that contain this term, or any of these terms, case-insensitively, with `context` lines around each, like `grep -C`.',
     isOptional: true,
   },
   {
-    name: 'bodyOffset',
+    name: 'context',
     type: 'number',
-    description:
-      'Where to start, in characters: in the chosen `section`, otherwise in the body. With `match`, it reads on in the whole body from a `[… body character N …]` marker. `more` gives it when a body is cut short.',
+    description: 'With `match`: lines to show before and after each matching line, 0 to 20.',
     isOptional: true,
-    defaultValue: '0',
+    defaultValue: '2',
+  },
+  {
+    name: 'from',
+    type: '{ line: number; col?: number }',
+    description:
+      'Where to start reading: in the chosen `section`, otherwise in the body. With `match`, where to continue matching. `more` gives it when a result is cut short. `col` (0-based) only appears inside a line too long for one read.',
+    isOptional: true,
   },
   {
     name: 'notes',
@@ -169,19 +177,19 @@ Reads a page: its body, notes, child pages, and the notes on other pages that me
 
 A whole read returns `{ page, notes, children, childScopes?, mentionedIn, nextCursor?, mentionedInCursor?, more? }`, with the body on `page`. Anything cut short is listed in `more`, with how to get the rest:
 
-- **Body.** At most 1,000 tokens of body come back at a time. `more` gives the `bodyOffset` to read on from.
+- **Body.** A body that fits in 1,000 tokens comes back as `page.body`. A longer one comes back as `page.lines`, numbered (`12│text`), with `page.range`, the lines it covers, and `page.lineCount`. `more` says where to read on, such as `body: showing lines 1–40 of 412. Read on with from: {"line":41}.`
 - **Notes and mentions.** A whole read fetches up to `limit` notes and up to `limit` mentioning notes. Each list comes along while those fetched notes stay under 1,000 tokens. A longer list is replaced by `notesLeftOut` or `mentionedInLeftOut`, the number of notes fetched, and `more` says to read it with `notes: true` or `mentionedIn: true`. When there are more notes than `limit`, both that number and the token estimate in `more` cover only the fetched notes, so the list is larger.
 - **Child pages and scopes.** Past `limit`, `more` says to list them with `knowledge_list`.
 
-A read that returns part of a body (a truncated whole read, a `section` or a `bodyOffset` window) also returns `page.bodyRange`, `{ start, end, of }`: the characters it covers and the length of the body it was read from. Pass it to `knowledge_page` to edit only that part. A `match` read returns no `bodyRange`.
+A `range` is `{ start: { line, col? }, end: { line, col? } }`. Lines start at 1. A read gives `col` only when a line is too long for one read. It's 0-based, and an end `col` is exclusive. Pass a range to `knowledge_page` to replace those lines.
 
-`outline`, `section`, `match` and `bodyOffset` return only that part of the body, with no notes, child pages or mentions. Pass at most one of `outline`, `section` and `match`. `notes`, `mentionedIn` and both cursors return only those notes, with no body, and can't be combined with the body options:
+`match` returns `matches`, each `{ range, lines }`. When the matches run past 1,000 tokens, `more` gives the line to continue from, such as `match: stopped at about 1,000 tokens; more matches from line 120. Read again with the same match and from: {"line":120}.`
+
+`outline`, `section`, `match` and `from` return only that part of the body, with no notes, child pages or mentions. Pass at most one of `outline`, `section` and `match`. `notes`, `mentionedIn` and both cursors return only those notes, with no body, and can't be combined with the body options:
 
 ```text
-knowledge_read: read notes or mentionedIn on their own, without outline, section, match or bodyOffset.
+knowledge_read: read notes or mentionedIn on their own, without outline, section, match or from.
 ```
-
-A `match` result that runs past 1,000 tokens doesn't offer an offset. `more` says to match a narrower term or read a section by its heading.
 
 ## `knowledge_page`
 
@@ -226,14 +234,14 @@ Creates, edits, moves, merges and deletes pages. `scope` only names the destinat
     name: 'body',
     type: 'string',
     description:
-      'The curated long-form summary, in markdown. Replaces the whole body, or with `bodyRange` only that part.',
+      'The curated long-form summary, in markdown. Replaces the whole body, or with `range` only those lines. An empty `body` with `range` removes the lines.',
     isOptional: true,
   },
   {
-    name: 'bodyRange',
-    type: '{ start: number; end: number; of: number }',
+    name: 'range',
+    type: '{ start: { line: number; col?: number }; end: { line: number; col?: number } }',
     description:
-      'Edit: the `bodyRange` a `knowledge_read` returned with part of a body, passed back unchanged. `body` replaces characters `start` to `end`. Needs `expectedVersion`.',
+      'Edit: the lines to replace, from a `knowledge_read` `range` or `matches` entry, or a smaller range inside one. Needs `expectedVersion`.',
     isOptional: true,
   },
   {
@@ -245,7 +253,13 @@ Creates, edits, moves, merges and deletes pages. `scope` only names the destinat
 ]}
 />
 
-A `body` write without `bodyRange` is refused when the stored body is longer than one read returns (1,000 tokens). A `bodyRange` is refused without `expectedVersion`, when its `of` doesn't match the stored body's length, when it falls outside the body, and when it covers the whole of a long body.
+A `body` write without `range` is refused when the stored body is longer than one read returns (1,000 tokens). A `range` is refused without `expectedVersion`, when it starts after it ends or runs past the end of the body, and when it covers more than one read from its first line shows:
+
+```text
+Lines 1–150 run past what one knowledge_read from line 1 shows, so this can't be a range a read gave you. Edit the body part by part: write each part back with the range its own read returned.
+```
+
+A `body` that still has the line numbers from a read is refused: `This body still has the line numbers a knowledge_read put in front of each line ("12│"). Write the text without them.`
 
 | Operation | Role needed |
 | - | - |

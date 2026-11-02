@@ -77,10 +77,10 @@ Reading a scope address, such as `{ "page": "org:acme" }`, lists the pages in th
 { "from": "org:acme#policies", "depth": 2 }
 ```
 
-A long page doesn't come back whole. A read returns at most 1,000 tokens of body, and `more` says how to get the rest. For a long page, the agent can read the body's `outline` of headings with their sizes, then one `section`, or only the sections that `match` a term:
+A long page doesn't come back whole. A read returns at most 1,000 tokens of body, and `more` says how to get the rest. A long body comes back as numbered lines (`12│text`). The agent can read the body's `outline` of headings with their lines and sizes, then one `section`, or `match` a term to get the matching lines with a few around them, like `grep -C`:
 
 ```json
-{ "page": "org:acme#policies/refund", "section": "Damaged items" }
+{ "page": "org:acme#policies/refund", "match": "damaged", "context": 2 }
 ```
 
 A whole read fetches up to `limit` of a page's notes, and of the notes on other pages that mention it. Each list comes along while it stays under 1,000 tokens. A longer one is left out and noted in `more` instead, and the agent reads it with `notes: true` or `mentionedIn: true`. See [`knowledge_read`](/reference/knowledge/knowledge-tools#knowledge_read) for every option.
@@ -122,24 +122,24 @@ Edit a page's name, description or body:
 
 Editing needs `editor` on the page's scope. Pass the `version` from the last read as `expectedVersion`, and the write is refused if someone changed the page since.
 
-A `body` replaces the whole body, so it only works on a page short enough to come back in one read. On a longer page, edit one part at a time. A read that returns part of a body (a `section`, a `bodyOffset` window or a truncated whole read) also returns that part's `bodyRange`. Pass it back unchanged with the new text, and only that part is replaced:
+A `body` replaces the whole body, so it only works on a page short enough to come back in one read. A longer page comes back as numbered lines with the `range` they cover, and the agent edits it a few lines at a time. Pass a `range` from a read, or a smaller one inside it, with the new text, and only those lines are replaced. An empty `body` removes them:
 
 ```json
 {
   "op": "write",
   "page": "org:acme#policies/refund",
-  "body": "## Damaged items\n\nDamaged items always get a full refund and a prepaid return label.\n\n",
-  "bodyRange": { "start": 25, "end": 84, "of": 62342 },
+  "body": "## Damaged items\n\nDamaged items always get a full refund and a prepaid return label.\n",
+  "range": { "start": { "line": 5 }, "end": { "line": 8 } },
   "expectedVersion": 1
 }
 ```
 
-The range covers the text exactly as the read returned it, including the blank line after a section. Keep that blank line in the new text, or the next heading joins the end of it.
+Here the read of the `Damaged items` section returned lines 5 to 8, ending with the blank line before the next heading. The new text ends in a line break, so line 8 stays blank and the next heading stays on its own line. Send the text without the `5│` line numbers. A body that still has them is refused.
 
 Writing a whole `body` to a long page is refused, because the writer can only have seen part of it:
 
 ```text
-This page's body is 62367 characters, more than one knowledge_read returns, and a body write replaces all of it. Write back only the part you read, with the bodyRange that read returned and its expectedVersion; read other parts with bodyOffset or section and write each back with its own bodyRange.
+This page's body is 12892 characters, more than one knowledge_read returns, and a body write without a range replaces all of it. Write back only the lines you read, with the range that read returned and its expectedVersion; read other parts with from, section or match and write each back with its own range.
 ```
 
 ## Move, merge and delete pages
