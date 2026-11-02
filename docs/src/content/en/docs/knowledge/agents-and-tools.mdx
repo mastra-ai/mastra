@@ -13,7 +13,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-An agent with Knowledge tools turned on gets up to five tools. The model calls them. Your [scope declarations](/docs/knowledge/scope-types) decide what each call is allowed to do. The examples on this page are tool inputs as the model sends them, for a run that holds `org:acme` and `team:acme:support` with these declarations:
+An agent with Knowledge tools turned on gets up to six tools. The model calls them. Your [scope declarations](/docs/knowledge/scope-types) decide what each call is allowed to do. The examples on this page are tool inputs as the model sends them, for a run that holds `org:acme` and `team:acme:support` with these declarations:
 
 ```typescript oxfmt:false
 scopes: {
@@ -29,6 +29,7 @@ scopes: {
 
 | Tool | Operations | Turned on by |
 | - | - | - |
+| `knowledge_list` | List the page tree under a scope or page | `tools: true` or `{ read: true }` |
 | `knowledge_search` | Search pages and notes | `tools: true` or `{ read: true }` |
 | `knowledge_read` | Read a page, browse a scope, list held scopes | `tools: true` or `{ read: true }` |
 | `knowledge_page` | `write`, `move`, `merge`, `delete` | `tools: true` or `{ write: true }` |
@@ -41,12 +42,14 @@ Every tool that takes a `page` accepts:
 
 - the page ID
 - a scope address, such as `org:acme`, which reads that scope
-- a page path: the scope address, `#`, then the page keys from the top of the tree joined with `/`, such as `policy:acme#refund-policy` or `org:acme#policies/refund`
+- a page path: the scope address, `#`, then the page keys from the top of the tree joined with `/`, such as `policy:acme#refund-policy` or `org:acme#policies/refund`. Leading, trailing and doubled slashes after the `#` are ignored
 - the page's exact name
 
 A `/` before the `#` names a child scope and a `/` after it names a child page. A path resolves when it's used: after a move, the page answers to its new path and the old one finds nothing.
 
-A name that matches more than one readable page is refused, and the error lists the candidate IDs. A page the run can't read is reported as not found, the same as a page that doesn't exist:
+Tool results name every page by its `ref`, which the tools accept back: the full path when the page has a key on every level, otherwise its ID.
+
+A name that matches more than one readable page is refused, and the error lists the candidates' refs. A page the run can't read is reported as not found, the same as a page that doesn't exist:
 
 ```text
 Knowledge page "org:acme#policies/escalation" not found.
@@ -68,7 +71,21 @@ Knowledge page "org:acme#policies/escalation" not found.
 
 Reading a scope address, such as `{ "page": "org:acme" }`, lists the pages in that scope and the scopes placed under it. Called with no `page`, it lists the scopes the run holds, which is how the model finds where to start.
 
-Both need `viewer`.
+`knowledge_list` shows how a scope or section is organized, up to three levels deep. Each entry has the `ref` to read it by, its name, description and number of children:
+
+```json
+{ "from": "org:acme#policies", "depth": 2 }
+```
+
+A long page doesn't come back whole. A read returns at most 5,000 tokens of body, and `more` says how to get the rest. For a long page, the agent can read the body's `outline` of headings with their sizes, then one `section`, or only the sections that `match` a term:
+
+```json
+{ "page": "org:acme#policies/refund", "section": "Damaged items" }
+```
+
+A page's notes, and the notes on other pages that mention it, come with a whole read while each list stays under 1,000 tokens. A longer list is counted in `more` instead, and the agent reads it with `notes: true` or `mentionedIn: true`. See [`knowledge_read`](/reference/knowledge/knowledge-tools#knowledge_read) for every option.
+
+All three need `viewer`.
 
 ## Write pages
 

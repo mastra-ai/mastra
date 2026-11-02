@@ -100,7 +100,8 @@ A page can have a **key**, a short name unique among its siblings. Tools refer t
 - A path is the scope address, `#`, then the keys from the top of the tree down, joined with `/`: `policy:acme#refund-policy` for a top-level page, `org:acme#policies/refund` for the `refund` page under `policies`.
 - A `/` before the `#` names a child scope, and a `/` after it names a child page. `org:acme/private#refund` and `org:acme#private/refund` are different pages.
 - A path resolves when it's used. A moved page answers to its new path, and the old path finds nothing.
-- A name that matches more than one readable page is refused with the candidate IDs.
+- Leading, trailing and doubled slashes after the `#` are ignored: `org:acme#policies/` is `org:acme#policies`.
+- A name that matches more than one readable page is refused with the candidates' refs.
 
 ## Notes
 

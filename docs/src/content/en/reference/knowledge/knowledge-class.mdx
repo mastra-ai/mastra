@@ -75,7 +75,7 @@ export const knowledge = new Knowledge({
     name: 'tools',
     type: 'boolean | { read?: boolean; write?: boolean }',
     description:
-      'Tools an attached agent gets. `true` gives `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first two, `{ write: true }` the last two. Off by default.',
+      'Tools an attached agent gets. `true` gives `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first three, `{ write: true }` the last two. Off by default.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -135,7 +135,7 @@ Returns the Knowledge tools for explicit wiring, such as an agent that isn't att
 
 ```typescript
 const tools = knowledge.createTools({ write: false })
-// knowledge_search, knowledge_read
+// knowledge_list, knowledge_search, knowledge_read
 ```
 
 ### `getInstructions()`
