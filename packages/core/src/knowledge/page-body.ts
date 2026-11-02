@@ -1,6 +1,6 @@
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
 
-/** Most estimated tokens of body text one `knowledge_read` returns; the rest comes by `bodyOffset`. */
+/** Most estimated tokens of body text one `knowledge_read` returns; the rest comes by `from`. */
 export const KNOWLEDGE_READ_BODY_TOKENS = 1_000;
 /**
  * Most estimated tokens of notes, or of mentioning notes, a whole-page read carries inline. Past it
@@ -44,9 +44,11 @@ export function knowledgeBodySections(body: string): KnowledgeBodySection[] {
 
 /** Each heading with its section's size, for an agent to pick one. */
 export function knowledgeBodyOutline(body: string) {
+  const lines = new KnowledgeBodyLines(body);
   return knowledgeBodySections(body).map(section => ({
     level: section.level,
     title: section.title,
+    line: lines.lineAt(section.start),
     tokens: estimateTokenCount(body.slice(section.start, section.end)),
   }));
 }
@@ -68,86 +70,183 @@ export function knowledgeBodySection(
   return { candidates: (partial.length ? partial : sections).map(section => section.title).slice(0, 10) };
 }
 
-/** A matching section longer than this comes back as its matching paragraphs instead of whole. */
-export const KNOWLEDGE_READ_MATCH_SECTION_TOKENS = 1_000;
+/** A place in a body: a 1-based line, and optionally a 0-based character column in it. */
+export interface KnowledgeLinePosition {
+  line: number;
+  col?: number;
+}
 
 /**
- * The parts of a body that contain `term` (case-insensitive): each smallest section (heading to the
- * next heading of any level) holding a match, with its heading, plus text before the first heading.
- * A section longer than {@link KNOWLEDGE_READ_MATCH_SECTION_TOKENS} gives only its matching
- * paragraphs, each with the paragraph before and after, marked with where they start in the body.
+ * Part of a body by line. Without columns it is whole lines, `start.line` through `end.line`.
+ * `start.col` is the first character it covers and `end.col` the character after its last.
  */
-export function knowledgeBodyMatches(body: string, term: string): { text: string; sections: string[] } {
-  const needle = term.toLowerCase();
-  const sections = knowledgeBodySections(body);
-  const cuts = [0, ...sections.map(section => section.start), body.length];
-  const parts: string[] = [];
-  const titles: string[] = [];
-  for (let i = 0; i < cuts.length - 1; i++) {
-    const text = body.slice(cuts[i], cuts[i + 1]);
-    if (!text.toLowerCase().includes(needle)) continue;
-    titles.push(i === 0 ? '(before the first heading)' : sections[i - 1]!.title);
-    if (estimateTokenCount(text) <= KNOWLEDGE_READ_MATCH_SECTION_TOKENS) {
-      parts.push(text.trimEnd());
-      continue;
-    }
-    parts.push(
-      matchingParagraphs(
-        text,
-        cuts[i]!,
-        needle,
-        i === 0 ? undefined : text.slice(0, text.indexOf('\n') + 1 || text.length),
-      ),
-    );
-  }
-  return { text: parts.join('\n\n'), sections: titles };
+export interface KnowledgeLineRange {
+  start: KnowledgeLinePosition;
+  end: KnowledgeLinePosition;
 }
 
-function matchingParagraphs(text: string, base: number, needle: string, heading: string | undefined): string {
-  const paragraphs: { start: number; end: number }[] = [];
-  const gap = /\n[ \t]*\n/g;
-  let start = 0;
-  for (let m = gap.exec(text); m; m = gap.exec(text)) {
-    paragraphs.push({ start, end: m.index });
-    start = m.index + m[0].length;
+/** A body's lines: split on `\n`, a final newline not counting as one more, empty body none. */
+export class KnowledgeBodyLines {
+  readonly starts: number[] = [];
+
+  constructor(readonly body: string) {
+    if (!body) return;
+    this.starts.push(0);
+    for (let at = body.indexOf('\n'); at !== -1 && at + 1 < body.length; at = body.indexOf('\n', at + 1)) {
+      this.starts.push(at + 1);
+    }
   }
-  paragraphs.push({ start, end: text.length });
-  const keep = new Set<number>();
-  paragraphs.forEach((paragraph, i) => {
-    if (heading && i === 0) return;
-    if (!text.slice(paragraph.start, paragraph.end).toLowerCase().includes(needle)) return;
-    for (const j of [i - 1, i, i + 1]) if (j >= (heading ? 1 : 0) && j < paragraphs.length) keep.add(j);
-  });
-  const out: string[] = heading ? [heading.trimEnd()] : [];
-  let previous = -2;
-  for (const i of [...keep].sort((a, b) => a - b)) {
-    if (i !== previous + 1) out.push(`[… body character ${base + paragraphs[i]!.start} …]`);
-    out.push(text.slice(paragraphs[i]!.start, paragraphs[i]!.end).trimEnd());
-    previous = i;
+
+  get count(): number {
+    return this.starts.length;
   }
-  return out.join('\n\n');
+
+  /** Character offset where line `n`'s text ends, before its newline. */
+  lineEnd(n: number): number {
+    const next = this.starts[n];
+    return next === undefined ? (this.body.endsWith('\n') ? this.body.length - 1 : this.body.length) : next - 1;
+  }
+
+  /** The line holding character `offset`; an offset at a line's end belongs to that line. */
+  lineAt(offset: number): number {
+    let low = 0;
+    let high = this.starts.length - 1;
+    while (low < high) {
+      const mid = (low + high + 1) >> 1;
+      if (this.starts[mid]! <= offset) low = mid;
+      else high = mid - 1;
+    }
+    return low + 1;
+  }
+
+  /** Where a range starts, as a body offset; throws when it isn't in the body. */
+  startOffset(at: KnowledgeLinePosition): number {
+    this.#check(at);
+    return this.starts[at.line - 1]! + (at.col ?? 0);
+  }
+
+  /** Where a range ends, as a body offset: without a column, the end of that line's text. */
+  endOffset(at: KnowledgeLinePosition): number {
+    this.#check(at);
+    return at.col === undefined ? this.lineEnd(at.line) : this.starts[at.line - 1]! + at.col;
+  }
+
+  /** The position of a start offset: its line, with a column only when it isn't the line's start. */
+  startPosition(offset: number): KnowledgeLinePosition {
+    const line = this.lineAt(offset);
+    const col = offset - this.starts[line - 1]!;
+    return col ? { line, col } : { line };
+  }
+
+  /** The position of an end offset: its line, with a column only when it isn't the line's end. */
+  endPosition(offset: number): KnowledgeLinePosition {
+    const line = this.lineAt(offset);
+    return offset === this.lineEnd(line) ? { line } : { line, col: offset - this.starts[line - 1]! };
+  }
+
+  /** Body characters `start` to `end`, each line prefixed with its number: `12│text`. */
+  numbered(start: number, end: number): string {
+    const first = this.lineAt(start);
+    const last = this.lineAt(end);
+    const width = String(last).length;
+    const out: string[] = [];
+    for (let n = first; n <= last; n++) {
+      const from = Math.max(start, this.starts[n - 1]!);
+      const to = Math.min(end, this.lineEnd(n));
+      out.push(`${String(n).padStart(width)}│${this.body.slice(from, to)}`);
+    }
+    return out.join('\n');
+  }
+
+  #check(at: KnowledgeLinePosition) {
+    if (!Number.isInteger(at.line) || at.line < 1 || at.line > this.count) {
+      throw new Error(`Line ${at.line} is outside the body, which has ${this.count} lines.`);
+    }
+    const length = this.lineEnd(at.line) - this.starts[at.line - 1]!;
+    if (at.col !== undefined && (!Number.isInteger(at.col) || at.col < 0 || at.col > length)) {
+      throw new Error(`Column ${at.col} is outside line ${at.line}, which has ${length} characters.`);
+    }
+  }
 }
 
 /**
- * Up to {@link KNOWLEDGE_READ_BODY_TOKENS} of `text` from character `offset`, never splitting a
- * surrogate pair, with how much is left.
+ * What one read returns from body character `start`, up to `limit`: at most
+ * {@link KNOWLEDGE_READ_BODY_TOKENS}, ended at the last whole line that fits. Only a line too long
+ * for one read is cut inside it, never splitting a surrogate pair. `next` is where the rest starts.
  */
 export function knowledgeBodyWindow(
-  text: string,
-  offset: number,
-): { text: string; start: number; end: number; total: number; remainingTokens: number } {
-  const start = Math.min(Math.max(offset, 0), text.length);
-  const rest = text.slice(start);
-  let piece =
-    estimateTokenCount(rest) > KNOWLEDGE_READ_BODY_TOKENS ? sliceByTokens(rest, 0, KNOWLEDGE_READ_BODY_TOKENS) : rest;
-  const last = piece.charCodeAt(piece.length - 1);
-  if (piece.length < rest.length && last >= 0xd800 && last <= 0xdbff) piece = piece.slice(0, -1);
-  const end = start + piece.length;
-  return {
-    text: piece,
-    start,
-    end,
-    total: text.length,
-    remainingTokens: end < text.length ? estimateTokenCount(text.slice(end)) : 0,
-  };
+  lines: KnowledgeBodyLines,
+  start: number,
+  limit = lines.body.length,
+): { start: number; end: number; next?: number } {
+  const rest = lines.body.slice(start, limit);
+  if (estimateTokenCount(rest) <= KNOWLEDGE_READ_BODY_TOKENS) return { start, end: limit };
+  let end = start + sliceByTokens(rest, 0, KNOWLEDGE_READ_BODY_TOKENS).length;
+  const newline = lines.body.lastIndexOf('\n', end - 1);
+  if (newline >= start) return { start, end: newline, next: newline + 1 };
+  const last = lines.body.charCodeAt(end - 1);
+  if (last >= 0xd800 && last <= 0xdbff) end--;
+  return { start, end, next: end };
+}
+
+/** A line longer than this shows only the characters around a match. */
+export const KNOWLEDGE_READ_MATCH_LINE_CHARS = 400;
+
+/**
+ * The lines that contain any of `terms` (case-insensitive), from body character `from`, each with
+ * `context` lines before and after, overlapping hits merged. Lines longer than
+ * {@link KNOWLEDGE_READ_MATCH_LINE_CHARS} are never shown whole: a matching one gives the
+ * characters around its first match, a non-matching one is left out. Each part is a body range a
+ * write can take back as it is.
+ */
+export function knowledgeBodyGrep(
+  lines: KnowledgeBodyLines,
+  terms: string[],
+  context: number,
+  from = 0,
+): Array<{ start: number; end: number }> {
+  const needles = terms.map(term => term.toLowerCase()).filter(Boolean);
+  const text = (n: number) => lines.body.slice(lines.starts[n - 1]!, lines.lineEnd(n)).toLowerCase();
+  const firstLine = lines.lineAt(from);
+  const spans: Array<[number, number]> = [];
+  for (let n = firstLine; n <= lines.count; n++) {
+    if (!needles.some(needle => text(n).includes(needle))) continue;
+    const span: [number, number] = [Math.max(firstLine, n - context), Math.min(lines.count, n + context)];
+    const last = spans[spans.length - 1];
+    if (last && span[0] <= last[1] + 1) last[1] = span[1];
+    else spans.push(span);
+  }
+  const parts: Array<{ start: number; end: number }> = [];
+  for (const [first, last] of spans) {
+    let run: number | undefined;
+    const close = (n: number) => {
+      if (run !== undefined) parts.push({ start: lines.starts[run - 1]!, end: lines.lineEnd(n) });
+      run = undefined;
+    };
+    for (let n = first; n <= last; n++) {
+      const start = lines.starts[n - 1]!;
+      const end = lines.lineEnd(n);
+      if (end - start <= KNOWLEDGE_READ_MATCH_LINE_CHARS) {
+        run ??= n;
+        continue;
+      }
+      close(n - 1);
+      const lower = text(n);
+      const hits = needles.map(needle => lower.indexOf(needle)).filter(at => at !== -1);
+      if (!hits.length) continue;
+      const at = Math.min(...hits);
+      const half = KNOWLEDGE_READ_MATCH_LINE_CHARS / 2;
+      let cutStart = start + Math.max(0, at - half);
+      let cutEnd = Math.min(end, start + at + half);
+      if (isLowSurrogate(lines.body.charCodeAt(cutStart))) cutStart--;
+      if (isLowSurrogate(lines.body.charCodeAt(cutEnd))) cutEnd++;
+      parts.push({ start: cutStart, end: cutEnd });
+    }
+    close(last);
+  }
+  return parts;
+}
+
+function isLowSurrogate(code: number): boolean {
+  return code >= 0xdc00 && code <= 0xdfff;
 }

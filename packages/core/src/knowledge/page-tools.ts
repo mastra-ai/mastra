@@ -15,11 +15,13 @@ import {
   KNOWLEDGE_READ_BODY_TOKENS,
   KNOWLEDGE_READ_INLINE_TOKENS,
   KNOWLEDGE_READ_OUTLINE_ENTRIES,
-  knowledgeBodyMatches,
+  KnowledgeBodyLines,
+  knowledgeBodyGrep,
   knowledgeBodyOutline,
   knowledgeBodySection,
   knowledgeBodyWindow,
 } from './page-body';
+import type { KnowledgeLinePosition, KnowledgeLineRange } from './page-body';
 import { knowledgePageRefs } from './page-refs';
 import type { KnowledgePageRefs } from './page-refs';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
@@ -299,15 +301,43 @@ function leftOut(count: number, hasMore: boolean, noun: string): string {
   return `${hasMore ? 'more than ' : ''}${count} ${noun}${count === 1 && !hasMore ? '' : 's'}`;
 }
 
+/** Lines shown before and after each `match` hit unless `context` says otherwise, and the most it may ask for. */
+const KNOWLEDGE_READ_MATCH_CONTEXT = 2;
+const KNOWLEDGE_READ_MATCH_CONTEXT_MAX = 20;
+
+const linePositionSchema = {
+  type: 'object',
+  properties: {
+    line: { type: 'integer', minimum: 1 },
+    col: { type: 'integer', minimum: 0 },
+  },
+  required: ['line'],
+  additionalProperties: false,
+} as const;
+
+/** How `from` was given, for telling the reader how to go on. */
+function fromText(at: KnowledgeLinePosition): string {
+  return JSON.stringify(at.col ? { line: at.line, col: at.col } : { line: at.line });
+}
+
 /** What `knowledge_read` returns of a body: the whole of it, its outline, a section or matches, a window at a time. */
 function bodyView(
   body: string,
-  input: { outline?: boolean; section?: string; match?: string; bodyOffset: number; more: string[] },
+  input: {
+    outline?: boolean;
+    section?: string;
+    match?: string[];
+    context: number;
+    from?: KnowledgeLinePosition;
+    more: string[];
+  },
 ): {
   body?: string;
-  bodyRange?: KnowledgeBodyRange;
+  lines?: string;
+  range?: KnowledgeLineRange;
+  lineCount?: number;
   outline?: ReturnType<typeof knowledgeBodyOutline>;
-  sections?: string[];
+  matches?: Array<{ range: KnowledgeLineRange; lines: string }>;
 } {
   const { more } = input;
   if (!body) {
@@ -321,13 +351,40 @@ function bodyView(
         `outline: showing ${KNOWLEDGE_READ_OUTLINE_ENTRIES} of ${outline.length} headings. Read a section to see the headings under it.`,
       );
     }
-    if (!outline.length) more.push('outline: the body has no headings. Read it by bodyOffset instead.');
+    if (!outline.length) more.push('outline: the body has no headings. Read it by line with from instead.');
     return { outline: outline.slice(0, KNOWLEDGE_READ_OUTLINE_ENTRIES) };
   }
-  let text = body;
-  let base = 0;
+  const lines = new KnowledgeBodyLines(body);
+  const from = input.from ? lines.startOffset(input.from) : 0;
+  if (input.match) {
+    const parts = knowledgeBodyGrep(lines, input.match, input.context, from);
+    if (!parts.length) {
+      more.push(
+        `match: no line${input.from ? ` from line ${input.from.line}` : ''} contains ${input.match.map(term => JSON.stringify(term)).join(' or ')}.`,
+      );
+      return { matches: [], lineCount: lines.count };
+    }
+    const matches: Array<{ range: KnowledgeLineRange; lines: string }> = [];
+    let tokens = 0;
+    for (const part of parts) {
+      const shown = lines.numbered(part.start, part.end);
+      tokens += estimateTokenCount(shown);
+      if (matches.length && tokens > KNOWLEDGE_READ_BODY_TOKENS) {
+        more.push(
+          `match: stopped at about ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens; more matches from line ${lines.lineAt(part.start)}. Read again with the same match and from: ${fromText({ line: lines.lineAt(part.start) })}.`,
+        );
+        break;
+      }
+      matches.push({
+        range: { start: lines.startPosition(part.start), end: lines.endPosition(part.end) },
+        lines: shown,
+      });
+    }
+    return { matches, lineCount: lines.count };
+  }
+  let start = from;
+  let limit = body.length;
   let again = '';
-  let sections: string[] | undefined;
   if (input.section) {
     const found = knowledgeBodySection(body, input.section);
     if ('candidates' in found) {
@@ -336,49 +393,28 @@ function bodyView(
         `knowledge_read: no section titled "${input.section}". ${headings ? `Headings include: ${headings}.` : 'The body has no headings.'}`,
       );
     }
-    text = body.slice(found.section.start, found.section.end);
-    base = found.section.start;
+    limit = found.section.end;
+    if (body.endsWith('\n', limit) && limit > found.section.start) limit--;
+    if (from > limit) {
+      throw new Error(
+        `knowledge_read: line ${input.from!.line} is past the end of section "${found.section.title}", which ends at line ${lines.lineAt(limit)}.`,
+      );
+    }
+    start = Math.max(from, found.section.start);
     again = `section: ${JSON.stringify(input.section)}, `;
-  } else if (input.match) {
-    const found = knowledgeBodyMatches(body, input.match);
-    if (!found.text) {
-      more.push(`match: no section contains ${JSON.stringify(input.match)}.`);
-      return { sections: [] };
-    }
-    // With match, bodyOffset is a body character (as the extract's markers name), so read on in the body.
-    if (input.bodyOffset > 0) {
-      text = body;
-    } else {
-      text = found.text;
-      sections = found.sections;
-    }
   }
-  const window = knowledgeBodyWindow(text, input.bodyOffset);
-  if (window.remainingTokens > 0 && sections) {
+  const window = knowledgeBodyWindow(lines, start, limit);
+  // A whole body that fits comes as it is; any part comes numbered, with the range a write takes back.
+  if (!input.section && start === 0 && window.next === undefined) return { body };
+  const range = { start: lines.startPosition(window.start), end: lines.endPosition(window.end) };
+  if (window.next !== undefined) {
+    const next = lines.startPosition(window.next);
     more.push(
-      `body: the matching parts run past ${window.end} of ${window.total} characters, about ${window.remainingTokens} more tokens. Match a narrower term, or read a section by its heading.`,
+      `body: showing lines ${range.start.line}–${range.end.line} of ${lines.count}. Read on with ${again}from: ${fromText(next)}.`,
     );
-  } else if (window.remainingTokens > 0) {
-    more.push(
-      `body: truncated at character ${window.end} of ${window.total}, about ${window.remainingTokens} more tokens. Read again with ${again}bodyOffset: ${window.end} for the rest.`,
-    );
-  } else if (window.start > 0) {
-    more.push(`body: showing characters ${window.start}–${window.end} of ${window.total}, the end.`);
   }
-  // Where a contiguous part sits in the body, so a write can replace just that part.
-  const range =
-    !sections && (base > 0 || window.start > 0 || base + window.end < body.length)
-      ? { start: base + window.start, end: base + window.end, of: body.length }
-      : undefined;
-  return {
-    ...(window.text ? { body: window.text } : {}),
-    ...(range ? { bodyRange: range } : {}),
-    ...(sections ? { sections } : {}),
-  };
+  return { lines: lines.numbered(window.start, window.end), range, lineCount: lines.count };
 }
-
-/** Characters `start` to `end` of a body of `of` characters, as `knowledge_read` returns it for a part. */
-type KnowledgeBodyRange = { start: number; end: number; of: number };
 
 function readTool(host: KnowledgePageToolHost) {
   return createTool({
@@ -386,8 +422,9 @@ function readTool(host: KnowledgePageToolHost) {
     description:
       'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists the scopes this run holds. ' +
       `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
-      `A body returns at most ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens at a time. Read a page whole first; only when \`more\` says its body was truncated, ask for its \`outline\` of headings and read one \`section\`, or only the sections that \`match\` a term. ` +
-      'Those part reads return just that part of the body. Anything cut short is listed in `more` with how to get the rest.',
+      `A body returns at most ${KNOWLEDGE_READ_BODY_TOKENS.toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on. ` +
+      'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
+      'Those part reads return just that part of the body. To edit part of a long body, pass the `range` a read gave you to knowledge_page.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -421,16 +458,23 @@ function readTool(host: KnowledgePageToolHost) {
             'Return only the section under this heading (its title, or a unique part of it), subsections included.',
         },
         match: {
-          type: 'string',
-          minLength: 1,
+          anyOf: [
+            { type: 'string', minLength: 1 },
+            { type: 'array', items: { type: 'string', minLength: 1 }, minItems: 1, maxItems: 10 },
+          ],
           description:
-            'Return only the sections whose text contains this term (case-insensitive), each with its heading.',
+            'Like grep: return only the lines that contain this term, or any of these terms (case-insensitive), as numbered lines with the range each covers.',
         },
-        bodyOffset: {
+        context: {
           type: 'integer',
           minimum: 0,
+          maximum: KNOWLEDGE_READ_MATCH_CONTEXT_MAX,
+          description: `With \`match\`: how many lines to show before and after each matching line, like grep -C. Defaults to ${KNOWLEDGE_READ_MATCH_CONTEXT}.`,
+        },
+        from: {
+          ...linePositionSchema,
           description:
-            'Where to start, in characters: in the chosen section, else in the body (with `match`, this reads on in the body from a `[… body character N …]` marker). `more` gives it when a body is cut short. Defaults to 0.',
+            'Where to start reading: a line (counted from 1) and, inside a very long line, a column (counted from 0). In a section, reads on within it; with `match`, searches from there. `more` gives it when a read stops early.',
         },
         limit: { ...limitSchema, description: 'Maximum notes, children and mentioning notes. Defaults to 10.' },
       },
@@ -445,8 +489,9 @@ function readTool(host: KnowledgePageToolHost) {
         mentionedInCursor,
         outline,
         section,
-        match,
-        bodyOffset = 0,
+        match: matchInput,
+        context: matchContext = KNOWLEDGE_READ_MATCH_CONTEXT,
+        from,
         limit: requested,
       } = input as {
         page?: string;
@@ -456,20 +501,23 @@ function readTool(host: KnowledgePageToolHost) {
         mentionedInCursor?: string;
         outline?: boolean;
         section?: string;
-        match?: string;
-        bodyOffset?: number;
+        match?: string | string[];
+        context?: number;
+        from?: KnowledgeLinePosition;
         limit?: number;
       };
+      const match = matchInput === undefined ? undefined : typeof matchInput === 'string' ? [matchInput] : matchInput;
       if ([outline, section, match].filter(Boolean).length > 1) {
         throw new Error('knowledge_read: pass at most one of outline, section and match.');
       }
       const wantNotes = !!(notesOnly || cursor);
       const wantMentions = !!(mentionedInOnly || mentionedInCursor);
-      if ((wantNotes || wantMentions) && (outline || section || match || bodyOffset > 0)) {
+      if ((wantNotes || wantMentions) && (outline || section || match || from)) {
         throw new Error(
-          'knowledge_read: read notes or mentionedIn on their own, without outline, section, match or bodyOffset.',
+          'knowledge_read: read notes or mentionedIn on their own, without outline, section, match or from.',
         );
       }
+      if (outline && from) throw new Error('knowledge_read: an outline covers the whole body; pass it without from.');
       const run = await start(host, context);
       const limit = limitOf(requested);
       if (!ref) {
@@ -488,9 +536,9 @@ function readTool(host: KnowledgePageToolHost) {
       const page = await run.pageOrCloseMatches(ref);
       // A part of the body (outline, section, matches, or a later window) comes alone: the notes,
       // children and mentions came with the first read and would only repeat.
-      if (outline || section || match || bodyOffset > 0) {
+      if (outline || section || match || from) {
         const more: string[] = [];
-        const view = bodyView(page.body ?? '', { outline, section, match, bodyOffset, more });
+        const view = bodyView(page.body ?? '', { outline, section, match, context: matchContext, from, more });
         return {
           page: { ...pageSummary(page, await pageRefs(run, [page])), version: page.version, ...view },
           ...(more.length ? { more } : {}),
@@ -569,7 +617,7 @@ function readTool(host: KnowledgePageToolHost) {
       ]);
       const ownRef = addresses.refs.get(page.id) ?? page.id;
       const more: string[] = [];
-      const view = bodyView(page.body ?? '', { bodyOffset, more });
+      const view = bodyView(page.body ?? '', { context: matchContext, more });
       const noteList = await noteSummaries(run, notes.notes, mentionCache);
       const mentionList = (await noteSummaries(run, mentioning.notes, mentionCache)).map((note, i) => ({
         ...note,
@@ -883,51 +931,63 @@ function listTool(host: KnowledgePageToolHost) {
   });
 }
 
+const NUMBERED_LINE = /^\s*\d+│/;
+
 /**
- * The body a write stores. With `bodyRange`, its part spliced into the body read at
- * `expectedVersion`. Without one, a body longer than one read returns is refused: the writer can
- * only have seen part of it, and writing that part back would drop the rest.
+ * The body a write stores. With `range`, its text spliced into the body read at `expectedVersion`.
+ * Without one, a body longer than one read returns is refused: the writer can only have seen part
+ * of it, and writing that part back would drop the rest.
  */
 function writtenBody(args: PageInput, page: KnowledgePage): string | undefined {
   const stored = page.body ?? '';
-  if (args.bodyRange) {
-    if (args.body === undefined) throw new Error('bodyRange needs body: the text that replaces that part.');
+  if (args.body !== undefined) {
+    const written = args.body.split('\n').filter(line => line.trim());
+    if (written.length && written.every(line => NUMBERED_LINE.test(line))) {
+      throw new Error(
+        'This body still has the line numbers a knowledge_read put in front of each line ("12│"). Write the text without them.',
+      );
+    }
+  }
+  if (args.range) {
+    if (args.body === undefined) throw new Error('range needs body: the text that replaces those lines.');
     if (args.expectedVersion === undefined) {
-      throw new Error('A bodyRange write needs expectedVersion, the version the range was read at.');
+      throw new Error('A range write needs expectedVersion, the version the range was read at.');
     }
-    const { start, end, of } = args.bodyRange;
-    if (args.expectedVersion === page.version && of !== stored.length) {
-      throw new Error(
-        `This bodyRange is from a body of ${of} characters, but this page's body has ${stored.length}. Read this page again for its own range.`,
-      );
-    }
-    if (args.expectedVersion === page.version && (start > end || end > stored.length)) {
-      throw new Error(
-        `bodyRange ${start}–${end} is outside the body, which has ${stored.length} characters. Read the page again for a current range.`,
-      );
+    // At another version the store refuses the write anyway; the range only means something at this one.
+    if (args.expectedVersion !== page.version) return args.body;
+    const lines = new KnowledgeBodyLines(stored);
+    let start = lines.startOffset(args.range.start);
+    let end = lines.endOffset(args.range.end);
+    if (start > end) {
+      throw new Error(`The range starts after it ends. Pass the range a knowledge_read returned.`);
     }
     // A read from `start` returns at most this window, so a wider range can't be one a read gave.
-    const window = knowledgeBodyWindow(stored, start);
-    if (args.expectedVersion === page.version && end - start > window.end - window.start) {
+    if (end > knowledgeBodyWindow(lines, start).end) {
       throw new Error(
-        `bodyRange ${start}–${end} is wider than one knowledge_read returns, so it can't be the range a read gave you. ` +
-          'Edit the body part by part: write each part back with the bodyRange its own read returned.',
+        `Lines ${args.range.start.line}–${args.range.end.line} run past what one knowledge_read from line ${args.range.start.line} shows, so this can't be a range a read gave you. ` +
+          'Edit the body part by part: write each part back with the range its own read returned.',
       );
+    }
+    // Writing nothing over whole lines removes them, newline included.
+    const wholeLines = args.range.start.col === undefined && args.range.end.col === undefined;
+    if (wholeLines && args.body === '') {
+      if (end < stored.length) end++;
+      else if (start > 0) start--;
     }
     return stored.slice(0, start) + args.body + stored.slice(end);
   }
   if (args.body !== undefined && estimateTokenCount(stored) > KNOWLEDGE_READ_BODY_TOKENS) {
     throw new Error(
-      `This page's body is ${stored.length} characters, more than one knowledge_read returns, and a body write replaces all of it. ` +
-        'Write back only the part you read, with the bodyRange that read returned and its expectedVersion; ' +
-        'read other parts with bodyOffset or section and write each back with its own bodyRange.',
+      `This page's body is ${stored.length} characters, more than one knowledge_read returns, and a body write without a range replaces all of it. ` +
+        'Write back only the lines you read, with the range that read returned and its expectedVersion; ' +
+        'read other parts with from, section or match and write each back with its own range.',
     );
   }
   return args.body;
 }
 
 type PageInput = {
-  bodyRange?: { start: number; end: number; of: number };
+  range?: KnowledgeLineRange;
   op: 'write' | 'move' | 'merge' | 'delete';
   page?: string;
   scope?: string;
@@ -973,18 +1033,15 @@ function pageTool(host: KnowledgePageToolHost) {
         body: {
           type: 'string',
           description:
-            'The curated long-form summary, in markdown. Replaces the whole body, or with `bodyRange` only that part.',
+            'The curated long-form summary, in markdown, without line numbers. Replaces the whole body, or with `range` only those lines.',
         },
-        bodyRange: {
+        range: {
           type: 'object',
           description:
-            'Edit: the bodyRange a knowledge_read returned with part of a body, passed back unchanged. `body` then replaces only characters start to end. Needs expectedVersion.',
-          properties: {
-            start: { type: 'integer', minimum: 0 },
-            end: { type: 'integer', minimum: 0 },
-            of: { type: 'integer', minimum: 0 },
-          },
-          required: ['start', 'end', 'of'],
+            'Edit: a range a knowledge_read returned (or part of one), e.g. {"start": {"line": 12}, "end": {"line": 14}}. `body` then replaces lines 12 through 14; an empty body removes them. A `col` limits it to part of a very long line. Needs expectedVersion.',
+          properties: { start: linePositionSchema, end: linePositionSchema },
+          required: ['start', 'end'],
+          additionalProperties: false,
         },
         expectedVersion: {
           type: 'integer',

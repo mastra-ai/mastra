@@ -57,224 +57,208 @@ function referenceBody(options = 60) {
   return lines.join('\n');
 }
 
+/** The numbered lines a read returns, as `[line, text]`. */
+function numbered(lines: string): Array<[number, string]> {
+  return lines.split('\n').map(line => {
+    const at = line.indexOf('│');
+    return [Number(line.slice(0, at)), line.slice(at + 1)];
+  });
+}
+
+/** Reads a page from the top by following `more`, and puts its body back together. */
+async function readAll(call: (tool: string, input: Record<string, unknown>) => Promise<any>, page: string) {
+  const text = new Map<number, string>();
+  let from: unknown;
+  for (let turn = 0; turn < 500; turn++) {
+    const result = await call('knowledge_read', { page, ...(from ? { from } : {}) });
+    if (result.page.body !== undefined) return result.page.body as string;
+    for (const [line, part] of numbered(result.page.lines)) text.set(line, (text.get(line) ?? '') + part);
+    const more = (result.more ?? []).find((line: string) => line.startsWith('body:'));
+    if (!more) break;
+    from = JSON.parse(/from: (\{.*\})\.$/.exec(more)![1]!);
+  }
+  return [...text.entries()]
+    .sort(([a], [b]) => a - b)
+    .map(([, line]) => line)
+    .join('\n');
+}
+
 describe('writing back a long page read in part', () => {
-  it('refuses a body written back from a truncated read, and leaves the page as it was', async () => {
+  it('refuses a body written back without a range, and leaves the page as it was', async () => {
     const { knowledge, call } = setup();
     const body = referenceBody();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
     const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
-    expect(read.page.body.length).toBeLessThan(body.length);
-
+    expect(read.page.body).toBeUndefined();
+    const shown = numbered(read.page.lines)
+      .map(([, text]) => text)
+      .join('\n');
     await expect(
       call('knowledge_page', {
         op: 'write',
         page: 'docs:acme#anthropic',
-        body: read.page.body + '\n\nOne more line.',
+        body: shown + '\n\nOne more line.',
         expectedVersion: read.page.version,
       }),
-    ).rejects.toThrow(/more than one knowledge_read returns.*bodyRange/s);
-    const after = await call('knowledge_read', { page: 'docs:acme#anthropic', match: 'Models' });
-    expect(after.page.version).toBe(read.page.version);
-    let whole = '';
-    for (let offset = 0; ;) {
-      const part = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: offset });
-      whole += part.page.body;
-      if (!part.page.bodyRange || part.page.bodyRange.end >= part.page.bodyRange.of) break;
-      offset = part.page.bodyRange.end;
-    }
-    expect(whole).toBe(body);
+    ).rejects.toThrow(/more than one knowledge_read returns.*with the range that read returned/s);
+    expect(await readAll(call, 'docs:acme#anthropic')).toBe(body);
   });
 
-  it('refuses a whole-body range on a long page, so following the refusal never drops the tail', async () => {
+  it('refuses a range even one line wider than the read it claims to come from', async () => {
     const { knowledge, call } = setup();
     const body = referenceBody();
+    const lineCount = body.split('\n').length;
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
     const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
-    const refusal = await call('knowledge_page', {
-      op: 'write',
-      page: 'docs:acme#anthropic',
-      body: read.page.body,
-      expectedVersion: read.page.version,
-    }).catch((error: Error) => error.message);
-    expect(refusal).not.toMatch(/start: 0/);
-    expect(refusal).not.toMatch(/whole body/);
-
-    await expect(
-      call('knowledge_page', {
-        op: 'write',
-        page: 'docs:acme#anthropic',
-        body: read.page.body,
-        bodyRange: { start: 0, end: body.length, of: body.length },
-        expectedVersion: read.page.version,
-      }),
-    ).rejects.toThrow(/wider than one knowledge_read/);
-    // Near misses: one character short of the whole body, and two windows' text written as one.
-    const second = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: read.page.bodyRange.end });
-    for (const end of [body.length - 1, second.page.bodyRange.end]) {
-      await expect(
-        call('knowledge_page', {
-          op: 'write',
-          page: 'docs:acme#anthropic',
-          body: read.page.body,
-          bodyRange: { start: 0, end, of: body.length },
-          expectedVersion: read.page.version,
-        }),
-      ).rejects.toThrow(/wider than one knowledge_read/);
-    }
-
-    // What the refusal says to do: write back the part with the bodyRange its read returned.
-    await call('knowledge_page', {
-      op: 'write',
-      page: 'docs:acme#anthropic',
-      body: read.page.body,
-      bodyRange: read.page.bodyRange,
-      expectedVersion: read.page.version,
-    });
-    let whole = '';
-    for (let offset = 0; ;) {
-      const part = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: offset });
-      whole += part.page.body;
-      if (!part.page.bodyRange || part.page.bodyRange.end >= part.page.bodyRange.of) break;
-      offset = part.page.bodyRange.end;
-    }
-    expect(whole).toBe(body);
-  });
-
-  it('refuses a range even one character wider than the read it claims to come from', async () => {
-    const { knowledge, call } = setup();
-    const body = referenceBody();
-    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
-    const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
-    const second = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: read.page.bodyRange.end });
-    // From offset 5 the read window is one character short of the token estimate's limit.
-    const shifted = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: 5 });
-    for (const [start, end] of [
-      [0, read.page.bodyRange.end + 1],
-      [5, shifted.page.bodyRange.end + 1],
-      [0, body.length - 1],
-      [0, second.page.bodyRange.end],
+    expect(read.page.range).toEqual({ start: { line: 1 }, end: { line: expect.any(Number) } });
+    expect(read.page.lineCount).toBe(lineCount);
+    const last = read.page.range.end.line;
+    const second = await call('knowledge_read', { page: 'docs:acme#anthropic', from: { line: last + 1 } });
+    const shifted = await call('knowledge_read', { page: 'docs:acme#anthropic', from: { line: 3 } });
+    for (const range of [
+      { start: { line: 1 }, end: { line: last + 1 } },
+      { start: { line: 1 }, end: { line: last + 1, col: 0 } },
+      { start: { line: 3 }, end: { line: shifted.page.range.end.line + 1 } },
+      { start: { line: 1 }, end: { line: lineCount } },
+      { start: { line: 1 }, end: second.page.range.end },
     ]) {
       await expect(
         call('knowledge_page', {
           op: 'write',
           page: 'docs:acme#anthropic',
-          body: read.page.body,
-          bodyRange: { start, end, of: body.length },
+          body: 'x',
+          range,
           expectedVersion: read.page.version,
         }),
-      ).rejects.toThrow(/wider than one knowledge_read/);
+      ).rejects.toThrow(/run past what one knowledge_read from line \d+ shows/);
     }
-    const after = await call('knowledge_read', { page: 'docs:acme#anthropic' });
-    expect(after.page.version).toBe(read.page.version);
+    expect(await readAll(call, 'docs:acme#anthropic')).toBe(body);
   });
 
-  it('writes just the part a read returned when the write echoes its bodyRange', async () => {
+  it('writes just the lines a read returned, from a later read and from a section', async () => {
     const { knowledge, call } = setup();
     const body = referenceBody();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
+    const lines = body.split('\n');
+    const at = lines.findIndex(line => line.startsWith('The option30 setting')) + 1;
 
-    const window = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: 100 });
-    expect(window.page.bodyRange).toEqual({ start: 100, end: 100 + window.page.body.length, of: body.length });
-    const edited = window.page.body.replace('option3 setting', 'option3 SETTING');
+    const window = await call('knowledge_read', { page: 'docs:acme#anthropic', from: { line: at - 2 } });
+    expect(window.page.range.start).toEqual({ line: at - 2 });
+    const edited = numbered(window.page.lines)
+      .map(([, text]) => text.replace('option30 setting', 'option30 SETTING'))
+      .join('\n');
     const written = await call('knowledge_page', {
       op: 'write',
       page: 'docs:acme#anthropic',
       body: edited,
-      bodyRange: window.page.bodyRange,
+      range: window.page.range,
       expectedVersion: window.page.version,
     });
 
     const section = await call('knowledge_read', { page: 'docs:acme#anthropic', section: 'Setup' });
-    expect(section.page.bodyRange.start).toBe(body.indexOf('## Setup'));
+    expect(section.page.range).toEqual({ start: { line: 3 }, end: { line: 6 } });
+    expect(section.page.lines).toBe('3│## Setup\n4│\n5│Set ANTHROPIC_API_KEY.\n6│');
+    // A smaller range inside the one read: just line 5.
     await call('knowledge_page', {
       op: 'write',
       page: 'docs:acme#anthropic',
-      body: '## Setup\n\nSet ANTHROPIC_API_KEY, or pass apiKey.\n\n',
-      bodyRange: section.page.bodyRange,
+      body: 'Set ANTHROPIC_API_KEY, or pass apiKey.',
+      range: { start: { line: 5 }, end: { line: 5 } },
       expectedVersion: written.page.version,
     });
 
-    let whole = '';
-    for (let offset = 0; ;) {
-      const part = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: offset });
-      whole += part.page.body;
-      if (!part.page.bodyRange || part.page.bodyRange.end >= part.page.bodyRange.of) break;
-      offset = part.page.bodyRange.end;
-    }
-    expect(whole).toBe(
+    expect(await readAll(call, 'docs:acme#anthropic')).toBe(
       body
-        .replace('option3 setting', 'option3 SETTING')
-        .replace('## Setup\n\nSet ANTHROPIC_API_KEY.\n\n', '## Setup\n\nSet ANTHROPIC_API_KEY, or pass apiKey.\n\n'),
+        .replace('option30 setting', 'option30 SETTING')
+        .replace('Set ANTHROPIC_API_KEY.', 'Set ANTHROPIC_API_KEY, or pass apiKey.'),
     );
   });
 
-  it('a bodyRange write needs the version it was read at, and a range inside the body', async () => {
+  it('removes whole lines when the body written over them is empty', async () => {
+    const { knowledge, call } = setup();
+    const body = referenceBody();
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
+    const read = await call('knowledge_read', { page: 'docs:acme#anthropic', section: 'Setup' });
+    await call('knowledge_page', {
+      op: 'write',
+      page: 'docs:acme#anthropic',
+      body: '',
+      range: read.page.range,
+      expectedVersion: read.page.version,
+    });
+    expect(await readAll(call, 'docs:acme#anthropic')).toBe(body.replace('## Setup\n\nSet ANTHROPIC_API_KEY.\n\n', ''));
+  });
+
+  it('refuses a body that still carries the line numbers', async () => {
     const { knowledge, call } = setup();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody() });
-    const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
-    await expect(
-      call('knowledge_page', { op: 'write', page: 'docs:acme#anthropic', body: 'x', bodyRange: read.page.bodyRange }),
-    ).rejects.toThrow(/expectedVersion/);
+    const read = await call('knowledge_read', { page: 'docs:acme#anthropic', section: 'Setup' });
     await expect(
       call('knowledge_page', {
         op: 'write',
         page: 'docs:acme#anthropic',
-        body: 'x',
-        bodyRange: { ...read.page.bodyRange, end: 10_000_000 },
+        body: read.page.lines,
+        range: read.page.range,
         expectedVersion: read.page.version,
       }),
-    ).rejects.toThrow(/outside the body/);
+    ).rejects.toThrow(/still has the line numbers/);
   });
 
-  it("refuses a bodyRange read from another page's body", async () => {
+  it('a range write needs the version it was read at, and a range inside the body', async () => {
     const { knowledge, call } = setup();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody() });
-    await knowledge.upsertPage({
-      scope: 'docs:acme',
-      path: 'openai',
-      name: 'OpenAI',
-      body: referenceBody() + '\n\nMore.',
-    });
-    const other = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: 100 });
-    const target = await call('knowledge_read', { page: 'docs:acme#openai' });
+    const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
     await expect(
-      call('knowledge_page', {
-        op: 'write',
-        page: 'docs:acme#openai',
-        body: other.page.body,
-        bodyRange: other.page.bodyRange,
-        expectedVersion: target.page.version,
-      }),
-    ).rejects.toThrow(/Read this page again for its own range/);
+      call('knowledge_page', { op: 'write', page: 'docs:acme#anthropic', body: 'x', range: read.page.range }),
+    ).rejects.toThrow(/expectedVersion/);
+    for (const range of [
+      { start: { line: 1 }, end: { line: 100_000 } },
+      { start: { line: 1 }, end: { line: 1, col: 10_000 } },
+    ]) {
+      await expect(
+        call('knowledge_page', {
+          op: 'write',
+          page: 'docs:acme#anthropic',
+          body: 'x',
+          range,
+          expectedVersion: read.page.version,
+        }),
+      ).rejects.toThrow(/outside (the body|line 1)/);
+    }
   });
 
-  it('still writes a short page whole without a bodyRange', async () => {
+  it('still writes a short page whole without a range', async () => {
     const { knowledge, call } = setup();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'short', name: 'Short', body: 'Old body.' });
     const read = await call('knowledge_read', { page: 'docs:acme#short' });
-    expect(read.page.bodyRange).toBeUndefined();
+    expect(read.page.body).toBe('Old body.');
+    expect(read.page.range).toBeUndefined();
     const written = await call('knowledge_page', { op: 'write', page: 'docs:acme#short', body: 'New body.' });
     expect(written.page.version).toBe(read.page.version + 1);
   });
 });
 
 describe('knowledge_read on long pages', () => {
-  it('caps the body by tokens, says how much is left, and continues from bodyOffset to the end', async () => {
+  it('reads whole lines up to the token cap, says where to read on, and gets back the whole body', async () => {
     const { knowledge, call } = setup();
     const body = referenceBody();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
-    let offset = 0;
-    let read = '';
-    for (let turn = 0; turn < 50; turn++) {
-      const result = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: offset });
-      expect(estimateTokenCount(result.page.body)).toBeLessThanOrEqual(KNOWLEDGE_READ_BODY_TOKENS);
-      read += result.page.body;
-      const cut = (result.more ?? []).find((line: string) => line.startsWith('body: truncated'));
-      if (!cut) break;
-      expect(cut).toMatch(/about \d+ more tokens\. Read again with bodyOffset: \d+ for the rest\./);
-      offset = Number(/bodyOffset: (\d+)/.exec(cut)![1]);
+    let from: unknown;
+    let reads = 0;
+    for (;;) {
+      const result = await call('knowledge_read', { page: 'docs:acme#anthropic', ...(from ? { from } : {}) });
+      reads++;
+      const text = numbered(result.page.lines)
+        .map(([, line]) => line)
+        .join('\n');
+      expect(estimateTokenCount(text)).toBeLessThanOrEqual(KNOWLEDGE_READ_BODY_TOKENS);
+      const more = (result.more ?? []).find((line: string) => line.startsWith('body:'));
+      if (!more) break;
+      expect(more).toMatch(/^body: showing lines \d+–\d+ of \d+\. Read on with from: \{"line":\d+\}\.$/);
+      from = JSON.parse(/from: (\{.*\})\.$/.exec(more)![1]!);
     }
-    expect(read).toBe(body);
+    expect(reads).toBeGreaterThan(5);
+    expect(await readAll(call, 'docs:acme#anthropic')).toBe(body);
   });
 
   it('returns a short body whole, with no more', async () => {
@@ -282,7 +266,42 @@ describe('knowledge_read on long pages', () => {
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'short', name: 'Short', body: '# A\n\ntext' });
     const result = await call('knowledge_read', { page: 'docs:acme#short' });
     expect(result.page.body).toBe('# A\n\ntext');
+    expect(result.page.lines).toBeUndefined();
     expect(result.more).toBeUndefined();
+  });
+
+  it('cuts a line too long for one read by column, and a range write on it changes only that part', async () => {
+    const { knowledge, call } = setup();
+    const row = `| ${Array.from({ length: 3000 }, (_, i) => `cell${i}`).join(' | ')} |`;
+    const body = `# Table\n\n${row}\n\nAfter.`;
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'table', name: 'Table', body });
+    const first = await call('knowledge_read', { page: 'docs:acme#table' });
+    expect(first.page.range).toEqual({ start: { line: 1 }, end: { line: 2 } });
+    const second = await call('knowledge_read', { page: 'docs:acme#table', from: { line: 3 } });
+    expect(second.page.range.start).toEqual({ line: 3 });
+    expect(second.page.range.end).toEqual({ line: 3, col: expect.any(Number) });
+    expect(second.more[0]).toMatch(/Read on with from: \{"line":3,"col":\d+\}\./);
+    expect(await readAll(call, 'docs:acme#table')).toBe(body);
+
+    // Context lines around a long line come as their own parts; the long line only around the match.
+    const around = await call('knowledge_read', { page: 'docs:acme#table', match: 'cell1500 ' });
+    expect(around.page.matches.map((m: any) => m.range.start.line)).toEqual([1, 3, 4]);
+    const hit = await call('knowledge_read', { page: 'docs:acme#table', match: 'cell1500 ', context: 0 });
+    expect(hit.page.matches).toHaveLength(1);
+    const [match] = hit.page.matches;
+    expect(match.range.start.line).toBe(3);
+    expect(match.range.end.line).toBe(3);
+    const [[, shown]] = numbered(match.lines);
+    expect(shown.length).toBeLessThanOrEqual(410);
+    expect(shown).toContain('cell1500 ');
+    await call('knowledge_page', {
+      op: 'write',
+      page: 'docs:acme#table',
+      body: shown.replace('cell1500 ', 'CELL1500 '),
+      range: match.range,
+      expectedVersion: hit.page.version,
+    });
+    expect(await readAll(call, 'docs:acme#table')).toBe(body.replace('cell1500 ', 'CELL1500 '));
   });
 
   it('returns only the asked-for part of the body on part reads, without notes, children or mentions', async () => {
@@ -290,7 +309,12 @@ describe('knowledge_read on long pages', () => {
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody(3) });
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic/child', name: 'Child' });
     await knowledge.addNote({ scope: 'docs:acme', path: 'anthropic', text: 'A fact' });
-    for (const part of [{ outline: true }, { section: 'Setup' }, { match: 'ANTHROPIC_API_KEY' }, { bodyOffset: 10 }]) {
+    for (const part of [
+      { outline: true },
+      { section: 'Setup' },
+      { match: 'ANTHROPIC_API_KEY' },
+      { from: { line: 3 } },
+    ]) {
       const result = await call('knowledge_read', { page: 'docs:acme#anthropic', ...part });
       expect(Object.keys(result).filter(key => key !== 'more')).toEqual(['page']);
       expect(result.page.ref).toBe('docs:acme#anthropic');
@@ -299,19 +323,19 @@ describe('knowledge_read on long pages', () => {
     expect(empty.more).toEqual(['body: the page has no body.']);
   });
 
-  it('gives an outline of headings with sizes, skipping headings inside code fences', async () => {
+  it('gives an outline of headings with their lines and sizes, skipping headings inside code fences', async () => {
     const { knowledge, call } = setup();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody(3) });
     const result = await call('knowledge_read', { page: 'docs:acme#anthropic', outline: true });
     expect(result.page.body).toBeUndefined();
-    expect(result.page.outline.map((entry: any) => `${entry.level} ${entry.title}`)).toEqual([
-      '2 Setup',
-      '2 Options',
-      '3 option0',
-      '3 option1',
-      '3 option2',
-      '3 contextManagement',
-      '2 Models',
+    expect(result.page.outline.map((entry: any) => `${entry.level} ${entry.title} ${entry.line}`)).toEqual([
+      '2 Setup 3',
+      '2 Options 7',
+      '3 option0 9',
+      '3 option1 13',
+      '3 option2 17',
+      '3 contextManagement 21',
+      '2 Models 28',
     ]);
     const options = result.page.outline.find((entry: any) => entry.title === 'Options');
     const option0 = result.page.outline.find((entry: any) => entry.title === 'option0');
@@ -322,77 +346,91 @@ describe('knowledge_read on long pages', () => {
     const { knowledge, call } = setup();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody(3) });
     const result = await call('knowledge_read', { page: 'docs:acme#anthropic', section: 'contextmanagement' });
-    expect(result.page.body).toBe('### contextManagement\n\n```ts\n# not a heading\nexcludeTools?: string[]\n```\n\n');
+    expect(result.page.lines).toBe(
+      '21│### contextManagement\n22│\n23│```ts\n24│# not a heading\n25│excludeTools?: string[]\n26│```\n27│',
+    );
+    expect(result.page.range).toEqual({ start: { line: 21 }, end: { line: 27 } });
     const options = await call('knowledge_read', { page: 'docs:acme#anthropic', section: 'Options' });
-    expect(options.page.body).toMatch(/^## Options/);
-    expect(options.page.body).toContain('### option2');
-    expect(options.page.body).not.toContain('## Models');
+    expect(options.page.lines).toMatch(/^ 7│## Options/);
+    expect(options.page.lines).toContain('### option2');
+    expect(options.page.lines).not.toContain('## Models');
     await expect(call('knowledge_read', { page: 'docs:acme#anthropic', section: 'Pricing' })).rejects.toThrow(
       /no section titled "Pricing". Headings include: "Setup", "Options"/,
     );
   });
 
-  it('gives only the matching paragraphs of a long section, with where they start in the body', async () => {
+  it('matches lines like grep -C, with line numbers a write can take back', async () => {
     const { knowledge, call } = setup();
-    const lines = Array.from(
-      { length: 400 },
-      (_, i) => `**Speaker:** line ${i} of the transcript goes on for a while.`,
-    );
+    const lines = Array.from({ length: 400 }, (_, i) => `**Speaker:** line ${i} of the transcript.`);
     lines[300] = '**Shane:** Peter Steinberger steers or queues with OpenClaw.';
-    const body = `# Episode\n\n## Transcript\n\n${lines.join('\n\n')}\n\n## More episodes\n\nOther shows.`;
+    lines[100] = '**Shane:** a zebraword here.';
+    const body = `# Episode\n\n## Transcript\n\n${lines.join('\n')}\n\n## More episodes\n\nOther shows.`;
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'podcast', name: 'Podcast', body });
-    const result = await call('knowledge_read', { page: 'docs:acme#podcast', match: 'steinberger' });
-    const at = body.indexOf(lines[299]!);
-    expect(result.page.sections).toEqual(['Transcript']);
-    expect(result.page.body).toBe(
-      `## Transcript\n\n[… body character ${at} …]\n\n${lines.slice(299, 302).join('\n\n')}`,
-    );
-    expect(result.more).toBeUndefined();
-    const from = await call('knowledge_read', { page: 'docs:acme#podcast', bodyOffset: at });
-    expect(from.page.body.startsWith(lines[299]!)).toBe(true);
-    const fromMatch = await call('knowledge_read', { page: 'docs:acme#podcast', match: 'steinberger', bodyOffset: at });
-    expect(fromMatch.page.body).toBe(from.page.body);
+    const steinberger = 5 + 300;
 
-    const runs = lines.map((line, i) => ([5, 40, 80].includes(i) ? `${line} Zebraword appears here.` : line));
-    await knowledge.upsertPage({
-      scope: 'docs:acme',
-      path: 'runs',
-      name: 'Runs',
-      body: `# Page\n\n## Transcript\n\n${runs.join('\n\n')}`,
+    const one = await call('knowledge_read', { page: 'docs:acme#podcast', match: 'steinberger', context: 1 });
+    expect(one.page.matches).toEqual([
+      {
+        range: { start: { line: steinberger - 1 }, end: { line: steinberger + 1 } },
+        lines: `${steinberger - 1}│${lines[299]}\n${steinberger}│${lines[300]}\n${steinberger + 1}│${lines[301]}`,
+      },
+    ]);
+    expect(one.more).toBeUndefined();
+
+    const two = await call('knowledge_read', { page: 'docs:acme#podcast', match: ['ZEBRAWORD', 'openclaw'] });
+    expect(two.page.matches.map((m: any) => [m.range.start.line, m.range.end.line])).toEqual([
+      [105 - 2, 105 + 2],
+      [steinberger - 2, steinberger + 2],
+    ]);
+    const from = await call('knowledge_read', {
+      page: 'docs:acme#podcast',
+      match: ['zebraword', 'openclaw'],
+      from: { line: 200 },
     });
-    const matched = await call('knowledge_read', { page: 'docs:acme#runs', match: 'zebraword' });
-    const markers = [...matched.page.body.matchAll(/\[… body character (\d+) …\]/g)].map(m => Number(m[1]));
-    expect(markers).toHaveLength(3);
-    expect(markers[0]).toBeLessThan(matched.page.body.length);
-    for (const marker of markers) {
-      const plain = await call('knowledge_read', { page: 'docs:acme#runs', bodyOffset: marker });
-      const withMatch = await call('knowledge_read', {
-        page: 'docs:acme#runs',
-        match: 'zebraword',
-        bodyOffset: marker,
-      });
-      expect(withMatch.page.body).toBe(plain.page.body);
-      expect(plain.page.body.startsWith(runs[[4, 39, 79][markers.indexOf(marker)]!]!)).toBe(true);
-    }
+    expect(from.page.matches).toHaveLength(1);
 
-    const heading = `# Page\n\n## Zebraword notes\n\n${lines.join('\n\n')}`;
-    await knowledge.upsertPage({ scope: 'docs:acme', path: 'heading', name: 'Heading', body: heading });
-    const inHeading = await call('knowledge_read', { page: 'docs:acme#heading', match: 'zebraword' });
-    expect(inHeading.page.body).toBe('## Zebraword notes');
-  });
+    await call('knowledge_page', {
+      op: 'write',
+      page: 'docs:acme#podcast',
+      body: lines[300]!.replace('Steinberger', 'STEINBERGER'),
+      range: { start: { line: steinberger }, end: { line: steinberger } },
+      expectedVersion: one.page.version,
+    });
+    expect(await readAll(call, 'docs:acme#podcast')).toBe(body.replace('Steinberger', 'STEINBERGER'));
 
-  it('pulls only the sections that match a term, each with its heading', async () => {
-    const { knowledge, call } = setup();
-    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody(3) });
-    const result = await call('knowledge_read', { page: 'docs:acme#anthropic', match: 'EXCLUDETOOLS' });
-    expect(result.page.sections).toEqual(['contextManagement']);
-    expect(result.page.body).toMatch(/^### contextManagement/);
-    const none = await call('knowledge_read', { page: 'docs:acme#anthropic', match: 'nowhere' });
-    expect(none.page.sections).toEqual([]);
-    expect(none.more).toEqual(['match: no section contains "nowhere".']);
-    await expect(call('knowledge_read', { page: 'docs:acme#anthropic', match: 'x', outline: true })).rejects.toThrow(
+    const none = await call('knowledge_read', { page: 'docs:acme#podcast', match: 'nowhere' });
+    expect(none.page.matches).toEqual([]);
+    expect(none.more).toEqual(['match: no line contains "nowhere".']);
+    await expect(call('knowledge_read', { page: 'docs:acme#podcast', match: 'x', outline: true })).rejects.toThrow(
       /at most one of outline, section and match/,
     );
+  });
+
+  it('stops matching at the token cap and goes on from the line it names, each match once', async () => {
+    const { knowledge, call } = setup();
+    const lines = Array.from(
+      { length: 2000 },
+      (_, i) => `Line ${i}: ${i % 10 === 0 ? 'needle' : 'hay'} and more words here.`,
+    );
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'big', name: 'Big', body: lines.join('\n') });
+    const seen: number[] = [];
+    let from: unknown;
+    let reads = 0;
+    for (; reads < 50; reads++) {
+      const result = await call('knowledge_read', {
+        page: 'docs:acme#big',
+        match: 'needle',
+        context: 0,
+        ...(from ? { from } : {}),
+      });
+      for (const match of result.page.matches) seen.push(match.range.start.line);
+      const more = (result.more ?? []).find((line: string) => line.startsWith('match:'));
+      if (!more) break;
+      expect(more).toMatch(/^match: stopped at about [\d,]+ tokens; more matches from line \d+\./);
+      from = JSON.parse(/from: (\{.*\})\.$/.exec(more)![1]!);
+    }
+    expect(reads).toBeGreaterThan(0);
+    expect(seen).toEqual(Array.from({ length: 200 }, (_, i) => i * 10 + 1));
   });
 
   it('says when notes, children and mentioning notes go past the limit, and how to get the rest', async () => {
