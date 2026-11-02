@@ -63,8 +63,12 @@ export class ChatChannelProcessor {
     const channel = requestContext?.get('channel') as ChannelContext | undefined;
     if (channel) {
       const render = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-      // Snapshots of a run drop the render context, so fall back to the adapter config.
-      const textDisplay = render ? render.textDisplay : this.#channels?._textDisplayFor?.(channel.platform);
+      // Only a live render context is trusted, as in the output processor. A restored run has none
+      // (or a JSON copy from an older snapshot), so read the adapter config the renderer will use.
+      const textDisplay =
+        typeof render?.wrapStream === 'function'
+          ? render.textDisplay
+          : this.#channels?._textDisplayFor?.(channel.platform);
       return { channel, textHidden: textDisplay === 'hidden' };
     }
 

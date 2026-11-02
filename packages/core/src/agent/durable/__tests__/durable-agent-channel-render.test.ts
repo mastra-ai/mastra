@@ -326,6 +326,34 @@ describe('a run on a channel-backed thread posts its answer to the channel', () 
   });
 
   /**
+   * A restored inbound run keeps its JSON-safe `channel` entry but not the render context. The rebuild
+   * must address the reply (and any approval card) to the sender in that entry, the run's requester.
+   */
+  it('rebuilds the render context for the requester in the persisted channel entry', async () => {
+    const { agent, durableAgent, postMessage } = await channelBackedAgent('channel-render-durable-requester');
+    const channels = agent.getChannels()!;
+    const rebuild = vi.spyOn(channels, 'buildRenderContextForThread');
+    const requestContext = new RequestContext<any>([
+      ['channel', { platform: PLATFORM, eventType: 'message', userId: 'U-requester', userName: 'ada' }],
+    ]);
+
+    const preparation = await prepareForDurableExecution({
+      agent,
+      messages: 'hi',
+      options: { memory: { thread: THREAD_ID, resource: RESOURCE_ID } },
+      optionsAreResolved: true,
+      requestContext,
+    });
+    expect(preparation.workflowInput.requestContextEntries?.channel).toMatchObject({ userId: 'U-requester' });
+
+    await drain(
+      await durableAgent.stream('hi', { memory: { thread: THREAD_ID, resource: RESOURCE_ID }, requestContext }),
+    );
+    expect(rebuild).toHaveBeenCalledWith(THREAD_ID, { userId: 'U-requester', userName: 'ada' });
+    expect(postMessage).toHaveBeenCalled();
+  });
+
+  /**
    * The regular loop stamps `stepResult.isContinued` on every `step-finish` chunk it emits
    * (`loop/workflows/agentic-loop/index.ts`), and `ChatChannelOutputProcessor` closes its render queue on
    * the first chunk where that flag is not `true`. These two tests pin the same contract down for a run
