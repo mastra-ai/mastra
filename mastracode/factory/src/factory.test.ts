@@ -1456,6 +1456,7 @@ describe('MastraFactory.prepare', () => {
       'factory_subscribe_session',
       'factory_unsubscribe_session',
       'factory_recreate_sandbox',
+      'factory_sandbox_port_url',
     ];
 
     it('gives a user session every tool on every turn, and other sessions none', async () => {
@@ -1503,6 +1504,7 @@ describe('MastraFactory.prepare', () => {
       };
 
       expect(await toolsWith('platform')).toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('platform')).toHaveProperty('factory_sandbox_port_url');
       expect(await toolsWith('e2b')).not.toHaveProperty('factory_recreate_sandbox');
       expect(await toolsWith('local')).not.toHaveProperty('factory_recreate_sandbox');
       expect(await toolsWith(undefined)).not.toHaveProperty('factory_recreate_sandbox');
