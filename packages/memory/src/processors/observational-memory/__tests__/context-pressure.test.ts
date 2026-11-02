@@ -24,9 +24,43 @@ describe('context usage anchors', () => {
       [message, { ...message, id: 'new', content: { format: 2, parts: [{ type: 'text', text: 'new result' }] } }],
       1,
     );
-    expect(contextPressure(anchor, current, 150)).toBe(12_050);
-    expect(contextPressure(anchor, current, 80)).toBe(12_000);
+    const overhead = anchor.request.fixedTokens;
+    expect(contextPressure(anchor, current, 150)).toBe(12_050 - overhead);
+    expect(contextPressure(anchor, current, 80)).toBe(12_000 - overhead);
     expect(contextPressure(undefined, current, 150)).toBeUndefined();
+  });
+
+  it('excludes the anchored request overhead: every system message and the tool definitions', () => {
+    const observations = '<observations>' + 'Read the file and continue the task. '.repeat(200) + '</observations>';
+    const listWith = (messages: MastraDBMessage[]) => {
+      const list = new MessageList();
+      list.addSystem('You read files.');
+      list.addSystem(observations, 'observational-memory');
+      list.add(messages, 'memory');
+      return list;
+    };
+    const next: MastraDBMessage = {
+      ...message,
+      id: 'new',
+      content: { format: 2, parts: [{ type: 'text', text: 'new' }] },
+    };
+    const withOverhead = {
+      request: snapshotContextRequest(listWith([message]), 0, 'provider/model', counter, 500),
+      inputTokens: 10_000,
+      outputTokens: 2_000,
+      outputEstimate: 100,
+    };
+    const overhead = withOverhead.request.fixedTokens;
+    expect(overhead, 'the tagged observations block and the 500 tool tokens are both counted').toBeGreaterThan(
+      500 + counter.countString(observations) - 1,
+    );
+    const current = snapshotContextRequest(listWith([message, next]), 1, 'provider/model', counter);
+    expect(contextPressure(withOverhead, current, 150)).toBe(12_050 - overhead);
+    // A tagged system message that changed since the request is a different prompt: no anchor.
+    const rewritten = listWith([message, next]).clearSystemMessages('observational-memory');
+    rewritten.addSystem('<observations>shorter</observations>', 'observational-memory');
+    const stale = snapshotContextRequest(rewritten, 1, 'provider/model', counter);
+    expect(contextPressure(withOverhead, stale, 150)).toBeUndefined();
   });
 
   it('invalidates after removal, content edits, model changes, system changes or nonconsecutive steps', () => {
