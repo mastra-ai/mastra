@@ -70,7 +70,9 @@ describe('Slack channel tools', () => {
     const { slack, requestContext, post } = await factoryWithSlack();
 
     const tools = await slack.agentTools({ requestContext });
-    expect(Object.keys(tools).sort()).toEqual(['attach_file', 'read_attachment', REPLY_TOOL_NAME, ...WORKSPACE_TOOLS].sort());
+    expect(Object.keys(tools).sort()).toEqual(
+      ['attach_file', 'read_attachment', REPLY_TOOL_NAME, ...WORKSPACE_TOOLS].sort(),
+    );
 
     await (tools[REPLY_TOOL_NAME] as unknown as Execute).execute({ text: 'Done: tests pass.' }, {});
     expect(post).toHaveBeenCalledWith({ markdown: 'Done: tests pass.' });
@@ -88,7 +90,9 @@ describe('Slack channel tools', () => {
     const fromSlack = await factoryWithSlack();
     fromSlack.requestContext.set('channel', { platform: 'slack', isDM: false });
     const tools = await fromSlack.slack.agentTools({ requestContext: fromSlack.requestContext });
-    expect(Object.keys(tools).sort()).toEqual(['attach_file', 'read_attachment', REPLY_TOOL_NAME, ...WORKSPACE_TOOLS].sort());
+    expect(Object.keys(tools).sort()).toEqual(
+      ['attach_file', 'read_attachment', REPLY_TOOL_NAME, ...WORKSPACE_TOOLS].sort(),
+    );
     expect(fromSlack.getThreadById).not.toHaveBeenCalled();
   });
 
