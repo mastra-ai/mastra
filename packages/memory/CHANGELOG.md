@@ -1,5 +1,17 @@
 # @mastra/memory
 
+## 1.41.0-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#29124](https://github.com/mastra-ai/mastra/pull/29124))
+  - Updated dependency [`diff@^9.0.0` ↗︎](https://www.npmjs.com/package/diff/v/9.0.0) (from `^8.0.4`, in `dependencies`)
+
+- Observational Memory now tells the Observer who sent each user signal. In a thread shared by several people, messages sent with `agent.sendMessage({ contents, attributes: { name: 'Alice' } }, ...)` are labeled `User (name="Alice")` when observed, so observations can say who said what instead of attributing everything to "User". Messages without attributes keep the plain `User` label. ([#29176](https://github.com/mastra-ai/mastra/pull/29176))
+
+- Updated dependencies [[`8751dd7`](https://github.com/mastra-ai/mastra/commit/8751dd7f56eefe40d8ce57b6d44df415cadbda4f), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`ebf8a9a`](https://github.com/mastra-ai/mastra/commit/ebf8a9a1370105fd6bcc5706711203236a1993ff)]:
+  - @mastra/core@1.82.0-alpha.1
+
 ## 1.41.0-alpha.0
 
 ### Minor Changes

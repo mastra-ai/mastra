@@ -129,7 +129,7 @@ export const Group: Story = {
         </Field>
         <Field>
           <FieldLabel>Value</FieldLabel>
-          <Input className="font-mono" type="password" placeholder="sk-…" />
+          <Input className="font-mono" type="password" placeholder="sk-xxxxxxxx" />
         </Field>
       </div>
     </Fieldset>
