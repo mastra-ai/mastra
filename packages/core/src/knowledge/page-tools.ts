@@ -16,6 +16,7 @@ import {
   KNOWLEDGE_READ_INLINE_TOKENS,
   KNOWLEDGE_READ_OUTLINE_ENTRIES,
   KNOWLEDGE_READ_REST_OUTLINE_TOKENS,
+  knowledgeBodySkeleton,
   KnowledgeBodyLines,
   knowledgeBodyGrep,
   knowledgeBodyOutline,
@@ -431,6 +432,24 @@ function bodyView(
   const window = knowledgeBodyWindow(lines, start, limit, input.maxTokens);
   // A whole body that fits comes as it is; any part comes numbered, with the range a write takes back.
   if (!input.section && start === 0 && window.next === undefined) return { body };
+  // A first read cut short shows the whole body at a glance instead: every heading with its line
+  // number and the first lines under it, so the reader can go straight to the section it needs.
+  if (window.next !== undefined && !input.section && !input.from) {
+    const headings = knowledgeBodyOutline(body);
+    const skeleton = headings.length
+      ? knowledgeBodySkeleton(
+          lines,
+          headings.map(heading => heading.line),
+          input.maxTokens,
+        )
+      : undefined;
+    if (skeleton !== undefined) {
+      more.push(
+        `body: the page is ${lines.count} lines, too long to show whole, so \`lines\` shows every heading and the first lines under it; ⋯ marks lines left out and … a line cut short. Read the part you need with section (a heading) or from (a line number), then answer. To edit, read that part first: this view has no range to write back.`,
+      );
+      return { lines: skeleton, lineCount: lines.count };
+    }
+  }
   const range = { start: lines.startPosition(window.start), end: lines.endPosition(window.end) };
   // A first read cut short also lists the headings it did not reach, so the reader can go
   // straight to the section it needs instead of paging toward it line by line.
@@ -467,7 +486,7 @@ function readTool(host: KnowledgePageToolHost) {
     description:
       'Read a page: its body, its notes, its child pages and the notes on other pages that mention it. Read a scope address (org:acme) to browse that scope. Without `page`, lists the scopes this run holds. ' +
       `When a page's notes, or the notes mentioning it, come to more than ${KNOWLEDGE_READ_INLINE_TOKENS.toLocaleString('en-US')} tokens, a whole read leaves them out and counts them in \`more\`; read them on their own with \`notes\` or \`mentionedIn\`. ` +
-      `A body returns at most ${maxTokensOf(host).toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read cut short also gives the \`outline\` of the headings it did not reach. ` +
+      `A body returns at most ${maxTokensOf(host).toLocaleString('en-US')} tokens at a time. A body that fits comes whole as \`body\`; a longer one comes as numbered \`lines\` (\`12│text\`) with the \`range\` they cover, and \`more\` says where to read on; a first read of a long page shows every heading with its line number and the first lines under it, so you can pick the part to read. ` +
       'For a long page, ask for its `outline` of headings with their line numbers, read one `section`, or `match` terms to see only the lines that contain them, with `context` lines around each. ' +
       'Those part reads return just that part of the body. To edit part of a long body, pass the `range` a read gave you to knowledge_page.',
     inputSchema: {

@@ -68,9 +68,10 @@ function numbered(lines: string): Array<[number, string]> {
 /** Reads a page from the top by following `more`, and puts its body back together. */
 async function readAll(call: (tool: string, input: Record<string, unknown>) => Promise<any>, page: string) {
   const text = new Map<number, string>();
-  let from: unknown;
+  // From line 1: a first read without `from` shows a long page's headings, not its top lines.
+  let from: unknown = { line: 1 };
   for (let turn = 0; turn < 500; turn++) {
-    const result = await call('knowledge_read', { page, ...(from ? { from } : {}) });
+    const result = await call('knowledge_read', { page, from });
     if (result.page.body !== undefined) return result.page.body as string;
     for (const [line, part] of numbered(result.page.lines)) text.set(line, (text.get(line) ?? '') + part);
     const more = (result.more ?? []).find((line: string) => line.startsWith('body:'));
@@ -88,7 +89,7 @@ describe('writing back a long page read in part', () => {
     const { knowledge, call } = setup();
     const body = referenceBody();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
-    const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
+    const read = await call('knowledge_read', { page: 'docs:acme#anthropic', from: { line: 1 } });
     expect(read.page.body).toBeUndefined();
     const shown = numbered(read.page.lines)
       .map(([, text]) => text)
@@ -109,7 +110,7 @@ describe('writing back a long page read in part', () => {
     const body = referenceBody();
     const lineCount = body.split('\n').length;
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
-    const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
+    const read = await call('knowledge_read', { page: 'docs:acme#anthropic', from: { line: 1 } });
     expect(read.page.range).toEqual({ start: { line: 1 }, end: { line: expect.any(Number) } });
     expect(read.page.lineCount).toBe(lineCount);
     const last = read.page.range.end.line;
@@ -207,7 +208,7 @@ describe('writing back a long page read in part', () => {
   it('a range write needs the version it was read at, and a range inside the body', async () => {
     const { knowledge, call } = setup();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body: referenceBody() });
-    const read = await call('knowledge_read', { page: 'docs:acme#anthropic' });
+    const read = await call('knowledge_read', { page: 'docs:acme#anthropic', from: { line: 1 } });
     await expect(
       call('knowledge_page', { op: 'write', page: 'docs:acme#anthropic', body: 'x', range: read.page.range }),
     ).rejects.toThrow(/expectedVersion/);
@@ -243,10 +244,10 @@ describe('knowledge_read on long pages', () => {
     const { knowledge, call } = setup();
     const body = referenceBody();
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
-    let from: unknown;
+    let from: unknown = { line: 1 };
     let reads = 0;
     for (;;) {
-      const result = await call('knowledge_read', { page: 'docs:acme#anthropic', ...(from ? { from } : {}) });
+      const result = await call('knowledge_read', { page: 'docs:acme#anthropic', from });
       reads++;
       const text = numbered(result.page.lines)
         .map(([, line]) => line)
@@ -263,32 +264,58 @@ describe('knowledge_read on long pages', () => {
     expect(await readAll(call, 'docs:acme#anthropic')).toBe(body);
   });
 
-  it('lists the headings a first read did not reach, so one section read gets a fact far down the page', async () => {
+  it('shows a long page as its headings with the first lines under each, so one section read gets a fact far down', async () => {
     const { knowledge, call } = setup();
-    // Shaped like the models page: the answer sits in a short section far past the first read.
+    // Shaped like the models page: the answer sits in a short section far past the first window.
     const body = `${referenceBody(12)}\n\n### Select the OpenAI Responses API\n\nCustom \`url\` endpoints use Chat Completions by default; set \`api: "responses"\`.\n\n## Use AI SDK with Mastra\n\nMore text.`;
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'models', name: 'Models', body });
     const first = await call('knowledge_read', { page: 'docs:acme#models' });
-    expect(first.page.lines).not.toContain('api: "responses"');
-    const heading = first.page.outline?.find(
-      (entry: { title: string }) => entry.title === 'Select the OpenAI Responses API',
+    const shown = new Map(
+      numbered(
+        first.page.lines
+          .replace(/^\s*⋯ lines \d+–\d+$/gm, '')
+          .replace(/\n+/g, '\n')
+          .trim(),
+      ),
     );
-    expect(heading).toMatchObject({ level: 3, line: expect.any(Number), tokens: expect.any(Number) });
-    expect(heading.line).toBeGreaterThan(first.page.range.end.line);
-    expect(first.page.outline.every((entry: { line: number }) => entry.line > first.page.range.end.line)).toBe(true);
-    expect(estimateTokenCount(JSON.stringify(first.page.outline))).toBeLessThanOrEqual(
-      KNOWLEDGE_READ_REST_OUTLINE_TOKENS,
-    );
-    expect(first.more[0]).toMatch(/`outline` lists the headings below; read the one you need with section/);
-    const section = await call('knowledge_read', { page: 'docs:acme#models', section: heading.title });
+    const all = body.split('\n');
+    // Every heading is there with its line number, and each shown line is the body's line.
+    all.forEach((text, i) => {
+      if (/^#{1,6} /.test(text)) expect(shown.get(i + 1)).toBe(text);
+    });
+    for (const [line, text] of shown) expect(all[line - 1]!.startsWith(text.replace(/…$/, ''))).toBe(true);
+    expect(first.page.lines).toMatch(/…$/m);
+    expect(first.page.lines).toContain('Custom `url` endpoints use Chat Completions by default');
+    expect(first.page.range).toBeUndefined();
+    expect(first.page.outline).toBeUndefined();
+    expect(estimateTokenCount(first.page.lines)).toBeLessThanOrEqual(KNOWLEDGE_READ_BODY_TOKENS);
+    expect(first.more[0]).toMatch(/shows every heading and the first lines under it/);
+    const section = await call('knowledge_read', {
+      page: 'docs:acme#models',
+      section: 'Select the OpenAI Responses API',
+    });
     expect(section.page.lines).toContain('api: "responses"');
     expect(section.more).toBeUndefined();
-    // Reads that already aim somewhere do not repeat it.
+    // Reads that already aim somewhere get plain lines.
     const later = await call('knowledge_read', { page: 'docs:acme#models', from: { line: 20 } });
-    expect(later.page.outline).toBeUndefined();
-    // A page with many headings lists only as many as fit, and says where the rest are.
-    await knowledge.upsertPage({ scope: 'docs:acme', path: 'big', name: 'Big', body: referenceBody(80) });
+    expect(later.page.range.start).toEqual({ line: 20 });
+    // A page with more headings than fit falls back to its top lines and the headings below them.
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'big', name: 'Big', body: referenceBody(400) });
     const big = await call('knowledge_read', { page: 'docs:acme#big' });
+    expect(big.page.range.start).toEqual({ line: 1 });
+    // Fewer headings than fit, but long sections: the lines under each are left out and marked.
+    await knowledge.upsertPage({
+      scope: 'docs:acme',
+      path: 'long',
+      name: 'Long',
+      body: Array.from(
+        { length: 6 },
+        (_, i) => `## Part ${i}\n\n${Array.from({ length: 40 }, (_, j) => `Line ${j} of part ${i}.`).join('\n')}`,
+      ).join('\n\n'),
+    });
+    const long = await call('knowledge_read', { page: 'docs:acme#long' });
+    expect(long.page.lines).toMatch(/^\s*⋯ lines \d+–\d+$/m);
+    expect(long.page.lines.match(/│## Part \d/g)).toHaveLength(6);
     expect(estimateTokenCount(JSON.stringify(big.page.outline))).toBeLessThanOrEqual(
       KNOWLEDGE_READ_REST_OUTLINE_TOKENS,
     );
@@ -309,7 +336,7 @@ describe('knowledge_read on long pages', () => {
     const row = `| ${Array.from({ length: 3000 }, (_, i) => `cell${i}`).join(' | ')} |`;
     const body = `# Table\n\n${row}\n\nAfter.`;
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'table', name: 'Table', body });
-    const first = await call('knowledge_read', { page: 'docs:acme#table' });
+    const first = await call('knowledge_read', { page: 'docs:acme#table', from: { line: 1 } });
     expect(first.page.range).toEqual({ start: { line: 1 }, end: { line: 2 } });
     const second = await call('knowledge_read', { page: 'docs:acme#table', from: { line: 3 } });
     expect(second.page.range.start).toEqual({ line: 3 });
@@ -598,8 +625,8 @@ describe('tools.read.maxTokens', () => {
       numbered(result.page.lines)
         .map(([, line]) => line)
         .join('\n');
-    const smallRead = await small.call('knowledge_read', { page: 'docs:acme#anthropic' });
-    const largeRead = await large.call('knowledge_read', { page: 'docs:acme#anthropic' });
+    const smallRead = await small.call('knowledge_read', { page: 'docs:acme#anthropic', from: { line: 1 } });
+    const largeRead = await large.call('knowledge_read', { page: 'docs:acme#anthropic', from: { line: 1 } });
     expect(estimateTokenCount(text(smallRead))).toBeLessThanOrEqual(KNOWLEDGE_READ_BODY_TOKENS);
     expect(estimateTokenCount(text(largeRead))).toBeGreaterThan(KNOWLEDGE_READ_BODY_TOKENS * 2);
     expect(estimateTokenCount(text(largeRead))).toBeLessThanOrEqual(3_000);
@@ -630,7 +657,8 @@ describe('tools.read.maxTokens', () => {
     expect(written.page.version).toBe(version + 1);
     expect(await readAll(large.call, 'docs:acme#anthropic')).toBe(body);
     // The default-cap tools refuse that wider range: it is more than one of their reads shows.
-    const smallVersion = (await small.call('knowledge_read', { page: 'docs:acme#anthropic' })).page.version;
+    const smallVersion = (await small.call('knowledge_read', { page: 'docs:acme#anthropic', from: { line: 1 } })).page
+      .version;
     await expect(
       small.call('knowledge_page', {
         op: 'write',

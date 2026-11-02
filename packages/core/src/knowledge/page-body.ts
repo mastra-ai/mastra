@@ -256,3 +256,69 @@ export function knowledgeBodyGrep(
 function isLowSurrogate(code: number): boolean {
   return code >= 0xdc00 && code <= 0xdfff;
 }
+
+/** Longest a line runs in a heading skeleton before it is cut with `…`. */
+const SKELETON_LINE_CHARS = 200;
+
+/**
+ * A long body seen whole at a glance: every heading with its line number, and under each as many
+ * of its first lines as fit in `maxTokens`, shared out evenly; `⋯ lines a–b` marks what is left
+ * out. Undefined when the headings alone don't fit.
+ */
+export function knowledgeBodySkeleton(
+  lines: KnowledgeBodyLines,
+  headingLines: number[],
+  maxTokens: number,
+): string | undefined {
+  const width = String(lines.count).length;
+  const text = (n: number) => lines.body.slice(lines.starts[n - 1]!, lines.lineEnd(n));
+  const render = (n: number) => {
+    const line = text(n);
+    return `${String(n).padStart(width)}│${line.length > SKELETON_LINE_CHARS ? `${line.slice(0, SKELETON_LINE_CHARS)}…` : line}`;
+  };
+  const gap = (from: number, to: number) => `${' '.repeat(width)}⋯ lines ${from}–${to}`;
+  const cost = (line: string) => estimateTokenCount(line) + 1;
+  const starts = [...new Set([1, ...headingLines])].sort((a, b) => a - b);
+  const sections = starts.map((start, i) => ({ start, end: (starts[i + 1] ?? lines.count + 1) - 1 }));
+  const shown = new Set(headingLines);
+  let tokens = 0;
+  for (const n of shown) tokens += cost(render(n));
+  // Every section may leave a gap marker behind it.
+  tokens += sections.length * cost(gap(lines.count, lines.count));
+  if (tokens > maxTokens) return undefined;
+  const next = sections.map(section => section.start);
+  for (let added = true; added;) {
+    added = false;
+    for (let i = 0; i < sections.length; i++) {
+      let n = next[i]!;
+      while (n <= sections[i]!.end && (shown.has(n) || !text(n).trim())) n++;
+      if (n > sections[i]!.end) continue;
+      const lineCost = cost(render(n));
+      // Keep each preview to the section's first lines: once one does not fit, the section is done.
+      next[i] = tokens + lineCost > maxTokens ? sections[i]!.end + 1 : n + 1;
+      if (tokens + lineCost > maxTokens) continue;
+      tokens += lineCost;
+      shown.add(n);
+      added = true;
+    }
+  }
+  const out: string[] = [];
+  let hidden: number | undefined;
+  let hiddenText = false;
+  const flush = (to: number) => {
+    if (hidden !== undefined && hiddenText) out.push(gap(hidden, to));
+    hidden = undefined;
+    hiddenText = false;
+  };
+  for (let n = 1; n <= lines.count; n++) {
+    if (shown.has(n)) {
+      flush(n - 1);
+      out.push(render(n));
+    } else {
+      hidden ??= n;
+      hiddenText ||= Boolean(text(n).trim());
+    }
+  }
+  flush(lines.count);
+  return out.join('\n');
+}
