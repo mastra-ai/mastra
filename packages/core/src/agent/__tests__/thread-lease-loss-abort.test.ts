@@ -1163,7 +1163,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
           return super.renewLease(key, owner, ttlMs);
         }
         override async transferLease(key: string, from: string, to: string) {
-          if (from.includes('\u0000retake\u0000')) {
+          if (isRetakeLeaseOwner(from)) {
             this.tokenHeld = true;
             await transferGate;
           }
@@ -1196,7 +1196,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         ownerPubSub.cut = true;
         shared.drop(key);
         await vi.waitFor(() => expect(ownerPubSub.tokenHeld).toBe(true));
-        expect(shared.owner(key)).toContain('\u0000retake\u0000');
+        expect(isRetakeLeaseOwner(shared.owner(key))).toBe(true);
         const aborted = coldReplica.__abortThreadStreamAcrossProcesses({
           resourceId: RESOURCE,
           threadId: thread,

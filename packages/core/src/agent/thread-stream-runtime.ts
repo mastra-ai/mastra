@@ -184,9 +184,9 @@ const LEGACY_RETAKE_LEASE_MARKER = '\u0000retake\u0000';
 
 /** Resolves a follow-up address forwarded as a lease owner, in either format, to its run ID. */
 function forwardedSignalRunId(address: string): string {
-  if (parseThreadLeaseOwner(address)) return threadLeaseRunId(address);
   const legacyRetake = address.lastIndexOf(LEGACY_RETAKE_LEASE_MARKER);
-  return legacyRetake > 0 ? address.slice(0, legacyRetake) : address;
+  const owner = legacyRetake > 0 ? address.slice(0, legacyRetake) : address;
+  return threadLeaseRunId(owner);
 }
 
 /**
@@ -1068,12 +1068,13 @@ export class AgentThreadStreamRuntime {
     if (isFallback) return true;
     // A backend that fails or doesn't answer in time is no proof the run holds the thread.
     const owner = await this.#readLeaseOwnerInTime(provider, key).catch(() => undefined);
-    if (owner === runId) return true;
-    if (!owner?.startsWith(`${runId}${RETAKE_LEASE_MARKER}`)) return false;
+    const expectedOwner = this.#threadLeaseOwner(pubsub, runId);
+    if (owner === expectedOwner) return true;
+    if (!isHandoverLeaseOwner(owner) || forwardedSignalRunId(owner!) !== runId) return false;
     const retake = this.#getState(pubsub).leaseRetakes.get(runId);
     if (retake) return retake.catch(() => false);
     // The retake may have settled between the two reads; the owner then names the run again.
-    return (await this.#readLeaseOwnerInTime(provider, key).catch(() => undefined)) === runId;
+    return (await this.#readLeaseOwnerInTime(provider, key).catch(() => undefined)) === expectedOwner;
   }
 
   /** The lease owner of `key`, rejecting when the backend doesn't answer within one renewal interval. */
@@ -1155,8 +1156,7 @@ export class AgentThreadStreamRuntime {
     const { provider, isFallback } = this.#resolveLeaseProvider(pubsub);
     if (isFallback) return undefined;
     const owner = await this.#readLeaseOwnerInTime(provider, this.#threadKey(options.resourceId, options.threadId));
-    // A run retaking its lease holds it under a token prefixed with its run id.
-    return owner?.split(RETAKE_LEASE_MARKER)[0] || undefined;
+    return owner ? forwardedSignalRunId(owner) : undefined;
   }
 
   /**
