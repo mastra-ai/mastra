@@ -73,19 +73,18 @@ export function MetricsTableBody<Row>({
   }
   if (rows.length === 0) {
     if (pageSize) {
+      if (empty === undefined) return <MetricsTableFiller count={pageSize} />;
       // Empty, a paged table keeps at least a full page's height, with the message in its middle.
       // Both share one grid cell, so a message taller than the page still grows the row.
       return (
         <div role="row" className="col-span-full grid *:col-start-1 *:row-start-1">
           <MetricsTableFiller count={pageSize} />
-          {empty !== undefined && (
-            <p
-              role="cell"
-              className="flex items-center justify-center px-3 py-4 text-center text-body-sm text-muted-foreground"
-            >
-              {empty}
-            </p>
-          )}
+          <p
+            role="cell"
+            className="flex items-center justify-center px-3 py-4 text-center text-body-sm text-muted-foreground"
+          >
+            {empty}
+          </p>
         </div>
       );
     }
@@ -108,7 +107,7 @@ export function MetricsTableBody<Row>({
 export function MetricsTableFiller({ count }: { count: number }) {
   if (count <= 0) return null;
   return (
-    <div aria-hidden data-slot="metrics-table-filler">
+    <div aria-hidden data-slot="metrics-table-filler" className="col-span-full">
       {Array.from({ length: count }, (_, i) => (
         <div key={i} className={ROW_BOX}>
           {'\u200b'}
