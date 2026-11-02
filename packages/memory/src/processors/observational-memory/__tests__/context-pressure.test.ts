@@ -1,7 +1,7 @@
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { describe, expect, it } from 'vitest';
-import { contextPressure, snapshotContextRequest } from '../context-pressure';
+import { contextPressure, nextOverhead, snapshotContextRequest } from '../context-pressure';
 import { TokenCounter } from '../token-counter';
 
 const counter = new TokenCounter();
@@ -23,6 +23,28 @@ const anchor = {
   outputEstimate: 100,
   overheadTokens: 0,
 };
+
+describe('measured overhead', () => {
+  const request = (system: string, model = 'provider/model', messageEstimate = 100) => ({
+    ...snapshot([message], 0, model),
+    system,
+    messageEstimate,
+  });
+
+  it('keeps the smallest residual while the system prompt and model are unchanged', () => {
+    const first = nextOverhead(undefined, request('a'), 600); // residual 500
+    expect(first.tokens).toBe(500);
+    // Hidden growth (e.g. encrypted reasoning) raises the residual; the floor must not follow it.
+    expect(nextOverhead(first, request('a'), 900).tokens).toBe(500);
+    expect(nextOverhead(first, request('a'), 450).tokens).toBe(350);
+  });
+
+  it('starts over when the system prompt or model changes', () => {
+    const first = nextOverhead(undefined, request('a'), 200); // residual 100
+    expect(nextOverhead(first, request('b'), 3_100).tokens).toBe(3_000);
+    expect(nextOverhead(first, request('a', 'provider/other'), 3_100).tokens).toBe(3_000);
+  });
+});
 
 describe('context usage anchors', () => {
   it('does not count tagged system messages (OM observations) as message pressure', () => {

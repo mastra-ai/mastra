@@ -18,8 +18,8 @@ import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { isContextOverflowError } from './context-overflow';
-import { contextPressure, snapshotContextRequest } from './context-pressure';
-import type { ContextRequest, ContextUsageAnchor } from './context-pressure';
+import { contextPressure, nextOverhead, snapshotContextRequest } from './context-pressure';
+import type { ContextRequest, ContextUsageAnchor, OverheadBasis } from './context-pressure';
 import { omDebug } from './debug';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
@@ -538,13 +538,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       outputTokens < 0
     )
       return args.messageList;
-    // The minimum only holds while the non-message prompt is unchanged: new observations or a
-    // model switch change the overhead, so start over from this request.
-    const previous = args.state.__omOverhead as { system: string; model: string; tokens: number } | undefined;
-    const residual = Math.max(0, inputTokens - request.messageEstimate);
-    const sameBasis = previous?.system === request.system && previous.model === request.model;
-    const overheadTokens = sameBasis ? Math.min(previous.tokens, residual) : residual;
-    args.state.__omOverhead = { system: request.system, model: request.model, tokens: overheadTokens };
+    const overhead = nextOverhead(args.state.__omOverhead as OverheadBasis | undefined, request, inputTokens);
+    args.state.__omOverhead = overhead;
+    const overheadTokens = overhead.tokens;
     const anchor: ContextUsageAnchor = {
       request,
       overheadTokens,

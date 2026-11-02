@@ -83,3 +83,24 @@ export function contextPressure(
     Math.max(0, currentEstimate - anchor.outputEstimate)
   );
 }
+
+export type OverheadBasis = { system: string; model: string; tokens: number };
+
+/**
+ * Track the provider-charged non-message overhead as the smallest input-minus-message-estimate seen
+ * while the system prompt and model are unchanged. A new system prompt (e.g. after an observation
+ * rollover) or model starts over from this request, so a stale low floor cannot understate pressure.
+ */
+export function nextOverhead(
+  previous: OverheadBasis | undefined,
+  request: ContextRequest,
+  inputTokens: number,
+): OverheadBasis {
+  const residual = Math.max(0, inputTokens - request.messageEstimate);
+  const sameBasis = previous?.system === request.system && previous.model === request.model;
+  return {
+    system: request.system,
+    model: request.model,
+    tokens: sameBasis ? Math.min(previous.tokens, residual) : residual,
+  };
+}
