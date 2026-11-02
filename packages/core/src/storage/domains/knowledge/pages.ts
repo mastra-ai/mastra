@@ -265,6 +265,9 @@ export const MAX_KNOWLEDGE_PAGE_LINKS = 10_000;
 /** Distinct `[[refs]]` core indexes per page body; further refs stay plain text. @experimental */
 export const MAX_KNOWLEDGE_PAGE_BODY_LINKS = 1_000;
 
+/** Longest body-link ref key core stores; a longer `[[ref]]` stays plain text. Stores may size the column to it. @experimental */
+export const MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH = 512;
+
 /**
  * Maximum page description in estimated tokens (tokenx), enforced by every adapter on create and
  * update.
@@ -709,7 +712,8 @@ export interface KnowledgePageStore {
   // Links
   /**
    * Replaces every body link from `pageId` with `links` in one transaction (an empty list clears
-   * them). Rows are keyed by (`pageId`, `ref`); duplicate refs in `links` are a caller error. The store
+   * them). Rows are keyed by (`pageId`, `ref`); duplicate refs in `links` are a caller error, and no ref
+   * is longer than {@link MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH} characters. The store
    * doesn't check the page exists or resolve anything: core resolves refs and calls this on every body
    * write, move, merge and delete. Rows stay when a page is soft-deleted until core clears them, and
    * reads hide them either way.

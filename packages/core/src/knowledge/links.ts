@@ -4,6 +4,7 @@ import {
   knowledgeLinkRefKey,
   MAX_KNOWLEDGE_MOVE_PAGES,
   MAX_KNOWLEDGE_PAGE_BODY_LINKS,
+  MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH,
   parseKnowledgePageRef,
 } from '../storage/domains/knowledge';
 
@@ -63,6 +64,7 @@ export async function syncKnowledgePageBodyLinks(storage: KnowledgeStorage, page
   if (!page.deletedAt) {
     for (const [ref, count] of knowledgeBodyLinkRefs(page.body)) {
       const key = knowledgeLinkRefKey(ref);
+      if (key.length > MAX_KNOWLEDGE_PAGE_LINK_REF_LENGTH) continue;
       const entry = byKey.get(key);
       if (entry) entry.count += count;
       else byKey.set(key, { ref, count });

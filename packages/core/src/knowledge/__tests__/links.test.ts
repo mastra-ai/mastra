@@ -51,6 +51,16 @@ describe('Knowledge page link index', () => {
     expect(counts[refunds.id]).toEqual({ in: 1, out: 0 });
   });
 
+  it('leaves a ref longer than the stored ref limit as plain text', async () => {
+    const { write, store } = setup();
+    const target = await write('Target', 't');
+    const hub = await write('Hub', `See [[Target]] and [[${'x'.repeat(513)}]].`);
+    const links = await (await store()).listPageBodyLinkSources({ toPageIds: [target.id] });
+    expect(links).toEqual([hub.id]);
+    const rows = await (await store()).listPageBodyLinkSources({ refs: ['x'.repeat(513)] });
+    expect(rows).toEqual([]);
+  });
+
   it('resolves a dangling link once its target page is created, and unresolves it on delete', async () => {
     const { call, write, out } = setup();
     const hub = await write('Hub', 'Later: [[Returns]].');
