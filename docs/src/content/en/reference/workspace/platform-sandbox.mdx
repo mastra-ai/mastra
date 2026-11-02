@@ -458,13 +458,13 @@ A long-running process's output stream reconnects periodically, and the process 
 ```typescript
 await sandbox.processes.spawn('pnpm dev --host 0.0.0.0 --port 3000')
 
-const url = await sandbox.networking.getPortUrl(3000)
+const url = await sandbox.networking?.getPortUrl(3000)
 // https://3000-<sandbox id>.sandbox.us.mastra.cloud/
 ```
 
 Ports are private: the URL opens in a browser for members of the sandbox's organization once they sign in to Mastra. You can share it, since it never expires, and opening it wakes a paused sandbox.
 
-`getPortUrl()` returns `null` without starting the sandbox when the sandbox isn't running or has been destroyed, when its ports can't be opened, for a port outside 1 to 65535, and for the sandbox's reserved control port.
+`networking` is `undefined` on a sandbox whose ports can't be opened. `getPortUrl()` returns `null` without starting the sandbox when the sandbox isn't running or has been destroyed, for a port outside 1 to 65535, and for the sandbox's reserved control port.
 
 ## Properties
 
@@ -499,9 +499,9 @@ Ports are private: the URL opens in a browser for members of the sandbox's organ
   },
   {
     name: 'networking',
-    type: 'SandboxNetworking',
+    type: 'SandboxNetworking | undefined',
     description:
-      "Port URLs. `getPortUrl(port)` returns the URL of a port in the running sandbox, which opens in a browser after signing in to Mastra, or `null` when the sandbox isn't running. See [Port URLs](#port-urls).",
+      "Port URLs. `getPortUrl(port)` returns the URL of a port in the running sandbox, which opens in a browser after signing in to Mastra, or `null` when the sandbox isn't running. `undefined` when the sandbox's ports can't be opened. See [Port URLs](#port-urls).",
   },
   {
     name: 'filesystem',

@@ -541,12 +541,15 @@ export class PlatformSandbox extends MastraSandbox {
    * in the sandbox's organization can open a port's URL in a browser after
    * signing in to the platform, and anyone else is turned away. The URL
    * doesn't expire, so it's the one to share.
+   *
+   * Absent on sandboxes whose ports can't be opened, so `supportsNetworking()`
+   * reports them correctly.
    */
-  readonly networking: SandboxNetworking = {
+  declare readonly networking?: SandboxNetworking;
+
+  private readonly _networking: SandboxNetworking = {
     getPortUrl: async (port: number): Promise<string | null> => {
       if (!Number.isInteger(port) || port < 1 || port > 65_535 || port === E2B_CONTROL_PORT) return null;
-      // Only E2B-backed sandboxes serve their ports.
-      if (this._client.sandboxProvider !== 'e2b') return null;
       const sandboxId = this.sandboxId;
       if (!sandboxId) return null;
       try {
@@ -679,6 +682,8 @@ export class PlatformSandbox extends MastraSandbox {
     this._hasRecoveryKey = options.id !== undefined;
     this.id = options.id ?? this.generateId();
     this._client = new PlatformClient(options);
+    // Only E2B-backed sandboxes serve their ports.
+    if (this._client.sandboxProvider === 'e2b') this.networking = this._networking;
     this._environmentId = options.environmentId ?? process.env.MASTRA_ENVIRONMENT_ID ?? '';
     if (!this._environmentId && !options.sandboxId) throw new Error('environmentId is required');
     this._sandboxId = options.sandboxId;

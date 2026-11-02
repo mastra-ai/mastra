@@ -4041,7 +4041,7 @@ describe('PlatformSandbox networking', () => {
     const { sandbox, fetchMock } = makeSandbox(grant());
     await sandbox._start();
 
-    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBe('https://3000-sbx_1.preview.test/');
+    await expect(sandbox.networking!.getPortUrl(3000)).resolves.toBe('https://3000-sbx_1.preview.test/');
     const [url, init] = fetchMock.mock.calls[1]!;
     expect(String(url)).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/preview-grants');
     expect(init.method).toBe('POST');
@@ -4051,7 +4051,7 @@ describe('PlatformSandbox networking', () => {
   it("is null before the sandbox is running, and doesn't start it", async () => {
     const { sandbox, fetchMock } = makeSandbox();
 
-    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBeNull();
+    await expect(sandbox.networking!.getPortUrl(3000)).resolves.toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -4059,17 +4059,16 @@ describe('PlatformSandbox networking', () => {
     const { sandbox, fetchMock } = makeSandbox();
     await sandbox._start();
 
-    await expect(sandbox.networking.getPortUrl(port)).resolves.toBeNull();
+    await expect(sandbox.networking!.getPortUrl(port)).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it("is null on sandboxes whose provider doesn't serve ports", async () => {
+  it("doesn't offer networking on sandboxes whose provider can't serve ports", () => {
     vi.stubEnv('SANDBOX_PROVIDER', 'railway');
-    const { sandbox, fetchMock } = makeSandbox();
-    await sandbox._start();
+    const { sandbox } = makeSandbox();
 
-    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBeNull();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(supportsNetworking(sandbox)).toBe(false);
+    expect(sandbox.networking).toBeUndefined();
   });
 
   it.each([
@@ -4079,14 +4078,14 @@ describe('PlatformSandbox networking', () => {
     const { sandbox } = makeSandbox(json({ error: { message: 'nope', type: 'x' } }, { status }));
     await sandbox._start();
 
-    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBeNull();
+    await expect(sandbox.networking!.getPortUrl(3000)).resolves.toBeNull();
   });
 
   it('forgets a sandbox the platform says was destroyed', async () => {
     const { sandbox } = makeSandbox(json({ error: { message: 'gone', type: 'sandbox_destroyed' } }, { status: 410 }));
     await sandbox._start();
 
-    await expect(sandbox.networking.getPortUrl(3000)).resolves.toBeNull();
+    await expect(sandbox.networking!.getPortUrl(3000)).resolves.toBeNull();
     expect(sandbox.sandboxId).toBeUndefined();
     expect(sandbox.status).toBe('pending');
   });
@@ -4095,6 +4094,6 @@ describe('PlatformSandbox networking', () => {
     const { sandbox } = makeSandbox(json({ error: { message: 'boom', type: 'internal' } }, { status: 500 }));
     await sandbox._start();
 
-    await expect(sandbox.networking.getPortUrl(3000)).rejects.toThrow();
+    await expect(sandbox.networking!.getPortUrl(3000)).rejects.toThrow();
   });
 });

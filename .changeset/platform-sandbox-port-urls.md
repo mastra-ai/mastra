@@ -6,5 +6,5 @@ Added port URLs to `PlatformSandbox`. `sandbox.networking.getPortUrl(port)` retu
 
 ```typescript
 await sandbox.processes.spawn('pnpm dev --host 0.0.0.0 --port 3000')
-const url = await sandbox.networking.getPortUrl(3000)
+const url = await sandbox.networking?.getPortUrl(3000)
 ```
