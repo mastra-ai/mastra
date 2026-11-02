@@ -10,4 +10,12 @@ Redesigned the calendar and the custom date range picker. Picking a custom range
 - `fromDate={date}` → `startMonth={date}` plus `disabled={{ before: date }}` (or `hidden={{ before: date }}` to hide those days)
 - `toDate={date}` → `endMonth={date}` plus `disabled={{ after: date }}` (or `hidden={{ after: date }}`)
 
+```tsx
+// Before
+<DatePicker mode="single" selected={day} onSelect={setDay} fromDate={minDay} />
+
+// After
+<DatePicker mode="single" selected={day} onSelect={setDay} startMonth={minDay} disabled={{ before: minDay }} />
+```
+
 `TimePicker` is removed. Use `<Input type="time" />`, which reads and writes `HH:mm`.
