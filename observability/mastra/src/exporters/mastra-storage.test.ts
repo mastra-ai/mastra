@@ -1997,3 +1997,36 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
     });
   },
 );
+
+describe('MastraStorageExporter service name', () => {
+  it('stores the configured service name on spans whose metadata does not set one', async () => {
+    const storage = new InMemoryStore();
+    const observability = new Observability({
+      configs: { default: { serviceName: 'checkout-api', exporters: [new MastraStorageExporter()] } },
+    });
+    const mastra = new Mastra({ storage, observability, logger: false });
+    try {
+      const tracing = observability.getDefaultInstance()!;
+      const checkout = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'checkout agent' });
+      checkout.createChildSpan({ type: SpanType.GENERIC, name: 'charge card' }).end();
+      checkout.end();
+      const refund = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'refund agent',
+        metadata: { serviceName: 'refunds-api' },
+      });
+      refund.end();
+      await tracing.flush();
+
+      const store = (await storage.getStore('observability'))!;
+      const checkoutTrace = await store.getTrace({ traceId: checkout.traceId });
+      expect(checkoutTrace?.spans.map(span => span.serviceName)).toEqual(['checkout-api', 'checkout-api']);
+      const refundTrace = await store.getTrace({ traceId: refund.traceId });
+      expect(refundTrace?.spans.map(span => span.serviceName)).toEqual(['refunds-api']);
+      const filtered = await store.listTraces({ filters: { serviceName: 'checkout-api' } });
+      expect(filtered.spans.map(span => span.traceId)).toEqual([checkout.traceId]);
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+});
