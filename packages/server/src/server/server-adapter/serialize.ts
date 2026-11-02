@@ -17,8 +17,24 @@ export type SerializedStreamChunk = { ok: true; json: string } | { ok: false; er
  */
 export function serializeStreamChunk(chunk: unknown): SerializedStreamChunk {
   try {
-    return { ok: true, json: safeStringify(chunk) };
+    return { ok: true, json: safeStringify(withPlainPayloadError(chunk)) };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error : new Error(String(error)) };
   }
+}
+
+/**
+ * `JSON.stringify(new Error('x'))` keeps only own enumerable fields, so an Error subclass that sets `name`
+ * arrives as `{ name }` and clients show `[object Object]`. Send the message too; never the stack.
+ */
+function withPlainPayloadError(chunk: unknown): unknown {
+  if (!chunk || typeof chunk !== 'object' || !('payload' in chunk)) return chunk;
+  const { payload } = chunk;
+  if (!payload || typeof payload !== 'object' || !('error' in payload) || !(payload.error instanceof Error)) {
+    return chunk;
+  }
+  const { error } = payload;
+  const plain: Record<string, unknown> = { ...error, message: error.message };
+  if (error.name !== 'Error') plain.name = error.name;
+  return { ...chunk, payload: { ...payload, error: plain } };
 }

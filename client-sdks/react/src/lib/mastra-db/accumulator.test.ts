@@ -960,6 +960,19 @@ describe('accumulateChunk - tool calls', () => {
     });
   });
 
+  describe('when a tool error arrives as an object with no message', () => {
+    // An Error subclass that sets `name` crosses JSON as `{ name }`: its message is not enumerable.
+    it.each([
+      [{ name: 'KnowledgeNotFoundError' }, 'KnowledgeNotFoundError'],
+      [{ code: 'E_STORAGE', status: 503 }, 'The tool call failed.'],
+      [{}, 'The tool call failed.'],
+    ])('names the error instead of writing [object Object] (%j)', (error, errorText) => {
+      const out = reduce([startChunk(), toolCallChunk('tc-1', 'knowledge_read', {}), toolErrorChunk('tc-1', error)]);
+      const toolPart = out[0].content.parts.find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+      expect(toolPart.toolInvocation).toMatchObject({ state: 'output-error', errorText });
+    });
+  });
+
   it('records a tool error when the stored invocation has no tool name', () => {
     const initial = reduce([startChunk(), toolCallChunk('tc-1', 'search', {})]);
     const part = initial[0].content.parts.find(p => p.type === 'tool-invocation');
@@ -1029,19 +1042,19 @@ describe('accumulateChunk - tool calls', () => {
       error: { cause: { id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED', message: '', cause: { message: 'inner' } } },
       expected: '',
     },
-    { error: { cause: { message: 'Private provider diagnostic' } }, expected: '[object Object]' },
+    { error: { cause: { message: 'Private provider diagnostic' } }, expected: 'The tool call failed.' },
     {
       error: { cause: { code: 'PROVIDER_ERROR', message: 'Private provider diagnostic' } },
-      expected: '[object Object]',
+      expected: 'The tool call failed.',
     },
     {
       error: {
         cause: { code: 'AGENT_AGENT_TOOL_EXECUTION_FAILED', cause: { message: 'Private provider diagnostic' } },
       },
-      expected: '[object Object]',
+      expected: 'The tool call failed.',
     },
-    { error: { cause: null }, expected: '[object Object]' },
-  ])('keeps existing error text behavior for $error', ({ error, expected }) => {
+    { error: { cause: null }, expected: 'The tool call failed.' },
+  ])('shows no private cause in the error text for $error', ({ error, expected }) => {
     const out = reduce([startChunk(), toolCallChunk('tc-1', 'agent-head', {}), toolErrorChunk('tc-1', error)]);
     expect(out[0].content.parts).toContainEqual(
       expect.objectContaining({

@@ -6,6 +6,7 @@ import type { MessageMetadata } from '@/domains/chat';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
+import { ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
 
@@ -23,6 +24,8 @@ interface PageSummary {
   name: string;
   address?: string;
   scope?: string;
+  /** The full readable ref (`docs:mastra#observability/logging`); older cores send only the last `key`. */
+  ref?: string;
   key?: string;
   description?: string;
   version?: number;
@@ -72,7 +75,7 @@ function PageLine({ page, linked = true }: { page: PageSummary; linked?: boolean
       <Txt as="span" variant="label">
         {linked ? <PageLink page={page} /> : page.name}
       </Txt>
-      {scope ? <Meta>{page.key ? `${scope}#${page.key}` : scope}</Meta> : null}
+      {page.ref ? <Meta>{page.ref}</Meta> : scope ? <Meta>{page.key ? `${scope}#${page.key}` : scope}</Meta> : null}
     </div>
   );
 }
@@ -145,10 +148,34 @@ export interface KnowledgeCard {
   body: ReactNode;
 }
 
-/** What each Knowledge tool's settled result says, or null when the shape isn't one we know. */
-export function knowledgeCard(toolName: string, input: unknown, output: unknown): KnowledgeCard | null {
-  if (!isRecord(output)) return null;
+const FAILED_TITLES: Record<string, string> = {
+  knowledge_search: "Couldn't search Knowledge",
+  knowledge_read: "Couldn't read",
+  knowledge_page: "Couldn't change page",
+  knowledge_note: "Couldn't change note",
+  knowledge_pin: "Couldn't change pin",
+};
+
+/**
+ * What each Knowledge tool's settled result says, or null when the shape isn't one we know.
+ * A failed call (`errorText` set) gets a card naming what it tried and the error it got.
+ */
+export function knowledgeCard(
+  toolName: string,
+  input: unknown,
+  output: unknown,
+  errorText?: string,
+): KnowledgeCard | null {
   const args = isRecord(input) ? input : {};
+  const failedTitle = FAILED_TITLES[toolName];
+  if (errorText !== undefined && failedTitle) {
+    return {
+      title: failedTitle,
+      detail: str(args.page) ?? str(args.query),
+      body: <ToolCallOutput text={errorText || 'The tool call failed.'} error data-testid="knowledge-tool-error" />,
+    };
+  }
+  if (!isRecord(output)) return null;
   switch (toolName) {
     case 'knowledge_search': {
       if (!Array.isArray(output.results)) return null;

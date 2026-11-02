@@ -38,4 +38,44 @@ describe('serializeStreamChunk', () => {
     expect(result.ok).toBe(false);
     expect((result as { ok: false; error: Error }).error.message).toBe('boom from toJSON');
   });
+
+  describe('when a chunk carries an Error in its payload', () => {
+    class NotFoundError extends Error {
+      constructor(ref: string) {
+        super(`Knowledge page "${ref}" not found.`);
+        this.name = 'NotFoundError';
+      }
+    }
+
+    it('keeps the error message, which JSON would drop', () => {
+      const chunk = {
+        type: 'tool-error',
+        payload: { toolCallId: 'c1', toolName: 'knowledge_read', error: new NotFoundError('site:mastra#pricing') },
+      };
+      const json = expectJson(serializeStreamChunk(chunk));
+      expect(JSON.parse(json).payload.error).toEqual({
+        name: 'NotFoundError',
+        message: 'Knowledge page "site:mastra#pricing" not found.',
+      });
+    });
+
+    it('keeps the message of an error rebuilt by the agent loop, whose name is an own field', () => {
+      // deserializeToolError assigns `name`, so the old wire shape was `{ "name": "Error" }`.
+      const error = new Error('Knowledge page "site:mastra#pricing-tiers" not found.');
+      error.name = 'Error';
+      const json = expectJson(serializeStreamChunk({ type: 'tool-error', payload: { toolCallId: 'c1', error } }));
+      expect(JSON.parse(json).payload.error).toEqual({
+        name: 'Error',
+        message: 'Knowledge page "site:mastra#pricing-tiers" not found.',
+      });
+    });
+
+    it('sends no stack and leaves the original chunk untouched', () => {
+      const error = new Error('boom');
+      const chunk = { type: 'error', payload: { error } };
+      const json = expectJson(serializeStreamChunk(chunk));
+      expect(JSON.parse(json).payload.error).toEqual({ message: 'boom' });
+      expect(chunk.payload.error).toBe(error);
+    });
+  });
 });

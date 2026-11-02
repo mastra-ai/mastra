@@ -257,13 +257,74 @@ describe('Knowledge tool cards', () => {
     });
   });
 
-  describe('when a Knowledge call is still running or failed', () => {
+  describe('when a Knowledge call is still running', () => {
     it('keeps the plain tool badge', () => {
       const fields = { toolName: 'knowledge_search', toolCallId: 'c', input: { query: 'x' }, output: undefined };
       expect(toolCardKind({ ...fields, state: 'input-available' }, {})).toBe('plain');
-      expect(toolCardKind({ ...fields, state: 'output-error', output: 'boom' }, {})).toBe('plain');
       renderCard({ state: 'input-available', output: undefined, input: { query: 'x' } });
       expect(screen.queryByTestId('knowledge-tool-badge')).toBeNull();
+    });
+  });
+
+  describe('when a Knowledge call failed', () => {
+    it('says what it could not read and shows the error when opened', () => {
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'docs:mastra#observational-memory' },
+        output: undefined,
+        state: 'output-error',
+        errorText: 'Knowledge page "docs:mastra#observational-memory" not found.',
+      });
+      const badge = open();
+      expect(badge.textContent).toContain("Couldn't read");
+      expect(badge.textContent).toContain('docs:mastra#observational-memory');
+      expect(within(badge).getByTestId('knowledge-tool-error').textContent).toContain(
+        'Knowledge page "docs:mastra#observational-memory" not found.',
+      );
+      expect(badge.textContent).not.toContain('[object Object]');
+    });
+
+    it.each([
+      ['knowledge_search', { query: 'threshold' }, "Couldn't search Knowledge", 'threshold'],
+      ['knowledge_page', { page: 'docs:mastra#om' }, "Couldn't change page", 'docs:mastra#om'],
+      ['knowledge_note', { page: 'docs:mastra#om' }, "Couldn't change note", 'docs:mastra#om'],
+      ['knowledge_pin', { page: 'docs:mastra#om' }, "Couldn't change pin", 'docs:mastra#om'],
+    ])('names the failed %s call and its error', (toolName, input, title, detail) => {
+      renderCard({ toolName, input, output: undefined, state: 'output-error', errorText: 'Storage is unavailable.' });
+      const badge = open();
+      expect(badge.textContent).toContain(title);
+      expect(badge.textContent).toContain(detail);
+      expect(within(badge).getByTestId('knowledge-tool-error').textContent).toContain('Storage is unavailable.');
+    });
+
+    it('still draws the failed card when the error text is empty', () => {
+      renderCard({ toolName: 'knowledge_read', input: { page: 'x' }, output: undefined, state: 'output-error' });
+      expect(within(open()).getByTestId('knowledge-tool-error').textContent).toContain('The tool call failed.');
+    });
+  });
+
+  describe('when a result page carries its full readable ref', () => {
+    it('shows the ref instead of rebuilding it from the last key', () => {
+      renderCard({
+        input: { query: 'logging' },
+        output: {
+          results: [
+            {
+              type: 'page',
+              page: {
+                id: 'p-log',
+                name: 'Logging',
+                scope: 'docs:mastra',
+                key: 'logging',
+                ref: 'docs:mastra#observability/logging',
+              },
+            },
+          ],
+        },
+      });
+      const badge = open();
+      expect(badge.textContent).toContain('docs:mastra#observability/logging');
+      expect(badge.textContent).not.toContain('docs:mastra#logging');
     });
   });
 
