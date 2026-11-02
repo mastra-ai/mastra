@@ -626,8 +626,8 @@ function readTool(host: KnowledgePageToolHost) {
 const LIST_DEFAULT_LIMIT = 50;
 const LIST_MAX_LIMIT = 100;
 const LIST_MAX_DEPTH = 3;
-/** Most estimated tokens of entries one `knowledge_list` returns, the same budget as a body read. */
-const LIST_MAX_TOKENS = KNOWLEDGE_READ_BODY_TOKENS;
+/** Most estimated tokens of entries one `knowledge_list` returns: room for a full default `limit` of entries with descriptions. */
+const LIST_MAX_TOKENS = 5_000;
 
 /** One entry of a `knowledge_list` result. */
 interface ListEntry {

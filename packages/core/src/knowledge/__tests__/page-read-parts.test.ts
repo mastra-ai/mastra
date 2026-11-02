@@ -265,7 +265,7 @@ describe('knowledge_read on long pages', () => {
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
     let offset = 0;
     let read = '';
-    for (let turn = 0; turn < 10; turn++) {
+    for (let turn = 0; turn < 50; turn++) {
       const result = await call('knowledge_read', { page: 'docs:acme#anthropic', bodyOffset: offset });
       expect(estimateTokenCount(result.page.body)).toBeLessThanOrEqual(KNOWLEDGE_READ_BODY_TOKENS);
       read += result.page.body;

@@ -1,7 +1,7 @@
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
 
 /** Most estimated tokens of body text one `knowledge_read` returns; the rest comes by `bodyOffset`. */
-export const KNOWLEDGE_READ_BODY_TOKENS = 5_000;
+export const KNOWLEDGE_READ_BODY_TOKENS = 1_000;
 /**
  * Most estimated tokens of notes, or of mentioning notes, a whole-page read carries inline. Past it
  * the list is left out with a count, and read on its own with `notes` or `mentionedIn`.
