@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { MASTRA_USER_AGENT } from './constants.js';
+import { GatewayManager } from './gateway-manager.js';
 import { ModelsDevGateway } from './models-dev.js';
 
 const {
@@ -89,6 +90,31 @@ describe('ModelsDevGateway', () => {
   });
 
   describe('fetchProviders', () => {
+    it('carries release dates through to the selectable model catalog', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          openai: {
+            id: 'openai',
+            name: 'OpenAI',
+            api: 'https://api.openai.com/v1',
+            npm: '@ai-sdk/openai',
+            models: {
+              'gpt-4o': { id: 'gpt-4o', release_date: '2024-05-13' },
+              'gpt-5': { id: 'gpt-5', release_date: '2025-08-07' },
+              custom: { id: 'custom' },
+            },
+          },
+        }),
+      });
+      const catalog = await new GatewayManager([gateway]).listAvailableModels();
+      expect(catalog.map(({ id, releaseDate }) => ({ id, releaseDate }))).toEqual([
+        { id: 'openai/custom', releaseDate: undefined },
+        { id: 'openai/gpt-4o', releaseDate: '2024-05-13' },
+        { id: 'openai/gpt-5', releaseDate: '2025-08-07' },
+      ]);
+    });
+
     const mockApiResponse = {
       openai: {
         id: 'openai',

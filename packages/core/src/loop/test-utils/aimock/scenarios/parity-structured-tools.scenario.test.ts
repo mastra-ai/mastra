@@ -24,14 +24,16 @@ describeParity('structured-tools parity', target => {
       model: { tapes: [toolCallTape('step', { n: 1 }, 't48-step'), textOnlyTape(JSON.stringify(OBJECT))] },
       differences: {
         [target]: {
-          reason: 'COR-1390: wrapped engines emit object-result after finish rather than before step-finish.',
+          reason: 'COR-1390: wrapped engines emit object-result after step-finish but before finish.',
           expect: plain => {
             const expected = structuredClone(plain);
             for (const turn of expected.turns) {
               const index = turn.chunkTypes.indexOf('object-result');
               expect(index).toBeGreaterThan(-1);
+              const finishIndex = turn.chunkTypes.indexOf('finish');
               for (const list of [turn.chunkTypes, turn.chunks, turn.chunkPayloads]) {
-                list.push(...list.splice(index, 1));
+                const [result] = list.splice(index, 1);
+                list.splice(finishIndex - 1, 0, result!);
               }
             }
             return expected;
@@ -76,8 +78,7 @@ describeParity('structured-tools parity', target => {
       const turn = observation.turns[0]!;
       const objectIndex = turn.chunkTypes.indexOf('object-result');
       expect(objectIndex).toBeGreaterThan(turn.chunkTypes.indexOf('tool-result'));
-      // T48 records placement in its comparison contract; COR-1390 owns this delta.
-      expect(objectIndex > turn.chunkTypes.indexOf('finish')).toBe(engine !== 'plain');
+      expect(objectIndex).toBeLessThan(turn.chunkTypes.indexOf('finish'));
     }
   });
 });

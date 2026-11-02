@@ -26,6 +26,8 @@ Returns a record of agent IDs to their serialized agent configurations.
 Get an instance of a specific agent by its ID:
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 export const myAgent = new Agent({
   id: 'my-agent',
 })
@@ -401,6 +403,14 @@ const { messages, initialHistoryPagination } = useChat({
     name: 'threadId',
     type: 'string',
     description: 'Thread ID to subscribe to.',
+  },
+  {
+    name: 'withRunStatus',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Emit live and retained thread-run-status outcomes. Callback types include these chunks only when requested. useChat enables this for its thread subscription.',
   },
   {
     name: 'processDataStream().reconnect',

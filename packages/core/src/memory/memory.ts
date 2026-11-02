@@ -1,6 +1,7 @@
 import type { AssistantContent, UserContent, CoreMessage } from '@internal/ai-sdk-v4';
 import type { MastraDBMessage } from '../agent/message-list';
 import type { AgentSignalType } from '../agent/signals';
+import { agentThreadStreamTopic } from '../agent/thread-stream-topic';
 import { MastraBase } from '../base';
 import { ErrorDomain, MastraError } from '../error';
 import { ModelRouterEmbeddingModel } from '../llm/model';
@@ -250,6 +251,21 @@ https://mastra.ai/en/docs/memory/semantic-recall`,
    */
   __registerMastra(mastra: Mastra): void {
     this.#mastra = mastra;
+  }
+
+  /**
+   * Delete a thread's live event stream from the registered Mastra pubsub.
+   * Call after the thread itself is deleted: nothing else ever clears an
+   * open-ended thread topic, so without this it lingers until the pubsub's
+   * idle TTL (or forever, if the pubsub has none). Best-effort; no-op when
+   * no Mastra instance is registered.
+   */
+  protected async clearThreadStream(threadId: string, resourceId?: string): Promise<void> {
+    try {
+      await this.#mastra?.pubsub?.clearTopic(agentThreadStreamTopic(resourceId, threadId));
+    } catch (error) {
+      this.logger.warn('Failed to clear thread event stream after deleting thread', { threadId, error });
+    }
   }
 
   protected _hasOwnStorage = false;
@@ -859,10 +875,11 @@ https://mastra.ai/en/docs/memory/overview`,
               'version' in effectiveConfig.workingMemory &&
               effectiveConfig.workingMemory.version === 'vnext',
             templateProvider: this,
-            readOnly:
-              effectiveConfig.readOnly ||
-              (typeof effectiveConfig.workingMemory === 'object' &&
-                effectiveConfig.workingMemory.agentManaged === false),
+            readOnly: effectiveConfig.readOnly,
+            agentManaged:
+              typeof effectiveConfig.workingMemory === 'object'
+                ? effectiveConfig.workingMemory.agentManaged
+                : undefined,
           }),
         );
       }

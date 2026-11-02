@@ -1,3 +1,4 @@
+import type { MastraClient } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 import type { SpanRecord } from '../../../../types';
 
@@ -7,7 +8,8 @@ export function makeSpan(overrides: Partial<SpanRecord> = {}): SpanRecord {
   return {
     traceId: 'trace-1',
     spanId: 'span-1',
-    parentSpanId: null,
+    // Only an agent run starts a trace; every other span type hangs under one.
+    parentSpanId: overrides.spanType && overrides.spanType !== SpanType.AGENT_RUN ? 'agent-root' : null,
     name: 'agent run',
     entityType: null,
     entityId: null,
@@ -279,6 +281,42 @@ export const processorToolResultSpan = makeSpan({
   input: { toolName: 'search', toolCallId: 'call_17', stepNumber: 3, providerExecuted: false },
 });
 
+/** An llmRequest processor: it gets the conversation as the provider prompt, right before the model call. */
+export const processorLlmRequestSpan = makeSpan({
+  spanId: 'span-processor-llm-request',
+  name: 'llm request processor: unsupported-file-handler',
+  spanType: SpanType.PROCESSOR_RUN,
+  entityType: 'input_processor',
+  attributes: { processorPhase: 'llmRequest', processorExecutor: 'legacy', processorIndex: 8 },
+  input: {
+    prompt: [
+      { role: 'system', content: 'You are Michel, a practical home chef.' },
+      { role: 'user', content: [{ type: 'text', text: 'weather in paris' }] },
+      {
+        role: 'assistant',
+        content: [
+          { type: 'reasoning', text: '' },
+          { type: 'tool-call', toolCallId: 'call_1', toolName: 'weatherInfo', input: { location: 'Paris' } },
+        ],
+      },
+      {
+        role: 'tool',
+        content: [
+          {
+            type: 'tool-result',
+            toolCallId: 'call_1',
+            toolName: 'weatherInfo',
+            output: { type: 'json', value: { location: 'Paris', temperature: 15.5 } },
+          },
+        ],
+      },
+    ],
+    stepNumber: 1,
+    retryCount: 0,
+  },
+  output: { shortCircuited: false },
+});
+
 export const processorOutputStreamSpan = makeSpan({
   spanId: 'span-processor-output-stream',
   name: 'output stream processor: moderation',
@@ -333,6 +371,13 @@ export const malformedProcessorSpan = makeSpan({
   input: { messages: 'redacted-message-content' },
   attributes: { processorPhase: 'input', messageListMutations: 'redacted-mutation-log' },
   metadata: { customMetadata: 'keep-this-value' },
+});
+
+/** A processor payload with a key the preview does not know, next to keys it does. */
+export const processorWithExtrasSpan = makeSpan({
+  ...processorInputSpan,
+  spanId: 'span-processor-with-extras',
+  input: { messages: [{ role: 'user', content: 'Be brief.' }], customFlag: true },
 });
 
 export const processorInputStepSpan = makeSpan({
@@ -468,3 +513,36 @@ export const ALL_SPAN_FIXTURES = {
   processorRequestErrorSpan,
   legacyProcessorSpan,
 } as const;
+
+/** An input-step processor offered two tools: one in the tool registry, one a workspace tool that is not. */
+export const processorToolsSpan = makeSpan({
+  spanId: 'span-processor-tools',
+  name: 'memory: recall',
+  spanType: SpanType.PROCESSOR_RUN,
+  entityType: 'input_step_processor',
+  entityId: 'observational-memory',
+  attributes: { processorPhase: 'inputStep', processorExecutor: 'legacy', processorIndex: 0 },
+  input: {
+    messages: [{ role: 'user', content: 'What should I cook tonight?' }],
+    messageId: 'msg-tools-0',
+    tools: [
+      { id: 'cooking-tool', name: 'cookingTool', description: 'Suggests a recipe from what is in the fridge.' },
+      { id: 'mastra_workspace_read_file', name: 'mastra_workspace_read_file', description: 'Reads a workspace file.' },
+    ],
+    toolChoice: { type: 'auto' },
+  },
+});
+
+/** A model call that was forced to one tool; model spans record definitions under the registry key. */
+export const modelToolsSpan = makeSpan({
+  spanId: 'span-model-tools',
+  name: "llm: 'gpt-5-mini'",
+  spanType: SpanType.MODEL_INFERENCE,
+  attributes: {
+    tools: [{ type: 'function', name: 'cookingTool', description: 'Suggests a recipe from what is in the fridge.' }],
+    toolChoice: { type: 'tool', toolName: 'cookingTool' },
+  },
+});
+
+/** The trace the data panel's Output tab looks tool calls up in, for spans that called none. */
+export const traceWithoutToolCalls: Awaited<ReturnType<MastraClient['getTrace']>> = { traceId: 't', spans: [] };

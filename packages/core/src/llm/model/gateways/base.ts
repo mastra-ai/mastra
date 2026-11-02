@@ -51,6 +51,8 @@ export interface ProviderConfig {
   apiKeyEnvVar: string | string[];
   name: string;
   models: string[];
+  /** ISO release dates keyed by model ID, when the catalog supplies them. */
+  modelReleaseDates?: Record<string, string>;
   docUrl?: string; // Optional documentation URL
   gateway: string;
   npm?: string; // NPM package name from models.dev (e.g., "@ai-sdk/anthropic")

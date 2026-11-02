@@ -160,7 +160,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
           expand();
           setWidth(maxWidth);
           commit();
-          return;
+          break;
         }
       }
     },

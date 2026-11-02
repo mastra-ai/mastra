@@ -1,5 +1,6 @@
 import type { IMastraLogger } from '../../../logger';
 import { ensureSerializable } from '../../../utils/safe-stringify';
+import { TOOL_ABORT_GRACE_MS } from '../tool-abort-grace';
 
 export type ExecuteToolOutcome =
   /** Execution completed. `result` is the serializable value engines should
@@ -7,8 +8,8 @@ export type ExecuteToolOutcome =
    * pre-serialization side channels (e.g. the durable engine's in-step
    * `toModelOutput` mapping, which reads symbols the JSON round-trip strips). */
   | { status: 'success'; result: unknown; rawResult: unknown }
-  /** Execution threw while the request abort signal was set — a mid-flight
-   * cancellation, not a genuine failure. Engines leave the call incomplete. */
+  /** Cancellation won the execution wait, even if the tool never settles.
+   * Engines leave the call incomplete rather than publishing a result. */
   | { status: 'aborted' }
   /** Execution threw. Engines own error serialization (their persisted error
    * shapes differ), so the raw error is returned. */
@@ -55,6 +56,8 @@ export async function executeToolCall(deps: {
   toolCallId: string;
   toolName: string;
   abortSignal?: AbortSignal;
+  /** Eager attempts are cancelled immediately by their coordinator after the run's grace window. */
+  settleSignal?: AbortSignal;
   /** Engine wrapper around live execution (e.g. durable's `markRunActive`); returns a release fn. */
   acquireExecution?: () => () => void;
   /**
@@ -69,13 +72,36 @@ export async function executeToolCall(deps: {
   logger?: IMastraLogger;
 }): Promise<ExecuteToolOutcome> {
   const { tool, toolCallId, toolName, abortSignal, logger } = deps;
+  const aborted = Symbol('tool execution aborted');
+  let executionError: unknown;
 
   try {
     const release = deps.acquireExecution?.();
+    const settleSignal = deps.settleSignal ?? abortSignal;
+    let onAbort: (() => void) | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let rawResult: unknown;
     try {
-      rawResult = await tool.execute(deps.args, deps.toolOptions);
+      rawResult = settleSignal
+        ? await new Promise<unknown>((resolve, reject) => {
+            onAbort = () => {
+              if (deps.settleSignal) queueMicrotask(() => reject(aborted));
+              else timer = setTimeout(() => reject(aborted), TOOL_ABORT_GRACE_MS);
+            };
+            settleSignal.addEventListener('abort', onAbort, { once: true });
+            if (settleSignal.aborted) {
+              onAbort();
+            }
+            // Consume abandoned rejections even after the grace window expires.
+            Promise.resolve(tool.execute(deps.args, deps.toolOptions)).then(resolve, error => {
+              executionError = error;
+              reject(error);
+            });
+          })
+        : await tool.execute(deps.args, deps.toolOptions);
     } finally {
+      if (onAbort) settleSignal?.removeEventListener('abort', onAbort);
+      if (timer) clearTimeout(timer);
       release?.();
     }
     deps.assertNotBailedOut?.();
@@ -95,6 +121,9 @@ export async function executeToolCall(deps: {
 
     return { status: 'success', result, rawResult };
   } catch (error) {
+    // Keep control-flow errors already available when cancellation settles;
+    // failures arriving after this point remain abandoned and handled.
+    if (error === aborted && executionError !== undefined) error = executionError;
     // Re-throw FGA authorization errors instead of swallowing them — an
     // authorization denial must fail the run, not be serialized as a
     // recoverable tool error for the LLM to retry.

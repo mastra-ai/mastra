@@ -60,7 +60,7 @@ describeForAllEngines('AIMock loop scenario: request context on approval resume'
   async function suspendOnApproval(
     shared: Awaited<ReturnType<typeof createSharedAgent>>,
     toolName: string,
-    extra: { requestContext: RequestContext; memory?: MastraMemory },
+    extra: { requestContext: RequestContext; memory?: MastraMemory; outputProcessors?: Processor[] },
   ) {
     const { output, chunks } = await runLoopScenario({
       engine,
@@ -68,6 +68,7 @@ describeForAllEngines('AIMock loop scenario: request context on approval resume'
       sharedAgent: shared,
       prompt: 'Look it up',
       requestContext: extra.requestContext,
+      ...(extra.outputProcessors ? { outputProcessors: extra.outputProcessors } : {}),
       ...(extra.memory ? { memory: extra.memory, threadId, resourceId } : {}),
       stopWhen: stepCountIs(5),
       collectChunks: true,
@@ -170,6 +171,37 @@ describeForAllEngines('AIMock loop scenario: request context on approval resume'
 
       expect(seen).toEqual(['second']);
     });
+
+    // The normal and fs loops do not run output processors on a resumed tool result.
+    it.skipIf(engine === 'normal' || engine === 'fs')(
+      'output processors see the request context passed to approveToolCall on the approved tool result',
+      async () => {
+        const seen = new Set<unknown>();
+        const recordWho: Processor = {
+          id: 'record-who',
+          // The approved tool's result is processed by the resumed run. The
+          // original stream stays subscribed with its own context, so other
+          // parts would mix both callers' contexts.
+          processOutputStream: async ({ part, requestContext }) => {
+            if (part.type === 'tool-result') seen.add(requestContext?.get('who'));
+            return part;
+          },
+        };
+        const shared = await createSharedAgent(getMock(), { engine, tools: { whoami: whoamiTool([]) } });
+        const run = await suspendOnApproval(shared, 'whoami', {
+          requestContext: contextWith('who', 'first'),
+          outputProcessors: [recordWho],
+        });
+        seen.clear();
+
+        const text = await drainText(
+          await shared.agent.approveToolCall({ ...run, requestContext: contextWith('who', 'second') }),
+        );
+
+        expect(text).toBe('done');
+        expect([...seen]).toEqual(['second']);
+      },
+    );
   });
 
   describe('memory chosen from the request context', () => {

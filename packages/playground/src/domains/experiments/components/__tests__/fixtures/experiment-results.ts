@@ -33,6 +33,43 @@ export const agentFailedResult: DatasetExperimentResult = {
   error: { message: 'model exploded' },
 };
 
+/** Tool calls and results as the experiment executor stores them: raw stream chunks paired by `toolCallId`. */
+const searchDocsCall = {
+  type: 'tool-call',
+  runId: 'run-1',
+  from: 'AGENT',
+  payload: { toolCallId: 'call-search', toolName: 'searchDocs', args: { query: 'pricing' } },
+};
+const searchDocsResult = {
+  type: 'tool-result',
+  runId: 'run-1',
+  from: 'AGENT',
+  payload: { toolCallId: 'call-search', toolName: 'searchDocs', args: { query: 'pricing' }, result: { hits: 3 } },
+};
+const readDocsCall = {
+  type: 'tool-call',
+  runId: 'run-1',
+  from: 'AGENT',
+  payload: { toolCallId: 'call-read', toolName: 'readDocs', args: { path: '/pricing' } },
+};
+
+export const agentToolCallsResult: DatasetExperimentResult = {
+  ...base,
+  id: 'res-agent-tools',
+  itemId: 'item-agent-tools',
+  targetType: 'agent',
+  output: { text: 'Pricing has two parts.', toolCalls: [searchDocsCall], toolResults: [searchDocsResult] },
+};
+
+/** Agent that ran out of steps while still calling tools, so it never produced a final text. */
+export const agentNoFinalTextResult: DatasetExperimentResult = {
+  ...base,
+  id: 'res-agent-no-text',
+  itemId: 'item-agent-no-text',
+  targetType: 'agent',
+  output: { text: '', toolCalls: [searchDocsCall, readDocsCall], toolResults: [searchDocsResult], error: null },
+};
+
 export const workflowResult: DatasetExperimentResult = {
   ...base,
   id: 'res-workflow',

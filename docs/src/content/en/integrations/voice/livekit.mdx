@@ -339,6 +339,8 @@ export default createLiveKitWorker({
 A workflow streams structured step events, not text. To speak tokens as they generate, the reply step pipes its agent's text into the step `writer`:
 
 ```typescript title="src/mastra/workflows/phone-conversation.ts"
+import { createStep } from '@mastra/core/workflows'
+
 const generateResponse = createStep({
   id: 'generateResponse',
   // input and output schemas omitted
@@ -1112,6 +1114,7 @@ Streams a Mastra agent's reply into a workflow step's `writer` on the workflow r
 
 ```typescript title="src/mastra/workflows/phone-conversation.ts"
 import { pipeAgentReplyToWriter } from '@mastra/livekit'
+import { createStep } from '@mastra/core/workflows'
 
 const generateResponse = createStep({
   id: 'generateResponse',

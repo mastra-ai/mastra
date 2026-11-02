@@ -81,7 +81,7 @@ describe('ProviderReconnectAction', () => {
     serveSession(modelScope);
     renderAction({ ...liveSession, owner });
 
-    expect(await screen.findByRole('link', { name: 'Login' })).toHaveAttribute('href', href);
+    expect(await screen.findByRole('link', { name: 'Review credentials' })).toHaveAttribute('href', href);
   });
 
   it('names the teammate whose connection a personal-credential session runs on', async () => {
@@ -89,6 +89,6 @@ describe('ProviderReconnectAction', () => {
     renderAction({ ...liveSession, owner: ward });
 
     expect(await screen.findByText('Ward Peeters needs to reconnect')).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'Login' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Review credentials' })).not.toBeInTheDocument();
   });
 });

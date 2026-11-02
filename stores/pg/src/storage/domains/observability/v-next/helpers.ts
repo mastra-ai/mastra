@@ -21,7 +21,7 @@ import type {
   ScoreRecord,
   SpanRecord,
 } from '@mastra/core/storage';
-import { computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { computeTraceStatus, EntityType, getStringAttribute } from '@mastra/core/storage';
 import { toPgText } from '../../../db/sanitize-json';
 import { storedPreview as buildStoredPreview, readPreview } from './preview-compat';
 import { coerceFeedbackReviewStatus } from './review-status';
@@ -46,6 +46,12 @@ const PROMOTED_KEYS = new Set([
   'executionSource',
   'serviceName',
 ]);
+
+function nullableNumber(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isNaN(n) ? null : n;
+}
 
 function nullableString(value: unknown): string | null {
   if (typeof value === 'string') return value === '' ? null : value;
@@ -274,6 +280,15 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     startedAt: toIsoOrDate(span.startedAt),
     endedAt: toIsoOrDate(endedAt),
     timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
+    externalParentSpanId: span.externalParentSpanId ?? null,
+    resumedFromSpanId: span.resumedFromSpanId ?? null,
+    model: span.model ?? null,
+    provider: span.provider ?? null,
+    outcome: span.outcome ?? null,
+    stopReason: span.stopReason ?? null,
+    stopReasonContext: jsonField(span.stopReasonContext),
+    timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
+    errorCount: span.errorCount ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata as Record<string, unknown> | null),
     metadataRaw: jsonField(metadata),
@@ -305,6 +320,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
   const startedAt = toDate(row.startedAt);
   const endedAt = spanRowEndedAt(row, startedAt);
   const error = parsedJson(row.error);
+  const attributes = parsedJson(row.attributes) as Record<string, unknown> | null;
   // Spans expose the row's `executionSource` column as `source` on the record.
   const { executionSource, ...ctx } = rowToCommonContext(row);
   return {
@@ -318,10 +334,19 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     isEvent: Boolean(row.isEvent),
     startedAt,
     endedAt,
+    externalParentSpanId: nullableString(row.externalParentSpanId),
+    resumedFromSpanId: nullableString(row.resumedFromSpanId),
+    model: nullableString(row.model) ?? getStringAttribute(attributes, 'model'),
+    provider: nullableString(row.provider) ?? getStringAttribute(attributes, 'provider'),
+    outcome: nullableString(row.outcome),
+    stopReason: nullableString(row.stopReason),
+    stopReasonContext: (parsedJson(row.stopReasonContext) as Record<string, unknown> | null) ?? null,
+    timeToFirstTokenMs: nullableNumber(row.timeToFirstTokenMs),
+    errorCount: nullableNumber(row.errorCount),
     tags: normalizeTags(row.tags),
     metadata: (parsedJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     scope: (parsedJson(row.scope) as Record<string, unknown> | null) ?? undefined,
-    attributes: (parsedJson(row.attributes) as Record<string, unknown> | null) ?? undefined,
+    attributes: attributes ?? undefined,
     links: (parsedJson(row.links) as Record<string, unknown>[] | null) ?? undefined,
     input: parsedJson(row.input) ?? undefined,
     output: parsedJson(row.output) ?? undefined,

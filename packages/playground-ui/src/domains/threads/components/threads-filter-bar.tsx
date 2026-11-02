@@ -1,4 +1,4 @@
-import { TraceTimeRangeChip, TRACE_TIME_RANGE_FIELD_ID } from '../../traces/components/trace-time-range-chip';
+import { DEFAULT_TRACES_FILTERS } from '../../traces/components/traces-explorer/traces-explorer-actions';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../traces/trace-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
@@ -8,6 +8,7 @@ import {
   useThreadsFilterBarFields,
 } from '../hooks/use-threads-filter-bar';
 import { FilterBar } from '@/ds/components/FilterBar';
+import { FILTER_BAR_TIME_RANGE_FIELD_ID } from '@/ds/components/FilterBar/filter-bar-time-range';
 
 // Items are rebuilt from tokens with `id: fieldId` (traceTokensToFilterBarItems); give the
 // draft that id so the chip survives the round trip without remounting.
@@ -28,7 +29,7 @@ export type ThreadsFilterBarProps = {
   disabled?: boolean;
 };
 
-/** The threads filter bar: a time range chip plus the fields `queryTraceThreads()` accepts. */
+/** The threads filter bar: the time range plus the fields `queryTraceThreads()` accepts. */
 export function ThreadsFilterBar({
   datePreset,
   dateFrom,
@@ -58,8 +59,8 @@ export function ThreadsFilterBar({
     >
       <FilterBar.Chips
         renderChip={item =>
-          item.fieldId === TRACE_TIME_RANGE_FIELD_ID ? (
-            <TraceTimeRangeChip
+          item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID ? (
+            <FilterBar.TimeRange
               preset={datePreset}
               onPresetChange={onDatePresetChange}
               dateFrom={dateFrom}
@@ -69,13 +70,14 @@ export function ThreadsFilterBar({
               onDateRangeChange={onDateRangeChange}
               disabled={disabled}
               presets={THREAD_TIME_RANGE_PRESETS}
+              defaultPreset={DEFAULT_TRACES_FILTERS.datePreset}
             />
           ) : (
             <FilterBar.Chip item={item} />
           )
         }
       />
-      <FilterBar.Input placeholder="Filter threads…" />
+      <FilterBar.Input placeholder="Filter threads" />
     </FilterBar>
   );
 }

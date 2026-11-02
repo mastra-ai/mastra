@@ -893,20 +893,18 @@ if (flags.json) {
     }
   }
   console.log(JSON.stringify(output, null, 2));
+} else if (flags.verbose) {
+  console.error(`\n${affectedSorted.length} affected test(s) found in ${elapsed}ms:\n`);
+  for (const testRel of affectedSorted) {
+    const chain = selectedResult.chains.get(testRel) || [];
+    console.log(`${testRel}`);
+    if (chain.length > 1) {
+      console.log(`  chain: ${chain.join(' → ')}`);
+    }
+    console.log('');
+  }
 } else {
-  if (flags.verbose) {
-    console.error(`\n${affectedSorted.length} affected test(s) found in ${elapsed}ms:\n`);
-    for (const testRel of affectedSorted) {
-      const chain = selectedResult.chains.get(testRel) || [];
-      console.log(`${testRel}`);
-      if (chain.length > 1) {
-        console.log(`  chain: ${chain.join(' → ')}`);
-      }
-      console.log('');
-    }
-  } else {
-    for (const testRel of affectedSorted) {
-      console.log(testRel);
-    }
+  for (const testRel of affectedSorted) {
+    console.log(testRel);
   }
 }

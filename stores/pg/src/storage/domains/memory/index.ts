@@ -384,7 +384,7 @@ export class MemoryPG extends MemoryStorage {
       );
       // idx_om_lookup_key index
       const fullOmTableName = dbGetTableName({ indexName: OM_TABLE, schemaName: quotedSchemaName });
-      const idxPrefix = schemaPrefix ? `${schemaPrefix}` : '';
+      const idxPrefix = schemaPrefix ? schemaPrefix : '';
       statements.push(
         `CREATE INDEX IF NOT EXISTS "${idxPrefix}idx_om_lookup_key" ON ${fullOmTableName} ("lookupKey");`,
       );
@@ -3442,12 +3442,11 @@ export class MemoryPG extends MemoryStorage {
               bestOverBoundary = boundary;
               bestOverTokens = cumulativeMessageTokens;
             }
-          } else {
+          } else if (cumulativeMessageTokens > bestUnderTokens) {
             // Under — track the closest (highest) under boundary
-            if (cumulativeMessageTokens > bestUnderTokens) {
-              bestUnderBoundary = boundary;
-              bestUnderTokens = cumulativeMessageTokens;
-            }
+
+            bestUnderBoundary = boundary;
+            bestUnderTokens = cumulativeMessageTokens;
           }
         }
 

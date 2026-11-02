@@ -1,5 +1,3 @@
-/** Browser-side helpers for the GitLab intake source. */
-
 export const MASTRA_PROJECTS_URL = 'https://projects.mastra.ai';
 
 export interface GitLabConnection {
@@ -90,7 +88,6 @@ export interface GitLabProject {
   sandboxWorkdir?: string;
 }
 
-/** Provider-neutral repository pick used by Factory onboarding and linking. */
 export interface GitLabRepository {
   provider: 'gitlab';
   /** Opaque Intake source id. */
@@ -134,6 +131,9 @@ export async function fetchGitLabStatus(baseUrl: string): Promise<GitLabStatus> 
     });
     if (res.status === 401) {
       return { enabled: false, configured: false, reauthRequired: false, reason: 'auth_required' };
+    }
+    if (res.status === 404) {
+      return { enabled: false, configured: false, reauthRequired: false, reason: 'missing_config' };
     }
     if (!res.ok) return { enabled: false, configured: false, reauthRequired: false, reason: 'unavailable' };
     return (await res.json()) as GitLabStatus;

@@ -757,12 +757,28 @@ export class ProcessorRunner {
         }
       }
       const detailStr = details.length > 0 ? ` — ${details.join('; ')}` : '';
-      throw new MastraError({
-        category: 'USER',
-        domain: 'AGENT',
-        id: 'PROCESSOR_WORKFLOW_FAILED',
-        text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
-      });
+      // Keep the underlying failure reachable: without it callers only see the
+      // flattened status text and lose the original error, stack and type.
+      let failedStepError: Error | undefined;
+      if (result.status === 'failed') {
+        for (const step of Object.values(result.steps)) {
+          if (step.status === 'failed' && step.error) {
+            failedStepError = step.error;
+            break;
+          }
+        }
+      }
+      throw new MastraError(
+        {
+          category: 'USER',
+          domain: 'AGENT',
+          id: 'PROCESSOR_WORKFLOW_FAILED',
+          text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
+        },
+        // The step's error is the live object; `result.error` is the engine's
+        // serialized copy and has no stack or original class.
+        result.status === 'failed' ? (failedStepError ?? result.error) : undefined,
+      );
     }
 
     // Extract and validate the output from the workflow result
@@ -897,19 +913,17 @@ export class ProcessorRunner {
           if (mutations.length > 0) {
             processableMessages = getProcessableResponseMessages(processResult);
           }
-        } else {
-          if (processResult) {
-            const deletedIds = idsBeforeProcessing.filter(
-              (i: string) => !processResult.some((m: MastraDBMessage) => m.id === i),
-            );
-            if (deletedIds.length) {
-              messageList.removeByIds(deletedIds);
-            }
-            processableMessages = processResult || [];
-            for (const message of processResult) {
-              messageList.removeByIds([message.id]);
-              messageList.add(message, check.getSource(message) || 'response', { merge: false });
-            }
+        } else if (processResult) {
+          const deletedIds = idsBeforeProcessing.filter(
+            (i: string) => !processResult.some((m: MastraDBMessage) => m.id === i),
+          );
+          if (deletedIds.length) {
+            messageList.removeByIds(deletedIds);
+          }
+          processableMessages = processResult || [];
+          for (const message of processResult) {
+            messageList.removeByIds([message.id]);
+            messageList.add(message, check.getSource(message) || 'response', { merge: false });
           }
         }
 
@@ -2845,7 +2859,11 @@ export class ProcessorRunner {
       const messageIdBefore = args.messageId;
       let messageIdAfter = args.messageId;
       const currentSpan = observabilityContext.tracingContext?.currentSpan;
-      const parentSpan = currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan;
+      // The failed call's MODEL_STEP is still open here, so the span sits under it
+      // like the step's other processor spans, not flat under the agent run.
+      const parentSpan =
+        findOwnModelStepSpan(currentSpan) ??
+        (currentSpan?.findParent(SpanType.AGENT_RUN) || currentSpan?.parent || currentSpan);
       const processorSpan = parentSpan?.createChildSpan({
         type: processor.spanType ?? SpanType.PROCESSOR_RUN,
         name: resolveProcessorSpanName(processor, 'requestError', `request error processor: ${processor.id}`),

@@ -34,6 +34,82 @@ export async function publishAbortRequest(pubsub: PubSub, runId: string): Promis
 }
 
 /**
+ * Topic on which the process executing a run acknowledges abort requests that
+ * carried a `requestId`. Kept apart from the control topic so a requester never
+ * has to read (or replay) the control history to wait for its own reply.
+ */
+const abortAckTopic = (runId: string): string => `agent.control.${runId}.ack`;
+const ABORT_ACK = 'abort-ack';
+
+/** How long `requestAcknowledgedAbort` waits for the executing process to answer. */
+const ABORT_ACK_TIMEOUT_MS = 2_000;
+
+/**
+ * Ask whichever process is executing `runId` to abort it, and wait for that
+ * process to confirm it applied the request.
+ *
+ * Resolves `true` only when an executing process acknowledged the abort, and
+ * `false` when nobody answered within `timeoutMs` (the run is not executing
+ * anywhere, its owner died, or its listener is not installed yet). A publish
+ * failure rejects: the caller cannot claim an abort it never sent.
+ *
+ * @internal Used by `@mastra/server`'s run abort route; not a public API.
+ */
+export async function requestAcknowledgedAbort(
+  pubsub: PubSub,
+  runId: string,
+  timeoutMs: number = ABORT_ACK_TIMEOUT_MS,
+): Promise<boolean> {
+  const requestId = globalThis.crypto.randomUUID();
+  const topic = abortAckTopic(runId);
+  let acknowledge!: () => void;
+  const acknowledged = new Promise<boolean>(resolve => {
+    acknowledge = () => resolve(true);
+  });
+  const handler = async (
+    event: { type?: string; data?: { requestId?: string } },
+    ack?: () => Promise<void>,
+  ): Promise<void> => {
+    if (event?.type === ABORT_ACK && event.data?.requestId === requestId) acknowledge();
+    await ack?.();
+  };
+
+  // The deadline bounds the whole exchange: a broker that stalls on subscribe or
+  // publish must not hold the caller open past `timeoutMs`.
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let timedOut = false;
+  const deadline = new Promise<boolean>(resolve => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      resolve(false);
+    }, timeoutMs);
+  });
+  // Subscribe before publishing so an acknowledgement cannot race past us.
+  const subscribed = pubsub.subscribe(topic, handler as Parameters<PubSub['subscribe']>[1], { startFrom: 'latest' });
+  const exchange = (async () => {
+    await subscribed;
+    await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
+      type: AgentControlEventTypes.ABORT_REQUEST,
+      runId,
+      data: { requestId },
+    });
+    return acknowledged;
+  })();
+  // A setup failure after the deadline has nobody left to report to.
+  exchange.catch(() => {});
+  try {
+    return await Promise.race([exchange, deadline]);
+  } finally {
+    clearTimeout(timer);
+    // Unsubscribe once the subscription settles, even when it lands after the deadline.
+    const cleanup = subscribed
+      .then(() => pubsub.unsubscribe(topic, handler as Parameters<PubSub['subscribe']>[1]))
+      .catch(() => {});
+    if (!timedOut) await cleanup;
+  }
+}
+
+/**
  * Listen for abort requests targeting `runId`.
  *
  * @returns An unsubscribe function. Callers must invoke it when the run leaves
@@ -48,9 +124,21 @@ export async function subscribeToAbortRequests(
   // Every delivery is acknowledged, including control events this listener
   // ignores. An ignored delivery is still a delivery, and a durable transport
   // keeps unacknowledged entries pending for the life of the subscription.
-  const handler = async (event: { type?: string }, ack?: () => Promise<void>) => {
+  const handler = async (event: { type?: string; data?: { requestId?: string } }, ack?: () => Promise<void>) => {
     if (event?.type === AgentControlEventTypes.ABORT_REQUEST) {
       onAbortRequested();
+      const requestId = event.data?.requestId;
+      if (requestId) {
+        // Confirm to a requester waiting on `requestAcknowledgedAbort`. A lost
+        // acknowledgement only makes the requester retry; the abort has applied.
+        await pubsub
+          .publish(abortAckTopic(runId), {
+            type: ABORT_ACK,
+            runId,
+            data: { requestId },
+          })
+          .catch(() => {});
+      }
     }
     await ack?.();
   };

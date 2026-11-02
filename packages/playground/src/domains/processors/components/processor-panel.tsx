@@ -182,7 +182,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
             <Textarea
               value={testMessage}
               onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setTestMessage(e.target.value)}
-              placeholder="Enter a test message..."
+              placeholder="Enter a test message"
               rows={4}
             />
           </Field>
@@ -241,7 +241,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
       <div className="relative h-full overflow-x-auto overflow-y-auto p-5">
         <CodeMirror
           value={errorString || resultCode}
-          editable={true}
+          editable
           theme={theme}
           extensions={[jsonLanguage, codeFoldGutter]}
           basicSetup={{ foldGutter: false }}

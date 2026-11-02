@@ -15,7 +15,8 @@ import { ChatSessionContext } from '../../../context/ChatSessionContext';
 import type { ChatSessionContextApi } from '../../../context/ChatSessionContext';
 import { ChatThinkingProvider } from '../../../context/ChatThinkingProvider';
 import { AGENT_CONTROLLER_ID } from '../../../services/constants';
-import { ModelPicker } from '../ModelPicker';
+import { ChangeModelAction, ModelPicker } from '../ModelPicker';
+import { datedModels } from '../../../../settings/components/__tests__/fixtures/models';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -69,7 +70,10 @@ function renderPicker({
   emptyCatalog = false,
   catalogFails = false,
   sessionPolicy,
+  catalog = models,
+  withChangeModelAction = false,
 }: {
+  catalog?: AvailableModelOption[];
   kind?: ChatSessionContextApi['kind'];
   modelId?: string;
   defaultModelId?: string | null;
@@ -78,7 +82,7 @@ function renderPicker({
   catalogLoaded?: Promise<void>;
   modelSwitched?: Promise<void>;
   thinkingDefaultsFail?: boolean;
-  /** Mount on a Factory route, so the Factory's thinking level applies. */
+  /** Mount on a Factory-routed Factory, so the Factory's thinking level applies. */
   inFactory?: boolean;
   /** Mount on a Factory route whose project has this model scope. */
   modelScope?: 'factory' | 'user' | 'hybrid';
@@ -92,6 +96,7 @@ function renderPicker({
   emptyCatalog?: boolean;
   /** The session catalog request fails. */
   catalogFails?: boolean;
+  withChangeModelAction?: boolean;
 } = {}) {
   const modelSwitches: unknown[] = [];
   const stateUpdates: unknown[] = [];
@@ -101,7 +106,7 @@ function renderPicker({
     ),
     http.get(`${TEST_BASE_URL}/web/config/models`, async ({ request }) => {
       await catalogLoaded;
-      if (!modelScope) return HttpResponse.json({ models });
+      if (!modelScope) return HttpResponse.json({ models: catalog });
       const params = new URL(request.url).searchParams;
       if (params.has('resourceId')) {
         if (catalogFails) {
@@ -137,7 +142,9 @@ function renderPicker({
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
       thinkingDefaultsFail
         ? HttpResponse.json({ error: 'unavailable' }, { status: 500 })
-        : HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', defaultThinkingLevel: 'medium' } }),
+        : HttpResponse.json({
+            project: { id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultThinkingLevel: 'medium' },
+          }),
     ),
     http.get(`${API}/sessions/:resourceId`, async ({ params }) => {
       await settingsLoaded;
@@ -179,7 +186,7 @@ function renderPicker({
             name: 'Mastra',
             modelScope,
             defaultModelId: factoryDefaultModelId,
-            defaultThinkingLevel: 'medium',
+            defaultThinkingLevel: 'low',
           },
         }),
       ),
@@ -203,6 +210,7 @@ function renderPicker({
         <ChatModelsProvider>
           <ChatThinkingProvider>
             <ModelPicker />
+            {withChangeModelAction ? <ChangeModelAction /> : null}
             <Toaster position="bottom-right" />
           </ChatThinkingProvider>
         </ChatModelsProvider>
@@ -229,6 +237,19 @@ afterEach(() => {
 });
 
 describe('ModelPicker', () => {
+  describe('when the catalog contains release dates', () => {
+    it('offers newer models first within each provider', async () => {
+      const user = userEvent.setup();
+      renderPicker({ catalog: datedModels, defaultModelId: 'openai/gpt-5' });
+      await user.click(await screen.findByLabelText('Session model'));
+      const options = await screen.findAllByRole('option');
+      expect(options.map(option => option.getAttribute('data-value'))).toEqual([
+        'openai/gpt-5',
+        'openai/gpt-4.1',
+        'openai/gpt-4o',
+      ]);
+    });
+  });
   it.each(['user', 'hybrid'] as const)(
     'shows the thread owner catalog and default to a collaborator in %s scope',
     async modelScope => {
@@ -280,6 +301,16 @@ describe('ModelPicker', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Thinking: High · Personal default' }));
     expect(screen.getByText('Follows the Personal default.')).toBeInTheDocument();
+  });
+
+  it("starts a chat on personal defaults at medium, never the Factory's level, when its owner set no personal level", async () => {
+    renderPicker({
+      modelScope: 'user',
+      modelId: 'anthropic/claude-sonnet-4-6',
+      sessionPolicy: { modelScope: 'user', defaultModelId: 'anthropic/claude-sonnet-4-6', personalThinkingLevel: null },
+    });
+
+    expect(await screen.findByRole('button', { name: 'Thinking: Medium · Built-in default' })).toBeEnabled();
   });
 
   it('uses personal credentials to show a hybrid user session model as configured', async () => {
@@ -543,5 +574,35 @@ describe('ModelPicker', () => {
     finishSwitch();
     await waitForMutationsIdle(client);
     expect(await screen.findByRole('button', { name: 'Thinking: High · this session' })).toBeEnabled();
+  });
+
+  it('locks the status-line picker while the error card switches the model', async () => {
+    let finishSwitch = () => {};
+    const modelSwitched = new Promise<void>(resolve => {
+      finishSwitch = resolve;
+    });
+    const user = userEvent.setup();
+    const { client } = renderPicker({
+      modelId: 'anthropic/claude-sonnet-4-6',
+      thinkingLevel: 'high',
+      modelSwitched,
+      withChangeModelAction: true,
+    });
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Change model' })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Change model' }));
+    await user.click(screen.getByRole('option', { name: /gpt-5/i }));
+
+    const sessionModel = await screen.findByRole('button', { name: 'Session model' });
+    await waitFor(() => expect(sessionModel).toBeDisabled());
+    expect(sessionModel).toHaveTextContent(/gpt-5/i);
+    expect(screen.getByRole('button', { name: 'Thinking: unavailable. Switching model…' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    finishSwitch();
+    await waitForMutationsIdle(client);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Session model' })).toBeEnabled());
   });
 });

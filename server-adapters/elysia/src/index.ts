@@ -98,6 +98,19 @@ function normalizeRouteParams(path: string): { normalizedPath: string; paramName
 }
 
 /**
+ * Reads query params keeping every value of a repeated key (`?tag=a&tag=b` -> `{ tag: ['a', 'b'] }`), as the
+ * other adapters do; Elysia's `ctx.query` and `Object.fromEntries` keep only one.
+ */
+function searchParamsToQuery(searchParams: URLSearchParams): Record<string, string | string[]> {
+  const query: Record<string, string | string[]> = {};
+  for (const key of new Set(searchParams.keys())) {
+    const values = searchParams.getAll(key);
+    query[key] = values.length === 1 ? (values[0] as string) : values;
+  }
+  return query;
+}
+
+/**
  * Remaps Elysia's parsed params from position-based names (p0, p1, ...)
  * back to the original parameter names expected by the route handler.
  */
@@ -374,7 +387,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     const urlParams = paramNames.length > 0 ? remapParams(rawUrlParams, paramNames) : rawUrlParams;
 
     // Query params - parse from URL
-    const queryParams = normalizeQueryParams(Object.fromEntries(url.searchParams));
+    const queryParams = normalizeQueryParams(searchParamsToQuery(url.searchParams));
 
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
@@ -567,9 +580,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         statusText: sseResponse.statusText,
         headers,
       });
-    } else {
-      return new Response(null, { status: 500 });
     }
+    return new Response(null, { status: 500 });
   }
 
   async registerRoute(
@@ -621,7 +633,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       if (hasAuth) {
         const hasPermission = await loadHasPermission();
         if (hasPermission) {
-          const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
+          const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
           const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, ctx.requestContext);
           if (permissionError) {
             return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
@@ -635,7 +647,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       // Extract params - remap from normalized param names back to original
       const rawParams = ctx.params || {};
       const urlParams = paramNames.length > 0 ? remapParams(rawParams, paramNames) : rawParams;
-      const queryParams = normalizeQueryParams(ctx.query || {});
+      const queryParams = normalizeQueryParams(searchParamsToQuery(new URL(ctx.request.url).searchParams));
       let body: unknown;
       let bodyParseError: { message: string } | undefined;
 
@@ -809,13 +821,17 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       } catch (error) {
         const httpStatus =
           error && typeof error === 'object' ? ((error as any).status ?? (error as any).details?.status) : undefined;
-        // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.
-        const logLevel = httpStatus === 501 ? 'warn' : 'error';
-        this.mastra.getLogger()?.[logLevel]('Error calling handler', {
-          error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
-          path: route.path,
-          method: route.method,
-        });
+        // Client errors (4xx) are returned as structured responses below, so they aren't logged as server faults.
+        const isClientError = typeof httpStatus === 'number' && httpStatus >= 400 && httpStatus < 500;
+        if (!isClientError) {
+          // 501 means an optional capability isn't provided by the configured storage or core: expected, not a server fault.
+          const logLevel = httpStatus === 501 ? 'warn' : 'error';
+          this.mastra.getLogger()?.[logLevel]('Error calling handler', {
+            error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
+            path: route.path,
+            method: route.method,
+          });
+        }
 
         const customResponse = getCustomHTTPExceptionResponse(error);
         if (customResponse) {
@@ -893,7 +909,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             if (hasAuth) {
               const hasPermission = await loadHasPermission();
               if (hasPermission) {
-                const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
+                const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
                 const permissionError = this.checkRoutePermission(
                   serverRoute,
                   userPermissions,

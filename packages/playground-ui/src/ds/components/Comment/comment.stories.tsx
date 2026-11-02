@@ -74,7 +74,7 @@ const SimpleThread = ({ variant }: { variant: CommentVariant }) => (
       ))}
     </CommentList>
     <CommentComposer aria-label="Add a comment">
-      <CommentComposerInput aria-label="Comment" placeholder={variant === 'embed' ? 'Reply...' : 'Add a comment...'}>
+      <CommentComposerInput aria-label="Comment" placeholder={variant === 'embed' ? 'Reply' : 'Add a comment'}>
         <CommentComposerSend />
       </CommentComposerInput>
     </CommentComposer>
@@ -94,7 +94,7 @@ export const ComposerOnly: Story = {
   render: () => (
     <Comment className="max-w-2xl">
       <CommentComposer aria-label="Add a comment">
-        <CommentComposerInput aria-label="Comment" placeholder="Add a comment...">
+        <CommentComposerInput aria-label="Comment" placeholder="Add a comment">
           <CommentComposerSend disabled />
         </CommentComposerInput>
       </CommentComposer>
@@ -130,7 +130,7 @@ const InteractiveThread = () => {
       >
         <CommentComposerInput
           aria-label="Comment"
-          placeholder="Add a comment..."
+          placeholder="Add a comment"
           value={value}
           onChange={event => {
             setValue(event.target.value);

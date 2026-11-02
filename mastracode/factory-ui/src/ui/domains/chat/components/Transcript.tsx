@@ -18,17 +18,37 @@ import {
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
+import { ActivityWorkingDirectory } from '@mastra/playground-ui/components/ai/activity';
+import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
+import { ActivityDisclosureProvider } from '@mastra/playground-ui/domains/chat/activity';
 import { MessageBubble } from './MessageBubble';
-import { ProviderReconnectAction } from './ProviderReconnectAction';
+import { hasLiveStretch, planTurnActivity, sameEntryActivity } from './activity/activity-plan';
+import type { EntryActivity } from './activity/activity-plan';
+import { RunErrorNotice } from './RunErrorNotice';
 import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
-import { isTurnDivider } from './TranscriptSignals';
+import { agentWorkingDirectory, isTurnDivider } from './TranscriptSignals';
+import { FactoryKnowledgeLinks } from './knowledge/FactoryKnowledgeLinks';
+import { TurnRevealScope } from './TurnReveal';
+import { turnGaps } from './turn-gaps';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
 
-export function Transcript({ tail }: { tail?: ReactNode }) {
+/** The live turn's last row, told whether a live stretch above it already names what the agent is doing. */
+export type TranscriptTail = (stretchLive: boolean) => ReactNode;
+
+/** A step ending is not the reply ending, so a running turn has no whole answer to copy yet. */
+function turnReply(steps: MessageEntry[], runningTurn: boolean): string | undefined {
+  if (runningTurn) return undefined;
+  return steps
+    .map(step => messageText(renderableParts(step)))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+export function Transcript({ tail }: { tail?: TranscriptTail }) {
   const { sessionId, sessionEnabled, baseUrl, owner } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const { entries } = transcript;
@@ -97,7 +117,7 @@ export function TranscriptEntries({
   /** Whose personal credentials the thread runs on; names their replies for other viewers. */
   owner?: ThreadOwner;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
-  tail?: ReactNode;
+  tail?: TranscriptTail;
 }) {
   const prompts = entries.flatMap(entry => (entry.kind === 'suspension' ? [entry] : []));
   // Keyed by the prompts on screen, not by the array holding them: a delta hands this
@@ -117,7 +137,7 @@ export function TranscriptEntries({
 
   // Ignore echoed user signals that render nothing when opening a turn.
   const drawsContent = (entry: MessageEntry): boolean =>
-    entry.message.content.parts.some(part => draws(part, suspensions, entry.runtimeTools));
+    entry.message.content.parts.some(part => draws(part, entry, suspensions));
   const opensTurn = (entry: TimelineEntry): boolean =>
     entry.kind === 'message' && startsUserTurn(entry.message) && drawsContent(entry);
   // A steer interjects into a reply still being written: it keeps its turn for the
@@ -126,62 +146,96 @@ export function TranscriptEntries({
 
   const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTurnDivider });
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
+  const gaps = turnGaps(entries, opensTurn);
+  const directories = turnGroups.reduce<(string | undefined)[]>(
+    (held, group) => [...held, agentWorkingDirectory(group.entries) ?? held.at(-1)],
+    [],
+  );
 
   return (
-    <>
-      {turnGroups.map((group, index) => {
-        const isLiveTurn = index === turnGroups.length - 1;
-        const runningTurn = isLiveTurn && running;
-        // The first turn opens at the top of the transcript already, so room under it
-        // would buy no travel — only empty scroll below a fresh thread.
-        const holdsRoom =
-          runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
+    <FactoryKnowledgeLinks>
+      <ActivityDisclosureProvider>
+        {turnGroups.map((group, index) => {
+          const isLiveTurn = index === turnGroups.length - 1;
+          const runningTurn = isLiveTurn && running;
+          // The first turn opens at the top of the transcript already, so room under it
+          // would buy no travel — only empty scroll below a fresh thread.
+          const holdsRoom =
+            runningTurn && group.opensTurn && index > 0 && !steers(group.entries.find(entry => entry.id === group.key));
 
-        // One reply, however many messages the server split it into: the meta row lands
-        // once, under the last of them, and copies the whole answer. While the run is
-        // still answering there is no whole answer yet — a step ending is not the reply
-        // ending, so no stamp lands mid-turn.
-        const steps = replySteps(group);
-        const replyEnd = steps.at(-1);
-        const reply = runningTurn
-          ? undefined
-          : steps
-              .map(step => messageText(renderableParts(step)))
-              .filter(Boolean)
-              .join('\n\n');
+          const steps = replySteps(group);
+          const replyEnd = steps.at(-1);
+          const reply = turnReply(steps, runningTurn);
+          const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
 
-        return (
-          <ChatShell.Turn
-            key={group.key}
-            opensTurn={group.opensTurn}
-            holdsRoom={holdsRoom}
-            restored={group.key === restoredTurnKey}
-          >
-            {group.entries.map(entry => (
-              <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
-                <TranscriptEntryContent
-                  entry={entry}
-                  suspensions={suspensions}
-                  reply={entry === replyEnd ? reply : undefined}
-                  redundantSuspension={
-                    entry.kind === 'suspension' &&
-                    entry.toolName !== 'request_access' &&
-                    canonicalToolCallIds.has(entry.toolCallId)
-                  }
-                  isSubmitting={isSubmitting}
-                  viewerId={viewerId}
-                  owner={owner}
-                  onApprove={onApprove}
-                  onRespond={onRespond}
-                />
-              </TranscriptItem>
-            ))}
-            {isLiveTurn && tail}
-          </ChatShell.Turn>
-        );
-      })}
-      {turnGroups.length === 0 && tail}
-    </>
+          return (
+            <ChatShell.Turn
+              key={group.key}
+              opensTurn={group.opensTurn}
+              holdsRoom={holdsRoom}
+              restored={group.key === restoredTurnKey}
+            >
+              <ActivityWorkingDirectory path={directories[index]}>
+                <TurnRevealScope>
+                  {group.entries.map(entry => {
+                    const gap = gaps.get(entry.id);
+                    return (
+                      <TranscriptItem key={entry.id} entry={entry} scrollAnchor={opensTurn(entry) && !steers(entry)}>
+                        {gap && <TranscriptDivider label={gap.label} title={gap.title} />}
+                        <TranscriptEntryContent
+                          entry={entry}
+                          suspensions={suspensions}
+                          reply={entry === replyEnd ? reply : undefined}
+                          activity={activityByEntry.get(entry.id)}
+                          redundantSuspension={
+                            entry.kind === 'suspension' &&
+                            entry.toolName !== 'request_access' &&
+                            canonicalToolCallIds.has(entry.toolCallId)
+                          }
+                          isSubmitting={isSubmitting}
+                          viewerId={viewerId}
+                          owner={owner}
+                          onApprove={onApprove}
+                          onRespond={onRespond}
+                        />
+                      </TranscriptItem>
+                    );
+                  })}
+                </TurnRevealScope>
+                {isLiveTurn && tail?.(hasLiveStretch(activityByEntry))}
+              </ActivityWorkingDirectory>
+            </ChatShell.Turn>
+          );
+        })}
+        {turnGroups.length === 0 && tail?.(false)}
+      </ActivityDisclosureProvider>
+    </FactoryKnowledgeLinks>
+  );
+}
+
+interface TranscriptEntryContentProps {
+  entry: TimelineEntry;
+  suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  reply?: string;
+  redundantSuspension: boolean;
+  isSubmitting: boolean;
+  viewerId?: string;
+  owner?: ThreadOwner;
+  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  activity?: EntryActivity;
+}
+
+/** The turn's plan is rebuilt every token: compare `activity` by what it draws, the rest by identity. */
+function sameEntryContentProps(
+  { activity: prevActivity, ...prev }: TranscriptEntryContentProps,
+  { activity: nextActivity, ...next }: TranscriptEntryContentProps,
+): boolean {
+  if (!sameEntryActivity(prevActivity, nextActivity)) return false;
+  const nextProps = new Map(Object.entries(next));
+  const prevProps = Object.entries(prev);
+  return (
+    prevProps.length === nextProps.size && prevProps.every(([name, value]) => Object.is(value, nextProps.get(name)))
   );
 }
 
@@ -204,17 +258,8 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   owner,
   onApprove,
   onRespond,
-}: {
-  entry: TimelineEntry;
-  suspensions: ReadonlyMap<string, SuspensionPrompt>;
-  reply?: string;
-  redundantSuspension: boolean;
-  isSubmitting: boolean;
-  viewerId?: string;
-  owner?: ThreadOwner;
-  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
-  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
-}) {
+  activity,
+}: TranscriptEntryContentProps) {
   switch (entry.kind) {
     case 'message':
       return (
@@ -226,6 +271,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
           viewerId={viewerId}
           owner={owner}
           onRespond={onRespond}
+          activity={activity}
         />
       );
     case 'notice':
@@ -245,7 +291,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
     default:
       return null;
   }
-});
+}, sameEntryContentProps);
 
 function TranscriptItem({
   entry,
@@ -263,7 +309,7 @@ function TranscriptItem({
       messageId={entry.id}
       scrollAnchor={scrollAnchor}
       // Prepend anchoring needs real item heights, not off-screen estimates.
-      className={cn('[content-visibility:visible]', arriving)}
+      className={cn('[content-visibility:visible] empty:hidden', arriving)}
     >
       <ArrivalScope>{children}</ArrivalScope>
     </MessageScrollerItem>
@@ -271,12 +317,9 @@ function TranscriptItem({
 }
 
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
+  if (entry.error) return <RunErrorNotice error={entry.error} entryId={entry.id} />;
   return (
-    <Notice
-      className="my-2"
-      variant={entry.level === 'error' ? 'destructive' : 'info'}
-      action={entry.action === 'provider-login' ? <ProviderReconnectAction /> : undefined}
-    >
+    <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
       <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
     </Notice>
   );

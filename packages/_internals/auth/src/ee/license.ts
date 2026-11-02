@@ -230,24 +230,23 @@ export class LicenseClient {
         this.status = 'invalid';
         this.clearCache();
         return false;
-      } else {
-        // First call failed
-        this.logger?.warn('License server unreachable on startup. Failing open (allowing features) and will retry.');
-
-        // Mock a success to fail open, but set a short TTL to force quick retry
-        this.status = 'valid';
-        this.cachedResult = {
-          valid: true,
-          entitlements: [],
-          planTier: 'unknown',
-          expiresAt: null,
-          leaseTtlSeconds: 300, // 5 minutes
-        };
-        this.cacheExpiry = now + 300 * 1000;
-        this.gracePeriodEnd = now + this.GRACE_PERIOD_MS;
-        this.scheduleRevalidation(300);
-        return true;
       }
+      // First call failed
+      this.logger?.warn('License server unreachable on startup. Failing open (allowing features) and will retry.');
+
+      // Mock a success to fail open, but set a short TTL to force quick retry
+      this.status = 'valid';
+      this.cachedResult = {
+        valid: true,
+        entitlements: [],
+        planTier: 'unknown',
+        expiresAt: null,
+        leaseTtlSeconds: 300, // 5 minutes
+      };
+      this.cacheExpiry = now + 300 * 1000;
+      this.gracePeriodEnd = now + this.GRACE_PERIOD_MS;
+      this.scheduleRevalidation(300);
+      return true;
     }
   }
 

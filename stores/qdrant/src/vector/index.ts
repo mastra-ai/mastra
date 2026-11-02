@@ -593,7 +593,6 @@ export class QdrantVector extends MastraVector {
           await this.client.upsert(indexName, {
             points: [point],
           });
-          return;
         }
       } else if (filter) {
         // Update multiple vectors matching filter
@@ -653,7 +652,6 @@ export class QdrantVector extends MastraVector {
               wait: true,
             });
           }
-          return;
         }
       }
     } catch (error) {

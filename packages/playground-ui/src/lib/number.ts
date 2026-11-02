@@ -4,13 +4,40 @@ export const toSigFigs = (num: number, sigFigs: number) => {
   return Number(num.toPrecision(sigFigs));
 };
 
-const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+const BYTE_UNITS = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'] as const;
 
-export function formatBytes(bytes: number | null | undefined): string | undefined {
+export type ByteUnit = (typeof BYTE_UNITS)[number];
+
+export function formatBytes(
+  bytes: number | null | undefined,
+  options?: { unit: ByteUnit; autoScale?: boolean },
+): string | undefined {
   if (bytes == null || !Number.isFinite(bytes) || bytes < 0) return undefined;
-  const exponent = bytes < 1 ? 0 : Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1);
-  const value = bytes / 1024 ** exponent;
-  const rounded = exponent === 0 || value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
+  if (options && !options.autoScale) return `${bytes} ${options.unit}`;
+
+  let exponent = options
+    ? BYTE_UNITS.indexOf(options.unit)
+    : bytes < 1
+      ? 0
+      : Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), BYTE_UNITS.length - 1);
+  let value = options ? bytes : bytes / 1024 ** exponent;
+
+  if (options) {
+    while (value < 1 && exponent > 0) {
+      value *= 1024;
+      exponent--;
+    }
+    while (value >= 1024 && exponent < BYTE_UNITS.length - 1) {
+      value /= 1024;
+      exponent++;
+    }
+  }
+
+  let rounded = exponent === 0 || value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
+  if (options && rounded >= 1024 && exponent < BYTE_UNITS.length - 1) {
+    rounded = 1;
+    exponent++;
+  }
   return `${rounded} ${BYTE_UNITS[exponent]}`;
 }
 

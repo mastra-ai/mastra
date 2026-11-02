@@ -65,6 +65,7 @@ export * from './NvidiaIcon';
 export * from './OpenaiChatIcon';
 export * from './OpenRouterIcon';
 export * from './QwenIcon';
+export * from './TypesafeIcon';
 export * from './XGroqIcon';
 export * from './XaiIcon';
 export * from './ZaiIcon';

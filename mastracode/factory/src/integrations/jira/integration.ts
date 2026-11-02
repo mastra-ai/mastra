@@ -45,6 +45,8 @@ import type { JiraComment, JiraIssue, JiraTransition } from './api.js';
 import { JiraApiClient, JiraApiError } from './api.js';
 import type { JiraEventRules, JiraRuleOverrides } from './default-rules.js';
 import { resolveJiraRules } from './default-rules.js';
+import { buildIntakeJql, unfilteredJiraScopes } from './intake-jql.js';
+import type { JiraIntakeScope } from './intake-jql.js';
 import { attachJiraIssueReconciler } from './issue-reconciler.js';
 import { jiraReconciliationEnabled, jiraReconciliationInterval } from './reconciliation-config.js';
 import { buildJiraRoutes } from './routes.js';
@@ -52,8 +54,10 @@ import { attachJiraRules } from './rules.js';
 
 /** Deployment-global Jira Cloud credentials. All credential fields are required. */
 export interface JiraIntegrationConfig {
-  /** Site base URL, e.g. `https://acme.atlassian.net`. */
+  /** Site base URL, e.g. `https://acme.atlassian.net`, used for browser links. */
   baseUrl: string;
+  /** API base URL for scoped tokens. Defaults to `baseUrl`. */
+  apiBaseUrl?: string;
   /** Atlassian account email the API token belongs to. */
   email: string;
   /** API token from id.atlassian.com → Security → API tokens. */
@@ -80,6 +84,19 @@ export const DEPLOYMENT_CONNECTION: IntegrationConnection = { type: 'oauth', acc
 const ISSUE_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeSiteBaseUrl(baseUrl: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new Error(`JiraIntegration baseUrl is not an absolute URL: "${baseUrl}".`);
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`JiraIntegration baseUrl must be an http(s) URL: "${baseUrl}".`);
+  }
+  return baseUrl.replace(/\/+$/, '');
+}
 
 /**
  * Capability state types (`capabilities/intake.ts`) → Jira status-category
@@ -111,6 +128,7 @@ export class JiraIntegration implements FactoryIntegration {
   readonly id = 'jira';
 
   readonly #config: JiraIntegrationConfig;
+  readonly #baseUrl: string;
   /** Typed REST client bound to the deployment credentials. */
   readonly api: JiraApiClient;
 
@@ -127,8 +145,9 @@ export class JiraIntegration implements FactoryIntegration {
 
   constructor(config: JiraIntegrationConfig) {
     this.#rules = resolveJiraRules(config.rules);
-    // JiraApiClient validates the credential group and normalizes the URL.
-    this.api = new JiraApiClient(config);
+    this.#baseUrl = normalizeSiteBaseUrl(config.baseUrl);
+    // JiraApiClient validates the credential group and normalizes the API URL.
+    this.api = new JiraApiClient({ ...config, baseUrl: config.apiBaseUrl ?? config.baseUrl });
     this.#config = config;
   }
 
@@ -193,10 +212,11 @@ export class JiraIntegration implements FactoryIntegration {
 
   /** Normalized site base URL (no trailing slash) — `/browse/<key>` links hang off this. */
   get baseUrl(): string {
-    return this.api.baseUrl;
+    return this.#baseUrl;
   }
 
   readonly intake: Intake = {
+    bindingLabelFilters: true,
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: () => this.#listSources(),
     listItems: input => this.#listItems(input),
@@ -245,7 +265,7 @@ export class JiraIntegration implements FactoryIntegration {
 
   async #listItems({ sourceIds, cursor }: ListIntakeItemsInput): Promise<IntakeItemPage> {
     if (sourceIds.length === 0) return { items: [], nextCursor: null };
-    const page = await this.listActiveIssues(cursor, sourceIds);
+    const page = await this.listActiveIssues(cursor, unfilteredJiraScopes(sourceIds));
     return {
       items: page.issues.map(issue => ({
         source: { type: 'issue', externalId: issue.identifier, url: issue.url },
@@ -277,22 +297,28 @@ export class JiraIntegration implements FactoryIntegration {
   }
 
   async #listIssues(input: ListIntakeIssuesInput): Promise<{ issues: IntakeIssue[]; nextCursor: string | null }> {
-    const page = await this.listActiveIssues(input.cursor, input.sourceIds, input.labels);
+    const page = await this.listActiveIssues(
+      input.cursor,
+      input.sourceIds ? unfilteredJiraScopes(input.sourceIds) : undefined,
+      input.labels,
+    );
     return { issues: page.issues, nextCursor: page.nextCursor };
   }
 
   /**
    * One page of active issues (status category not Done), most recently
-   * updated first, optionally filtered to projects and labels. The
-   * capability cursor is Jira's opaque `nextPageToken` passed through.
+   * updated first, optionally narrowed to the given project scopes and labels.
+   * The capability cursor is Jira's opaque `nextPageToken` passed through.
    */
   async listActiveIssues(
     cursor?: string,
-    projectIds?: string[],
+    scopes?: JiraIntakeScope[],
     labels?: string[],
   ): Promise<{ issues: Array<IntakeIssue & { sourceId: string }>; nextCursor: string | null }> {
+    const jql = buildIntakeJql(scopes, labels);
+    if (jql === null) return { issues: [], nextCursor: null };
     const page = await this.api.searchIssues({
-      jql: buildIntakeJql(projectIds, labels),
+      jql,
       ...(cursor ? { nextPageToken: cursor } : {}),
     });
     return {
@@ -421,6 +447,7 @@ export class JiraIntegration implements FactoryIntegration {
       jira: this,
       auth: ctx.auth,
       intake: ctx.storage.intake,
+      workItems: ctx.runtime?.workItems,
       ingestFactoryIssues: attachJiraRules(this, ctx),
     });
   }
@@ -468,29 +495,6 @@ function maskEmail(email: string): string {
   const at = email.indexOf('@');
   if (at <= 0) return '***';
   return `${email[0]}***${email.slice(at)}`;
-}
-
-/**
- * Build the intake JQL. Source ids and labels come from stored org config /
- * request input, so both are sanitized before interpolation: numeric project
- * ids pass through bare, project keys are restricted to a safe charset, and
- * label quotes/backslashes are stripped.
- */
-function buildIntakeJql(projectIds?: string[], labels?: string[]): string {
-  const clauses: string[] = [];
-  const safeProjects = (projectIds ?? [])
-    .map(id => id.trim())
-    .filter(id => /^[A-Za-z0-9_]+$/.test(id))
-    .map(id => (/^\d+$/.test(id) ? id : `"${id}"`));
-  if (safeProjects.length > 0) {
-    clauses.push(`project IN (${safeProjects.join(', ')})`);
-  }
-  clauses.push('statusCategory != Done');
-  const safeLabels = [...new Set((labels ?? []).map(label => label.trim().replace(/["\\]/g, '')).filter(Boolean))];
-  if (safeLabels.length > 0) {
-    clauses.push(`labels IN (${safeLabels.map(label => `"${label}"`).join(', ')})`);
-  }
-  return `${clauses.join(' AND ')} ORDER BY updated DESC`;
 }
 
 /** Whether the issue is already in the requested target state. */

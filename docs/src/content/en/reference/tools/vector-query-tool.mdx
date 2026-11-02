@@ -630,6 +630,7 @@ For multi-tenant applications where each tenant has isolated data (e.g., separat
 ```typescript title="src/index.ts"
 import { createVectorQueryTool, VectorStoreResolver } from '@mastra/rag'
 import { PgVector } from '@mastra/pg'
+import { RequestContext } from '@mastra/core/request-context'
 
 // Cache for tenant-specific vector stores
 const vectorStoreCache = new Map<string, PgVector>()

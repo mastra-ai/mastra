@@ -42,7 +42,7 @@ describe('SettingsNavigation', () => {
         .map(link => link.textContent);
     expect(linksIn('Account')).toEqual(['My account', 'Preferences', 'Connections']);
     expect(linksIn('Agent')).toEqual(['Models', 'Memory', 'Skills', 'Behavior']);
-    expect(linksIn('Factory')).toEqual(['Repositories', 'Environment', 'Work Intake', 'Manage Factory']);
+    expect(linksIn('Factory')).toEqual(['Repositories', 'Work Intake', 'Manage Factory']);
     expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');
   });
@@ -56,6 +56,18 @@ describe('SettingsNavigation', () => {
     expect(screen.getByRole('link', { name: 'Repositories' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Work Intake' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Account' })).not.toBeInTheDocument();
+  });
+
+  it('finds Environment under Manage Factory and navigates to its canonical destination', async () => {
+    const user = userEvent.setup();
+    renderNavigation();
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search settings' }), 'environment');
+
+    const manageFactory = screen.getByRole('link', { name: 'Manage Factory' });
+    expect(screen.queryByRole('link', { name: 'Environment' })).not.toBeInTheDocument();
+    await user.click(manageFactory);
+    expect(manageFactory).toHaveAttribute('aria-current', 'page');
   });
 
   it.each([

@@ -55,9 +55,9 @@ if (result.status === 'suspended') {
   },
   {
     name: 'cancel',
-    type: '() => Promise<{ message: string }>',
+    type: '() => Promise<void>',
     description:
-      'Cancels the workflow execution, stopping any running steps and preventing subsequent steps from executing',
+      'Cancels the workflow execution and prevents subsequent steps from executing. It does not wait for running steps to finish: a running step only stops early if it checks its abortSignal.',
     required: true,
   },
   {
@@ -132,7 +132,7 @@ A workflow run's `status` indicates its current execution state. The possible va
     name: 'canceled',
     type: 'string',
     description:
-      'Workflow execution was canceled via the cancel() method, stopping any running steps and preventing subsequent steps from executing',
+      'Workflow execution was canceled via the cancel() method. Subsequent steps do not run, and running steps stop only if they respond to their abortSignal',
   },
   {
     name: 'bailed',

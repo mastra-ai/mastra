@@ -49,7 +49,7 @@ export function workItemNumber(item: Pick<WorkItemBranchInput, 'source' | 'metad
   if (item.source === 'github-pr') return branchNumber(metadata, 'githubPullRequestNumber');
   if (item.source === 'gitlab-issue') return branchNumber(metadata, 'gitlabIssueIid');
   if (item.source === 'gitlab-pr') return branchNumber(metadata, 'gitlabMergeRequestIid');
-  return;
+  return undefined;
 }
 
 /** How a card names its thread: a Linear title already opens with its identifier, a GitHub card gets its number here. */

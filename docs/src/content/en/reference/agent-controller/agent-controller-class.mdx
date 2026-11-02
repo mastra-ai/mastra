@@ -652,6 +652,16 @@ const modes = controller.listModes()
 
 Returns: `AgentControllerMode[]`
 
+#### `getDefaultMode()`
+
+Return the mode the controller starts in. The constructor picks it in this order: the mode that matches `defaultModeId`, then the first mode with `default: true` or `metadata.default: true`, then the first configured mode. If `defaultModeId` doesn't match any mode, the constructor throws.
+
+```typescript
+const mode = controller.getDefaultMode()
+```
+
+Returns: `AgentControllerMode`
+
 #### `getCurrentAgent(session)`
 
 Return the backing agent for the session's active mode.

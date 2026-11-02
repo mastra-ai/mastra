@@ -5,27 +5,19 @@ import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useSetDefaultThinkingLevel } from '../../../../../../hooks/use-default-model';
-import { useFactoryThinkingDefaultQuery } from '../../../../../../hooks/use-thinking';
 import {
   ALL_THINKING_LEVEL_OPTIONS,
-  routedThinkingDefault,
-  THINKING_DEFAULT_SOURCE_LABELS,
+  DEFAULT_SOURCE_LABELS,
+  personalThinkingDefault,
 } from '../../../../chat/services/thinkingLevels';
 
 interface PersonalThinkingControlProps {
-  factoryId: string;
   savedModelId: string | undefined;
   savedThinkingLevel: ThinkingLevelSetting | null;
   saving: boolean;
 }
 
-export function PersonalThinkingControl({
-  factoryId,
-  savedModelId,
-  savedThinkingLevel,
-  saving,
-}: PersonalThinkingControlProps) {
-  const factoryLevelQuery = useFactoryThinkingDefaultQuery(factoryId);
+export function PersonalThinkingControl({ savedModelId, savedThinkingLevel, saving }: PersonalThinkingControlProps) {
   const setLevel = useSetDefaultThinkingLevel();
 
   const unavailable = (reason: string) => (
@@ -34,51 +26,42 @@ export function PersonalThinkingControl({
 
   if (!savedModelId) return unavailable('Pick a personal default model first.');
   if (saving) return unavailable('Saving your personal defaults…');
-  const thinkingDefault = routedThinkingDefault(savedThinkingLevel, factoryLevelQuery.data);
-  if (!thinkingDefault) {
-    return unavailable(
-      factoryLevelQuery.isError
-        ? "The Factory thinking level couldn't be loaded."
-        : "The thinking level isn't loaded yet.",
-    );
-  }
 
   const saveLevel = (next: ThinkingLevelSetting | null) =>
     setLevel
       .mutateAsync(next)
       .catch(error => toast.error(error instanceof Error ? error.message : 'Failed to change thinking level'));
 
-  const followsFactory = thinkingDefault.origin === 'factory';
+  const thinkingDefault = personalThinkingDefault(savedThinkingLevel);
+  const followsBuiltIn = thinkingDefault.origin === 'built-in';
   return (
     <ThinkingLevelPicker
       options={ALL_THINKING_LEVEL_OPTIONS}
       value={thinkingDefault.level}
       label="Thinking"
-      origin={followsFactory ? THINKING_DEFAULT_SOURCE_LABELS.factory : undefined}
-      footer={
-        <PersonalThinkingOriginNote followsFactory={followsFactory} onUseFactoryDefault={() => saveLevel(null)} />
-      }
+      origin={followsBuiltIn ? DEFAULT_SOURCE_LABELS['built-in'] : undefined}
+      footer={<PersonalThinkingOriginNote followsBuiltIn={followsBuiltIn} onUseDefault={() => saveLevel(null)} />}
       onChange={saveLevel}
     />
   );
 }
 
 interface PersonalThinkingOriginNoteProps {
-  followsFactory: boolean;
-  onUseFactoryDefault: () => void;
+  followsBuiltIn: boolean;
+  onUseDefault: () => void;
 }
 
-function PersonalThinkingOriginNote({ followsFactory, onUseFactoryDefault }: PersonalThinkingOriginNoteProps) {
-  if (followsFactory) {
+function PersonalThinkingOriginNote({ followsBuiltIn, onUseDefault }: PersonalThinkingOriginNoteProps) {
+  if (followsBuiltIn) {
     return (
       <Txt as="p" variant="caption" tone="muted">
-        Follows the {THINKING_DEFAULT_SOURCE_LABELS.factory}.
+        Follows the {DEFAULT_SOURCE_LABELS['built-in']}.
       </Txt>
     );
   }
   return (
-    <Button variant="ghost" size="sm" className="self-end" onClick={onUseFactoryDefault}>
-      Use Factory default
+    <Button variant="ghost" size="sm" className="self-end" onClick={onUseDefault}>
+      Use default
     </Button>
   );
 }
