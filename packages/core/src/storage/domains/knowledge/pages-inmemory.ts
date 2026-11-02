@@ -1,4 +1,8 @@
-import { knowledgePageKeyProblem, knowledgeSearchWords } from '@internal/core/knowledge-compat';
+import {
+  KNOWLEDGE_SEARCH_WEIGHTS,
+  knowledgePageKeyProblem,
+  knowledgeSearchWords,
+} from '@internal/core/knowledge-compat';
 import { KnowledgeConflictError, KnowledgeNotFoundError } from './base';
 import {
   assertKnowledgeNoteTextWithinBound,
@@ -691,40 +695,52 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     const phrase = input.query.trim().toLowerCase().replace(/\s+/g, ' ');
     const limit = input.limit === undefined ? DEFAULT_SEARCH_LIMIT : pageSize(input.limit);
     const inScope = (page: KnowledgePage) => !input.scopeIds || input.scopeIds.includes(page.scopeId);
-    const hasAll = (...texts: Array<string | undefined>) => {
-      const haystack = texts.filter(Boolean).join('\n').toLowerCase();
-      return words.every(word => haystack.includes(word));
+    const lower = (text: string | undefined) => (text ?? '').toLowerCase();
+    const pageScore = (page: KnowledgePage) => {
+      const name = lower(page.name);
+      const description = lower(page.description);
+      const body = lower(page.body);
+      let score = 0;
+      for (const word of words) {
+        if (name.includes(word)) score += KNOWLEDGE_SEARCH_WEIGHTS.name;
+        else if (description.includes(word)) score += KNOWLEDGE_SEARCH_WEIGHTS.description;
+        else if (body.includes(word)) score += KNOWLEDGE_SEARCH_WEIGHTS.body;
+      }
+      return score;
     };
-    const tier = (page: KnowledgePage) =>
-      canonicalKnowledgeName(page.name).includes(phrase) ? 0 : hasAll(page.name) ? 1 : 2;
+    const noteScore = (note: KnowledgeNote) => {
+      const text = lower(note.text);
+      return words.filter(word => text.includes(word)).length;
+    };
     const pageHits = [...this.#pages.values()]
-      .filter(
-        page =>
-          !page.isScope &&
-          !page.deletedAt &&
-          inScope(page) &&
-          hasAll(page.name, page.description, page.body) &&
-          this.#pageReadable(page, input.read),
-      )
-      .map(page => ({ page, tier: tier(page) }))
+      .filter(page => !page.isScope && !page.deletedAt && inScope(page) && this.#pageReadable(page, input.read))
+      .map(page => ({
+        page,
+        phrase: canonicalKnowledgeName(page.name).includes(phrase) ? 0 : 1,
+        score: pageScore(page),
+      }))
+      .filter(hit => hit.score > 0)
       .sort(
         (a, b) =>
-          a.tier - b.tier ||
+          a.phrase - b.phrase ||
+          b.score - a.score ||
           b.page.updatedAt.getTime() - a.page.updatedAt.getTime() ||
           (a.page.id < b.page.id ? -1 : 1),
       );
     const noteHits = [...this.#notes.values()]
       .filter(note => {
         const page = this.#pages.get(note.pageId)!;
-        return (
-          !note.deletedAt &&
-          !page.deletedAt &&
-          inScope(page) &&
-          hasAll(note.text) &&
-          this.#noteVisible(note, input.read)
-        );
+        return !note.deletedAt && !page.deletedAt && inScope(page) && this.#noteVisible(note, input.read);
       })
-      .sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime() || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0));
+      .map(note => ({ note, score: noteScore(note) }))
+      .filter(hit => hit.score > 0)
+      .sort(
+        (a, b) =>
+          b.score - a.score ||
+          b.note.updatedAt.getTime() - a.note.updatedAt.getTime() ||
+          (a.note.id < b.note.id ? 1 : a.note.id > b.note.id ? -1 : 0),
+      )
+      .map(hit => hit.note);
     return [
       ...pageHits.map(({ page }) => ({ type: 'page' as const, page: clone(page) })),
       ...noteHits.map(note => ({

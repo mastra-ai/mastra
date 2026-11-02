@@ -1039,7 +1039,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         );
       });
 
-      it('matches every query word anywhere in a page, ranking phrase-in-name, then words-in-name, then other pages, then notes', async () => {
+      it('matches any query word, ranking phrase-in-name, then matched words weighted name > description > body, then notes', async () => {
         const acme = await scope('org:acme', ORG);
         await scope('org:refund', ORG);
         const pause = () => new Promise(resolve => setTimeout(resolve, 15));
@@ -1072,14 +1072,17 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
           hit.type === 'page' ? `page:${hit.page.name}` : `note:${hit.note.text}`;
 
-        // 'Refund window' has "refund" in its name and "approval" only in a note: not a page hit,
-        // but the note containing both words is. Scope pages (org:refund) never hit.
+        // Any word matches. Pages first: the phrase in the name, then by points (a matched word earns
+        // 3 in the name, else 2 in the description, else 1 in the body), newest first on ties; then notes
+        // by words matched. 'Refund window' matches on "refund" alone; scope pages (org:refund) never hit.
         expect((await store.searchPages({ query: '  refund   APPROVAL ', read: r })).map(label)).toEqual([
           `page:${phrase.name}`,
           `page:${scattered.name}`,
-          `page:${inBody.name}`,
           `page:${acrossFields.name}`,
+          `page:${nameOnly.name}`,
+          `page:${inBody.name}`,
           `note:${noteBoth.text}`,
+          'note:Approval is logged.',
         ]);
         expect((await store.searchPages({ query: 'refund approval', read: r, limit: 2 })).map(label)).toEqual([
           `page:${phrase.name}`,
@@ -1096,10 +1099,44 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         ]);
         expect(await store.searchPages({ query: '   ', read: r })).toEqual([]);
         // Repeated words count once for matching.
-        expect((await store.searchPages({ query: 'refund approval refund', read: r })).map(label)).toHaveLength(5);
+        expect((await store.searchPages({ query: 'refund approval refund', read: r })).map(label)).toHaveLength(7);
         expect((await store.searchPages({ query: 'approval  RULES', read: r })).map(label).slice(0, 1)).toEqual([
           `page:${phrase.name}`,
         ]);
+      });
+
+      it('ranks by words matched and field weight, not recency, and never returns pages that match no word', async () => {
+        const acme = await scope('org:acme', ORG);
+        const pause = () => new Promise(resolve => setTimeout(resolve, 15));
+        const inName = await page(acme.id, 'Zebra care');
+        await pause();
+        const inDescription = await page(acme.id, 'Stripes', { description: 'About a zebra' });
+        await pause();
+        const bothInBody = await page(acme.id, 'Safari', { body: 'A zebra and a giraffe walk by.' });
+        await pause();
+        const oneInBody = await page(acme.id, 'Savanna', { body: 'A giraffe grazes.' });
+        await pause();
+        await page(acme.id, 'Penguins', { body: 'Cold weather birds.' });
+        const label = (hit: Awaited<ReturnType<typeof store.searchPages>>[number]) =>
+          hit.type === 'page' ? hit.page.name : hit.note.text;
+        const r = read(['org:acme']);
+        // Points: Zebra care 3; Safari 1 + 1 = 2; Stripes 2 (a tie goes to the newer page); Savanna 1.
+        expect((await store.searchPages({ query: 'zebra giraffe lion', read: r })).map(label)).toEqual([
+          inName.name,
+          bothInBody.name,
+          inDescription.name,
+          oneInBody.name,
+        ]);
+        // Name beats description beats body for the same word, though the body page is newer.
+        expect((await store.searchPages({ query: 'zebra', read: r })).map(label)).toEqual([
+          inName.name,
+          inDescription.name,
+          bothInBody.name,
+        ]);
+        // One word in the name (3) beats two words only in the body (2).
+        expect((await store.searchPages({ query: 'giraffe zebra', read: r })).map(label)[0]).toBe(inName.name);
+        // Equal points: newest first, and the limit applies after ranking.
+        expect((await store.searchPages({ query: 'giraffe', read: r, limit: 1 })).map(label)).toEqual([oneInBody.name]);
       });
 
       it('never counts a hidden note toward search results or the limit', async () => {
@@ -1122,7 +1159,7 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           mentions: [],
           provenance: alex,
         });
-        const hits = await store.searchPages({ query: 'checklist launch', read: read(['org:acme']), limit: 1 });
+        const hits = await store.searchPages({ query: 'checklist private', read: read(['org:acme']), limit: 1 });
         expect(hits.map(hit => (hit.type === 'note' ? hit.note.id : hit.page.id))).toEqual([visible.id]);
       });
 
@@ -1137,7 +1174,9 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
           (await store.searchPages({ query, read: r })).map(hit => (hit.type === 'page' ? hit.page.id : hit.note.id));
         expect(await ids('50%')).toEqual([percent.id]);
         expect(await ids('a_b')).toEqual([underscore.id]);
-        expect(await ids('off 50%')).toEqual([percent.id]);
+        // "off" also matches 'Discount 500 off', but 50% (literal) and off both match only the first.
+        expect((await ids('off 50%'))[0]).toBe(percent.id);
+        expect(await ids('off 50%')).toHaveLength(2);
       });
 
       it('moves merged source history to the target scope, without retaining source-scope visibility', async () => {

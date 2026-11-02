@@ -319,12 +319,19 @@ export function createKnowledgePagesCoreLoader(
 }
 
 /**
- * Keyword-search words: the query split on whitespace, lowercased, deduplicated. Every word must
- * appear (as a case-insensitive substring) in a hit; an empty list means the search returns nothing.
+ * Keyword-search words: the query split on whitespace, lowercased, deduplicated. A hit needs at
+ * least one of them (as a case-insensitive substring); an empty list means the search returns nothing.
  */
 export function knowledgeSearchWords(query: string): string[] {
   return [...new Set(query.toLowerCase().split(/\s+/).filter(Boolean))];
 }
+
+/**
+ * Points one matched search word earns on a page, by the best field it appears in: name, then
+ * description, then body. A page's score is the sum over the query's words, so matching more
+ * words always counts and matching them in the name or description counts more than in the body.
+ */
+export const KNOWLEDGE_SEARCH_WEIGHTS = { name: 3, description: 2, body: 1 } as const;
 
 /**
  * Why `key` can't be a Knowledge page key, or undefined when it can. Keys are one path segment:

@@ -698,12 +698,14 @@ export interface KnowledgePageStore {
   /**
    * Lexical search over page names, descriptions, bodies and note text; access filtered before ranking
    * and the limit. The query is split on whitespace into lowercased, deduplicated words (an empty
-   * query returns nothing); each word matches as a case-insensitive substring. A page hits when every
-   * word appears in its name, description and body combined; a note hits when every word appears in
-   * its own text. Scope pages are never returned. Results: pages whose canonical name contains the
-   * whole query (trimmed, lowercased, whitespace runs collapsed to one space), then pages with every word in the name, then other page hits (each
-   * newest `updatedAt` first, ties by id ascending), then notes (newest `updatedAt` first, ties by id
-   * descending), truncated to `limit`. No quoting or operators.
+   * query returns nothing); each word matches as a case-insensitive substring. A page hits when at
+   * least one word appears in its name, description or body; a note hits when at least one word
+   * appears in its text. Scope pages are never returned. A page scores, for each query word, 3 if it
+   * is in the name, else 2 if in the description, else 1 if in the body. Results: pages whose
+   * canonical name contains the whole query (trimmed, lowercased, whitespace runs collapsed to one
+   * space), then the other page hits, each group highest score first, then newest `updatedAt`, then
+   * id ascending; then notes (most query words first, then newest `updatedAt`, then id descending),
+   * truncated to `limit`. No quoting or operators.
    */
   searchPages(input: SearchKnowledgePagesInput): Promise<KnowledgePageSearchHit[]>;
   /**

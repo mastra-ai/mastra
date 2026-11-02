@@ -576,7 +576,7 @@ describe('knowledge_read on long pages', () => {
     expect((await call('knowledge_search', { query: 'widget', limit: 5 })).more).toBeUndefined();
   });
 
-  it('matches quoted words, and says what to try when nothing has every word', async () => {
+  it('matches quoted words, and says what to try when nothing has any word', async () => {
     const { knowledge, call } = setup();
     await knowledge.upsertPage({
       scope: 'docs:acme',
@@ -586,10 +586,10 @@ describe('knowledge_read on long pages', () => {
     });
     const quoted = await call('knowledge_search', { query: '"api" "responses" `url`' });
     expect(quoted.results.map((hit: any) => hit.page.ref)).toEqual(['docs:acme#models']);
-    const none = await call('knowledge_search', { query: 'responses gateway namespace' });
+    const none = await call('knowledge_search', { query: 'gateway namespace' });
     expect(none.results).toEqual([]);
     expect(none.more).toEqual([
-      'results: no page or note contains every word of "responses gateway namespace". Search again with one to three key words, or browse with knowledge_list.',
+      'results: no page or note contains any word of "gateway namespace". Search again with different key words, or browse with knowledge_list.',
     ]);
     await expect(call('knowledge_search', { query: 'responses', scope: ['docs:acme#models'] })).rejects.toThrow(
       '"docs:acme#models" is a page ref, not a scope. scope takes scope addresses such as "docs:acme"; to see what is under the page, use knowledge_list with from: "docs:acme#models".',

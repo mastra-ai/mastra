@@ -299,7 +299,7 @@ function searchTool(host: KnowledgePageToolHost) {
         ...(hits.length === 0
           ? {
               more: [
-                `results: no page or note contains every word of ${JSON.stringify(words || query)}. Search again with one to three key words, or browse with knowledge_list.`,
+                `results: no page or note contains any word of ${JSON.stringify(words || query)}. Search again with different key words, or browse with knowledge_list.`,
               ],
             }
           : hits.length === max
