@@ -52,7 +52,12 @@ import {
 } from './validation.js';
 
 const LEASE_MS = 30_000;
+// Cadence while dispatches are in flight or a cycle filled its batch. An idle
+// dispatcher does not poll: it sleeps until the next row becomes claimable or
+// a write wakes it.
 const POLL_MS = 1_000;
+// setTimeout clamps larger delays to 1ms.
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 const BATCH_SIZE = 10;
 const MAX_ATTEMPTS = 5;
 
@@ -611,8 +616,14 @@ export class FactoryDecisionDispatcher {
   readonly #skillCompletionObservationTimeoutMs: number;
   #lastReconcileAt?: Date;
   #reconcileInFlight?: Promise<void>;
-  #timer?: ReturnType<typeof setInterval>;
-  #activeClaim?: Promise<void>;
+  /** A reconcile is due once activity stops, to drain results of runs that just ended. */
+  #reconcileOwed = true;
+  #started = false;
+  #stopping = false;
+  #wakeRequested = false;
+  #unsubscribeClaimableWork?: () => void;
+  #loop?: Promise<void>;
+  #timer?: ReturnType<typeof setTimeout>;
   /** Starts and run-bearing decisions; capped by `maxInFlight`. */
   readonly #runInFlight = new Set<Promise<void>>();
   /** Fast board bookkeeping (transitions, linked-card upserts); its own small cap. */
@@ -653,21 +664,116 @@ export class FactoryDecisionDispatcher {
   }
 
   start(): void {
-    if (this.#timer) return;
-    void this.#tick();
-    this.#timer = setInterval(() => void this.#tick(), POLL_MS);
-    this.#timer.unref?.();
+    if (this.#started) return;
+    this.#started = true;
+    this.#stopping = false;
+    this.#unsubscribeClaimableWork = this.#storage.onClaimableWork(() => this.wake());
+    this.wake();
   }
 
   async stop(): Promise<void> {
-    if (this.#timer) clearInterval(this.#timer);
-    this.#timer = undefined;
-    await this.#activeClaim;
+    this.#stopping = true;
+    this.#unsubscribeClaimableWork?.();
+    this.#unsubscribeClaimableWork = undefined;
+    this.#clearTimer();
+    await this.#loop;
     await Promise.allSettled([...this.#runInFlight, ...this.#bookkeepingInFlight, ...this.#backgroundInFlight]);
+    this.#started = false;
+    this.#stopping = false;
+  }
+
+  /**
+   * Runs a dispatch cycle now. Called after any write that leaves claimable
+   * work, locally or from another replica via pubsub. A wake during a running
+   * cycle makes the loop run once more instead of starting a second loop.
+   */
+  wake(): void {
+    if (!this.#started || this.#stopping) return;
+    this.#wakeRequested = true;
+    if (this.#loop) return;
+    this.#clearTimer();
+    this.#loop = this.#runLoop();
   }
 
   async runOnce(now = new Date()): Promise<void> {
-    await Promise.all(await this.#claimAndStart(now));
+    void this.#maybeSweepStaleBindings(now);
+    this.#maybeReconcileToolResults(now);
+    const { dispatches } = await this.#claimAndStart(now);
+    await Promise.all(dispatches);
+  }
+
+  #clearTimer(): void {
+    if (this.#timer) clearTimeout(this.#timer);
+    this.#timer = undefined;
+  }
+
+  async #runLoop(): Promise<void> {
+    let delay: number | undefined;
+    do {
+      this.#wakeRequested = false;
+      try {
+        delay = await this.#cycle();
+      } catch (error) {
+        console.error('Factory decision dispatch cycle failed', sanitizeDispatchError(error));
+        delay = POLL_MS;
+      }
+    } while (this.#wakeRequested && !this.#stopping);
+    // No await between the loop exit and clearing #loop, so a wake() can
+    // never land in between and be lost.
+    this.#loop = undefined;
+    if (this.#stopping || delay === undefined) return;
+    this.#timer = setTimeout(() => {
+      this.#timer = undefined;
+      this.wake();
+    }, delay);
+    this.#timer.unref?.();
+  }
+
+  /** One loop cycle; returns the delay until the next one, or undefined to sleep until woken. */
+  async #cycle(): Promise<number | undefined> {
+    const now = new Date();
+    // Fire-and-forget like the reconcile walk: the sweep reads every active
+    // binding, so awaiting it would stretch the cycle as the active set grows.
+    void this.#maybeSweepStaleBindings(now);
+    // Tool results only come from runs, so the reconcile walk follows local
+    // activity, plus one trailing pass after it stops.
+    const active =
+      this.#runInFlight.size > 0 ||
+      this.#bookkeepingInFlight.size > 0 ||
+      this.#controller.listActiveThreadRuns().length > 0;
+    if (!this.#reconcileToolResults) this.#reconcileOwed = false;
+    else if (active) this.#reconcileOwed = true;
+    if (this.#reconcileOwed && this.#maybeReconcileToolResults(now) && !active) this.#reconcileOwed = false;
+
+    let full: boolean;
+    try {
+      const claimed = await this.#claimAndStart(now);
+      full = claimed.full;
+      for (const dispatch of claimed.dispatches) {
+        dispatch.catch(error => {
+          console.error('Factory decision dispatch failed', sanitizeDispatchError(error));
+        });
+      }
+    } catch (error) {
+      console.error('Factory decision dispatch cycle failed', sanitizeDispatchError(error));
+      return POLL_MS;
+    }
+    if (full || this.#runInFlight.size > 0 || this.#bookkeepingInFlight.size > 0) return POLL_MS;
+
+    const dueTimes: number[] = [];
+    if (this.#reconcileOwed) {
+      dueTimes.push((this.#lastReconcileAt?.getTime() ?? 0) + this.#reconcileIntervalMs);
+    }
+    try {
+      // Covers future retries and leases left behind by a crashed replica.
+      const nextClaimableAt = await this.#storage.nextClaimableAt();
+      if (nextClaimableAt) dueTimes.push(nextClaimableAt.getTime());
+    } catch (error) {
+      console.error('Factory decision dispatch cycle failed', sanitizeDispatchError(error));
+      return POLL_MS;
+    }
+    if (dueTimes.length === 0) return undefined;
+    return Math.max(POLL_MS, Math.min(Math.min(...dueTimes) - Date.now(), MAX_TIMER_DELAY_MS));
   }
 
   /**
@@ -677,11 +783,8 @@ export class FactoryDecisionDispatcher {
    * them here would freeze the poll loop and starve every other queued
    * decision. In-flight records stay protected from re-claim by lease renewal.
    */
-  async #claimAndStart(now: Date): Promise<Array<Promise<void>>> {
-    // Fire-and-forget like the reconcile walk: the sweep reads every active
-    // binding, so awaiting it would stretch the tick as the active set grows.
-    void this.#maybeSweepStaleBindings(now);
-    this.#maybeReconcileToolResults(now);
+  async #claimAndStart(now: Date): Promise<{ dispatches: Array<Promise<void>>; full: boolean }> {
+    let full = false;
     const leaseExpiresAt = new Date(now.getTime() + LEASE_MS);
     const dispatches: Array<Promise<void>> = [];
     // Run slots are held for whole agent runs (minutes), so bookkeeping that
@@ -701,6 +804,7 @@ export class FactoryDecisionDispatcher {
         limit,
       });
       const decisionsLimit = limit - starts.length;
+      full = decisionsLimit <= 0;
       const decisions =
         decisionsLimit > 0
           ? await this.#storage.claimDeferredDecisions({
@@ -711,6 +815,7 @@ export class FactoryDecisionDispatcher {
               decisionFilter: isRunBearingDecision,
             })
           : [];
+      full ||= starts.length + decisions.length >= limit;
       dispatches.push(
         ...starts.map(start => this.#track(this.#runInFlight, this.#dispatchPendingStart(start, now))),
         ...decisions.map(decision => this.#track(this.#runInFlight, this.#dispatchDecision(decision, now))),
@@ -718,18 +823,20 @@ export class FactoryDecisionDispatcher {
     }
     const bookkeepingCapacity = BOOKKEEPING_MAX_IN_FLIGHT - this.#bookkeepingInFlight.size;
     if (bookkeepingCapacity > 0) {
+      const limit = Math.min(BATCH_SIZE, bookkeepingCapacity);
       const decisions = await this.#storage.claimDeferredDecisions({
         ownerId: this.#ownerId,
         now,
         leaseExpiresAt,
-        limit: Math.min(BATCH_SIZE, bookkeepingCapacity),
+        limit,
         decisionFilter: isBookkeepingDecision,
       });
+      full ||= decisions.length >= limit;
       dispatches.push(
         ...decisions.map(decision => this.#track(this.#bookkeepingInFlight, this.#dispatchDecision(decision, now))),
       );
     }
-    return dispatches;
+    return { dispatches, full };
   }
 
   /**
@@ -737,9 +844,11 @@ export class FactoryDecisionDispatcher {
    * claiming never waits behind cursor + message reads, and overlapping runs
    * are skipped while one is still in flight.
    */
-  #maybeReconcileToolResults(now: Date): void {
-    if (!this.#reconcileToolResults || this.#reconcileInFlight) return;
-    if (this.#lastReconcileAt && now.getTime() - this.#lastReconcileAt.getTime() < this.#reconcileIntervalMs) return;
+  #maybeReconcileToolResults(now: Date): boolean {
+    if (!this.#reconcileToolResults || this.#reconcileInFlight) return false;
+    if (this.#lastReconcileAt && now.getTime() - this.#lastReconcileAt.getTime() < this.#reconcileIntervalMs) {
+      return false;
+    }
     this.#lastReconcileAt = now;
     const run = this.#reconcileToolResults()
       .catch(error => {
@@ -750,6 +859,7 @@ export class FactoryDecisionDispatcher {
       });
     this.#reconcileInFlight = run;
     this.#track(this.#backgroundInFlight, run);
+    return true;
   }
 
   /** Slow-cadence revocation of leaked/legacy bindings; failures never block the claim path. */
@@ -787,29 +897,14 @@ export class FactoryDecisionDispatcher {
 
   #track(pool: Set<Promise<void>>, dispatch: Promise<void>): Promise<void> {
     pool.add(dispatch);
-    void dispatch.catch(() => {}).then(() => pool.delete(dispatch));
+    void dispatch
+      .catch(() => {})
+      .then(() => {
+        pool.delete(dispatch);
+        // A settled dispatch frees capacity and may have queued a retry.
+        if (pool !== this.#backgroundInFlight) this.wake();
+      });
     return dispatch;
-  }
-
-  async #tick(): Promise<void> {
-    if (this.#activeClaim) return;
-    this.#activeClaim = this.#claimAndStart(new Date()).then(
-      dispatches => {
-        for (const dispatch of dispatches) {
-          dispatch.catch(error => {
-            console.error('Factory decision dispatch failed', sanitizeDispatchError(error));
-          });
-        }
-      },
-      error => {
-        console.error('Factory decision dispatch cycle failed', sanitizeDispatchError(error));
-      },
-    );
-    try {
-      await this.#activeClaim;
-    } finally {
-      this.#activeClaim = undefined;
-    }
   }
 
   async #dispatchDecision(record: FactoryDeferredDecisionRecord, now: Date): Promise<void> {
