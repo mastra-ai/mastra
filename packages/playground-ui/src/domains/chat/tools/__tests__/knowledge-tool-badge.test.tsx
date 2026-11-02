@@ -108,6 +108,76 @@ describe('Knowledge tool cards', () => {
     });
   });
 
+  describe('when a read page body links other pages with [[scope#path]]', () => {
+    const pricing = { id: 'page-pricing', name: 'Pricing', ref: 'site:mastra#pricing', scope: 'site:mastra' };
+    const read = (body: string) =>
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'site:mastra#pricing' },
+        output: {
+          page: { ...pricing, body },
+          notes: [
+            {
+              id: 'n-links',
+              text: 'Links:\n[[site:mastra#contact]]\n[[site:mastra#customers/salesforce]]',
+              author: 'site-sync',
+              mentions: {
+                'site:mastra#contact': 'page-contact',
+                'site:mastra#customers/salesforce': 'page-salesforce',
+              },
+            },
+          ],
+          children: [],
+          mentionedIn: [],
+        },
+      });
+
+    it('links each ref the result resolves to its page in the Knowledge viewer', () => {
+      read('Get a demo ([[site:mastra#contact]])\n\nRead →\n\n([[site:mastra#customers/salesforce]])');
+      const body = within(open()).getByTestId('knowledge-tool-body');
+      expect(within(body).getByRole('link', { name: 'site:mastra#contact' }).getAttribute('href')).toBe(
+        '/knowledge?page=page-contact&view=page',
+      );
+      expect(within(body).getByRole('link', { name: 'site:mastra#customers/salesforce' }).getAttribute('href')).toBe(
+        '/knowledge?page=page-salesforce&view=page',
+      );
+      expect(body.textContent).not.toContain('[[');
+    });
+
+    it('shows a ref nothing in the result resolves as plain text, named like an Object member or not', () => {
+      read('See [[site:mastra#careers]] and [[constructor]].');
+      const body = within(open()).getByTestId('knowledge-tool-body');
+      expect(
+        within(body)
+          .getAllByTestId('knowledge-unresolved-mention')
+          .map(span => span.textContent),
+      ).toEqual(['site:mastra#careers', 'constructor']);
+      expect(within(body).queryByRole('link')).toBeNull();
+    });
+
+    it('leaves refs in code as they were written', () => {
+      read('Write `[[site:mastra#contact]]` like this:\n\n```\n[[site:mastra#contact]]\n```');
+      const body = within(open()).getByTestId('knowledge-tool-body');
+      expect(within(body).queryByRole('link')).toBeNull();
+      expect(body.querySelectorAll('code')[0]?.textContent).toBe('[[site:mastra#contact]]');
+    });
+  });
+
+  describe('when knowledge_page writes a body that links pages', () => {
+    it('links the page to itself and shows other refs as plain text', () => {
+      renderCard({
+        toolName: 'knowledge_page',
+        input: { page: 'site:mastra#pricing', body: 'This is [[site:mastra#pricing]]; see [[site:mastra#contact]].' },
+        output: { page: { id: 'page-pricing', name: 'Pricing', ref: 'site:mastra#pricing', scope: 'site:mastra' } },
+      });
+      const body = within(open()).getByTestId('knowledge-tool-body');
+      expect(within(body).getByRole('link', { name: 'site:mastra#pricing' }).getAttribute('href')).toBe(
+        '/knowledge?page=page-pricing&view=page',
+      );
+      expect(within(body).getByTestId('knowledge-unresolved-mention').textContent).toBe('site:mastra#contact');
+    });
+  });
+
   describe('when knowledge_read returns part of a page', () => {
     const deployer = { id: 'page-cf', name: 'CloudflareDeployer', scope: 'docs:mastra', key: 'cloudflare-deployer' };
     const at = (line: number) => ({ line });
