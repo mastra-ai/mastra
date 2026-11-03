@@ -1,3 +1,7 @@
+import { z } from 'zod';
+import { LiveKitSessionConfigSchema } from './session-config';
+import type { LiveKitSessionConfig } from './session-config';
+
 /**
  * Session metadata passed from the Mastra server to the LiveKit agent worker through
  * LiveKit's job dispatch metadata (a plain string, so this is JSON-serialized).
@@ -11,9 +15,30 @@ export interface LiveKitSessionMetadata {
   resourceId?: string;
   /** Plain-object entries restored into a RequestContext for agent execution. */
   requestContext?: Record<string, unknown>;
+  /** Applied only by workers that enable `sessionConfigFromMetadata`. */
+  sessionConfig?: LiveKitSessionConfig;
 }
 
-export function parseSessionMetadata(raw: string | undefined | null): LiveKitSessionMetadata {
+/** Opt-in validation; preserves application-defined metadata fields. */
+export const LiveKitSessionMetadataSchema = z
+  .object({
+    agentId: z.string().optional(),
+    threadId: z.string().optional(),
+    resourceId: z.string().optional(),
+    requestContext: z.record(z.string(), z.unknown()).optional(),
+    sessionConfig: LiveKitSessionConfigSchema.optional(),
+  })
+  .passthrough() satisfies z.ZodType<LiveKitSessionMetadata>;
+
+/**
+ * Reads LiveKit job metadata. The default retains the legacy permissive behavior.
+ * Set `validate: true` to reject malformed metadata and unsupported session settings.
+ */
+export function parseSessionMetadata(
+  raw: string | undefined | null,
+  options: { validate?: boolean } = {},
+): LiveKitSessionMetadata {
+  if (options.validate) return LiveKitSessionMetadataSchema.parse(raw ? JSON.parse(raw) : {});
   if (!raw) return {};
   try {
     const parsed = JSON.parse(raw);

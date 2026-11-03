@@ -6,8 +6,10 @@ import {
   Room,
   RoomEgress,
   RoomServiceClient,
+  TokenVerifier,
 } from 'livekit-server-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { LiveKitSessionMetadataSchema, parseSessionMetadata } from './metadata';
 import type { LiveKitRecordingOptions } from './recording';
 import { liveKitConnectionRoute } from './routes';
 
@@ -74,7 +76,11 @@ describe('liveKitConnectionRoute recording', () => {
   });
 
   it('creates the room and explicitly dispatches with server metadata, keeping storage credentials out of the token', async () => {
-    const { context, json } = fakeContext({ agentId: 'support', resourceId: 'user-9' });
+    const { context, json } = fakeContext({
+      agentId: 'support',
+      resourceId: 'user-9',
+      sessionConfig: { version: 1, options: { userAwayTimeout: 1 } },
+    });
     const { promise, resolve } = Promise.withResolvers<AgentDispatch>();
     vi.mocked(AgentDispatchClient.prototype.createDispatch).mockReturnValue(promise);
     const result = getHandler(liveKitConnectionRoute({ ...credentials, recording, agentName: 'recorded-agent' }))(
@@ -105,6 +111,13 @@ describe('liveKitConnectionRoute recording', () => {
     expect(claims.roomConfig).toBeUndefined();
     expect(JSON.stringify(claims)).not.toContain('storage-secret');
     expect(JSON.stringify(details)).not.toContain('storage-secret');
+    // The current server SDK requires exp when verifying tokens. Validate the route's
+    // real signed token as a consumer would, rather than only decoding its payload.
+    const verified = await new TokenVerifier(credentials.apiKey, credentials.apiSecret).verify(
+      details.participantToken!,
+    );
+    expect(verified.sub).toBe('user-9');
+    expect(verified.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
   });
 
   it('resolves recording per request with the body, context, and final room name', async () => {
@@ -237,11 +250,16 @@ describe('liveKitConnectionRoute', () => {
     vi.stubEnv('LIVEKIT_API_SECRET', 'secret-secret-secret-secret-secret');
     const { context, json } = fakeContext({});
 
+    const metadata = LiveKitSessionMetadataSchema.parse({
+      agentId: 'sales',
+      threadId: 'thread-42',
+      sessionConfig: { version: 1, options: { userAwayTimeout: 20 } },
+    });
     await getHandler(
       liveKitConnectionRoute({
         agentName: 'custom-agent',
         roomName: 'fixed-room',
-        metadata: () => ({ agentId: 'sales', threadId: 'thread-42' }),
+        metadata: () => metadata,
       }),
     )(context);
 
@@ -249,6 +267,6 @@ describe('liveKitConnectionRoute', () => {
     expect(details.roomName).toBe('fixed-room');
     const dispatch = decodeJwtPayload(details.participantToken!).roomConfig.agents[0]!;
     expect(dispatch.agentName).toBe('custom-agent');
-    expect(JSON.parse(dispatch.metadata)).toEqual({ agentId: 'sales', threadId: 'thread-42' });
+    expect(parseSessionMetadata(dispatch.metadata, { validate: true })).toEqual(metadata);
   });
 });

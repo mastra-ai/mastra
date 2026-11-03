@@ -11,6 +11,15 @@ import { summarizeCall } from './memory';
 export default createLiveKitWorker({
   mastra,
   agent: 'callCenter',
+  sessionConfigFromMetadata: true,
+  transcriptPersistence: 'memory',
+  transcriptPersistenceOptions: {
+    onBarrier: durationMs => console.info('[voice] transcript wait', { durationMs }),
+    onError: event => console.warn('[voice] transcript persistence error', event),
+  },
+  onSessionStart: ({ ctx, transcriptPersistence }) => {
+    console.info('[voice] session started', { roomName: ctx.room.name, memory: transcriptPersistence?.memory });
+  },
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
   turnDetection: 'multilingual',
@@ -31,16 +40,16 @@ export default createLiveKitWorker({
   },
   // Scope memory for the call: `thread` is this call, `resource` is the caller so their
   // collected details and working memory persist across calls (returning callers are
-  // recognized). In production `resource` would be the verified customer (from caller ID or
-  // after lookupCustomer); here it falls back to the per-call id when the caller is unknown.
+  // recognized). In production derive `resource` from an authenticated customer identity;
+  // caller ID alone is not authentication. Here it falls back to the per-call id.
   memory: ({ metadata, roomName }) => {
     const thread = metadata.threadId ?? roomName;
     return { thread, resource: metadata.resourceId ?? thread };
   },
   // Spoken filler while a tool runs, so the caller isn't left in silence. Returning nothing
   // keeps a tool silent. (Working memory no longer surfaces here at all: with
-  // `manageWorkingMemory` in ../memory.ts the agent has no in-loop memory tool — the Observer
-  // writes it off the audio path.)
+  // read-only generation and agentManaged: false there is no in-loop memory writer;
+  // summarizeCall updates working memory after the call.)
   toolFeedback: ({ toolName }) => {
     if (toolName === 'lookupCustomer') return 'Let me pull up your account.';
     if (toolName === 'checkAvailability') return 'One moment while I check the diary.';
@@ -51,12 +60,8 @@ export default createLiveKitWorker({
     if (toolName === 'finalizeIntake') return 'Great, let me get that logged for you.';
     return undefined;
   },
-  // Post-turn maintenance, fully off the audio path. `onTurnComplete` fires after the reply has
-  // streamed to TTS, and the worker does NOT await it — so anything here (CRM writes, analytics,
-  // a fire-and-forget `memory.updateWorkingMemory(...)`) never adds to the caller's latency or
-  // delays the next turn. Here we log each turn to the contact "CRM"; the call's caller id is on
-  // `memory.resource`. Errors are caught and logged by the package, so a flaky backend can't
-  // break the call.
+  // The worker does not await this post-turn CRM write. Keep callbacks short and avoid
+  // synchronous work that blocks the event loop. Errors are caught and logged by the package.
   onTurnComplete: async ({ result, memory }) => {
     if (!memory) return;
     await recordContact({
@@ -70,10 +75,17 @@ export default createLiveKitWorker({
   // records — off the audio path, awaited within LiveKit's shutdown window so it finishes before
   // the worker process exits. `summarizeCall` (memory.ts) runs `memory.summarizeThread()`: a
   // standalone one-shot summarization + structured extraction over the whole call, deliberately
-  // outside observational memory's lifecycle (OM keeps doing cross-call facts on its own cadence).
-  // Permissive default: the summary ALWAYS runs. For the consent-gated version (no consent → no
-  // stored summary), see voice-worker-regulated.ts.
-  onCallEnd: async ({ memory }) => {
+  // outside observational memory's lifecycle. Managed persistence reads existing observations
+  // but does not run automatic observation or reflection during generation.
+  // Summarize only after successful transcript flushing. For the consent-gated summary,
+  // see voice-worker-regulated.ts.
+  onCallEnd: async ({ memory, transcriptPersistence }) => {
+    // The session has closed and final writes have drained within the shutdown budget.
+    console.info('[voice] transcript closed', { memory, transcriptPersistence });
+    if (transcriptPersistence?.pending || transcriptPersistence?.failed) {
+      console.warn('[voice] transcript is incomplete; skipping the call summary');
+      return;
+    }
     if (!memory) return;
     await summarizeCall(memory);
   },

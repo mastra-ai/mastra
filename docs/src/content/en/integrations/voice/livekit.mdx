@@ -187,6 +187,69 @@ export default createLiveKitWorker({
 
 `configuration.stt` works the same way for per-call transcription, for example a different transcription model or language per tenant. The greeting has a matching per-call form: `configuration.greeting.text` accepts a resolver with the same call context, so one worker can open with each tenant's own phrasing.
 
+### Shared session configuration
+
+Use the optional `sessionConfig` field in dispatch metadata to share per-call LiveKit settings between your server and worker. `LiveKitSessionMetadataSchema` validates the metadata before dispatch, and `sessionConfigFromMetadata: true` enables validation and applies the settings in `createLiveKitWorker()`.
+
+```typescript title="Dispatch a session from your server"
+import { dispatchVoiceSession, LiveKitSessionMetadataSchema } from '@mastra/livekit'
+
+const metadata = LiveKitSessionMetadataSchema.parse({
+  agentId: 'support',
+  threadId: 'thread-42',
+  resourceId: 'user-7',
+  sessionConfig: {
+    version: 1,
+    options: {
+      stt: 'deepgram/nova-3',
+      tts: 'cartesia/sonic-3',
+      userAwayTimeout: 20,
+      turnHandling: {
+        endpointing: { minDelay: 300, maxDelay: 2000 },
+        interruption: { minDuration: 500 },
+      },
+    },
+  },
+})
+
+await dispatchVoiceSession({ roomName: 'support-call-42', metadata })
+```
+
+Enable the contract on the receiving worker:
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker } from '@mastra/livekit/worker'
+import { mastra } from './index'
+
+export default createLiveKitWorker({
+  mastra,
+  sessionConfigFromMetadata: true,
+})
+```
+
+For browser calls, return the same validated metadata from the `metadata` callback on `liveKitConnectionRoute()`. Build these settings on your server from trusted configuration. The route doesn't copy `sessionConfig` from the browser's request body.
+
+Version 1 accepts the following JSON-compatible subset of LiveKit's `AgentSessionOptions`. The exported `LiveKitSessionOptions` type derives these fields from LiveKit's types, and the worker passes them to LiveKit's `AgentSession` constructor.
+
+| Option | Accepted values |
+| - | - |
+| `stt`, `tts` | Non-empty LiveKit inference model strings. LiveKit resolves the model and provider. |
+| `userAwayTimeout` | Non-negative seconds, or `null` to disable. LiveKit marks the user as away; this doesn't end the call or speak a prompt. |
+| `turnHandling.endpointing` | `mode` (`'fixed'` or `'dynamic'`), `minDelay`, and `maxDelay`. Delays are non-negative milliseconds; when both are provided, `maxDelay` must be at least `minDelay`. |
+| `turnHandling.interruption` | `enabled`, `mode` (`'adaptive'` or `'vad'`), `minDuration`, `minWords`, `discardAudioIfUninterruptible`, `falseInterruptionTimeout`, and `resumeFalseInterruption`. Durations are non-negative milliseconds; `minWords` is a non-negative integer. |
+
+Keep plugin instances, credentials, VAD, turn detectors, and other session options in the worker. This contract adds no session defaults or timers. LiveKit implements the configured behavior.
+
+Configuration precedence is:
+
+1. Metadata settings override the worker's top-level `stt`, `tts`, and matching `turnHandling` fields. Omitted fields retain the worker settings or LiveKit defaults.
+1. `configuration.stt` and `configuration.tts` resolvers take precedence when they return a value. Returning `undefined` falls back to metadata, then the top-level option.
+1. Explicit `sessionOptions` remain the final override. As before, `sessionOptions.turnHandling` replaces the worker's assembled `turnHandling` object.
+
+Existing workers keep their current behavior until you enable `sessionConfigFromMetadata`. Once enabled, malformed metadata, unsupported versions, and unknown settings inside `sessionConfig` fail before the worker connects. Legacy metadata without `sessionConfig` remains valid, and application-defined metadata fields are preserved. Update the worker before sending settings you expect it to apply; workers without the opt-in ignore them.
+
+For a custom LiveKit worker, use `parseSessionMetadata(ctx.job.metadata, { validate: true })` from `@mastra/livekit`, then pass `metadata.sessionConfig?.options` into LiveKit's `AgentSession` constructor alongside your worker configuration. `LiveKitSessionConfigSchema` validates just the versioned configuration when you don't need the full metadata schema.
+
 ### Per-call turn detection
 
 LiveKit's `TurnDetector` classes read the job's inference executor when constructed, so they can only be created inside a LiveKit job, not at module scope where the worker options live. To use one, set the `configuration.turnDetection` resolver. It runs once per call with the same call context as `configuration.stt` and returns anything the top-level `turnDetection` option accepts. Return `undefined` to fall back to the top-level option.
@@ -219,84 +282,117 @@ When the resolved Mastra agent has memory configured, each call becomes one memo
 
 Each turn sends only the new user input; Mastra Memory supplies history, semantic recall, and working memory. Pin a session to an existing thread by passing `threadId` in the connection request body, which is useful for continuing a text conversation by voice. In Studio, starting a call from an open chat binds the call to that thread, and the transcript fills into the chat after each exchange.
 
-When a user interrupts the agent, the in-flight generation aborts and nothing from that turn is persisted at that moment. LiveKit keeps the part the user actually heard in its transcript, and on the next turn the worker re-sends that heard-only fragment so the thread backfills to match the call. A user who hangs up right after interrupting leaves that final fragment unrecorded. See [interrupted turns](#interrupted-turns) for the details and a reconciliation recipe.
+Without managed transcript persistence, when a user interrupts the agent, the in-flight generation aborts and nothing from that turn is persisted at that moment. LiveKit keeps the part the user actually heard in its transcript, and on the next turn the worker re-sends that heard-only fragment so the thread backfills to match the call. A user who hangs up right after interrupting leaves that final fragment unrecorded. See [interrupted turns](#interrupted-turns) for the details and a reconciliation recipe.
 
-#### Preemptive generation with memory
+#### Save committed transcripts
 
-LiveKit's preemptive generation calls the Mastra agent on interim transcripts and discards runs whose transcript changed. The plugin can't tell a speculative run from a real turn, so with `memory` set every run persists, including discarded ones. To keep preemptive generation on without corrupting the thread, pass `options: { readOnly: true }` in the memory mapping. The agent still reads history, semantic recall, and working memory from the thread but writes nothing, so speculative runs leave no trace. Persistence of committed turns then belongs to you: save them from LiveKit's `ConversationItemAdded` event, which fires only for items the session committed. Messages keep LiveKit's ids, so saves stay idempotent across retries.
+Set `transcriptPersistence: 'memory'` to save LiveKit's committed conversation items in the call's existing [Memory thread](/docs/memory/overview). The adapter saves greetings, user messages, and assistant replies with their interruption state. Generated text that LiveKit discards isn't saved as spoken text.
 
 ```typescript title="src/mastra/voice-worker.ts"
-import { voice } from '@livekit/agents'
 import { createLiveKitWorker } from '@mastra/livekit/worker'
 import { mastra } from './index'
 
 export default createLiveKitWorker({
   mastra,
   agent: 'support',
-  memory: ({ metadata, roomName }) => ({
-    thread: metadata.threadId ?? roomName,
-    resource: metadata.resourceId ?? roomName,
-    options: { readOnly: true },
-  }),
+  transcriptPersistence: 'memory',
+  transcriptPersistenceOptions: {
+    shutdownTimeoutMs: 10_000,
+    onError: event => console.warn('Transcript persistence', event),
+    onBarrier: durationMs => console.debug('Transcript wait in ms', durationMs),
+  },
+  onCallEnd: async ({ transcriptPersistence }) => {
+    if (transcriptPersistence?.failed || transcriptPersistence?.pending) {
+      console.warn('Transcript is incomplete', transcriptPersistence)
+    }
+  },
+})
+```
+
+The resolved agent must have Memory. The adapter uses `memory.options.readOnly: true` for generation while saving committed items through `Memory.saveMessages()`. Existing history remains available, and stored messages and generation inputs share IDs to prevent duplicates. An explicit `readOnly: false`, disabled memory, workflow, or custom generator conflicts with managed persistence and fails setup. Omit `transcriptPersistence` to retain the existing behavior.
+
+Storage writes run asynchronously. LiveKit's audio path and the current reply stream don't await them. Before another generation starts, the adapter waits for writes already queued at that boundary. Slow storage or embedding work can therefore delay the next reply. `onBarrier` reports that wait in milliseconds. A failed write stops generation at this boundary and reports a persistence error; it doesn't itself disconnect the call. Keep observer callbacks short.
+
+The worker exposes the binding as `onSessionStart`'s `transcriptPersistence` argument. After resolving a storage failure, call `await transcriptPersistence.flush({ retryFailed: true })` to retry failed snapshots. Retries preserve IDs and timestamps and don't execute tools. Remote writes also use the Mastra client's existing bounded retries. `flush()` returns `{ saved, pending, failed }`. `saved` and `pending` count distinct messages; `saved` means Memory acknowledged the latest write. `failed` also includes capture or shutdown failures.
+
+On shutdown, the adapter closes the LiveKit session, accepts its final conversation items, drains writes, and detaches listeners. The worker waits for this result before `onCallEnd`. The default budget is 10 seconds; set `shutdownTimeoutMs` below the worker's shutdown grace period, allowing time for other completion work. A timeout reports pending or failed items. Unacknowledged writes aren't recoverable after a process crash.
+
+The adapter preserves LiveKit's original timestamp in `content.metadata.nativeCreatedAt` and adjusts the stored `createdAt` when needed to keep message order. Metadata also includes `source: 'livekit'`, `sessionId`, `liveKitItemId`, `interrupted`, and `sequence`. It passes committed string content to Memory without trimming it; Memory still applies its own text normalization, including working-memory-tag removal.
+
+Mastra tool calls, results, and errors are saved as structured tool messages, separate from spoken text. A call without a received result remains incomplete; the adapter never invents a result or re-executes a tool. A connection loss can prevent a worker from learning the result of a remote tool that ran. Generation completion and speech-completion hooks retain their existing timing; use `flush()` or `onCallEnd` for transcript-dependent work.
+
+Use one active writer per thread. Remove application transcript listeners and greeting writers when enabling this feature. Existing thread ownership, title, metadata, and messages are preserved. With managed persistence, `configuration.greeting.persist: false` or `persistGreeting: false` uses LiveKit's `addToChatCtx: false`, excluding the greeting from both LiveKit history and saved Memory.
+
+| Memory feature | Managed persistence behavior |
+| - | - |
+| Message history | Reads existing history and saves committed messages |
+| Semantic recall | Reads existing results; saves use Memory's configured indexing, which can add storage time |
+| Working memory | Reads existing content; automatic updates are disabled by read-only generation |
+| Observational memory | Reads existing observations; automatic observation and reflection don't run during read-only generation |
+
+#### Preemptive generation with memory
+
+Managed transcript persistence supports LiveKit's preemptive generation without saving discarded speech drafts. Enable preemptive generation separately if needed; the adapter doesn't change speech or turn settings:
+
+```typescript
+export default createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  transcriptPersistence: 'memory',
   turnHandling: { preemptiveGeneration: { enabled: true } },
-  onSessionStart: async ({ session, ctx, agent }) => {
-    const mapping = agent.memory
-    const memory = await mastra.getAgent('support').getMemory()
-    if (!mapping || !memory) return
+})
+```
 
-    let shuttingDown = false
-    const maxRetries = 5
-    const retryTimers = new Set<ReturnType<typeof setTimeout>>()
-    ctx.addShutdownCallback(async () => {
-      shuttingDown = true
-      for (const timer of retryTimers) clearTimeout(timer)
-      retryTimers.clear()
+Speculative generations can still execute application tools. Persistence doesn't prevent their side effects. Without managed persistence, keep preemptive generation disabled when using automatic Memory writes, or supply your own complete read-only persistence integration.
+
+#### Bind a custom or remote session
+
+Create a binding before starting a custom LiveKit session. Pass it to `MastraLLM` as the sole source of the agent, memory mapping, and request context. For remote agents, use your configured `MastraClient`; both generation and persistence use that client's authentication, fetch implementation, API prefix, and abort settings.
+
+```typescript title="src/voice-worker.ts"
+import { defineAgent, voice } from '@livekit/agents'
+import { MastraClient } from '@mastra/client-js'
+import { parseSessionMetadata } from '@mastra/livekit'
+import { createLiveKitTranscriptPersistence, MastraLLM } from '@mastra/livekit/plugin'
+
+export default defineAgent({
+  entry: async ctx => {
+    await ctx.connect()
+    const metadata = parseSessionMetadata(ctx.job.metadata, { validate: true })
+    const client = new MastraClient({
+      baseUrl: process.env.MASTRA_URL!,
+      headers: { Authorization: `Bearer ${process.env.MASTRA_TOKEN!}` },
     })
-
-    session.on(voice.AgentSessionEventTypes.ConversationItemAdded, ({ item }) => {
-      if (item.type !== 'message' || (item.role !== 'user' && item.role !== 'assistant')) return
-
-      const persist = async (attempt = 0): Promise<void> => {
-        try {
-          await memory.saveMessages({
-            messages: [
-              {
-                id: item.id,
-                threadId: mapping.thread,
-                resourceId: mapping.resource ?? mapping.thread,
-                role: item.role,
-                content: {
-                  format: 2,
-                  parts: [{ type: 'text', text: item.textContent ?? '' }],
-                },
-                type: 'text',
-                createdAt: new Date(),
-              },
-            ],
-          })
-        } catch (error) {
-          if (shuttingDown) return
-          if (attempt >= maxRetries) {
-            console.error(`Failed to persist committed voice item ${item.id}; giving up`, error)
-            return
-          }
-          console.error(`Failed to persist committed voice item ${item.id}; retrying`, error)
-          const delay = Math.min(1_000 * 2 ** attempt, 30_000)
-          const timer = setTimeout(() => {
-            retryTimers.delete(timer)
-            void persist(attempt + 1)
-          }, delay)
-          retryTimers.add(timer)
-        }
-      }
-
-      void persist()
+    const persistence = await createLiveKitTranscriptPersistence({
+      remote: { client, agentId: 'support' },
+      sessionId: ctx.job.id,
+      memory: {
+        thread: metadata.threadId ?? ctx.job.id,
+        resource: metadata.resourceId ?? ctx.job.id,
+      },
+      requestContext: metadata.requestContext,
+    })
+    const session = new voice.AgentSession({
+      stt: 'deepgram/nova-3',
+      tts: 'cartesia/sonic-3',
+      llm: new MastraLLM({ transcriptPersistence: persistence }),
+    })
+    persistence.attach(session)
+    ctx.addShutdownCallback(async () => {
+      const status = await persistence.close()
+      if (status.failed || status.pending) console.warn('Incomplete transcript', status)
+    })
+    await session.start({
+      agent: new voice.Agent({ instructions: 'Handled by the Mastra agent.' }),
+      room: ctx.room,
     })
   },
 })
 ```
 
-The same `options` field works on `MastraVoiceAgent` and `MastraLLM`; on the remote transport it's forwarded in the request body as `memory.options`.
+For a local agent, replace `remote: { client, agentId: 'support' }` with `agent: mastra.getAgent('support')`. The same binding works with `new MastraVoiceAgent({ transcriptPersistence: persistence })` for a local session using the worker entry point. Attach each binding to one session and one generation source. `close()` is idempotent and closes the session before flushing; `flush()` leaves the session running.
+
+Remote persistence uses the existing authenticated Memory endpoints. The credentials must permit access to the selected thread and resource. Because the save endpoint uses the agent's configured Memory settings, remote per-run memory overrides are limited to `readOnly: true` and `lastMessages`. Configure other Memory features on the server. Keep the request context stable for the session so generation and persistence resolve the same Memory implementation.
 
 ### Speak while tools run
 
@@ -415,7 +511,7 @@ Both paths share the same reply pipeline underneath; choose by who should own th
 Tools stay on the Mastra agent and execute on the server. LiveKit-side tools passed to the session are ignored. Tool activity reaches the worker through `toolFeedback` (spoken filler), `onToolCall` (fires as each tool call starts), and `onTurnComplete` (fires after each reply with the text, tool calls, and token usage). Agent-initiated hang-up takes a few lines: pair `onToolCall` with [`runEndCall()`](#runendcall).
 
 :::warning
-Don't combine the `memory` option with LiveKit's `preemptiveGeneration`, which LiveKit enables by default in sessions you build yourself. A speculative turn persists a partial user message and a partial, never-spoken reply to the thread before LiveKit discards it. Set `turnHandling: { preemptiveGeneration: { enabled: false } }`, run without `memory` and pass the full transcript each turn, or set `memory.options.readOnly` and persist committed turns yourself; see [preemptive generation with memory](#preemptive-generation-with-memory).
+Don't combine the `memory` option with LiveKit's `preemptiveGeneration`, which LiveKit enables by default in sessions you build yourself. A speculative turn persists a partial user message and a partial, never-spoken reply to the thread before LiveKit discards it. Set `turnHandling: { preemptiveGeneration: { enabled: false } }`, run without `memory` and pass the full transcript each turn, or enable [managed transcript persistence](#save-committed-transcripts).
 :::
 
 `MastraLLM` also accepts an in-process Mastra `agent` instance, session ownership without a second deployment, or a custom `generate` function. The remote transport is available standalone as [`createRemoteAgentReplyGenerator()`](#createremoteagentreplygenerator), which also plugs into `createLiveKitWorker`'s `generate` option to run the batteries-included worker against a remote server.
@@ -433,6 +529,233 @@ await dispatchVoiceSession({
   metadata: { agentId: 'support', threadId: 'thread-42', resourceId: 'user-7' },
 })
 ```
+
+### Phone call setup
+
+Set `telephony` on `createLiveKitWorker()` to coordinate phone calls through LiveKit's native APIs. Outbound jobs wait for an answer before starting the session and greeting. Inbound jobs can resolve an agent, request context, and memory identifiers from the native SIP participant before starting the conversation.
+
+Use a dedicated room for each call. Configure a [LiveKit outbound trunk](https://docs.livekit.io/telephony/making-calls/outbound-trunk/) or [inbound trunk and dispatch rule](https://docs.livekit.io/telephony/accepting-calls/) first. The worker and its native API clients must use the same LiveKit project.
+
+Install the server SDK for its native clients and configuration types:
+
+```bash npm2yarn
+npm install livekit-server-sdk@^2.19.1
+```
+
+#### Outbound calls
+
+Dispatch a job from trusted application code after authorizing the destination. `dispatchVoiceSession()` returns the native dispatch result. The result confirms dispatch acceptance. Answer confirmation happens later in the worker.
+
+```typescript title="src/start-call.ts"
+import { randomUUID } from 'node:crypto'
+import { dispatchVoiceSession } from '@mastra/livekit'
+
+await dispatchVoiceSession({
+  roomName: `support-call-${randomUUID()}`,
+  metadata: {
+    agentId: 'support',
+    resourceId: 'customer-7',
+    requestContext: { phoneNumber: '+15555550123' },
+  },
+})
+```
+
+Configure the worker to dial using LiveKit's `SipClient`. Alongside the LiveKit credentials, set `SIP_OUTBOUND_TRUNK_ID` to your stored outbound trunk ID. Keep your existing worker runner configuration.
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker } from '@mastra/livekit/worker'
+import { LiveKitAPI } from 'livekit-server-sdk'
+import { mastra } from './index'
+
+const livekit = new LiveKitAPI()
+
+export default createLiveKitWorker({
+  mastra,
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  telephony: ({ metadata }) => {
+    const phoneNumber = metadata.requestContext?.phoneNumber
+    if (typeof phoneNumber !== 'string') throw new Error('Missing authorized destination')
+
+    return {
+      direction: 'outbound',
+      sipClient: livekit.sip,
+      sipTrunkId: process.env.SIP_OUTBOUND_TRUNK_ID!,
+      phoneNumber,
+      participantOptions: {
+        participantIdentity: 'callee',
+        ringingTimeout: 30,
+        maxCallDuration: 600,
+      },
+      deleteRoomOnFailure: livekit.room,
+    }
+  },
+  configuration: { greeting: { text: 'Hello, how can I help?' } },
+})
+```
+
+The worker selects the Mastra agent and validates dialing configuration before dialing. It calls `createSipParticipant()` with `waitUntilAnswered: true`, then binds the native session to the returned participant identity. `participantOptions` accepts LiveKit's `CreateSipParticipantOptions` except `waitUntilAnswered`, which the adapter always enables. Timeouts and durations use LiveKit's native seconds. The SDK sizes the request timeout against the ringing window.
+
+For inline trunk configuration, pass LiveKit's `SIPOutboundConfig` as `outboundTrunkConfig`, use an empty `sipTrunkId`, and provide `participantOptions.fromNumber`. Native clients, trunk configuration, and credentials stay in the worker rather than job metadata.
+
+`onSessionStart` receives `sipParticipant`, the native `SIPParticipantInfo` returned by the answered request. An answered request may reach voicemail or a phone menu. LiveKit reports answer status separately from audio subscription, and neither confirms that a person heard the greeting. See [LiveKit outbound call behavior](https://docs.livekit.io/telephony/making-calls/outbound-calls/).
+
+#### Inbound calls
+
+Use a native SIP dispatch rule to place each caller in a separate room and dispatch `mastra-voice`. Create the rule once as part of your LiveKit setup:
+
+```typescript title="scripts/configure-inbound.ts"
+import { serializeSessionMetadata } from '@mastra/livekit'
+import { LiveKitAPI, RoomConfiguration } from 'livekit-server-sdk'
+
+const livekit = new LiveKitAPI()
+
+await livekit.sip.createSipDispatchRule(
+  { type: 'individual', roomPrefix: 'support-call-' },
+  {
+    trunkIds: [process.env.SIP_INBOUND_TRUNK_ID!],
+    roomConfig: new RoomConfiguration({
+      agents: [
+        {
+          agentName: 'mastra-voice',
+          metadata: serializeSessionMetadata({ agentId: 'support' }),
+        },
+      ],
+    }),
+  },
+)
+```
+
+Add inbound configuration to your worker. `resolveMetadata` receives the native participant after the worker connects, before agent selection or memory setup. Return complete session metadata, using a spread if you want to preserve existing fields:
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker } from '@mastra/livekit/worker'
+import { LiveKitAPI } from 'livekit-server-sdk'
+import { mastra } from './index'
+
+const livekit = new LiveKitAPI()
+
+export default createLiveKitWorker({
+  mastra,
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  sessionConfigFromMetadata: true,
+  telephony: {
+    direction: 'inbound',
+    deleteRoomOnFailure: livekit.room,
+    resolveMetadata: ({ ctx, metadata, participant }) => {
+      const calledNumber = participant.attributes['sip.trunkPhoneNumber']
+      if (!calledNumber || calledNumber !== process.env.SUPPORT_PHONE_NUMBER)
+        throw new Error('Unknown inbound route')
+
+      return {
+        ...metadata,
+        agentId: 'support',
+        threadId: ctx.room.name!,
+        resourceId: `call:${ctx.room.name}`,
+        requestContext: { ...metadata.requestContext, calledNumber },
+      }
+    },
+  },
+})
+```
+
+The resolver owns routing and authorization. Caller-ID attributes don't authenticate a customer. The example isolates memory by call rather than linking caller ID to an existing customer's history. You can return `sessionConfig` to apply the shared native session settings. With `sessionConfigFromMetadata` enabled, resolved metadata is validated before agent selection.
+
+Set `participantIdentity` when the caller's identity is known. Otherwise the worker uses LiveKit's first non-agent participant and rejects it if it isn't a SIP participant. It binds the session's native input to that caller. The native participant is also available to the `agent` and `memory` resolvers and `onSessionStart`. Conflicting identities in `telephony` and `inputOptions` fail during setup.
+
+Omit `resolveMetadata` when dispatch metadata already supplies the routing information. A `telephony` callback can select inbound or outbound configuration per job, or return `undefined` for an ordinary browser session. Throw for unknown routes rather than falling back to another agent or project. Omitting `telephony` preserves existing behavior.
+
+#### Setup failures
+
+The adapter preserves native `SipCallError` details, including carrier status codes, and shuts down failed telephony jobs. It adds no polling, timers, or retry loop. A transport failure can leave the remote call outcome uncertain. Don't report a confirmed carrier rejection or automatically redial after such a failure.
+
+`deleteRoomOnFailure` takes a native `RoomServiceClient` and is optional. Supply it only for a dedicated call room: deletion disconnects every participant in that room. A deletion failure is logged without replacing the original setup error. If the telephony resolver throws before returning configuration, the job shuts down without deleting a room because ownership hasn't been selected.
+
+Cleanup is best effort. Dispatch failure, an unassigned job, worker-process failure, and failed cleanup aren't a durable rollback transaction. Application-level idempotency, call records, and business lifecycle handling remain with your application. Native LiveKit shutdown and room input options continue to control the lifecycle after successful setup.
+
+To verify deployment, use a controlled test destination: check answer-before-greeting ordering, native participant identity, and busy/no-answer cleanup. Test inbound routing with an allowed called number and an unknown route. Real audio and carrier behavior require this deployment check in addition to automated SDK tests.
+
+### Navigate phone menus
+
+Enable dual-tone multi-frequency (DTMF) input to let a Mastra agent press telephone keys during a call. The adapter publishes each key through [LiveKit's native `LocalParticipant.publishDtmf()` API](https://docs.livekit.io/telephony/features/dtmf/). The Mastra agent decides which keys to press from the menu prompts it hears.
+
+For the standard worker, add `dtmf: true` to a telephony configuration:
+
+```typescript title="src/mastra/voice-worker.ts"
+import { createLiveKitWorker } from '@mastra/livekit/worker'
+import { mastra } from './index'
+
+export default createLiveKitWorker({
+  mastra,
+  agent: 'support',
+  stt: 'deepgram/nova-3',
+  tts: 'cartesia/sonic-3',
+  telephony: { direction: 'inbound' },
+  dtmf: true,
+})
+```
+
+This adds a `sendDtmf` tool to the selected Mastra agent for that call. It also works with the outbound telephony configuration above. The tool accepts `{ digits: '123#' }`, with digits `0` through `9`, `*`, `#`, and uppercase `A` through `D`. Put navigation instructions on the **Mastra agent**, including when to press a key and when to wait without speaking for the next prompt.
+
+Use a separate room for each call. Native DTMF broadcasts to the room. The tool refuses to publish unless exactly one SIP participant is present and matches the intended caller. The tool also refuses overlapping sequences and execution with preemptive generation enabled. The standard worker disables preemptive generation by default. Omitting `dtmf` leaves the feature disabled and adds no tool execution to ordinary turns.
+
+#### Use a custom or remote worker
+
+Create one `createDtmfTool()` instance per call and pass it to `MastraLLM.tools`. It binds the keypad action to the native room, session, and caller. Local agents execute it through Mastra toolsets. Remote agents use the existing Mastra client-tool API to execute it in the worker and return the result to the remote agent. Install `@mastra/client-js` for remote client tools.
+
+The following worker accepts an inbound SIP caller. Set `MASTRA_URL` and `MASTRA_API_TOKEN` for your authenticated Mastra server, alongside the LiveKit credentials:
+
+```typescript title="src/mastra/voice-worker.ts"
+import { defineAgent, voice } from '@livekit/agents'
+import { ParticipantInfo_Kind } from '@livekit/protocol'
+import { createDtmfTool, MastraLLM } from '@mastra/livekit/plugin'
+
+export default defineAgent({
+  entry: async ctx => {
+    await ctx.connect()
+    const caller = await ctx.waitForParticipant()
+    if (Number(caller.kind) !== ParticipantInfo_Kind.SIP) throw new Error('Expected a SIP caller')
+
+    const session = new voice.AgentSession({
+      stt: 'deepgram/nova-3',
+      tts: 'cartesia/sonic-3',
+      turnHandling: { preemptiveGeneration: { enabled: false } },
+    })
+    ctx.addShutdownCallback(() => session.close())
+
+    const sendDtmf = createDtmfTool({
+      room: ctx.room,
+      session,
+      participantIdentity: caller.identity,
+    })
+    const llm = new MastraLLM({
+      remote: {
+        baseUrl: process.env.MASTRA_URL!,
+        agentId: 'support',
+        headers: { Authorization: `Bearer ${process.env.MASTRA_API_TOKEN!}` },
+      },
+      tools: { sendDtmf },
+    })
+
+    await session.start({
+      room: ctx.room,
+      agent: new voice.Agent({ instructions: '', llm }),
+      inputOptions: { participantIdentity: caller.identity },
+    })
+  },
+})
+```
+
+Replace `remote` with `agent: yourMastraAgent` for an in-process agent. Custom reply generators own their tool registration. `MastraLLM` rejects combining `generate` with `tools`. The standard worker's `dtmf` option requires a Mastra agent and telephony configuration.
+
+#### Interpret the result
+
+The tool returns `{ published: '123#', complete: true }` after LiveKit acknowledges publishing every digit. This confirms publication, not acceptance by the remote phone menu. A runtime failure returns `complete: false`, an `error`, and the prefix acknowledged before the failure. That prefix can be empty. Cancellation stops further digits after an in-flight publish settles. It can't undo a key already sent. Don't automatically repeat a failed or partial sequence.
+
+The adapter adds no tone synthesis, pauses, retries, or menu state machine. Use agent instructions to handle menu choices, and verify the next prompt before continuing. When transcript persistence is enabled, completed tool calls and their results are saved with the conversation.
+
+Before deploying, call a controlled phone menu and verify single digits, sequences, `*` and `#`, interruptions, and hang-up. Automated tests verify native LiveKit packets and Mastra tool continuation. Carrier timing and menu acceptance need a real call.
 
 ### Record calls
 
@@ -487,14 +810,18 @@ const roomName = `support-call-${randomUUID()}`
 
 await dispatchVoiceSession({
   roomName,
-  metadata: { agentId: 'support', resourceId: 'caller-7' },
+  metadata: {
+    agentId: 'support',
+    resourceId: 'caller-7',
+    requestContext: { phoneNumber: '+15555550123' },
+  },
   recording,
 })
 
-// Add the phone participant to roomName through your existing LiveKit SIP code.
+// The outbound telephony worker above dials after the recorded room is created.
 ```
 
-Use a fresh room name for each recorded session and await dispatch before dialing. `dispatchVoiceSession()` throws `LiveKitRecordingRoomConflictError` if the room already exists. Import this error from `@mastra/livekit` to handle the conflict. The existence check and room creation are separate requests, so your application must prevent another process from creating the same room concurrently. This option doesn't start recording in an existing room or capture earlier audio.
+Use a fresh room name for each recorded session. With the outbound worker above, room creation precedes dispatch and dialing. `dispatchVoiceSession()` throws `LiveKitRecordingRoomConflictError` if the room already exists. Import this error from `@mastra/livekit` to handle the conflict. The existence check and room creation are separate requests, so your application must prevent another process from creating the same room concurrently. This option doesn't start recording in an existing room or capture earlier audio.
 
 For browser sessions, pass the same settings to the connection route:
 
@@ -756,9 +1083,11 @@ Conversation history lives in Mastra Memory, so voice sessions and text chat can
 - [Agent Memory](/docs/memory/overview)
 - [LiveKit Agents docs](https://docs.livekit.io/agents/)
 
-## Upgrade to 0.5.0
+<a id="upgrade-to-050" />
 
-The 0.5.0 prerelease requires LiveKit Agents 1.7.1 or newer within 1.x. The speech helpers use `FlushSentinel` and `SpeechHandle.exception()`, which are absent in Agents 1.4.0. Test the supplied prerelease version or package archive before deploying it. Updating a dependency range doesn't update an existing lockfile: check the installed versions after installation.
+## Upgrade the integration
+
+This release raises the minimum LiveKit Agents and plugin versions from 1.7.1 to 1.9.3 within 1.x. Update Agents, any installed plugins, and RTC together before upgrading the integration. Older versions no longer satisfy the package's peer requirements. Updating a dependency range doesn't update an existing lockfile: check the installed versions after installation.
 
 If you used `client.getLiveKitRecording(traceId)` in an earlier snapshot, switch to `getLiveKitRecording(client, traceId)` from `@mastra/livekit/client`. Import `LiveKitRecordingResponse` from the same entry point instead of `GetLiveKitRecordingResponse` from client-js.
 
@@ -768,25 +1097,27 @@ Before upgrading an application that registers `liveKitRecordingRoute()`, add an
 
 ### Install compatible packages
 
-Use the same exact release for Agents and its plugins. The tested baseline is:
+Use the same exact release for Agents and its plugins. The required minimum versions and tested stable combination are:
 
 | Package | Version |
 | - | - |
-| `@livekit/agents` | `1.7.1` |
-| `@livekit/agents-plugin-livekit` | `1.7.1` |
-| `@livekit/agents-plugin-silero` | `1.7.1` |
-| `@livekit/rtc-node` | `0.13.34` |
-| `livekit-server-sdk` | `2.16.0` |
+| `@livekit/agents` | `1.9.3` |
+| `@livekit/agents-plugin-livekit` | `1.9.3` |
+| `@livekit/agents-plugin-silero` | `1.9.3` |
+| `@livekit/rtc-node` | `1.1.0` |
+| `livekit-server-sdk` | `2.19.1` |
 
 For a local prerelease archive, install it with the matching LiveKit packages:
 
 ```bash npm2yarn
-npm install ./mastra-livekit-0.5.0-next.0.tgz @livekit/agents@1.7.1 @livekit/agents-plugin-livekit@1.7.1 @livekit/agents-plugin-silero@1.7.1 @livekit/rtc-node@0.13.34 livekit-server-sdk@2.16.0
+npm install ./mastra-livekit.tgz @livekit/agents@1.9.3 @livekit/agents-plugin-livekit@1.9.3 @livekit/agents-plugin-silero@1.9.3 @livekit/rtc-node@1.1.0 livekit-server-sdk@2.19.1
 ```
 
-Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.7.1 and Silero 1.7.1 require RTC `^0.13.34`; RTC 1.x doesn't satisfy that requirement. Don't override peer dependency errors to install it.
+Replace the archive path with the supplied prerelease. Install any other `@livekit/agents-plugin-*` packages at the matching release. Agents 1.9.3 and Silero 1.9.3 require RTC `^1.1.0`. Update an application's explicit RTC dependency along with Agents and its plugins.
 
-Keep Node.js 22.13 or newer. Both `@mastra/livekit` and Agents require Zod `^3.25.76 || ^4.1.8`. Upgrade older Zod versions before installing 0.5.0. Verify the installed dependency tree and initialize the worker's models:
+The LiveKit and Silero plugins remain optional. If you install either plugin, its version must satisfy `^1.9.3` and match Agents. RTC 0.13.x is incompatible with this combination. Don't override peer dependency errors to keep the older packages.
+
+Keep Node.js 22.13 or newer. Both `@mastra/livekit` and Agents require Zod `^3.25.76 || ^4.1.8`. Upgrade older Zod versions before installing this release. Verify the installed dependency tree and initialize the worker's models:
 
 ```bash npm2yarn
 npm ls @mastra/livekit @livekit/agents @livekit/agents-plugin-livekit @livekit/agents-plugin-silero @livekit/rtc-node
@@ -794,6 +1125,17 @@ npx tsx src/mastra/voice-worker.ts download-files
 ```
 
 Use a single installed copy of Agents for both the integration and a custom `voice.AgentSession`. Multiple copies can fail LiveKit's runtime class checks.
+
+### Account for upstream behavior changes
+
+When upgrading from Agents 1.7.1 to 1.9.3, review these [LiveKit changes](https://github.com/livekit/agents-js/blob/main/agents/CHANGELOG.md):
+
+- Several LiveKit trace duration attributes, including `lk.eou.endpointing_delay` and `lk.transcription_delay`, now use seconds. Update dashboards that interpret those attributes as milliseconds. Mastra's `onTurnMetrics` fields ending in `Ms` still use milliseconds.
+- LiveKit's session transports throw when a send fails because the transport is closed or the room is disconnected. Applications using those transports directly should handle the rejected send.
+- LiveKit exports conversation content to configured OpenTelemetry exporters. Use its `allowPii: false` tracer-provider option or `LIVEKIT_TELEMETRY_ALLOW_PII=0` for an ambient provider to omit that content from third-party exporters. `OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT=false` disables content capture for all destinations.
+- When all eligible clients support transcription streams, LiveKit stops sending duplicate legacy transcription packets. The `lk.transcription` stream and committed conversation events used by Mastra's transcript persistence remain available.
+
+The [Server SDK 2.19.1 token verifier](https://github.com/livekit/node-sdks/blob/main/packages/livekit-server-sdk/CHANGELOG.md) requires an `exp` claim. Tokens issued by `liveKitConnectionRoute()` already include it. If an application creates tokens separately, use LiveKit's `AccessToken` API with an expiration.
 
 ### Check VAD and turn detection
 
@@ -958,6 +1300,28 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     type: 'Partial<AgentSessionOptions>',
     description: 'Extra LiveKit AgentSession options merged over what this helper builds.',
     isOptional: true,
+  },
+  {
+    name: 'transcriptPersistence',
+    type: "'memory'",
+    description:
+      'Opt in to saving committed LiveKit conversation items in the resolved agent’s Memory. Generation reads Memory without automatic writes. Requires the agent path and enabled Memory.',
+    isOptional: true,
+  },
+  {
+    name: 'transcriptPersistenceOptions',
+    type: 'TranscriptPersistenceOptions',
+    description:
+      'Optional shutdownTimeoutMs (default 10000), logger, onError, and onBarrier callbacks for managed persistence.',
+    isOptional: true,
+  },
+  {
+    name: 'sessionConfigFromMetadata',
+    type: 'boolean',
+    description:
+      'Validate job metadata and apply its versioned sessionConfig through LiveKit. Enable for trusted dispatchers. Speech resolvers and explicit sessionOptions retain precedence.',
+    isOptional: true,
+    defaultValue: 'false',
   },
   {
     name: 'memory',
@@ -1188,7 +1552,7 @@ The agent carries its own placeholder `llm.LLM` so LiveKit runs the reply pipeli
 
 #### Options
 
-Provide exactly one reply source: `agent` or `generate`.
+Provide exactly one reply source: `agent`, `generate`, or a local `transcriptPersistence` binding.
 
 <PropertiesTable
   content={[
@@ -1196,6 +1560,13 @@ Provide exactly one reply source: `agent` or `generate`.
     name: 'agent',
     type: 'Agent',
     description: 'In-process Mastra agent. Tools and memory run inside it.',
+    isOptional: true,
+  },
+  {
+    name: 'transcriptPersistence',
+    type: 'LiveKitTranscriptPersistence',
+    description:
+      'Binding from createLiveKitTranscriptPersistence() with a local agent. Supplies the agent, memory mapping, and request context; omit separate values for those options, including in streamOptions. Attach the binding before session.start().',
     isOptional: true,
   },
   {
@@ -1295,7 +1666,7 @@ The plugin reports `provider` as `mastra` and `model` as the agent id, so LiveKi
 
 #### Constructor options
 
-Provide exactly one reply source: `remote`, `agent`, or `generate`.
+Provide exactly one reply source: `remote`, `agent`, `generate`, or a `transcriptPersistence` binding.
 
 <PropertiesTable
   content={[
@@ -1310,6 +1681,13 @@ Provide exactly one reply source: `remote`, `agent`, or `generate`.
     name: 'agent',
     type: 'Agent',
     description: 'In-process Mastra agent. Session ownership without a second deployment.',
+    isOptional: true,
+  },
+  {
+    name: 'transcriptPersistence',
+    type: 'LiveKitTranscriptPersistence',
+    description:
+      'Binding from createLiveKitTranscriptPersistence() with a local agent or remote client. Supplies the generation source, memory mapping, and request context; omit separate values for those options. Attach the binding before session.start().',
     isOptional: true,
   },
   {
@@ -1357,7 +1735,7 @@ Provide exactly one reply source: `remote`, `agent`, or `generate`.
 />
 
 :::warning
-Don't combine `memory` with the session's `preemptiveGeneration` option, which LiveKit enables by default in sessions you build yourself. A speculative turn persists a partial user message and a partial, never-spoken reply to the thread before LiveKit discards it. Set `turnHandling: { preemptiveGeneration: { enabled: false } }` on the session, or set `memory.options.readOnly` and persist committed turns yourself; see [preemptive generation with memory](#preemptive-generation-with-memory). Stateless mode (no `memory`) works with preemptive generation.
+Don't combine `memory` with the session's `preemptiveGeneration` option, which LiveKit enables by default in sessions you build yourself. A speculative turn persists a partial user message and a partial, never-spoken reply to the thread before LiveKit discards it. Set `turnHandling: { preemptiveGeneration: { enabled: false } }` on the session, or enable [managed transcript persistence](#save-committed-transcripts). Stateless mode (no `memory`) works with preemptive generation.
 :::
 
 #### Tools run on the Mastra agent
@@ -1371,6 +1749,8 @@ Tool activity reaches the worker through `toolFeedback`, `onToolCall`, and `onTu
 LiveKit injects your `voice.Agent`'s `instructions` into the chat context of every request. The plugin drops them because the server-side Mastra agent's own instructions are authoritative. To change the prompt, change the Mastra agent.
 
 #### Interrupted turns
+
+With managed transcript persistence, LiveKit's committed partial reply is saved directly, including at shutdown. The following describes the default behavior when managed persistence is omitted.
 
 When the user interrupts a reply:
 
@@ -1864,10 +2244,19 @@ The metadata passed from the Mastra server to the worker through LiveKit job dis
     description: 'Plain-object entries restored into a RequestContext for agent execution.',
     isOptional: true,
   },
+  {
+    name: 'sessionConfig',
+    type: 'LiveKitSessionConfig',
+    description:
+      'Optional versioned configuration: { version: 1, options: LiveKitSessionOptions }. Applied only by workers with sessionConfigFromMetadata enabled.',
+    isOptional: true,
+  },
 ]}
 />
 
 The metadata travels as a JSON string. `liveKitConnectionRoute()` and `dispatchVoiceSession()` serialize it for you; use `serializeSessionMetadata(metadata)` when dispatching through your own code, or write the JSON directly in LiveKit-side configuration such as a SIP dispatch rule. Entries in `requestContext` reach the agent's runtime-defined instructions, tools, and input processors on every turn of the call.
+
+Serialization remains permissive. Use `LiveKitSessionMetadataSchema.parse(metadata)` to validate before dispatch or `parseSessionMetadata(raw, { validate: true })` to validate received JSON. Without `validate: true`, parsing retains the existing behavior: missing or malformed JSON returns an empty object, and object fields pass through unchanged. See [shared session configuration](#shared-session-configuration) for supported settings and worker opt-in.
 
 ### Related
 

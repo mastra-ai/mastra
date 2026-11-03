@@ -57,6 +57,14 @@ export { createRemoteAgentReplyGenerator } from './remote';
 export type { RemoteMastraAgentOptions, RemoteAgentReplyGeneratorOptions } from './remote';
 
 export { observeVoiceSession, mastraLLMNode } from './speech';
+export { createLiveKitTranscriptPersistence } from './transcript';
+export type {
+  LiveKitTranscriptPersistence,
+  CreateLiveKitTranscriptPersistenceOptions,
+  TranscriptPersistenceOptions,
+  TranscriptPersistenceStatus,
+  TranscriptPersistenceError,
+} from './transcript';
 export type { ObserveVoiceSessionOptions } from './speech';
 export { VOICE_TEXT_FLUSH } from './turn-metrics';
 export type {
@@ -71,3 +79,14 @@ export type {
   VoiceSpeechResult,
   VoiceSpeechCompleteHook,
 } from './turn-metrics';
+
+export type {
+  LiveKitTelephonyContext,
+  LiveKitTelephonyOptions,
+  LiveKitTelephonyResolver,
+  LiveKitInboundCallOptions,
+  LiveKitOutboundCallOptions,
+} from './telephony';
+
+export { createDtmfTool } from './dtmf';
+export type { DtmfToolOptions } from './dtmf';

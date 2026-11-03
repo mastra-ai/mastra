@@ -8,6 +8,7 @@ import {
 } from 'livekit-server-sdk';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dispatchVoiceSession } from './dispatch';
+import { LiveKitSessionMetadataSchema, parseSessionMetadata } from './metadata';
 import { LiveKitRecordingRoomConflictError } from './recording';
 import type { LiveKitRecordingOptions } from './recording';
 
@@ -82,6 +83,17 @@ describe('dispatchVoiceSession', () => {
     expect(AgentDispatchClient.prototype.createDispatch).toHaveBeenCalledExactlyOnceWith('call-42', 'phone-agent', {
       metadata: JSON.stringify(metadata),
     });
+  });
+
+  it('carries validated session settings through the native dispatch metadata', async () => {
+    const metadata = LiveKitSessionMetadataSchema.parse({
+      agentId: 'support',
+      sessionConfig: { version: 1, options: { userAwayTimeout: 20 } },
+      custom: { tenant: 'acme' },
+    });
+    await dispatchVoiceSession({ ...options, metadata });
+    const sent = vi.mocked(AgentDispatchClient.prototype.createDispatch).mock.calls[0]![2]!.metadata;
+    expect(parseSessionMetadata(sent, { validate: true })).toEqual(metadata);
   });
 
   it('accepts LiveKit RoomEgress instances and separate-track configuration', async () => {

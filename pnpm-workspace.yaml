@@ -160,6 +160,13 @@ trustPolicy: no-downgrade
 trustPolicyIgnoreAfter: 43200 # 30 days
 minimumReleaseAge: 1440 # 1 day
 minimumReleaseAgeExclude:
+  # Latest stable LiveKit validation, adopted on release day. Keep exceptions version-specific.
+  - '@livekit/agents@1.9.3'
+  - '@livekit/agents-plugin-livekit@1.9.3'
+  - '@livekit/agents-plugin-silero@1.9.3'
+  - 'vitest@5.0.5'
+  - '@vitest/mocker@5.0.5'
+  - '@vitest/spy@5.0.5'
   # Exclude our own published packages so snapshot/canary e2e flows can install
   # versions immediately after publishing in CI. The minimumReleaseAge gate is
   # intended as a supply-chain defense for third-party dependencies.
@@ -347,6 +354,8 @@ overrides:
   '@lancedb/lancedb@0.31.0>openai': '-'
   # Share Wrangler's runtime with the Cloudflare storage test fixtures.
   'miniflare@4.20260730.0>workerd': 1.20261023.1
+  # Test LiveKit with current Node types without changing the workspace's Node 22 baseline.
+  '@mastra/livekit>@types/node': 26.6.5
   # Temporarily pinning to 7.2.0; will unpin shortly.
   bson: 7.2.0
   '@types/node': 22.19.15

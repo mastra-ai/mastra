@@ -13,6 +13,7 @@ import { summarizeCall } from './memory';
 
 export default createLiveKitWorker({
   mastra,
+  sessionConfigFromMetadata: true,
   agent: 'superRegulated',
   stt: 'deepgram/nova-3',
   tts: 'cartesia/sonic-3',
