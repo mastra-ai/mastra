@@ -1358,21 +1358,6 @@ function KnowledgePageGraphInner({
     fit(true, fitDuration(prefersMotion()));
   }, [selectedPageId, selectedIsLoaded, fit]);
 
-  // The pages a focus links to arrive after the focus itself, so the fit made on selecting it left them out
-  // of view. When more of them turn up for the same focus, fit again, unless the user has moved the view.
-  const userMoved = useRef(false);
-  const ringFit = useRef<{ id: string | null; size: number }>({ id: null, size: 0 });
-  useEffect(() => {
-    if (!selectedIsLoaded || !selectedPageId) return;
-    const last = ringFit.current;
-    ringFit.current = { id: selectedPageId, size: linkedIds.size };
-    if (last.id !== selectedPageId) {
-      userMoved.current = false;
-      return;
-    }
-    if (linkedIds.size > last.size && !userMoved.current) fit(true, fitDuration(prefersMotion()));
-  }, [linkedIds, selectedPageId, selectedIsLoaded, fit]);
-
   // First click selects; a click on the page that is already selected opens it. A double-click is the two.
   const activate = (page: KnowledgePagePayload) => {
     // A stand-in or a scope group isn't a page: the host loads or opens what it stands for.
@@ -1439,9 +1424,6 @@ function KnowledgePageGraphInner({
         onInit={() => {
           initialized.current = true;
           fit(true);
-        }}
-        onMoveStart={event => {
-          if (event) userMoved.current = true;
         }}
         minZoom={0.1}
         proOptions={{ hideAttribution: true }}
