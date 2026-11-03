@@ -33,7 +33,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The routes mount under `/api/knowledge` and need `@mastra/core` 1.81.0 or later. With 1.81.0, Studio counts links only among the pages it has loaded. [Server routes](/reference/server/routes#knowledge) lists each route, its parameters and its errors.
+The routes mount under your server's API prefix, `/api/knowledge` by default, and need `@mastra/core` 1.81.0 or later. With 1.81.0, Studio counts links only among the pages it has loaded. [Server routes](/reference/server/routes#knowledge) lists each route, its parameters and its errors.
 
 ## What you see
 
@@ -92,6 +92,8 @@ export const mastra = new Mastra({
   },
 })
 ```
+
+If you set a different prefix, change the `/api/knowledge` check in `authorize` to match. Otherwise the key isn't set and the routes return `403`.
 
 An `authorize` function replaces the server's rules and role checks for every route, so keep your app's existing decision for the other paths, as above. Returning `true` for everything would let any signed-in user call any route.
 
