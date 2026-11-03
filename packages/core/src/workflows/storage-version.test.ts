@@ -2361,9 +2361,9 @@ describe('storage v2 memory', () => {
     // No step read its input from storage, since each one's previous entry was still in memory, and
     // returning the result read nothing.
     expect(reads).toEqual([['step1']]);
-    // `steps()` reads what is still evicted, in one read.
+    // The result holds every successful step as a stub, so `steps()` reads all of them, in one read.
     const loaded = await withLoadedSteps(v2);
-    expect(reads).toEqual([['step1'], ['step2', 'step3', 'step4', 'step5', 'step6', 'step7', 'step8']]);
+    expect(reads).toEqual([['step1'], Array.from({ length: 10 }, (_, i) => `step${i + 1}`)]);
     expect(withoutTimestamps(loaded)).toEqual(withoutTimestamps(v1));
   });
 
@@ -2400,10 +2400,10 @@ describe('storage v2 memory', () => {
     // left was evicted when join ended, so after reads it from storage.
     expect(afterReads).toEqual([['left']]);
     // join and after find their input in memory, and join finds left there too. Returning the
-    // result reads nothing more; `steps()` reads what is still evicted.
+    // result reads nothing more; `steps()` reads every successful step, which the result holds as stubs.
     expect(reads).toEqual([['left']]);
     await (result.steps as unknown as () => Promise<unknown>)();
-    expect(reads).toEqual([['left'], ['left', 'right', 'join']]);
+    expect(reads).toEqual([['left'], ['left', 'right', 'join', 'after', 'last']]);
   });
 
   it('reads an evicted step once across foreach iterations', async () => {
@@ -2484,9 +2484,11 @@ describe('storage v2 memory', () => {
     const v2 = await startOn(2, build, storage);
 
     expect(readValue).toEqual({ n: 1 });
-    // Nothing was evicted, so `steps()` has nothing to read either.
-    const loaded = await withLoadedSteps(v2);
+    // Nothing was evicted while the run went on, so d read a from memory. The final write stored
+    // every result, so the returned result holds them as stubs and `steps()` reads them once.
     expect(reads).toEqual([]);
+    const loaded = await withLoadedSteps(v2);
+    expect(reads).toEqual([['a', 'b', 'c', 'd']]);
     expect(withoutTimestamps(loaded)).toEqual(withoutTimestamps(v1));
   });
 
@@ -2568,9 +2570,10 @@ describe('storage v2 memory', () => {
     ).toEqual(['loadWorkflowRun summary', 'loadWorkflowRunSteps']);
     // The finished sibling and the previous entry, read before the entry runs.
     expect([...calls[1]!.args.stepIds].sort()).toEqual(['a', 'done']);
-    // Those reads left nothing evicted, so `steps()` reads nothing.
+    // The result holds every successful step as a stub, so `steps()` reads them once.
     const loaded = await withLoadedSteps(v2);
-    expect(calls).toHaveLength(2);
+    expect(calls).toHaveLength(3);
+    expect([...calls[2]!.args.stepIds].sort()).toEqual(['a', 'done', 'gate']);
     expect(withoutTimestamps(loaded)).toEqual(withoutTimestamps(v1));
   });
 

@@ -1417,7 +1417,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         }
 
         // Every write of this entry has been awaited. Keep this entry: it's the next one's `prevStep`.
-        // After the last entry, the end of the run reads every result back anyway.
+        // The last entry stays too; once the final write settles, the result's `steps()` loader keeps
+        // only stubs of every stored successful result (see `lazyStepResults`).
         if (i + 1 < steps.length) journal?.evict(stepResults, getStepIds(entry));
       }
 
