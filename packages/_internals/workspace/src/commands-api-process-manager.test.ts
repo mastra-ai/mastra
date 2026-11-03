@@ -237,6 +237,8 @@ describe('CommandsApiProcessManager', () => {
 
   it('stops what a killed process started, so `npm run dev` takes its dev server down with it', async () => {
     const processes = setup();
+    // Another background process, which must survive: it's a sibling, not a child.
+    const neighbor = await processes.spawn('sleep 300');
     // Shaped like `npm run dev`: wrapper -> `sh -c` -> server. Prints the
     // middle shell's pid, then the server's.
     const handle = await processes.spawn(`sh -c 'echo $$; sleep 300 & echo $!; sleep 300'; true`);
@@ -249,6 +251,8 @@ describe('CommandsApiProcessManager', () => {
 
     await until(() => !isAlive(shell) && !isAlive(server));
     expect((await handle.wait()).exitCode).toBe(137);
+    expect(isAlive(neighbor.pid)).toBe(true);
+    expect(neighbor.exitCode).toBeUndefined();
   });
 
   it('writes stdin through runCommands, and refuses when stdin was detached', async () => {
