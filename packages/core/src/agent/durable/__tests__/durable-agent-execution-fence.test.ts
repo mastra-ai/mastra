@@ -679,6 +679,15 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         const history = await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
         const abandonedStartAt = history.findLast(event => event.type === AgentStreamEventTypes.ITERATION_START)?.index;
         expect(abandonedStartAt).toEqual(expect.any(Number));
+        // Processor output can be published after iteration-start but before step-start.
+        await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          type: 'chunk',
+          runId,
+          data: { type: 'data-question', payload: { id: 'pre-step', state: 'waiting' } },
+          stepIndex: 0,
+          generation: originalGeneration,
+          producedAt: Date.now(),
+        });
         // Simulate a model step published before its result was checkpointed.
         await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
           type: AgentStreamEventTypes.STEP_START,
@@ -735,6 +744,7 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
             event => event.type === AgentStreamEventTypes.STEP_START && event.generation === originalGeneration,
           ),
         ).toHaveLength(0);
+        expect(replayed.some(event => (event as any).data?.type === 'data-question')).toBe(false);
         await unsubscribe();
         const afterClaim = events.slice(claimedAt + 1);
         expect(afterClaim.some(event => event.type === 'finish' && event.generation === recoveredGeneration)).toBe(
