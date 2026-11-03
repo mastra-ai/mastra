@@ -411,6 +411,7 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     const connectionId =
       issueReference?.connectionId ?? source?.connectionId ?? connectionIdFromConnection(input.connection);
     const issueId = issueReference?.issueId ?? input.issueId;
+    const projectId = issueReference?.projectId ?? source?.projectId;
 
     const candidates: JiraConnectionContext[] = [];
     if (connectionId) {
@@ -426,7 +427,10 @@ export class PlatformJiraIntegration implements FactoryIntegration {
     let firstError: unknown;
     for (const context of candidates) {
       try {
-        return { context, issue: await context.api.getIssue(issueId) };
+        const issue = await context.api.getIssue(issueId);
+        // A reference scoped to a project only resolves issues that live in that project.
+        if (projectId && issue.fields.project?.id !== projectId) return null;
+        return { context, issue };
       } catch (error) {
         if (error instanceof JiraApiError && error.status === 404) continue;
         firstError ??= error;

@@ -321,6 +321,19 @@ describe('PlatformJiraIntegration over integrations v2', () => {
     expect(detail?.comments[0]?.body).toBe('Details');
   });
 
+  it('does not return an issue from a different project than the reference names', async () => {
+    stubRoutes([
+      ['GET', `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/SEC-9?`, () => json(issue('SEC-9', '3'))],
+      ['GET', `a1b_beta/proxy/ex/jira/${BETA_CLOUD_ID}/rest/api/3/issue/SEC-9/comment`, () => json({ comments: [], total: 0 })],
+    ]);
+    const reference = encodeIssueReference({ connectionId: 'a1b_beta', issueId: 'SEC-9', projectId: '2' });
+
+    await expect(integration().intake.getIssue({ connection, issueId: reference })).resolves.toBeNull();
+    await expect(
+      integration().intake.getIssue({ connection, issueId: 'SEC-9', sourceId: encodeSourceId('a1b_beta', '2') }),
+    ).resolves.toBeNull();
+  });
+
   it('rejects a connection that was not discovered as active jira', async () => {
     const fetchMock = stubRoutes([]);
     const reference = encodeIssueReference({ connectionId: 'a1b_gitlab', issueId: 'OPS-7', projectId: '2' });
