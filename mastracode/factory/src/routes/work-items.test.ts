@@ -1080,6 +1080,8 @@ describe('work item relations', () => {
     });
 
     expect(child.workItem.parentWorkItemId).toBe(parent.workItem.id);
+    // A pull request filed without a board lands on Work, where it is reviewed.
+    expect(child.workItem.board).toBe('work');
 
     const { body: repeated } = await create('child', {
       externalSource: { integrationId: 'github', type: 'pull-request', externalId: 'child' },

@@ -53,7 +53,6 @@ import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { ProjectBoardCache } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
-import { boardForWorkItem } from './boards/semantics.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -106,6 +105,7 @@ import { isValidGitRef } from './sandbox/git-ref.js';
 import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
+import { peekSessionSandbox } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
@@ -123,6 +123,7 @@ import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
+import { selfReviewApprovedHead } from './session/self-review-gate.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
@@ -1581,30 +1582,12 @@ export class MastraFactory {
                 },
                 ...(workItemsStorage
                   ? {
-                      selfReviewApprovedHead: async () => {
-                        const resolution = await resolveFactorySessionAddress({
+                      selfReviewApprovedHead: () =>
+                        selfReviewApprovedHead({
                           requestContext,
-                          storage: workItemsStorage,
-                        });
-                        if (!resolution) return undefined;
-                        const binding =
-                          resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                        if (!binding) return undefined;
-                        const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                        if (!item || boardForWorkItem(item) !== 'work') return undefined;
-                        if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
-                        // A verdict already recorded still binds the change request to its head.
-                        if (item.metadata?.selfReviewVerdict === undefined) {
-                          await factoryProjectsStorage.ensureReady();
-                          const project = await factoryProjectsStorage.get({
-                            orgId: binding.orgId,
-                            id: binding.factoryProjectId,
-                          });
-                          if (!project?.selfReviewEnabled) return undefined;
-                        }
-                        const sha = item.metadata?.selfReviewedHeadSha;
-                        return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string' ? sha : null;
-                      },
+                          workItems: workItemsStorage,
+                          projects: factoryProjectsStorage,
+                        }),
                       boundChangeRequestId: async () => {
                         const resolution = await resolveFactorySessionAddress({
                           requestContext,
@@ -1691,6 +1674,12 @@ export class MastraFactory {
                     createFactorySandboxTools(scope, {
                       sessions: sourceControlSessions,
                       resetSandbox: input => sessionRetirement.resetSessionSandbox(input),
+                      findSandbox: async ({ sourceControl, orgId, sessionId }) => {
+                        const session = await sourceControl.sessions.getBySessionId(sessionId);
+                        if (!session || session.orgId !== orgId) return undefined;
+                        return peekSessionSandbox(session.id)?.sandbox;
+                      },
+                      browser: this.#config.browser,
                     }),
                   );
                 }

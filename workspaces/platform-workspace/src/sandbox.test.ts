@@ -4048,6 +4048,29 @@ describe('PlatformSandbox networking', () => {
     expect(JSON.parse(init.body)).toEqual({ port: 3000 });
   });
 
+  it('gives the port auth cookie for a browser you control', async () => {
+    const { sandbox, fetchMock } = makeSandbox(grant());
+    await sandbox._start();
+
+    await expect(sandbox.getPortAuthCookie(3000)).resolves.toEqual({
+      name: '__mastra_preview',
+      value: 'signed',
+      domain: '3000-sbx_1.preview.test',
+      path: '/',
+    });
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/preview-grants',
+    );
+  });
+
+  it('gives no cookie for a port with no URL', async () => {
+    const { sandbox, fetchMock } = makeSandbox();
+    await sandbox._start();
+
+    await expect(sandbox.getPortAuthCookie(49983)).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("is null before the sandbox is running, and doesn't start it", async () => {
     const { sandbox, fetchMock } = makeSandbox();
 
