@@ -155,6 +155,16 @@ describe('auth helpers', () => {
       expect(await checkRules(rules, '/api/public/file.jpg', 'GET', {})).toBe(true);
     });
 
+    it('should not fall through to a later rule when a matching condition returns false', async () => {
+      const layered: MastraAuthConfig['rules'] = [
+        { path: '/api/admin/*', condition: (user: any) => user?.role === 'admin', allow: true },
+        { path: '/api/*', allow: true },
+      ];
+      expect(await checkRules(layered, '/api/admin/dashboard', 'GET', { role: 'user' })).toBe(false);
+      expect(await checkRules(layered, '/api/admin/dashboard', 'GET', { role: 'admin' })).toBe(true);
+      expect(await checkRules(layered, '/api/agents', 'GET', { role: 'user' })).toBe(true);
+    });
+
     it('should deny access when no rules match', async () => {
       expect(await checkRules(rules, '/api/other/resource', 'GET', {})).toBe(false);
     });
