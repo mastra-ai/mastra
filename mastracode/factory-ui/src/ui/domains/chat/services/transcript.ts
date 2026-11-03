@@ -1111,7 +1111,8 @@ const MAX_SHELL_OUTPUT = 1024 * 1024;
 
 /** Appends shell output, keeping only the latest `MAX_SHELL_OUTPUT` code units. */
 function appendShellOutput(existing: string, chunk: string): string {
-  if (chunk.length >= MAX_SHELL_OUTPUT) return chunk.slice(-MAX_SHELL_OUTPUT);
+  // Copy an oversized chunk's tail: a plain `slice` can share, and so retain, the whole chunk.
+  if (chunk.length >= MAX_SHELL_OUTPUT) return JSON.parse(JSON.stringify(chunk.slice(-MAX_SHELL_OUTPUT))) as string;
   return existing.slice(-(MAX_SHELL_OUTPUT - chunk.length)) + chunk;
 }
 

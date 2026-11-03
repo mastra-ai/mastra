@@ -3765,11 +3765,13 @@ export class SessionDisplayState {
         const shellTool = ds.activeTools.get(event.toolCallId);
         if (shellTool) {
           // Keep a bounded display tail. Slice before concatenating so a single
-          // oversized chunk never creates an even larger intermediate string.
+          // oversized chunk never creates an even larger intermediate string, and
+          // copy that chunk's tail: a plain `slice` can share, and so retain, the
+          // whole chunk.
           const limit = 1024 * 1024;
           shellTool.shellOutput =
             event.output.length >= limit
-              ? event.output.slice(-limit)
+              ? (JSON.parse(JSON.stringify(event.output.slice(-limit))) as string)
               : (shellTool.shellOutput ?? '').slice(-(limit - event.output.length)) + event.output;
         }
         break;
