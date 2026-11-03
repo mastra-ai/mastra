@@ -133,7 +133,7 @@ Knowledge needs `scopes`: declare the scopes its runs hold, e.g. `scopes: { ...k
 createTools(options?: { read?: boolean; write?: boolean; pinnedContext?: boolean }): Record<string, Tool>
 ```
 
-Returns the Knowledge tools for explicit wiring, such as an agent that isn't attached with `knowledge`. Each option overrides the matching group set on the instance. See [Knowledge tools](/reference/knowledge/knowledge-tools).
+Returns the Knowledge tools for explicit wiring, such as an agent that isn't attached with `knowledge`. Each option overrides the matching group set on the instance, and an omitted option keeps it. On an instance with `pinnedContext` on, `createTools({ write: false })` also returns `knowledge_pin`. See [Knowledge tools](/reference/knowledge/knowledge-tools).
 
 ```typescript
 const tools = knowledge.createTools({ write: false })
