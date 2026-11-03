@@ -156,6 +156,26 @@ describe('toolEdit', () => {
     expect(toolEdit('write_file', { path: 'a.ts', content: 'x' })).toEqual({ path: 'a.ts', content: 'x' });
   });
 
+  it.each(['filesystem_edit_file', 'filesystem_string_replace', 'filesystem_str_replace'])(
+    'keeps the diff from %s visible when ordinary arguments are hidden',
+    toolName => {
+      const args = { file_path: 'src/refunds.ts', old_string: 'return refund();', new_string: '' };
+      expect(toolEdit(toolName, args)).toEqual({
+        path: 'src/refunds.ts',
+        oldText: 'return refund();',
+        newText: '',
+      });
+      expect(hasToolArguments({ toolName, args, hideArguments: true })).toBe(true);
+      expect(presentTool(toolName, args).pose).toBe('tool');
+    },
+  );
+
+  it.each(['filesystem_write_file', 'filesystem_create_file'])('shows the file content written by %s', toolName => {
+    const args = { path: 'src/refunds.ts', content: 'export const refunds = [];\n' };
+    expect(toolEdit(toolName, args)).toEqual({ path: 'src/refunds.ts', content: args.content });
+    expect(presentTool(toolName, args).pose).toBe('tool');
+  });
+
   it('leaves other calls to the raw arguments', () => {
     expect(toolEdit('view', { path: 'a.ts' })).toBeUndefined();
     expect(toolEdit('edit_file', { path: 'a.ts' })).toBeUndefined();
