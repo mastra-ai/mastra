@@ -232,8 +232,9 @@ ${patchToolGuidance}
   }
 
   // Outside plan mode nothing else names the plans directory (the submit_plan
-  // tool example is directory-neutral), so state it here.
-  if (modeId !== 'plan' && !denied.has('submit_plan')) {
+  // tool example is directory-neutral), so state it here. Explore (`fast`) mode
+  // is read-only and has neither submit_plan nor file writes.
+  if (modeId !== 'plan' && modeId !== 'fast' && !denied.has('submit_plan')) {
     const elsewhere =
       plansDir === DEFAULT_PLANS_DIR
         ? ''

@@ -1080,7 +1080,7 @@ describe('GitHub session workspace preparation', () => {
       input: { path },
       context: {
         requestContext: {
-          harness: { session: { modeId: 'plan', state: { get: () => ({ projectPath: '/tmp/factory-plans' }) } } },
+          controller: { session: { modeId: 'plan', state: { get: () => ({ projectPath: '/tmp/factory-plans' }) } } },
         },
       },
     });

@@ -59,4 +59,9 @@ describe('buildToolGuidance knowledge tools', () => {
     expect(guidance).not.toContain('never under');
     expect(guidance).not.toContain('.mastracode\\plans');
   });
+
+  it('omits plans guidance in read-only Explore mode', () => {
+    expect(buildToolGuidance('build', { plansDir: '.artifacts/plans' })).toContain('Write plan files under');
+    expect(buildToolGuidance('fast', { plansDir: '.artifacts/plans' })).not.toContain('Write plan files under');
+  });
 });

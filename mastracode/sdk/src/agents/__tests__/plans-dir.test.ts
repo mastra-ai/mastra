@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { WORKSPACE_TOOLS } from '@mastra/core/workspace';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -63,11 +64,10 @@ describe('host-configured plansDir', () => {
   it('lets the plan-mode write guard allow the host plans dir and refuse the default one', () => {
     const guard = createMastraCodeWorkspaceTools(false, '.artifacts/plans').hooks!.beforeToolCall!;
     const projectPath = '/tmp/mastracode-plans-dir-guard';
-    const context = {
-      requestContext: {
-        harness: { session: { modeId: 'plan', state: { get: () => ({ projectPath }) } } },
-      },
-    };
+    // The guard reads the context the agent controller sets under 'controller'.
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { session: { modeId: 'plan', state: { get: () => ({ projectPath }) } } });
+    const context = { requestContext };
     const write = (path: string) =>
       guard({
         toolName: MC_TOOLS.WRITE_FILE,
