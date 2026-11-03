@@ -119,8 +119,11 @@ export function toolCardKind(
   if (SANDBOX_TOOLS.has(toolName)) return 'sandbox';
   if (codeModeCall(input, output)) return 'code_mode';
   if (mcpAppTools?.[toolName]) return 'mcp_app';
-  // A settled Knowledge result draws as a readable card; while running or failed it stays a plain badge.
-  if (KNOWLEDGE_TOOLS.has(toolName) && isSettledState(state) && knowledgeCard(toolName, input, output)) {
+  // A settled or failed Knowledge call draws as a readable card; while running it stays a plain badge.
+  if (
+    KNOWLEDGE_TOOLS.has(toolName) &&
+    (state === 'output-error' || (isSettledState(state) && knowledgeCard(toolName, input, output)))
+  ) {
     return 'knowledge';
   }
   return 'plain';

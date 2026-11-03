@@ -62,6 +62,20 @@ function Explorer({
     }),
     [knowledgeKey, live],
   );
+  // Chat cards link pages by the reference a tool named them with (`site:mastra#pricing`); the server reads
+  // the page by it, and the URL then switches to the page's id so the tree and graph can mark it.
+  const selectedPageById = useKnowledgePage(knowledgeKey, live, selectedPageId).data?.page.id;
+  useEffect(() => {
+    if (!selectedPageById || !selectedPageId || selectedPageById === selectedPageId) return;
+    setSearchParams(
+      current => {
+        const next = new URLSearchParams(current);
+        next.set('page', selectedPageById);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [selectedPageById, selectedPageId, setSearchParams]);
   // Opening a page sets `page` then `view` in one tick. react-router builds each update from the params of
   // the last render, so the changes are merged here until the URL catches up.
   const pending = useRef<URLSearchParams | null>(null);

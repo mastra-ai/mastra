@@ -6,6 +6,7 @@ import type { MessageMetadata } from '@/domains/chat';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
+import { ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
 
@@ -16,6 +17,7 @@ export const KNOWLEDGE_TOOLS = new Set([
   'knowledge_page',
   'knowledge_note',
   'knowledge_pin',
+  'knowledge_list',
 ]);
 
 interface PageSummary {
@@ -23,6 +25,8 @@ interface PageSummary {
   name: string;
   address?: string;
   scope?: string;
+  /** The full readable ref (`docs:mastra#observability/logging`); older cores send only the last `key`. */
+  ref?: string;
   key?: string;
   description?: string;
   version?: number;
@@ -72,7 +76,7 @@ function PageLine({ page, linked = true }: { page: PageSummary; linked?: boolean
       <Txt as="span" variant="label">
         {linked ? <PageLink page={page} /> : page.name}
       </Txt>
-      {scope ? <Meta>{page.key ? `${scope}#${page.key}` : scope}</Meta> : null}
+      {page.ref ? <Meta>{page.ref}</Meta> : scope ? <Meta>{page.key ? `${scope}#${page.key}` : scope}</Meta> : null}
     </div>
   );
 }
@@ -139,16 +143,85 @@ function NoteList({ notes }: { notes: NoteSummary[] }) {
   );
 }
 
+/** One entry of a `knowledge_list` result: a page or scope at some depth below the starting point. */
+interface ListEntry {
+  ref: string;
+  name: string;
+  description?: string;
+  depth: number;
+  children: number;
+  scope?: boolean;
+}
+
+function asListEntry(value: unknown): ListEntry | undefined {
+  if (!isRecord(value) || !str(value.ref) || typeof value.name !== 'string') return undefined;
+  if (typeof value.depth !== 'number' || typeof value.children !== 'number') return undefined;
+  return value as unknown as ListEntry;
+}
+
+const DEPTH_INDENT = ['', 'pl-4', 'pl-8'] as const;
+
+/** A `knowledge_list` result as an indented tree: each name links to its page (scopes to their scope page), with its ref and child count. */
+function ListTree({ entries }: { entries: ListEntry[] }) {
+  return (
+    <ul className="flex max-h-64 flex-col gap-1 overflow-auto" data-testid="knowledge-list-entries">
+      {entries.map((entry, index) => (
+        <li
+          key={`${entry.ref}-${index}`}
+          className={`flex min-w-0 flex-col ${DEPTH_INDENT[Math.min(Math.max(entry.depth, 1), 3) - 1]}`}
+        >
+          <div className="flex min-w-0 items-baseline gap-2">
+            <Txt as="span" variant="label" className="truncate">
+              <KnowledgePageLink pageRef={entry.ref}>{entry.name}</KnowledgePageLink>
+            </Txt>
+            {entry.ref !== entry.name ? <Meta>{entry.ref}</Meta> : null}
+            {entry.children ? (
+              <Meta>
+                {entry.children} {entry.children === 1 ? 'child' : 'children'}
+              </Meta>
+            ) : null}
+          </div>
+          {entry.description ? <Meta>{entry.description}</Meta> : null}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export interface KnowledgeCard {
   title: string;
   detail?: string;
   body: ReactNode;
 }
 
-/** What each Knowledge tool's settled result says, or null when the shape isn't one we know. */
-export function knowledgeCard(toolName: string, input: unknown, output: unknown): KnowledgeCard | null {
-  if (!isRecord(output)) return null;
+const FAILED_TITLES: Record<string, string> = {
+  knowledge_search: "Couldn't search Knowledge",
+  knowledge_read: "Couldn't read",
+  knowledge_page: "Couldn't change page",
+  knowledge_note: "Couldn't change note",
+  knowledge_pin: "Couldn't change pin",
+};
+
+/**
+ * What each Knowledge tool's settled result says, or null when the shape isn't one we know.
+ * A failed call (`errorText` set) gets a card naming what it tried and the error it got.
+ */
+export function knowledgeCard(
+  toolName: string,
+  input: unknown,
+  output: unknown,
+  errorText?: string,
+): KnowledgeCard | null {
   const args = isRecord(input) ? input : {};
+  const failedTitle = FAILED_TITLES[toolName];
+  if (errorText !== undefined && failedTitle) {
+    return {
+      title: failedTitle,
+      detail: str(args.page) ?? str(args.query),
+      body: <ToolCallOutput text={errorText || 'The tool call failed.'} error data-testid="knowledge-tool-error" />,
+    };
+  }
+  if (!isRecord(output)) return null;
   switch (toolName) {
     case 'knowledge_search': {
       if (!Array.isArray(output.results)) return null;
@@ -298,6 +371,22 @@ export function knowledgeCard(toolName: string, input: unknown, output: unknown)
               <PageLink page={{ id: pageId, name: pageRef ?? 'the page' }} />
             </Meta>
             <Meta>{audience.length ? `Pinned for ${audience.join(', ')}` : 'No longer pinned for anyone'}</Meta>
+          </div>
+        ),
+      };
+    }
+    case 'knowledge_list': {
+      if (!Array.isArray(output.entries)) return null;
+      const entries = output.entries.map(asListEntry).filter((entry): entry is ListEntry => entry !== undefined);
+      const from = str(args.from);
+      const more = str(output.nextCursor) || output.more !== undefined;
+      return {
+        title: from ? 'Listed pages' : 'Listed Knowledge scopes',
+        detail: from,
+        body: (
+          <div className="flex flex-col gap-2">
+            {entries.length ? <ListTree entries={entries} /> : <Meta>{from ? 'No pages under it' : 'No scopes'}</Meta>}
+            {more ? <Meta>More entries not shown</Meta> : null}
           </div>
         ),
       };

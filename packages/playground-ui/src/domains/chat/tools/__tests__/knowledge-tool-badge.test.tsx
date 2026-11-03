@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToolCard } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
 import { ChatRunningContext } from '@/domains/chat/context/chat-context';
+import { KnowledgeLinksProvider } from '@/domains/chat/knowledge/knowledge-links';
 import { toolCardKind } from '@/domains/chat/tools/tool-card-kind';
 import { foldsIntoGroup } from '@/domains/chat/tools/tool-groups';
 import type { LinkComponentProviderProps } from '@/lib/framework';
@@ -104,6 +105,103 @@ describe('Knowledge tool cards', () => {
       expect(body.querySelector('script')).toBeNull();
       expect(badge.textContent).toContain('Managers approve over $100');
       expect(badge.textContent).toContain('Child pages: EU refunds');
+    });
+  });
+
+  describe('when knowledge_list lists the scopes a run can read', () => {
+    it('names each scope with its child count', () => {
+      renderCard({
+        toolName: 'knowledge_list',
+        input: {},
+        output: {
+          entries: [
+            {
+              ref: 'site:mastra',
+              name: 'site:mastra',
+              description: 'Pages synced from a website',
+              depth: 1,
+              children: 45,
+              scope: true,
+            },
+            { ref: 'thread:t1', name: 'thread:t1', depth: 1, children: 0, scope: true },
+          ],
+        },
+      });
+      const badge = open();
+      expect(badge.textContent).toContain('Listed Knowledge scopes');
+      const entries = within(badge)
+        .getAllByRole('listitem')
+        .map(item => item.textContent);
+      expect(entries).toEqual(['site:mastra45 childrenPages synced from a website', 'thread:t1']);
+    });
+  });
+
+  describe('when knowledge_list lists the tree under a page, two levels deep', () => {
+    it('indents each level, shows each ref, and says when entries were left out', () => {
+      renderCard({
+        toolName: 'knowledge_list',
+        input: { from: 'site:mastra', depth: 2 },
+        output: {
+          from: 'site:mastra',
+          entries: [
+            { ref: 'site:mastra#customers', name: 'Customers', depth: 1, children: 1 },
+            { ref: 'site:mastra#customers/replit', name: 'Replit', depth: 2, children: 0 },
+          ],
+          nextCursor: 'p01M6',
+        },
+      });
+      const badge = open();
+      expect(badge.textContent).toContain('Listed pages');
+      const [customers, replit] = within(badge).getAllByRole('listitem');
+      expect(customers?.textContent).toBe('Customerssite:mastra#customers1 child');
+      expect(replit?.textContent).toBe('Replitsite:mastra#customers/replit');
+      expect(replit?.className).toContain('pl-4');
+      expect(customers?.className).not.toContain('pl-4');
+      expect(badge.textContent).toContain('More entries not shown');
+    });
+
+    it('says so when nothing is under the starting point', () => {
+      renderCard({ toolName: 'knowledge_list', input: { from: 'site:mastra#contact' }, output: { entries: [] } });
+      expect(open().textContent).toContain('No pages under it');
+    });
+  });
+
+  describe('when knowledge_list entries are opened from the card', () => {
+    const output = {
+      entries: [
+        { ref: 'site:mastra', name: 'site:mastra', depth: 1, children: 45, scope: true },
+        { ref: 'site:mastra#topics/observability', name: 'Observability', depth: 2, children: 3 },
+        { ref: 'site:mastra#topics/observability/tracing', name: 'Tracing', depth: 3, children: 0 },
+      ],
+    };
+
+    it('links every entry, scope roots and nested pages, to its page and keeps the child count', () => {
+      renderCard({ toolName: 'knowledge_list', input: { depth: 3 }, output });
+      const badge = open();
+      const href = (name: string) => within(badge).getByRole('link', { name }).getAttribute('href');
+      expect(href('site:mastra')).toBe('/knowledge?page=site%3Amastra&view=page');
+      expect(href('Observability')).toBe('/knowledge?page=site%3Amastra%23topics%2Fobservability&view=page');
+      expect(href('Tracing')).toBe('/knowledge?page=site%3Amastra%23topics%2Fobservability%2Ftracing&view=page');
+      expect(within(badge).getAllByRole('listitem')[0]?.textContent).toContain('45 children');
+    });
+
+    it('shows entries as text in a host that opens pages only by id', () => {
+      render(
+        <KnowledgeLinksProvider pageHref={id => `/kb/${id}`}>
+          <ToolCard {...props({ toolName: 'knowledge_list', input: {}, output })} />
+        </KnowledgeLinksProvider>,
+        { wrapper: Providers },
+      );
+      const badge = open();
+      expect(within(badge).queryAllByRole('link')).toEqual([]);
+      expect(badge.textContent).toContain('Observability');
+    });
+  });
+
+  describe('when knowledge_list returns a shape it does not know', () => {
+    it('falls back to the plain tool row', () => {
+      renderCard({ toolName: 'knowledge_list', input: {}, output: { scopes: [] } });
+      expect(screen.queryByTestId('knowledge-tool-badge')).toBeNull();
     });
   });
 
@@ -257,13 +355,74 @@ describe('Knowledge tool cards', () => {
     });
   });
 
-  describe('when a Knowledge call is still running or failed', () => {
+  describe('when a Knowledge call is still running', () => {
     it('keeps the plain tool badge', () => {
       const fields = { toolName: 'knowledge_search', toolCallId: 'c', input: { query: 'x' }, output: undefined };
       expect(toolCardKind({ ...fields, state: 'input-available' }, {})).toBe('plain');
-      expect(toolCardKind({ ...fields, state: 'output-error', output: 'boom' }, {})).toBe('plain');
       renderCard({ state: 'input-available', output: undefined, input: { query: 'x' } });
       expect(screen.queryByTestId('knowledge-tool-badge')).toBeNull();
+    });
+  });
+
+  describe('when a Knowledge call failed', () => {
+    it('says what it could not read and shows the error when opened', () => {
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'docs:mastra#observational-memory' },
+        output: undefined,
+        state: 'output-error',
+        errorText: 'Knowledge page "docs:mastra#observational-memory" not found.',
+      });
+      const badge = open();
+      expect(badge.textContent).toContain("Couldn't read");
+      expect(badge.textContent).toContain('docs:mastra#observational-memory');
+      expect(within(badge).getByTestId('knowledge-tool-error').textContent).toContain(
+        'Knowledge page "docs:mastra#observational-memory" not found.',
+      );
+      expect(badge.textContent).not.toContain('[object Object]');
+    });
+
+    it.each([
+      ['knowledge_search', { query: 'threshold' }, "Couldn't search Knowledge", 'threshold'],
+      ['knowledge_page', { page: 'docs:mastra#om' }, "Couldn't change page", 'docs:mastra#om'],
+      ['knowledge_note', { page: 'docs:mastra#om' }, "Couldn't change note", 'docs:mastra#om'],
+      ['knowledge_pin', { page: 'docs:mastra#om' }, "Couldn't change pin", 'docs:mastra#om'],
+    ])('names the failed %s call and its error', (toolName, input, title, detail) => {
+      renderCard({ toolName, input, output: undefined, state: 'output-error', errorText: 'Storage is unavailable.' });
+      const badge = open();
+      expect(badge.textContent).toContain(title);
+      expect(badge.textContent).toContain(detail);
+      expect(within(badge).getByTestId('knowledge-tool-error').textContent).toContain('Storage is unavailable.');
+    });
+
+    it('still draws the failed card when the error text is empty', () => {
+      renderCard({ toolName: 'knowledge_read', input: { page: 'x' }, output: undefined, state: 'output-error' });
+      expect(within(open()).getByTestId('knowledge-tool-error').textContent).toContain('The tool call failed.');
+    });
+  });
+
+  describe('when a result page carries its full readable ref', () => {
+    it('shows the ref instead of rebuilding it from the last key', () => {
+      renderCard({
+        input: { query: 'logging' },
+        output: {
+          results: [
+            {
+              type: 'page',
+              page: {
+                id: 'p-log',
+                name: 'Logging',
+                scope: 'docs:mastra',
+                key: 'logging',
+                ref: 'docs:mastra#observability/logging',
+              },
+            },
+          ],
+        },
+      });
+      const badge = open();
+      expect(badge.textContent).toContain('docs:mastra#observability/logging');
+      expect(badge.textContent).not.toContain('docs:mastra#logging');
     });
   });
 

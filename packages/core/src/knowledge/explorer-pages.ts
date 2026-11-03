@@ -7,7 +7,7 @@ import type {
   KnowledgePin,
   KnowledgeReadScope,
 } from '../storage';
-import { knowledgeScopeReadable, MAX_KNOWLEDGE_PAGE_LIST_LIMIT } from '../storage';
+import { knowledgeScopeReadable, MAX_KNOWLEDGE_PAGE_LIST_LIMIT, parseKnowledgePageRef } from '../storage';
 import type { KnowledgeRole } from './declarations';
 
 /**
@@ -146,14 +146,31 @@ export interface KnowledgePageView {
   mentionedBy: KnowledgeNote[];
 }
 
+/**
+ * A page by id, or by the reference a tool result names it with: a scope address (`site:mastra`) or
+ * `<scope>#<key>[/<key>…]`. Read-gated like the id lookup: an unreadable scope or page is not found.
+ * Scope addresses and refs always hold a `:`, which page ids never do, so an id never takes the ref path.
+ */
+async function pageByIdOrRef(store: KnowledgePageStore, ref: string, read: KnowledgeReadScope) {
+  const byId = await store.getPage({ id: ref, read });
+  if (byId || !ref.includes(':')) return byId;
+  const parsed = ref.includes('#') ? parseKnowledgePageRef(ref) : { scope: ref, path: [] };
+  if (!parsed) return null;
+  const [scope] = await store.getScopesByAddress([parsed.scope]);
+  if (!scope || !knowledgeScopeReadable(scope, read)) return null;
+  if (parsed.path.length === 0) return store.getPage({ id: scope.id, read });
+  return store.getPageByPath({ scopeId: scope.id, path: parsed.path, read });
+}
+
 /** One page with its notes, pin and the pages they reference. Null when `read` can't see the page. */
 export async function readKnowledgePage(
   store: KnowledgePageStore,
   input: { pageId: string; read: KnowledgeReadScope; noteCursor?: string; noteLimit?: number },
 ): Promise<KnowledgePageView | null> {
-  const { pageId, read } = input;
-  const page = await store.getPage({ id: pageId, read });
+  const { read } = input;
+  const page = await pageByIdOrRef(store, input.pageId, read);
   if (!page) return null;
+  const pageId = page.id;
   const [notes, pins, mentionedBy, ancestors] = await Promise.all([
     store.listNotes({
       pageId,
