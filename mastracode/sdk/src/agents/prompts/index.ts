@@ -88,10 +88,10 @@ export function buildFullPrompt(ctx: PromptContext): string {
  */
 export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // Determine whether web search tools are available
+  // Parallel/Tavily register web_search and web_extract; provider search registers only web_search.
+  const hasWebExtract = hasParallelKey() || hasTavilyKey();
   const hasWebSearch =
-    hasParallelKey() ||
-    hasTavilyKey() ||
-    resolveProviderWebSearchRoute(ctx.modelId, { requestContext: ctx.requestContext }) !== undefined;
+    hasWebExtract || resolveProviderWebSearchRoute(ctx.modelId, { requestContext: ctx.requestContext }) !== undefined;
 
   // Collect per-tool deny rules so guidance omits denied tools
   const deniedTools = new Set<string>();
@@ -113,6 +113,7 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   const factoryProjectId = typeof ctx.state?.factoryProjectId === 'string' ? ctx.state.factoryProjectId : undefined;
   const toolGuidance = buildToolGuidance(ctx.modeId, {
     hasWebSearch,
+    hasWebExtract,
     hasSubconscious: ctx.hasSubconscious === true,
     hasSubagents: ctx.hasSubagents,
     deniedTools,

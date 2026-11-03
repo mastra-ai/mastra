@@ -223,6 +223,7 @@ async function prepareTerminalRun(
   else if (scenario.projectFixture !== 'manual') createBasicProject(projectDir);
 
   const scenarioContext = {
+    ...(aimock ? { aimockUrl: aimock.url.replace(/\/+$/, '') } : {}),
     appDataDir: isolatedAppDataDir,
     dbPath,
     homeDir: isolatedHome,

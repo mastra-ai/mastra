@@ -298,7 +298,10 @@ describe('web search guidance for model aliases', () => {
     'advertises provider search for %s and its gateway alias',
     modelId => {
       for (const id of [modelId, `mastra/${modelId}`]) {
-        expect(buildFullPrompt({ ...context, modelId: id })).toContain('**web_search**');
+        const prompt = buildFullPrompt({ ...context, modelId: id });
+        expect(prompt).toContain('**web_search** — Search the web');
+        // Provider search registers no extract tool, so none is advertised.
+        expect(prompt).not.toContain('**web_extract**');
         expect(
           buildFullPrompt({ ...context, modelId: id, state: { permissionRules: { tools: { web_search: 'deny' } } } }),
         ).not.toContain('**web_search**');
@@ -309,7 +312,9 @@ describe('web search guidance for model aliases', () => {
   it.each(['parallel', 'tavily'] as const)('advertises configured %s search for other providers', backend => {
     searchConfig[backend] = true;
     try {
-      expect(buildFullPrompt({ ...context, modelId: 'mastra/google/gemini-2.5-flash' })).toContain('**web_search**');
+      expect(buildFullPrompt({ ...context, modelId: 'mastra/google/gemini-2.5-flash' })).toContain(
+        '**web_search** / **web_extract** — Search the web / extract page content',
+      );
     } finally {
       searchConfig[backend] = false;
     }
