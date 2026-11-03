@@ -656,11 +656,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         await vi.waitFor(
           async () => {
             const review = (await decisionsFor(pullRequest)).find(record => record.decision.type === 'invokeSkill');
-            expect(review).toMatchObject({ decision: { role: 'review' } });
-            expect(review!.status).not.toBe('proposed');
+            expect(review).toMatchObject({ status: 'succeeded', decision: { role: 'review' } });
           },
           { timeout: 20_000 },
         );
+        expect(runsOf(requests, 'factory-review', 'Add rate limiting')).not.toEqual([]);
       }, 120_000);
 
       it('applies an edit made on one replica to the runs another replica starts, until the board is reset', async () => {
