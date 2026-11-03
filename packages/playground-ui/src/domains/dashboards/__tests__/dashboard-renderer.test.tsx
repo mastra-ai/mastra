@@ -29,7 +29,7 @@ import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { defineWidgetKind } from '../widget-kind';
 import type { AnyWidgetKind, DashboardExpand } from '../widget-kind';
 import { metricsWidget, modelsWidget as models } from './equality-harness';
-import { kpisWidget } from './fixtures/metrics-widgets';
+import { kpisWidget, scoresWidget } from './fixtures/metrics-widgets';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -411,6 +411,12 @@ describe('DashboardRenderer', () => {
       const link = await within(card).findByRole('link', { name: 'Token usage' });
       expect(link.getAttribute('href')).toBe('/app/query?metric=token-usage');
       expect(within(card).queryByRole('button', { name: 'Token usage' })).toBeNull();
+    });
+
+    it('links a scores card the same way', async () => {
+      const { container } = renderDashboard(definition(scoresWidget), { expand });
+      const link = await within(cell(container, 'scores')).findByRole('link', { name: 'Scores' }, { timeout: 5000 });
+      expect(link.getAttribute('href')).toBe('/app/query?metric=scores');
     });
 
     it('keeps the views menu on a card the host has nowhere to send', async () => {
