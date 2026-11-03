@@ -105,4 +105,4 @@ Set the value to an array of scopes, or `'all'` for someone who should see the w
 
 ## Build your own view
 
-To show Knowledge changes in your own app, subscribe with [`knowledge.onChange()`](/reference/knowledge/knowledge-class#onchange). Events carry IDs, not content. Read the page again under the user's scopes before you show it to them. A `page` `delete` event can't be read again, so remove the page from your view. A `page` `merge` event's `pageId` is the target, so also remove the merged-away page in `sourceId`. A `scope` event is sent once for a new scope and its template pages, so list the scope again.
+To show Knowledge changes in your own app, subscribe with [`knowledge.onChange()`](/reference/knowledge/knowledge-class#onchange). Events carry IDs, not content. Read the page again under the user's scopes before you show it to them. A `page` `delete` event can't be read again, so remove the page from your view. A `page` `merge` event's `pageId` is the target, so also remove the merged-away page in `sourceId`. A `scope` event is sent for a new scope only, not for its child scopes or template pages, so list the scope again to find them.
