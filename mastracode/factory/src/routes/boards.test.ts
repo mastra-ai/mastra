@@ -96,11 +96,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
   function replica(
     domains: Client,
     orgId: string,
-    options: { auth?: RouteAuth; clock?: { now: number }; release?: InstalledBoard } = {},
+    options: { auth?: RouteAuth; clock?: { now: number }; release?: InstalledBoard | null } = {},
   ) {
     const clock = options.clock ?? { now: 0 };
     const cache = new ProjectBoardCache({
-      codeRegistry: createBoardRegistry({ boards: [options.release ?? releaseBoard()] }),
+      codeRegistry: createBoardRegistry({
+        boards: options.release === null ? [] : [options.release ?? releaseBoard()],
+      }),
       storage: domains.boards,
       projects: domains.projects,
       recheckMs: RECHECK_MS,
@@ -334,7 +336,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       canEdit: true,
       board: {
         codeBehaviour: {
-          intake: { handlers: false, exitToolId: null, requiredNextPhases: [] },
+          intake: {
+            handlers: false,
+            exitToolId: null,
+            requiredNextPhases: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
+          },
           triage: { handlers: true, exitToolId: null },
           planning: { handlers: true, exitToolId: 'submit_plan' },
           'pr-review': { handlers: true, exitToolId: null },
@@ -402,19 +408,31 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       },
       editPhase(work, 'triage', phase => ({ ...phase, runner: { ...phase.runner, context: 'work' } })),
       editPhase(work, 'planning', phase => ({ ...phase, exitTool: { id: 'finish_plan', autoApprove: false } })),
+      editPhase(work, 'planning', phase => ({
+        ...phase,
+        nextPhases: phase.nextPhases?.filter(next => next !== 'execute'),
+      })),
+      editPhase(work, 'execute', phase => ({ ...phase, exitTool: { id: 'finish_build', autoApprove: false } })),
     ];
     const messages = [
       /"planning" has code behaviour on board "work"; it can't be removed\./,
       /keep runner\.context/,
       /waits for exit tool "submit_plan"; keep exitTool\.id\./,
+      /moves cards from it to "execute"; keep it in nextPhases\./,
+      /move cards on without an exit tool; leave exitTool unset\./,
     ];
     for (const [index, body] of cases.entries()) {
       const response = await replicaA.send('PATCH', `${base}/work`, body);
       expect(response.status).toBe(422);
       expect(response.body.error).toBe('code_behaviour');
       expect(response.body.message).toMatch(messages[index]!);
-      expect(response.body.conflicts).toEqual([expect.stringMatching(messages[index]!)]);
+      expect(response.body.conflicts).toContainEqual(expect.stringMatching(messages[index]!));
     }
+    // Removing Planning also drops the moves code makes into it.
+    const removal = await replicaA.send('PATCH', `${base}/work`, cases[0]);
+    expect(removal.body.conflicts).toContainEqual(
+      'Phase "triage": Factory\'s code moves cards from it to "planning"; keep it in nextPhases.',
+    );
     const both = editPhase({ ...cases[1]!, revision: 1 }, 'planning', phase => ({
       ...phase,
       exitTool: { id: 'finish_plan', autoApprove: false },
@@ -423,6 +441,33 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
 
     expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 1, customized: false });
     expect(await a.boards.readVersion(scope)).toBe(version);
+  });
+
+  it("turns an app board's copy into a stored board when it is edited after the app stops defining it", async () => {
+    const { a, orgId, scope, base, replicaA } = await setup();
+    await getBoard(replicaA.send, base, 'release');
+    const gone = replica(a, orgId, { release: null });
+
+    const before = (await gone.send('GET', base)).body;
+    expect((before.boards as Array<{ id: string }>).map(board => board.id)).not.toContain('release');
+    expect(before.problems).toContain(
+      'Stored board "release" was copied from a code board this Factory no longer defines.',
+    );
+
+    const copy = await getBoard(gone.send, base, 'release');
+    const renamed = await gone.send('PATCH', `${base}/release`, {
+      name: 'Shipped stuff',
+      description: copy.description,
+      phases: copy.phases,
+      expectedRevision: copy.revision,
+    });
+    expect(renamed.status).toBe(200);
+    expect(await a.boards.get(scope, 'release')).toMatchObject({ name: 'Shipped stuff', seedHash: null });
+    expect(await catalogBoard(gone.send, base, 'release')).toMatchObject({
+      name: 'Shipped stuff',
+      source: 'stored',
+      editable: true,
+    });
   });
 
   it('resets an edited Work board to its code default, refusing a stale revision and a board with no code default', async () => {

@@ -127,10 +127,10 @@ What code behaviour depends on stays fixed, and an edit that changes it is refus
 
 - Every phase the code declares stays, with the same `kind`, and the code's initial phase stays first.
 - On a phase whose work runs in code handlers (Triage, Planning, Building, Review and PR review on Work), `runner.context` stays as declared and `runner.skill` stays unset: the handlers choose the skill.
-- A declared exit tool (`submit_plan` on Planning) keeps its `id`. Its `autoApprove` and `autoApproveWhen` are yours.
-- Outcome targets stay in `nextPhases`.
+- A declared exit tool (`submit_plan` on Planning) keeps its `id`. Its `autoApprove` and `autoApproveWhen` are yours. A phase whose code handlers move cards on without an exit tool can't get one: it would hold those moves back.
+- Every move the code board allows from a phase stays in its `nextPhases`. Code makes those moves itself: an approved plan moves Planning to Building, a merged or closed pull request moves its card to Done or Canceled, and integration rules move cards between phases. You can add moves.
 
-Everything else can change: names and descriptions, `nextPhases`, `autoStart` and `autoStartWhen`, exit-tool approval, runner instructions, the runner of working phases without code handlers, the order of phases after the first, and new phases (which behave like stored-board phases).
+Everything else can change: names and descriptions, added `nextPhases`, `autoStart` and `autoStartWhen`, exit-tool approval, runner instructions, the runner of working phases without code handlers, the order of phases after the first, and new phases (which behave like stored-board phases).
 
 An unedited copy always follows the code of the Factory version that is running, so a new release's defaults reach it at once; the stored row catches up on the next boards-API read. Once edited, the copy keeps your fields. `defaultChanged` is `true` when the code default has changed since; `POST …/boards/:boardKey/reset` with `expectedRevision` replaces the copy with the current default and clears `customized`. If an edited copy no longer fits a newer code default (for example the release added a phase), Factory serves the code board and reports `Board "<key>" keeps its built-in definition: <reason>; edit or reset it.` in `problems`.
 

@@ -77,7 +77,7 @@ const storedBoardResponseSchema = z.object({
     /**
      * For a built-in or app board, what its code behaviour holds fixed on each code phase: the
      * phase stays with its kind, phases with code handlers keep their runner context and skill,
-     * the exit tool id stays, and outcome targets stay in nextPhases. Null for stored boards.
+     * the exit tool id stays, and the moves code makes from it stay in nextPhases. Null for stored boards.
      */
     codeBehaviour: z
       .record(

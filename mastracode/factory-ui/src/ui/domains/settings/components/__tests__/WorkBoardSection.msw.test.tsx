@@ -59,6 +59,12 @@ describe('WorkBoardSection', () => {
     expect(phase('Planning').getByLabelText('Exit tool')).toHaveValue('submit_plan');
     expect(phase('Planning').getByLabelText('Exit tool')).toBeDisabled();
     expect(phase('Triage').getByLabelText('Runner context')).toBeDisabled();
+    // Building's code moves cards on without an exit tool, and an approved plan moves Planning to Building.
+    expect(phase('Building').getByLabelText('Exit tool')).toBeDisabled();
+    expect(phase('Planning').getByRole('checkbox', { name: 'Planning moves to Building' })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
     expect(phase('Triage').getByText('Code behaviour')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled();
 

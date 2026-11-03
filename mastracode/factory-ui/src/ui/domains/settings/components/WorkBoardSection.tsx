@@ -229,8 +229,8 @@ function PhaseEditor({
         </div>
         {code?.handlers && (
           <Txt as="p" variant="caption" tone="muted">
-            Factory runs this phase&apos;s work in code, so its runner context and skill are fixed. Its instructions,
-            automation and next phases are yours to change.
+            Factory runs this phase&apos;s work in code, so its runner context, skill and exit tool are fixed, and so
+            are the moves code makes from it. Its instructions, automation and other next phases are yours to change.
           </Txt>
         )}
         <div className="grid gap-4 sm:grid-cols-2">
@@ -337,12 +337,14 @@ function PhaseEditor({
               <FieldDescription>
                 {code?.exitToolId
                   ? 'Factory waits for this tool in code, so it stays.'
-                  : 'The tool whose success ends the phase. Leave empty for none.'}
+                  : code?.handlers
+                    ? 'Factory moves cards on from this phase in code, without an exit tool.'
+                    : 'The tool whose success ends the phase. Leave empty for none.'}
               </FieldDescription>
               <Input
                 id={`${id}-exit-tool`}
                 value={exitToolId}
-                disabled={disabled || code?.exitToolId != null}
+                disabled={disabled || code?.exitToolId != null || code?.handlers}
                 onChange={event => {
                   const value = event.target.value.trim();
                   onChange({ ...phase, exitTool: value ? { ...phase.exitTool, id: value } : null });
