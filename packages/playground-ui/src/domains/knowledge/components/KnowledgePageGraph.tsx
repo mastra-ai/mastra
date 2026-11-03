@@ -559,7 +559,7 @@ function RimEdgeComponent({ id, data, style, markerEnd }: EdgeProps<Edge<RimEdge
   );
 }
 
-const edgeTypes = { rim: RimEdgeComponent };
+const edgeTypes = { rim: memo(RimEdgeComponent) };
 
 const nodeTypes = { page: memo(PageNodeComponent) };
 
