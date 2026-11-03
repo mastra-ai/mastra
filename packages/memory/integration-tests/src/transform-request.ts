@@ -125,20 +125,12 @@ function sortJsonObjectKeys(value: unknown): unknown {
   );
 }
 
-// Only structured tool outputs are JSON data. Do not interpret prompt text as
-// JSON, and retain original text when parsing would lose duplicate keys or
-// numeric precision. Array order and all scalar tokens must stay intact.
-function normalizeJsonToolOutput(output: unknown): unknown {
+function sortJsonToolOutputKeys(output: unknown): unknown {
   if (typeof output !== 'string') return output;
   try {
     const parsed = JSON.parse(output);
-    if (!isRecord(parsed) && !Array.isArray(parsed)) return output;
-    const normalized = JSON.stringify(sortJsonObjectKeys(parsed));
-    const scalarTokens = (text: string) =>
-      JSON.stringify(
-        text.match(/"(?:[^"\\]|\\.)*"|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|true|false|null/g)?.sort(),
-      );
-    return scalarTokens(output) === scalarTokens(normalized) ? normalized : output;
+    const lossless = (isRecord(parsed) || Array.isArray(parsed)) && JSON.stringify(parsed) === output;
+    return lossless ? JSON.stringify(sortJsonObjectKeys(parsed)) : output;
   } catch {
     return output;
   }
@@ -154,7 +146,7 @@ function normalizeAnthropicToolOutputs(body: unknown): unknown {
             ...message,
             content: message.content.map(part =>
               isRecord(part) && part.type === 'tool_result'
-                ? { ...part, content: normalizeJsonToolOutput(part.content) }
+                ? { ...part, content: sortJsonToolOutputKeys(part.content) }
                 : part,
             ),
           }
@@ -188,18 +180,24 @@ function normalizeGoogleToolSchemaKeys(body: unknown): unknown {
   };
 }
 
-// Responses providers can serialize plain assistant text as output_text parts
-// or a string. Canonicalize only that equivalent form for replay matching;
-// annotated parts and other content keep their full structure.
+function normalizeOpenAIResponseToolOutputs(body: unknown): unknown {
+  if (!isRecord(body) || !Array.isArray(body.input)) return body;
+  return {
+    ...body,
+    input: body.input.map(item =>
+      isRecord(item) && item.type === 'function_call_output'
+        ? { ...item, output: sortJsonToolOutputKeys(item.output) }
+        : item,
+    ),
+  };
+}
+
 function normalizeOpenAIResponseAssistantText(body: unknown): unknown {
   if (!isRecord(body) || !Array.isArray(body.input)) return body;
 
   return {
     ...body,
     input: body.input.map(message => {
-      if (isRecord(message) && message.type === 'function_call_output') {
-        return { ...message, output: normalizeJsonToolOutput(message.output) };
-      }
       if (
         !isRecord(message) ||
         message.role !== 'assistant' ||
@@ -289,7 +287,7 @@ export function transformRequest({ url, body }: { url: string; body: unknown }):
   let normalizedBody = normalizeOpenAIResponseFunctionCalls(normalizeNetworkFinalResultMessages(body));
   const { hostname, pathname } = new URL(url);
   if (hostname === 'api.openai.com' && pathname === '/v1/responses') {
-    normalizedBody = normalizeOpenAIResponseAssistantText(normalizedBody);
+    normalizedBody = normalizeOpenAIResponseAssistantText(normalizeOpenAIResponseToolOutputs(normalizedBody));
   }
   if (hostname === 'api.anthropic.com' && pathname === '/v1/messages') {
     normalizedBody = normalizeAnthropicToolOutputs(normalizedBody);

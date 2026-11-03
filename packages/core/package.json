@@ -942,7 +942,7 @@
     "@ai-sdk/openai": "^1.3.24",
     "@ai-sdk/openai-compatible-v5": "npm:@ai-sdk/openai-compatible@1.0.59",
     "@ai-sdk/openai-compatible-v6": "npm:@ai-sdk/openai-compatible@2.0.87",
-    "@ai-sdk/openai-compatible-v7": "npm:@ai-sdk/openai-compatible@3.0.71",
+    "@ai-sdk/openai-compatible-v7": "npm:@ai-sdk/openai-compatible@3.0.79",
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.137",
     "@ai-sdk/openai-v6": "npm:@ai-sdk/openai@3.0.132",
     "@ai-sdk/openai-v7": "npm:@ai-sdk/openai@4.0.103",
