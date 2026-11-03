@@ -838,6 +838,19 @@ export function KnowledgePageExplorer({
     }
     openPage(pageId);
   };
+  // From search: in the graph, a first pick frames the page there and a second pick of the focused page opens
+  // it, like the tree. A fixed graph that lacks the page has nothing to frame, so it opens as a page.
+  const selectFromSearch = (pageId: string) => {
+    if (view === 'graph' && (lazyMode || pagesById.has(pageId)) && pageId !== selectedPageId) {
+      if (
+        focusScopeId &&
+        !withinScope([...lazy.pages, ...drawn.pages], focusScopeId).some(page => page.id === pageId)
+      ) {
+        setFocusScopeId(null);
+      }
+      onSelect(pageId);
+    } else openAnywhere(pageId);
+  };
   const focusScope = focusScopeId
     ? (lazy.pages.find(page => page.id === focusScopeId) ?? pagesById.get(focusScopeId))
     : undefined;
@@ -858,7 +871,7 @@ export function KnowledgePageExplorer({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <SearchBox source={source} onSelect={openAnywhere} />
+        <SearchBox source={source} onSelect={selectFromSearch} />
         <div role="group" aria-label="View" className="flex overflow-hidden rounded border border-border">
           {views.map(option => (
             <button

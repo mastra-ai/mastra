@@ -180,3 +180,50 @@ describe('KnowledgePageExplorer mention popup', () => {
     expect(await screen.findByRole('article', { name: 'Refunds' })).toBeTruthy();
   });
 });
+
+describe('KnowledgePageExplorer search', () => {
+  const searchSource: KnowledgeExplorerSource = {
+    ...source,
+    useSearch: query => ({ data: { results: query.length >= 2 ? [{ page: roadmap }] : [] } }),
+  };
+  function SearchHost({ initialView }: { initialView: KnowledgeExplorerView }) {
+    const [selected, setSelected] = useState<string | null>(null);
+    const [view, setView] = useState<KnowledgeExplorerView>(initialView);
+    return (
+      <KnowledgePageExplorer
+        source={searchSource}
+        graph={graph}
+        selectedPageId={selected}
+        onSelect={setSelected}
+        view={view}
+        onViewChange={setView}
+      />
+    );
+  }
+  const search = (name: string) => {
+    fireEvent.change(screen.getByLabelText('Search knowledge'), { target: { value: 'ro' } });
+    fireEvent.click(screen.getByRole('button', { name }));
+  };
+  const pressed = (name: string) => screen.getByRole('button', { name }).getAttribute('aria-pressed');
+
+  it('in graph view, focuses the result and stays on the graph; a second pick opens it', async () => {
+    renderWithProviders(<SearchHost initialView="graph" />);
+    await screen.findAllByTestId('knowledge-page-node');
+    search('Roadmap');
+    expect(pressed('Graph')).toBe('true');
+    expect(pressed('Page')).toBe('false');
+    await waitFor(() =>
+      expect(document.querySelector('[data-page-id="roadmap"] .knowledge-circle')?.getAttribute('data-selected')).toBe(
+        'true',
+      ),
+    );
+    search('Roadmap');
+    expect(pressed('Page')).toBe('true');
+  });
+
+  it('in page view, opens the result as a page, as before', () => {
+    renderWithProviders(<SearchHost initialView="page" />);
+    search('Roadmap');
+    expect(pressed('Page')).toBe('true');
+  });
+});
