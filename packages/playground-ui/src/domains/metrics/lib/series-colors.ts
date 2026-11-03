@@ -1,7 +1,8 @@
 /**
  * Series colors for breakdowns by model, provider or any other key, from one palette of eleven hues
  * (`--chart-series-*`). Each lab reserves its hue, so a lab reads the same on every chart; its other
- * models take shifted shades of it. Series with no lab take the hues left over.
+ * next two models take shifted shades of it, and the rest stand apart in hues of their own. Series with
+ * no lab take the hues left over.
  */
 
 export const SERIES_HUES = [
@@ -31,7 +32,8 @@ export const LAB_HUES: Record<string, SeriesHue> = {
   meta: 'cyan',
   mistral: 'amber',
   qwen: 'violet',
-  nvidia: 'lime',
+  openrouter: 'lime',
+  moonshotai: 'neutral',
   minimax: 'magenta',
   zai: 'teal',
 };
@@ -199,9 +201,15 @@ export type SeriesColorItem = {
  * first, once per page, so a model keeps its color on every chart.
  *
  * - Each lab's largest series takes the lab's hue; labs without one claim a free hue.
- * - The lab's other series take shifted shades of it, in rank order.
+ * - The lab's next two series take shifted shades of it, in rank order; past those, a shared family
+ *   is too hard to follow on a line chart, so the rest take hues of their own.
+ * - When the page shows a single lab, a shared family tells nothing apart, so its other series all
+ *   take hues of their own.
  * - Series with no lab take the hues no lab on the page uses, then shades once those run out.
  */
+/** How many of a lab's series share its color family before the rest take their own hue. */
+const SHARED_PER_LAB = 3;
+
 export function seriesColors(items: SeriesColorItem[]) {
   const colors = new Map<string, string>();
   // Shades handed out per hue.
@@ -221,6 +229,8 @@ export function seriesColors(items: SeriesColorItem[]) {
 
   const labs = items.map(it => seriesLab(it.provider, it.model));
   const labHue = new Map<string, SeriesHue>();
+  // Series handed out per lab, so a lab's first few share its family and the rest stand apart.
+  const perLab = new Map<string, number>();
 
   // Labs with a hue reserve it first, so a lab's largest series always gets the pure color.
   items.forEach((it, i) => {
@@ -228,17 +238,29 @@ export function seriesColors(items: SeriesColorItem[]) {
     const hue = lab ? LAB_HUE.get(lab) : undefined;
     if (lab && hue && !labHue.has(lab)) {
       labHue.set(lab, hue);
+      perLab.set(lab, 1);
       take(it.key, hue);
     }
   });
+
+  // With one lab on the page a shared family adds nothing, so its models all take their own hue.
+  const singleLab = new Set(labs.filter(Boolean)).size === 1;
 
   items.forEach((it, i) => {
     if (colors.has(it.key)) return;
     const lab = labs[i];
     if (!lab) return take(it.key, nextFree());
-    const hue = labHue.get(lab) ?? nextFree();
-    labHue.set(lab, hue);
-    take(it.key, hue);
+    const rank = perLab.get(lab) ?? 0;
+    perLab.set(lab, rank + 1);
+    const hue = labHue.get(lab);
+    if (!hue) {
+      // A lab without a preset hue claims a free one for its family.
+      const claimed = nextFree();
+      labHue.set(lab, claimed);
+      return take(it.key, claimed);
+    }
+    if (!singleLab && rank < SHARED_PER_LAB) return take(it.key, hue);
+    take(it.key, nextFree());
   });
   return colors;
 }

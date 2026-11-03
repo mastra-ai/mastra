@@ -63,10 +63,25 @@ describe('seriesColors', () => {
       expect(colors.get('grok-5')).toBe('var(--chart-series-neutral)');
     });
 
+    it('gives OpenRouter lime and Moonshot neutral', () => {
+      const colors = seriesColors([
+        { key: 'openrouter', provider: 'openrouter' },
+        { key: 'kimi-k2.5', model: 'kimi-k2.5' },
+      ]);
+      expect(colors.get('openrouter')).toBe('var(--chart-series-lime)');
+      expect(colors.get('kimi-k2.5')).toBe('var(--chart-series-neutral)');
+    });
+
     it("gives a lab's other series shifted shades of its hue, in rank order", () => {
       const colors = seriesColors(ranked('claude-opus-5-5', 'gpt-5.5', 'claude-sonnet-5-5', 'claude-haiku-5-5'));
       expect(colors.get('claude-sonnet-5-5')).toBe(seriesColor('orange', 1));
       expect(colors.get('claude-haiku-5-5')).toBe(seriesColor('orange', 2));
+    });
+
+    it("gives a lab's fourth series on a hue of its own", () => {
+      const colors = seriesColors(ranked('gpt-5.5', 'claude-opus-5-5', 'gpt-5-mini', 'gpt-5-nano', 'gpt-4.1'));
+      expect(colors.get('gpt-5-nano')).toBe(seriesColor('green', 2));
+      expect(colors.get('gpt-4.1')).toBe('var(--chart-series-blue)');
     });
 
     it("never repeats a color within a lab's first ten series", () => {
@@ -76,15 +91,23 @@ describe('seriesColors', () => {
     });
   });
 
+  describe('when the page shows a single lab', () => {
+    it("keeps the lab's hue on its largest series and gives the rest hues of their own", () => {
+      const colors = seriesColors(ranked('o5', 'gpt-5.5', 'gpt-5-mini'));
+      expect(colors.get('o5')).toBe('var(--chart-series-green)');
+      expect(colors.get('gpt-5.5')).toBe('var(--chart-series-blue)');
+      expect(colors.get('gpt-5-mini')).toBe('var(--chart-series-orange)');
+    });
+  });
+
   describe('when a lab has no hue of its own', () => {
     it('gives all its series one free hue', () => {
       const colors = seriesColors([
+        { key: 'claude-opus-5-5', model: 'claude-opus-5-5' },
         { key: 'command-a-2', provider: 'cohere', model: 'command-a-2' },
-        { key: 'Production' },
         { key: 'command-r', provider: 'cohere', model: 'command-r' },
       ]);
       expect(colors.get('command-a-2')).toBe('var(--chart-series-blue)');
-      expect(colors.get('Production')).toBe('var(--chart-series-orange)');
       expect(colors.get('command-r')).toBe(seriesColor('blue', 1));
     });
   });

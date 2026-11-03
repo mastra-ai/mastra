@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Added a series palette for charts that break down by model, provider or key: eleven `--chart-series-*` hues at one lightness and chroma per theme, plus `--chart-series-neutral`. `seriesColors(items)` colors a page's series from it: each lab reserves one hue (Anthropic orange, OpenAI green, Google indigo, Jev pink, DeepSeek blue, xAI neutral, and others), its other models take shifted shades of that hue, and series with no lab take the hues left over. Call it once per page so a model keeps its color on every chart.
+Added a series palette for charts that break down by model, provider or key: eleven `--chart-series-*` hues at one lightness and chroma per theme, plus `--chart-series-neutral`. `seriesColors(items)` colors a page's series from it: each lab reserves one hue (Anthropic orange, OpenAI green, Google indigo, Jev pink, DeepSeek blue, xAI neutral, and others), its next two models take shifted shades of that hue (a lab's other models, or every model when the page shows one lab, take hues of their own), and series with no lab take the hues left over. Call it once per page so a model keeps its color on every chart.
 
 ```ts
 import { seriesColors } from '@mastra/playground-ui/domains/metrics';
