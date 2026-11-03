@@ -582,7 +582,9 @@ export async function executeStep(
             : undefined,
         // Only pass restart data if this step is part of activeStepsPath
         // This prevents pending nested workflows from trying to restart instead of start
-        restart: !!restart?.activeStepsPath?.[step.id],
+        // A foreach item's nested run gets a fresh id unless one was recorded, so an item that was
+        // running at the crash has no stored run to restart and starts over instead (COR-1501).
+        restart: !!restart?.activeStepsPath?.[step.id] && (foreachIndex === undefined || !!persistedNestedRunId),
         timeTravel:
           timeTravelSteps.length > 0
             ? {
