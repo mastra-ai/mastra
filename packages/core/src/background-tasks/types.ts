@@ -106,11 +106,18 @@ export type UpdateBackgroundTask = Partial<
  * only if the stored row still matches every supplied condition — a
  * compare-and-set that fences writes from superseded owners.
  *
- * `expectedOwnerId` / `expectedLeaseExpiresAt` use `string | null` /
- * `Date | null` because "expect the column to be unset" (null) is a meaningful
- * condition distinct from "don't check it" (undefined).
+ * `expectedOwnerId` / `expectedLeaseExpiresAt` / `expectedSuspendedAt` use
+ * `string | null` / `Date | null` because "expect the column to be unset"
+ * (null) is a meaningful condition distinct from "don't check it" (undefined).
  */
 export interface UpdateBackgroundTaskOptions {
+  /**
+   * Apply only if the stored suspension time equals this value (null = not
+   * suspended / unset). Distinguishes one suspension of a task from the next:
+   * owner and lease are cleared on suspend, so status alone can't tell a stale
+   * write for an earlier suspension from a write for the current one.
+   */
+  expectedSuspendedAt?: Date | null;
   /** Apply only if the stored status equals this value. */
   expectedStatus?: BackgroundTaskStatus;
   /** Apply only if the stored owner equals this value (null = unowned). */
@@ -139,6 +146,36 @@ export interface TaskPayload {
 }
 
 /**
+ * Options for `BackgroundTaskManager.enqueue()`.
+ */
+export interface EnqueueOptions {
+  /**
+   * Pin the `pending` row to this worker. Use it when work for the task is
+   * already in flight on this worker, for example an execution the caller
+   * started before enqueueing that the task's executor adopts. Requires a
+   * `context`.
+   *
+   * The row is written with this worker's owner ID and an execution lease,
+   * which the lease heartbeat renews while the row waits for a local slot.
+   * While the lease is live, other workers' recovery and dispatch skip the row.
+   *
+   * If this worker dies and the lease lapses, the in-flight work is lost, so the
+   * row counts as a lost attempt, like a `running` task whose worker died: it
+   * consumes a retry and is re-dispatched if `retryCount < maxRetries`,
+   * otherwise it fails. It never re-runs on another worker for free, so a task
+   * with `maxRetries: 0` is never run elsewhere. Workers with
+   * `recoverStaleTasksOnStart` check for lapsed pins at startup and then every
+   * `leaseDurationMs`.
+   *
+   * A lapsed lease only proves this worker stopped renewing it, not that the
+   * adopted work stopped (for example, an event loop stalled past the lease).
+   * Pinned work must be idempotent, or fence its side effects, if it can be
+   * retried on another worker.
+   */
+  pinToWorker?: boolean;
+}
+
+/**
  * Options for `BackgroundTaskManager.resume()`.
  */
 export interface ResumeOptions {
@@ -155,6 +192,12 @@ export interface ResumeOptions {
    * `resume()` again.
    */
   onNoSlot?: 'throw' | 'queue';
+  /**
+   * The `suspendedAt` the caller read. When set, resume throws a
+   * `suspension has changed` error unless the task is still in that same
+   * suspension, so an answer to an earlier question can't resume a later one.
+   */
+  suspendedAt?: Date | number;
 }
 
 /**
@@ -267,7 +310,9 @@ export interface BackgroundTaskManagerConfig {
    * Whether to recover running and pending tasks during manager startup.
    * Recovery is fenced by persisted execution leases: a running task is only
    * reclaimed once its owner's lease has expired, so it is safe when multiple
-   * live managers share storage. Set to false to skip recovery entirely.
+   * live managers share storage. When enabled, the manager also checks every
+   * `leaseDurationMs` for `pinToWorker` tasks whose worker stopped renewing
+   * their lease. Set to false to skip recovery entirely.
    * Default: true.
    */
   recoverStaleTasksOnStart?: boolean;
@@ -299,6 +344,24 @@ export interface BackgroundTaskManagerConfig {
    * `untilIdle: { maxIdleMs }` always takes precedence. Default: 300_000 (5 minutes).
    */
   untilIdleMaxIdleMs?: number;
+  /**
+   * Whether a deferred task that finishes with no `untilIdle` stream open for
+   * its thread sends the agent a `background-task` signal, so the agent reports
+   * the outcome (waking an idle thread). Set to `false` when the app delivers
+   * its own completion signal, for example from `onTaskComplete`. Default: `true`.
+   */
+  notifyAgentOnFinish?: boolean;
+  /**
+   * Whether a run that a signal starts on an idle thread ends after its own turn
+   * instead of staying open until the background tasks it dispatched finish. Its
+   * deferred tasks then report through the `background-task` signal (see
+   * `notifyAgentOnFinish`). A signal's own `ifIdle.streamOptions.untilIdle`
+   * takes precedence. Default: `false`.
+   *
+   * Temporary: in the next major, ending after the turn becomes the only behavior and this
+   * option is removed. Pass `untilIdle: true` in `ifIdle.streamOptions` to keep a run open.
+   */
+  wokenRunsEndAfterTurn?: boolean;
   /** Optional callback invoked when a task completes (in addition to stream + message list injection) */
   onTaskComplete?: (task: BackgroundTask) => void | Promise<void>;
   /** Optional callback invoked when a task fails (in addition to stream + message list injection) */
@@ -471,6 +534,8 @@ export interface ToolExecutor {
       resumeData?: unknown;
       /** Framework-resolved delegated run ID recovered from persisted suspension state. */
       suspendedToolRunId?: string;
+      /** On resume, the payload the task suspended with. Undefined on the initial execution. */
+      suspendPayload?: unknown;
     },
   ): Promise<unknown>;
 }
@@ -506,6 +571,8 @@ export type ToolExecutionInjector = (params: {
   resourceId?: string;
   startedAt: Date;
   suspendedAt?: Date;
+  /** The payload the task suspended with; set together with `suspendedAt`. */
+  suspendPayload?: unknown;
 }) => void | Promise<void>;
 
 // --- Per-task context ---

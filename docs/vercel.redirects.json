@@ -2259,6 +2259,11 @@
       "source": "/docs/harness/signal-providers",
       "destination": "/docs/signals/signal-providers",
       "permanent": true
+    },
+    {
+      "source": "/reference/vectors/:path*",
+      "destination": "/integrations/vectors/:path*",
+      "permanent": true
     }
   ]
 }

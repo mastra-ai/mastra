@@ -151,6 +151,49 @@ describe('createTraceFilterBarFields', () => {
     });
   });
 
+  describe('when the server records time to first chunk and first token', () => {
+    const streamed = createTraceFilterBarFields({
+      availableRootEntityNames: [],
+      availableEnvironments: [],
+      withTimeToFirstChunk: true,
+      withTimeToFirstToken: true,
+    });
+    const streamedById = (id: string) => streamed.find(f => f.id === id);
+
+    it.each([
+      ['timeToFirstChunkMs', 'Time to first chunk (ms)'],
+      ['timeToFirstTokenMs', 'Time to first token (ms)'],
+      ['spans.timeToFirstChunkMs', 'Span time to first chunk (ms)'],
+      ['spans.timeToFirstTokenMs', 'Span time to first token (ms)'],
+    ])('offers %s as a number field labelled %s', (id, label) => {
+      expect(streamedById(id)).toMatchObject({
+        label,
+        type: 'number',
+        operators: ['is', 'isNot', 'gt', 'gte', 'lt', 'lte', 'exists', 'notExists'],
+      });
+    });
+  });
+
+  describe('when the server records only time to first chunk', () => {
+    it('offers the chunk fields without the token fields', () => {
+      const ids = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        withTimeToFirstChunk: true,
+      }).map(f => f.id);
+
+      expect(ids).toEqual(expect.arrayContaining(['timeToFirstChunkMs', 'spans.timeToFirstChunkMs']));
+      expect(ids).not.toContain('timeToFirstTokenMs');
+      expect(ids).not.toContain('spans.timeToFirstTokenMs');
+    });
+  });
+
+  describe('when the server records neither', () => {
+    it('offers no time to first chunk or token field', () => {
+      expect(fields.map(f => f.id).filter(id => id.includes('timeToFirst'))).toEqual([]);
+    });
+  });
+
   describe('when the server supports outcome predicates', () => {
     const withOutcome = createTraceFilterBarFields({
       availableRootEntityNames: [],
@@ -180,6 +223,17 @@ describe('createTraceFilterBarFields', () => {
   });
 
   describe('when only the legacy list endpoint is available', () => {
+    it('does not offer time to first chunk or token fields even if the server records them', () => {
+      const legacy = createTraceFilterBarFields({
+        availableRootEntityNames: [],
+        availableEnvironments: [],
+        withQueryTrace: false,
+        withTimeToFirstChunk: true,
+        withTimeToFirstToken: true,
+      });
+      expect(legacy.map(f => f.id).filter(id => id.includes('timeToFirst'))).toEqual([]);
+    });
+
     it('does not offer a Duration (ms) field even if root duration is supported', () => {
       const legacy = createTraceFilterBarFields({
         availableRootEntityNames: [],
@@ -778,6 +832,26 @@ describe('filter operator URL params', () => {
       applyTracePropertyFilterTokens(params, [{ fieldId: 'spans.error', value: '', operatorId: 'exists' }]);
 
       expect(params.toString()).toBe('filterSpanError=&filterSpanError.op=exists');
+    });
+  });
+
+  describe('when the URL carries time to first chunk and token filters', () => {
+    const query =
+      'filterTimeToFirstChunkMs=300&filterTimeToFirstChunkMs.op=gt&filterTimeToFirstTokenMs=500&filterTimeToFirstTokenMs.op=lt&filterSpanTimeToFirstChunkMs=&filterSpanTimeToFirstChunkMs.op=exists&filterSpanTimeToFirstTokenMs=800&filterSpanTimeToFirstTokenMs.op=gte';
+
+    it('reads each as its own token', () => {
+      expect(getTracePropertyFilterTokens(new URLSearchParams(query))).toEqual([
+        { fieldId: 'timeToFirstChunkMs', value: '300', operatorId: 'gt' },
+        { fieldId: 'timeToFirstTokenMs', value: '500', operatorId: 'lt' },
+        { fieldId: 'spans.timeToFirstChunkMs', value: '', operatorId: 'exists' },
+        { fieldId: 'spans.timeToFirstTokenMs', value: '800', operatorId: 'gte' },
+      ]);
+    });
+
+    it('writes them back unchanged', () => {
+      const params = new URLSearchParams();
+      applyTracePropertyFilterTokens(params, getTracePropertyFilterTokens(new URLSearchParams(query)));
+      expect(params.toString()).toBe(query);
     });
   });
 

@@ -121,10 +121,12 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
  * - `span-query-model-fields`: `model` and `provider` predicates in `querySpans` and `aggregateSpans`
  * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
+ * - `span-aggregate-model-dimensions`: `model` and `provider` in `aggregateSpans` `groupBy` and `countDistinct`
  * - `trace-query`: `queryTraces`
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
  * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
+ * - `trace-query-context-fields`: `requestId`, `serviceName` and `experimentId` predicates in trace queries (trace scope and `spans.some`/`spans.none`)
  * - `trace-query-time-to-first-chunk`: `timeToFirstChunkMs` on trace and span query results and predicates
  * - `trace-query-root-span-fields`: root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
  * - `trace-query-root-entity-id`: root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
@@ -137,6 +139,8 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  *   trace aggregate `groupBy`/`countDistinct`, both fields in `spans.some`/`spans.none` predicates, and the root
  *   span's `outcome`, `stopReason` and `stopReasonContext` on trace rows
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
+ * - `aggregate-time-to-first-measures`: `timeToFirstToken.*` and `timeToFirstChunk.*` measures in
+ *   `aggregateTraces` (root span value) and `aggregateSpans` (each span's value)
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
  * - `feedback`: the feedback CRUD, review-status and analytics methods
@@ -155,6 +159,7 @@ export type ObservabilityStorageFeature =
   | 'span-query-context-fields'
   | 'span-query-model-fields'
   | 'span-aggregate'
+  | 'span-aggregate-model-dimensions'
   | 'trace-query'
   | 'trace-aggregate'
   | 'trace-query-root-duration'
@@ -164,6 +169,7 @@ export type ObservabilityStorageFeature =
   | 'trace-query-tenant-scope'
   | 'feedback'
   | 'trace-query-context-ids'
+  | 'trace-query-context-fields'
   | 'trace-query-time-to-first-chunk'
   | 'trace-query-root-span-fields'
   | 'trace-query-root-entity-id'
@@ -171,7 +177,8 @@ export type ObservabilityStorageFeature =
   | 'trace-query-time-to-first-token'
   | 'trace-query-time-to-first-token-sort'
   | 'span-query-outcome-fields'
-  | 'trace-query-outcome-fields';
+  | 'trace-query-outcome-fields'
+  | 'aggregate-time-to-first-measures';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).

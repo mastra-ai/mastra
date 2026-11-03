@@ -198,7 +198,7 @@ describe('ThreadPage eager render', () => {
     await waitFor(() => expect(ring.getAttribute('data-busy')).toBe('false'));
     // Draft survives the flag flip without remount.
     expect(textarea.value).toBe('my draft prompt');
-    expect(textarea.placeholder).toBe('Ask Mastra Code…');
+    expect(textarea.placeholder).toBe('Ask Mastra Code');
     expect(sendButton).not.toHaveAttribute('title', 'Initializing session…');
     await waitFor(() => expect(sendButton).not.toBeDisabled());
 

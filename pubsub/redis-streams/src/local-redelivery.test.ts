@@ -35,7 +35,9 @@ describe('local-only redelivery', () => {
       }),
     };
     clients.create.mockReset().mockReturnValue(writer);
-    ps = new RedisStreamsPubSub({ reclaimIntervalMs: 0 });
+    // The fake writer models bare XGROUP CREATE / XADD (no MULTI); the idle-TTL
+    // MULTI path is covered against real Redis in connection-and-cleanup.test.ts.
+    ps = new RedisStreamsPubSub({ reclaimIntervalMs: 0, streamIdleTtlMs: 0 });
   });
 
   afterEach(async () => {
@@ -148,7 +150,7 @@ describe('local-only redelivery', () => {
 
   it.each([1, 3, 0])('honors maxDeliveryAttempts=%s and caps the delay', async cap => {
     await ps.close();
-    ps = new RedisStreamsPubSub({ maxDeliveryAttempts: cap, reclaimIntervalMs: 0 });
+    ps = new RedisStreamsPubSub({ maxDeliveryAttempts: cap, reclaimIntervalMs: 0, streamIdleTtlMs: 0 });
     const cb = vi.fn(async (_event, _ack, nack) => nack());
     await ps.subscribe('topic', cb);
     await publish(ps);

@@ -1,6 +1,14 @@
+export { isMCPTaskStoreAdmin, principalKeyOf, taskKeyOf } from './store';
 export type {
   MCPTaskAccess,
+  MCPTaskAdminOutcome,
+  MCPTaskListing,
+  MCPTaskListOptions,
+  MCPTaskListPage,
+  MCPTaskStoreAdmin,
   MCPTaskAttempt,
+  MCPTaskAttemptTrace,
+  MCPTaskTrace,
   MCPTaskAttemptOutcome,
   MCPTaskCreateParams,
   MCPTaskLimits,
@@ -16,4 +24,7 @@ export type {
   MCPServerTaskMode,
   MCPServerTasksOptions,
   MCPServerToolTaskConfig,
+  MCPServerWorkflowTaskConfig,
 } from './config';
+export { isWorkflowTaskContext } from './workflow-runs';
+export type { WorkflowTaskContext } from './workflow-runs';

@@ -9,6 +9,7 @@ import type { PubSub } from '../../../../events/pubsub';
 import { validateModelTimeoutSettings } from '../../../../llm/model/model-settings';
 import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import { resolveApiProviderId } from '../../../../llm/model/router';
+import { resolveResponseModelId } from '../../../../llm/model/server-side-fallback';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
 import { LOCAL_MODEL_REQUEST_KEY, STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
@@ -93,7 +94,7 @@ import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../uti
 import { createRunMessageList } from '../../utils/run-message-list';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
-import { baseIterationStateSchema, durableOptionsSchema } from '../shared/schemas';
+import { baseIterationStateSchema, durableOptionsSchema, responseRecordSchema } from '../shared/schemas';
 
 /**
  * Detect a run-level budget expiry (`modelSettings.timeout.totalMs`, #21724
@@ -239,6 +240,8 @@ const durableLLMOutputSchema = z.object({
   completionStartTime: z.coerce.date().optional(),
   // Time to first token of the inference that streamed that chunk; kept with it
   timeToFirstTokenMs: z.number().optional(),
+  // Provider id and serving model of the response, only when the provider sent one
+  response: responseRecordSchema.optional(),
 });
 
 /**
@@ -1978,7 +1981,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // current step is honoured, instead of being silently skipped.
                 const transformTools = currentTools as unknown as Record<string, CoreTool> | undefined;
                 let deferredEnrichedChunk: typeof rawChunk | undefined;
-                if (rawChunk.type === 'tool-result' && rawChunk.payload && 'result' in (rawChunk.payload as any)) {
+                // Partial provider results (e.g. OpenAI image_generation partial images) are only
+                // streamed; the final result is processed, saved and ends the provider span.
+                if (
+                  rawChunk.type === 'tool-result' &&
+                  rawChunk.payload &&
+                  !rawChunk.payload.preliminary &&
+                  'result' in (rawChunk.payload as any)
+                ) {
                   const resultPayload = rawChunk.payload as any;
                   const resultToolDef = resolveToolDef(resultPayload.toolName);
                   const resultProviderExecuted = inferProviderExecuted(resultPayload.providerExecuted, resultToolDef);
@@ -2342,6 +2352,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
                   case 'tool-result': {
                     const payload = rawChunk.payload as any;
+                    if (payload.preliminary) break;
                     // The result determines which MODEL_STEP owns the provider tool call, so
                     // the PROVIDER_TOOL_CALL span is created now, backdated to the tool-call chunk.
                     const pending = pendingProviderToolCallsByToolCallId.get(payload.toolCallId);
@@ -2991,6 +3002,19 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 providerMetadata: responseMetadata,
                 headers: rawResponse?.headers,
               },
+              // Only a finished step has a step-finish chunk, so an aborted step records
+              // none. Its metadata already defaults the model to the requested one, and
+              // the serving model accounts for Anthropic server-side fallbacks, as the
+              // main loop does.
+              response: deferredStepFinishChunk
+                ? {
+                    id: deferredStepFinishChunk.payload?.metadata?.id,
+                    modelId: resolveResponseModelId(
+                      deferredStepFinishChunk.payload?.metadata?.providerMetadata,
+                      deferredStepFinishChunk.payload?.metadata?.modelId,
+                    ),
+                  }
+                : undefined,
               state: typedInput.state,
               // Pass span data so tool calls can be children of model_step
               modelSpanData:

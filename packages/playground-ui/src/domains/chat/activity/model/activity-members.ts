@@ -17,6 +17,8 @@ export interface ActivityCall {
   body?: ReactNode;
 }
 
+export type ActivityCallState = Pick<ActivityCall, 'toolName' | 'args' | 'status' | 'startedAt'>;
+
 export interface ActivityThought {
   kind: 'thought';
   key: string;

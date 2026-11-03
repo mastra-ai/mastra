@@ -21,6 +21,7 @@ import {
   writeObservabilityListFilters,
   OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
   OBSERVABILITY_LIST_SORT_FIELDS,
+  SPAN_LIST_SORT_FIELDS,
 } from './observability-list-url-state';
 import {
   DEFAULT_LOGS_DATE_PRESET,
@@ -125,18 +126,37 @@ const splitNodes = (nodes: TraceFilterNode[]) => ({
 // The widest field set each page can offer (every server capability on); the page's own query
 // builder still leaves out what the connected server can't run.
 const TRACE_FIELD_OPERATORS = operatorsByField([
-  ...createTraceFilterBarFields({ availableRootEntityNames: [], availableEnvironments: [], withRootDuration: true }),
+  ...createTraceFilterBarFields({
+    availableRootEntityNames: [],
+    availableEnvironments: [],
+    withRootDuration: true,
+    withTimeToFirstChunk: true,
+    withTimeToFirstToken: true,
+  }),
   { id: 'tags', operators: TRACE_TAGS_OPERATORS },
 ]);
 const TRACE_URL_FIELD_IDS = new Set<string>([...TRACE_SYNTHETIC_FILTER_FIELD_IDS, ...TRACE_PROPERTY_FILTER_FIELD_IDS]);
 
 const SPAN_FIELD_IDS = new Set<string>([...SPAN_CORE_FILTER_FIELD_IDS, ...SPAN_CONTEXT_FILTER_FIELD_IDS]);
 const SPAN_FIELD_OPERATORS = operatorsByField(
-  createSpanFilterBarFields({ withContextFields: true, entityNames: [], environments: [] }),
+  createSpanFilterBarFields({
+    withContextFields: true,
+    withTimeToFirstChunk: true,
+    withTimeToFirstToken: true,
+    entityNames: [],
+    environments: [],
+  }),
 );
 
 const THREAD_FIELD_IDS = new Set<string>(THREAD_FILTER_FIELD_IDS);
-const THREAD_FIELD_OPERATORS = operatorsByField(createThreadFilterBarFields({ entityNames: [], environments: [] }));
+const THREAD_FIELD_OPERATORS = operatorsByField(
+  createThreadFilterBarFields({
+    withTimeToFirstChunk: true,
+    withTimeToFirstToken: true,
+    entityNames: [],
+    environments: [],
+  }),
+);
 
 const LOGS_FIELD_IDS = new Set<string>([LOGS_ROOT_ENTITY_TYPE_PARAM, ...LOGS_PROPERTY_FILTER_FIELD_IDS]);
 /** Fields the logs URL stores as repeated params; every other logs field holds one string. */
@@ -185,6 +205,7 @@ const PAGE_SPECS: Record<SavedViewPage, PageSpec> = {
   spans: {
     ...observabilityListFilters,
     ...noOptions,
+    sortFields: SPAN_LIST_SORT_FIELDS,
     acceptsToken: acceptsWith(
       fieldId => SPAN_FIELD_IDS.has(fieldId),
       fieldId => SPAN_FIELD_OPERATORS.get(fieldId),
@@ -198,6 +219,7 @@ const PAGE_SPECS: Record<SavedViewPage, PageSpec> = {
       fieldId => THREAD_FIELD_IDS.has(fieldId),
       fieldId => THREAD_FIELD_OPERATORS.get(fieldId),
     ),
+    columns: 'threads',
   },
   logs: {
     readFilters: getLogsPropertyFilterTokens,
@@ -244,13 +266,18 @@ function readDateRange(params: URLSearchParams, spec: PageSpec): SavedViewDateRa
   return to ? { from, to } : { from };
 }
 
-function writeDateRange(params: URLSearchParams, spec: PageSpec, range: SavedViewDateRange | undefined) {
+function writeDateRange(
+  params: URLSearchParams,
+  spec: PageSpec,
+  range: SavedViewDateRange | undefined,
+  defaultDatePreset: string,
+) {
   params.delete(TRACE_DATE_PRESET_PARAM);
   params.delete(TRACE_DATE_FROM_PARAM);
   params.delete(TRACE_DATE_TO_PARAM);
   if (!range) return;
   if ('preset' in range) {
-    if (range.preset !== 'custom' && range.preset !== spec.defaultDatePreset && spec.datePresets.has(range.preset)) {
+    if (range.preset !== 'custom' && range.preset !== defaultDatePreset && spec.datePresets.has(range.preset)) {
       params.set(TRACE_DATE_PRESET_PARAM, range.preset);
     }
     return;
@@ -339,7 +366,7 @@ export function columnPreferencesFromSavedView(
 
 /**
  * The saved view of `page` for its current URL. Pass the page's column preferences to save its
- * columns too (traces and spans only; the other pages have fixed columns).
+ * columns too (traces, spans and threads only; the other pages have fixed columns).
  */
 export function savedViewFromSearchParams(
   page: SavedViewPage,
@@ -368,18 +395,30 @@ export type AppliedSavedView = {
   columns?: TraceColumnPreferences;
 };
 
+export type ApplySavedViewOptions = {
+  /**
+   * The range the host shows when the URL names none, when it differs from the page's own default.
+   * Only this preset is left out of the URL; any other one, including the page's default, is written.
+   */
+  defaultDatePreset?: string;
+};
+
 /**
  * Applies `view` on top of `base` (the page's current search params): every view param is replaced,
  * other params (e.g. the open row) are kept and the list restarts at its first page. Parts of the view
  * the page no longer supports (unknown filter field or operator, sort field, date preset, column,
  * option) are dropped one by one; the page's default takes their place.
  */
-export function applySavedView(view: SavedViewState, base: URLSearchParams): AppliedSavedView {
+export function applySavedView(
+  view: SavedViewState,
+  base: URLSearchParams,
+  { defaultDatePreset }: ApplySavedViewOptions = {},
+): AppliedSavedView {
   const spec = PAGE_SPECS[view.page];
   const params = new URLSearchParams(base);
   const { tokens, groups } = splitNodes(keepApplicable(view.filters, spec));
   spec.writeFilters(params, tokens, groups);
-  writeDateRange(params, spec, view.dateRange);
+  writeDateRange(params, spec, view.dateRange, defaultDatePreset ?? spec.defaultDatePreset);
   writeSort(params, spec, view.sort);
   spec.writeOptions(params, view.options ?? {});
   params.delete(PAGE_PARAM);

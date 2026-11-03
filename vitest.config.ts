@@ -7,7 +7,6 @@ import { configDefaults, defineConfig } from 'vitest/config';
 // Directories to exclude from project discovery
 const EXCLUDED_DIRS = new Set([
   'packages/_config',
-  'packages/_types-builder',
   'packages/_vendored',
   'server-adapters/server-adapters-test-suite',
   'browser/_test-utils',

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { DateTimeRangePicker } from './date-time-range-picker';
 import type { DateRangePreset } from './date-time-range-picker';
@@ -188,6 +188,51 @@ describe('DateTimeRangePicker (custom range popover)', () => {
   });
 });
 
+describe('DateTimeRangePicker (custom range label)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-29T12:00:00.000Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const label = (dateFrom?: Date, dateTo?: Date) => {
+    render(<DateTimeRangePicker preset="custom" dateFrom={dateFrom} dateTo={dateTo} />);
+    return screen.getByRole('button').textContent;
+  };
+
+  describe('when the range sits within one day', () => {
+    it('shows the day once, then both times', () => {
+      expect(label(new Date('2026-10-21T14:05:00.000Z'), new Date('2026-10-21T16:00:00.000Z'))).toBe(
+        'Oct 21, 2:05 PM \u2013 4 PM',
+      );
+    });
+  });
+
+  describe('when the range spans several days', () => {
+    it('shows the day and time of each end', () => {
+      expect(label(new Date('2026-10-20T00:00:00.000Z'), new Date('2026-10-27T09:30:00.000Z'))).toBe(
+        'Oct 20, 12 AM \u2013 Oct 27, 9:30 AM',
+      );
+    });
+  });
+
+  describe('when the range reaches outside the current year', () => {
+    it('adds the year to both ends', () => {
+      expect(label(new Date('2025-12-30T22:00:00.000Z'), new Date('2026-01-02T06:00:00.000Z'))).toBe(
+        'Dec 30, 2025, 10 PM \u2013 Jan 2, 2026, 6 AM',
+      );
+    });
+  });
+
+  describe('when an end is open', () => {
+    it('names the open end', () => {
+      expect(label(new Date('2026-10-21T14:00:00.000Z'), undefined)).toBe('Oct 21, 2 PM \u2013 End');
+    });
+  });
+});
+
 const TRACE_PRESETS: readonly DateRangePreset[] = ['last-24h', 'last-3d', 'last-7d', 'last-14d', 'last-30d', 'custom'];
 
 /** Owns the preset like a real consumer (e.g. the Traces URL state) so preset switches re-render. */
@@ -249,5 +294,71 @@ describe('DateTimeRangePicker (presets restored by a slow parent)', () => {
     expect(onPendingPreset).toHaveBeenCalledWith('last-3d');
     expect(screen.getByRole('button', { name: 'Last 3 days' })).toBeTruthy();
     expect(checkedPreset()).toBe('Last 3 days');
+  });
+});
+
+const PERIOD_START = new Date(2026, 9, 11, 10, 28);
+
+/** A billing page's picker: "This period" offered beside the presets, the range held in state. */
+function PeriodPicker({ initial = 'period' }: { initial?: 'period' | 'last-7d' }) {
+  const [preset, setPreset] = useState<DateRangePreset>(initial === 'period' ? 'custom' : 'last-7d');
+  const [range, setRange] = useState<{ from?: Date; to?: Date }>(initial === 'period' ? { from: PERIOD_START } : {});
+  return (
+    <DateTimeRangePicker
+      preset={preset}
+      onPresetChange={setPreset}
+      dateFrom={range.from}
+      dateTo={range.to}
+      onDateRangeChange={(from, to) => setRange({ from, to })}
+      presets={TRACE_PRESETS}
+      namedRanges={[{ label: 'This period', from: PERIOD_START }]}
+    />
+  );
+}
+
+describe('DateTimeRangePicker (named ranges)', () => {
+  it('names an applied named range on the trigger and checks it in the list, with no reset', () => {
+    render(<PeriodPicker />);
+
+    const trigger = screen.getByRole('button', { name: 'This period' });
+    expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
+    fireEvent.click(trigger);
+    expect(checkedPreset()).toBe('This period');
+  });
+
+  it('applies a named range from the list', () => {
+    render(<PeriodPicker initial="last-7d" />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'This period' }));
+
+    expect(screen.getByRole('button', { name: 'This period' })).toBeDefined();
+  });
+});
+
+describe('DateTimeRangePicker (named ranges and the custom editor)', () => {
+  it('opens the custom editor from an applied named range', () => {
+    render(<PeriodPicker />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'This period' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Custom range...' }));
+
+    expect(screen.getByRole('button', { name: /presets/i })).toBeDefined();
+  });
+
+  it('disables a named range that starts before minDate', () => {
+    render(
+      <DateTimeRangePicker
+        preset="last-7d"
+        presets={TRACE_PRESETS}
+        minDate={new Date(2026, 9, 20)}
+        namedRanges={[{ label: 'This period', from: PERIOD_START }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+
+    const item = screen.getByRole('menuitemradio', { name: 'This period' });
+    expect(item.getAttribute('aria-disabled')).toBe('true');
   });
 });

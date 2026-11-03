@@ -5,6 +5,7 @@ export const TRACE_OPTIONAL_COLUMNS = [
   'duration',
   'traceCount',
   'timeToFirstChunk',
+  'timeToFirstToken',
   'endTime',
   'environment',
   'model',
@@ -51,14 +52,8 @@ export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
   metadataKeys: [],
 };
 
-/** The Threads list: the trace defaults plus each thread's trace count. Not offered in any column picker. */
-export const THREAD_LIST_COLUMN_PREFERENCES: TraceColumnPreferences = {
-  ...DEFAULT_TRACE_COLUMN_PREFERENCES,
-  visibleColumns: [...DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns, 'traceCount'],
-};
-
 /** A list a column selection belongs to. Each list only offers the columns its rows carry. */
-export type TraceColumnScope = 'traces' | 'spans';
+export type TraceColumnScope = 'traces' | 'spans' | 'threads';
 
 export type TraceColumnCatalog = {
   /** Plain columns offered in the picker, in menu order. */
@@ -72,16 +67,56 @@ export type TraceColumnCatalog = {
 
 export const TRACE_COLUMN_CATALOGS: Record<TraceColumnScope, TraceColumnCatalog> = {
   traces: {
-    standardColumns: ['type', 'input', 'output', 'duration', 'timeToFirstChunk', 'endTime', 'environment'],
+    standardColumns: [
+      'type',
+      'input',
+      'output',
+      'duration',
+      'timeToFirstChunk',
+      'timeToFirstToken',
+      'endTime',
+      'environment',
+    ],
     usage: true,
     metadata: true,
     defaults: DEFAULT_TRACE_COLUMN_PREFERENCES,
   },
   spans: {
-    standardColumns: ['type', 'input', 'output', 'duration', 'endTime', 'environment', 'model', 'provider'],
+    standardColumns: [
+      'type',
+      'input',
+      'output',
+      'duration',
+      'timeToFirstChunk',
+      'timeToFirstToken',
+      'endTime',
+      'environment',
+      'model',
+      'provider',
+    ],
     usage: false,
     metadata: false,
     defaults: { visibleColumns: ['type', 'input', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+  },
+  threads: {
+    standardColumns: [
+      'type',
+      'input',
+      'output',
+      'duration',
+      'traceCount',
+      'timeToFirstChunk',
+      'timeToFirstToken',
+      'endTime',
+      'environment',
+    ],
+    usage: false,
+    metadata: false,
+    defaults: {
+      visibleColumns: ['type', 'input', 'output', 'duration', 'traceCount'],
+      customColumns: [],
+      metadataKeys: [],
+    },
   },
 };
 
@@ -176,6 +211,7 @@ export function buildTraceListColumnKeys(
     'duration',
     'traceCount',
     'timeToFirstChunk',
+    'timeToFirstToken',
     'endTime',
     'environment',
     'model',
@@ -210,6 +246,7 @@ export function buildTraceListColumns(
   if (visible.has('duration')) columns.push('7rem');
   if (visible.has('traceCount')) columns.push('6rem');
   if (visible.has('timeToFirstChunk')) columns.push('7rem');
+  if (visible.has('timeToFirstToken')) columns.push('7rem');
   if (visible.has('endTime')) columns.push('11rem');
   if (visible.has('environment')) columns.push('8rem');
   if (visible.has('model')) columns.push('10rem');
@@ -259,6 +296,25 @@ export function formatTraceMetadataValue(
 
 export function hasTraceColumn(preferences: TraceColumnPreferences, column: TraceOptionalColumn): boolean {
   return preferences.visibleColumns.includes(column);
+}
+
+/**
+ * The preferences to draw when the store does not record every streaming timing: the
+ * unrecorded timing columns are hidden but stay saved, so they come back on a store that records them.
+ */
+export function withoutUnrecordedStreamingColumns(
+  preferences: TraceColumnPreferences,
+  { withTimeToFirstChunk, withTimeToFirstToken }: { withTimeToFirstChunk: boolean; withTimeToFirstToken: boolean },
+): TraceColumnPreferences {
+  if (withTimeToFirstChunk && withTimeToFirstToken) return preferences;
+  return {
+    ...preferences,
+    visibleColumns: preferences.visibleColumns.filter(
+      column =>
+        (withTimeToFirstChunk || column !== 'timeToFirstChunk') &&
+        (withTimeToFirstToken || column !== 'timeToFirstToken'),
+    ),
+  };
 }
 
 export function toggleTraceColumn(

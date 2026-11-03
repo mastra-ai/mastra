@@ -665,6 +665,8 @@ export interface InngestAgent<TOutput = undefined> {
    * Returns `false` when there is no matching active run.
    */
   abortThreadStream: Agent<any, any, TOutput>['abortThreadStream'];
+  /** @internal Thread abort for the server route; runs the Inngest override above. */
+  __abortThreadStreamAcrossProcesses: Agent<any, any, TOutput>['__abortThreadStreamAcrossProcesses'];
   /** Abort a run by id, including on the Inngest worker executing it. */
   abortRunStream: Agent<any, any, TOutput>['abortRunStream'];
   /**
@@ -1239,6 +1241,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     | 'approveToolCallGenerate'
     | 'declineToolCallGenerate'
     | 'abortThreadStream'
+    | '__abortThreadStreamAcrossProcesses'
     | 'abortRunStream'
     | '__abortRunAcknowledged'
     | '__fork'
@@ -1445,8 +1448,21 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           // Save the accepted request before the run starts, as DurableAgent does,
           // so a run that times out or fails still keeps it (#28659).
           await persistDurableRunInput(runId, workflowInput, mastra);
+          // A caller abort reaches the run signal with the controller's own reason, so a
+          // timeout reason the controller does not share is this run's deadline.
+          const deadlineFired = () => {
+            const reason = registryEntry.abortSignal?.reason;
+            return isMastraTimeoutError(reason) && reason !== abortController.signal.reason;
+          };
+          // The deadline already reported the timeout and cleared the run's rows; don't start it.
+          if (deadlineFired()) return;
           // Written before the trigger so it can never land after the engine's terminal row.
           const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
+          // The deadline can also fire while that row is being written; its cleanup may have run first.
+          if (deadlineFired()) {
+            if (persistedRunning) await deleteRunSnapshots(runId);
+            return;
+          }
           try {
             await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
           } catch (error) {
@@ -2453,6 +2469,25 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (!aborted || !runId) return aborted;
 
       if (!abortOptions.localOnly) abortDurableRun(runId);
+      return true;
+    },
+
+    // Defined here so the proxy doesn't forward it to the wrapped Agent, whose
+    // version would call that Agent's abortThreadStream and skip the override above.
+    async __abortThreadStreamAcrossProcesses(abortOptions) {
+      const aborted = proxyRef!.abortThreadStream(abortOptions);
+      if (aborted || abortOptions.localOnly) return aborted;
+      // This server never saw the run: the thread lease names it wherever it
+      // started, as in DurableAgent (#28310).
+      const threadPubSub = agent.getPubSub();
+      const runId = await agentThreadStreamRuntime.getThreadLeaseOwnerRunId(threadPubSub, abortOptions);
+      if (!runId) return false;
+      if (abortOptions.expectedRunId !== undefined && abortOptions.expectedRunId !== runId) return false;
+      // Same split as DurableAgent: the thread request also releases a parked run.
+      await Promise.all([
+        agentThreadStreamRuntime.requestThreadRunAbort(threadPubSub, abortOptions, runId),
+        abortOptions.clearPendingSignals ? undefined : publishAbortRequest(getPubsub(), runId),
+      ]);
       return true;
     },
 

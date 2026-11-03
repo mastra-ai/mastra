@@ -72,7 +72,12 @@ export function evaluateSpanAggregateRequest(
 //
 // Model and provider columns: t1-model (both copies) gpt-4o / openai; t3-model claude-sonnet-5-5 /
 // anthropic. t2-model carries its model only in attributes, as spans exported before the columns
-// were filled do, so span filters on model and provider must not match it.
+// were filled do, so span filters on model and provider must not match it and grouping by them puts
+// it under null (no backfill).
+//
+// Time to first token / chunk (ms): t1-root 300 / 1300 (copied from its first model call, chunk
+// measured from the agent run's start); t1-model 300 / 350 (older copy 9000 / 9000); t2-model 500 /
+// none. Every other span has neither, so it is skipped by the time-to-first measures.
 //
 // The older t1-model copy is written first and also ends first, so every store's version rule
 // (latest end time or latest write) picks the 2 s copy; without the collapse, llm counts 4 spans.
@@ -106,6 +111,8 @@ interface SpanSpec {
   columns?: { model: string; provider: string };
   error?: boolean;
   isPending?: boolean;
+  timeToFirstTokenMs?: number;
+  timeToFirstChunkMs?: number;
 }
 
 function fixtureSpan(spec: SpanSpec): RawTraceQuerySpan {
@@ -126,6 +133,8 @@ function fixtureSpan(spec: SpanSpec): RawTraceQuerySpan {
     parentEntityName: spec.parent?.name ?? null,
     rootEntityType: spec.root?.type ?? null,
     rootEntityName: spec.root?.name ?? null,
+    timeToFirstTokenMs: spec.timeToFirstTokenMs ?? null,
+    timeToFirstChunkMs: spec.timeToFirstChunkMs ?? null,
   });
 }
 
@@ -176,6 +185,8 @@ export const SPAN_AGGREGATE_FIXTURE_DATA: TraceAggregateFixtureData = {
       seconds: 10,
       entity: support,
       root: support,
+      timeToFirstTokenMs: 300,
+      timeToFirstChunkMs: 1300,
     }),
     fixtureSpan({
       cursorId: 2,
@@ -186,6 +197,8 @@ export const SPAN_AGGREGATE_FIXTURE_DATA: TraceAggregateFixtureData = {
       name: 'llm',
       startedAt: after(t1, 1),
       seconds: 1,
+      timeToFirstTokenMs: 9000,
+      timeToFirstChunkMs: 9000,
       model: 'gpt-4o',
       columns: { model: 'gpt-4o', provider: 'openai' },
       ...child(support),
@@ -199,6 +212,8 @@ export const SPAN_AGGREGATE_FIXTURE_DATA: TraceAggregateFixtureData = {
       name: 'llm',
       startedAt: after(t1, 1),
       seconds: 2,
+      timeToFirstTokenMs: 300,
+      timeToFirstChunkMs: 350,
       model: 'gpt-4o',
       columns: { model: 'gpt-4o', provider: 'openai' },
       ...child(support),
@@ -236,6 +251,7 @@ export const SPAN_AGGREGATE_FIXTURE_DATA: TraceAggregateFixtureData = {
       name: 'llm',
       startedAt: after(t2, 1),
       seconds: 4,
+      timeToFirstTokenMs: 500,
       model: 'gpt-4o-mini',
       ...child(billing),
     }),
@@ -508,5 +524,150 @@ export const SPAN_AGGREGATE_CONFORMANCE_CASES: SpanAggregateConformanceCase[] = 
       measures: ['count', 'countDistinct.traceId'],
     },
     expected: { rows: [{ measures: { count: 2, 'countDistinct.traceId': 2 } }], truncated: false },
+  },
+  {
+    // No backfill: t2-model has its model only in attributes, so it groups under null. The retried
+    // t1-model counts once, with its tokens counted once.
+    name: 'groups model calls by the model column, with attribute-only spans under null',
+    request: {
+      timeRange: spanRange,
+      where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+      groupBy: ['model'],
+      measures: ['count', 'tokens.total.sum'],
+    },
+    expected: {
+      rows: [
+        { dimensions: { model: 'claude-sonnet-5-5' }, measures: { count: 1, 'tokens.total.sum': 50 } },
+        { dimensions: { model: 'gpt-4o' }, measures: { count: 1, 'tokens.total.sum': 150 } },
+        { dimensions: { model: null }, measures: { count: 1, 'tokens.total.sum': 280 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'groups by provider and model across spans with and without model columns',
+    request: { timeRange: spanRange, groupBy: ['provider', 'model'], measures: ['count'] },
+    expected: {
+      rows: [
+        { dimensions: { provider: null, model: null }, measures: { count: 6 } },
+        { dimensions: { provider: 'anthropic', model: 'claude-sonnet-5-5' }, measures: { count: 1 } },
+        { dimensions: { provider: 'openai', model: 'gpt-4o' }, measures: { count: 1 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'filters and groups on the model columns together',
+    request: {
+      timeRange: spanRange,
+      where: { op: 'in', value: { path: 'provider' }, set: ['openai', 'anthropic'] },
+      groupBy: ['model'],
+      measures: ['count', 'tokens.total.sum'],
+      orderBy: { field: 'tokens.total.sum', direction: 'desc' },
+    },
+    expected: {
+      rows: [
+        { dimensions: { model: 'gpt-4o' }, measures: { count: 1, 'tokens.total.sum': 150 } },
+        { dimensions: { model: 'claude-sonnet-5-5' }, measures: { count: 1, 'tokens.total.sum': 50 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    // Spans without a model column don't count as a distinct model, so billing has none.
+    name: 'counts distinct models and providers per root entity',
+    request: {
+      timeRange: spanRange,
+      groupBy: ['rootEntityName'],
+      measures: ['count', 'countDistinct.model', 'countDistinct.provider'],
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: { rootEntityName: 'billing' },
+          measures: { count: 3, 'countDistinct.model': 0, 'countDistinct.provider': 0 },
+        },
+        {
+          dimensions: { rootEntityName: 'support' },
+          measures: { count: 3, 'countDistinct.model': 1, 'countDistinct.provider': 1 },
+        },
+        {
+          dimensions: { rootEntityName: 'nightly' },
+          measures: { count: 2, 'countDistinct.model': 1, 'countDistinct.provider': 1 },
+        },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'time-to-first measures over model calls skip spans without a value',
+    request: {
+      timeRange: spanRange,
+      where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+      measures: [
+        'count',
+        'timeToFirstToken.avg',
+        'timeToFirstToken.min',
+        'timeToFirstToken.max',
+        'timeToFirstToken.p50',
+        'timeToFirstToken.count',
+        'timeToFirstChunk.avg',
+        'timeToFirstChunk.p95',
+        'timeToFirstChunk.count',
+      ],
+    },
+    expected: {
+      rows: [
+        {
+          measures: {
+            count: 3,
+            'timeToFirstToken.avg': 400,
+            'timeToFirstToken.min': 300,
+            'timeToFirstToken.max': 500,
+            'timeToFirstToken.p50': 400,
+            'timeToFirstToken.count': 2,
+            'timeToFirstChunk.avg': 350,
+            'timeToFirstChunk.p95': 350,
+            'timeToFirstChunk.count': 1,
+          },
+        },
+      ],
+      truncated: false,
+    },
+    // Backend-native percentiles of {300, 500} land between the interpolated value and 500.
+    tolerance: { 'timeToFirstToken.p50': 100 },
+  },
+  {
+    name: 'time-to-first measures are null for groups where no span has a value',
+    request: {
+      timeRange: spanRange,
+      where: { op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] },
+      groupBy: ['spanType'],
+      measures: ['count', 'timeToFirstToken.max', 'timeToFirstChunk.avg', 'timeToFirstChunk.count'],
+      orderBy: { field: 'spanType', direction: 'asc' },
+    },
+    expected: {
+      rows: [
+        {
+          dimensions: { spanType: 'agent_run' },
+          measures: {
+            count: 2,
+            'timeToFirstToken.max': 300,
+            'timeToFirstChunk.avg': 1300,
+            'timeToFirstChunk.count': 1,
+          },
+        },
+        {
+          dimensions: { spanType: 'tool_call' },
+          measures: {
+            count: 2,
+            'timeToFirstToken.max': null,
+            'timeToFirstChunk.avg': null,
+            'timeToFirstChunk.count': 0,
+          },
+        },
+      ],
+      truncated: false,
+    },
   },
 ];

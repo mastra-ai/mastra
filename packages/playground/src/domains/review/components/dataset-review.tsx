@@ -587,7 +587,7 @@ export function DatasetReview({
                 className="text-caption"
                 value={analyzePrompt}
                 onChange={e => setAnalyzePrompt(e.target.value)}
-                placeholder="E.g., Focus on safety issues and factual errors..."
+                placeholder="E.g., Focus on safety issues and factual errors"
                 rows={3}
               />
             </Field>

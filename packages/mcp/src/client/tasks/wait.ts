@@ -5,6 +5,8 @@ import type { MCPInputRequestHandler } from '../types';
 
 /** A task that reached a terminal status. */
 export type MCPTerminalTask = Extract<MCPDetailedTask, { status: 'completed' | 'failed' | 'cancelled' }>;
+/** A task waiting for input, listing only the requests nobody has answered yet. */
+export type MCPInputRequiredTask = Extract<MCPDetailedTask, { status: 'input_required' }>;
 
 export interface TaskWaitPort {
   get(taskId: string, options: { signal?: AbortSignal }): Promise<MCPDetailedTask>;
@@ -24,6 +26,13 @@ export interface TaskWaitOptions {
   signal?: AbortSignal;
   /** Answers `input_required` task requests. Without one, such a task stops the wait. */
   inputRequests?: MCPInputRequestHandler;
+  /**
+   * Without an `inputRequests` handler, return a task that needs input (with its unanswered requests)
+   * instead of failing, and leave the remote task open so the caller can answer it later.
+   */
+  stopAtInput?: boolean;
+  /** Answers already given, sent with `tasks/update` the first time the task lists their keys. */
+  inputResponses?: MCPTaskInputResponses;
   /** Interval used when the server suggests none. */
   pollIntervalMs?: number;
   /** Stops waiting, and cancels the remote task, after this long. */
@@ -33,6 +42,8 @@ export interface TaskWaitOptions {
    * The wait also ends earlier at `maxWaitMs` or the task's TTL. Default 5 minutes.
    */
   maxOutageMs?: number;
+  /** Called with the created task, then whenever a poll reports a different status. */
+  onStatus?: (task: MCPTask) => void;
   /** For tests. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   now?: () => number;
@@ -81,14 +92,32 @@ const defaultSleep = (ms: number, signal?: AbortSignal) =>
 export async function waitForTask(
   port: TaskWaitPort,
   created: MCPTask,
+  options: TaskWaitOptions & { stopAtInput: boolean },
+): Promise<MCPTerminalTask | MCPInputRequiredTask>;
+export async function waitForTask(
+  port: TaskWaitPort,
+  created: MCPTask,
+  options?: TaskWaitOptions,
+): Promise<MCPTerminalTask>;
+export async function waitForTask(
+  port: TaskWaitPort,
+  created: MCPTask,
   options: TaskWaitOptions = {},
-): Promise<MCPTerminalTask> {
+): Promise<MCPTerminalTask | MCPInputRequiredTask> {
   const sleep = options.sleep ?? defaultSleep;
   const now = options.now ?? Date.now;
   const maxOutageMs = options.maxOutageMs ?? DEFAULT_MAX_OUTAGE_MS;
   const deadline = options.maxWaitMs === undefined ? undefined : now() + options.maxWaitMs;
   const answered = new Set<string>();
   let task: MCPDetailedTask | MCPTask = created;
+  // The TTL counts from createdAt. Servers may send ISO 8601 forms Date.parse can't read; count from
+  // when this wait started instead, so the TTL backstop still ends the wait.
+  const startedAt = now();
+  const ttlEndOf = (current: MCPTask): number => {
+    if (current.ttlMs === null) return Infinity;
+    const createdAt = Date.parse(current.createdAt);
+    return (Number.isNaN(createdAt) ? startedAt : createdAt) + current.ttlMs;
+  };
   let cancelSent = false;
   const cancel = () => {
     if (cancelSent) return;
@@ -122,7 +151,12 @@ export async function waitForTask(
   deadlineTimer?.unref?.();
 
   try {
+    let reported: MCPTask['status'] | undefined;
     for (;;) {
+      if (task.status !== reported) {
+        reported = task.status;
+        options.onStatus?.(task);
+      }
       stop.signal.throwIfAborted();
       if (isTerminalTaskStatus(task.status)) return task as MCPTerminalTask;
 
@@ -130,7 +164,23 @@ export async function waitForTask(
         const { inputRequests } = task as Extract<MCPDetailedTask, { status: 'input_required' }>;
         const pending = Object.entries(inputRequests).filter(([key]) => !answered.has(key));
         if (pending.length > 0) {
-          const responses = await bounded(answerInputRequests(pending, task, options.inputRequests, stop.signal));
+          const supplied = options.inputResponses ?? {};
+          const unanswered = pending.filter(([key]) => !Object.hasOwn(supplied, key));
+          const responses: MCPTaskInputResponses = {};
+          for (const [key] of pending) if (Object.hasOwn(supplied, key)) responses[key] = supplied[key]!;
+          if (unanswered.length > 0 && !options.inputRequests && options.stopAtInput) {
+            if (Object.keys(responses).length > 0) {
+              for (const key of Object.keys(responses)) answered.add(key);
+              await bounded(port.update(task.taskId, responses, { signal: stop.signal }));
+            }
+            return { ...(task as MCPInputRequiredTask), inputRequests: Object.fromEntries(unanswered) };
+          }
+          if (unanswered.length > 0) {
+            Object.assign(
+              responses,
+              await bounded(answerInputRequests(unanswered, task, options.inputRequests, stop.signal)),
+            );
+          }
           for (const key of Object.keys(responses)) answered.add(key);
           await bounded(port.update(task.taskId, responses, { signal: stop.signal }));
           // Updates are eventually consistent, so the next poll follows without waiting.
@@ -139,11 +189,12 @@ export async function waitForTask(
         }
       }
 
-      const expiresAt = task.ttlMs === null ? undefined : Date.parse(task.createdAt) + task.ttlMs;
-      if (expiresAt !== undefined && now() > expiresAt) {
+      // The last poll lands on the TTL deadline, so a result that arrives right at it still counts.
+      const ttlLeft = ttlEndOf(task) - now();
+      if (ttlLeft <= 0) {
         throw new TaskWaitError('expired', `MCP task ${task.taskId} outlived its ${task.ttlMs}ms TTL`, task);
       }
-      let interval = pollIntervalOf(task);
+      let interval = Math.min(pollIntervalOf(task), ttlLeft);
       if (deadline !== undefined) {
         const remaining = deadline - now();
         if (remaining <= 0) {
@@ -180,8 +231,7 @@ export async function waitForTask(
             cancel();
             throw timedOut();
           }
-          const ttlEnd = task.ttlMs === null ? Infinity : Date.parse(task.createdAt) + task.ttlMs;
-          const giveUpAt = Math.min(outageStartedAt + maxOutageMs, ttlEnd);
+          const giveUpAt = Math.min(outageStartedAt + maxOutageMs, ttlEndOf(task));
           if (at >= giveUpAt) {
             const seconds = Math.round((at - outageStartedAt) / 1000);
             throw new TaskWaitError(

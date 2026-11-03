@@ -340,10 +340,13 @@ function OutputTab({ span, view, onViewChange }: PayloadTabProps) {
 
 /** Everything looked up rather than read, grouped the same way for every span type. */
 function DetailsTab({ traceId, span }: { traceId: string; span: SpanRecord }) {
-  const { model, provider, finishReason, firstToken, speed } = getModelFacts(span);
+  const { finishReason, firstToken, speed, ...facts } = getModelFacts(span);
+  // Agent runs and model steps record the model they ran natively, not only model-call spans.
+  const model = span.model || facts.model;
+  const provider = span.provider || facts.provider;
   // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built SDK declarations type attributes.usage as unknown.
   const usage = span.attributes?.usage as UsageStats | undefined;
-  const hasModel = Boolean(model || finishReason || firstToken || speed);
+  const hasModel = Boolean(model || provider || finishReason || firstToken || speed);
   const durationMs = getSpanDurationMs(span.startedAt, span.endedAt);
   const ids: Array<[string, string | null | undefined]> = [
     ['Span', span.spanId],
@@ -392,6 +395,12 @@ function DetailsTab({ traceId, span }: { traceId: string; span: SpanRecord }) {
           <Row label="Started">{formatTimestampPrecise(span.startedAt)}</Row>
           {span.endedAt && <Row label="Ended">{formatTimestampPrecise(span.endedAt)}</Row>}
           {durationMs != null && <Row label="Duration">{formatDurationPrecise(durationMs)}</Row>}
+          {span.timeToFirstChunkMs != null && (
+            <Row label="Time to first chunk">{formatDurationPrecise(span.timeToFirstChunkMs)}</Row>
+          )}
+          {span.timeToFirstTokenMs != null && (
+            <Row label="Time to first token">{formatDurationPrecise(span.timeToFirstTokenMs)}</Row>
+          )}
         </DataKeysAndValues>
       </Section>
 

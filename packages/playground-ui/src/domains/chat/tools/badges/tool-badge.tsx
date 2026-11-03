@@ -1,4 +1,8 @@
+import type { McpInputRequestPayload } from '../mcp-input-request';
+import { isDeferredCall } from '../tool-card-kind';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
+import { BackgroundMcpTaskChip, McpTaskChip } from './mcp-task-chip';
+import { useMcpTaskProgress } from './use-mcp-task-progress';
 import type { MessageMetadata } from '@/domains/chat';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
@@ -35,6 +39,12 @@ export interface ToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> 
   toolCalled?: boolean;
   withoutArgs?: boolean;
   status?: ActivityStatus;
+  /** The Mastra background task running the call, when it was deferred. */
+  backgroundTaskId?: string;
+  /** `running` while the part holds a deferred call's placeholder; `completed`/`failed` once it holds the result. */
+  backgroundTaskStatus?: string;
+  /** The MCP task question the call is waiting on, if it is. */
+  mcpInputRequest?: McpInputRequestPayload;
 }
 
 export const ToolBadge = ({
@@ -50,6 +60,9 @@ export const ToolBadge = ({
   toolCalled: toolCalledProp,
   withoutArgs,
   status = 'idle',
+  backgroundTaskId,
+  backgroundTaskStatus,
+  mcpInputRequest,
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
   const { icon: ToolIcon, label, detail, description } = presentTool(toolName, argsObject);
@@ -69,6 +82,9 @@ export const ToolBadge = ({
     Boolean(resultPretty) ||
     toolOutput.length > 0 ||
     needsApproval;
+
+  const deferred = isDeferredCall(backgroundTaskId, backgroundTaskStatus);
+  const mcpTask = useMcpTaskProgress(result, status, { deferred, request: mcpInputRequest });
 
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
@@ -97,8 +113,16 @@ export const ToolBadge = ({
             selectionReason={selectionReason || ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
+        ) : mcpTask || (bgEntry?.taskId && bgEntry?.startedAt) ? (
+          <>
+            {mcpTask &&
+              (backgroundTaskId ? (
+                <BackgroundMcpTaskChip task={mcpTask} backgroundTaskId={backgroundTaskId} />
+              ) : (
+                <McpTaskChip task={mcpTask} />
+              ))}
+            {bgEntry?.taskId && bgEntry?.startedAt && <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />}
+          </>
         ) : null
       }
       initialCollapsed={!(toolApprovalMetadata ?? suspendPayload)}

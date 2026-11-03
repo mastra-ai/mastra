@@ -168,6 +168,15 @@ export class StoreBackgroundTasksLance extends BackgroundTasksStorage {
           : `leaseExpiresAt = ${options.expectedLeaseExpiresAt.getTime()}`,
       );
     }
+    if (options?.expectedSuspendedAt !== undefined) {
+      // Unlike the lease, an unset `suspendedAt` is stored as 0 (see `toRecord`),
+      // but rows from before that convention may hold NULL.
+      conditions.push(
+        options.expectedSuspendedAt === null
+          ? '(suspendedAt IS NULL OR suspendedAt = 0)'
+          : `suspendedAt = ${options.expectedSuspendedAt.getTime()}`,
+      );
+    }
 
     const table = await this.client.openTable(TABLE_BACKGROUND_TASKS);
     const result = await table.update({ where: conditions.join(' AND '), values });

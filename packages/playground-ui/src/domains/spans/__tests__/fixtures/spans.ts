@@ -30,7 +30,33 @@ export const spanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     threadQuery: true,
     spanQuery: true,
     spanQueryContextFields: true,
+    traceQueryTimeToFirstChunk: true,
+    traceQueryTimeToFirstChunkSort: true,
+    traceQueryTimeToFirstToken: true,
+    traceQueryTimeToFirstTokenSort: true,
     feedback: true,
+  },
+};
+
+/** A store that runs span queries but records neither time to first chunk nor time to first token. */
+export const noStreamingTimingsSpanCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: {
+    ...spanQueryCapabilities.capabilities,
+    traceQueryTimeToFirstChunk: false,
+    traceQueryTimeToFirstChunkSort: false,
+    traceQueryTimeToFirstToken: false,
+    traceQueryTimeToFirstTokenSort: false,
+  },
+};
+
+/** A store that records both timings on spans but cannot order a span query by them. */
+export const noStreamingTimingsSortSpanCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: {
+    ...spanQueryCapabilities.capabilities,
+    traceQueryTimeToFirstChunkSort: false,
+    traceQueryTimeToFirstTokenSort: false,
   },
 };
 
@@ -38,6 +64,12 @@ export const spanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
 export const spanOutcomeCapabilities: GetObservabilityCapabilitiesResponse = {
   ...spanQueryCapabilities,
   capabilities: { ...spanQueryCapabilities.capabilities, spanQueryOutcomeFields: true },
+};
+
+/** A store that fills the model and provider columns and filters span queries on them. */
+export const spanModelCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: { ...spanQueryCapabilities.capabilities, spanQueryModelFields: true },
 };
 
 export const spanQueryCoreOnlyCapabilities: GetObservabilityCapabilitiesResponse = {
@@ -165,6 +197,8 @@ export const spanRowsPage: QuerySpansResult = {
       name: 'agent run: weather',
       model: 'gpt-5.6',
       provider: 'openai',
+      timeToFirstChunkMs: 412,
+      timeToFirstTokenMs: 538,
     }),
     makeSpan({
       traceId: 'trace-1',

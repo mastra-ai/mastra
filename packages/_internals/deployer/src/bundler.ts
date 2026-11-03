@@ -79,6 +79,7 @@ export interface IBundler {
     options: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void>;
   prepare(outputDirectory: string): Promise<void>;
+  setConfigEntryFile?(entryFile: string | undefined): void;
   writePackageJson(outputDirectory: string, dependencies: Map<string, string>): Promise<void>;
   lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void>;
 }

@@ -446,6 +446,8 @@ export interface SignalSettings {
   experimentalCrossAgentSignals: boolean;
   /** Experimental: give the agent tools to create and manage `/schedules` schedules on its thread. */
   experimentalScheduleTools: boolean;
+  /** Experimental: give the agent Knowledge (search, read, write, pin) on Mastra Code's own storage. */
+  experimentalKnowledge: boolean;
   /** Poll interval for GitHub PR subscriptions. */
   githubPollIntervalMs: number;
 }
@@ -542,6 +544,7 @@ const DEFAULTS: GlobalSettings = {
     experimentalGithubSignals: false,
     experimentalCrossAgentSignals: false,
     experimentalScheduleTools: false,
+    experimentalKnowledge: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
   },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -568,6 +571,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
     left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
     left.experimentalScheduleTools === right.experimentalScheduleTools &&
+    left.experimentalKnowledge === right.experimentalKnowledge &&
     left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
@@ -758,6 +762,10 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalScheduleTools === 'boolean'
         ? raw.experimentalScheduleTools
         : DEFAULTS.signals.experimentalScheduleTools,
+    experimentalKnowledge:
+      typeof raw.experimentalKnowledge === 'boolean'
+        ? raw.experimentalKnowledge
+        : DEFAULTS.signals.experimentalKnowledge,
     githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }
@@ -1237,9 +1245,7 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
     let settingsChanged = false;
     // Persist the resolved preview line limit under its current key. Legacy quiet-mode keys are
     // left untouched so older Mastra Code instances that are still running keep working.
-    if (!isFiniteNumber(raw.preferences?.previewLines)) {
-      settingsChanged = true;
-    }
+    const persistPreviewLines = !isFiniteNumber(raw.preferences?.previewLines);
     // Migrate legacy omModelId → omModelOverride
     if (raw.models?.omModelId && !settings.models.omModelOverride) {
       settings.models.omModelOverride = raw.models.omModelId;
@@ -1252,6 +1258,22 @@ export function loadSettings(filePath: string = getSettingsPath()): GlobalSettin
 
     if (settingsChanged) {
       saveSettings(settings, filePath);
+    } else if (persistPreviewLines) {
+      // Add only the preview key so a sparse settings file isn't expanded with every default.
+      // Best effort: an unwritable file still loads with the resolved value in memory.
+      const rawPreferences = raw.preferences && typeof raw.preferences === 'object' ? raw.preferences : {};
+      try {
+        writeFileAtomically(
+          filePath,
+          JSON.stringify(
+            { ...raw, preferences: { ...rawPreferences, previewLines: settings.preferences.previewLines } },
+            null,
+            2,
+          ),
+        );
+      } catch {
+        // Keep the loaded settings.
+      }
     }
 
     return rememberLoadedSettings(settings);

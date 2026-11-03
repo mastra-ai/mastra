@@ -1,6 +1,9 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { rangeBeforeZoom, rememberZoom } from '../lib/zoom-memory';
+import type { ZoomMemory } from '../lib/zoom-memory';
 import {
   OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
+  OBSERVABILITY_LIST_SORT_FIELDS,
   readObservabilityListDates,
   readObservabilityListFilters,
   readObservabilityListSort,
@@ -8,13 +11,12 @@ import {
   writeObservabilityListFilters,
   writeObservabilityListSort,
 } from '../observability-list-url-state';
-import type { ObservabilityListDates } from '../observability-list-url-state';
+import type { ObservabilityListDates, ObservabilityListSort } from '../observability-list-url-state';
 import { recoveryRefetchInterval } from '@/domains/observability/list-polling';
 import { resolveTracesDateWindow } from '@/domains/traces/components/traces-explorer/traces-explorer-actions';
 import { resolveTraceQueryTimeRange } from '@/domains/traces/trace-query-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '@/domains/traces/trace-query-filters';
 import type { TraceDatePreset } from '@/domains/traces/types';
-import type { DataListSort } from '@/ds/components/DataList/data-list-sortable-top-cell';
 import type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
 
 /**
@@ -44,16 +46,24 @@ function useListSearchParams(url: ObservabilityListUrlState | undefined): Observ
 /**
  * The time range, filter and sort state of a spans or threads list, kept in the host's URL (same
  * date, sort and group params as /traces) so it survives a reload and can be shared. Without `url`
- * the state lives in memory.
+ * the state lives in memory. A sort on a field outside `sortFields` reads as start time, newest first.
+ * `defaultDatePreset` is the range shown when the URL names none (last 7 days unless the host differs);
+ * it is left out of the URL like any default.
  */
-export function useObservabilityListFilters(url?: ObservabilityListUrlState) {
+export function useObservabilityListFilters<F extends string = 'startedAt'>(
+  url?: ObservabilityListUrlState,
+  {
+    sortFields,
+    defaultDatePreset = OBSERVABILITY_LIST_DEFAULT_DATE_PRESET,
+  }: { sortFields?: readonly F[]; defaultDatePreset?: TraceDatePreset } = {},
+) {
   const { searchParams, setSearchParams } = useListSearchParams(url);
 
   // Decoded values keep their identity while unrelated params (e.g. the open row) change.
-  const datesKey = JSON.stringify(readObservabilityListDates(searchParams));
+  const datesKey = JSON.stringify(readObservabilityListDates(searchParams, defaultDatePreset));
   const filtersKey = JSON.stringify(readObservabilityListFilters(searchParams));
   const { datePreset, dateFrom, dateTo } = useMemo(
-    () => readObservabilityListDates(searchParams),
+    () => readObservabilityListDates(searchParams, defaultDatePreset),
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-read when the date params change
     [datesKey],
   );
@@ -62,7 +72,14 @@ export function useObservabilityListFilters(url?: ObservabilityListUrlState) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-read when the filter params change
     [filtersKey],
   );
-  const sort: DataListSort = readObservabilityListSort(searchParams);
+  const urlSort = readObservabilityListSort<F | 'startedAt'>(
+    searchParams,
+    sortFields ?? OBSERVABILITY_LIST_SORT_FIELDS,
+  );
+  const sort = useMemo<ObservabilityListSort<F | 'startedAt'>>(
+    () => ({ field: urlSort.field, direction: urlSort.direction }),
+    [urlSort.field, urlSort.direction],
+  );
 
   const fromMs = dateFrom?.getTime();
   const toMs = dateTo?.getTime();
@@ -93,25 +110,49 @@ export function useObservabilityListFilters(url?: ObservabilityListUrlState) {
     setSearchParams(next, { replace: true });
   };
   const updateDates = (change: (current: ObservabilityListDates) => ObservabilityListDates) =>
-    update(next => writeObservabilityListDates(next, change(readObservabilityListDates(next))));
+    update(next =>
+      writeObservabilityListDates(next, change(readObservabilityListDates(next, defaultDatePreset)), defaultDatePreset),
+    );
+
+  // Not URL state: a shared or reloaded link has no zoom to undo.
+  const zoomMemory = useRef<ZoomMemory | undefined>(undefined);
+  // A range picked by hand drops the zoom memory, even one that matches the zoomed bounds.
+  const pickDates = (change: (current: ObservabilityListDates) => ObservabilityListDates) => {
+    zoomMemory.current = undefined;
+    updateDates(change);
+  };
 
   // Switching to `custom` keeps the current dates so the picker opens on them; any other preset drops them.
   const onDatePresetChange = (preset: TraceDatePreset) =>
-    updateDates(current => (preset === 'custom' ? { ...current, datePreset: preset } : { datePreset: preset }));
+    pickDates(current => (preset === 'custom' ? { ...current, datePreset: preset } : { datePreset: preset }));
   // The picker can report a date right after switching away from `custom`; those are ignored.
   const onDateChange = (date: Date | undefined, end: 'from' | 'to') =>
-    updateDates(current => {
+    pickDates(current => {
       if (current.datePreset !== 'custom') return current;
       return end === 'from' ? { ...current, dateFrom: date } : { ...current, dateTo: date };
     });
   const onDateRangeChange = (from: Date | undefined, to: Date | undefined) =>
-    updateDates(current => (current.datePreset === 'custom' ? { ...current, dateFrom: from, dateTo: to } : current));
+    pickDates(current => (current.datePreset === 'custom' ? { ...current, dateFrom: from, dateTo: to } : current));
+  /** Narrows the range to a histogram selection, remembering the range to return to on reset. */
+  const onZoom = (from: Date, to: Date) =>
+    updateDates(current => {
+      zoomMemory.current = rememberZoom(zoomMemory.current, current, from, to);
+      return { datePreset: 'custom', dateFrom: from, dateTo: to };
+    });
+  /** Undoes the last histogram zoom, or switches to `defaultPreset` when there is none to undo. */
+  const onDateReset = (defaultPreset: TraceDatePreset) =>
+    updateDates(current => {
+      const before = rangeBeforeZoom(zoomMemory.current, current);
+      zoomMemory.current = undefined;
+      return before ?? { datePreset: defaultPreset };
+    });
   const onFiltersChange = (nextTokens: TraceFilterToken[], nextGroups: TraceFilterGroup[]) =>
     update(next => writeObservabilityListFilters(next, { tokens: nextTokens, groups: nextGroups }));
-  const setSort = (direction: DataListSort) => update(next => writeObservabilityListSort(next, direction));
+  const setSort = (next: ObservabilityListSort<F | 'startedAt'>) =>
+    update(params => writeObservabilityListSort(params, next));
 
   const contentFiltersApplied = tokens.length > 0 || groups.length > 0;
-  const filtersApplied = contentFiltersApplied || datePreset !== OBSERVABILITY_LIST_DEFAULT_DATE_PRESET;
+  const filtersApplied = contentFiltersApplied || datePreset !== defaultDatePreset;
 
   return {
     datePreset,
@@ -127,6 +168,8 @@ export function useObservabilityListFilters(url?: ObservabilityListUrlState) {
     onDatePresetChange,
     onDateChange,
     onDateRangeChange,
+    onZoom,
+    onDateReset,
     onFiltersChange,
     contentFiltersApplied,
     filtersApplied,

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { renderHook } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { act, renderHook } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 
 import { useRevealedParts } from './message-reveal';
 
@@ -23,5 +23,20 @@ describe('useRevealedParts', () => {
     const { result } = renderHook(() => useRevealedParts(parts, true));
 
     expect(result.current).toEqual([]);
+  });
+
+  it("hands back the caller's own parts once a streamed message is fully revealed", () => {
+    vi.useFakeTimers();
+    try {
+      const { result, rerender } = renderHook(({ streaming }) => useRevealedParts(parts, streaming), {
+        initialProps: { streaming: true },
+      });
+      rerender({ streaming: false });
+      act(() => void vi.advanceTimersByTime(5000));
+
+      expect(result.current).toBe(parts);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

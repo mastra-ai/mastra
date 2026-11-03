@@ -647,6 +647,110 @@ export function registerApiCommand(program: CommanderCommand): void {
     routePlacement: 'origin',
   });
 
+  const factoryBoard = factory
+    .command('board')
+    .description("Manage a Factory project's boards; built-in and app boards are read-only");
+  addAction(factoryBoard, 'get', FACTORY_API_ROUTE_CATALOG.boardGet, {
+    description: "Get a board's definition and, for a board the project stored, its revision",
+    routePlacement: 'origin',
+  });
+  addAction(factoryBoard, 'create', FACTORY_API_ROUTE_CATALOG.boardCreate, {
+    description: 'Create a board on a Factory project',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Create a board with a resting, a working and a terminal phase',
+        command: `mastra api factory board create <project-id> '{"key":"bugs","name":"Bugs","phases":[{"key":"reported","name":"Reported","kind":"resting"},{"key":"fixing","name":"Fixing","kind":"working","runner":{"context":"work"}},{"key":"fixed","name":"Fixed","kind":"terminal"}]}'`,
+      },
+    ],
+  });
+  addAction(factoryBoard, 'update', FACTORY_API_ROUTE_CATALOG.boardReplace, {
+    description: "Replace a stored board's definition using its expected revision",
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryBoard, 'delete', FACTORY_API_ROUTE_CATALOG.boardDelete, {
+    description: 'Delete a stored board that has no cards, using its expected revision',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Delete a board at revision 2',
+        command: `mastra api factory board delete <project-id> bugs '{"expectedRevision":2}'`,
+      },
+    ],
+  });
+
+  addAction(factory, 'skills', FACTORY_API_ROUTE_CATALOG.skillList, {
+    description: "List Factory skills; pass a projectId to include that project's edits",
+    input: 'optional',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: "List skills with a project's edits",
+        command: `mastra api factory skills '{"projectId":"<project-id>"}'`,
+      },
+    ],
+  });
+
+  const factorySkill = factory
+    .command('skill')
+    .description("Edit a Factory project's skills; organization admins only");
+  addAction(factorySkill, 'update', FACTORY_API_ROUTE_CATALOG.skillOverrideSave, {
+    description: 'Save an edited SKILL.md for one Factory project; the frontmatter name must match the skill name',
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Edit the factory-plan skill for one project',
+        command: `mastra api factory skill update <project-id> factory-plan '{"content":"---\\nname: factory-plan\\ndescription: Our planning rules\\n---\\n\\n# Plan\\n"}'`,
+      },
+    ],
+  });
+  addAction(factorySkill, 'revert', FACTORY_API_ROUTE_CATALOG.skillOverrideRevert, {
+    description: "Revert a Factory project's edit so the skill uses its original SKILL.md",
+    routePlacement: 'origin',
+  });
+
+  const factoryIntakeRoute = factory
+    .command('intake-route')
+    .description("Manage a Factory project's intake routes: where new cards land and which wait for a person");
+  addAction(factoryIntakeRoute, 'list', FACTORY_API_ROUTE_CATALOG.intakeRouteList, {
+    description: "List a project's intake routes in order, and what applies when none matches",
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeRoute, 'get', FACTORY_API_ROUTE_CATALOG.intakeRouteGet, {
+    description: 'Get an intake route',
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeRoute, 'create', FACTORY_API_ROUTE_CATALOG.intakeRouteCreate, {
+    description: "Add an intake route at the end of a project's routes",
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Send issues from trusted authors straight to Triage',
+        command: `mastra api factory intake-route create <project-id> '{"name":"Trusted to Triage","when":{"operator":"AND","conditions":[{"field":"author.trusted","operator":"equals","value":true}]},"target":{"boardKey":"work","phaseKey":"triage"}}'`,
+      },
+    ],
+  });
+  addAction(factoryIntakeRoute, 'update', FACTORY_API_ROUTE_CATALOG.intakeRouteUpdate, {
+    description: 'Change fields of an intake route using its expected revision',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeRoute, 'delete', FACTORY_API_ROUTE_CATALOG.intakeRouteDelete, {
+    description: 'Delete an intake route using its expected revision',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeRoute, 'reorder', FACTORY_API_ROUTE_CATALOG.intakeRouteReorder, {
+    description: 'Set the order of every intake route of a project',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {
     description: 'Get Factory project metrics',
     input: 'optional',
