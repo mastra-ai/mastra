@@ -1,5 +1,6 @@
 import type { DataMessagePart } from '../tool-card';
 import { isRecord } from '@/domains/chat/messages/signal-data';
+import type { ToolCallExit } from '@/ds/components/ai/tool-call';
 
 interface WorkspaceResource {
   id?: string;
@@ -43,4 +44,16 @@ export function workspaceMetadata(
   toolCallId: string,
 ): WorkspaceMetadata | undefined {
   return toolDataParts(dataParts, 'workspace-metadata', toolCallId)[0]?.data;
+}
+
+export interface SandboxExit extends ToolCallExit {
+  executionTimeMs?: number;
+}
+
+export function sandboxExit(
+  dataParts: ReadonlyArray<DataMessagePart> | undefined,
+  toolCallId: string,
+): SandboxExit | undefined {
+  const exit = toolDataParts(dataParts, 'sandbox-exit', toolCallId)[0]?.data;
+  return typeof exit?.exitCode === 'number' ? exit : undefined;
 }

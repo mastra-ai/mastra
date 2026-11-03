@@ -33,13 +33,14 @@ describe('Factory tool body', () => {
     });
   });
 
-  describe('when an edit succeeds', () => {
-    it('shows the change without the redundant success result', async () => {
-      renderWithProviders(<ToolCard tool={editTool} />);
+  describe('when an edit succeeds with diagnostics', () => {
+    it('shows what the edit reported beside the change', async () => {
+      const result = 'File updated\n\nLSP Diagnostics:\nerror TS2322 at line 1';
+      renderWithProviders(<ToolCard tool={{ ...editTool, result }} />);
       await userEvent.click(screen.getByRole('button', { name: /Edit/ }));
 
       expect(screen.getByRole('group', { name: 'File change' })).toBeVisible();
-      expect(screen.queryByText('File updated')).not.toBeInTheDocument();
+      expect(screen.getByText(/error TS2322 at line 1/)).toBeVisible();
     });
   });
 

@@ -177,7 +177,7 @@ export const MessageRow = memo(function MessageRow({
                 steps={members.map(member => ({
                   toolName: member.toolName,
                   args: member.input,
-                  status: badgeStatus(member.state, isRunning),
+                  status: badgeStatus(member, dataParts, isRunning),
                   hasResult: isSettledState(member.state),
                 }))}
               >

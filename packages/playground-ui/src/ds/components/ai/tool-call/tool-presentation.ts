@@ -98,8 +98,12 @@ function withoutCdPrefix(command: string): string {
   return command.replace(/^\s*cd\s+(?:'[^']*'|"[^"]*"|[^\s&|;]+)\s*&&\s*/, '') || command;
 }
 
+function toolStyle(toolName: string): ToolStyle | undefined {
+  return TOOL_STYLES[toolName.replace(/^mastra_workspace_/, '')];
+}
+
 export function presentTool(toolName: string, args: unknown): ToolPresentation {
-  const style = TOOL_STYLES[toolName.replace(/^mastra_workspace_/, '')];
+  const style = toolStyle(toolName);
   if (!style) return { pose: 'tool', icon: agentGlyph('tool'), label: humanize(toolName) };
 
   const dressed = { pose: style.pose, icon: agentGlyph(style.pose), label: style.label };
@@ -150,16 +154,9 @@ export function hasToolArguments(input: ToolArgumentsInput): boolean {
   return Boolean(toolEdit(input.toolName, input.args) || visibleToolArgumentsText(input));
 }
 
-export interface CommandOutputInput {
-  streamed: string;
-  result?: string;
-  failed: boolean;
-}
-
-export function commandOutputText({ streamed, result, failed }: CommandOutputInput): string | undefined {
-  // Only the result carries the exit code and any error.
-  if (failed && result) return result;
-  return streamed || result;
+/** Only a command's own exit is its outcome: `kill_process` and `get_process_output` report another process's. */
+export function exitedWithFailure(toolName: string, exitCode: number | undefined): boolean {
+  return toolStyle(toolName)?.isCommand === true && exitCode !== undefined && exitCode !== 0;
 }
 
 /** Task tools draw in the docked task list, never as a transcript row. */

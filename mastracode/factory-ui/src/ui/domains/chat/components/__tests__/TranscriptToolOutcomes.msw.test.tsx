@@ -108,6 +108,25 @@ describe('Transcript tool outcomes', () => {
       expect(within(line).getByRole('img', { name: 'Failed' })).toBeVisible();
     });
 
+    it('says on its row which code it exited with, and nothing on the clean one beside it', async () => {
+      const { entries } = createInitialTranscript({
+        messages: [
+          assistant('step', [
+            ran('ls', 'execute_command', { command: 'ls' }, 'README.md\n\nExit code: 0'),
+            exited('ls', { exitCode: 0, success: true }),
+            gitStatus,
+            gitStatusExit,
+          ]),
+        ],
+      });
+      renderEntries(entries);
+
+      await userEvent.click(within(screen.getByRole('group', { name: 'Ran commands' })).getAllByRole('button')[0]);
+
+      const rows = screen.getAllByRole('group', { name: 'Tool: execute_command' });
+      expect(rows.map(row => within(row).queryByText(/^exit /)?.textContent)).toEqual([undefined, 'exit 128']);
+    });
+
     const survivingStart = {
       type: 'tool_start',
       toolCallId: 'git',

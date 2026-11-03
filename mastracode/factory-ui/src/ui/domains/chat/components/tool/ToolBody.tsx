@@ -1,18 +1,11 @@
-import {
-  ToolCallArguments,
-  ToolCallCommand,
-  ToolCallOutput,
-  commandOutputText,
-  hasToolArguments,
-  stringifyToolValue,
-  stripSerializedAnsi,
-  toolEdit,
-} from '@mastra/playground-ui/components/ai/tool-call';
+import { ToolCallBody, toolCallHasBody } from '@mastra/playground-ui/components/ai/tool-call';
+import type { ToolCallView } from '@mastra/playground-ui/components/ai/tool-call';
 
 import { KNOWLEDGE_TOOLS, knowledgeCard } from '@mastra/playground-ui/domains/chat/knowledge';
 
 import { useEffect, useRef, useState } from 'react';
 
+import { toolCallStatus } from '../../services/transcript';
 import type { ToolCall } from '../../services/transcript';
 
 /** The PNG a finished `browser_screenshot` returned, as an image URL. */
@@ -29,15 +22,20 @@ export function toolKnowledgeCard(tool: ToolCall) {
   return knowledgeCard(tool.toolName, tool.args, tool.result) ?? undefined;
 }
 
-function toolResultText(tool: ToolCall): string | undefined {
-  if (tool.status === 'running' || tool.result === undefined || tool.result === null) return undefined;
-  return stripSerializedAnsi(stringifyToolValue(tool.result)) || undefined;
+function toolCallView(tool: ToolCall, command: string | undefined): ToolCallView {
+  return {
+    toolName: tool.toolName,
+    args: tool.args,
+    argsText: tool.argsText,
+    status: toolCallStatus(tool.status),
+    command,
+    output: tool.output,
+    result: tool.result,
+  };
 }
 
 export function toolHasBody(tool: ToolCall, command: string | undefined): boolean {
-  if (toolKnowledgeCard(tool)) return true;
-  if (command !== undefined || tool.output) return true;
-  return hasToolArguments(tool) || toolResultText(tool) !== undefined;
+  return Boolean(toolKnowledgeCard(tool)) || toolCallHasBody(toolCallView(tool, command));
 }
 
 /**
@@ -87,41 +85,11 @@ function Screenshot({ src }: { src: string }) {
 }
 
 export function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
-  const edit = toolEdit(tool.toolName, tool.args);
-  const resultText = toolResultText(tool);
   const screenshot = screenshotSrc(tool);
-
   if (screenshot) return <Screenshot src={screenshot} />;
 
   const knowledge = toolKnowledgeCard(tool);
   if (knowledge) return <>{knowledge.body}</>;
 
-  if (edit) {
-    return (
-      <>
-        <ToolCallArguments toolName={tool.toolName} args={tool.args} />
-        {tool.status === 'error' && resultText !== undefined && (
-          <ToolCallOutput text={resultText} maxLength={800} error />
-        )}
-      </>
-    );
-  }
-
-  if (command) {
-    const output = commandOutputText({ streamed: tool.output, result: resultText, failed: tool.status === 'error' });
-    return (
-      <>
-        <ToolCallCommand command={command} />
-        {output && <ToolCallOutput text={output} />}
-      </>
-    );
-  }
-
-  return (
-    <>
-      <ToolCallArguments toolName={tool.toolName} args={tool.args} argsText={tool.argsText} />
-      {tool.output && <ToolCallOutput text={tool.output} />}
-      {resultText !== undefined && <ToolCallOutput text={resultText} maxLength={800} />}
-    </>
-  );
+  return <ToolCallBody {...toolCallView(tool, command)} />;
 }

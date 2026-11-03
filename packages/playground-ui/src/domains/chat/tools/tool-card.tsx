@@ -105,7 +105,7 @@ export const ToolCardInner = ({
     toolName,
     toolCallId,
   );
-  const status = badgeStatus(state, isRunning);
+  const status = badgeStatus({ toolName, toolCallId, state }, dataParts, isRunning);
   // Any deferred call, whatever its output looks like: live it holds the MCP task's progress records,
   // after a reload the "Background task started" placeholder.
   const deferredRequest = useDeferredInputRequest(
