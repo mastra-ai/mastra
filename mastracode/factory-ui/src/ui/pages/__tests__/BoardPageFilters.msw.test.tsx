@@ -38,7 +38,6 @@ const workItem = (id: string, board: 'work' | 'review', metadata: Record<string,
   triageType: null,
   acceptedAt: null,
   commentCount: 0,
-  feedActivityAt: null,
   revision: 1,
   createdAt: now,
   updatedAt: now,
@@ -249,8 +248,9 @@ describe('BoardPage filters', () => {
     await waitFor(() => expect(screen.queryByText('Card both')).not.toBeInTheDocument());
     expect(screen.getByText('Card bug')).toBeInTheDocument();
     expect(candidateTitles()).toEqual([]);
+    // Work holds pull request cards too, so it filters by who review was requested from.
     await openPropertiesMenu(user, MENU);
-    expect(screen.queryByRole('menuitem', { name: /^Review requested/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^Review requested/ })).toBeInTheDocument();
     await closePropertiesMenus(user);
   });
 

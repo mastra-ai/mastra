@@ -9,7 +9,7 @@ import { INTAKE_ROUTE_METADATA_KEY, resolveIntakePlacement } from '../boards/int
 import type { IntakeRoutesReader } from '../boards/intake-routing.js';
 import type { FactoryTransitionRequest, FactoryTransitionService } from '../rules/transition-service.js';
 import type { EmitAuditInput } from '../storage/domains/audit/domain.js';
-import type { CreateWorkItemInput, WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { CreateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 
 /** Records one audit event for the caller; routes bind it to the request, tools to the session's person. */
 export type FactoryAuditEmit = (input: EmitAuditInput) => Promise<void>;
@@ -18,9 +18,9 @@ type TransitionResult = Awaited<ReturnType<FactoryTransitionService['transition'
 
 export type CreateFactoryWorkItemResult =
   /** A new card, entered into its board's first phase and audited. */
-  | { status: 'created'; item: WorkItemRow }
+  | { status: 'created'; item: Card }
   /** The source key matched an existing card, which was updated instead (the caller audits the patch). */
-  | { status: 'reused'; item: WorkItemRow }
+  | { status: 'reused'; item: Card }
   | {
       status: 'refused';
       code: 'invalid_board' | 'governed_transition_required' | 'factory_transitions_unavailable';
@@ -76,8 +76,7 @@ export async function createFactoryWorkItem({
           boards,
         )
       : undefined;
-  const boardId =
-    placement?.board ?? input.board ?? (input.externalSource?.type === 'pull-request' ? 'review' : 'work');
+  const boardId = placement?.board ?? input.board ?? 'work';
   const board = boards.get(boardId);
   if (!board) return { status: 'refused', code: 'invalid_board', message: `Board '${boardId}' is not installed.` };
   const initialStages = input.stages ?? [board.initialPhase];

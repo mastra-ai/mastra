@@ -37,6 +37,10 @@ export interface KnowledgePagePayload {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
+  /** Pages (and, for a scope, child scopes) directly under this one; tree levels only, from servers that count them. */
+  childCount?: number;
+  /** The server stopped counting child scopes at its scan limit, so `childCount` is a lower bound. */
+  childCountCapped?: boolean;
 }
 
 export interface KnowledgeNotePayload {
@@ -89,12 +93,13 @@ export interface KnowledgePageActivityPayload {
 /**
  * A graph edge between two pages. `parent`: tree containment (parent → child).
  * `mention`: notes on `source` mention `target`; `count` is how many.
+ * `link`: the body of `source` links `target` with `[[ref]]`; `count` is how many times.
  * `grant`: the `source` scope's holders get `role` on the `target` scope.
  */
 export interface KnowledgePageEdge {
   source: string;
   target: string;
-  kind: 'parent' | 'mention' | 'grant';
+  kind: 'parent' | 'mention' | 'link' | 'grant';
   count?: number;
   role?: KnowledgeRolePayload;
 }

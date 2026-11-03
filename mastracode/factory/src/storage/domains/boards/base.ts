@@ -148,7 +148,30 @@ export const DEFAULT_INTAKE_ROUTE: StoredIntakeRouteInput = {
   target: { boardKey: 'work', phaseKey: 'intake' },
 };
 
-/** Who `DEFAULT_INTAKE_ROUTE` is created and last updated by. */
+/**
+ * Pull requests are reviewed in Work › PR review. It comes after `DEFAULT_INTAKE_ROUTE`, so a
+ * pull request from outside the write-access circle still waits in Intake for a person.
+ */
+export const PULL_REQUEST_INTAKE_ROUTE: StoredIntakeRouteInput = {
+  name: 'Pull requests go to PR review',
+  when: { operator: 'AND', conditions: [{ field: 'source.kind', operator: 'equals', value: 'pull_request' }] },
+  target: { boardKey: 'work', phaseKey: 'pr-review' },
+};
+
+/**
+ * The routes Factory adds to a project, in order, each under a key that never changes. A project
+ * gets each one once: a new project gets them all, a project set up earlier gets a route added
+ * since at the end of its list, and a route an admin deleted stays deleted.
+ */
+export const DEFAULT_INTAKE_ROUTES: readonly { key: string; route: StoredIntakeRouteInput }[] = [
+  { key: 'outside-authors', route: DEFAULT_INTAKE_ROUTE },
+  { key: 'pull-requests', route: PULL_REQUEST_INTAKE_ROUTE },
+];
+
+/** The defaults a project whose lock row predates `seeded_defaults` was set up with. */
+const ORIGINAL_DEFAULT_KEYS = ['outside-authors'];
+
+/** Who the default intake routes are created and last updated by. */
 export const DEFAULT_INTAKE_ROUTE_ACTOR = 'factory';
 
 export class StoredBoardError extends Error {
@@ -208,6 +231,20 @@ interface IntakeRouteRow extends Record<string, unknown> {
   created_at: Date;
   updated_by: string;
   updated_at: Date;
+}
+
+interface IntakeRouteLockRow extends Record<string, unknown> {
+  /** Keys of the `DEFAULT_INTAKE_ROUTES` added to the project; null on rows written before the list. */
+  seeded_defaults: string[] | null;
+}
+
+function seededDefaults(lock: IntakeRouteLockRow): string[] {
+  return lock.seeded_defaults ?? ORIGINAL_DEFAULT_KEYS;
+}
+
+function missingDefaults(lock: IntakeRouteLockRow): (typeof DEFAULT_INTAKE_ROUTES)[number][] {
+  const seeded = new Set(seededDefaults(lock));
+  return DEFAULT_INTAKE_ROUTES.filter(({ key }) => !seeded.has(key));
 }
 
 const BOARDS = 'factory_boards';
@@ -361,7 +398,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     });
   }
 
-  /** The project's intake routes in the order they are tried; a new project gets `DEFAULT_INTAKE_ROUTE` first. */
+  /** The project's intake routes in the order they are tried; Factory's `DEFAULT_INTAKE_ROUTES` are added once each. */
   async listIntakeRoutes(scope: StoredBoardScope): Promise<StoredIntakeRouteRecord[]> {
     await this.#ensureIntakeRoutes(scope);
     return (await readIntakeRoutes(this.ops, scope)).map(toIntakeRouteRecord);
@@ -462,22 +499,38 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
   }
 
   /**
-   * Creates the project's route lock row (see `FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA`) together with
-   * `DEFAULT_INTAKE_ROUTE`, once. The lock row marks the project's routes as set up, so a project
-   * whose admin deleted the default route doesn't get it back. Runs before, never inside, a write's
-   * transaction: the lock taken there must always be an update.
+   * Creates the project's route lock row (see `FACTORY_INTAKE_ROUTE_LOCKS_SCHEMA`) and adds each of
+   * `DEFAULT_INTAKE_ROUTES` the row doesn't list as added yet, after the project's routes. The row
+   * records every default it added, so a project whose admin deleted one doesn't get it back. Runs
+   * before, never inside, a write's transaction: the lock taken there must always be an update.
    */
   async #ensureIntakeRoutes(scope: StoredBoardScope): Promise<void> {
-    if (await this.ops.findOne(INTAKE_ROUTE_LOCKS, scopeWhere(scope))) return;
+    const lock = await this.ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope));
+    if (lock && missingDefaults(lock).length === 0) return;
     await this.#transact(async ops => {
-      // A racing first read inserted the lock row first: this retry finds it and stops.
-      if (await ops.findOne(INTAKE_ROUTE_LOCKS, scopeWhere(scope))) return;
-      await ops.insertOne(INTAKE_ROUTE_LOCKS, { ...scopeWhere(scope), locked_at: new Date() });
-      await insertIntakeRoute(ops, scope, {
-        id: randomUUID(),
-        input: DEFAULT_INTAKE_ROUTE,
-        position: 0,
-        actor: DEFAULT_INTAKE_ROUTE_ACTOR,
+      if (await ops.findOne(INTAKE_ROUTE_LOCKS, scopeWhere(scope))) await lockIntakeRoutes(ops, scope);
+      // A racing first read inserted the lock row first: this one fails on the unique index and
+      // retries, taking the lock above.
+      else
+        await ops.insertOne(INTAKE_ROUTE_LOCKS, { ...scopeWhere(scope), locked_at: new Date(), seeded_defaults: [] });
+      // Read under the lock: a racing seeder that committed first already added what it listed.
+      const current = (await ops.findOne<IntakeRouteLockRow>(INTAKE_ROUTE_LOCKS, scopeWhere(scope)))!;
+      const missing = missingDefaults(current);
+      if (missing.length === 0) return;
+      const rows = await readIntakeRoutes(ops, scope);
+      let position = rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
+      for (const { route } of missing) {
+        // A project at the limit keeps its own routes; the default counts as added all the same.
+        if (position >= MAX_INTAKE_ROUTES) break;
+        await insertIntakeRoute(ops, scope, {
+          id: randomUUID(),
+          input: route,
+          position: position++,
+          actor: DEFAULT_INTAKE_ROUTE_ACTOR,
+        });
+      }
+      await ops.updateMany(INTAKE_ROUTE_LOCKS, scopeWhere(scope), {
+        seeded_defaults: [...seededDefaults(current), ...missing.map(({ key }) => key)],
       });
     });
   }

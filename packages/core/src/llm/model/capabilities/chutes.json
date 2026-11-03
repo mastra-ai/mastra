@@ -39,7 +39,22 @@
     "zai-org/GLM-5.2-TEE"
   ],
   "reasoning": {
+    "Qwen/Qwen3.5-397B-A17B-TEE": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.6-27B-TEE": [
+      {
+        "type": "toggle"
+      }
+    ],
     "google/gemma-4-31B-turbo-TEE": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/Kimi-K3-TEE": [
       {
         "type": "toggle"
       }
@@ -49,7 +64,12 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/Kimi-K3-TEE": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731-TEE": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.2-TEE": [
       {
         "type": "toggle"
       }
@@ -60,26 +80,6 @@
       }
     ],
     "zai-org/GLM-5.1-TEE": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3.2-TEE": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731-TEE": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.6-27B-TEE": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.5-397B-A17B-TEE": [
       {
         "type": "toggle"
       }
