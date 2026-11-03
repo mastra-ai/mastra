@@ -30,6 +30,11 @@ describe('stripCitationMarkup', () => {
     // Lone private-use characters (e.g. icon-font glyphs) must survive.
     expect(stripCitationMarkup('icon \uE200 and \uE201 here')).toBe('icon \uE200 and \uE201 here');
   });
+
+  it('requires at least one source id but accepts any marker family', () => {
+    expect(stripCitationMarkup('a\uE200cite\uE201b')).toBe('a\uE200cite\uE201b');
+    expect(stripCitationMarkup('a\uE200filecite\uE202turn0file1\uE201b')).toBe('ab');
+  });
 });
 
 describe('stripCitationMarkupFromToolInput', () => {
@@ -69,6 +74,25 @@ describe('CitationMarkupStreamSanitizer', () => {
 
     expect(sanitizer.push('b', 'icon \uE200')).toBe('icon ');
     expect(sanitizer.push('b', ' next line\nmore')).toBe('\uE200 next line\nmore');
+  });
+
+  it('holds a long multi-source marker until it closes', () => {
+    const sanitizer = new CitationMarkupStreamSanitizer();
+    const marker = cite(...Array.from({ length: 40 }, (_, i) => `turn0search${i}`));
+    expect(marker.length).toBeGreaterThan(256);
+    const deltas = ['Answer.', ...(marker.match(/[\s\S]{1,50}/g) ?? []), ' End.'];
+    expect(pushAll(sanitizer, 'a', deltas)).toBe('Answer. End.');
+  });
+
+  it('strips JSON-escaped markers split across tool-input deltas', () => {
+    const sanitizer = new CitationMarkupStreamSanitizer({ json: true });
+    const json = '{"text":"Answer\\ue200cite\\ue202turn0search0\\ue202turn0search1\\ue201","path":"C:\\\\tmp\\nx\\"y"}';
+    const expected = '{"text":"Answer","path":"C:\\\\tmp\\nx\\"y"}';
+    for (const size of [1, 2, 3, 5, 7, 11]) {
+      const deltas = json.match(new RegExp(`[\\s\\S]{1,${size}}`, 'g')) ?? [];
+      expect(pushAll(sanitizer, `call-${size}`, deltas)).toBe(expected);
+    }
+    expect(JSON.parse(expected)).toEqual({ text: 'Answer', path: 'C:\\tmp\nx"y' });
   });
 
   it('tracks ids independently', () => {

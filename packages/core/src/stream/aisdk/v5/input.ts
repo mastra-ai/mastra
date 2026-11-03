@@ -54,7 +54,7 @@ export class AISDKV5InputStream extends MastraModelInput {
     const citationSanitizers = {
       'text-delta': new CitationMarkupStreamSanitizer(),
       'reasoning-delta': new CitationMarkupStreamSanitizer(),
-      'tool-input-delta': new CitationMarkupStreamSanitizer(),
+      'tool-input-delta': new CitationMarkupStreamSanitizer({ json: true }),
     } as const;
     const endChunkDeltaTypes = {
       'text-end': 'text-delta',
