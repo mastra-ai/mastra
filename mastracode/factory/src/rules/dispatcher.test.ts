@@ -1,3 +1,4 @@
+import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -4119,6 +4120,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.respondToToolSuspension).toHaveBeenCalledWith({
       resumeData: { action: 'approved' },
       toolCallId: 'call-plan',
+      requestContext: expect.any(RequestContext),
     });
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('succeeded');
   });
@@ -4258,6 +4260,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.respondToToolSuspension).toHaveBeenCalledWith({
       resumeData: { action: 'approved' },
       toolCallId: 'call-plan',
+      requestContext: expect.any(RequestContext),
     });
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
@@ -7320,6 +7323,7 @@ describe('board phase automation', () => {
         expect(session.respondToToolSuspension).toHaveBeenCalledWith({
           resumeData: { action: 'approved' },
           toolCallId: 'call-plan',
+          requestContext: expect.any(RequestContext),
         });
       } else {
         expect(session.respondToToolSuspension).not.toHaveBeenCalled();
