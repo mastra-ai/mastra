@@ -9,7 +9,7 @@ import * as pkg from 'empathic/package';
 import fsExtra, { copy, ensureDir, emptyDir, readJSON } from 'fs-extra/esm';
 import type { InputOptions, OutputOptions } from 'rolldown';
 import { glob } from 'tinyglobby';
-import { analyzeBundle } from '../build/analyze';
+import { analyzeBundle, analyzeBundleDeferringValidation } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions, getUnresolvedWorkspaceImport } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
 import { exactPathRegex, virtualModules } from '../build/rolldown';
@@ -669,10 +669,28 @@ export abstract class Bundler extends MastraBase implements IBundler {
       dynamicPackages: bundlerOptions.dynamicPackages,
     };
 
-    let analyzedBundleInfo;
+    const toAnalyzeError = (error: unknown): MastraError => {
+      if (error instanceof MastraError) {
+        return error;
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      return new MastraError(
+        {
+          id: 'DEPLOYER_BUNDLER_ANALYZE_FAILED',
+          text: `Failed to analyze Mastra application: ${message}`,
+          domain: ErrorDomain.DEPLOYER,
+          category: ErrorCategory.SYSTEM,
+        },
+        error,
+      );
+    };
+
+    let analyzedBundleInfo: Awaited<ReturnType<typeof analyzeBundle>>;
+    let validation: Promise<void>;
     try {
       const resolvedToolsPaths = await this.listToolsInputOptions(toolsPaths, entryProjectRoot);
-      analyzedBundleInfo = await analyzeBundle(
+      ({ validation, ...analyzedBundleInfo } = await analyzeBundleDeferringValidation(
         [serverFile, ...Object.values(additionalEntries), ...Object.values(resolvedToolsPaths)],
         mastraEntryFile,
         {
@@ -682,202 +700,216 @@ export abstract class Bundler extends MastraBase implements IBundler {
           bundlerOptions: internalBundlerOptions,
         },
         this.logger,
-      );
+      ));
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-
-      if (error instanceof MastraError) {
-        throw error;
-      }
-
-      throw new MastraError(
-        {
-          id: 'DEPLOYER_BUNDLER_ANALYZE_FAILED',
-          text: `Failed to analyze Mastra application: ${message}`,
-          domain: ErrorDomain.DEPLOYER,
-          category: ErrorCategory.SYSTEM,
-        },
-        error,
-      );
+      throw toAnalyzeError(error);
     }
 
-    const { workspaceRoot } = await getWorkspaceInformation({ dir: projectRoot, mastraEntryFile });
-    const sourceDependencyConstraints = await getSourceDependencyConstraints({
-      projectRoot: entryProjectRoot,
-      mastraEntryFile,
-      workspaceRoot,
-    });
-    const dependenciesToInstall = new Map<string, ExternalDependencyInfo>();
-    for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
-      if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
-        continue;
-      }
-
-      dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
-    }
-
-    // Workspace packages in `analyzedBundleInfo.dependencies` are compiled into the bundle, so only
-    // the ones still imported at runtime need a tarball and an install (#28303).
-    const initialWorkspaceDependencies = new Set<string>();
-    for (const dep of analyzedBundleInfo.externalDependencies.keys()) {
-      const pkgName = getPackageName(dep);
-      if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
-        initialWorkspaceDependencies.add(pkgName);
-      }
-    }
-
-    const transitiveWorkspaceDependencies = await collectTransitiveWorkspaceDependencies({
-      workspaceMap: analyzedBundleInfo.workspaceMap,
-      initialDependencies: initialWorkspaceDependencies,
-      logger: this.logger,
-    });
-
-    for (const [dep, packageSpec] of Object.entries(transitiveWorkspaceDependencies.resolutions)) {
-      dependenciesToInstall.set(dep, {
-        version: analyzedBundleInfo.workspaceMap.get(dep)?.version,
-        packageSpec,
-      });
-    }
+    // The validation processes only decide whether the build succeeds; nothing below depends on what they find. So
+    // packing and the final bundle run alongside them, and their failure replaces any later one, as when they ran first.
+    const validationFailure = validation.then(
+      () => undefined,
+      (error: unknown) => toAnalyzeError(error),
+    );
+    let packing: Promise<void> | undefined;
 
     try {
-      await this.writePackageJson(
-        join(outputDirectory, this.outputDir),
-        dependenciesToInstall,
-        transitiveWorkspaceDependencies.resolutions,
-      );
-      if (transitiveWorkspaceDependencies.usedWorkspacePackages.size > 0) {
-        await packWorkspaceDependencies({
-          workspaceMap: analyzedBundleInfo.workspaceMap,
-          usedWorkspacePackages: transitiveWorkspaceDependencies.usedWorkspacePackages,
-          bundleOutputDir: join(outputDirectory, this.outputDir),
-          logger: this.logger,
+      const { workspaceRoot } = await getWorkspaceInformation({ dir: projectRoot, mastraEntryFile });
+      const sourceDependencyConstraints = await getSourceDependencyConstraints({
+        projectRoot: entryProjectRoot,
+        mastraEntryFile,
+        workspaceRoot,
+      });
+      const dependenciesToInstall = new Map<string, ExternalDependencyInfo>();
+      for (const [dep, depInfo] of analyzedBundleInfo.externalDependencies) {
+        if (analyzedBundleInfo.workspaceMap.has(dep) || !isBareModuleSpecifier(dep)) {
+          continue;
+        }
+
+        dependenciesToInstall.set(dep, applySourceDependencyRange(dep, depInfo, sourceDependencyConstraints));
+      }
+
+      // Workspace packages in `analyzedBundleInfo.dependencies` are compiled into the bundle, so only
+      // the ones still imported at runtime need a tarball and an install (#28303).
+      const initialWorkspaceDependencies = new Set<string>();
+      for (const dep of analyzedBundleInfo.externalDependencies.keys()) {
+        const pkgName = getPackageName(dep);
+        if (pkgName && analyzedBundleInfo.workspaceMap.has(pkgName)) {
+          initialWorkspaceDependencies.add(pkgName);
+        }
+      }
+
+      const transitiveWorkspaceDependencies = await collectTransitiveWorkspaceDependencies({
+        workspaceMap: analyzedBundleInfo.workspaceMap,
+        initialDependencies: initialWorkspaceDependencies,
+        logger: this.logger,
+      });
+
+      for (const [dep, packageSpec] of Object.entries(transitiveWorkspaceDependencies.resolutions)) {
+        dependenciesToInstall.set(dep, {
+          version: analyzedBundleInfo.workspaceMap.get(dep)?.version,
+          packageSpec,
         });
       }
 
-      this.logger.info('Bundling Mastra application');
+      try {
+        await this.writePackageJson(
+          join(outputDirectory, this.outputDir),
+          dependenciesToInstall,
+          transitiveWorkspaceDependencies.resolutions,
+        );
+        if (transitiveWorkspaceDependencies.usedWorkspacePackages.size > 0) {
+          packing = packWorkspaceDependencies({
+            workspaceMap: analyzedBundleInfo.workspaceMap,
+            usedWorkspacePackages: transitiveWorkspaceDependencies.usedWorkspacePackages,
+            bundleOutputDir: join(outputDirectory, this.outputDir),
+            logger: this.logger,
+          });
+          // Awaited after the final bundle; this keeps an early failure from being reported as unhandled.
+          packing.catch(() => {});
+        }
 
-      const inputOptions: InputOptions = await this.getBundlerOptions(
-        serverFile,
-        mastraEntryFile,
-        analyzedBundleInfo,
-        toolsPaths,
-        internalBundlerOptions,
-        additionalEntries,
-        entryProjectRoot,
-      );
+        this.logger.info('Bundling Mastra application');
 
-      const unresolvedWorkspaceImports: Array<{ source: string }> = [];
+        const inputOptions: InputOptions = await this.getBundlerOptions(
+          serverFile,
+          mastraEntryFile,
+          analyzedBundleInfo,
+          toolsPaths,
+          internalBundlerOptions,
+          additionalEntries,
+          entryProjectRoot,
+        );
 
-      const bundler = await this.createBundler(
-        {
-          ...inputOptions,
-          logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
-          // Rolldown only reports circular dependencies when asked to.
-          checks: { ...inputOptions.checks, circularDependency: true },
-          onLog: (level, log) => {
-            if (level !== 'warn') {
-              return;
-            }
+        const unresolvedWorkspaceImports: Array<{ source: string }> = [];
 
-            const unresolvedWorkspaceDep = getUnresolvedWorkspaceImport(log, analyzedBundleInfo.workspaceMap);
-            if (unresolvedWorkspaceDep) {
-              unresolvedWorkspaceImports.push({ source: unresolvedWorkspaceDep });
-            }
-
-            if (log.code === 'CIRCULAR_DEPENDENCY') {
-              const ids = log.ids ?? [];
-              if (!ids.length || ids.every(id => id.includes('node_modules'))) {
+        const bundler = await this.createBundler(
+          {
+            ...inputOptions,
+            logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
+            // Rolldown only reports circular dependencies when asked to.
+            checks: { ...inputOptions.checks, circularDependency: true },
+            onLog: (level, log) => {
+              if (level !== 'warn') {
                 return;
               }
 
-              this.logger.warn('Circular dependency found', {
-                dependency: ids.map(id => relative(projectRoot, id)).join(' -> '),
-              });
-            }
+              const unresolvedWorkspaceDep = getUnresolvedWorkspaceImport(log, analyzedBundleInfo.workspaceMap);
+              if (unresolvedWorkspaceDep) {
+                unresolvedWorkspaceImports.push({ source: unresolvedWorkspaceDep });
+              }
+
+              if (log.code === 'CIRCULAR_DEPENDENCY') {
+                const ids = log.ids ?? [];
+                if (!ids.length || ids.every(id => id.includes('node_modules'))) {
+                  return;
+                }
+
+                this.logger.warn('Circular dependency found', {
+                  dependency: ids.map(id => relative(projectRoot, id)).join(' -> '),
+                });
+              }
+            },
           },
-        },
-        {
-          dir: bundleLocation,
-          // `#mastra` resolves to the entry file; its dependencies follow it into the same chunk.
-          codeSplitting: {
-            groups: [{ name: 'mastra', test: exactPathRegex(mastraEntryFile) }],
+          {
+            dir: bundleLocation,
+            // `#mastra` resolves to the entry file; its dependencies follow it into the same chunk.
+            codeSplitting: {
+              groups: [{ name: 'mastra', test: exactPathRegex(mastraEntryFile) }],
+            },
+            sourcemap: internalBundlerOptions.enableSourcemap,
           },
-          sourcemap: internalBundlerOptions.enableSourcemap,
-        },
-      );
+        );
 
-      await bundler.write();
+        await bundler.write();
 
-      if (unresolvedWorkspaceImports.length > 0) {
-        const importList = unresolvedWorkspaceImports.map(i => `  - ${i.source}`).join('\n');
-        throw new MastraError({
-          id: 'DEPLOYER_BUNDLER_UNRESOLVED_WORKSPACE_IMPORT',
-          text: `Workspace imports could not be resolved during bundling:\n${importList}\n\nThis means the analyzer did not capture these workspace subpath imports during the analysis phase. Try adding the package as a direct dependency of the app, or check the workspace configuration.`,
-          domain: ErrorDomain.DEPLOYER,
-          category: ErrorCategory.SYSTEM,
-        });
-      }
-      const toolImports: string[] = [];
-      const toolsExports: string[] = [];
-      Array.from(Object.keys(inputOptions.input || {}))
-        .filter(key => key.startsWith('tools/'))
-        .forEach((key, index) => {
-          const toolExport = `tool${index}`;
-          toolImports.push(`import * as ${toolExport} from './${key}.mjs';`);
-          toolsExports.push(toolExport);
-        });
+        if (unresolvedWorkspaceImports.length > 0) {
+          const importList = unresolvedWorkspaceImports.map(i => `  - ${i.source}`).join('\n');
+          throw new MastraError({
+            id: 'DEPLOYER_BUNDLER_UNRESOLVED_WORKSPACE_IMPORT',
+            text: `Workspace imports could not be resolved during bundling:\n${importList}\n\nThis means the analyzer did not capture these workspace subpath imports during the analysis phase. Try adding the package as a direct dependency of the app, or check the workspace configuration.`,
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.SYSTEM,
+          });
+        }
+        const toolImports: string[] = [];
+        const toolsExports: string[] = [];
+        Array.from(Object.keys(inputOptions.input || {}))
+          .filter(key => key.startsWith('tools/'))
+          .forEach((key, index) => {
+            const toolExport = `tool${index}`;
+            toolImports.push(`import * as ${toolExport} from './${key}.mjs';`);
+            toolsExports.push(toolExport);
+          });
 
-      await writeFile(
-        join(bundleLocation, 'tools.mjs'),
-        `${toolImports.join('\n')}
+        await writeFile(
+          join(bundleLocation, 'tools.mjs'),
+          `${toolImports.join('\n')}
 
 export const tools = [${toolsExports.join(', ')}]`,
-      );
-      this.logger.info('Bundling Mastra done');
+        );
+        this.logger.info('Bundling Mastra done');
 
-      this.logger.info('Copying public files');
-      await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
-      this.logger.info('Done copying public files');
+        const validationError = await validationFailure;
+        if (validationError) {
+          throw validationError;
+        }
+        await packing;
 
-      // For Software Factory projects, write a deterministic deployment marker
-      // after public assets (including the SPA) have been copied.
-      if (analyzedBundleInfo.projectType === 'factory') {
-        await this.writeFactoryMarker(outputDirectory);
-      }
+        this.logger.info('Copying public files');
+        await this.copyPublic(dirname(mastraEntryFile), outputDirectory);
+        this.logger.info('Done copying public files');
 
-      this.logger.info('Copying .npmrc file');
-      await this.copyDOTNPMRC({ outputDirectory, rootDir: projectRoot });
+        // For Software Factory projects, write a deterministic deployment marker
+        // after public assets (including the SPA) have been copied.
+        if (analyzedBundleInfo.projectType === 'factory') {
+          await this.writeFactoryMarker(outputDirectory);
+        }
 
-      this.logger.info('Done copying .npmrc file');
+        this.logger.info('Copying .npmrc file');
+        await this.copyDOTNPMRC({ outputDirectory, rootDir: projectRoot });
 
-      if (shouldSkipInstall()) {
-        this.logger.info('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
-      } else {
-        await this.installDependencies(
-          outputDirectory,
-          projectRoot,
-          transitiveWorkspaceDependencies.resolutions,
-          bundlerOptions.pnpmWorkspaceSettings,
+        this.logger.info('Done copying .npmrc file');
+
+        if (shouldSkipInstall()) {
+          this.logger.info('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
+        } else {
+          await this.installDependencies(
+            outputDirectory,
+            projectRoot,
+            transitiveWorkspaceDependencies.resolutions,
+            bundlerOptions.pnpmWorkspaceSettings,
+          );
+        }
+      } catch (caught) {
+        // No `pnpm pack` may outlive the build. Packing used to finish before the final bundle started, so its
+        // failure comes first.
+        const packFailure = await packing?.then(
+          () => undefined,
+          (packError: unknown) => packError ?? caught,
+        );
+        const error = packFailure ?? caught;
+        if (
+          error instanceof MastraError &&
+          (error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' || error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS')
+        ) {
+          throw error;
+        }
+
+        const message = error instanceof Error ? error.message : String(error);
+        throw new MastraError(
+          {
+            id: 'DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED',
+            text: `Failed during bundler bundle stage: ${message}`,
+            domain: ErrorDomain.DEPLOYER,
+            category: ErrorCategory.SYSTEM,
+          },
+          error,
         );
       }
     } catch (error) {
-      if (
-        error instanceof MastraError &&
-        (error.id === 'DEPLOYER_BUNDLER_FACTORY_UI_MISSING' || error.id === 'DEPLOYER_PNPM_IGNORED_BUILDS')
-      ) {
-        throw error;
-      }
-
-      const message = error instanceof Error ? error.message : String(error);
-      throw new MastraError(
-        {
-          id: 'DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED',
-          text: `Failed during bundler bundle stage: ${message}`,
-          domain: ErrorDomain.DEPLOYER,
-          category: ErrorCategory.SYSTEM,
-        },
-        error,
-      );
+      // Waits for the validation processes to exit, and reports their failure first, as when they ran first.
+      throw (await validationFailure) ?? error;
     }
   }
 

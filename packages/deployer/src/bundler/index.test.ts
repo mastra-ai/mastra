@@ -206,6 +206,98 @@ describe('Bundler.installDependencies', () => {
   });
 });
 
+describe('Bundler._bundle', () => {
+  class BuildBundler extends TestBundler {
+    finalBundleError?: Error;
+
+    build(entryFile: string, projectRoot: string) {
+      return this._bundle(entryFile, entryFile, { projectRoot, outputDirectory: join(projectRoot, '.mastra') });
+    }
+
+    protected createBundler(...args: Parameters<Bundler['createBundler']>) {
+      const error = this.finalBundleError;
+      if (!error) {
+        return super.createBundler(...args);
+      }
+      return Promise.resolve({ write: () => Promise.reject(error), close: () => Promise.resolve() });
+    }
+  }
+
+  /** An app whose bundled dependency throws while it loads, `validationDelay` ms after the validation process starts. */
+  async function createAppWithBrokenDependency(validationDelay = 0) {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'mastra-bundler-validation-'));
+    tempDirs.push(projectRoot);
+    const mastraDir = join(projectRoot, 'src', 'mastra');
+    const brokenDir = join(projectRoot, 'node_modules', 'broken-dep');
+    await mkdir(join(mastraDir, 'public'), { recursive: true });
+    await mkdir(brokenDir, { recursive: true });
+    await mkdir(join(projectRoot, '.mastra', '.build'), { recursive: true });
+    await writeFile(join(projectRoot, 'package.json'), JSON.stringify({ name: 'validation-app', type: 'module' }));
+    await writeFile(
+      join(brokenDir, 'package.json'),
+      JSON.stringify({ name: 'broken-dep', version: '1.0.0', type: 'module', main: './index.js' }),
+    );
+    await writeFile(
+      join(brokenDir, 'index.js'),
+      `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ${validationDelay});\nexport const value = globalThis.missing.value;`,
+    );
+    await writeFile(join(mastraDir, 'public', 'robots.txt'), 'User-agent: *');
+    const entryFile = join(mastraDir, 'index.ts');
+    await writeFile(entryFile, `import { value } from 'broken-dep';\nexport const mastra = { value };`);
+    return { projectRoot, entryFile };
+  }
+
+  // The final bundle runs while the validation processes check the optimized dependencies. A dependency that can't
+  // load must still fail the build with the analyze error, before public files land in the output.
+  it('fails with the validation error and copies no public files when a bundled dependency cannot load', async () => {
+    const { projectRoot, entryFile } = await createAppWithBrokenDependency();
+
+    const error = await new BuildBundler('Test').build(entryFile, projectRoot).then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+
+    expect(error).toMatchObject({ id: 'DEPLOYER_ANALYZE_TYPE_ERROR' });
+    expect((error as Error).message).toContain(`Mastra wasn't able to bundle "broken-dep"`);
+    await expect(readFile(join(projectRoot, '.mastra', 'output', 'robots.txt'), 'utf-8')).rejects.toMatchObject({
+      code: 'ENOENT',
+    });
+  }, 30000);
+
+  it('reports the validation error over a final bundle that failed while validation was still running', async () => {
+    const { projectRoot, entryFile } = await createAppWithBrokenDependency(1000);
+    const bundler = new BuildBundler('Test');
+    bundler.finalBundleError = new Error('final bundle failed');
+
+    const error = await bundler.build(entryFile, projectRoot).then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+
+    expect(error).toMatchObject({ id: 'DEPLOYER_ANALYZE_TYPE_ERROR' });
+  }, 30000);
+
+  it('reports a failed final bundle when validation passes', async () => {
+    const projectRoot = await mkdtemp(join(tmpdir(), 'mastra-bundler-final-'));
+    tempDirs.push(projectRoot);
+    const entryFile = join(projectRoot, 'src', 'mastra', 'index.ts');
+    await mkdir(join(projectRoot, 'src', 'mastra'), { recursive: true });
+    await mkdir(join(projectRoot, '.mastra', '.build'), { recursive: true });
+    await writeFile(join(projectRoot, 'package.json'), JSON.stringify({ name: 'final-app', type: 'module' }));
+    await writeFile(entryFile, `export const mastra = {};`);
+    const bundler = new BuildBundler('Test');
+    bundler.finalBundleError = new Error('final bundle failed');
+
+    const error = await bundler.build(entryFile, projectRoot).then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+
+    expect(error).toMatchObject({ id: 'DEPLOYER_BUNDLER_BUNDLE_STAGE_FAILED' });
+    expect((error as Error).message).toContain('final bundle failed');
+  }, 30000);
+});
+
 describe('Bundler.listToolsInputOptions', () => {
   it('returns stable, sorted inputs relative to the project root', async () => {
     const tempDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-tools-'));

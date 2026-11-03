@@ -7,7 +7,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "mastra": "./dist/index.js"
+    "mastra": "./dist/bin.js"
   },
   "exports": {
     ".": "./dist/index.js",

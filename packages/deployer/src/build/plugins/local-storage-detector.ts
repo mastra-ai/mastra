@@ -55,6 +55,13 @@ export interface PreflightMetadata {
  */
 const MASTRA_BUILD_DIR = /[\\/]\.mastra[\\/]\.build[\\/]/;
 
+/**
+ * Worker config is only read from a `new Mastra(...)` call (see `findWorkersConfig`). Most user modules mention
+ * `Mastra` in imports or types without constructing it, so a plain `includes('Mastra')` parsed nearly every module.
+ * Parens are allowed because the parser drops them: `new (Mastra)(...)`.
+ */
+const NEW_MASTRA = /\bnew[\s(]+Mastra\b/;
+
 const PROCESS_ENV_DOT = /\bprocess\.env\.([A-Z_][A-Z0-9_]*)\b/g;
 const PROCESS_ENV_BRACKET = /\bprocess\.env\[['"]([A-Z_][A-Z0-9_]*)['"]\]/g;
 
@@ -527,11 +534,12 @@ interface ModuleAnalysis {
 function analyzeModule(id: string, code: string): ModuleAnalysis {
   let matches = collectLocalHostMatches(code);
   let envRefs = collectEnvRefs(code);
+  const hasNewMastra = NEW_MASTRA.test(code);
 
   // Best-effort structural pass: only parse modules that may contain Mastra
   // worker config, env refs or local paths. On parse failure the regex
   // results stay as-is and local-path matches remain unguarded.
-  if (!code.includes('Mastra') && matches.length === 0 && envRefs.size === 0) {
+  if (!hasNewMastra && matches.length === 0 && envRefs.size === 0) {
     return { matches, envRefs };
   }
 
@@ -555,7 +563,7 @@ function analyzeModule(id: string, code: string): ModuleAnalysis {
     }
   }
 
-  return { matches, envRefs, workersConfig: code.includes('Mastra') ? findWorkersConfig(ast) : undefined };
+  return { matches, envRefs, workersConfig: hasNewMastra ? findWorkersConfig(ast) : undefined };
 }
 
 export function localStorageDetector(rootDir?: string): Plugin {

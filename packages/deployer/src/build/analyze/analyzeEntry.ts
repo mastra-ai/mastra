@@ -1,3 +1,4 @@
+import { availableParallelism } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import type { IMastraLogger } from '@internal/core/logger';
 import { resolveModule } from 'local-pkg';
@@ -73,63 +74,149 @@ function getInputPlugins(
   return plugins.filter(plugin => plugin !== null);
 }
 
-type AnalyzedChunk = {
-  facadeModuleId: string | null;
-  importedBindings: Record<string, string[]>;
-  dynamicImports: string[];
+type EntryConfig = { entry: string; isVirtualFile: boolean };
+
+/** Options that shape the Rolldown pass over an entry. */
+export type EntryScanOptions = {
+  sourcemapEnabled: boolean;
+  env: Record<string, string>;
+  alias: Record<string, string>;
+  platform: BundlerPlatform;
+  workspaceMap: Map<string, WorkspacePackageInfo>;
+  projectRoot: string;
+  packageLookupCache?: PackageLookupCache;
 };
 
 /**
- * Extracts and categorizes dependencies from the analyzed chunk to determine which ones need optimization.
- * Analyzes both static imports and dynamic imports while filtering out Node.js built-ins and ignored dependencies.
- * Identifies workspace packages and resolves package root paths for proper bundling optimization.
+ * The Rolldown pass over one entry plus the metadata of its static imports. It depends on the entry and the build
+ * options only, not on the dependency path that reached the entry, so analyses running side by side can share it.
  */
-async function captureDependenciesToOptimize(
-  output: AnalyzedChunk,
-  workspaceMap: Map<string, WorkspacePackageInfo>,
-  projectRoot: string,
-  {
-    logger,
-    mastraEntry,
-    shouldCheckTransitiveDependencies,
-    env,
-    analyzeCache,
-    activeEntries,
-    packageLookupCache,
-    externals,
-    externalsPreset,
-    alias,
-    platform,
-  }: {
-    logger: IMastraLogger;
-    mastraEntry: string;
-    shouldCheckTransitiveDependencies: boolean;
-    env: Record<string, string>;
-    /** Shared cache to avoid re-analyzing the same entry across recursive calls */
-    analyzeCache?: Map<string, AnalyzeEntryResult>;
-    /** Resolved entries currently being analyzed in this recursion path */
-    activeEntries: Set<string>;
-    packageLookupCache?: PackageLookupCache;
-    externals: string[];
-    externalsPreset: boolean;
-    alias: Record<string, string>;
-    platform: BundlerPlatform;
-  },
-): Promise<Map<string, DependencyMetadata>> {
-  const depsToOptimize = new Map<string, DependencyMetadata>();
+export type EntryScan = {
+  facadeModuleId: string;
+  /** Root of the package the entry belongs to, where its dependencies are looked up */
+  entryRootPath: string;
+  dependencies: Map<string, DependencyMetadata>;
+  dynamicImports: string[];
+  output: AnalyzeEntryResult['output'];
+  /** `resolveModule` results for workspace dependencies, filled on first use */
+  workspaceEntries: Map<string, string | undefined>;
+};
 
-  if (!output.facadeModuleId) {
+// A pass is mostly Rust work off the main thread, so a few at once overlap without flooding the thread pool.
+const ANALYZE_CONCURRENCY = Math.max(1, Math.min(4, availableParallelism()));
+
+/**
+ * Runs entry scans with bounded concurrency and shares each one between the analyses that need it.
+ *
+ * A scan never waits on another scan, so scans can be started ahead of the sequential dependency walk that consumes
+ * them without any risk of deadlock on dependency cycles, and the walk produces the same result in the same order as
+ * when every scan ran inline.
+ *
+ * Use one scanner per analysis: scans are keyed by entry only, so the {@link EntryScanOptions} must not change.
+ */
+export type EntryScanner = {
+  scan(key: string, run: () => Promise<EntryScan>): Promise<EntryScan>;
+  /** Cancels queued scans and waits for running ones, so no pass outlives a failed analysis. */
+  close(): Promise<void>;
+};
+
+export function createEntryScanner(concurrency = ANALYZE_CONCURRENCY): EntryScanner {
+  const scans = new Map<string, Promise<EntryScan>>();
+  const waiting: Array<() => void> = [];
+  let running = 0;
+  let closed = false;
+
+  async function runLimited(run: () => Promise<EntryScan>): Promise<EntryScan> {
+    if (running < concurrency) {
+      running++;
+    } else {
+      // The finishing scan hands its slot over without decrementing `running`.
+      await new Promise<void>(resolve => waiting.push(resolve));
+    }
+
+    try {
+      if (closed) {
+        throw new Error('Entry analysis was cancelled');
+      }
+      return await run();
+    } finally {
+      const next = waiting.shift();
+      if (next) {
+        next();
+      } else {
+        running--;
+      }
+    }
+  }
+
+  return {
+    scan(key, run) {
+      let scan = scans.get(key);
+      if (!scan) {
+        scan = runLimited(run);
+        // Scans started ahead of time are never awaited when an earlier entry fails first.
+        scan.catch(() => {});
+        scans.set(key, scan);
+      }
+      return scan;
+    },
+    async close() {
+      closed = true;
+      await Promise.allSettled(scans.values());
+    },
+  };
+}
+
+async function runEntryScan(
+  { entry, isVirtualFile }: EntryConfig,
+  mastraEntry: string,
+  { sourcemapEnabled, env, alias, platform, workspaceMap, projectRoot, packageLookupCache }: EntryScanOptions,
+): Promise<EntryScan> {
+  const requiredExternals = new Set<string>();
+  const optimizerBundler = await rolldown({
+    logLevel: bundlerLogLevel(),
+    input: isVirtualFile ? '#entry' : entry,
+    // Relative imports from the virtual entry resolve against the cwd, like Rollup did.
+    cwd: process.cwd(),
+    treeshake: false,
+    ...getPlatformOptions(platform, { preserveSymlinks: true }),
+    plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, {
+      sourcemapEnabled,
+      env,
+      alias,
+      platform,
+      requiredExternals,
+    }),
+    external: [EXTERNAL_PROTOCOL_RE, packagesRegex(DEPS_TO_IGNORE)!],
+  });
+
+  const { output } = await (async () => {
+    try {
+      return await optimizerBundler.generate({
+        format: 'esm',
+        codeSplitting: false,
+      });
+    } finally {
+      await optimizerBundler.close();
+    }
+  })();
+
+  const chunk = output[0];
+  const { importedBindings, dynamicImports } = extractImportedBindings(chunk.code, requiredExternals);
+
+  if (!chunk.facadeModuleId) {
     throw new Error(
       'Something went wrong, we could not find the package name of the entry file. Please open an issue.',
     );
   }
 
   let entryRootPath = projectRoot;
-  if (!output.facadeModuleId.startsWith(VIRTUAL_PREFIX)) {
-    entryRootPath = (await getPackageRootPath(output.facadeModuleId, undefined, packageLookupCache)) || projectRoot;
+  if (!chunk.facadeModuleId.startsWith(VIRTUAL_PREFIX)) {
+    entryRootPath = (await getPackageRootPath(chunk.facadeModuleId, undefined, packageLookupCache)) || projectRoot;
   }
 
-  for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
+  const dependencies = new Map<string, DependencyMetadata>();
+  for (const [dependency, bindings] of Object.entries(importedBindings)) {
     if (!isBareModuleSpecifier(dependency)) {
       continue;
     }
@@ -151,7 +238,7 @@ async function captureDependenciesToOptimize(
 
     const normalizedRootPath = rootPath ? slash(rootPath) : null;
 
-    depsToOptimize.set(dependency, {
+    dependencies.set(dependency, {
       exports: bindings,
       rootPath: normalizedRootPath,
       isWorkspace,
@@ -160,29 +247,134 @@ async function captureDependenciesToOptimize(
     });
   }
 
+  return {
+    facadeModuleId: chunk.facadeModuleId,
+    entryRootPath,
+    dependencies,
+    dynamicImports,
+    output: {
+      code: chunk.code,
+      map: chunk.map,
+    },
+    workspaceEntries: new Map(),
+  };
+}
+
+function scanEntry(
+  entryConfig: EntryConfig,
+  mastraEntry: string,
+  options: EntryScanOptions,
+  scanner: EntryScanner,
+): Promise<EntryScan> {
+  // A virtual entry has no path; its code identifies it.
+  const key = entryConfig.isVirtualFile ? `virtual:${entryConfig.entry}` : slash(entryConfig.entry);
+  return scanner.scan(key, () => runEntryScan(entryConfig, mastraEntry, options));
+}
+
+/**
+ * Starts the Rolldown pass for an entry so that a later {@link analyzeEntry} call with the same scanner and options
+ * picks it up instead of starting it then.
+ */
+export function prefetchEntry(
+  entryConfig: EntryConfig,
+  mastraEntry: string,
+  options: EntryScanOptions,
+  scanner: EntryScanner,
+): void {
+  void scanEntry(entryConfig, mastraEntry, options, scanner);
+}
+
+type AnalyzeCacheKeyOptions = {
+  shouldCheckTransitiveDependencies: boolean;
+  externals: string[];
+  externalsPreset: boolean;
+};
+
+function getAnalyzeCacheKey(
+  resolvedEntry: string,
+  { shouldCheckTransitiveDependencies, externals, externalsPreset }: AnalyzeCacheKeyOptions,
+) {
+  // Transitive analysis produces a different result from direct analysis, so cache them separately.
+  const externalsCacheKey = JSON.stringify([externalsPreset, [...externals].sort()]);
+  return `${resolvedEntry}:${shouldCheckTransitiveDependencies ? 'transitive' : 'direct'}:${externalsCacheKey}`;
+}
+
+/**
+ * Adds the transitive workspace dependencies and the dynamic imports of a scanned entry to its static imports.
+ * Workspace dependencies are analyzed recursively, one after another in import order, so the result doesn't depend
+ * on which scan finishes first.
+ */
+async function captureDependenciesToOptimize(
+  scan: EntryScan,
+  {
+    logger,
+    mastraEntry,
+    shouldCheckTransitiveDependencies,
+    analyzeCache,
+    activeEntries,
+    scanner,
+    scanOptions,
+    externals,
+    externalsPreset,
+  }: {
+    logger: IMastraLogger;
+    mastraEntry: string;
+    shouldCheckTransitiveDependencies: boolean;
+    /** Shared cache to avoid re-analyzing the same entry across recursive calls */
+    analyzeCache: Map<string, AnalyzeEntryResult>;
+    /** Resolved entries currently being analyzed in this recursion path */
+    activeEntries: Set<string>;
+    scanner: EntryScanner;
+    scanOptions: EntryScanOptions;
+    externals: string[];
+    externalsPreset: boolean;
+  },
+): Promise<Map<string, DependencyMetadata>> {
+  const { projectRoot, packageLookupCache } = scanOptions;
+  const depsToOptimize = new Map(scan.dependencies);
+
+  function resolveWorkspaceEntry(dep: string): string | undefined {
+    if (!scan.workspaceEntries.has(dep)) {
+      const importerFile = scan.facadeModuleId.startsWith(VIRTUAL_PREFIX)
+        ? mastraEntry || projectRoot
+        : scan.facadeModuleId;
+      const importerPath = pathToFileURL(importerFile).href;
+      // Absolute path to the dependency using ESM-compatible resolution
+      scan.workspaceEntries.set(dep, resolveModule(dep, { paths: [importerPath] }));
+    }
+    return scan.workspaceEntries.get(dep);
+  }
+
   const processedWorkspaceEntries = new Set<string>();
 
   /**
    * Recursively discovers transitive workspace dependencies from package manifests.
    */
   async function checkTransitiveDependencies() {
-    // Make a copy so that we can safely iterate over it
-    const depsSnapshot = new Map(depsToOptimize);
+    const workspaceDeps = [...depsToOptimize]
+      .filter(([dep, meta]) => getPackageName(dep) && meta.isWorkspace)
+      .map(([dep]) => dep);
+    const transitiveScanOptions = { ...scanOptions, sourcemapEnabled: false };
+    const transitiveCacheKeyOptions = { shouldCheckTransitiveDependencies: true, externals, externalsPreset };
 
-    for (const [dep, meta] of depsSnapshot) {
-      const pkgName = getPackageName(dep);
-      if (!pkgName || !meta.isWorkspace) {
+    // Start the scans of the workspace dependencies the loop below analyzes.
+    for (const dep of workspaceDeps) {
+      const resolvedPath = resolveWorkspaceEntry(dep);
+      if (!resolvedPath) {
         continue;
       }
 
-      const importerFile = output.facadeModuleId!.startsWith(VIRTUAL_PREFIX)
-        ? mastraEntry || projectRoot
-        : output.facadeModuleId!;
-      const importerPath = pathToFileURL(importerFile).href;
-      // Absolute path to the dependency using ESM-compatible resolution
-      const resolvedPath = resolveModule(dep, {
-        paths: [importerPath],
-      });
+      const resolvedEntry = slash(resolvedPath);
+      if (
+        !activeEntries.has(resolvedEntry) &&
+        !analyzeCache.has(getAnalyzeCacheKey(resolvedEntry, transitiveCacheKeyOptions))
+      ) {
+        prefetchEntry({ entry: resolvedPath, isVirtualFile: false }, mastraEntry, transitiveScanOptions, scanner);
+      }
+    }
+
+    for (const dep of workspaceDeps) {
+      const resolvedPath = resolveWorkspaceEntry(dep);
 
       if (!resolvedPath) {
         logger.warn('Could not resolve path for workspace dependency', { dep });
@@ -197,19 +389,14 @@ async function captureDependenciesToOptimize(
       processedWorkspaceEntries.add(resolvedEntry);
 
       const analysis = await analyzeEntry({ entry: resolvedPath, isVirtualFile: false }, mastraEntry, {
-        workspaceMap,
-        projectRoot,
+        ...transitiveScanOptions,
         logger,
-        sourcemapEnabled: false,
-        env,
         shouldCheckTransitiveDependencies: true,
         analyzeCache,
         activeEntries,
-        packageLookupCache,
+        scanner,
         externals,
         externalsPreset,
-        alias,
-        platform,
       });
 
       if (!analysis?.dependencies) {
@@ -245,7 +432,7 @@ async function captureDependenciesToOptimize(
   }
 
   // #tools is a generated dependency, we don't want our analyzer to handle it
-  const dynamicImports = output.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
+  const dynamicImports = scan.dynamicImports.filter(d => !DEPS_TO_IGNORE.includes(d));
   if (dynamicImports.length) {
     for (const dynamicImport of dynamicImports) {
       if (!depsToOptimize.has(dynamicImport) && isBareModuleSpecifier(dynamicImport)) {
@@ -256,7 +443,7 @@ async function captureDependenciesToOptimize(
         let rootPath: string | null = null;
 
         if (pkgName) {
-          const metadata = await getPackageMetadata(dynamicImport, entryRootPath, packageLookupCache);
+          const metadata = await getPackageMetadata(dynamicImport, scan.entryRootPath, packageLookupCache);
           rootPath = metadata.rootPath;
           version = metadata.version;
           packageSpec = metadata.packageSpec;
@@ -276,6 +463,15 @@ async function captureDependenciesToOptimize(
   return depsToOptimize;
 }
 
+/** Return type of {@link analyzeEntry} */
+export type AnalyzeEntryResult = {
+  dependencies: Map<string, DependencyMetadata>;
+  output: {
+    code: string;
+    map: SourceMap | null;
+  };
+};
+
 /**
  * Analyzes the entry file to identify external dependencies and their imports. This allows us to treeshake all code that is not used.
  *
@@ -290,23 +486,8 @@ async function captureDependenciesToOptimize(
  * @param options.shouldCheckTransitiveDependencies - Whether to recursively analyze transitive workspace dependencies (default: false)
  * @returns A promise that resolves to an object containing the analyzed dependencies and generated output
  */
-/** Return type of {@link analyzeEntry} */
-export type AnalyzeEntryResult = {
-  dependencies: Map<string, DependencyMetadata>;
-  output: {
-    code: string;
-    map: SourceMap | null;
-  };
-};
-
 export async function analyzeEntry(
-  {
-    entry,
-    isVirtualFile,
-  }: {
-    entry: string;
-    isVirtualFile: boolean;
-  },
+  { entry, isVirtualFile }: EntryConfig,
   mastraEntry: string,
   {
     logger,
@@ -317,6 +498,7 @@ export async function analyzeEntry(
     shouldCheckTransitiveDependencies = false,
     analyzeCache,
     activeEntries: providedActiveEntries,
+    scanner: providedScanner,
     packageLookupCache,
     externals = [],
     externalsPreset = false,
@@ -333,6 +515,8 @@ export async function analyzeEntry(
     analyzeCache?: Map<string, AnalyzeEntryResult>;
     /** Resolved entries currently being analyzed in this recursion path */
     activeEntries?: Set<string>;
+    /** Shares Rolldown passes between calls, including passes started with {@link prefetchEntry} */
+    scanner?: EntryScanner;
     /** Package lookups memoized for the current build */
     packageLookupCache?: PackageLookupCache;
     /** Dependencies that must remain external during analysis */
@@ -346,10 +530,8 @@ export async function analyzeEntry(
 ): Promise<AnalyzeEntryResult> {
   const resolvedEntry = isVirtualFile ? undefined : slash(entry);
   const effectiveAnalyzeCache = analyzeCache ?? new Map<string, AnalyzeEntryResult>();
-  // Transitive analysis produces a different result from direct analysis, so cache them separately.
-  const externalsCacheKey = JSON.stringify([externalsPreset, [...externals].sort()]);
   const cacheKey = resolvedEntry
-    ? `${resolvedEntry}:${shouldCheckTransitiveDependencies ? 'transitive' : 'direct'}:${externalsCacheKey}`
+    ? getAnalyzeCacheKey(resolvedEntry, { shouldCheckTransitiveDependencies, externals, externalsPreset })
     : undefined;
   if (cacheKey && effectiveAnalyzeCache.has(cacheKey)) {
     return effectiveAnalyzeCache.get(cacheKey)!;
@@ -361,60 +543,34 @@ export async function analyzeEntry(
     activeEntries.add(resolvedEntry);
   }
 
+  const scanner = providedScanner ?? createEntryScanner();
+  const scanOptions: EntryScanOptions = {
+    sourcemapEnabled,
+    env,
+    alias,
+    platform,
+    workspaceMap,
+    projectRoot,
+    packageLookupCache,
+  };
+
   try {
-    const requiredExternals = new Set<string>();
-    const optimizerBundler = await rolldown({
-      logLevel: bundlerLogLevel(),
-      input: isVirtualFile ? '#entry' : entry,
-      // Relative imports from the virtual entry resolve against the cwd, like Rollup did.
-      cwd: process.cwd(),
-      treeshake: false,
-      ...getPlatformOptions(platform, { preserveSymlinks: true }),
-      plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, {
-        sourcemapEnabled,
-        env,
-        alias,
-        platform,
-        requiredExternals,
-      }),
-      external: [EXTERNAL_PROTOCOL_RE, packagesRegex(DEPS_TO_IGNORE)!],
-    });
-
-    const { output } = await (async () => {
-      try {
-        return await optimizerBundler.generate({
-          format: 'esm',
-          codeSplitting: false,
-        });
-      } finally {
-        await optimizerBundler.close();
-      }
-    })();
-
-    const chunk = output[0];
-    const { importedBindings, dynamicImports } = extractImportedBindings(chunk.code, requiredExternals);
-    const analyzedChunk: AnalyzedChunk = { facadeModuleId: chunk.facadeModuleId, importedBindings, dynamicImports };
-
-    const depsToOptimize = await captureDependenciesToOptimize(analyzedChunk, workspaceMap, projectRoot, {
+    const scan = await scanEntry({ entry, isVirtualFile }, mastraEntry, scanOptions, scanner);
+    const depsToOptimize = await captureDependenciesToOptimize(scan, {
       logger,
       mastraEntry,
       shouldCheckTransitiveDependencies,
-      env,
       analyzeCache: effectiveAnalyzeCache,
       activeEntries,
-      packageLookupCache,
+      scanner,
+      scanOptions,
       externals,
       externalsPreset,
-      alias,
-      platform,
     });
 
     const result: AnalyzeEntryResult = {
       dependencies: depsToOptimize,
-      output: {
-        code: chunk.code,
-        map: chunk.map,
-      },
+      output: scan.output,
     };
 
     // Cache the result so recursive calls for the same entry are instant
@@ -423,6 +579,12 @@ export async function analyzeEntry(
     }
 
     return result;
+  } catch (error) {
+    // Workspace dependencies prefetched by this call may still be scanning.
+    if (!providedScanner) {
+      await scanner.close();
+    }
+    throw error;
   } finally {
     if (resolvedEntry && shouldTrackEntry) {
       activeEntries.delete(resolvedEntry);

@@ -69,6 +69,37 @@ describe('localStorageDetector', () => {
     expect(parseCalls).toBe(0);
   });
 
+  // Most user modules import Mastra types or reference the instance without constructing it.
+  it('does not parse modules that mention Mastra without constructing it', () => {
+    const { parseCalls, workersConfig } = runPlugin([
+      {
+        id: '/project/src/mastra/agents/support.ts',
+        code: `import type { Mastra } from '@mastra/core/mastra';
+          import { MastraClient } from '@mastra/client-js';
+          export function attach(mastra: Mastra) { return new MastraClient({ baseUrl: mastra.url }); }`,
+      },
+    ]);
+
+    expect(parseCalls).toBe(0);
+    expect(workersConfig).toBeNull();
+  });
+
+  it.each([
+    ['type arguments', `export const mastra = new Mastra<typeof agents>({ storage, pubsub });`],
+    ['a line break after new', `export const mastra = new\n  Mastra({ storage, pubsub });`],
+    ['a parenthesized class', `export const mastra = new (Mastra)({ storage, pubsub });`],
+  ])('emits worker topology for a Mastra constructed with %s', (_label, code) => {
+    const { workersConfig } = runPlugin([{ id: '/project/src/mastra/index.ts', code }]);
+
+    expect(workersConfig).toEqual({
+      version: 1,
+      orchestration: { enabled: true },
+      scheduler: { enabled: true },
+      backgroundTasks: { enabled: false },
+      custom: [],
+    });
+  });
+
   it('collects file: paths from user modules', () => {
     const { metadata, legacy } = runPlugin([
       { id: '/project/src/mastra/index.ts', code: `const url = 'file:./mastra.db';` },

@@ -10,7 +10,8 @@ import * as stackTraceParser from 'stacktrace-parser';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
 import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
 import { validate, ValidationError } from '../validator/validate';
-import { analyzeEntry } from './analyze/analyzeEntry';
+import { analyzeEntry, createEntryScanner, prefetchEntry } from './analyze/analyzeEntry';
+import type { EntryScanOptions } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { DEPS_TO_IGNORE } from './analyze/constants';
 import { normalizeExternals } from './analyze/externals';
@@ -315,12 +316,15 @@ async function forEachWithFirstErrorInOrder<T>(
  * Validates the bundled output by attempting to import each generated module.
  * Tracks external dependencies that couldn't be bundled.
  *
+ * The imports run in child processes and only decide whether the build may succeed: nothing they find feeds the
+ * returned dependency data. So the checks are returned as a pending `validation` the caller awaits when it has to.
+ *
  * @param output - Bundle output from rollup
  * @param reverseVirtualReferenceMap - Map to resolve virtual module names back to original deps
  * @param outputDir - Directory containing the bundled files
  * @param logger - Logger instance for debugging
  * @param workspaceMap - Map of workspace packages that gets directly passed through for later consumption
- * @returns Analysis result containing dependency mappings
+ * @returns Analysis result containing dependency mappings, and the running validation
  */
 async function validateOutput(
   {
@@ -399,7 +403,7 @@ async function validateOutput(
   }
 
   // validate if the chunks are actually valid, a failsafe to make sure bundling didn't make any mistakes
-  await forEachWithFirstErrorInOrder(chunks, VALIDATION_CONCURRENCY, async file => {
+  const validation = forEachWithFirstErrorInOrder(chunks, VALIDATION_CONCURRENCY, async file => {
     logger.debug('Validating module', { fileName: file.fileName });
     await validateFile(projectRoot, file, {
       binaryMapData,
@@ -409,9 +413,23 @@ async function validateOutput(
       stubbedExternals,
     });
   });
+  // Handled by whoever awaits it; this keeps a failure from being reported as unhandled in the meantime.
+  validation.catch(() => {});
 
-  return result;
+  return { result, validation };
 }
+
+type AnalyzeBundleOptions = {
+  outputDir: string;
+  projectRoot: string;
+  platform: BundlerPlatform;
+  isDev?: boolean;
+  bundlerOptions?: Pick<
+    InternalBundlerOptions,
+    'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages' | 'alias'
+  > | null;
+  env?: Record<string, string>;
+};
 
 /**
  * Main bundle analysis function that orchestrates the three-step process:
@@ -424,6 +442,22 @@ async function validateOutput(
 export async function analyzeBundle(
   entries: string[],
   mastraEntry: string,
+  options: AnalyzeBundleOptions,
+  logger: IMastraLogger,
+) {
+  const { validation, ...analysis } = await analyzeBundleDeferringValidation(entries, mastraEntry, options, logger);
+  await validation;
+  return analysis;
+}
+
+/**
+ * {@link analyzeBundle} without waiting for step 3. The returned analysis is complete; `validation` settles once every
+ * validation process has exited and rejects with the error `analyzeBundle` would throw. Callers can do more work in
+ * the meantime but must await `validation` before treating the build as successful.
+ */
+export async function analyzeBundleDeferringValidation(
+  entries: string[],
+  mastraEntry: string,
   {
     outputDir,
     projectRoot,
@@ -431,17 +465,7 @@ export async function analyzeBundle(
     isDev = false,
     bundlerOptions,
     env = { 'process.env.NODE_ENV': JSON.stringify('production') },
-  }: {
-    outputDir: string;
-    projectRoot: string;
-    platform: BundlerPlatform;
-    isDev?: boolean;
-    bundlerOptions?: Pick<
-      InternalBundlerOptions,
-      'externals' | 'externalsPreset' | 'enableSourcemap' | 'dynamicPackages' | 'alias'
-    > | null;
-    env?: Record<string, string>;
-  },
+  }: AnalyzeBundleOptions,
   logger: IMastraLogger,
 ) {
   const mastraConfigResult = await checkMastraConfigExport(mastraEntry);
@@ -476,69 +500,86 @@ export async function analyzeBundle(
   const activeAnalyzeEntries = new Set<string>();
   // Scoped to this call so a long-running `mastra dev` sees installs that changed since the last analysis.
   const packageLookupCache = createPackageLookupCache();
-  for (const entry of entries) {
-    const isVirtualFile = entry.includes('\n') || !existsSync(entry);
-    const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
-      logger,
-      sourcemapEnabled: bundlerOptions?.enableSourcemap ?? false,
-      workspaceMap,
-      projectRoot,
-      env,
-      shouldCheckTransitiveDependencies: true,
-      analyzeCache,
-      activeEntries: activeAnalyzeEntries,
-      packageLookupCache,
-      externals: mergedExternals,
-      externalsPreset,
-      alias: bundlerOptions?.alias,
-      platform,
-    });
+  const entryScanner = createEntryScanner();
+  const entryScanOptions: EntryScanOptions = {
+    sourcemapEnabled: bundlerOptions?.enableSourcemap ?? false,
+    env,
+    alias: bundlerOptions?.alias ?? {},
+    platform,
+    workspaceMap,
+    projectRoot,
+    packageLookupCache,
+  };
+  const entryConfigs = entries.map(entry => ({ entry, isVirtualFile: entry.includes('\n') || !existsSync(entry) }));
 
-    // Detect pino transports in the bundled output. Skips the Babel parse when nothing can match.
-    // A false match parses the whole chunk (~750ms on a real app), so require a quoted `pino` or a `pino.transport`.
-    const code = analyzeResult.output.code;
-    if (
-      code.includes('pino') &&
-      /\.transport\s*\(/.test(code) &&
-      (/(['"`])pino\1/.test(code) || /\bpino\s*\.\s*(?:default\s*\.\s*)?transport\b/.test(code))
-    ) {
-      transformSync(analyzeResult.output.code, {
-        filename: 'pino-detection.js',
-        plugins: [() => detectPinoTransports(detectedPinoTransports)],
-        configFile: false,
-        babelrc: false,
-        code: false,
+  // The Rolldown passes of all entries run ahead in parallel; their results are merged one entry at a time, in
+  // input order, so the output doesn't depend on which pass finishes first.
+  for (const entryConfig of entryConfigs) {
+    prefetchEntry(entryConfig, mastraEntry, entryScanOptions, entryScanner);
+  }
+
+  try {
+    for (const entryConfig of entryConfigs) {
+      const analyzeResult = await analyzeEntry(entryConfig, mastraEntry, {
+        ...entryScanOptions,
+        logger,
+        shouldCheckTransitiveDependencies: true,
+        analyzeCache,
+        activeEntries: activeAnalyzeEntries,
+        scanner: entryScanner,
+        externals: mergedExternals,
+        externalsPreset,
       });
-    }
 
-    // Write the entry file to the output dir so that we can use it for workspace resolution stuff
-    await writeFile(join(outputDir, `entry-${index++}.mjs`), analyzeResult.output.code);
-
-    // Merge dependencies from each entry (main, tools, etc.)
-    for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
-      const isPartOfExternals = mergedExternals.some(external => isDependencyPartOfPackage(dep, external));
-      if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace)) {
-        // Add all packages coming from src/mastra with their version info
-        const pkgName = getPackageName(dep);
-        if (pkgName) {
-          allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), metadata));
-        }
-        continue;
-      }
-
-      if (depsToOptimize.has(dep)) {
-        // Merge with existing exports if dependency already exists
-        const existingEntry = depsToOptimize.get(dep)!;
-        depsToOptimize.set(dep, {
-          ...existingEntry,
-          version: metadata.version ?? existingEntry.version,
-          packageSpec: metadata.packageSpec ?? existingEntry.packageSpec,
-          exports: [...new Set([...existingEntry.exports, ...metadata.exports])],
+      // Detect pino transports in the bundled output. Skips the Babel parse when nothing can match.
+      // A false match parses the whole chunk (~750ms on a real app), so require a quoted `pino` or a `pino.transport`.
+      const code = analyzeResult.output.code;
+      if (
+        code.includes('pino') &&
+        /\.transport\s*\(/.test(code) &&
+        (/(['"`])pino\1/.test(code) || /\bpino\s*\.\s*(?:default\s*\.\s*)?transport\b/.test(code))
+      ) {
+        transformSync(analyzeResult.output.code, {
+          filename: 'pino-detection.js',
+          plugins: [() => detectPinoTransports(detectedPinoTransports)],
+          configFile: false,
+          babelrc: false,
+          code: false,
         });
-      } else {
-        depsToOptimize.set(dep, metadata);
+      }
+
+      // Write the entry file to the output dir so that we can use it for workspace resolution stuff
+      await writeFile(join(outputDir, `entry-${index++}.mjs`), analyzeResult.output.code);
+
+      // Merge dependencies from each entry (main, tools, etc.)
+      for (const [dep, metadata] of analyzeResult.dependencies.entries()) {
+        const isPartOfExternals = mergedExternals.some(external => isDependencyPartOfPackage(dep, external));
+        if (isPartOfExternals || (externalsPreset && !metadata.isWorkspace)) {
+          // Add all packages coming from src/mastra with their version info
+          const pkgName = getPackageName(dep);
+          if (pkgName) {
+            allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), metadata));
+          }
+          continue;
+        }
+
+        if (depsToOptimize.has(dep)) {
+          // Merge with existing exports if dependency already exists
+          const existingEntry = depsToOptimize.get(dep)!;
+          depsToOptimize.set(dep, {
+            ...existingEntry,
+            version: metadata.version ?? existingEntry.version,
+            packageSpec: metadata.packageSpec ?? existingEntry.packageSpec,
+            exports: [...new Set([...existingEntry.exports, ...metadata.exports])],
+          });
+        } else {
+          depsToOptimize.set(dep, metadata);
+        }
       }
     }
+  } catch (error) {
+    await entryScanner.close();
+    throw error;
   }
 
   // Build a map of dependency versions from the full analysis result before dev/externalsPreset pruning.
@@ -644,7 +685,7 @@ export async function analyzeBundle(
     }
   }
 
-  const result = await validateOutput(
+  const { result, validation } = await validateOutput(
     {
       output,
       reverseVirtualReferenceMap: fileNameToDependencyMap,
@@ -659,72 +700,80 @@ export async function analyzeBundle(
     logger,
   );
 
-  /**
-   * Build the final set of external dependencies from four sources:
-   * 1. result.externalDependencies - externals discovered during bundle validation
-   * 2. allUsedExternals - packages detected via static analysis that matched the externals config
-   * 3. detectedPinoTransports - pino transports detected by the plugin during bundling
-   * 4. userDynamicPackages - user-specified packages loaded dynamically at runtime
-   *
-   * Prefer entries with version info over entries without
-   */
-  const mergedExternalDeps = new Map<string, ExternalDependencyInfo>(result.externalDependencies);
-  for (const [dep, info] of allUsedExternals) {
-    if (isExternalProtocolImport(dep)) {
-      continue;
-    }
-
-    mergedExternalDeps.set(dep, preferDependencyInfo(mergedExternalDeps.get(dep), info));
-  }
-
-  const externalMetadataParentPaths = [
-    projectRoot,
-    ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
-    // Last resort: resolve from the deployer's own installed location. Some externals are
-    // discovered inside externalized packages (e.g. optional dynamic imports like
-    // `import('typescript')` in @mastra/core) without being installed in the user's project.
-    import.meta.dirname,
-  ];
-
-  // Retry externals that were discovered without install metadata (e.g. from entry analysis
-  // where the package isn't resolvable from the entry's own location).
-  for (const [dep, info] of mergedExternalDeps) {
-    if (!info.version && !info.packageSpec) {
-      mergedExternalDeps.set(
-        dep,
-        await resolveDependencyInfo(dep, info, externalMetadataParentPaths, packageLookupCache),
-      );
-    }
-  }
-
-  // Add pino transports and user dynamic packages
-  for (const transport of detectedPinoTransports) {
-    if (!mergedExternalDeps.has(transport)) {
-      mergedExternalDeps.set(
-        transport,
-        await resolveDependencyInfo(transport, undefined, externalMetadataParentPaths, packageLookupCache),
-      );
-    }
-  }
-  for (const pkg of userDynamicPackages) {
-    if (!mergedExternalDeps.has(pkg)) {
-      mergedExternalDeps.set(
-        pkg,
-        await resolveDependencyInfo(pkg, undefined, externalMetadataParentPaths, packageLookupCache),
-      );
-    }
-  }
-
-  return {
-    ...result,
-    externalDependencies: mergedExternalDeps,
+  // The lookups below overlap with the validation processes.
+  try {
     /**
-     * Workspace deps that were optimized (after isDev/externalsPreset pruning).
-     * Used by the watcher to re-run optimization when workspace sources change.
+     * Build the final set of external dependencies from four sources:
+     * 1. result.externalDependencies - externals discovered during bundle validation
+     * 2. allUsedExternals - packages detected via static analysis that matched the externals config
+     * 3. detectedPinoTransports - pino transports detected by the plugin during bundling
+     * 4. userDynamicPackages - user-specified packages loaded dynamically at runtime
+     *
+     * Prefer entries with version info over entries without
      */
-    depsToOptimize,
-    workspaceRoot,
-    outputDir,
-    ...(mastraConfigResult.projectType ? { projectType: mastraConfigResult.projectType } : {}),
-  };
+    const mergedExternalDeps = new Map<string, ExternalDependencyInfo>(result.externalDependencies);
+    for (const [dep, info] of allUsedExternals) {
+      if (isExternalProtocolImport(dep)) {
+        continue;
+      }
+
+      mergedExternalDeps.set(dep, preferDependencyInfo(mergedExternalDeps.get(dep), info));
+    }
+
+    const externalMetadataParentPaths = [
+      projectRoot,
+      ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
+      // Last resort: resolve from the deployer's own installed location. Some externals are
+      // discovered inside externalized packages (e.g. optional dynamic imports like
+      // `import('typescript')` in @mastra/core) without being installed in the user's project.
+      import.meta.dirname,
+    ];
+
+    // Retry externals that were discovered without install metadata (e.g. from entry analysis
+    // where the package isn't resolvable from the entry's own location).
+    for (const [dep, info] of mergedExternalDeps) {
+      if (!info.version && !info.packageSpec) {
+        mergedExternalDeps.set(
+          dep,
+          await resolveDependencyInfo(dep, info, externalMetadataParentPaths, packageLookupCache),
+        );
+      }
+    }
+
+    // Add pino transports and user dynamic packages
+    for (const transport of detectedPinoTransports) {
+      if (!mergedExternalDeps.has(transport)) {
+        mergedExternalDeps.set(
+          transport,
+          await resolveDependencyInfo(transport, undefined, externalMetadataParentPaths, packageLookupCache),
+        );
+      }
+    }
+    for (const pkg of userDynamicPackages) {
+      if (!mergedExternalDeps.has(pkg)) {
+        mergedExternalDeps.set(
+          pkg,
+          await resolveDependencyInfo(pkg, undefined, externalMetadataParentPaths, packageLookupCache),
+        );
+      }
+    }
+
+    return {
+      ...result,
+      externalDependencies: mergedExternalDeps,
+      /**
+       * Workspace deps that were optimized (after isDev/externalsPreset pruning).
+       * Used by the watcher to re-run optimization when workspace sources change.
+       */
+      depsToOptimize,
+      workspaceRoot,
+      outputDir,
+      ...(mastraConfigResult.projectType ? { projectType: mastraConfigResult.projectType } : {}),
+      validation,
+    };
+  } catch (error) {
+    // Validation ran before these lookups when it was awaited in place, so its failure still wins.
+    await validation;
+    throw error;
+  }
 }

@@ -1,7 +1,13 @@
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
+import { getPackageInfo as getLocalPackageInfo } from 'local-pkg';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createPackageLookupCache, getPackageMetadata, getPackageRootPath } from './package-info';
+
+vi.mock('local-pkg', async importOriginal => {
+  const actual = await importOriginal<typeof import('local-pkg')>();
+  return { ...actual, getPackageInfo: vi.fn(actual.getPackageInfo) };
+});
 
 const tempDirs: string[] = [];
 
@@ -350,6 +356,23 @@ describe('package lookup cache', () => {
       packageSpec: undefined,
     });
     await expect(getPackageRootPath('late-pkg', appDir, nextBuild)).resolves.toBe(packageDir);
+  });
+
+  // The deployer server imports many `hono/*` subpaths that the app doesn't install. Each one used to fall back to
+  // local-pkg, ~7 ms apiece on a real app.
+  it('looks up a package that is not installed once for all of its subpaths', async () => {
+    const appDir = await createApp('lookup-cache-subpaths-');
+    const build = createPackageLookupCache();
+    vi.mocked(getLocalPackageInfo).mockClear();
+
+    for (const subpath of ['ws', 'cors', 'cookie', 'streaming']) {
+      await expect(getPackageMetadata(`not-installed-pkg/${subpath}`, appDir, build)).resolves.toEqual({
+        rootPath: null,
+      });
+    }
+    await expect(getPackageMetadata('not-installed-pkg', appDir, build)).resolves.toEqual({ rootPath: null });
+
+    expect(getLocalPackageInfo).toHaveBeenCalledTimes(1);
   });
 
   it('resolves the copy installed for each importer within one build', async () => {

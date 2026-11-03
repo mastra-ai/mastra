@@ -1,4 +1,5 @@
-import { access, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
@@ -444,6 +445,170 @@ describe('bundle validation', () => {
 
     expect(whenAlphaIsSlow).toMatch(/^(alpha|beta)$/);
     expect(whenBetaIsSlow).toBe(whenAlphaIsSlow);
+  }, 30000);
+});
+
+// Entries are scanned in parallel; a long chain of local modules makes an entry's scan finish after the others.
+async function writeModuleChain(dir: string, name: string, length: number, lastModule: string) {
+  await mkdir(join(dir, name), { recursive: true });
+  for (let i = 0; i < length; i++) {
+    await writeFile(
+      join(dir, name, `m${i}.js`),
+      i === length - 1 ? lastModule : `export * from './m${i + 1}.js';\nexport const v${i} = ${i};`,
+    );
+  }
+  return `./${name}/m0.js`;
+}
+
+describe('analyzing several entries', () => {
+  async function createApp(prefix: string) {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, prefix));
+    tempDirs.push(tempDir);
+    await mkdir(join(tempDir, '.mastra', '.build'), { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'several-entries-app', type: 'module' }));
+    return tempDir;
+  }
+
+  async function analyzeIn(cwd: string, entries: string[], options: { externals: string[]; isDev?: boolean }) {
+    const originalCwd = process.cwd();
+    process.chdir(cwd);
+    try {
+      return await analyzeBundle(
+        entries,
+        entries[0]!,
+        {
+          outputDir: join(cwd, '.mastra', '.build'),
+          projectRoot: cwd,
+          platform: 'node',
+          isDev: options.isDev,
+          bundlerOptions: { externals: options.externals, enableSourcemap: false },
+        },
+        noopLogger,
+      );
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }
+
+  it('keeps the entry order in the output when a later entry finishes analyzing first', async () => {
+    const appDir = await createApp('mastra-entry-order-');
+    const slowChain = await writeModuleChain(appDir, 'slow', 300, `export const last = 'last';`);
+    const slowEntry = join(appDir, 'slow-entry.ts');
+    const fastEntry = join(appDir, 'fast-entry.ts');
+    await writeFile(
+      slowEntry,
+      `import { zeta } from 'zeta-ext';\nexport * from '${slowChain}';\nexport const slowValue = zeta;`,
+    );
+    await writeFile(fastEntry, `import { alpha } from 'alpha-ext';\nexport const fastValue = alpha;`);
+
+    const result = await analyzeIn(appDir, [slowEntry, fastEntry], { externals: ['zeta-ext', 'alpha-ext'] });
+
+    expect([...result.externalDependencies.keys()]).toEqual(['zeta-ext', 'alpha-ext']);
+    const [firstEntry, secondEntry] = await Promise.all([
+      readFile(join(appDir, '.mastra', '.build', 'entry-0.mjs'), 'utf-8'),
+      readFile(join(appDir, '.mastra', '.build', 'entry-1.mjs'), 'utf-8'),
+    ]);
+    expect(firstEntry).toContain('slowValue');
+    expect(secondEntry).toContain('fastValue');
+  }, 30000);
+
+  it('reports the failure of the first failing entry even when a later one fails sooner', async () => {
+    const appDir = await createApp('mastra-entry-first-error-');
+    const slowChain = await writeModuleChain(appDir, 'slow', 300, `export const broken = ;`);
+    const slowEntry = join(appDir, 'slow-broken-entry.ts');
+    const fastEntry = join(appDir, 'fast-broken-entry.ts');
+    await writeFile(slowEntry, `export * from '${slowChain}';`);
+    await writeFile(fastEntry, `export const broken = ;`);
+
+    const error = await analyzeIn(appDir, [slowEntry, fastEntry], { externals: [] }).then(
+      () => undefined,
+      (err: unknown) => err,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as Error).message).toContain(join('slow', 'm299.js'));
+    expect((error as Error).message).not.toContain('fast-broken-entry');
+  }, 30000);
+
+  // Entry a reaches workspace package b through a, entry b reaches a through b. Sharing in-flight analyses between
+  // entries must not leave each waiting for the other.
+  it('analyzes entries that reach a workspace dependency cycle from opposite ends', async () => {
+    // Outside the repo: workspace roots are cached by directory prefix, and earlier tests cached the repo root for
+    // everything under `.tmp`.
+    const tempDir = await realpath(await mkdtemp(join(tmpdir(), 'mastra-entry-cycle-')));
+    tempDirs.push(tempDir);
+
+    const appDir = join(tempDir, 'apps', 'app');
+    const pkgADir = join(tempDir, 'packages', 'a');
+    const pkgBDir = join(tempDir, 'packages', 'b');
+    await mkdir(join(appDir, '.mastra', '.build'), { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'cycle-workspace', version: '1.0.0' }));
+    await writeFile(join(tempDir, 'pnpm-workspace.yaml'), `packages:\n  - apps/*\n  - packages/*\n`);
+    await writeFile(
+      join(appDir, 'package.json'),
+      JSON.stringify({
+        name: 'app',
+        version: '1.0.0',
+        type: 'module',
+        dependencies: { '@cyc/a': 'workspace:*', '@cyc/b': 'workspace:*' },
+      }),
+    );
+    for (const [dir, name, other] of [
+      [pkgADir, 'a', 'b'],
+      [pkgBDir, 'b', 'a'],
+    ] as const) {
+      await mkdir(join(dir, 'src'), { recursive: true });
+      await mkdir(join(dir, 'node_modules', '@cyc'), { recursive: true });
+      await writeFile(
+        join(dir, 'package.json'),
+        JSON.stringify({
+          name: `@cyc/${name}`,
+          version: '1.0.0',
+          type: 'module',
+          main: './src/index.js',
+          dependencies: { [`@cyc/${other}`]: 'workspace:*' },
+        }),
+      );
+      await writeFile(
+        join(dir, 'src', 'index.js'),
+        `import { ${other} } from '@cyc/${other}';\nexport const ${name} = '${name}';\nexport const get${other.toUpperCase()} = () => ${other};`,
+      );
+    }
+    await mkdir(join(appDir, 'node_modules', '@cyc'), { recursive: true });
+    await symlink(pkgADir, join(appDir, 'node_modules', '@cyc', 'a'));
+    await symlink(pkgBDir, join(appDir, 'node_modules', '@cyc', 'b'));
+    await symlink(pkgBDir, join(pkgADir, 'node_modules', '@cyc', 'b'));
+    await symlink(pkgADir, join(pkgBDir, 'node_modules', '@cyc', 'a'));
+
+    const entryA = join(appDir, 'a.ts');
+    const entryB = join(appDir, 'b.ts');
+    await writeFile(entryA, `import { a } from '@cyc/a';\nexport const fromA = a;`);
+    await writeFile(entryB, `import { b } from '@cyc/b';\nexport const fromB = b;`);
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      const result = await analyzeBundle(
+        [entryA, entryB],
+        entryA,
+        {
+          outputDir: join(appDir, '.mastra', '.build'),
+          projectRoot: appDir,
+          platform: 'node',
+          isDev: true,
+          bundlerOptions: { externals: [], enableSourcemap: false },
+        },
+        noopLogger,
+      );
+
+      expect([...result.depsToOptimize].map(([dep, { exports }]) => [dep, exports])).toEqual([
+        ['@cyc/a', ['a']],
+        ['@cyc/b', ['b']],
+      ]);
+    } finally {
+      process.chdir(originalCwd);
+    }
   }, 30000);
 });
 

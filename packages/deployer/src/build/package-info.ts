@@ -278,6 +278,23 @@ async function resolvePackageMetadata(
 ): Promise<PackageMetadata> {
   const requestedPackageName = getPackageName(packageName);
   const packageNames = [...new Set([packageName, requestedPackageName].filter(Boolean) as string[])];
+
+  // A subpath lookup that misses the installed package falls back to local-pkg, several ms per subpath. Without a
+  // package folder there is nothing for the subpath to resolve to, so ask once per package instead. Yarn PnP has no
+  // folders and can resolve an exported subpath of a package whose bare name doesn't resolve.
+  if (
+    requestedPackageName &&
+    requestedPackageName !== packageName &&
+    !isAbsolute(packageName) &&
+    !packageName.startsWith('.') &&
+    !process.versions.pnp
+  ) {
+    const packageRootPath = await getPackageRootPathFromBase(requestedPackageName, baseUrl, cache);
+    if (!packageRootPath) {
+      return { rootPath: null };
+    }
+  }
+
   let firstRootPath: string | null = null;
 
   for (const name of packageNames) {

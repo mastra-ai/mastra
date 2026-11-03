@@ -233,6 +233,35 @@ describe('workspaceDependencies', () => {
       expect(mockDepsServiceMethods.pack).not.toHaveBeenCalled();
     });
 
+    // A failed build must not leave `pnpm pack` children running, or restore manifests they are still packing.
+    it('lets every pack in a batch finish before reporting a failed one', async () => {
+      let slowPackFinished = false;
+      mockDepsServiceMethods.pack.mockImplementation(async ({ dir }: { dir: string }) => {
+        if (dir === '/pkg-a') {
+          throw new Error('pack failed for pkg-a');
+        }
+        await new Promise(resolve => setTimeout(resolve, 50));
+        slowPackFinished = true;
+      });
+
+      try {
+        await expect(
+          packWorkspaceDependencies({
+            workspaceMap: new Map([
+              ['pkg-a', { location: '/pkg-a', dependencies: {}, version: '1.0.0' }],
+              ['pkg-b', { location: '/pkg-b', dependencies: {}, version: '1.0.0' }],
+            ]),
+            usedWorkspacePackages: new Set(['pkg-a', 'pkg-b']),
+            bundleOutputDir: '/output',
+            logger: mockLogger,
+          }),
+        ).rejects.toThrow('pack failed for pkg-a');
+        expect(slowPackFinished).toBe(true);
+      } finally {
+        mockDepsServiceMethods.pack.mockResolvedValue('mock-tgz-path');
+      }
+    });
+
     it('should throw error when workspace root not found', async () => {
       vi.mocked(findWorkspacesRoot).mockReturnValue(null);
       const workspaceMap = new Map<

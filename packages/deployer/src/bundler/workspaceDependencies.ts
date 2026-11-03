@@ -196,7 +196,8 @@ export const packWorkspaceDependencies = async ({
         logger.info(
           `Packaging batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(packages.length / batchSize)}: ${batch.join(', ')}`,
         );
-        await Promise.all(
+        // Let every `pnpm pack` in the batch exit before failing, so none outlives the build or the manifest restore.
+        const results = await Promise.allSettled(
           batch.map(async pkgName => {
             const dep = workspaceMap.get(pkgName);
             const sanitizedName = slugify(pkgName);
@@ -210,6 +211,10 @@ export const packWorkspaceDependencies = async ({
             });
           }),
         );
+        const failure = results.find(result => result.status === 'rejected');
+        if (failure) {
+          throw failure.reason;
+        }
       }
     });
 
