@@ -21,11 +21,13 @@ Knowledge is in alpha. Its API may change between releases.
 
 [Memory](/docs/memory/overview) is the conversation: the messages and observations that guide one agent's work in a thread. Knowledge is the organized information agents bring into a thread, shared across threads, agents and people.
 
-Use Knowledge for:
+Use Knowledge when you want agents to:
 
-- Documentation, policies or runbooks an agent should answer from instead of guessing.
-- Decisions and conventions that several agents or users build on.
-- Facts that only some runs may see, such as one customer's account notes or one team's playbooks.
+- **Follow rules that change dynamically.** Pin a policy page and every agent that can read it sees it each turn. Edit it, and running agents get the new version on their next turn.
+- **Serve many customers or teams from one agent.** Each customer's or team's pages live in their own scope, and the scopes your server passes for a run decide which ones it can read.
+- **Build on what other agents learned.** Agents record decisions, conventions and runbook notes as pages and attributed notes, which other agents and people then find and add to.
+- **Hand work between agents.** A research agent writes findings, a planning agent adds a plan under them, and a coding agent reads both from the same scope.
+- **Answer from your content instead of guessing.** Seed your docs or policies into a scope and give the agent read-only tools.
 
 ## What Knowledge is
 
