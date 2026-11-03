@@ -33,7 +33,7 @@ export const mastra = new Mastra({
 })
 ```
 
-They mount under your configured API prefix (`/api/knowledge` by default) and are gated by the `knowledge:read` permission. They need `@mastra/core` 1.81.0 or later. With an older version, they return `501`.
+They mount under your configured API prefix (`/api/knowledge` by default) and are gated by the `knowledge:read` permission. They need `@mastra/core` 1.81.0 or later. With an older version, they return `501`. The `link-counts` and `links` routes need 1.82.0 or later and return `501` before it. Studio then counts links among the pages it has loaded.
 
 | Route | Returns |
 | - | - |
