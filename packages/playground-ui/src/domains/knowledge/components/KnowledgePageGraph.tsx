@@ -1395,12 +1395,7 @@ function KnowledgePageGraphInner({
   };
   // Where the pointer went down, so a click that ends a pan isn't taken for a click on empty canvas.
   const pressedAt = useRef<{ x: number; y: number } | null>(null);
-  const onPaneClick = (event: React.MouseEvent) => {
-    const start = pressedAt.current;
-    pressedAt.current = null;
-    if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return;
-    onClearSelection?.();
-  };
+
   // React Flow focuses nodes but only toggles its own selection on Enter or Space; route them like a click.
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
@@ -1410,6 +1405,39 @@ function KnowledgePageGraphInner({
     event.preventDefault();
     activate(page);
   };
+  // React Flow hands these to every node and line, and re-renders them all when one changes. They read the
+  // latest props through a ref so their identity never changes, and pointing at a page re-renders only the
+  // pages whose own props changed.
+  const latest = useRef({ activate, onPreview, onMentionSelect, onClearSelection, laidOut, pagesById });
+  latest.current = { activate, onPreview, onMentionSelect, onClearSelection, laidOut, pagesById };
+  const onNodeMouseEnter = useCallback((_: unknown, node: PageFlowNode) => {
+    setHoveredId(node.id);
+    if (latest.current.laidOut.shape.form.get(node.id) === 'dot') latest.current.onPreview?.(node.data.page);
+  }, []);
+  const onNodeMouseLeave = useCallback(() => setHoveredId(null), []);
+  const onNodeClick = useCallback((_: unknown, node: PageFlowNode) => {
+    if (!isPlaceholder(node.data.page)) latest.current.activate(node.data.page);
+  }, []);
+  const onEdgeClick = useCallback((event: React.MouseEvent, edge: Edge<RimEdgeData>) => {
+    const { onMentionSelect, pagesById } = latest.current;
+    if (edge.data?.kind !== 'mention' || !onMentionSelect) return;
+    const source = pagesById.get(edge.source);
+    const target = pagesById.get(edge.target);
+    if (!source || !target) return;
+    const box = containerRef.current?.getBoundingClientRect();
+    onMentionSelect({
+      source,
+      target,
+      point: { x: event.clientX - (box?.left ?? 0), y: event.clientY - (box?.top ?? 0) },
+      pane: { width: box?.width ?? 0, height: box?.height ?? 0 },
+    });
+  }, []);
+  const onPaneClick = useCallback((event: React.MouseEvent) => {
+    const start = pressedAt.current;
+    pressedAt.current = null;
+    if (start && Math.hypot(event.clientX - start.x, event.clientY - start.y) > CLICK_SLOP_PX) return;
+    latest.current.onClearSelection?.();
+  }, []);
 
   if (!hasNodes) {
     return (
@@ -1457,27 +1485,10 @@ function KnowledgePageGraphInner({
         nodesConnectable={false}
         nodesDraggable={false}
         onPaneClick={onPaneClick}
-        onNodeMouseEnter={(_: unknown, node: PageFlowNode) => {
-          setHoveredId(node.id);
-          if (laidOut.shape.form.get(node.id) === 'dot') onPreview?.(node.data.page);
-        }}
-        onNodeMouseLeave={() => setHoveredId(null)}
-        onNodeClick={(_: unknown, node: PageFlowNode) => {
-          if (!isPlaceholder(node.data.page)) activate(node.data.page);
-        }}
-        onEdgeClick={(event: React.MouseEvent, edge: Edge<RimEdgeData>) => {
-          if (edge.data?.kind !== 'mention' || !onMentionSelect) return;
-          const source = pagesById.get(edge.source);
-          const target = pagesById.get(edge.target);
-          if (!source || !target) return;
-          const box = containerRef.current?.getBoundingClientRect();
-          onMentionSelect({
-            source,
-            target,
-            point: { x: event.clientX - (box?.left ?? 0), y: event.clientY - (box?.top ?? 0) },
-            pane: { width: box?.width ?? 0, height: box?.height ?? 0 },
-          });
-        }}
+        onNodeMouseEnter={onNodeMouseEnter}
+        onNodeMouseLeave={onNodeMouseLeave}
+        onNodeClick={onNodeClick}
+        onEdgeClick={onEdgeClick}
       >
         <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
         <Controls showInteractive={false} showFitView={false}>
