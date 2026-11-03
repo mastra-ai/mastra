@@ -230,18 +230,13 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'knowledge/patterns',
-              label: 'Patterns',
+              id: 'knowledge/agents-and-tools',
+              label: 'Agents and tools',
             },
             {
               type: 'doc',
               id: 'knowledge/scopes-and-access',
               label: 'Scopes and access',
-            },
-            {
-              type: 'doc',
-              id: 'knowledge/agents-and-tools',
-              label: 'Agents and tools',
             },
             {
               type: 'doc',
@@ -257,6 +252,11 @@ const sidebars = {
               type: 'doc',
               id: 'knowledge/seed-data',
               label: 'Seed data',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/patterns',
+              label: 'Patterns',
             },
           ],
         },
