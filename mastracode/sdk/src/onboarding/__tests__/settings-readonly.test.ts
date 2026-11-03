@@ -22,6 +22,7 @@ describe('loading sparse settings', () => {
     withTempSettingsFile(filePath => {
       const original = '{\n  "preferences": { "subagentsEnabled": false },\n  "customOption": "keep me"\n}\n';
       writeFileSync(filePath, original, { encoding: 'utf-8', mode: 0o400 });
+      const originalMode = statSync(filePath).mode;
 
       for (let attempt = 0; attempt < 2; attempt++) {
         const settings = loadSettings(filePath);
@@ -29,7 +30,7 @@ describe('loading sparse settings', () => {
         expect(settings.preferences.subagentsEnabled).toBe(false);
         expect(settings.preferences.thinkingLevel).toBe('off');
         expect(readFileSync(filePath, 'utf-8')).toBe(original);
-        expect(statSync(filePath).mode & 0o777).toBe(0o400);
+        expect(statSync(filePath).mode).toBe(originalMode);
       }
     });
   });
