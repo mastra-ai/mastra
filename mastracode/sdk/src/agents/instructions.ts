@@ -88,6 +88,7 @@ export async function getDynamicInstructionSections({
     hasSubagents,
     hasSubconscious: typeof hasSubconscious === 'function' ? hasSubconscious(state) : hasSubconscious,
     disabledBuiltinTools,
+    requestContext,
   };
 
   const promptSections = buildFullPromptSections(promptCtx);

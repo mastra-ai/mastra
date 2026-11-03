@@ -8,11 +8,12 @@ export { fastModePrompt } from './fast.js';
 
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
+import type { RequestContext } from '@mastra/core/request-context';
 import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
-import { stripMastraGatewayPrefix } from '../../providers/model-ids.js';
 import { MC_TOOLS } from '../../tool-names.js';
 import { hasParallelKey, hasTavilyKey } from '../../tools/index.js';
 import { getLocalPlansRelativeDir } from '../../utils/plans.js';
+import { resolveProviderWebSearchRoute } from '../model.js';
 import { loadSessionInstructions, formatInstructionSource, AGENT_INSTRUCTIONS_HEADING } from './agent-instructions.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
@@ -27,6 +28,8 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   /** The subconscious knowledge tools are registered on the agent. */
   hasSubconscious?: boolean;
   hostInstructions?: string;
+  /** Request whose credentials decide the model's transport, and so its web search tool. */
+  requestContext?: RequestContext;
   /** Controller built-in tools removed via `disableBuiltinTools`; treated as denied. */
   disabledBuiltinTools?: readonly string[];
   /** Resolved in `buildFullPromptSections`; false when `submit_plan` is denied or disabled. */
@@ -85,11 +88,10 @@ export function buildFullPrompt(ctx: PromptContext): string {
  */
 export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // Determine whether web search tools are available
-  const modelId = ctx.modelId ? stripMastraGatewayPrefix(ctx.modelId) : ctx.modelId;
   const hasWebSearch =
     hasParallelKey() ||
     hasTavilyKey() ||
-    (!!modelId && (modelId.startsWith('anthropic/') || modelId.startsWith('openai/')));
+    resolveProviderWebSearchRoute(ctx.modelId, { requestContext: ctx.requestContext }) !== undefined;
 
   // Collect per-tool deny rules so guidance omits denied tools
   const deniedTools = new Set<string>();

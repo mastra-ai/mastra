@@ -310,6 +310,39 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
 }
 
 /**
+ * Which provider-executed web search tool fits the transport a model resolves to:
+ * - `anthropic` / `openai`: the native provider API (direct keys, and Claude or
+ *   Codex OAuth, which keep the native API even through the Mastra gateway).
+ * - `mastra-gateway`: a `mastra/` alias with a gateway key and no OAuth, which
+ *   `resolveModelForRequest` sends to the gateway's OpenRouter chat endpoint.
+ * Other providers have no built-in search. Mirrors the routing in
+ * `resolveModelForRequest` and `MastraCodeGateway`, so the registered tool and
+ * the prompt guidance follow the request the model will actually make.
+ */
+export type ProviderWebSearchRoute = 'anthropic' | 'openai' | 'mastra-gateway';
+
+/** Credential ids whose OAuth sign-in keeps the native provider API through the gateway. */
+const NATIVE_OAUTH_CREDENTIAL_IDS = { anthropic: 'anthropic', openai: 'openai-codex' } as const;
+
+export function resolveProviderWebSearchRoute(
+  modelId: string | undefined,
+  options?: { requestContext?: RequestContext },
+): ProviderWebSearchRoute | undefined {
+  if (!modelId) return undefined;
+  const normalizedInput = normalizeLegacyModelId(modelId);
+  const providerId = stripMastraGatewayPrefix(normalizedInput).split('/')[0];
+  if (providerId !== 'anthropic' && providerId !== 'openai') return undefined;
+  if (!normalizedInput.startsWith(MASTRA_GATEWAY_PREFIX) || !MastraCodeGateway.getMastraGatewayApiKey()) {
+    return providerId;
+  }
+
+  reloadAuthStorage();
+  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
+  const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
+  return credentialStore.get(NATIVE_OAUTH_CREDENTIAL_IDS[providerId])?.type === 'oauth' ? providerId : 'mastra-gateway';
+}
+
+/**
  * Whether `resolveModel` can authenticate a provider for this request, using the
  * same credential lookup: the tenant store in deployed Factory (no environment
  * keys), otherwise local auth and then the provider's environment keys.
