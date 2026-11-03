@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
+import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
 import {
@@ -53,20 +54,8 @@ describe('IntakeSection linear', () => {
         http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
           HttpResponse.json({
             projects: [
-              { id: 'fp-1', name: 'mastra' },
-              { id: 'fp-2', name: 'Other Factory' },
-            ],
-          }),
-        ),
-        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2/source-control-connections`, () =>
-          HttpResponse.json({
-            connections: [
-              {
-                id: 'conn-fp-2',
-                repositories: [
-                  { id: 'ghp-2', branch: null, repository: { slug: 'unrelated/repo', defaultBranch: 'main' } },
-                ],
-              },
+              { id: 'fp-1', name: 'mastra', repositories: [listedRepository('ghp-1', 'mastra')] },
+              { id: 'fp-2', name: 'Other Factory', repositories: [listedRepository('ghp-2', 'unrelated/repo')] },
             ],
           }),
         ),
@@ -134,7 +123,9 @@ describe('IntakeSection linear', () => {
           }),
         ),
         http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-          HttpResponse.json({ projects: [{ id: 'fp-1', name: 'mastra' }] }),
+          HttpResponse.json({
+            projects: [{ id: 'fp-1', name: 'mastra', repositories: [listedRepository('ghp-1', 'mastra')] }],
+          }),
         ),
       );
 

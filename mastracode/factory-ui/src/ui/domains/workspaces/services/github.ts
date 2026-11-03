@@ -14,6 +14,7 @@
  */
 
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
 
 import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 import type { GitLabRepository } from '../../factory/services/gitlab';
@@ -317,11 +318,27 @@ async function listProjectConnections(baseUrl: string, factoryProjectId: string)
   return connections;
 }
 
+/** A linked repository as the project list returns it, in the shape the browser uses. */
+function fromProjectListRepository(
+  project: FactoryProjectPayload,
+  repository: ProjectListRepository,
+): LinkedRepositoryPayload {
+  return {
+    projectRepositoryId: repository.projectRepositoryId,
+    provider: repository.integrationId === 'gitlab' ? 'gitlab' : 'github',
+    externalId: repository.externalId ?? undefined,
+    slug: repository.slug ?? project.name,
+    gitBranch: repository.branch ?? repository.defaultBranch ?? undefined,
+    sandboxWorkdir: repository.sandboxWorkdir,
+  };
+}
+
 /**
- * List the org's Factory projects with their linked repositories (flattened
- * across source-control connections). Resolves to `null` when the caller is
- * unauthenticated, org-less, or the feature is off, so hydration can keep the
- * local cache instead of wiping it.
+ * List the org's Factory projects with their linked repositories, which the
+ * server returns with the list so the app needs one request before it
+ * renders. Resolves to `null` when the caller is unauthenticated, org-less,
+ * or the feature is off, so hydration can keep the local cache instead of
+ * wiping it.
  */
 export async function listFactoryProjects(baseUrl: string): Promise<FactoryProjectSnapshot[] | null> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
@@ -329,18 +346,13 @@ export async function listFactoryProjects(baseUrl: string): Promise<FactoryProje
     headers: { Accept: 'application/json' },
   });
   if (res.status === 401 || res.status === 403 || res.status === 404) return null;
-  const { projects } = await readJsonOrThrow<{ projects: FactoryProjectPayload[] }>(res, 'Failed to list Factories');
-  return Promise.all(
-    projects.map(async project => {
-      const connections = await listProjectConnections(baseUrl, project.id);
-      return {
-        ...project,
-        repositories: connections.flatMap(connection =>
-          connection.repositories.map(link => toLinkedRepositoryPayload(project, link, connection.integrationId)),
-        ),
-      };
-    }),
-  );
+  const { projects } = await readJsonOrThrow<{
+    projects: Array<FactoryProjectPayload & { repositories: ProjectListRepository[] }>;
+  }>(res, 'Failed to list Factories');
+  return projects.map(project => ({
+    ...project,
+    repositories: project.repositories.map(repository => fromProjectListRepository(project, repository)),
+  }));
 }
 
 /** Create a named Factory project. The name is user-chosen, not derived from a repo. */
