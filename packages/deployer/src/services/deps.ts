@@ -225,9 +225,16 @@ function serializePnpmWorkspaceSettings(settings: BundlerConfig['pnpmWorkspaceSe
   });
 }
 
+// Every unindented line starts a new top-level entry, except comments and sequence items, which YAML allows at
+// column 0 under the key above them. Treating any other line as a continuation would copy it with the previous
+// block, such as an auth token after a copied key.
+function isTopLevelEntry(line: string) {
+  return /^[^\s#-]/.test(line);
+}
+
 function getTopLevelYamlKey(line: string) {
-  const match = /^(?!\s)([\w-]+):/.exec(line);
-  return match?.[1];
+  const match = /^(?:"([\w-]+)"|'([\w-]+)'|([\w-]+))\s*:/.exec(line);
+  return match?.[1] ?? match?.[2] ?? match?.[3];
 }
 
 const PNPM_IGNORED_BUILDS_ERROR = 'ERR_PNPM_IGNORED_BUILDS';
@@ -333,19 +340,19 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
     !(key === 'supportedArchitectures' && hasArchitecture);
 
   for (let index = 0; index < lines.length;) {
-    const key = getTopLevelYamlKey(lines[index] ?? '');
-    if (!key) {
+    if (!isTopLevelEntry(lines[index] ?? '')) {
       index += 1;
       continue;
     }
 
+    const key = getTopLevelYamlKey(lines[index] ?? '');
     const start = index;
     index += 1;
-    while (index < lines.length && !getTopLevelYamlKey(lines[index] ?? '')) {
+    while (index < lines.length && !isTopLevelEntry(lines[index] ?? '')) {
       index += 1;
     }
 
-    if (!shouldCopy(key)) {
+    if (!key || !shouldCopy(key)) {
       continue;
     }
 
@@ -358,7 +365,7 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
   }
 
   // pnpm 10 also reads these keys from the `pnpm` field of package.json. The workspace file wins when both set one,
-  // so its keys are read from the parsed YAML too: the line scanner above skips quoted keys.
+  // including keys the line scanner can't name, such as YAML explicit `? key` entries.
   let sourceKeys: string[] = [];
   try {
     const parsed = parse(source);

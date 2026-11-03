@@ -48,7 +48,7 @@ describe('copyPnpmWorkspaceSettings', () => {
   // workspace root. They are re-emitted from options once rewritten for the output directory.
   it('copies pnpm install policy without copying source workspace packages or raw patch paths', () => {
     const output = copyPnpmWorkspaceSettings(
-      `packages:\n  - packages/*\n\ncatalog:\n  react: ^19.0.0\n\nminimumReleaseAge: 1440\nminimumReleaseAgeExclude:\n  - '@mastra/*'\n\nallowBuilds:\n  onnxruntime-node: false\n  node-pty: true\n\npatchedDependencies:\n  foo@1.0.0: patches/foo.patch\n`,
+      `packages:\n  - packages/*\n\ncatalog:\n  react: ^19.0.0\n\nminimumReleaseAge: 1440\n//registry.example/:_authToken: secret\nminimumReleaseAgeExclude:\n  - '@mastra/*'\n\nallowBuilds:\n  onnxruntime-node: false\n  node-pty: true\n\npatchedDependencies:\n  foo@1.0.0: patches/foo.patch\n`,
     );
 
     expect(output).toBe(
@@ -60,6 +60,8 @@ describe('copyPnpmWorkspaceSettings', () => {
     `allowBuilds:\n  onnxruntime-node: false\n  node-pty: true\n\nonlyBuiltDependencies:\n  - better-sqlite3\n  - '@duckdb/node-bindings'\n`,
     `allowBuilds: { onnxruntime-node: false, node-pty: true }\n\nonlyBuiltDependencies: [better-sqlite3, '@duckdb/node-bindings']\n`,
     `allowBuilds: {}\n\nonlyBuiltDependencies: []\n`,
+    `onlyBuiltDependencies:\n- better-sqlite3\n# approved for the sqlite store\n- '@duckdb/node-bindings'\n`,
+    `"allowBuilds":\n  node-pty: true\n\n'onlyBuiltDependencies': [better-sqlite3]\n`,
   ])('preserves valid explicit pnpm build approvals', source => {
     expect(copyPnpmWorkspaceSettings(source)).toBe(`packages:\n  - '.'\n\n${source}`);
   });
@@ -301,8 +303,11 @@ packageExtensions:
     },
   );
 
-  it('does not approve builds from package.json that pnpm-workspace.yaml sets under a quoted key', async () => {
-    await writeFile(join(sourceRoot, 'pnpm-workspace.yaml'), 'minimumReleaseAge: 1440\n"onlyBuiltDependencies": []\n');
+  it.each([
+    ['first', '"onlyBuiltDependencies": []\nminimumReleaseAge: 1440\n'],
+    ['after a copied key', 'minimumReleaseAge: 1440\n"onlyBuiltDependencies": []\n'],
+  ])('keeps a quoted pnpm-workspace.yaml key %s over package.json build approvals', async (_, workspaceYaml) => {
+    await writeFile(join(sourceRoot, 'pnpm-workspace.yaml'), workspaceYaml);
     await writeFile(
       join(sourceRoot, 'package.json'),
       JSON.stringify({ name: 'source', packageManager: 'pnpm@10.34.6', pnpm: { onlyBuiltDependencies: ['esbuild'] } }),
@@ -311,8 +316,9 @@ packageExtensions:
     await new DepsService(sourceRoot).install({ dir: outputDir });
 
     const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    // `parse` rejects duplicate keys, so this also checks the setting is written once.
     expect(workspace.minimumReleaseAge).toBe(1440);
-    expect(workspace.onlyBuiltDependencies).not.toEqual(['esbuild']);
+    expect(workspace.onlyBuiltDependencies).toEqual([]);
   });
 
   it('preserves existing behavior when custom settings are omitted', async () => {
