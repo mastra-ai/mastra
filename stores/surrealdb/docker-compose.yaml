@@ -1,0 +1,13 @@
+services:
+  surrealdb:
+    image: surrealdb/surrealdb:v3.3.4
+    container_name: 'surrealdb-test-db'
+    command: ['start', '--user', 'root', '--pass', 'root', 'memory']
+    ports:
+      - '8010:8000'
+    healthcheck:
+      test: ['CMD', '/surreal', 'is-ready', '--endpoint', 'http://localhost:8000']
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s

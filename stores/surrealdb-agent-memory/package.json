@@ -1,0 +1,66 @@
+{
+  "name": "@mastra/surrealdb-agent-memory",
+  "version": "0.0.0",
+  "description": "SurrealDB Agent Memory provider for Mastra - fact extraction, semantic recall and documents on top of any Mastra storage",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build:lib": "tsdown --silent --config tsdown.config.ts",
+    "prepack": "tsx ../../scripts/generate-package-docs.ts",
+    "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
+  },
+  "dependencies": {
+    "@surrealdb/memory": "^1.0.0-alpha.11"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@internal/types-builder": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/node": "22.19.15",
+    "@vitest/coverage-v8": "catalog:",
+    "@vitest/ui": "catalog:",
+    "tsdown": "0.23.1",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.76.0-0 <2.0.0-0",
+    "zod": "^3.25.0 || ^4.0.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "license": "Apache-2.0",
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "stores/surrealdb-agent-memory"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}
