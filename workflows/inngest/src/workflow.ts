@@ -719,9 +719,9 @@ export class InngestWorkflow<
 
             // Ensure final snapshot is persisted BEFORE publishing workflow-finish
             // This fixes a race condition where getRunOutput reads the snapshot before it's fully written
-            // A run whose budget expired has had its snapshot deleted by the caller; do not write it back.
+            // A run the caller deleted at its budget deadline stays deleted.
             const shouldPersistFinalSnapshot =
-              !engine.executionDeadlinePassed() &&
+              !(await engine.deletedAtDeadline(this.id, runId)) &&
               this.options.shouldPersistSnapshot({
                 workflowStatus: result.status,
                 stepResults: result.steps,

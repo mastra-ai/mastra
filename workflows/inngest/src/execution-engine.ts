@@ -305,11 +305,20 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   }
 
   /**
-   * A run whose budget expired has had its snapshot deleted by the caller (see createInngestAgent
-   * `armTotalTimeout`), so no step update may write it back.
+   * Whether the caller deleted this run at its budget deadline (see createInngestAgent
+   * `armTotalTimeout`). A write after that must not bring the run back. A run that suspended or
+   * finished before the deadline keeps its snapshot, so its write still lands when it reaches
+   * storage late.
    */
+  async deletedAtDeadline(workflowId: string, runId: string): Promise<boolean> {
+    if (!this.executionDeadlinePassed()) return false;
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    if (!workflowsStore) return false;
+    return !(await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId }));
+  }
+
   override async persistStepUpdate(params: Parameters<DefaultExecutionEngine['persistStepUpdate']>[0]): Promise<void> {
-    if (this.executionDeadlinePassed()) return;
+    if (await this.deletedAtDeadline(params.workflowId, params.runId)) return;
     return super.persistStepUpdate(params);
   }
 
