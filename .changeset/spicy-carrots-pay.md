@@ -1,6 +1,6 @@
 ---
-"@internal/core": major
-"@mastra/core": major
+"@internal/core": minor
+"@mastra/core": minor
 ---
 
 Required a nonblank `traceId` in the feedback and score HTTP body schemas. Missing, null, empty, and whitespace-only IDs are rejected. Storage creation, batch APIs, and historical nullable records are unchanged.

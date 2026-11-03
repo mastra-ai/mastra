@@ -1,5 +1,5 @@
 ---
-"@mastra/client-js": major
+"@mastra/client-js": minor
 ---
 
 Required `traceId` in the request types for `createFeedback()` and `createScore()`. Callers that previously omitted the trace ID must now supply it. `spanId` remains optional, and response types are unchanged.
