@@ -20,25 +20,34 @@ export default async function setup(project: TestProject) {
 
   const tag = E2E_TAG;
   const teardown = await prepareMonorepo(rootDir, globby, tag);
-
-  const verdaccioPath = resolveVerdaccioPath();
-  const port = await getPort();
-  const registryLocation = await mkdtemp(join(tmpdir(), 'npm-import-test-registry'));
-  await copyFile(join(__dirname, '../_local-registry-setup/verdaccio.yaml'), join(registryLocation, 'verdaccio.yaml'));
-  const registry = await startRegistry(verdaccioPath, port, registryLocation);
-
-  project.provide('tag', tag);
-  project.provide('registry', registry.toString());
-
-  await publishPackages(await getSuitePublishFilters(rootDir, 'npm-import'), tag, rootDir, registry);
-
-  return () => {
+  let registry: Awaited<ReturnType<typeof startRegistry>> | undefined;
+  const stopRegistry = () => {
     try {
-      teardown();
+      registry?.kill();
     } catch {}
-    try {
-      registry.kill();
-    } catch {}
+  };
+
+  try {
+    const registryLocation = await mkdtemp(join(tmpdir(), 'npm-import-test-registry'));
+    await copyFile(
+      join(__dirname, '../_local-registry-setup/verdaccio.yaml'),
+      join(registryLocation, 'verdaccio.yaml'),
+    );
+    registry = await startRegistry(resolveVerdaccioPath(), await getPort(), registryLocation);
+
+    project.provide('tag', tag);
+    project.provide('registry', registry.toString());
+
+    await publishPackages(await getSuitePublishFilters(rootDir, 'npm-import'), tag, rootDir, registry);
+  } catch (error) {
+    stopRegistry();
+    await teardown();
+    throw error;
+  }
+
+  return async () => {
+    stopRegistry();
+    await teardown();
   };
 }
 

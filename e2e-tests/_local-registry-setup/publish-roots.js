@@ -15,7 +15,7 @@ const SHARED_REGISTRY_SUITES = {
     manifestGlobs: ['e2e-tests/monorepo/template/**/package.json'],
   },
   'npm-import': {
-    manifestGlobs: ['e2e-tests/npm-import/template/package.json'],
+    manifestGlobs: ['e2e-tests/npm-import/template/**/package.json'],
   },
   'no-bundling': {
     manifestGlobs: ['e2e-tests/no-bundling/template/package.json'],
