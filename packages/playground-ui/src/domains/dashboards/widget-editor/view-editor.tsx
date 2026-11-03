@@ -1,4 +1,5 @@
 import { SigmaIcon, XIcon } from 'lucide-react';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { chartColor } from '../lib/format';
@@ -24,7 +25,7 @@ import { useDimensionSuggestions, useDimensionValues } from './use-dimension-val
 import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Field, FieldLabel } from '@/ds/components/Field';
+import { Field, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar';
 import { chipClass, editableSegmentClass, removeSegmentClass } from '@/ds/components/FilterBar/filter-bar-chip';
@@ -80,7 +81,14 @@ export function ViewEditor({ index, kind, scorers, start }: ViewEditorProps) {
   const entries = view.metrics.map(m => findEntry(m.entry, scorers));
   const shownEntries = entries.filter(e => e !== undefined);
   const hasScores = entries.some(e => e?.source === 'scores');
-  const split = splitLabel(kind);
+  // Hide the split when nothing can be picked: a table always needs its rows, charts only when a dimension fits.
+  const splittable =
+    kind === 'table' ||
+    !!view.splitBy ||
+    dimensionsFor(hasScores).some(
+      d => !view.filters.some(f => f.dimension === d.id) && fits({ splitBy: d.id, splitValues: [] }),
+    );
+  const split = splittable ? splitLabel(kind) : undefined;
 
   const updateMetric = (key: string, patch: Partial<MetricDraft>) =>
     set({ metrics: view.metrics.map(m => (m.key === key ? { ...m, ...patch } : m)) });
@@ -147,8 +155,9 @@ export function ViewEditor({ index, kind, scorers, start }: ViewEditorProps) {
     );
   }
 
+  // A fragment, so each section is a direct child of the popover and `first:` finds the top one.
   return (
-    <div className="flex flex-col gap-4">
+    <>
       <Section title="Metrics">
         <div className="flex flex-wrap items-center gap-1.5">
           {view.metrics.map((metric, i) => {
@@ -165,14 +174,11 @@ export function ViewEditor({ index, kind, scorers, start }: ViewEditorProps) {
               <ItemChip
                 key={metric.key}
                 label={metric.label || placeholder}
+                name={placeholder}
+                description={entry && `${entry.group} · ${entry.description}`}
                 color={colors?.[metric.key]?.color}
                 onRemove={() => removeMetric(metric.key)}
               >
-                {entry && (
-                  <Txt variant="caption" tone="muted">
-                    {entry.group} · {entry.description}
-                  </Txt>
-                )}
                 {aggregation && options.length > 1 && (
                   <AggregationSelect
                     options={options}
@@ -195,6 +201,7 @@ export function ViewEditor({ index, kind, scorers, start }: ViewEditorProps) {
             <ItemChip
               key={combo.key}
               label={comboLabel(combo)}
+              name={defaultComboLabel(combo.op, labelOf(combo.a), labelOf(combo.b))}
               color={colors?.[combo.key]?.color}
               onRemove={() => removeCombo(combo.key)}
             >
@@ -254,7 +261,7 @@ export function ViewEditor({ index, kind, scorers, start }: ViewEditorProps) {
           />
         </Section>
       )}
-    </div>
+    </>
   );
 }
 
@@ -271,19 +278,21 @@ function seriesColors(view: ViewDraft) {
 }
 
 /** A labelled group of the settings. */
+/** One group of the settings popover, ruled off from the group above it. */
 export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-2">
-      <Txt as="h3" variant="label" tone="muted">
-        {title}
-      </Txt>
+    <Fieldset className="border-t border-border p-4 first:border-t-0">
+      <FieldsetLegend>{title}</FieldsetLegend>
       {children}
-    </section>
+    </Fieldset>
   );
 }
 
 type ItemChipProps = {
   label: string;
+  /** What the item measures, kept in view once it's renamed. */
+  name: string;
+  description?: string;
   /** The series color, when the chart draws one per item. */
   color: ChartColor | undefined;
   onRemove: () => void;
@@ -292,7 +301,7 @@ type ItemChipProps = {
 };
 
 /** A metric or combination: its mark and label; a click opens its settings. */
-function ItemChip({ label, color, onRemove, children }: ItemChipProps) {
+function ItemChip({ label, name, description, color, onRemove, children }: ItemChipProps) {
   return (
     <span className={chipClass}>
       <Popover>
@@ -305,6 +314,14 @@ function ItemChip({ label, color, onRemove, children }: ItemChipProps) {
           <span className="truncate">{label}</span>
         </PopoverTrigger>
         <PopoverContent align="start" className="flex w-80 flex-col gap-4">
+          <div className="flex flex-col gap-0.5">
+            <Txt variant="label">{name}</Txt>
+            {description && (
+              <Txt variant="caption" tone="muted">
+                {description}
+              </Txt>
+            )}
+          </div>
           {children}
         </PopoverContent>
       </Popover>
@@ -430,19 +447,22 @@ function Presentation({ draft, kind, placeholder, defaultIcon, color, onChange }
     <>
       <Field>
         <FieldLabel>{labelName}</FieldLabel>
-        <Input
-          size="sm"
-          value={draft.label ?? ''}
-          placeholder={placeholder}
-          onChange={e => onChange({ label: e.target.value || undefined })}
-        />
+        <div className="flex items-center gap-2">
+          {color && (
+            <ColorPicker
+              value={color.color}
+              onChange={next => onChange({ color: next === color.fallback ? undefined : next })}
+            />
+          )}
+          <Input
+            size="sm"
+            className="flex-1"
+            value={draft.label ?? ''}
+            placeholder={placeholder}
+            onChange={e => onChange({ label: e.target.value || undefined })}
+          />
+        </div>
       </Field>
-      {color && (
-        <ColorSelect
-          value={color.color}
-          onChange={next => onChange({ color: next === color.fallback ? undefined : next })}
-        />
-      )}
       {kind === 'kpis' && <IconSelect value={draft.icon ?? defaultIcon} onChange={icon => onChange({ icon })} />}
       {(kind === 'kpis' || kind === 'table') && (
         <Field orientation="horizontal">
@@ -588,15 +608,6 @@ function SplitBy({ view, entry, kind, hasScores, fits, sortItems, onChange }: Sp
       .map(d => ({ value: d.id, label: d.label })),
   ];
   const options = [...new Set([...values, ...view.splitValues])].map(v => ({ value: v, label: v }));
-  const blocked = !view.splitBy && !fits({ splitBy: 'environment', splitValues: [] });
-  // Nothing to pick but "None": say why instead of showing a dead select.
-  if (blocked) {
-    return (
-      <Txt variant="caption" tone="muted" className="flex min-h-control-sm items-center">
-        Combinations, scores and percentiles can't be split. Remove them to split this view.
-      </Txt>
-    );
-  }
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -688,25 +699,39 @@ function TableOrder({
   );
 }
 
-function ColorSelect({ value, onChange }: { value: ChartColor; onChange: (color: ChartColor) => void }) {
+/** The series' swatch, left of its label field; a click picks another color. */
+function ColorPicker({ value, onChange }: { value: ChartColor; onChange: (color: ChartColor) => void }) {
+  const [open, setOpen] = useState(false);
+  const current = COLOR_ITEMS.find(c => c.value === value);
   return (
-    <Field>
-      <FieldLabel>Color</FieldLabel>
-      <Select value={value} onValueChange={color => color && onChange(color)} items={COLOR_ITEMS}>
-        <SelectTrigger size="sm">
-          <SeriesMark color={chartColor(value)} />
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {COLOR_ITEMS.map(c => (
-            <SelectItem key={c.value} value={c.value}>
-              <SeriesMark color={chartColor(c.value)} />
-              {c.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </Field>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        variant="default"
+        size="icon-sm"
+        tooltip="Change color"
+        aria-label={`Color: ${current?.label ?? value}`}
+      >
+        <SeriesMark color={chartColor(value)} className="size-3" />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="grid w-auto grid-cols-4 gap-1 p-2">
+        {COLOR_ITEMS.map(c => (
+          <button
+            key={c.value}
+            type="button"
+            aria-label={c.label}
+            aria-pressed={c.value === value}
+            title={c.label}
+            onClick={() => {
+              onChange(c.value);
+              setOpen(false);
+            }}
+            className="grid size-8 cursor-pointer place-items-center rounded-md hover:bg-fill-subtle aria-pressed:bg-fill-subtle aria-pressed:ring-1 aria-pressed:ring-border-strong"
+          >
+            <SeriesMark color={chartColor(c.value)} className="size-4 rounded-sm" />
+          </button>
+        ))}
+      </PopoverContent>
+    </Popover>
   );
 }
 

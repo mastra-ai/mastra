@@ -68,7 +68,7 @@ export function MetricCommand({ entries, start, onPick, className }: MetricComma
       </div>
 
       {browsing ? (
-        <div className="mt-4 flex flex-col gap-2 border-t border-border px-4 pt-4 pb-4">
+        <div className="mt-4 flex flex-col gap-2 border-t border-border p-4">
           <Txt as="h4" variant="label" tone="muted">
             Or start from a ready-made widget
           </Txt>
@@ -80,7 +80,7 @@ export function MetricCommand({ entries, start, onPick, className }: MetricComma
                 onClick={() => start.onPreset(preset)}
                 className={cn(
                   'flex cursor-pointer items-center gap-3 rounded-xl border border-border p-3 text-left',
-                  'hover:bg-fill-subtle focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                  'focus-visible:ring-ring hover:bg-fill-subtle focus-visible:ring-2 focus-visible:outline-none',
                 )}
               >
                 <span className="flex h-10 w-14 shrink-0 items-center justify-center rounded-lg bg-fill-subtle">

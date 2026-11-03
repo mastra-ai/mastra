@@ -12,7 +12,16 @@ import type { Scorer } from '../lib/scores';
 import { EDITOR_KINDS, findEntry, isTimeseriesKind } from './catalogue';
 import type { EditorKind } from './catalogue';
 import { draftToWidget, effectiveKind, misfit, widgetToDraft } from './codec';
-import { DEFAULT_VIEW_LABEL, copyLabel, emptyView, emptyWidget, newWidgetTitle, nextViewLabel, unsplit } from './draft';
+import {
+  DEFAULT_VIEW_LABEL,
+  copyLabel,
+  emptyView,
+  emptyWidget,
+  newWidgetTitle,
+  nextViewLabel,
+  carrySplit,
+  unsplit,
+} from './draft';
 import type { WidgetDraft } from './draft';
 import { KindTiles } from './kind-tiles';
 import type { WidgetPreset } from './presets';
@@ -146,19 +155,23 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange,
   useEffect(() => emit(JSON.parse(change) as WidgetEditorChange), [change]);
 
   const hasScore = views.some(v => v.metrics.some(m => findEntry(m.entry, scorers)?.source === 'scores'));
-  // Switching kinds drops the split, so a kind is judged on the views without it. One that would
-  // still leave a metric out isn't offered: switching never strikes items through.
-  const unsplitViews = views.map(unsplit);
+  // What the views become in another kind: the split carries over when that kind can use it, and is
+  // dropped when keeping it would leave a metric out (a combination can't be split into series).
+  // A kind that still leaves one out isn't offered: switching never strikes items through.
+  const switchedViews = (to: EditorKind) => {
+    const carried = views.map(v => carrySplit(v, to));
+    return misfit(carried, to, scorers) ? views.map(unsplit) : carried;
+  };
   const kinds = EDITOR_KINDS.filter(k => k.value !== 'scores' || hasScore || kind === 'scores').map(k => ({
     ...k,
-    misfit: misfit(k.value === kind ? views : unsplitViews, k.value, scorers),
+    misfit: misfit(k.value === kind ? views : switchedViews(k.value), k.value, scorers),
   }));
   // Why the greyed-out kinds are off, once each: Line and Stacked bars often share a reason.
   const blocked = [...new Set(kinds.flatMap(k => (k.misfit && k.value !== kind ? [k.misfit] : [])))];
 
   const setViews = (next: WidgetDraft['views']) => setValue('views', next, { shouldDirty: true });
   const pickKind = (value: EditorKind) => {
-    setValue('views', unsplitViews, { shouldDirty: true });
+    if (value !== kind) setValue('views', switchedViews(value), { shouldDirty: true });
     setValue('kind', value, { shouldDirty: true });
     setValue('kindPicked', true, { shouldDirty: true });
   };
@@ -167,7 +180,7 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange,
     fill(() => {
       setViews(views.map((v, i) => (i === active ? { ...preset.view(), label: v.label || DEFAULT_VIEW_LABEL } : v)));
       if (draft.title === initial.title) setValue('title', preset.title, { shouldDirty: true });
-      // Not pickKind: that drops splits, and the preset's split is part of it.
+      // Not pickKind: that adapts the current split, and the preset brings its own.
       setValue('kind', preset.kind, { shouldDirty: true });
       setValue('kindPicked', true, { shouldDirty: true });
     });
@@ -244,7 +257,7 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange,
             afterClose.current = undefined;
           }}
         >
-          <div className="relative">
+          <div className="group/frame relative">
             {activeEmpty ? (
               <ChartCard title={draft.title || 'Untitled widget'}>
                 <div className="flex h-full items-center justify-center">
@@ -265,7 +278,15 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange,
             {buttonCount > 0 && (
               <div
                 ref={buttons}
-                className={cn('absolute z-10 flex gap-1', cardless ? '-top-3.5 -right-3.5' : 'top-2 right-4')}
+                className={cn(
+                  'absolute z-10 flex gap-1 transition-opacity duration-normal',
+                  cardless ? '-top-3.5 -right-3.5' : 'top-2 right-4',
+                  // Out of the way until the card is hovered or focused; kept while one of its popovers is open
+                  // and on touch screens, which can't hover.
+                  !settingsOpen &&
+                    !filtersOpen &&
+                    'opacity-0 group-hover/frame:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100',
+                )}
               >
                 {!activeEmpty && (
                   <>
@@ -339,10 +360,7 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange,
             align="start"
             sideOffset={8}
             collisionAvoidance={COLLISION}
-            className={cn(
-              'flex max-h-(--available-height) w-[min(32rem,calc(100vw-2rem))] flex-col overflow-y-auto',
-              activeEmpty ? 'p-0' : 'gap-5 p-4',
-            )}
+            className="flex max-h-(--available-height) w-[min(32rem,calc(100vw-2rem))] flex-col overflow-y-auto p-0"
           >
             {activeEmpty ? (
               <ViewEditor
@@ -423,7 +441,7 @@ type SettingsFooterProps = {
 function SettingsFooter({ view, issues }: SettingsFooterProps) {
   if (!view && issues.length === 0) return null;
   return (
-    <div className="flex flex-col gap-3 border-t border-border pt-4">
+    <div className="flex flex-col gap-3 border-t border-border p-4">
       {issues.length > 0 && (
         <ul className="flex flex-col gap-0.5" role="alert">
           {issues.map(issue => (

@@ -2,8 +2,9 @@ import { GripHorizontal } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, DragEvent, KeyboardEvent, PointerEvent, ReactNode } from 'react';
 import { setWidgetDragData, WIDGET_DRAG_TYPE } from './drag-data';
-import { canInsertAt, insertWidget, LAYOUT_COLUMNS, MIN_SPAN, moveWidget, resizeWidgets } from './layout';
+import { canInsertAt, insertWidget, LAYOUT_COLUMNS, moveWidget, resizeOptions, resizeWidgets } from './layout';
 import type { WidgetDropTarget, WidgetLayoutItem, WidgetLayoutRow } from './layout';
+import { useSlotAnimations } from './use-slot-animations';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { focusRing } from '@/ds/primitives/transitions';
@@ -26,13 +27,15 @@ export type WidgetLayoutProps = {
 type DragState = { widgetId: string | null };
 
 /**
- * Rows of widgets on 12 columns, each row always filled. Drag a widget by its handle onto a blue
- * line: a horizontal one puts it on a new row, a vertical one slots it into that row. The handle
+ * Rows of widgets on 12 columns, each row always filled. Drag a widget by its handle into a gap; a
+ * line shows where it lands: a horizontal one puts it on a new row, a vertical one slots it into that row. The handle
  * between two widgets trades columns between them.
  */
 export function WidgetLayout({ rows, onRowsChange, renderWidget, className }: WidgetLayoutProps) {
   const [drag, setDrag] = useState<DragState>();
   const dragging = drag !== undefined;
+  const layoutRef = useRef<HTMLDivElement>(null);
+  useSlotAnimations(layoutRef, rows);
 
   // A drop or a cancelled drag ends wherever the pointer is, often outside the layout.
   useEffect(() => {
@@ -94,6 +97,7 @@ export function WidgetLayout({ rows, onRowsChange, renderWidget, className }: Wi
     row.widgets.forEach((widget, index) => {
       const next = row.widgets[index + 1];
       const isLast = next === undefined;
+      const leftSpans = resizeOptions(row.widgets, index);
       cells.push(
         <WidgetSlot
           key={widget.id}
@@ -105,10 +109,10 @@ export function WidgetLayout({ rows, onRowsChange, renderWidget, className }: Wi
         >
           {slotZone(rowIndex, index, 'before')}
           {isLast && slotZone(rowIndex, index + 1, 'after')}
-          {next && !dragging && (
+          {!isLast && !dragging && (
             <ResizeHandle
               leftSpan={widget.span}
-              maxLeftSpan={widget.span + next.span - MIN_SPAN}
+              leftSpans={leftSpans}
               onResize={span => resize(rowIndex, index, span)}
             />
           )}
@@ -121,6 +125,7 @@ export function WidgetLayout({ rows, onRowsChange, renderWidget, className }: Wi
 
   return (
     <div
+      ref={layoutRef}
       data-widget-layout=""
       className={cn('group/layout grid grid-cols-12 gap-x-4 px-4', className)}
       onDragEnter={event => {
@@ -194,7 +199,7 @@ type DropZoneProps = {
   onDrop: (event: DragEvent) => void;
 };
 
-/** A blue line with a wider invisible hit area around it; it brightens while a widget is over it. */
+/** An invisible hit area that shows a gray line only while a widget is dragged over it. */
 function DropZone({ orientation, className, onDrop }: DropZoneProps) {
   const [over, setOver] = useState(false);
   return (
@@ -218,10 +223,9 @@ function DropZone({ orientation, className, onDrop }: DropZoneProps) {
     >
       <div
         className={cn(
-          'pointer-events-none rounded-full bg-info-indicator transition-[opacity,scale] duration-fast motion-reduce:transition-none',
-          orientation === 'horizontal' ? 'h-0.5 w-full' : 'h-full w-0.5',
-          over ? 'opacity-100' : 'opacity-40',
-          over && (orientation === 'horizontal' ? 'scale-y-200' : 'scale-x-200'),
+          'pointer-events-none rounded-full bg-border-strong transition-opacity duration-fast motion-reduce:transition-none',
+          orientation === 'horizontal' ? 'h-1 w-full' : 'h-full w-1',
+          over ? 'opacity-100' : 'opacity-0',
         )}
       />
     </div>
@@ -230,21 +234,25 @@ function DropZone({ orientation, className, onDrop }: DropZoneProps) {
 
 type ResizeHandleProps = {
   leftSpan: number;
-  maxLeftSpan: number;
+  /** The spans the left widget can take, narrowest first; the widgets after it share the rest. */
+  leftSpans: number[];
   onResize: (leftSpan: number) => void;
 };
 
 /**
- * Sits in the gap after a widget. Dragging it left shrinks the widget on its left and grows the one
- * on its right by whole columns; arrow keys do the same one column at a time.
+ * Sits in the gap after a widget. Dragging it left shrinks the widget on its left and grows the ones
+ * on its right, snapping to the nearest span the row can store; arrow keys step through the spans.
+ * When the boundary has nowhere else to go (two widgets can only split a row 6 + 6) it stays visible
+ * but inert.
  */
-function ResizeHandle({ leftSpan, maxLeftSpan, onResize }: ResizeHandleProps) {
+function ResizeHandle({ leftSpan, leftSpans, onResize }: ResizeHandleProps) {
   const start = useRef<{ x: number; span: number; column: number }>(null);
   const [resizing, setResizing] = useState(false);
+  const fixed = leftSpans.length < 2;
 
   const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
     const layout = event.currentTarget.closest<HTMLElement>('[data-widget-layout]');
-    if (!layout) return;
+    if (fixed || !layout) return;
     event.preventDefault();
     const style = getComputedStyle(layout);
     const gap = parseFloat(style.columnGap) || 0;
@@ -266,7 +274,13 @@ function ResizeHandle({ leftSpan, maxLeftSpan, onResize }: ResizeHandleProps) {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    const span = { ArrowLeft: leftSpan - 1, ArrowRight: leftSpan + 1, Home: MIN_SPAN, End: maxLeftSpan }[event.key];
+    const current = leftSpans.indexOf(leftSpan);
+    const span = {
+      ArrowLeft: leftSpans[current - 1],
+      ArrowRight: leftSpans[current + 1],
+      Home: leftSpans[0],
+      End: leftSpans.at(-1),
+    }[event.key];
     if (span === undefined) return;
     event.preventDefault();
     onResize(span);
@@ -277,12 +291,14 @@ function ResizeHandle({ leftSpan, maxLeftSpan, onResize }: ResizeHandleProps) {
       role="separator"
       aria-orientation="vertical"
       aria-label="Resize widgets"
-      aria-valuemin={MIN_SPAN}
-      aria-valuemax={maxLeftSpan}
+      aria-valuemin={leftSpans[0]}
+      aria-valuemax={leftSpans.at(-1)}
       aria-valuenow={leftSpan}
-      tabIndex={0}
+      aria-disabled={fixed || undefined}
+      tabIndex={fixed ? -1 : 0}
       className={cn(
-        'group/handle absolute inset-y-0 -right-4 z-10 flex w-4 cursor-col-resize touch-none items-center justify-center rounded-full select-none',
+        'group/handle absolute inset-y-0 -right-4 z-10 flex w-4 touch-none items-center justify-center rounded-full select-none',
+        fixed ? 'cursor-not-allowed' : 'cursor-col-resize',
         focusRing,
       )}
       onPointerDown={onPointerDown}
@@ -296,7 +312,9 @@ function ResizeHandle({ leftSpan, maxLeftSpan, onResize }: ResizeHandleProps) {
           'h-8 w-1 rounded-full transition-[opacity,background-color] duration-fast motion-reduce:transition-none',
           resizing
             ? 'bg-info-indicator opacity-100'
-            : 'bg-border-strong opacity-0 group-hover/layout:opacity-100 group-hover/handle:bg-info-indicator group-focus-visible/handle:opacity-100',
+            : fixed
+              ? 'bg-border opacity-0 group-hover/layout:opacity-100'
+              : 'bg-border-strong opacity-0 group-hover/handle:bg-info-indicator group-hover/layout:opacity-100 group-focus-visible/handle:opacity-100',
         )}
       />
     </div>

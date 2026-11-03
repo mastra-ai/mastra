@@ -1,9 +1,15 @@
+import { DASHBOARD_WIDGET_SPANS } from '@mastra/core/storage/dashboards';
+import type { DashboardSpan } from '../components/dashboard-grid';
+
 /** Every row fills the 12 columns: one widget spans 12, several share 12 between them. */
 export const LAYOUT_COLUMNS = 12;
 /** The narrowest a widget can get, so a row holds at most six widgets. */
-export const MIN_SPAN = 2;
+export const MIN_SPAN = 2 satisfies DashboardSpan;
+export const MAX_ROW_WIDGETS = LAYOUT_COLUMNS / MIN_SPAN;
+/** The widths the layout hands out: the ones a dashboard stores, from `MIN_SPAN` up. */
+export const LAYOUT_SPANS = DASHBOARD_WIDGET_SPANS.filter(span => span >= MIN_SPAN);
 
-export type WidgetLayoutItem = { id: string; span: number };
+export type WidgetLayoutItem = { id: string; span: DashboardSpan };
 export type WidgetLayoutRow = { widgets: WidgetLayoutItem[] };
 
 /**
@@ -25,21 +31,62 @@ function locate(rows: WidgetLayoutRow[], widgetId: string) {
   return undefined;
 }
 
-/** Columns the row can give up without any widget going below `MIN_SPAN`. */
-function spareColumns(row: WidgetLayoutRow) {
-  return row.widgets.reduce((sum, w) => sum + w.span - MIN_SPAN, 0);
+/** Every way, in order, for `count` widgets to fill `columns` with layout spans. */
+function rowSplits(count: number, columns: number = LAYOUT_COLUMNS): DashboardSpan[][] {
+  if (count === 0) return columns === 0 ? [[]] : [];
+  return LAYOUT_SPANS.filter(span => span <= columns).flatMap(span =>
+    rowSplits(count - 1, columns - span).map(rest => [span, ...rest]),
+  );
 }
 
-/** Whether a new widget fits at `target`: a new row always does; a row needs `MIN_SPAN` spare columns. */
-export function canInsertAt(rows: WidgetLayoutRow[], target: WidgetDropTarget) {
-  if (target.type === 'row') return true;
-  const row = rows[target.rowIndex];
-  return row !== undefined && spareColumns(row) >= MIN_SPAN;
+const sum = (values: number[]) => values.reduce((total, value) => total + value, 0);
+
+/** Orders costs by their first criterion, then the next one on a tie. */
+function compareCosts(a: number[], b: number[]) {
+  for (const [i, value] of a.entries()) {
+    const other = b[i] ?? 0;
+    if (value !== other) return value - other;
+  }
+  return 0;
+}
+
+/** Picks the option with the lowest cost; the first one wins a tie. */
+function cheapest<T>(options: T[], cost: (option: T) => number[]): T | undefined {
+  let best: { option: T; cost: number[] } | undefined;
+  for (const option of options) {
+    const next = { option, cost: cost(option) };
+    if (!best || compareCosts(next.cost, best.cost) < 0) best = next;
+  }
+  return best?.option;
 }
 
 /**
- * Inserts a widget at `target`. On a new row it spans the whole row; in a row it takes `MIN_SPAN`
- * columns from its closest siblings, the wider one first when two are as close.
+ * Gives `widgets` the spans that fill the row while changing their current ones the least. On a
+ * tie, widgets closer to where the row changed (by `distance`) give way first, then those on the left.
+ * Returns `undefined` when no split fits that many widgets into `columns`.
+ */
+function fitRow(
+  widgets: WidgetLayoutItem[],
+  distance: (index: number) => number,
+  columns: number = LAYOUT_COLUMNS,
+): WidgetLayoutItem[] | undefined {
+  const split = cheapest(rowSplits(widgets.length, columns), split => {
+    const changes = widgets.map((w, i) => Math.abs((split[i] ?? 0) - w.span));
+    return [sum(changes), sum(changes.map((c, i) => c * distance(i))), sum(changes.map((c, i) => c * i))];
+  });
+  return split && widgets.map((w, i) => ({ ...w, span: split[i] ?? w.span }));
+}
+
+/** Whether a new widget fits at `target`: a new row always does; a row while it has fewer than six widgets. */
+export function canInsertAt(rows: WidgetLayoutRow[], target: WidgetDropTarget) {
+  if (target.type === 'row') return true;
+  const row = rows[target.rowIndex];
+  return row !== undefined && row.widgets.length < MAX_ROW_WIDGETS;
+}
+
+/**
+ * Inserts a widget at `target`. On a new row it spans the whole row; in a row it starts at
+ * `MIN_SPAN` and the row is refitted, taking columns from its closest siblings first.
  * Returns `undefined` when the row has no room left.
  */
 export function insertWidget(
@@ -53,41 +100,28 @@ export function insertWidget(
     return next;
   }
   const row = rows[target.rowIndex];
-  if (!row || spareColumns(row) < MIN_SPAN) return undefined;
+  if (!row || row.widgets.length >= MAX_ROW_WIDGETS) return undefined;
 
-  const widgets = row.widgets.map(w => ({ ...w }));
-  let needed = MIN_SPAN;
-  for (let distance = 0; needed > 0; distance++) {
-    const left = widgets[target.index - 1 - distance];
-    const right = widgets[target.index + distance];
-    const closest = [left, right].filter(w => w !== undefined).sort((a, b) => b.span - a.span);
-    for (const sibling of closest) {
-      const taken = Math.min(needed, sibling.span - MIN_SPAN);
-      sibling.span -= taken;
-      needed -= taken;
-    }
-  }
+  const widgets = [...row.widgets];
   widgets.splice(target.index, 0, { id: widgetId, span: MIN_SPAN });
-  return replaceRow(rows, target.rowIndex, widgets);
+  const fitted = fitRow(widgets, i => Math.abs(i - target.index));
+  return fitted && replaceRow(rows, target.rowIndex, fitted);
 }
 
-/** Removes a widget; its columns go to its left sibling (right when first), and an emptied row goes away. */
+/** Removes a widget; the row is refitted, its closest siblings taking the columns, and an emptied row goes away. */
 export function removeWidget(rows: WidgetLayoutRow[], widgetId: string): WidgetLayoutRow[] {
   const at = locate(rows, widgetId);
   if (!at) return rows;
-  const { row, widget: removed } = at;
-  if (row.widgets.length === 1) return rows.filter((_, i) => i !== at.rowIndex);
+  if (at.row.widgets.length === 1) return rows.filter((_, i) => i !== at.rowIndex);
 
-  const heir = at.index > 0 ? at.index - 1 : 1;
-  const widgets = row.widgets
-    .map((w, i) => (i === heir ? { ...w, span: w.span + removed.span } : w))
-    .filter(w => w.id !== widgetId);
-  return replaceRow(rows, at.rowIndex, widgets);
+  const widgets = at.row.widgets.filter(w => w.id !== widgetId);
+  const fitted = fitRow(widgets, i => (i < at.index ? at.index - i : i - at.index + 1));
+  return replaceRow(rows, at.rowIndex, fitted ?? widgets);
 }
 
 /**
  * Moves a widget to `target`. Within its own row it only changes places and keeps every span;
- * to another row it leaves its columns to a sibling and is inserted as a new widget would be.
+ * to another row it leaves its columns to its siblings and is inserted as a new widget would be.
  * Returns `undefined` when the drop changes nothing or the target row has no room.
  */
 export function moveWidget(
@@ -116,8 +150,20 @@ export function moveWidget(
 }
 
 /**
- * Moves the boundary between `widgets[leftIndex]` and the widget after it so the left one spans
- * `leftSpan`; the right one gets the rest of their columns, neither going below `MIN_SPAN`.
+ * The spans `widgets[leftIndex]` can take by moving the boundary on its right, narrowest first:
+ * the widgets before it keep theirs, the ones after it must still fill the rest of the row.
+ */
+export function resizeOptions(widgets: WidgetLayoutItem[], leftIndex: number): DashboardSpan[] {
+  const before = sum(widgets.slice(0, leftIndex).map(w => w.span));
+  const after = widgets.length - leftIndex - 1;
+  if (after < 1) return [];
+  return LAYOUT_SPANS.filter(span => rowSplits(after, LAYOUT_COLUMNS - before - span).length > 0);
+}
+
+/**
+ * Moves the boundary after `widgets[leftIndex]` so that widget takes the option closest to
+ * `leftSpan` (its current span on a tie). Widgets before it keep their spans; the ones after it
+ * share what is left, the closest giving or taking columns first.
  * Returns `undefined` when the spans don't change.
  */
 export function resizeWidgets(
@@ -128,15 +174,16 @@ export function resizeWidgets(
 ): WidgetLayoutRow[] | undefined {
   const widgets = rows[rowIndex]?.widgets;
   const left = widgets?.[leftIndex];
-  const right = widgets?.[leftIndex + 1];
-  if (!widgets || !left || !right) return undefined;
+  if (!widgets || !left) return undefined;
 
-  const pair = left.span + right.span;
-  const span = Math.min(Math.max(leftSpan, MIN_SPAN), pair - MIN_SPAN);
-  if (span === left.span) return undefined;
-  return replaceRow(
-    rows,
-    rowIndex,
-    widgets.map((w, i) => (i === leftIndex ? { ...w, span } : i === leftIndex + 1 ? { ...w, span: pair - span } : w)),
-  );
+  const span = cheapest(resizeOptions(widgets, leftIndex), option => [
+    Math.abs(option - leftSpan),
+    Math.abs(option - left.span),
+  ]);
+  if (span === undefined || span === left.span) return undefined;
+
+  const before = widgets.slice(0, leftIndex);
+  const rest = LAYOUT_COLUMNS - sum(before.map(w => w.span)) - span;
+  const after = fitRow(widgets.slice(leftIndex + 1), i => i, rest);
+  return after && replaceRow(rows, rowIndex, [...before, { ...left, span }, ...after]);
 }

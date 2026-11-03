@@ -27,7 +27,14 @@ const SEEDED: WidgetLayoutRow[] = [
   {
     widgets: [
       { id: 'tokens', span: 6 },
-      { id: 'latency', span: 6 },
+      { id: 'latency', span: 3 },
+      { id: 'errors', span: 3 },
+    ],
+  },
+  {
+    widgets: [
+      { id: 'scores', span: 6 },
+      { id: 'runs', span: 6 },
     ],
   },
   { widgets: [{ id: 'entities', span: 12 }] },
@@ -70,7 +77,7 @@ function Harness({ initial }: { initial: WidgetLayoutRow[] }) {
             key={kind}
             draggable
             onDragStart={event => setWidgetDragData(event.dataTransfer, `${kind}-${created + 1}`)}
-            className="cursor-grab rounded-lg border border-border bg-surface3 px-3 py-1.5 active:cursor-grabbing"
+            className="bg-surface3 cursor-grab rounded-lg border border-border px-3 py-1.5 active:cursor-grabbing"
           >
             <Txt variant="body-sm">{label}</Txt>
           </div>
@@ -98,7 +105,9 @@ type Story = StoryObj<typeof Harness>;
 
 /**
  * Hover a widget for its move handle (top centre) and the resize handles between widgets. Drag a
- * widget, or a palette item, onto a blue line: horizontal for a new row, vertical to join a row.
+ * widget, or a palette item, into a gap; a line shows where it lands: horizontal for a new row, vertical to join a row.
+ * Widths stay on the spans a dashboard stores (2, 3, 4, 6, 12), so two widgets alone in a row are
+ * always 6 + 6 and their handle stays inert.
  */
 export const Default: Story = {
   args: { initial: SEEDED },

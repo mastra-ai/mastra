@@ -88,8 +88,17 @@ export const emptyView = (label: string): ViewDraft => ({
   sortDirection: 'desc',
 });
 
-/** The view without its split: what switching kinds starts from, since a split means rows in a table but picked series in a chart. */
 export const unsplit = (view: ViewDraft): ViewDraft => ({ ...view, splitBy: undefined, splitValues: [] });
+
+/**
+ * The view as another kind takes it. Charts and tables both split by a dimension, so the split carries
+ * over; a chart also needs picked values to draw, so a table's rows carry only once some were picked
+ * (they're kept while in the table). KPIs and scores don't split.
+ */
+export function carrySplit(view: ViewDraft, kind: EditorKind): ViewDraft {
+  const keeps = splitLabel(kind) !== undefined && (!isTimeseriesKind(kind) || view.splitValues.length > 0);
+  return keeps ? view : unsplit(view);
+}
 
 /** "New widget N" with the first N no other widget's title uses. */
 export function newWidgetTitle(titles: readonly (string | undefined)[]) {
