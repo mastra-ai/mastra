@@ -111,58 +111,10 @@
     "qwen3.8-omni-flash"
   ],
   "reasoning": {
-    "qwen3-32b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen3.5-397b-a17b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen3.7-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 262144
-      }
-    ],
-    "qwen3.8-flash": [
-      {
-        "type": "toggle"
-      },
+    "qwen3.8-omni-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens",
-        "max": 262144
-      }
-    ],
-    "qwen-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen-turbo": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "kimi-k3": [
@@ -174,14 +126,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3.5-35b-a3b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "qwen3.5-27b": [
       {
         "type": "toggle"
@@ -190,7 +134,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen3.7-plus": [
+    "qwen3.7-max": [
       {
         "type": "toggle"
       },
@@ -206,7 +150,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen3.6-max-preview": [
+    "qwen-plus": [
       {
         "type": "toggle"
       },
@@ -214,21 +158,20 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen3.8-omni-flash": [
+    "qwen3.8-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens",
+        "max": 262144
       }
     ],
     "qwen3.6-35b-a3b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen3-vl-30b-a3b": [
       {
         "type": "toggle"
       },
@@ -244,7 +187,25 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen-flash": [
+    "qwen3.5-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 81920
+      }
+    ],
+    "qwen3.7-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 262144
+      }
+    ],
+    "qwen3-8b": [
       {
         "type": "toggle"
       },
@@ -252,21 +213,7 @@
         "type": "budget_tokens"
       }
     ],
-    "deepseek-v4-flash-0731": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "qwen3-vl-235b-a22b": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen3.5-122b-a10b": [
+    "qwen3-vl-30b-a3b": [
       {
         "type": "toggle"
       },
@@ -274,7 +221,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen3.6-27b": [
+    "qwen-turbo": [
       {
         "type": "toggle"
       },
@@ -290,6 +237,45 @@
         "type": "budget_tokens"
       }
     ],
+    "qwen3-next-80b-a3b-thinking": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen3-vl-235b-a22b": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen3-14b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen3.6-27b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen3-omni-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "qwen3.6-plus": [
       {
         "type": "toggle"
@@ -298,15 +284,7 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen3-vl-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen3-8b": [
+    "qwen3.6-max-preview": [
       {
         "type": "toggle"
       },
@@ -323,30 +301,12 @@
         "values": ["high", "max"]
       }
     ],
-    "qwen3-14b": [
+    "qwen3.5-35b-a3b": [
       {
         "type": "toggle"
       },
       {
         "type": "budget_tokens"
-      }
-    ],
-    "qwen3.7-max": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen3-next-80b-a3b-thinking": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen3-omni-flash": [
-      {
-        "type": "toggle"
       }
     ],
     "qwen3.8-max": [
@@ -363,13 +323,53 @@
         "max": 262144
       }
     ],
-    "qwen3.5-flash": [
+    "qwen3.5-397b-a17b": [
       {
         "type": "toggle"
       },
       {
-        "type": "budget_tokens",
-        "max": 81920
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen3.7-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen3.5-122b-a10b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen3-32b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "deepseek-v4-flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen3-vl-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
       }
     ]
   }
