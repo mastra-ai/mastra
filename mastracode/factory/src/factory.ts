@@ -607,8 +607,8 @@ export class MastraFactory {
         await audit.record({ orgId: scope.orgId, actorId, actorType: 'system', ...input });
       },
     };
+    writes.refuseCodeBoard(board.key, 'edit');
     const { key, ...definition } = writes.validate(board);
-    writes.refuseCodeBoard(key, 'edit');
     // One retry when another writer gets in between reading the board and writing it.
     for (let attempt = 0; ; attempt++) {
       // The project's first load stores its code boards' copies.
