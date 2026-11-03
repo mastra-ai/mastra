@@ -16,6 +16,9 @@ export const gatewayWebSearchScenario = {
     return {
       MASTRACODE_MODEL_ID: 'mastra/openai/gpt-5.4-mini',
       MASTRA_GATEWAY_API_KEY: 'mc-e2e-gateway-key',
+      // A configured Parallel or Tavily backend would replace provider search.
+      PARALLEL_API_KEY: null,
+      TAVILY_API_KEY: null,
       // The gateway client appends /v1, so this routes OpenRouter chat requests to AIMock.
       MASTRA_GATEWAY_URL: aimockUrl,
     };
