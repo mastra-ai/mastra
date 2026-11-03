@@ -31,7 +31,7 @@ import { NotificationCard, NotificationSummaryCard } from './TranscriptNotificat
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
 import { agentWorkingDirectory, isTurnDivider } from './TranscriptSignals';
 import { FactoryKnowledgeLinks } from './knowledge/FactoryKnowledgeLinks';
-import { TranscriptQuoteToolbar } from './TranscriptQuoteToolbar';
+import { TranscriptAnnotations } from './TranscriptAnnotations';
 import { TurnRevealScope } from './TurnReveal';
 import { turnGaps } from './turn-gaps';
 
@@ -81,7 +81,7 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
   const transcriptRef = useRef<HTMLDivElement>(null);
 
   return (
-    // `contents`: only bounds what can be quoted, so the turns stay direct items of the chat column.
+    // `contents`: only bounds what can be annotated, so the turns stay direct items of the chat column.
     <div ref={transcriptRef} className="contents">
       <ArrivalScope>
         <TranscriptEntries
@@ -96,7 +96,7 @@ export function Transcript({ tail }: { tail?: TranscriptTail }) {
           tail={tail}
         />
       </ArrivalScope>
-      <TranscriptQuoteToolbar containerRef={transcriptRef} />
+      <TranscriptAnnotations containerRef={transcriptRef} />
     </div>
   );
 }

@@ -1,0 +1,4 @@
+/* Quoted text in the transcript. The indicator flips with the theme, so one mix reads on both. */
+::highlight(chat-quote) {
+  background-color: color-mix(in oklab, var(--color-info-indicator) 24%, transparent);
+}

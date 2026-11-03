@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import type { RefObject } from 'react';
 
 import { normalizeQuote } from './format-quoted-message';
-import { clampSelection, findQuotablePart, quoteSelectionAnchor } from './quotable-selection';
-import type { QuoteSelectionAnchor } from './quotable-selection';
+import { clampSelection, findQuotablePart, quoteSelectionAnchor, quoteSource } from './quotable-selection';
+import type { QuoteSelectionAnchor, QuoteSource } from './quotable-selection';
 
 export interface QuoteSelection {
   text: string;
+  source: QuoteSource;
   anchor: QuoteSelectionAnchor;
 }
 
@@ -42,7 +43,7 @@ export function useQuoteSelection(containerRef: RefObject<Element | null>) {
       if (part.spills) clampSelection(selection, part);
       const text = normalizeQuote(selection.toString());
       if (!text) return close();
-      setState({ open: true, selection: { text, anchor: quoteSelectionAnchor(part) } });
+      setState({ open: true, selection: { text, source: quoteSource(part), anchor: quoteSelectionAnchor(part) } });
     };
 
     const onPointerDown = () => {

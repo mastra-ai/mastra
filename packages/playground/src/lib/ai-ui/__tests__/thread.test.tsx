@@ -1323,7 +1323,7 @@ const taskCook: TaskItem = {
   activeForm: 'Cooking meal',
 };
 
-describe('Thread quotes', () => {
+describe('Thread annotations', () => {
   const REPLY = 'Open rows drop the frame and keep a subtle rounded hover.';
   const history = () => [userMessage('Which table style should we use?'), assistantMessage(REPLY)];
 
@@ -1350,14 +1350,13 @@ describe('Thread quotes', () => {
     fireEvent.pointerUp(paragraph);
   };
 
-  const composerForm = () => {
-    const form = screen.getByPlaceholderText('Enter your message').closest('form');
-    if (!form) throw new Error('The composer has no form');
-    return form;
-  };
+  const markers = () =>
+    Array.from(screen.getByTestId('thread-message-column').querySelectorAll('[data-slot="quote-marker"]')).map(
+      marker => marker.textContent,
+    );
 
   describe('when part of a reply is added to the chat', () => {
-    it('waits in the composer header and reaches the agent as a blockquote ahead of the typed message', async () => {
+    it('is numbered in the transcript, counted in the composer, and reaches the agent as a blockquote first', async () => {
       const captured: Captured[] = [];
       server.use(
         ...baseHandlers(),
@@ -1374,7 +1373,8 @@ describe('Thread quotes', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
 
       const textarea = screen.getByPlaceholderText<HTMLTextAreaElement>('Enter your message');
-      expect(within(composerForm()).getByText('Open rows')).toBeTruthy();
+      expect(markers()).toEqual(['1']);
+      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
       expect(document.activeElement).toBe(textarea);
 
       fireEvent.change(textarea, { target: { value: 'Why this one?' } });
@@ -1384,12 +1384,13 @@ describe('Thread quotes', () => {
       expect(JSON.stringify(captured[0].body.messages)).toContain(
         JSON.stringify('> Open rows\n\nWhy this one?').slice(1, -1),
       );
-      expect(within(composerForm()).queryByText('Open rows')).toBeNull();
+      expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull();
+      expect(markers()).toEqual([]);
     });
   });
 
-  describe('when the server rejects the message with the quote', () => {
-    it('puts the quote back in the composer header with the typed text', async () => {
+  describe('when the server rejects the message with the annotation', () => {
+    it('puts the annotation back in the composer with the typed text', async () => {
       let requests = 0;
       server.use(
         ...baseHandlers(),
@@ -1411,13 +1412,14 @@ describe('Thread quotes', () => {
 
       expect(await screen.findByText(/could not be sent/i, undefined, { timeout: 5000 })).toBeTruthy();
       expect(textarea.value).toBe('Why this one?');
-      expect(within(composerForm()).getByText('Open rows')).toBeTruthy();
+      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+      expect(markers()).toEqual(['1']);
     }, 10_000);
   });
 
-  describe('when the person opens another thread before sending the quote', () => {
+  describe('when the person opens another thread before sending the annotation', () => {
     // The agent pages remount the chat per thread, as `renderThreadTree` does by keying `ChatProvider`.
-    it('starts the other thread with an empty composer header', async () => {
+    it('starts the other thread without annotations', async () => {
       server.use(...baseHandlers());
       let rendered: ReturnType<typeof render> | undefined;
       await act(async () => {
@@ -1426,13 +1428,14 @@ describe('Thread quotes', () => {
 
       await selectFromReply('Open rows'.length);
       fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
-      expect(screen.getByRole('button', { name: 'Remove quote' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
 
       await act(async () => {
         rendered?.rerender(renderThreadTree(history(), { threadId: 'thread-2' }));
       });
 
-      expect(screen.queryByRole('button', { name: 'Remove quote' })).toBeNull();
+      expect(screen.queryByRole('button', { name: /annotation/ })).toBeNull();
+      expect(markers()).toEqual([]);
     });
   });
 });

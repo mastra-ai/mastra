@@ -70,11 +70,65 @@ export function clampSelection(selection: Selection, part: QuotablePart) {
   else selection.setBaseAndExtent(startContainer, startOffset, endContainer, endOffset);
 }
 
-function firstLineRect(range: Range): DOMRect {
-  const lines = Array.from(range.getClientRects()).filter(rect => rect.width > 0 && rect.height > 0);
-  return lines[0] ?? range.getBoundingClientRect();
-}
+const lineRects = (range: Range) =>
+  Array.from(range.getClientRects()).filter(rect => rect.width > 0 && rect.height > 0);
 
 export function quoteSelectionAnchor(part: QuotablePart): QuoteSelectionAnchor {
-  return { getBoundingClientRect: () => firstLineRect(part.range), contextElement: part.element };
+  return {
+    getBoundingClientRect: () => lineRects(part.range)[0] ?? part.range.getBoundingClientRect(),
+    contextElement: part.element,
+  };
+}
+
+/**
+ * Where a quote sits: the message content it came from and the character span of its text there.
+ * Offsets rather than a `Range`, so the mark survives the message re-rendering its text nodes.
+ */
+export interface QuoteSource {
+  element: Element;
+  start: number;
+  end: number;
+}
+
+function textOffset(element: Element, node: Node, offset: number): number {
+  const before = element.ownerDocument.createRange();
+  before.selectNodeContents(element);
+  before.setEnd(node, offset);
+  return before.toString().length;
+}
+
+export function quoteSource({ element, range }: QuotablePart): QuoteSource {
+  return {
+    element,
+    start: textOffset(element, range.startContainer, range.startOffset),
+    end: textOffset(element, range.endContainer, range.endOffset),
+  };
+}
+
+/** The quoted text as it is laid out now, or `undefined` once its message left the page or lost that text. */
+export function rangeFromSource({ element, start, end }: QuoteSource): Range | undefined {
+  if (!element.isConnected) return undefined;
+  const document = element.ownerDocument;
+  const range = document.createRange();
+  const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+  let seen = 0;
+  let started = false;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const length = node.textContent?.length ?? 0;
+    if (!started && start <= seen + length) {
+      range.setStart(node, start - seen);
+      started = true;
+    }
+    if (started && end <= seen + length) {
+      range.setEnd(node, end - seen);
+      return range;
+    }
+    seen += length;
+  }
+  return undefined;
+}
+
+/** The end of the quote's last line, where its number sits like a footnote mark. */
+export function quoteEndRect(range: Range): DOMRect | undefined {
+  return lineRects(range).at(-1);
 }

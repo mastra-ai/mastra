@@ -3,4 +3,4 @@
 '@mastra/factory': patch
 ---
 
-You can now quote part of an agent's reply in Studio and Factory chat. Select text in a message, click **Add to chat**, and the passage waits above the composer until you send your next message; the agent receives it as a quote ahead of what you typed. Remove a quote with its close button before sending, and quotes come back if a message fails to send.
+You can now annotate parts of an agent's reply in Studio and Factory chat. Select text in a message and click **Add to chat**: the passage gets a numbered mark in the chat that stays with the text as you scroll, and the composer counts what you added (for example **2 annotations**). Open the count to jump to a passage or remove it. When you send, the agent receives each passage as a quote ahead of what you typed. Annotations come back if a message fails to send.

@@ -1,8 +1,9 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import {
   ChatQuotesProvider,
-  ComposerQuote,
+  ComposerQuotes,
   formatQuotedMessage,
+  QuoteMarkers,
   QuoteSelectionToolbar,
   useChatQuotes,
 } from '@mastra/playground-ui/components/ai/quote';
@@ -14,7 +15,6 @@ import {
   Composer,
   ComposerActions,
   ComposerBox,
-  ComposerHeader,
   ComposerInput,
   ComposerRing,
 } from '@mastra/playground-ui/components/Composer';
@@ -102,22 +102,28 @@ const hasStreamingPart = (message: MastraDBMessage | undefined) => {
   });
 };
 
-interface ThreadQuoteToolbarProps {
+interface ThreadAnnotationsProps {
   containerRef: React.RefObject<HTMLDivElement | null>;
   composerInputRef: React.RefObject<HTMLTextAreaElement | null>;
 }
 
-/** Add to chat over text selected in a message: the quote waits in the composer header, which takes focus. */
-const ThreadQuoteToolbar = ({ containerRef, composerInputRef }: ThreadQuoteToolbarProps) => {
-  const { addQuote } = useChatQuotes();
+/**
+ * Add to chat over text selected in a message, and the numbered marks of what was added. Rendered
+ * in the message column, so the marks scroll with the text; adding one focuses the composer.
+ */
+const ThreadAnnotations = ({ containerRef, composerInputRef }: ThreadAnnotationsProps) => {
+  const { quotes, addQuote } = useChatQuotes();
   return (
-    <QuoteSelectionToolbar
-      containerRef={containerRef}
-      onQuote={text => {
-        addQuote(text);
-        composerInputRef.current?.focus();
-      }}
-    />
+    <>
+      <QuoteMarkers quotes={quotes} />
+      <QuoteSelectionToolbar
+        containerRef={containerRef}
+        onQuote={quote => {
+          addQuote(quote);
+          composerInputRef.current?.focus();
+        }}
+      />
+    </>
   );
 };
 
@@ -158,7 +164,7 @@ export interface ThreadProps {
   isLoadingPrevious?: boolean;
 }
 
-/** The thread body; `Thread` mounts it inside the quotes its transcript and composer share. */
+/** The thread body; `Thread` mounts it inside the annotations its transcript and composer share. */
 const ThreadContent = ({
   agentName,
   agentId,
@@ -273,7 +279,7 @@ const ThreadContent = ({
                   className="relative flex-1 gap-4 py-4"
                 >
                   <BracketOverlay containerRef={messagesContainerRef} />
-                  <ThreadQuoteToolbar containerRef={messagesContainerRef} composerInputRef={composerInputRef} />
+                  <ThreadAnnotations containerRef={messagesContainerRef} composerInputRef={composerInputRef} />
                   {/* Everything already here when the reader arrived is theirs; what lands after fades in. */}
                   <ArrivalScope>
                     {turnGroups.map((group, index) => {
@@ -374,7 +380,7 @@ const ThreadWelcome = ({ agentName }: { agentName?: string }) => {
 };
 
 interface AgentComposerProps {
-  /** Owned by the thread, so adding a quote from the transcript can focus the composer. */
+  /** Owned by the thread, so adding an annotation from the transcript can focus the composer. */
   inputRef: React.RefObject<HTMLTextAreaElement | null>;
   agentId?: string;
   threadId?: string;
@@ -502,15 +508,9 @@ const AgentComposer = ({
             void submit();
           }}
         >
-          <ComposerHeader open={quotes.length > 0}>
-            {quotes.map(quote => (
-              <ComposerQuote key={quote.id} onRemove={() => removeQuote(quote.id)}>
-                {quote.text}
-              </ComposerQuote>
-            ))}
-          </ComposerHeader>
           <ComposerRing busy={isRunning}>
             <ComposerBox sendingPulseKey={sendPulseKey}>
+              <ComposerQuotes quotes={quotes} onRemove={removeQuote} />
               <ChatComposerAttachments />
               <ComposerInput
                 ref={textareaRef}

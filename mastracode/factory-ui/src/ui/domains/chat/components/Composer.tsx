@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/core/agent-controller';
-import { ComposerQuote, formatQuotedMessage, useChatQuotes } from '@mastra/playground-ui/components/ai/quote';
+import { ComposerQuotes, formatQuotedMessage, useChatQuotes } from '@mastra/playground-ui/components/ai/quote';
 import type { ChatQuote } from '@mastra/playground-ui/components/ai/quote';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
@@ -185,7 +185,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       setHeldDraftText(text);
       return;
     }
-    // A command is not a message, so quotes wait for the next one.
+    // A command is not a message, so annotations wait for the next one.
     const sentQuotes = text.startsWith('/') ? [] : quotes;
     updateDraft('');
     for (const quote of sentQuotes) removeQuote(quote.id);
@@ -233,7 +233,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   };
 
   async function handleInput(text: string, sentQuotes: readonly ChatQuote[]) {
-    // What the agent reads; the draft keeps only what was typed, since failed quotes return to the header.
+    // What the agent reads; the draft keeps only what was typed, since failed annotations come back on their own.
     const quoted = sentQuotes.map(quote => quote.text);
     const message = formatQuotedMessage(text, quoted);
     if (planFeedback.pending) {
@@ -274,17 +274,13 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerHeader open={connectionNotice !== undefined || quotes.length > 0}>
+      <ComposerHeader open={connectionNotice !== undefined}>
         {connectionNotice && <ComposerConnectionNotice notice={connectionNotice} />}
-        {quotes.map(quote => (
-          <ComposerQuote key={quote.id} onRemove={() => removeQuote(quote.id)}>
-            {quote.text}
-          </ComposerQuote>
-        ))}
       </ComposerHeader>
       <ComposerRing busy={(busy || chatPreparing || startingDraft) && !connectionLost}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
+          <ComposerQuotes quotes={quotes} onRemove={removeQuote} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
           <ComposerInput
             {...commandMenu.inputProps}

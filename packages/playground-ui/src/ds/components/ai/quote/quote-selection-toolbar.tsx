@@ -2,6 +2,7 @@ import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import { TextQuote } from 'lucide-react';
 import type { RefObject } from 'react';
 
+import type { NewChatQuote } from './chat-quotes';
 import { useQuoteSelection } from './use-quote-selection';
 import { Button } from '@/ds/components/Button';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -12,8 +13,8 @@ import { cn } from '@/lib/utils';
 export interface QuoteSelectionToolbarProps {
   /** The transcript. Text selected inside one message's content within it can be quoted. */
   containerRef: RefObject<HTMLElement | null>;
-  /** Receives the selected text, already trimmed, when the person picks Add to chat. */
-  onQuote: (text: string) => void;
+  /** Receives the selected text, already trimmed, and where it sits, when the person picks Add to chat. */
+  onQuote: (quote: NewChatQuote) => void;
 }
 
 /**
@@ -29,7 +30,7 @@ export function QuoteSelectionToolbar({ containerRef, onQuote }: QuoteSelectionT
     // Cleared first: the consumer usually focuses its composer next, and that must keep its caret.
     document.getSelection()?.removeAllRanges();
     dismiss();
-    onQuote(selection.text);
+    onQuote({ text: selection.text, source: selection.source });
   };
 
   return (

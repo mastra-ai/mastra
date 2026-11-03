@@ -1,24 +1,33 @@
 // @vitest-environment jsdom
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useRef, useState } from 'react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ChatQuotesProvider, useChatQuotes } from './chat-quotes';
-import { ComposerQuote } from './composer-quote';
+import { ComposerQuotes } from './composer-quotes';
 import { formatQuotedMessage } from './format-quoted-message';
+import { QuoteMarkers } from './quote-markers';
 import { QuoteSelectionToolbar } from './quote-selection-toolbar';
-import { Composer, ComposerBox, ComposerHeader, ComposerInput } from '@/ds/components/Composer';
+import { Composer, ComposerBox, ComposerInput } from '@/ds/components/Composer';
 import { Message, MessageActions } from '@/ds/components/Message';
 
 afterEach(() => {
   document.getSelection()?.removeAllRanges();
+  vi.restoreAllMocks();
   cleanup();
 });
 
+/** jsdom has no layout: give every text range one line box, as a browser would. */
+const layOutLines = () =>
+  vi
+    .spyOn(Range.prototype, 'getClientRects')
+    .mockImplementation(() => Object.assign([new DOMRect(40, 120, 60, 18)], { item: () => null }));
+
 const REPLY = 'Open rows drop the frame and keep subtle rounded hover.';
+const SECOND = 'Soft rows add faint backgrounds.';
 
 /** A transcript and composer wired the way Studio and Factory wire them. */
-function QuotingChat({ onSend }: { onSend: (message: string) => void }) {
+function QuotingChat({ onSend, showReply = true }: { onSend: (message: string) => void; showReply?: boolean }) {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const { quotes, addQuote, removeQuote } = useChatQuotes();
@@ -26,25 +35,28 @@ function QuotingChat({ onSend }: { onSend: (message: string) => void }) {
 
   return (
     <>
-      <div ref={transcriptRef}>
+      <div ref={transcriptRef} data-testid="transcript" className="relative">
+        <QuoteMarkers quotes={quotes} />
         <Message from="user">Which table style should we use?</Message>
-        <Message
-          from="assistant"
-          footer={
-            <MessageActions>
-              <span>Model reply footer</span>
-            </MessageActions>
-          }
-        >
-          <p>{REPLY}</p>
-          <p>Soft rows add faint backgrounds.</p>
-        </Message>
+        {showReply && (
+          <Message
+            from="assistant"
+            footer={
+              <MessageActions>
+                <span>Model reply footer</span>
+              </MessageActions>
+            }
+          >
+            <p>{REPLY}</p>
+            <p>{SECOND}</p>
+          </Message>
+        )}
       </div>
       <Message from="assistant">Outside the transcript</Message>
       <QuoteSelectionToolbar
         containerRef={transcriptRef}
-        onQuote={text => {
-          addQuote(text);
+        onQuote={quote => {
+          addQuote(quote);
           inputRef.current?.focus();
         }}
       />
@@ -52,24 +64,14 @@ function QuotingChat({ onSend }: { onSend: (message: string) => void }) {
         aria-label="Message composer"
         onSubmit={event => {
           event.preventDefault();
-          onSend(
-            formatQuotedMessage(
-              draft,
-              quotes.map(quote => quote.text),
-            ),
-          );
+          const quoted = quotes.map(quote => quote.text);
+          onSend(formatQuotedMessage(draft, quoted));
           for (const quote of quotes) removeQuote(quote.id);
           setDraft('');
         }}
       >
-        <ComposerHeader open={quotes.length > 0} aria-label="Quotes">
-          {quotes.map(quote => (
-            <ComposerQuote key={quote.id} onRemove={() => removeQuote(quote.id)}>
-              {quote.text}
-            </ComposerQuote>
-          ))}
-        </ComposerHeader>
         <ComposerBox>
+          <ComposerQuotes quotes={quotes} onRemove={removeQuote} />
           <ComposerInput
             ref={inputRef}
             aria-label="Message"
@@ -85,12 +87,13 @@ function QuotingChat({ onSend }: { onSend: (message: string) => void }) {
 
 const renderChat = () => {
   const sent: string[] = [];
-  render(
+  const chat = (showReply: boolean) => (
     <ChatQuotesProvider>
-      <QuotingChat onSend={message => sent.push(message)} />
-    </ChatQuotesProvider>,
+      <QuotingChat onSend={message => sent.push(message)} showReply={showReply} />
+    </ChatQuotesProvider>
   );
-  return sent;
+  const view = render(chat(true));
+  return { sent, hideReply: () => view.rerender(chat(false)) };
 };
 
 const textNode = (text: string): Text => {
@@ -113,67 +116,114 @@ const dragSelect = (start: [Node, number], end: [Node, number]) => {
   fireEvent.pointerUp(target);
 };
 
-const quotesHeader = () => screen.getByRole('textbox', { name: 'Message' }).closest('form');
+/** Selects the first `length` characters of a paragraph and adds them to the chat. */
+const annotate = async (paragraph: string, length: number) => {
+  dragSelect([textNode(paragraph), 0], [textNode(paragraph), length]);
+  fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+  await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull());
+};
+
+const markers = () =>
+  Array.from(screen.getByTestId('transcript').querySelectorAll<HTMLElement>('[data-slot="quote-marker"]'));
+
+const typeAndSend = (text: string) => {
+  fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: text } });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+};
 
 describe('QuoteSelectionToolbar', () => {
   describe('when the person selects part of a reply and adds it to the chat', () => {
-    it('shows the quote in the composer header and sends it as a blockquote before the typed text', async () => {
-      const sent = renderChat();
-      dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
+    it('numbers it in the transcript, counts it in the composer, and sends it as a blockquote first', async () => {
+      const { sent } = renderChat();
 
-      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+      await annotate(REPLY, 'Open rows'.length);
 
-      const form = quotesHeader();
-      if (!form) throw new Error('Composer form is missing');
-      expect(within(form).getByText('Open rows')).toBeTruthy();
+      expect(markers().map(marker => marker.textContent)).toEqual(['1']);
+      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
       expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Message' }));
       expect(document.getSelection()?.isCollapsed ?? true).toBe(true);
 
-      fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Why this one?' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      typeAndSend('Why this one?');
 
       expect(sent).toEqual(['> Open rows\n\nWhy this one?']);
-      expect(within(form).queryByText('Open rows')).toBeNull();
+      expect(markers()).toHaveLength(0);
+      expect(screen.queryByRole('button', { name: /annotation/ })).toBeNull();
     });
   });
 
-  describe('when the person removes a quote before sending', () => {
-    it('sends only the typed text', async () => {
-      const sent = renderChat();
-      dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
-      fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
+  describe('when the person adds several passages', () => {
+    it('numbers them in the order added and sends them all in that order', async () => {
+      const { sent } = renderChat();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Remove quote' }));
-      fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'Never mind' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      await annotate(SECOND, 'Soft rows'.length);
+      await annotate(REPLY, 'Open rows'.length);
 
-      expect(sent).toEqual(['Never mind']);
+      expect(markers().map(marker => marker.textContent)).toEqual(['1', '2']);
+      fireEvent.click(screen.getByRole('button', { name: '2 annotations' }));
+      const list = await screen.findByRole('list', { name: 'Annotations' });
+      expect(
+        within(list)
+          .getAllByRole('listitem')
+          .map(item => item.textContent),
+      ).toEqual(['1Soft rows', '2Open rows']);
+
+      typeAndSend('Compare them');
+
+      expect(sent).toEqual(['> Soft rows\n\n> Open rows\n\nCompare them']);
+    });
+  });
+
+  describe('when the person removes an annotation before sending', () => {
+    it('renumbers the rest and leaves the removed passage out of the message', async () => {
+      const { sent } = renderChat();
+      await annotate(SECOND, 'Soft rows'.length);
+      await annotate(REPLY, 'Open rows'.length);
+
+      fireEvent.click(screen.getByRole('button', { name: '2 annotations' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Remove annotation 1' }));
+
+      expect(markers().map(marker => marker.textContent)).toEqual(['1']);
+      typeAndSend('Only this one');
+      expect(sent).toEqual(['> Open rows\n\nOnly this one']);
     });
   });
 
   describe('when the same passage is added twice', () => {
-    it('keeps a single quote', async () => {
+    it('keeps a single annotation', async () => {
       renderChat();
-      for (let attempt = 0; attempt < 2; attempt++) {
-        dragSelect([textNode(REPLY), 0], [textNode(REPLY), 'Open rows'.length]);
-        fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
-        await waitFor(() => expect(screen.queryByRole('button', { name: 'Add to chat' })).toBeNull());
-      }
+      await annotate(REPLY, 'Open rows'.length);
+      await annotate(REPLY, 'Open rows'.length);
 
-      expect(screen.getAllByRole('button', { name: 'Remove quote' })).toHaveLength(1);
+      expect(screen.getByRole('button', { name: '1 annotation' })).toBeTruthy();
+      expect(markers()).toHaveLength(1);
+    });
+  });
+
+  describe('when the message an annotation came from leaves the page', () => {
+    it('drops its mark from the transcript but still sends the passage', async () => {
+      layOutLines();
+      const { sent, hideReply } = renderChat();
+      await annotate(REPLY, 'Open rows'.length);
+
+      const [marker] = markers();
+      expect(marker?.hidden).toBe(false);
+      expect([marker?.style.left, marker?.style.top]).toEqual(['100px', '120px']);
+
+      hideReply();
+
+      expect(markers().map(mark => mark.hidden)).toEqual([true]);
+      typeAndSend('Still relevant?');
+      expect(sent).toEqual(['> Open rows\n\nStill relevant?']);
     });
   });
 
   describe('when a drag runs past the end of the reply into its footer', () => {
     it('trims the selection back to the reply and quotes only its text', async () => {
-      const sent = renderChat();
-      const lastParagraph = textNode('Soft rows add faint backgrounds.');
-      const footer = textNode('Model reply footer');
-      dragSelect([lastParagraph, 'Soft rows add '.length], [footer, 'Model'.length]);
+      const { sent } = renderChat();
+      dragSelect([textNode(SECOND), 'Soft rows add '.length], [textNode('Model reply footer'), 'Model'.length]);
 
       fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
-      fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'More?' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+      typeAndSend('More?');
 
       expect(sent).toEqual(['> faint backgrounds.\n\nMore?']);
     });

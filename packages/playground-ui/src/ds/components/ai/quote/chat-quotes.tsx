@@ -4,23 +4,36 @@ import { createContext, useContext, useState } from 'react';
 import type { ReactNode } from 'react';
 
 import { normalizeQuote } from './format-quoted-message';
+import type { QuoteSource } from './quotable-selection';
 
+export type { QuoteSource } from './quotable-selection';
+
+/** A passage waiting to go out with the next message. People see it as a numbered annotation. */
 export interface ChatQuote {
   id: string;
   text: string;
+  /** Where it was selected, so the transcript can mark it. */
+  source?: QuoteSource;
 }
 
+export type NewChatQuote = Omit<ChatQuote, 'id'>;
+
 export interface ChatQuotesApi {
-  /** Quotes waiting for the next message, oldest first. */
+  /** Quotes waiting for the next message, in the order they were added. Their number is their position. */
   quotes: ChatQuote[];
-  /** Adds the text as a quote. Blank text and a quote already waiting are ignored. */
-  addQuote: (text: string) => void;
+  /** Adds a quote. Blank text, and a passage already waiting, are ignored. */
+  addQuote: (quote: NewChatQuote) => void;
   removeQuote: (id: string) => void;
   /** Puts quotes from a message that failed to send back, ahead of any added since. */
   restoreQuotes: (quotes: readonly ChatQuote[]) => void;
 }
 
 const ChatQuotesContext = createContext<ChatQuotesApi | undefined>(undefined);
+
+const samePassage = (a: NewChatQuote, b: NewChatQuote) =>
+  a.source && b.source
+    ? a.source.element === b.source.element && a.source.start === b.source.start && a.source.end === b.source.end
+    : a.text === b.text;
 
 /**
  * Shares quotes between the transcript that adds them and the composer that sends them. Mount it
@@ -32,11 +45,11 @@ export function ChatQuotesProvider({ children }: { children: ReactNode }) {
 
   const value: ChatQuotesApi = {
     quotes,
-    addQuote: text => {
-      const normalized = normalizeQuote(text);
-      if (!normalized) return;
+    addQuote: ({ text, source }) => {
+      const quote = { text: normalizeQuote(text), source };
+      if (!quote.text) return;
       setQuotes(current =>
-        current.some(quote => quote.text === normalized) ? current : [...current, { id: nanoid(), text: normalized }],
+        current.some(waiting => samePassage(waiting, quote)) ? current : [...current, { id: nanoid(), ...quote }],
       );
     },
     removeQuote: id => setQuotes(current => current.filter(quote => quote.id !== id)),
