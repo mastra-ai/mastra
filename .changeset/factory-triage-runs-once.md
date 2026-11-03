@@ -1,5 +1,5 @@
 ---
-'@mastra/factory': patch
+'@mastra/factory': minor
 ---
 
 Factory Triage now runs once per card. Editing a GitHub or GitLab issue, or commenting on it, no longer starts Triage again on its card. Triage still runs when a person moves the card into Triage or starts the run.
