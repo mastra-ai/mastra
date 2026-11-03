@@ -280,6 +280,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       }) => Promise<void>;
       /** The session's routed thinking default, used when the session has not picked a level. */
       defaultThinkingLevel?: (requestContext: ComputeStateSignalArgs['requestContext']) => Promise<ThinkingLevel>;
+      /** Called on every step of a run on an active bound thread, so an idle dispatcher reconciles its tool results. */
+      onBoundThreadRun?: () => void;
       transitionService?: Pick<FactoryTransitionService, 'transition'>;
       messageReader?: PersistedMessageReader;
       recordPullRequestProvenance?: (input: {
@@ -329,6 +331,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // recovered session reaches its project row from this hook too.
     await this.loadCallerMemorySettings(args.requestContext, binding);
     if (!binding || binding.status !== 'active') return;
+    this.options.onBoundThreadRun?.();
     const completedToolCallIds = completedStepToolCallIds(args.steps);
     const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
     if (completedMessage) {

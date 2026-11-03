@@ -636,6 +636,8 @@ export class FactoryDecisionDispatcher {
   #reconcileInFlight?: Promise<void>;
   /** A reconcile is due once activity stops, to drain results of runs that just ended. */
   #reconcileOwed = true;
+  /** Last step seen on a bound session thread; counts as activity for one reconcile interval. */
+  #lastBoundThreadRunAt?: number;
   #started = false;
   #stopping = false;
   #wakeRequested = false;
@@ -713,6 +715,21 @@ export class FactoryDecisionDispatcher {
     this.#loop = this.#runLoop();
   }
 
+  /**
+   * A run is stepping on a bound session thread. Interactive runs queue no
+   * work, so without this an idle loop would never see them and the trailing
+   * reconcile for results they leave behind would not happen. Each step keeps
+   * the loop active for one reconcile interval; only the first step after a
+   * settled pass wakes it, since an owed pass already rechecks every interval.
+   */
+  noteBoundThreadRun(): void {
+    if (!this.#reconcileToolResults) return;
+    this.#lastBoundThreadRunAt = Date.now();
+    if (this.#reconcileOwed) return;
+    this.#reconcileOwed = true;
+    this.wake();
+  }
+
   async runOnce(now = new Date()): Promise<void> {
     void this.#maybeSweepStaleBindings(now);
     this.#maybeReconcileToolResults(now);
@@ -758,7 +775,9 @@ export class FactoryDecisionDispatcher {
     const active =
       this.#runInFlight.size > 0 ||
       this.#bookkeepingInFlight.size > 0 ||
-      this.#controller.listActiveThreadRuns().length > 0;
+      this.#controller.listActiveThreadRuns().length > 0 ||
+      (this.#lastBoundThreadRunAt !== undefined &&
+        now.getTime() - this.#lastBoundThreadRunAt < this.#reconcileIntervalMs);
     if (!this.#reconcileToolResults) this.#reconcileOwed = false;
     else if (active) this.#reconcileOwed = true;
     if (this.#reconcileOwed && this.#maybeReconcileToolResults(now) && !active) this.#reconcileOwed = false;

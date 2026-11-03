@@ -6088,6 +6088,34 @@ describe('FactoryDecisionDispatcher', () => {
       }
     });
 
+    it('reconciles tool results after an interactive run on a bound thread ends', async () => {
+      vi.useFakeTimers();
+      try {
+        const reconcileToolResults = vi.fn(async () => {});
+        const { dispatcher } = await startIdle({ reconcileToolResults });
+        await vi.advanceTimersByTimeAsync(10 * 60_000);
+        expect(reconcileToolResults).toHaveBeenCalledTimes(1);
+
+        // An interactive chat queues no work; its steps are the only signal.
+        for (let step = 0; step < 5; step++) {
+          dispatcher.noteBoundThreadRun();
+          await vi.advanceTimersByTimeAsync(10_000);
+        }
+        const duringRun = reconcileToolResults.mock.calls.length;
+        expect(duringRun).toBeGreaterThan(1);
+
+        // The run ends: one trailing pass within an interval, then quiet again.
+        await vi.advanceTimersByTimeAsync(2 * 30_000);
+        expect(reconcileToolResults.mock.calls.length).toBeGreaterThan(duringRun);
+        const afterRun = reconcileToolResults.mock.calls.length;
+        await vi.advanceTimersByTimeAsync(30 * 60_000);
+        expect(reconcileToolResults).toHaveBeenCalledTimes(afterRun);
+        await dispatcher.stop();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('rechecks storage once an hour in case a wake was lost', async () => {
       vi.useFakeTimers();
       try {

@@ -1307,6 +1307,7 @@ export class MastraFactory {
           boards: boards,
           loadMemorySettings,
           defaultThinkingLevel: resolveDefaultThinkingLevel,
+          onBoundThreadRun: () => this.#dispatcher?.noteBoundThreadRun(),
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
