@@ -4,6 +4,7 @@ import {
   externalLinkLabel,
   isPersistedCandidate,
   itemThreadSession,
+  itemSessionSpec,
   metadataLabelColors,
   persistedSourceKeys,
   workItemMeta,
@@ -27,7 +28,6 @@ function workItem(overrides: Partial<WorkItem> = {}): WorkItem {
     sessions: {},
     metadata: { githubPullRequestNumber: 22765, author: 'LekoArts' },
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdAt: '2026-09-02T12:00:00.000Z',
     updatedAt: '2026-09-02T12:00:00.000Z',
@@ -83,6 +83,51 @@ describe('workItemMeta', () => {
       workItemMeta(workItem({ source: 'gitlab-pr', metadata: { gitlabMergeRequestIid: 5, author: 'Rhys' } })),
     ).toBe('!5 · Rhys · just now');
     expect(externalLinkLabel('gitlab-pr')).toBe('Open in GitLab');
+  });
+});
+
+describe('itemSessionSpec', () => {
+  it.each([
+    ['linear-issue', 'ENG-42', 'factory/linear-eng-42'],
+    ['jira-issue', 'OPS-42', 'factory/jira-ops-42'],
+    ['incidentio-follow-up', 'INC-42', 'factory/incidentio-inc-42'],
+    ['gitlab-issue', 'acme/app#42', 'factory/gitlab-acme-app-42-item1'],
+  ] as const)('uses the normalized key for a %s session branch', (source, key, branch) => {
+    const item = workItem({
+      source,
+      title: 'Repair source facts',
+      metadata: { identifier: 'stale-key', authorTrusted: true },
+      workItem: {
+        provider: source,
+        key,
+        title: 'Repair source facts',
+        url: null,
+        state: 'open',
+        labels: [],
+        author: 'reporter',
+        metadata: {},
+      },
+    });
+    expect(itemSessionSpec(item)).toEqual({ branch, threadTitle: 'Repair source facts' });
+  });
+
+  it('keeps legacy provider numbers when only the key has been normalized', () => {
+    const item = workItem({
+      workItem: {
+        provider: 'github',
+        key: 'acme/app#22765',
+        title: 'Repair source facts',
+        url: null,
+        state: 'open',
+        labels: [],
+        author: 'reporter',
+        metadata: {},
+      },
+    });
+    expect(itemSessionSpec(item)).toEqual({
+      branch: 'factory/pr-22765-item1',
+      threadTitle: 'PR #22765: docs: improve generated model page metadata',
+    });
   });
 });
 

@@ -473,6 +473,45 @@ describe('POST /web/factory/projects/:id/work-items', () => {
 
 // ── Read wire ────────────────────────────────────────────────────────────
 describe('work item read wire', () => {
+  it('serves normalized source facts on create, list and update while retaining the legacy wire fields', async () => {
+    const response = await json(
+      'POST',
+      `/web/factory/projects/${PROJECT_ID}/work-items`,
+      createBody({
+        metadata: { number: 42, state: 'closed', labels: ['bug'], author: 'reporter', authorTrusted: true },
+      }),
+    );
+    const created = await response.json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema.parse(created)).toEqual(created);
+    expect(created.workItem.workItem).toMatchObject({
+      provider: 'github',
+      key: 'acme/app#42',
+      title: 'Fix the login flow',
+      state: 'closed',
+      labels: ['bug'],
+      author: 'reporter',
+    });
+    expect(created.workItem.metadata).toMatchObject({ number: 42, author: 'reporter', authorTrusted: true });
+    expect(created.workItem.workItem.metadata).not.toHaveProperty('authorTrusted');
+
+    const listed = await (await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.parse(listed)).toEqual(listed);
+    expect(listed.workItems[0].workItem).toEqual(created.workItem.workItem);
+
+    const updated = await (
+      await json('PATCH', `/web/factory/work-items/${created.workItem.id}`, { title: 'Updated title' })
+    ).json();
+    expect(FACTORY_ROUTE_CONTRACTS.workItemUpdate.responseSchema.parse(updated)).toEqual(updated);
+    expect(updated.workItem.workItem.title).toBe('Updated title');
+    expect(updated.workItem.title).toBe('Updated title');
+    for (const card of [created.workItem, listed.workItems[0], updated.workItem]) {
+      expect(card.workItem).not.toHaveProperty('kind');
+      expect(card.workItem.sources).toHaveLength(1);
+      expect(card.workItem.sources[0]).toMatchObject({ provider: 'github', sourceType: 'issue' });
+      expect(card.workItem.sources[0]).not.toHaveProperty('kind');
+    }
+  });
+
   it('keeps internal tokens in storage and out of every read', async () => {
     const { item } = await seed.workItems.upsert({
       orgId: 'org1',

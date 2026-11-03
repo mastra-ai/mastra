@@ -576,6 +576,76 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
     expect(await migrateWorkItemSplit(storage)).toMatchObject({ workItems: 0, skipped: [] });
   });
 
+  it('keeps booting when an old replica creates a conflicting source under another id', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await seedLegacy(storage);
+    const originalId = cards.get('github issue')!;
+    const { item: existing } = await workItems.upsert({
+      orgId: ORG,
+      userId: USER,
+      factoryProjectId: PROJECT,
+      input: FIXTURES[0]!.input,
+    });
+
+    const report = await migrateWorkItemSplit(storage);
+
+    expect(report).toMatchObject({
+      workItems: FIXTURES.length - 1,
+      skipped: [{ id: originalId, reason: expect.stringMatching(/source/) }],
+    });
+    const split = await readSplit(storage);
+    expect(split.boardItems.has(originalId)).toBe(false);
+    expect(split.boardItems.size).toBe(FIXTURES.length);
+    expect(split.workItems.size).toBe(FIXTURES.length);
+    expect(await workItems.get({ orgId: ORG, id: existing.id })).toEqual(existing);
+    await workItems.init();
+    expect(await readSplit(storage)).toEqual(split);
+  });
+
+  it('does not overwrite either card when an old replica recopies a conflicting source', async () => {
+    const { storage, workItems } = await createStorage(backend);
+    const cards = await seed(workItems);
+    await seedLegacy(storage);
+    await migrateWorkItemSplit(storage);
+    const { item: existing } = await workItems.upsert({
+      orgId: ORG,
+      userId: USER,
+      factoryProjectId: PROJECT,
+      input: {
+        ...FIXTURES[0]!.input,
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'new-source',
+        },
+      },
+    });
+    const existingRow = await new Cards(storage.ops).findOne({ id: existing.id });
+    const originalId = cards.get('github issue')!;
+    await storage.ops.updateMany(
+      'work_items',
+      { id: originalId },
+      {
+        external_source: existingRow!.external_source,
+        source_key: existingRow!.source_key,
+        updated_at: new Date(Date.now() + 1000),
+      },
+    );
+    const before = await readSplit(storage);
+
+    const report = await migrateWorkItemSplit(storage);
+
+    expect(report).toMatchObject({
+      workItems: 0,
+      recopied: 0,
+      skipped: [{ id: originalId, reason: expect.stringMatching(/source/) }],
+    });
+    expect(await readSplit(storage)).toEqual(before);
+    await workItems.init();
+    expect(await readSplit(storage)).toEqual(before);
+  });
+
   it('copies each card once when two replicas boot at the same time', async () => {
     const { storage, workItems } = await createStorage(backend);
     await seed(workItems);

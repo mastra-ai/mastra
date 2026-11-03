@@ -74,7 +74,6 @@ function stubBoardEndpoints() {
             sessions: {},
             metadata: {},
             commentCount: 1,
-            feedActivityAt: '2026-08-26T10:00:00.000Z',
             revision: 1,
             createdAt: '2026-07-18T00:00:00.000Z',
             updatedAt: '2026-07-18T00:00:00.000Z',

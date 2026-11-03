@@ -44,7 +44,6 @@ function item(sessions: Record<string, WorkItemSessionRef>): WorkItem {
     triageType: null,
     acceptedAt: null,
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdAt: '2026-08-30T00:00:00.000Z',
     updatedAt: '2026-08-30T00:00:00.000Z',
@@ -69,6 +68,34 @@ describe('cardMoves', () => {
     expect(cardMoves({ ...issue, metadata: { labels: ['Status: Needs Approval'] } }, 'intake')).toEqual([
       { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
     ]);
+    const normalizedIssue: WorkItem = {
+      ...item({}),
+      source: 'github-issue',
+      metadata: { labels: ['stale-label'] },
+      workItem: {
+        provider: 'github',
+        key: 'acme/repo#42',
+        url: null,
+        title: 'Needs approval',
+        state: 'open',
+        labels: ['Status: Needs Approval'],
+        author: 'reporter',
+        metadata: null,
+      },
+    };
+    expect(cardMoves(normalizedIssue, 'intake')).toEqual([
+      { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
+    ]);
+    expect(
+      cardMoves(
+        {
+          ...normalizedIssue,
+          metadata: { labels: ['Status: Needs Approval'] },
+          workItem: { ...normalizedIssue.workItem!, labels: [] },
+        },
+        'intake',
+      ),
+    ).toEqual([investigate, plan]);
     // A person moved it on, so the label is stale until the source catches up.
     expect(
       cardMoves({ ...issue, metadata: { labels: ['Status: Needs Approval'] }, stages: ['planning'] }, 'planning'),
@@ -80,7 +107,6 @@ describe('cardMoves', () => {
     metadata: { labels: ['stale-board-label'] },
     workItem: {
       provider: 'github',
-      kind: 'issue' as const,
       key: 'acme/repo#42',
       url: null,
       title: 'Needs approval',
