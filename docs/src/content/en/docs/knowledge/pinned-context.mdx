@@ -1,11 +1,11 @@
 ---
-title: "Pins"
-description: "Put Knowledge pages into an agent's context on every turn, with pinned context every run of a role gets from config and stored pins agents add at runtime."
+title: "Pinned context"
+description: "Keep Knowledge pages in an agent's context every turn, pinned in config for every run of a scope or by agents at runtime."
 packages:
   - "@mastra/core"
 ---
 
-# Pins
+# Pinned context
 
 :::alpha
 
@@ -13,7 +13,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-A pin puts a Knowledge page into the context of every run in an audience, on every turn, without the agent searching for it. Use pins for standing instructions, firm constraints and durable preferences that apply whether or not anyone asks. Everything else belongs in pages the agent finds with `knowledge_search` and `knowledge_read`: pinned pages cost tokens on every turn.
+Pinned context puts a Knowledge page into the context of every run in an audience, on every turn, without the agent searching for it. Use pins for standing instructions, firm constraints and durable preferences that apply whether or not anyone asks. Everything else belongs in pages the agent finds with `knowledge_search` and `knowledge_read`: pinned pages cost tokens on every turn.
 
 ## Turn on pinned context
 
@@ -37,7 +37,7 @@ export const knowledge = new Knowledge({
 
 `pinnedContext: true` uses the defaults: at most 20 pinned pages and 500 tokens per turn. `maxTokens` can go up to 2000. A higher value throws `Knowledge pinnedContext.maxTokens is at most 2000.` when the instance is created.
 
-`pinnedContext` adds the `knowledge_pin` tool and delivers pinned pages to the agent as a state signal each turn. The signal rides on the agent's Memory thread, so pins need Memory on the agent. An agent with `pinnedContext` and no Memory logs a warning once and gets no pinned pages. Its `knowledge_pin` calls still store the pin for agents that do have Memory.
+`pinnedContext` adds the `knowledge_pin` tool and delivers pinned pages to the agent as a [state signal](/docs/signals/state-signals). The first turn gets the whole set, and later turns get only what changed, so an edit to a pinned page reaches running agents on their next step and the prompt cache stays warm. The signal rides on the agent's Memory thread, so pins need Memory on the agent. An agent with `pinnedContext` and no Memory logs a warning once and gets no pinned pages. Its `knowledge_pin` calls still store the pin for agents that do have Memory.
 
 A pinned page reaches a run only when the run holds one of the pin's audience scopes **and** can read the page. A pin never grants access to a page. Pins point at the page rather than copying its text, so edits to the page show up on the next turn.
 
@@ -84,7 +84,7 @@ Knowledge resolves the path on every run. Point it at a template page from the t
 | `org:acme`, `role:acme:sales` | No, though it can read the page with the tools | No |
 | `org:globex`, `role:globex:support` | Only `policy:globex#refund-policy` | No |
 
-Pages in `pinnedContext` are always delivered and never dropped for budget. Tools can't remove them; change the declaration instead.
+Pages in `pinnedContext` are always delivered and never dropped for budget. Tools can't remove them: `knowledge_pin` with `op: "unpin"` leaves them in place. Change the declaration instead.
 
 ## Stored pins
 
@@ -110,7 +110,7 @@ Pinning a page needs editor on "policy:acme"; this run has viewer there.
 Pinning for "role:acme:sales" needs holding it or editor on it; this run has neither.
 ```
 
-`editor` on a role scope also lets the pinner create pages in that scope. Role scopes have no `self` rule, so nobody can read those pages unless you add one. Keep pages in content scopes such as `policy:` and use role scopes only as audiences.
+`editor` on a role scope also lets the pinner create pages there, which nobody can read without a `self` rule. Keep pages in content scopes such as `policy:` and use role scopes only as audiences.
 
 ## What a run receives
 
@@ -126,7 +126,7 @@ A page body longer than its share is cut and ends with `[truncated — knowledge
 
 ## Related
 
-- [Concepts](/docs/knowledge/concepts)
-- [Declare scope types](/docs/knowledge/scope-types)
-- [Use the Knowledge tools](/docs/knowledge/agents-and-tools)
-- [Limits](/docs/knowledge/limits)
+- [Scopes and access](/docs/knowledge/scopes-and-access)
+- [Scope declarations](/reference/knowledge/scope-declarations)
+- [`knowledge_pin`](/reference/knowledge/knowledge-tools#knowledge_pin)
+- [Limits](/reference/knowledge/limits)

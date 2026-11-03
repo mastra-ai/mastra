@@ -1,11 +1,11 @@
 ---
-title: "Knowledge instructions"
-description: "The usage instructions Knowledge adds to agents, and how to change or turn them off."
+title: 'Reference: Tool instructions | Knowledge'
+description: 'The usage instructions Knowledge adds to agents with its tools, and how to change or turn them off.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
-# Knowledge instructions
+# Tool instructions
 
 :::alpha
 
@@ -36,3 +36,8 @@ const knowledge = new Knowledge({
 The function receives the default text for each part as `read`, `write` and `pins`, with an empty string for parts that are off. Return the same string for the same inputs, or the prompt cache stops working.
 
 To add the block when you wire tools yourself, call `knowledge.getInstructions({ read: true, write: true, pinnedContext: false })`.
+
+## Related
+
+- [Knowledge tools](/reference/knowledge/knowledge-tools)
+- [`getInstructions()`](/reference/knowledge/knowledge-class#getinstructions)

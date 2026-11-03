@@ -13,7 +13,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-Knowledge gives agents six tools. Which ones an agent gets depends on the Knowledge `tools` and `pinnedContext` options, or on the groups passed to [`createTools()`](/reference/knowledge/knowledge-class#createtools). See [Use the Knowledge tools](/docs/knowledge/agents-and-tools) for how agents use them.
+Knowledge gives agents six tools. Which ones an agent gets depends on the Knowledge `tools` and `pinnedContext` options, or on the groups passed to [`createTools()`](/reference/knowledge/knowledge-class#createtools). See [Agents and tools](/docs/knowledge/agents-and-tools) for how agents use them.
 
 | Group | Tools | Enabled by |
 | - | - | - |
@@ -184,7 +184,7 @@ Reads a page: its body, notes, child pages, and the notes on other pages that me
 
 A whole read returns `{ page, notes, children, childScopes?, mentionedIn, nextCursor?, mentionedInCursor?, more? }`, with the body on `page`. Anything cut short is listed in `more`, with how to get the rest:
 
-- **Body.** A body that fits in the read cap (1,000 tokens unless [`tools.read.maxTokens`](/docs/knowledge/setup#set-how-much-one-read-returns) sets it) comes back as `page.body`. A longer one comes back as `page.lines`, numbered (`12│text`), with `page.range`, the lines it covers, and `page.lineCount`. `more` says where to read on, such as `body: showing lines 1–40 of 412. Read on with from: {"line":41}.`
+- **Body.** A body that fits in the read cap (1,000 tokens unless [`tools.read.maxTokens`](/reference/knowledge/knowledge-class#constructor-options) sets it) comes back as `page.body`. A longer one comes back as `page.lines`, numbered (`12│text`), with `page.range`, the lines it covers, and `page.lineCount`. `more` says where to read on, such as `body: showing lines 1–40 of 412. Read on with from: {"line":41}.`
 - **First read of a long page.** A plain read (no `section` or `from`) of a body with headings shows the whole page at a glance instead: `page.lines` holds every heading with its line number and the first lines under it, shared out within the read cap, with `⋯ lines a–b` where lines are left out and `…` where a line is cut short. It has `page.lineCount` but no `page.range`, so it can't be written back: read a `section` or `from` a line first, and edit with the `range` that read returns. A body with no headings, or with more headings than fit in the cap, comes back as its first lines with `page.range` instead, plus `page.outline` of the headings it didn't reach (up to about 500 tokens of them).
 - **Notes and mentions.** A whole read fetches up to `limit` notes and up to `limit` mentioning notes. Each list comes along while those fetched notes stay under 1,000 tokens. A longer list is replaced by `notesLeftOut` or `mentionedInLeftOut`, the number of notes fetched, and `more` says to read it with `notes: true` or `mentionedIn: true`. When there are more notes than `limit`, both that number and the token estimate in `more` cover only the fetched notes, so the list is larger.
 - **Child pages and scopes.** Past `limit`, `more` says to list them with `knowledge_list`.
@@ -353,7 +353,7 @@ Knowledge note text exceeds the 250 token limit; split it into separate notes or
 
 ## `knowledge_pin`
 
-Pins a page into the context of every run holding one of the audience scopes, every turn, or unpins it. Requires Memory to deliver pins. See [Pins](/docs/knowledge/pins).
+Pins a page into the context of every run holding one of the audience scopes, every turn, or unpins it. Requires Memory to deliver pins. See [Pinned context](/docs/knowledge/pinned-context).
 
 <PropertiesTable
   content={[
@@ -371,8 +371,32 @@ Pinning for "role:acme:sales" needs holding it or editor on it; this run has nei
 Pin audience "project:x" does not match a declared scope type.
 ```
 
+## What each operation needs
+
+| Operation | Role | On |
+| - | - | - |
+| Search, read, list | `viewer` | The page's scope |
+| Create a page | `contributor` | `scope` |
+| Edit a page | `editor` | The page's scope |
+| Move within a scope | `editor` | The page's scope |
+| Move to another scope | `owner` | Both scopes |
+| Merge | `owner` | The page that goes away |
+| | `editor` | The page that stays, in the same scope |
+| | `owner` | The page that stays, in another scope |
+| Delete a page | `owner` | The page's scope |
+| Add a note | `contributor` | The page's scope and each stamp |
+| Restamp, remove a note | `editor` | The page's scope (and `contributor` on each new stamp) |
+| Pin, unpin | `editor` | The page's scope, plus authority over each audience |
+
+A call that's in reach but needs a stronger role names the role it needs:
+
+```text
+Adding a note needs contributor on "team:acme:support"; this run has viewer there.
+```
+
 ## Related
 
-- [Use the Knowledge tools](/docs/knowledge/agents-and-tools)
+- [Agents and tools](/docs/knowledge/agents-and-tools)
 - [Knowledge class](/reference/knowledge/knowledge-class)
-- [Limits](/docs/knowledge/limits)
+- [Limits](/reference/knowledge/limits)
+- [Tool instructions](/reference/knowledge/tool-instructions)

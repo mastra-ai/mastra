@@ -414,6 +414,9 @@ const sidebars = {
         { type: 'doc', id: 'knowledge/knowledge-class', label: 'Knowledge Class' },
         { type: 'doc', id: 'knowledge/knowledge-tools', label: 'Knowledge Tools' },
         { type: 'doc', id: 'knowledge/knowledge-memory-scopes', label: 'knowledgeMemoryScopes()' },
+        { type: 'doc', id: 'knowledge/limits', label: 'Limits' },
+        { type: 'doc', id: 'knowledge/scope-declarations', label: 'Scope declarations' },
+        { type: 'doc', id: 'knowledge/tool-instructions', label: 'Tool instructions' },
       ],
     },
     {

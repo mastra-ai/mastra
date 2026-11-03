@@ -230,48 +230,28 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'knowledge/concepts',
-              label: 'Concepts',
+              id: 'knowledge/patterns',
+              label: 'Patterns',
             },
             {
               type: 'doc',
-              id: 'knowledge/setup',
-              label: 'Setup',
-            },
-            {
-              type: 'doc',
-              id: 'knowledge/scope-types',
-              label: 'Scope types',
-            },
-            {
-              type: 'doc',
-              id: 'knowledge/run-scopes',
-              label: 'Run scopes',
+              id: 'knowledge/scopes-and-access',
+              label: 'Scopes and access',
             },
             {
               type: 'doc',
               id: 'knowledge/agents-and-tools',
-              label: 'Tools',
+              label: 'Agents and tools',
             },
             {
               type: 'doc',
-              id: 'knowledge/pins',
-              label: 'Pins',
+              id: 'knowledge/pinned-context',
+              label: 'Pinned context',
             },
             {
               type: 'doc',
-              id: 'knowledge/access-patterns',
-              label: 'Access patterns',
-            },
-            {
-              type: 'doc',
-              id: 'knowledge/instructions',
-              label: 'Instructions',
-            },
-            {
-              type: 'doc',
-              id: 'knowledge/limits',
-              label: 'Limits',
+              id: 'knowledge/search-and-sync',
+              label: 'Search and sync',
             },
           ],
         },

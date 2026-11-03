@@ -1,6 +1,6 @@
 ---
 title: "Knowledge"
-description: "Give agents a shared store of pages and notes, with access decided by your configuration rather than by the model."
+description: "Give agents shared pages and notes they search, read and write, with access decided by your configuration rather than by the model."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -11,15 +11,25 @@ packages:
 
 Knowledge is a graph context system for agents. It works directly with [signals](/docs/signals/overview), Mastra's context engineering primitive. Signals bring the right knowledge into an agent's context and keep it current while the agent runs.
 
-Knowledge holds **pages** and **notes** that agents read and write across conversations. A page is a curated topic with a body. A note is a short, attributed fact added to a page. Pages live in **scopes**, such as `org:acme` or `team:acme:support`, and the scope types you declare decide who can read and write each one. The model never picks its own identity or what it can reach.
-
 :::alpha
 
 Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-Knowledge attaches directly to an agent and works without [Memory](/docs/memory/overview). With Memory, each run also holds its `resource:` and `thread:` scopes, and [pins](/docs/knowledge/pins) are delivered every turn.
+Knowledge holds **pages** and **notes** that agents read and write across conversations. A page is a topic with a name, a short description and a markdown body. A note is a short, attributed fact added to a page. Pages live in **scopes**, such as `org:acme` or `team:acme:support`, and nest inside each other like folders. The scope types you declare decide who can read and write each scope. The model never picks its own identity or what it can reach.
+
+Agents use Knowledge through tools: they browse a scope's pages, search, read a long page a section at a time, write pages and add notes. With [pinned context](/docs/knowledge/pinned-context), a page you choose is in the agent's context every turn, and an edit to it reaches running agents on their next turn.
+
+## When to use Knowledge
+
+Use Knowledge when agents need information that outlives one conversation and is shared between people or agents:
+
+- Documentation, policies or runbooks an agent should answer from instead of guessing.
+- Decisions and conventions that several agents or users build on.
+- Facts that only some runs may see, such as one customer's account notes or one team's playbooks.
+
+[Memory](/docs/memory/overview) is the conversation: the messages and observations that guide one agent's work in a thread. Knowledge holds the organized information agents use outside that thread. They work together: with Memory, each run also holds its `resource:` and `thread:` scopes, and pinned pages are delivered every turn.
 
 ## Quickstart
 
@@ -64,16 +74,20 @@ await agent.generate('Our refund window is 30 days. Save that for the team.', {
 
 The agent can call `knowledge_page` to create a page in `org:acme`, and any later run that holds `org:acme` finds it with `knowledge_search`.
 
-## What's in the section
+`tools` is off by default, so an agent with Knowledge attached gets no tools until you turn them on. An agent without Memory works too, as long as the agent or the call passes `scopes`.
 
-- [Concepts](/docs/knowledge/concepts): scopes, run scopes, roles, pages and notes, and what a run can reach.
-- [Set up Knowledge](/docs/knowledge/setup): storage, search and which tools to turn on.
-- [Declare scope types](/docs/knowledge/scope-types): patterns, access rules, templates and Memory's scopes.
-- [Use the tools](/docs/knowledge/agents-and-tools): the six tools, what each operation needs, and pins.
-- [Access patterns](/docs/knowledge/access-patterns): recipes for policies, teams, accounts and public bots.
-- [Instructions](/docs/knowledge/instructions): the built-in usage instructions and how to override them.
-- [Limits](/docs/knowledge/limits): size limits, counted in tokens.
+## Storage
 
-## Not in this release
+Leave out `storage` to use the storage configured on `Mastra`. Knowledge storage is supported by `LibSQLStore`, `PostgresStore`, `MySQLStore`, `MongoDBStore` and `InMemoryStore` (for tests).
+
+Upgrading from 1.79.0: on startup, the tables of the earlier experimental Knowledge store are dropped, with any rows in them, and the new tables are created. Tables already on the new schema, Memory and other tables are never touched. On MongoDB, Knowledge collections found without a schema version are adopted as the new schema.
+
+## Next steps
+
+- [What you can build](/docs/knowledge/patterns): ten patterns, from a docs agent to agent hand-offs.
+- [Scopes and access](/docs/knowledge/scopes-and-access): declare scopes, set who a run is, and check what it can reach.
+- [Agents and tools](/docs/knowledge/agents-and-tools): the tools agents get and how they read and write pages.
+- [Pinned context](/docs/knowledge/pinned-context): keep a page in an agent's context every turn.
+- [Search and sync](/docs/knowledge/search-and-sync): add semantic search, and sync your own content in.
 
 Built-in importers, retention and stored per-user grants aren't part of this release. Access is computed from your declarations each time a tool runs, and nothing is stored per user.

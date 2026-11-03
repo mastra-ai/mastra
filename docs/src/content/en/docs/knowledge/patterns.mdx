@@ -1,0 +1,197 @@
+---
+title: "What you can build with Knowledge"
+description: "What you can build with Knowledge: a docs agent, one agent for many customers, pinned policies, coding conventions, runbooks, department scopes, personal notes and agent hand-offs."
+packages:
+  - "@mastra/core"
+---
+
+# What you can build with Knowledge
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
+
+Each pattern below says who the agents are, which scopes hold what, and the config or tool calls that make it work. Scope kinds such as `tenant:`, `repo:` or `handbook:` are names each config chooses. Knowledge has no built-in kinds. Only `resource:` and `thread:` come from Memory, and [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) declares them plus a tenant scope.
+
+:::warning
+
+Access is checked on every tool call, but Knowledge can't yet guarantee that data never reaches a run outside the scopes that hold it, or that an agent never repeats something across scopes. Read these patterns as what Knowledge is designed for, and don't rely on it to isolate sensitive data yet.
+
+:::
+
+## Answer from your own docs
+
+Your server syncs your docs into a `product-docs:` scope with [`upsertPage()`](/docs/knowledge/search-and-sync#sync-your-content), and a docs agent gets only the read tools. It lists the tree, reads the lines of a long page that match what it's looking for, and says it doesn't know when search comes back empty:
+
+```typescript
+const knowledge = new Knowledge({
+  id: 'docs',
+  storage,
+  tools: { read: true },
+  scopes: {
+    ...knowledgeMemoryScopes({ org: 'workspace:$workspaceId' }),
+    'product-docs:$workspaceId': {
+      belongsTo: 'workspace:$workspaceId',
+      access: [{ principal: 'workspace:$workspaceId', role: 'viewer' }],
+    },
+  },
+})
+```
+
+```json
+{ "page": "product-docs:initech#billing/refunds", "match": "region 42", "context": 1 }
+```
+
+## One agent, many customers
+
+One support agent serves every customer. Each customer's pages live in its own scope, and your server runs the agent with that customer's scope plus the user and conversation:
+
+```typescript
+await agent.generate(message, {
+  scopes: ['tenant:globex', `resource:${userId}`, `thread:${threadId}`],
+})
+```
+
+A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, because the run doesn't hold `tenant:acme`. The prompt has nothing to do with it. With Memory on the agent, the `resource:` and `thread:` scopes also tell Memory which user and thread the run is. Test the rules with [`explainAccess()`](/docs/knowledge/scopes-and-access#check-what-a-run-can-reach).
+
+## A policy every agent follows
+
+A compliance desk edits an account's data-handling rules, and every run on the account has them in context without searching. Declare the page and pin it in config:
+
+```typescript oxfmt:false
+'account:$accountId': {
+  access: [
+    { principal: 'self', role: 'viewer' },
+    { principal: 'desk:$accountId:compliance', role: 'editor' },
+  ],
+  pages: [{ key: 'data-handling', name: 'Data handling rules' }],
+  pinnedContext: ['account:$accountId#data-handling'],
+},
+```
+
+When compliance edits the page, running agents get the change on their next step. See [Pinned context](/docs/knowledge/pinned-context).
+
+## Coding conventions that carry over
+
+Developers' coding agents share one scope per repo. The conventions page is pinned, and decisions go on it as notes with a link to the page they concern:
+
+```typescript oxfmt:false
+'repo:$repo': {
+  access: [{ principal: 'self', role: 'editor' }],
+  pages: [{ key: 'conventions', name: 'Conventions' }, { key: 'tooling', name: 'Tooling' }],
+  pinnedContext: ['repo:$repo#conventions'],
+},
+```
+
+```json
+{
+  "op": "add",
+  "page": "repo:api#conventions",
+  "scope": ["repo:api"],
+  "text": "Decided: pnpm workspaces, not npm. See [[repo:api#tooling]]."
+}
+```
+
+The next session in `repo:api` sees the conventions with "1 note" beside them. A session in `repo:web` sees none of it.
+
+## Runbooks that improve on call
+
+On-call engineers are contributors on their service's scope: their agents add notes to the pinned runbook but can't rewrite it. SRE leads are editors and fold the notes in:
+
+```typescript oxfmt:false
+'oncall:$orgId:$service': {
+  belongsTo: 'org:$orgId',
+  access: [
+    { principal: 'self', role: 'contributor' },
+    { principal: 'role:$orgId:sre-lead', role: 'editor' },
+  ],
+  pages: [{ key: 'runbook', name: 'Incident runbook' }],
+  pinnedContext: ['oncall:$orgId:$service#runbook'],
+},
+```
+
+An on-call agent that tries to edit the page gets `Editing a page needs editor on "oncall:globex:payments"; this run has contributor there.`
+
+## Organize pages like folders
+
+Pages nest inside a scope. A handbook declares `refunds` with `damaged-items` under it, and an agent that doesn't know the exact name lists the tree and reads what it needs:
+
+```json
+{ "from": "handbook:acme", "depth": 2 }
+```
+
+```text
+handbook:acme#refunds                Refund policy        (1 child)
+handbook:acme#refunds/damaged-items  Damaged items
+handbook:acme#escalation             Escalation process
+```
+
+## One scope per department
+
+Each department has its own scope under a firm-wide one. HR's salary bands live in `dept:initech:hr`. An engineer's search finds nothing there, while everyone finds the firm-wide holidays page:
+
+```typescript
+const scopes = {
+  ...knowledgeMemoryScopes({ org: 'firm:$firmId', orgRole: 'contributor' }),
+  'dept:$firmId:$dept': {
+    belongsTo: 'firm:$firmId',
+    access: [{ principal: 'self', role: 'editor' }],
+  },
+}
+```
+
+You change who sees what by changing the config and the scopes your server passes, not by rewriting prompts.
+
+## Notes for the people who need them
+
+A note's `scope` lists its stamps, and a run sees the note when it can read the page and holds any one of them. Dana's agent stamps a note with her own scope only, and another with hers and her squad's:
+
+```json
+{
+  "op": "add",
+  "page": "office:hooli#coverage",
+  "scope": ["resource:dana", "squad:hooli:support"],
+  "text": "Dana is out Nov 10 to 14; Bea covers her queue."
+}
+```
+
+Bea, on the support squad, sees the second note and not the first. Sam, in sales, sees neither, and his agent can't stamp a note for a squad it can't reach.
+
+## Hand work between agents
+
+Research, planning and coding agents on one initiative share a scope. Research writes a page, planning writes a plan nested under it, and the coding agent reads the plan and adds a note when a step is done:
+
+```json
+{
+  "op": "add",
+  "page": "initiative:checkout#research/plan",
+  "scope": ["initiative:checkout"],
+  "text": "Step 1 done in PR 412."
+}
+```
+
+None of the agents talk to each other. They share pages, under the same access rules.
+
+## Show people what agents know
+
+Register the instance on `Mastra` and add the read-only Knowledge routes, and Studio shows the tree, a graph, each page with its notes, and agents' edits as they happen:
+
+```typescript
+import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter'
+
+export const mastra = new Mastra({
+  agents: { support },
+  knowledge: { company: knowledge },
+  server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
+})
+```
+
+The routes read every page as the instance owner, so put them behind your own auth and the `knowledge:read` permission. `knowledge.onChange()` gives your own code the same change events. They carry IDs, not content, so re-read a page under the user's scopes before you show it to them.
+
+## Related
+
+- [Scopes and access](/docs/knowledge/scopes-and-access)
+- [Agents and tools](/docs/knowledge/agents-and-tools)
+- [Pinned context](/docs/knowledge/pinned-context)

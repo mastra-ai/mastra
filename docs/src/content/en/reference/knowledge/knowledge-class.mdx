@@ -13,7 +13,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-The `Knowledge` class holds pages and notes, declares which scopes exist and who gets which role on them, and gives attached agents the Knowledge tools. See [Knowledge overview](/docs/knowledge/overview) for what it does and [Setup](/docs/knowledge/setup) for a walkthrough.
+The `Knowledge` class holds pages and notes, declares which scopes exist and who gets which role on them, and gives attached agents the Knowledge tools. See [Knowledge](/docs/knowledge/overview) for what it does and a quickstart.
 
 ## Usage example
 
@@ -45,7 +45,7 @@ export const knowledge = new Knowledge({
     name: 'scopes',
     type: 'KnowledgeScopeDeclarations',
     description:
-      "Scope types and concrete scopes this Knowledge knows, keyed by pattern (`team:$orgId:$teamId`) or address (`org:acme`). Each declaration sets `access` rules and optionally `description`, `displayLabel`, `belongsTo`, `children`, `pages`, `pinnedContext` and `pinnedContextPriority`. `displayLabel` is a short name for UIs, such as `'$orgId organization'`; the model never sees it. Children take `displayLabel` too. Required: every run scope of an attached agent must match a declaration. Spread `knowledgeMemoryScopes()` for Memory's scopes; `{}` declares nothing. See [Declare scope types](/docs/knowledge/scope-types).",
+      "Scope types and concrete scopes this Knowledge knows, keyed by pattern (`team:$orgId:$teamId`) or address (`org:acme`). Each declaration sets `access` rules and optionally `description`, `displayLabel`, `belongsTo`, `children`, `pages`, `pinnedContext` and `pinnedContextPriority`. `displayLabel` is a short name for UIs, such as `'$orgId organization'`; the model never sees it. Children take `displayLabel` too. Required: every run scope of an attached agent must match a declaration. Spread `knowledgeMemoryScopes()` for Memory's scopes; `{}` declares nothing. See [Scope declarations](/reference/knowledge/scope-declarations).",
   },
   {
     name: 'id',
@@ -75,7 +75,7 @@ export const knowledge = new Knowledge({
     name: 'tools',
     type: 'boolean | { read?: boolean | { maxTokens?: number }; write?: boolean }',
     description:
-      'Tools an attached agent gets. `true` gives `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first three, `{ write: true }` the last two. `{ read: { maxTokens } }` turns on read and sets the most tokens one `knowledge_read` body or `match` result and one `knowledge_list` result returns: 1,000 by default, at least 100. Off by default. See [Set how much one read returns](/docs/knowledge/setup#set-how-much-one-read-returns).',
+      'Tools an attached agent gets. `true` gives `knowledge_list`, `knowledge_search`, `knowledge_read`, `knowledge_page` and `knowledge_note`. `{ read: true }` gives the first three, `{ write: true }` the last two. `{ read: { maxTokens } }` turns on read and sets the most tokens one `knowledge_read` body or `match` result and one `knowledge_list` result returns: 1,000 by default, at least 100. Off by default. See [read a page](/docs/knowledge/agents-and-tools#read-a-page).',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -83,7 +83,7 @@ export const knowledge = new Knowledge({
     name: 'pinnedContext',
     type: 'boolean | { maxPins?: number; maxTokens?: number }',
     description:
-      'Pinned pages delivered to an attached agent every turn, plus the `knowledge_pin` tool. Needs Memory. `maxPins` defaults to 20 and `maxTokens` to 500; `maxTokens` above 2000 throws. Off by default. See [Pins](/docs/knowledge/pins).',
+      'Pinned pages delivered to an attached agent every turn, plus the `knowledge_pin` tool. Needs Memory. `maxPins` defaults to 20 and `maxTokens` to 500; `maxTokens` above 2000 throws. Off by default. See [Pinned context](/docs/knowledge/pinned-context).',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -111,7 +111,7 @@ export const knowledge = new Knowledge({
     name: 'instructions',
     type: 'false | string | ((parts: { read: string; write: string; pins: string }) => string)',
     description:
-      'Replaces the built-in usage instructions added when Knowledge attaches tools. `false` adds none. A function receives the built-in parts, with an empty string for each disabled group, and must return the same text for the same input so the prompt stays cacheable. See [Instructions](/docs/knowledge/instructions).',
+      'Replaces the built-in usage instructions added when Knowledge attaches tools. `false` adds none. A function receives the built-in parts, with an empty string for each disabled group, and must return the same text for the same input so the prompt stays cacheable. See [Tool instructions](/reference/knowledge/tool-instructions).',
     isOptional: true,
   },
 ]}
@@ -232,7 +232,7 @@ Returns what a holder of `principals` can read: the principals themselves plus e
 renameScopeDeclaration(from: string, to: string): Promise<number>
 ```
 
-Moves stored scopes created from declaration key `from`, and its child scopes (`from/<name>`), to key `to`, in one step. Resolves to how many scopes moved. Refuses, and changes nothing, when `from` is still in `scopes`, `to` isn't, or a stored address doesn't match `to`'s pattern. Until stored keys match `scopes`, the instance refuses to run. On MongoDB the rename runs in a transaction only when the server is a replica set; on a standalone server it isn't atomic, so a failure partway can leave some scopes renamed. See [rename or retire a scope type](/docs/knowledge/scope-types#rename-or-retire-a-scope-type).
+Moves stored scopes created from declaration key `from`, and its child scopes (`from/<name>`), to key `to`, in one step. Resolves to how many scopes moved. Refuses, and changes nothing, when `from` is still in `scopes`, `to` isn't, or a stored address doesn't match `to`'s pattern. Until stored keys match `scopes`, the instance refuses to run. On MongoDB the rename runs in a transaction only when the server is a replica set; on a standalone server it isn't atomic, so a failure partway can leave some scopes renamed. See [rename or retire a scope type](/reference/knowledge/scope-declarations#rename-or-retire-a-scope-type).
 
 ### `getStorage()`
 
@@ -262,7 +262,7 @@ upsertPage(input: {
 }): Promise<{ page: KnowledgePage; status: 'created' | 'updated' | 'unchanged' }>
 ```
 
-Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. An empty key throws `Knowledge page path "<path>" needs non-empty keys.` See [sync content into Knowledge](/docs/knowledge/setup#sync-content-into-knowledge).
+Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. An empty key throws `Knowledge page path "<path>" needs non-empty keys.` See [sync content into Knowledge](/docs/knowledge/search-and-sync#sync-your-content).
 
 This method and the four below are host-only: they check no run scopes or access rules. Don't expose them through an agent tool, or through a server route without admin-level auth.
 
@@ -354,5 +354,5 @@ Returns the `displayLabel` for a scope address with its `$params` filled in: `'$
 
 - [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes)
 - [Knowledge tools](/reference/knowledge/knowledge-tools)
-- [Declare scope types](/docs/knowledge/scope-types)
-- [Set who a run is](/docs/knowledge/run-scopes)
+- [Scope declarations](/reference/knowledge/scope-declarations)
+- [Scopes and access](/docs/knowledge/scopes-and-access)

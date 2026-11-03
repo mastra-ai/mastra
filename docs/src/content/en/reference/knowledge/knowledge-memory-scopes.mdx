@@ -13,7 +13,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-`knowledgeMemoryScopes()` returns scope declarations for the `resource:` and `thread:` scopes every Memory run holds, plus a tenant scope. Spread it into the Knowledge `scopes` option so agents with Memory can use Knowledge. See [Declare scope types](/docs/knowledge/scope-types) for how declarations work.
+`knowledgeMemoryScopes()` returns scope declarations for the `resource:` and `thread:` scopes every Memory run holds, plus a tenant scope. Spread it into the Knowledge `scopes` option so agents with Memory can use Knowledge. See [Scope declarations](/reference/knowledge/scope-declarations) for how declarations work.
 
 ## Usage example
 
@@ -93,12 +93,12 @@ knowledgeScopeAddress('team:$orgId:$teamId', { orgId: 'a:b', teamId: 'c:d' })
 
 :::note
 
-Don't pass the result as an agent scope. Agent scopes take raw IDs (`resource:acme/dana`), and Knowledge encodes them at run start. See [Set who a run is](/docs/knowledge/run-scopes).
+Don't pass the result as an agent scope. Agent scopes take raw IDs (`resource:acme/dana`), and Knowledge encodes them at run start. See [set who a run is](/docs/knowledge/scopes-and-access#set-who-a-run-is).
 
 :::
 
 ## Related
 
 - [Knowledge class](/reference/knowledge/knowledge-class)
-- [Declare scope types](/docs/knowledge/scope-types)
-- [Pins](/docs/knowledge/pins)
+- [Scope declarations](/reference/knowledge/scope-declarations)
+- [Pinned context](/docs/knowledge/pinned-context)
