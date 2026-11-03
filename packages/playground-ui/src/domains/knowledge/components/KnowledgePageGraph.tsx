@@ -1292,7 +1292,7 @@ function KnowledgePageGraphInner({
   fitState.current = { nodes, allEdges, selectedPageId, centerId, reactFlow, linkedIds };
   // Set when a fit found the pane 0×0, so the next non-zero size fits even if it matches the last one seen.
   const fitPending = useRef(false);
-  const fit = useCallback((focusSelection: boolean, duration?: number) => {
+  const fit = useCallback((focusSelection: boolean, duration?: number, wholeRing = false) => {
     const container = containerRef.current;
     const width = container?.clientWidth ?? 0;
     const height = container?.clientHeight ?? 0;
@@ -1314,8 +1314,27 @@ function KnowledgePageGraphInner({
     const bounds = graphBounds(targets);
     if (!bounds) return;
     const anchor = current.find(node => node.id === (selected ?? centre));
-    const viewport = fitViewport({ bounds, width, height, focus: !!focus, anchor });
+    const ring = wholeRing && !!selected && targets.some(node => linked.has(node.id));
+    const viewport = fitViewport({ bounds, width, height, focus: !!focus, ring, anchor });
     void flow.setViewport(viewport, duration ? { duration } : undefined);
+  }, []);
+
+  // A refocus only pans: the newly focused page moves to the centre and the zoom stays where the user
+  // left it. Fit view is the one control that changes zoom.
+  const panToSelection = useCallback((duration?: number) => {
+    const container = containerRef.current;
+    const width = container?.clientWidth ?? 0;
+    const height = container?.clientHeight ?? 0;
+    const { nodes: current, selectedPageId: selected, reactFlow: flow } = fitState.current;
+    const anchor = current.find(node => node.id === selected);
+    if (!anchor || width === 0 || height === 0) return;
+    const { zoom } = flow.getViewport();
+    const cx = anchor.position.x + (anchor.width ?? 0) / 2;
+    const cy = anchor.position.y + (anchor.height ?? 0) / 2;
+    void flow.setViewport(
+      { zoom, x: width / 2 - cx * zoom, y: height / 2 - cy * zoom },
+      duration ? { duration } : undefined,
+    );
   }, []);
 
   // A host that hides the graph behind a Tree/Graph toggle gives it zero size at first, so fit again
@@ -1344,8 +1363,8 @@ function KnowledgePageGraphInner({
     };
   }, [hasNodes, fit]);
 
-  // A selection made outside the graph (tree, search, a link) brings that page and its neighbours into
-  // view. A click on the graph itself leaves the view where the user put it.
+  // A selection made outside the graph (tree, search, a link) pans to that page at the current zoom. A
+  // click on the graph itself leaves the view where the user put it.
   const selectedHere = useRef<string | null>(null);
   const selectedIsLoaded = !!selectedPageId && pagesById.has(selectedPageId);
   const initialized = useRef(false);
@@ -1354,8 +1373,8 @@ function KnowledgePageGraphInner({
     const fromGraph = selectedHere.current === selectedPageId;
     selectedHere.current = null;
     if (fromGraph) return;
-    fit(true, fitDuration(prefersMotion()));
-  }, [selectedPageId, selectedIsLoaded, fit]);
+    panToSelection(fitDuration(prefersMotion()));
+  }, [selectedPageId, selectedIsLoaded, panToSelection]);
 
   // First click selects; a click on the page that is already selected opens it. A double-click is the two.
   const activate = (page: KnowledgePagePayload) => {
@@ -1454,7 +1473,7 @@ function KnowledgePageGraphInner({
         <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
         <Controls showInteractive={false} showFitView={false}>
           <ControlButton
-            onClick={() => fit(false, fitDuration(prefersMotion()))}
+            onClick={() => fit(false, fitDuration(prefersMotion()), true)}
             title="Fit view"
             aria-label="Fit view"
           >

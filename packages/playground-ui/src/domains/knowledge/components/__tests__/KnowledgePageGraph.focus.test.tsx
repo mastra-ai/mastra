@@ -10,9 +10,18 @@ import { KnowledgePageGraph } from '../KnowledgePageGraph';
 // jsdom can't lay React Flow out, so only the viewport it is handed is observed; everything else is the
 // real library.
 const setViewport = vi.fn(async (_viewport: Viewport, _options?: { duration?: number }) => true);
+// The zoom the user has chosen, as React Flow would report it.
+let currentZoom = 1;
 vi.mock('@xyflow/react', async importOriginal => {
   const actual = await importOriginal<typeof import('@xyflow/react')>();
-  return { ...actual, useReactFlow: () => ({ ...actual.useReactFlow(), setViewport }) };
+  return {
+    ...actual,
+    useReactFlow: () => ({
+      ...actual.useReactFlow(),
+      setViewport,
+      getViewport: () => ({ x: 0, y: 0, zoom: currentZoom }),
+    }),
+  };
 });
 
 const WIDTH = 800;
@@ -77,28 +86,27 @@ function screenBox(ids: string[]) {
 }
 
 describe('KnowledgePageGraph focus on the selected page', () => {
-  beforeEach(() => setViewport.mockClear());
+  beforeEach(() => {
+    setViewport.mockClear();
+    currentZoom = 1;
+  });
 
   describe('when a page is selected outside the graph (tree, search, link)', () => {
-    it('frames that page and the pages one line away from it', async () => {
+    it('pans to that page and keeps the zoom the user had', async () => {
       const { rerender } = renderWithProviders(
         <KnowledgePageGraph pages={pages} edges={mentions} selectedPageId={null} onSelect={() => {}} />,
       );
       await screen.findAllByTestId('knowledge-page-node');
+      currentZoom = 0.45;
       setViewport.mockClear();
 
       rerender(<KnowledgePageGraph pages={pages} edges={mentions} selectedPageId="refunds" onSelect={() => {}} />);
 
       expect(setViewport).toHaveBeenCalledTimes(1);
-      // Refunds, its parent and the page it mentions are centred in the pane and fully inside it.
-      const box = screenBox(['refunds', 'org', 'billing']);
+      expect(setViewport.mock.calls[0]?.[0].zoom).toBe(0.45);
+      const box = screenBox(['refunds']);
       expect((box.left + box.right) / 2).toBeCloseTo(WIDTH / 2, 0);
       expect((box.top + box.bottom) / 2).toBeCloseTo(HEIGHT / 2, 0);
-      expect(box.left).toBeGreaterThanOrEqual(0);
-      expect(box.right).toBeLessThanOrEqual(WIDTH);
-      // Roadmap is not one of its neighbours, so the frame is not the whole graph's.
-      const all = screenBox(['refunds', 'org', 'billing', 'roadmap']);
-      expect([all.left, all.top, all.right, all.bottom]).not.toEqual([box.left, box.top, box.right, box.bottom]);
     });
 
     it('does not move the view again when the same data is refetched', async () => {
@@ -155,6 +163,46 @@ describe('KnowledgePageGraph focus on the selected page', () => {
       const box = screenBox(['hub']);
       expect((box.left + box.right) / 2).toBeCloseTo(WIDTH / 2, 0);
       expect((box.top + box.bottom) / 2).toBeCloseTo(HEIGHT / 2, 0);
+    });
+  });
+
+  describe('Fit view on a page with an outer ring of linked pages', () => {
+    const ringIds = Array.from({ length: 12 }, (_, index) => `link${index}`);
+    const crowded = [
+      page('site', null),
+      page('hub', 'site'),
+      ...Array.from({ length: 45 }, (_, index) => ({
+        ...page(`c${index}`, 'hub'),
+        position: `a${String(index).padStart(2, '0')}`,
+      })),
+      page('other', null),
+      ...ringIds.map(id => page(id, 'other')),
+    ];
+    const ringEdges: KnowledgePageEdge[] = ringIds.map(id => ({ source: 'hub', target: id, kind: 'link', count: 1 }));
+
+    it('zooms out past the readable zoom to frame the whole ring, which a refocus never does', async () => {
+      renderWithProviders(
+        <KnowledgePageGraph
+          pages={crowded}
+          edges={ringEdges}
+          nearIds={new Set(ringIds)}
+          selectedPageId="hub"
+          centerId="site"
+          onSelect={() => {}}
+        />,
+      );
+      await screen.findAllByTestId('knowledge-page-node');
+      setViewport.mockClear();
+
+      fireEvent.click(screen.getByLabelText('Fit view'));
+
+      const viewport = setViewport.mock.calls.at(-1)?.[0];
+      expect(viewport?.zoom).toBeLessThan(0.7);
+      const box = screenBox(['hub', ...ringIds]);
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(WIDTH);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.bottom).toBeLessThanOrEqual(HEIGHT);
     });
   });
 });
