@@ -23,6 +23,7 @@ import { fitWords } from '../lib/circleText';
 import { edgeOffsets, rimToRim } from '../lib/edgeOffsets';
 import type { Circle, EdgeOffset } from '../lib/edgeOffsets';
 import { fitTargets } from '../lib/fitTargets';
+import { fitViewport } from '../lib/fitViewport';
 import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
   KNOWLEDGE_DOT_HIT_MARGIN,
@@ -1295,16 +1296,9 @@ function KnowledgePageGraphInner({
     const targets = fitTargets(current, focus, linked);
     const bounds = graphBounds(targets);
     if (!bounds) return;
-    const viewport = getViewportForBounds(bounds, width, height, READABLE_MIN_ZOOM, focus ? 1.5 : 2, focus ? 0.3 : 0.1);
-    // When the floor stops the graph shrinking to fit, what is cropped is the edge, not the page being
-    // looked at: the view centres on the focused page, or the layout's centre when nothing is focused.
     const anchor = current.find(node => node.id === (selected ?? centre));
-    if (anchor && viewport.zoom <= READABLE_MIN_ZOOM) {
-      const cx = anchor.position.x + (anchor.width ?? 0) / 2;
-      const cy = anchor.position.y + (anchor.height ?? 0) / 2;
-      viewport.x = width / 2 - cx * viewport.zoom;
-      viewport.y = height / 2 - cy * viewport.zoom;
-    }
+    const ring = !!focus && targets.some(node => linked.has(node.id));
+    const viewport = fitViewport({ bounds, width, height, focus: !!focus, ring, anchor });
     void flow.setViewport(viewport, duration ? { duration } : undefined);
   }, []);
 
