@@ -618,7 +618,7 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       observationalMemory: {
-        model: 'google/gemini-2.5-flash',
+        model: 'auto',
         observation: {
           messageTokens: 20_000,
         },
@@ -701,7 +701,7 @@ export const agent = new Agent({
       observationalMemory: {
         // highlight-start
         observation: {
-          model: 'google/gemini-2.5-flash',
+          model: 'auto',
         },
         reflection: {
           model: '__GATEWAY_OPENAI_MODEL_LUNA__',
@@ -729,7 +729,7 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       observationalMemory: {
-        model: 'google/gemini-2.5-flash',
+        model: 'auto',
         observation: {
           // Focus observations on health-related preferences and goals
           instruction:
@@ -774,7 +774,7 @@ export const agent = new Agent({
   memory: new Memory({
     options: {
       observationalMemory: {
-        model: 'google/gemini-2.5-flash',
+        model: 'auto',
         observation: {
           messageTokens: 30_000,
           // Buffer every 5k tokens (runs in background)
@@ -801,7 +801,7 @@ To disable async buffering entirely:
 
 ```typescript oxfmt:false
 observationalMemory: {
-  model: "google/gemini-2.5-flash",
+  model: "auto",
   observation: {
     bufferTokens: false,
   },
@@ -1550,7 +1550,7 @@ Group IDs in search results include the record that holds them (`groupId@recordI
 new ModelByInputTokens(config)
 ```
 
-Where `config` is an object with `upTo` keys that map token thresholds (numbers) to model targets.
+Where `config` is an object with `upTo` keys that map token thresholds (numbers) to model targets. Each tier needs a concrete model, so the example below names specific models instead of `"auto"`.
 
 #### Example
 
