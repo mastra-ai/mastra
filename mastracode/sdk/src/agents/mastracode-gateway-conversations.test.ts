@@ -65,6 +65,7 @@ type Route = {
   headers: Record<string, string>;
   request: Record<string, unknown>;
   streamsUsage?: false;
+  builtByCore?: true;
 };
 
 const claude = { providerId: 'anthropic', modelId: 'claude-sonnet-4-6' };
@@ -160,6 +161,7 @@ const routes: Route[] = [
     headers: { authorization: 'Bearer organization-key' },
     request: { model: 'openai/gpt-5.5' },
     streamsUsage: false,
+    builtByCore: true,
   },
   {
     name: 'Factory Claude OAuth',
@@ -288,14 +290,14 @@ describe.each(routes)('conversations through $name', route => {
             }),
           },
         });
-      const agent = createAgent(
-        gateway.resolveLanguageModel({
-          providerId: route.providerId,
-          modelId: route.modelId,
-          apiKey: route.viaGateway ? 'organization-key' : 'tenant-key',
-          headers: { 'x-thread-id': 'picture-thread' },
-        }),
-      );
+      const model = gateway.resolveLanguageModel({
+        providerId: route.providerId,
+        modelId: route.modelId,
+        apiKey: route.viaGateway ? 'organization-key' : 'tenant-key',
+        headers: { 'x-thread-id': 'picture-thread' },
+      });
+      expect(model.specificationVersion).toBe(route.builtByCore ? 'v3' : 'v4');
+      const agent = createAgent(model);
       const run = async (messages: Parameters<typeof agent.generate>[0], target = agent) =>
         method === 'generate'
           ? target.generate(messages, { maxSteps: 3 })
