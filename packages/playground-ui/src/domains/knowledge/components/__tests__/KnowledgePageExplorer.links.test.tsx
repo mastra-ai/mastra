@@ -154,14 +154,85 @@ describe('KnowledgePageExplorer body links', () => {
   });
 
   describe('when the graph shows pages whose bodies link each other', () => {
-    it('draws a body-link line from the linking page to each page it links', () => {
-      const { container } = renderWithProviders(<Host initial={null} initialView="graph" />);
-      const lines = [...container.querySelectorAll('.react-flow__edge')]
+    const linkLines = (container: HTMLElement) =>
+      [...container.querySelectorAll('.react-flow__edge')]
         .map(edge => edge.getAttribute('data-id'))
         .filter(id => id?.startsWith('link:'))
         .sort();
-      expect(lines).toEqual(['link:overview->suspend', 'link:overview->workflows']);
+
+    it('draws none of them until all links are turned on, but counts them on each circle', () => {
+      const { container } = renderWithProviders(<Host initial={null} initialView="graph" />);
+      expect(linkLines(container)).toEqual([]);
+      expect(screen.getByRole('button', { name: 'All links' }).getAttribute('aria-pressed')).toBe('false');
+      const overview = container.querySelector('.react-flow__node [data-page-id="overview"]');
+      expect(overview?.querySelector('[data-testid="knowledge-hidden-links"]')?.textContent).toBe('2→');
+    });
+
+    it("reads each circle's badge as links in on the left and links out on the right, and says so for a screen reader", () => {
+      const { container } = renderWithProviders(<Host initial={null} initialView="graph" />);
+      const badge = container
+        .querySelector('.react-flow__node [data-page-id="overview"]')
+        ?.querySelector('[data-testid="knowledge-hidden-links"]');
+      expect(badge?.getAttribute('aria-label')).toBe('0 links in, 2 links out');
+      expect(badge?.getAttribute('title')).toBe('0 links in, 2 links out');
+      // A count of none is left off rather than written as 0.
+      expect(badge?.textContent).toBe('2→');
+    });
+
+    it('draws a body-link line from the linking page to each page it links once all links are on', () => {
+      const { container } = renderWithProviders(<Host initial={null} initialView="graph" />);
+      fireEvent.click(screen.getByRole('button', { name: 'All links' }));
+      expect(linkLines(container)).toEqual(['link:overview->suspend', 'link:overview->workflows']);
       expect(screen.getByTestId('knowledge-legend-link')).toBeTruthy();
+    });
+  });
+  describe('the graph toggles', () => {
+    it('float over the graph, beside Back, and not in the toolbar', () => {
+      renderWithProviders(<Host initial={null} initialView="graph" />);
+      const canvas = screen.getByTestId('knowledge-graph-container');
+      const back = screen.getByTestId('knowledge-graph-back');
+      for (const name of ['All links', 'Link counts']) {
+        const toggle = screen.getByRole('button', { name });
+        expect(canvas.contains(toggle)).toBe(true);
+        expect(toggle.parentElement).toBe(back.parentElement);
+        expect(toggle.getAttribute('title')).toContain(name);
+      }
+    });
+
+    it('are not shown in page view', () => {
+      renderWithProviders(<Host initial="overview" initialView="page" />);
+      expect(screen.queryByRole('button', { name: 'All links' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Link counts' })).toBeNull();
+    });
+
+    it('flip aria-pressed and say whether they are on when clicked', () => {
+      renderWithProviders(<Host initial={null} initialView="graph" />);
+      const toggle = screen.getByRole('button', { name: 'All links' });
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+      expect(toggle.getAttribute('title')).toContain('off');
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+      expect(toggle.getAttribute('title')).toContain('on');
+    });
+
+    it('have a solid fill when on that the off state lacks', () => {
+      renderWithProviders(<Host initial={null} initialView="graph" />);
+      const toggle = screen.getByRole('button', { name: 'All links' });
+      expect(toggle.className).toContain('aria-pressed:bg-fill-inverse');
+      expect(toggle.className).toContain('aria-pressed:text-background');
+    });
+  });
+
+  describe('the Graph and Page toggle', () => {
+    it('gives the selected segment a solid fill and full-strength text, the others muted text', () => {
+      renderWithProviders(<Host initial={null} initialView="graph" />);
+      const graph = screen.getByRole('button', { name: 'Graph' });
+      const page = screen.getByRole('button', { name: 'Page' });
+      expect(graph.getAttribute('aria-pressed')).toBe('true');
+      expect(page.getAttribute('aria-pressed')).toBe('false');
+      expect(graph.className).toContain('aria-pressed:bg-fill-inverse');
+      expect(graph.className).toContain('aria-pressed:text-background');
+      expect(graph.className).toContain('text-muted-foreground');
     });
   });
 });
