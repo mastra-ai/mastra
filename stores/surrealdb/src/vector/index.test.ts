@@ -124,6 +124,51 @@ describe('SurrealVector upsert with deleteFilter', () => {
     await connector.close();
   });
 
+  it('keeps the old rows when a later insert batch fails', async () => {
+    const rollbackIndex = `${indexName}_rollback`;
+    await store.createIndex({ indexName: rollbackIndex, dimension: 2, metric: 'cosine' });
+    try {
+      await store.upsert({
+        indexName: rollbackIndex,
+        ids: ['old-1', 'old-2'],
+        vectors: [
+          [1, 0],
+          [0, 1],
+        ],
+        metadata: [{ source: 'doc' }, { source: 'doc' }],
+      });
+
+      const original = connector.transaction.bind(connector);
+      // Fail the request after the delete and the first two insert batches.
+      const transaction = vi
+        .spyOn(connector, 'transaction')
+        .mockImplementation((statements, bindings) =>
+          original([...statements.slice(0, 3), 'THROW "batch failed"', ...statements.slice(3)], bindings),
+        );
+      const count = 1_201;
+      try {
+        await expect(
+          store.upsert({
+            indexName: rollbackIndex,
+            ids: Array.from({ length: count }, (_, i) => `new-${i}`),
+            vectors: Array.from({ length: count }, (_, i) => [1, i + 1]),
+            metadata: Array.from({ length: count }, () => ({ source: 'doc' })),
+            deleteFilter: { source: 'doc' },
+          }),
+        ).rejects.toThrow(/batch failed/);
+        expect(transaction).toHaveBeenCalledTimes(1);
+      } finally {
+        transaction.mockRestore();
+      }
+
+      expect((await store.describeIndex({ indexName: rollbackIndex })).count).toBe(2);
+      const results = await store.query({ indexName: rollbackIndex, queryVector: [1, 0], topK: 5 });
+      expect(results.map(result => result.id).sort()).toEqual(['old-1', 'old-2']);
+    } finally {
+      await store.deleteIndex({ indexName: rollbackIndex });
+    }
+  });
+
   it('replaces more than one batch of rows in a single transaction', async () => {
     await store.upsert({
       indexName,
