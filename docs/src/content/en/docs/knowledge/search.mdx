@@ -51,7 +51,12 @@ Pass both or neither. [`embedderOptions`](/reference/knowledge/knowledge-class#c
 
 Pages and notes are embedded when they're written. Scope pages aren't embedded, but notes on them are. Long pages are embedded in parts, and search still returns each page once. See [Limits](/reference/knowledge/limits) for the sizes.
 
-Knowledge doesn't embed content that already exists. Pages and notes written before you add `vector` and `embedder` stay keyword-only until they change. The same applies when you switch to an embedder with a different dimension, because search only uses the index for the current dimension.
+Knowledge doesn't embed content that already exists. Pages and notes written before you add `vector` and `embedder` stay keyword-only until they change.
+
+Avoid switching embedders on a store that already has embedded content. Knowledge can't re-embed it yet:
+
+- **Different dimension:** search uses a new index, so existing content is keyword-only until it changes.
+- **Same dimension:** search keeps using the old vectors and compares them with the new model's queries, which gives poor matches until each page changes.
 
 ### When embedding fails
 
