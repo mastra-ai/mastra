@@ -30,6 +30,8 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   requestContext?: RequestContextReader;
   /** Controller built-in tools removed via `disableBuiltinTools`; treated as denied. */
   disabledBuiltinTools?: readonly string[];
+  /** Agent tools removed via `disabledTools` (e.g. `web_search`); treated as denied. */
+  disabledTools?: readonly string[];
   /** Resolved in `buildFullPromptSections`; false when `submit_plan` is denied or disabled. */
   submitPlanAvailable?: boolean;
   currentDate: string;
@@ -102,6 +104,8 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
 
   // Disabled built-ins are never registered, so they are denied for guidance too.
   for (const name of ctx.disabledBuiltinTools ?? []) deniedTools.add(name);
+  // `createDynamicTools` drops disabled agent tools (such as web_search), so omit their guidance too.
+  for (const name of ctx.disabledTools ?? []) deniedTools.add(name);
 
   // LSP is opt-in — when it is off the tool is never registered, so its
   // guidance must not be advertised either.

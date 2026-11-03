@@ -320,6 +320,21 @@ describe('web search guidance for model aliases', () => {
     }
   });
 
+  it('omits web tool guidance for tools removed via disabledTools', () => {
+    expect(
+      buildFullPrompt({ ...context, modelId: 'mastra/openai/gpt-5.5', disabledTools: ['web_search'] }),
+    ).not.toContain('**web_search**');
+
+    searchConfig.parallel = true;
+    try {
+      const prompt = buildFullPrompt({ ...context, modelId: 'openai/gpt-5.5', disabledTools: ['web_extract'] });
+      expect(prompt).toContain('**web_search** — Search the web');
+      expect(prompt).not.toContain('**web_extract**');
+    } finally {
+      searchConfig.parallel = false;
+    }
+  });
+
   it('does not advertise absent search for other providers', () => {
     expect(buildFullPrompt({ ...context, modelId: 'mastra/google/gemini-2.5-flash' })).not.toContain('**web_search**');
   });
