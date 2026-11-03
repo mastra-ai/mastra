@@ -19,17 +19,19 @@ export interface CommandsApiStreamOptions {
 const KILL_DESCENDANTS_TIMEOUT_MS = 10_000;
 
 /**
- * A shell command that SIGKILLs every process `pid` started, at any depth. It
- * pauses `pid` first and leaves it to `kill(pid)`: a wrapper like npm exits on
- * its own once its child dies, and the kill would then report it wasn't running.
+ * A shell command that kills every process `pid` started, at any depth, but
+ * not `pid` itself. It pauses `pid` first: a wrapper like npm exits on its own
+ * once its child dies, and `kill(pid)` would then report it wasn't running.
  */
 function killDescendants(pid: number): string {
-  const tree =
-    `ps -A -o pid= -o ppid= | awk -v root=${pid} ` +
-    `'{ parent[$1] = $2 } END { seen[root] = 1; do { grew = 0; ` +
-    `for (p in parent) if (!(p in seen) && (parent[p] in seen)) { seen[p] = 1; grew = 1 } } while (grew); ` +
-    `for (p in seen) if (p != root) print p }'`;
-  return `kill -STOP ${pid} 2>/dev/null; pids=$(${tree}); [ -z "$pids" ] || kill -KILL $pids 2>/dev/null; true`;
+  return [
+    `kill -STOP ${pid}`,
+    // Pause each child before going deeper, so nothing can start new processes
+    // meanwhile. The recursion runs in a subshell so it can't overwrite `child`.
+    'kill_children() { for child in $(pgrep -P "$1"); do kill -STOP "$child"; (kill_children "$child"); kill -KILL "$child"; done; }',
+    `kill_children ${pid}`,
+    'true',
+  ].join('\n');
 }
 
 /** The envd commands calls the process manager makes (E2B's `sandbox.commands`). */
