@@ -7,7 +7,7 @@ import type { InlineSkill } from '@mastra/core/skills';
 import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 
-import { boardForWorkItem } from '../boards/index.js';
+import { boardForWorkItem, isPullRequestCard, pullRequestReviewPhase } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import { toBoardSource } from '../boards/project-boards.js';
@@ -20,6 +20,7 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import { workItemSource } from '../rules/types.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -65,6 +66,7 @@ import { BoardRoutes } from './boards.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
 import { buildFsRoutes } from './fs.js';
+import { IntakeRouteRoutes } from './intake-routes.js';
 import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
@@ -271,7 +273,10 @@ async function legacyPlanSession(
 function restingExitLane(
   board: { phaseForRole(role: string): string | undefined } | undefined,
   role: string,
+  pullRequestCard: boolean,
 ): string | undefined {
+  // A pull request's own card is reviewed in PR review; Work's Review lane is the builder's self-review.
+  if (pullRequestCard && role === 'review' && workLaneForRole(board, role)) return pullRequestReviewPhase('work');
   return workLaneForRole(board, role) ?? board?.phaseForRole(role);
 }
 
@@ -309,7 +314,7 @@ export async function prepareFactoryRuleBinding(
       currentKind === undefined
         ? undefined
         : currentKind === 'resting'
-          ? restingExitLane(board, input.role)
+          ? restingExitLane(board, input.role, isPullRequestCard({ source: workItemSource(input.item.externalSource) }))
           : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
@@ -836,6 +841,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
+          intakeRoutes: deps.storedBoards?.storage,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,
@@ -849,6 +855,15 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           audit: deps.audit,
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
+          storage: deps.storedBoards.storage,
+          boards: deps.storedBoards.cache,
+        }).routes()
+      : []),
+    ...(deps.factoryReady && deps.storedBoards
+      ? new IntakeRouteRoutes({
+          auth: deps.auth,
+          audit: deps.audit,
+          projects: deps.domains.projects,
           storage: deps.storedBoards.storage,
           boards: deps.storedBoards.cache,
         }).routes()

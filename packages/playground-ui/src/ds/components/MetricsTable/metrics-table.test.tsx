@@ -134,9 +134,28 @@ describe('MetricsTable', () => {
     expect(names()).toEqual(['m11', 'm10', 'm9', 'm8', 'm7']);
   });
 
-  it('shows no pagination when every row fits one page', () => {
-    render(<MetricsTable columns={columns} rows={rows} getRowKey={r => r.name} pageSize={5} />);
+  it('is always a full page tall: a short last page, one short page, or none at all', () => {
+    const filler = (container: HTMLElement) =>
+      container.querySelector('[data-slot="metrics-table-filler"]')?.children.length ?? 0;
+    const many: Row[] = Array.from({ length: 12 }, (_, i) => ({ name: `m${i}`, spend: i }));
+    const paged = render(<MetricsTable columns={columns} rows={many} getRowKey={r => r.name} pageSize={5} />);
+    expect(filler(paged.container)).toBe(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Page 3' }));
+    expect(names()).toEqual(['m10', 'm11']);
+    expect(filler(paged.container)).toBe(3);
+    paged.unmount();
+
+    // One page: no pagination, and the rows it lacks are still reserved.
+    const short = render(<MetricsTable columns={columns} rows={rows} getRowKey={r => r.name} pageSize={5} />);
     expect(screen.queryByRole('navigation')).toBeNull();
+    expect(filler(short.container)).toBe(2);
+    short.unmount();
+
+    const empty = render(
+      <MetricsTable columns={columns} rows={[]} getRowKey={r => r.name} pageSize={5} empty="Nothing in this range." />,
+    );
+    expect(screen.getByRole('cell', { name: 'Nothing in this range.' })).toBeDefined();
+    expect(filler(empty.container)).toBe(5);
   });
 
   it('shows skeleton rows under the real header while loading, instead of rows or the empty message', () => {

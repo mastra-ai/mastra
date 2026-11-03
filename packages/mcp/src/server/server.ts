@@ -1007,10 +1007,12 @@ export class MCPServer extends MCPServerBase {
 
     this.setTracedHandler(server, 'tools/call', async (request, ctx, trace) => {
       const name = request.params.name;
-      const tool = this.convertedTools[name];
+      // `name` comes from the client, so names like `constructor` must not resolve to Object.prototype members.
+      const tool = Object.hasOwn(this.convertedTools, name) ? this.convertedTools[name] : undefined;
       if (!tool) {
         this.logger.warn('Unknown tool requested', { tool: name });
-        return errorResult(`Unknown tool: ${name}`);
+        // The spec makes an unknown tool a protocol error; `isError` is for a tool that ran and failed.
+        throw new ProtocolError(ProtocolErrorCode.InvalidParams, `Unknown tool: ${name}`);
       }
       const args = request.params.arguments ?? {};
       const argsHash = hashArguments(args);

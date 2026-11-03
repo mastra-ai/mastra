@@ -1,4 +1,4 @@
-import { gitlabIdentifierForItem, githubNumberForItem } from '../boardItems';
+import { githubNumberForItem, workItemKey } from '../boardItems';
 import { rememberedBoardPath } from './boardViews';
 import type { WorkItem } from './workItems';
 import { isPullRequestSource } from './workItems';
@@ -92,8 +92,16 @@ export function inferredParentWorkItemId(
   )?.id;
 }
 
-export function relationshipPath(item: Pick<WorkItem, 'source'>, factoryId: string): string {
-  return rememberedBoardPath(factoryId, isPullRequestSource(item.source) ? 'review' : 'work');
+/**
+ * Pull requests are filed on Work now, so an unfiled one opens Work; a filed one opens the
+ * board that holds it, which is Review for cards filed before the move.
+ */
+export function relationshipPath(
+  item: Pick<WorkItem, 'source'> & { readonly board?: string | null },
+  factoryId: string,
+): string {
+  if (!isPullRequestSource(item.source) || item.board === undefined) return rememberedBoardPath(factoryId, 'work');
+  return rememberedBoardPath(factoryId, item.board ?? 'review');
 }
 
 export function relationshipLabel(item: WorkItem): string {
@@ -101,15 +109,12 @@ export function relationshipLabel(item: WorkItem): string {
   return isPullRequestSource(item.source) ? `Review: ${reference}` : `Work item: ${reference}`;
 }
 
-function linearIdentifier(item: IdentifiableItem): string | undefined {
-  return typeof item.metadata.identifier === 'string' ? item.metadata.identifier : undefined;
-}
-
-/** What a person types to find the item: `#20456` on GitHub, the team key `ENG-123` on Linear. */
+/** What a person types to find the item: `#20456` on GitHub, `ENG-123` on Linear or Jira. */
 export function workItemIdentifier(item: IdentifiableItem): string | undefined {
+  const key = workItemKey(item);
+  if (key !== undefined) return key;
   // Linear source key already reads `linear:ENG-123` — hashing it would invent `#ENG-123`.
-  if (item.source === 'linear-issue') return linearIdentifier(item) ?? workItemNumber(item);
-  if (item.source === 'gitlab-pr') return gitlabIdentifierForItem(item);
+  if (item.source === 'linear-issue') return workItemNumber(item);
   if (item.source === 'github-pr' || item.source === 'github-issue') {
     const number = workItemNumber(item);
     return number ? `#${number}` : undefined;
