@@ -74,9 +74,27 @@ const storedBoardResponseSchema = z.object({
     customized: z.boolean(),
     /** An edited built-in or app board whose code definition changed since; reset to adopt it. */
     defaultChanged: z.boolean(),
+    /**
+     * For a built-in or app board, what its code behaviour holds fixed on each code phase: the
+     * phase stays with its kind, phases with code handlers keep their runner context and skill,
+     * the exit tool id stays, and outcome targets stay in nextPhases. Null for stored boards.
+     */
+    codeBehaviour: z
+      .record(
+        z.string(),
+        z.object({
+          handlers: z.boolean(),
+          exitToolId: z.string().nullable(),
+          requiredNextPhases: z.array(z.string()),
+        }),
+      )
+      .nullable()
+      .optional(),
     /** Problems that do not stop the board from loading, such as a review skill outside the review context. */
     problems: z.array(z.string()),
   }),
+  /** Whether the caller may edit or reset this board: organization admins, or anyone with auth disabled. */
+  canEdit: z.boolean().optional(),
 });
 const intakeRoutePathSchema = z.object({ id: uuidSchema, routeId: uuidSchema });
 const intakeRouteIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);

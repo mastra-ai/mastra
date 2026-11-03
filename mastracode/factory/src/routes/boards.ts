@@ -21,6 +21,7 @@ import { boardForWorkItem } from '../boards/semantics.js';
 import {
   boardDefinitionOf,
   codeBehaviourConflicts,
+  codeBehaviourOf,
   compileStoredBoard,
   storedBoardInputSchema,
 } from '../boards/stored-board.js';
@@ -198,6 +199,8 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
   }
 
   async #respond(c: Context, scope: Resolved, key: string, status: 200 | 201 = 200) {
+    const { auth } = this.deps;
+    const canEdit = !auth.enabled() || (await auth.isOrganizationAdmin(c, scope.orgId));
     const project = await this.deps.boards.describe(scope);
     const details = project.details.get(key);
     const code = this.deps.boards.codeRegistry.get(key);
@@ -214,8 +217,10 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
             editable: false,
             customized: false,
             defaultChanged: false,
+            codeBehaviour: codeBehaviourOf(code),
             problems: details?.problems ?? [],
           },
+          canEdit: false,
         },
         status,
       );
@@ -240,8 +245,10 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
           editable: true,
           customized,
           defaultChanged: customized && row.seedHash !== seed!.hash,
+          codeBehaviour: code ? codeBehaviourOf(code) : null,
           problems: [...(details?.problems ?? []), ...rowProblems.filter(p => !details?.problems.includes(p))],
         },
+        canEdit,
       },
       status,
     );

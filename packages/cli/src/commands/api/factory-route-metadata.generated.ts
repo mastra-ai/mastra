@@ -1780,6 +1780,44 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "defaultChanged": {
               "type": "boolean"
             },
+            "codeBehaviour": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "handlers": {
+                        "type": "boolean"
+                      },
+                      "exitToolId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "requiredNextPhases": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "handlers",
+                      "exitToolId",
+                      "requiredNextPhases"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "problems": {
               "type": "array",
               "items": {
@@ -1799,6 +1837,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "defaultChanged",
             "problems"
           ]
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -3810,6 +3851,44 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "defaultChanged": {
               "type": "boolean"
             },
+            "codeBehaviour": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "handlers": {
+                        "type": "boolean"
+                      },
+                      "exitToolId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "requiredNextPhases": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "handlers",
+                      "exitToolId",
+                      "requiredNextPhases"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "problems": {
               "type": "array",
               "items": {
@@ -3829,6 +3908,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "defaultChanged",
             "problems"
           ]
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -5994,6 +6076,44 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "defaultChanged": {
               "type": "boolean"
             },
+            "codeBehaviour": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "handlers": {
+                        "type": "boolean"
+                      },
+                      "exitToolId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "requiredNextPhases": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "handlers",
+                      "exitToolId",
+                      "requiredNextPhases"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "problems": {
               "type": "array",
               "items": {
@@ -6013,6 +6133,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "defaultChanged",
             "problems"
           ]
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -6375,6 +6498,44 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "defaultChanged": {
               "type": "boolean"
             },
+            "codeBehaviour": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string"
+                  },
+                  "additionalProperties": {
+                    "type": "object",
+                    "properties": {
+                      "handlers": {
+                        "type": "boolean"
+                      },
+                      "exitToolId": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "requiredNextPhases": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "handlers",
+                      "exitToolId",
+                      "requiredNextPhases"
+                    ]
+                  }
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "problems": {
               "type": "array",
               "items": {
@@ -6394,6 +6555,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "defaultChanged",
             "problems"
           ]
+        },
+        "canEdit": {
+          "type": "boolean"
         }
       },
       "required": [
