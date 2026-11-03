@@ -1,6 +1,7 @@
 import type { FactoryRuleBoardClosure, FactoryRulePhaseContext } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
+import { workItemBranch, workItemBranchSource } from '../work-item-branch.js';
 import type {
   BoardEventIntegration,
   BoardEventRules,
@@ -96,30 +97,49 @@ export function newestOpenPullRequestNumber(item: SourcedItem, except?: number):
 
 interface SessionedItem {
   readonly sessions: Readonly<Record<string, { readonly branch?: string | null } | undefined>>;
+  readonly stageHistory?: readonly { readonly stage: string }[];
 }
 
 /**
- * Whether the card's builder has started: a `work` session is bound. From then on, a pull
- * request someone else opens for the card's issue gets a card of its own instead of joining
- * this one, so the builder's card only ever carries the builder's own pull requests.
+ * Whether building has started on the card: a builder (`work`) session is bound, or the card
+ * has been in Building. From then on, a pull request someone else opens for the card's issue
+ * gets a card of its own instead of joining this one, so a card being built only carries the
+ * pull requests its own sessions opened. Stage history keeps that true after the session is
+ * deleted.
  */
 export function hasBuilderSession(item: SessionedItem): boolean {
-  return item.sessions.work !== undefined;
+  return item.sessions.work !== undefined || (item.stageHistory ?? []).some(entry => entry.stage === 'execute');
 }
 
-/** The newest open pull request a session on this card opened (its head is a session branch), other than `except`. */
-export function newestOwnedOpenPullRequestNumber(item: SourcedItem & SessionedItem, except?: number): number | null {
-  const branches = new Set(
-    Object.values(item.sessions)
-      .map(session => session?.branch)
-      .filter((branch): branch is string => typeof branch === 'string' && branch !== ''),
-  );
+/**
+ * Whether a pull request from `headBranch` was opened by the card's own sessions: the head is
+ * one of its session branches, or the branch Factory builds the card on (stable even after its
+ * session is deleted).
+ */
+export function cardOwnsBranch(
+  item: SessionedItem & Pick<Card, 'id' | 'externalSource' | 'workItem'>,
+  headBranch: string | undefined,
+): boolean {
+  if (!headBranch) return false;
+  const buildBranch = workItemBranch({
+    id: item.id,
+    source: workItemBranchSource(item.externalSource),
+    metadata: item.workItem.metadata,
+  });
+  return buildBranch === headBranch || Object.values(item.sessions).some(session => session?.branch === headBranch);
+}
+
+/** The newest open pull request the card's own sessions opened, other than `except`. */
+export function newestOwnedOpenPullRequestNumber(
+  item: SessionedItem & Pick<Card, 'id' | 'externalSource' | 'workItem'>,
+  except?: number,
+): number | null {
   const open = pullRequestSources(item).filter(
     source =>
       openSource(source) &&
       pullRequestSourceNumber(source) !== except &&
       typeof source.metadata?.headBranch === 'string' &&
-      branches.has(source.metadata.headBranch),
+      cardOwnsBranch(item, source.metadata.headBranch),
   );
   return (open.length ? pullRequestSourceNumber(open.at(-1)!) : undefined) ?? null;
 }

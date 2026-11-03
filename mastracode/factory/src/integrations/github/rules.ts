@@ -7,6 +7,7 @@ import {
   boardForWorkItem,
   eventBoardId,
   isTerminalWorkItem,
+  cardOwnsBranch,
   hasBuilderSession,
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
@@ -1126,8 +1127,7 @@ export class GithubRules {
           (home === undefined &&
             (attached === undefined ||
               pullRequestFactoryAuthored ||
-              (headBranch !== undefined &&
-                Object.values(authoringItem.sessions).some(session => session.branch === headBranch))));
+              cardOwnsBranch(authoringItem, headBranch)));
         if (!ownedByCard) return;
         // The head comes along so a head recorded for an earlier pull
         // request cannot mark this one's verdict outdated.
