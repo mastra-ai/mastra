@@ -104,6 +104,14 @@ then interact with elements using their refs (e.g., @e5).`,
       'Tool names to exclude from the browser toolset. Use this to disable specific tools for models that do not support certain capabilities, such as vision.',
     isOptional: true,
   },
+  {
+    name: 'blockPrivateNetwork',
+    type: 'boolean | { allow: string[] }',
+    description:
+      "Blocks file: URLs, localhost, and private and link-local addresses, including after redirects and for hostnames that resolve to them. Pass { allow } to let specific hosts through, as host or host:port. Can't be combined with cdpUrl.",
+    isOptional: true,
+    defaultValue: 'false',
+  },
 ]}
 />
 
