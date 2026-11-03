@@ -328,6 +328,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       editable: true,
       revision: 1,
     });
+    // What the code behaviour holds fixed, so an editor can show it read-only.
+    const read = await replicaA.send('GET', `${base}/work`);
+    expect(read.body).toMatchObject({
+      canEdit: true,
+      board: {
+        codeBehaviour: {
+          intake: { handlers: false, exitToolId: null, requiredNextPhases: [] },
+          triage: { handlers: true, exitToolId: null },
+          planning: { handlers: true, exitToolId: 'submit_plan' },
+          'pr-review': { handlers: true, exitToolId: null },
+          canceled: { handlers: false, exitToolId: null },
+        },
+      },
+    });
   });
 
   it("lets an admin edit the Work board's automation, which another replica serves after the recheck window", async () => {
@@ -473,6 +487,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
   it('refuses editing or resetting the Work board from a member who is not an admin', async () => {
     const { a, scope, base, replicaA } = await setup();
     const work = await getBoard(replicaA.send, base, 'work');
+    expect(await replicaA.send('GET', `${base}/work`, undefined, MEMBER)).toMatchObject({
+      status: 200,
+      body: { canEdit: false, board: { editable: true } },
+    });
     const body = editPhase(work, 'planning', phase => ({ ...phase, name: 'Plan it' }));
     expect(await replicaA.send('PATCH', `${base}/work`, body, MEMBER)).toMatchObject({
       status: 403,

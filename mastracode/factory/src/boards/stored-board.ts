@@ -133,6 +133,31 @@ export function compileStoredBoard(board: StoredBoardInput, code?: InstalledBoar
   );
 }
 
+/** What a code board's behaviour holds fixed on each of its phases; the rest of the phase is editable. */
+export interface CodePhaseBehaviour {
+  /** Code handlers run on entering or leaving it, so its runner context and skill are fixed. */
+  handlers: boolean;
+  /** The exit tool its code behaviour waits for, if any. */
+  exitToolId: string | null;
+  /** Phases its code outcomes move cards to; they stay in its nextPhases. */
+  requiredNextPhases: string[];
+}
+
+/** The per-phase locks `codeBehaviourConflicts` enforces, for clients that show them. */
+export function codeBehaviourOf(code: InstalledBoard): Record<string, CodePhaseBehaviour> {
+  const declaration: AnyBoardConfig = declarationOf(code) ?? code;
+  return Object.fromEntries(
+    (Object.entries(code.phases) as [string, BoardPhase<string>][]).map(([key, phase]) => [
+      key,
+      {
+        handlers: phase.kind === 'working' && hasHandlers(declaration.phases[key]),
+        exitToolId: phase.kind === 'working' ? (phase.exitTool?.id ?? null) : null,
+        requiredNextPhases: [...new Set(Object.values(phase.outcomes ?? {}))],
+      },
+    ]),
+  );
+}
+
 function hasHandlers(phase: BoardPhaseDefinition<string> | undefined): boolean {
   return Object.keys(phase?.onEnter ?? {}).length > 0 || Object.keys(phase?.onExit ?? {}).length > 0;
 }
