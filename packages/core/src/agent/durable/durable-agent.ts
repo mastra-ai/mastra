@@ -1626,7 +1626,8 @@ export class DurableAgent<
     // The segment the run was executing when it crashed: its first pair, or the pair a resume
     // or an earlier recovery carried in the persisted request context.
     const crashed = segmentFromSnapshot(snapshot, runId);
-    if (this.#mastra?.observability && !segmentEndedBeforeCrash(snapshot, runId)) {
+    const crashedMidStep = !segmentEndedBeforeCrash(snapshot, runId);
+    if (this.#mastra?.observability && crashedMidStep) {
       // The crashed process never ended that segment's spans, and stores persist
       // only span-end events, so end them here — otherwise the recovered span
       // below is parented under a root that never lands (or stays RUNNING).
@@ -1656,6 +1657,8 @@ export class DurableAgent<
       agent: wrapped,
       model: modelList?.find(entry => entry.id === persistedHead?.id)?.model ?? persistedHead?.config ?? model,
       previous: crashed.agentSpanData,
+      // The step the crashed segment was executing is still open: the recovered segment ends it.
+      adoptsStepsOf: crashedMidStep ? crashed.modelSpanData?.id : undefined,
       requestContext,
       // `run.restart()` forwards this context to the workers, which end the recovered pair.
       carryInto: requestContext,

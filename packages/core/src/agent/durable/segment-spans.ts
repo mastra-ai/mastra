@@ -46,12 +46,19 @@ interface CarriedSegment {
   v: 1;
   agent: ExportedSpan<SpanType.AGENT_RUN> | null;
   model: ExportedSpan<SpanType.MODEL_GENERATION> | null;
+  /** Recovered segment: the MODEL_GENERATION whose open MODEL_STEP it took over. */
+  adoptsStepsOf?: string;
 }
 
 /** Snapshot pair of one segment. Both absent when the segment is untraced. */
 export interface SegmentSpanData {
   agentSpanData?: ExportedSpan<SpanType.AGENT_RUN>;
   modelSpanData?: ExportedSpan<SpanType.MODEL_GENERATION>;
+  /**
+   * The MODEL_GENERATION of the segment that crashed mid-step, whose step this recovered segment
+   * ends. Absent when the crashed segment had already ended, or for a resumed segment.
+   */
+  adoptsStepsOf?: string;
 }
 
 /**
@@ -87,8 +94,8 @@ export interface DurableSegment extends SegmentSpanData {
   modelSpan(): AIModelGenerationSpan | undefined;
   /**
    * Whether this segment may end a MODEL_STEP: one opened under this segment's MODEL_GENERATION, or
-   * one left open by a segment that crashed (a recovered segment adopts it). A step opened under a
-   * segment that suspended was already ended then.
+   * the one the segment it recovered from left open mid-step (`adoptsStepsOf`). A step opened under
+   * a segment that suspended was already ended then, and an untraced segment owns nothing.
    */
   ownsStep(stepSpanData: unknown): boolean;
   /** First-chunk clocks measured under this segment, from the first candidate that carries them. */
@@ -125,13 +132,18 @@ function readCarriedSegment(
     carried.v === 1 &&
     (carried.agent === null || isSpanRecord(carried.agent)) &&
     (carried.model === null || carried.model === undefined || isSpanRecord(carried.model)) &&
-    (!carried.agent || !carried.model || carried.agent.traceId === carried.model.traceId);
+    (!carried.agent || !carried.model || carried.agent.traceId === carried.model.traceId) &&
+    (carried.adoptsStepsOf === undefined || typeof carried.adoptsStepsOf === 'string');
   if (!wellFormed) {
     logger?.warn?.(`[DurableAgent] Ignoring malformed segment spans carried for run ${runId}`);
     return undefined;
   }
   if (!carried.agent) return {};
-  return { agentSpanData: carried.agent, ...(carried.model ? { modelSpanData: carried.model } : {}) };
+  return {
+    agentSpanData: carried.agent,
+    ...(carried.model ? { modelSpanData: carried.model } : {}),
+    ...(carried.adoptsStepsOf ? { adoptsStepsOf: carried.adoptsStepsOf } : {}),
+  };
 }
 
 function writeCarriedSegment(
@@ -170,16 +182,18 @@ export function currentSegment(args: {
   state: SegmentState;
 }): DurableSegment {
   const { mastra, requestContext, runId, state } = args;
-  const data: SegmentSpanData = readCarriedSegment(requestContext, runId, mastra?.getLogger?.()) ?? {
+  const carried = readCarriedSegment(requestContext, runId, mastra?.getLogger?.());
+  const data: SegmentSpanData = carried ?? {
     agentSpanData: state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN> | undefined,
     modelSpanData: state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION> | undefined,
   };
+  // Carried as untraced: this segment opened no spans, so it owns nothing of an earlier one.
+  const untraced = !!carried && !carried.agentSpanData;
   const observability = () => mastra?.observability?.getSelectedInstance({ requestContext });
   const live = <S extends AnySpan>(span: S | undefined, snapshot: AnyExportedSpan | undefined): S | undefined =>
     span && snapshot && span.id === snapshot.id ? span : undefined;
   let agentSpan: Span<SpanType.AGENT_RUN> | undefined | null = null;
   let modelSpan: AIModelGenerationSpan | undefined | null = null;
-  const recovered = (data.agentSpanData?.metadata as { recovered?: unknown } | undefined)?.recovered === true;
   return {
     ...data,
     agentSpan() {
@@ -203,8 +217,10 @@ export function currentSegment(args: {
       return modelSpan;
     },
     ownsStep(stepSpanData) {
-      if (!data.modelSpanData || recovered) return true;
-      return (stepSpanData as { parentSpanId?: string } | undefined)?.parentSpanId === data.modelSpanData.id;
+      if (untraced) return false;
+      if (!data.modelSpanData) return true;
+      const parent = (stepSpanData as { parentSpanId?: string } | undefined)?.parentSpanId;
+      return parent === data.modelSpanData.id || (data.adoptsStepsOf !== undefined && parent === data.adoptsStepsOf);
     },
     clocks(...candidates) {
       const owner = data.modelSpanData?.id;
@@ -277,11 +293,16 @@ export function openSegment(args: {
   model: { modelId?: unknown; provider?: unknown } | undefined;
   /** The segment this one continues: a live span (warm) or its snapshot (cold, other process). */
   previous: AnySpan | AnyExportedSpan | undefined;
+  /**
+   * Recovery only: the MODEL_GENERATION of `previous` when it crashed mid-step, so the recovered
+   * segment ends the step it left open. Omit when that segment had already ended.
+   */
+  adoptsStepsOf?: string;
   requestContext: RequestContext | undefined;
   /** The request context the handoff serializes for the workers. */
   carryInto: RequestContext | Record<string, unknown>;
 }): OpenedSegment | undefined {
-  const { mastra, kind, runId, agent, model, previous, requestContext, carryInto } = args;
+  const { mastra, kind, runId, agent, model, previous, adoptsStepsOf, requestContext, carryInto } = args;
   const untraced: CarriedSegment = { v: 1, agent: null, model: null };
   if (!previous || !mastra?.observability) {
     writeCarriedSegment(carryInto, runId, untraced);
@@ -338,6 +359,7 @@ export function openSegment(args: {
       v: 1,
       agent: agentSpan.snapshot?.() ?? agentSpan.exportSpan() ?? null,
       model: modelSpan?.snapshot?.() ?? modelSpan?.exportSpan() ?? null,
+      ...(kind === 'recovered' && adoptsStepsOf ? { adoptsStepsOf } : {}),
     });
     return { agentSpan, modelSpan };
   } catch (error) {
