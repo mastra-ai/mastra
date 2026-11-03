@@ -31,11 +31,12 @@ import { announcePullRequest } from '../channel-thread-announcements.js';
 import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
 import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
 import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
+import { createSlackChatTools } from './chat-tools.js';
 import { createSlackConnectRoutes } from './connect-route.js';
 import { SlackFeedPublisher } from './feed-publisher.js';
 import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
 import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool.js';
-import { createShareFileTool, isSlackThread } from './share-file-tool.js';
+import { createShareFileTool, isSlackThread, slackThreadOf } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
 
@@ -221,10 +222,14 @@ export class SlackIntegration implements FactoryIntegration {
    * post into when they are called.
    */
   async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
-    if (!(await isSlackThread(requestContext, this.#deps))) return {};
+    const slackThread = await slackThreadOf(requestContext, this.#deps);
+    if (!slackThread) return {};
+    const chat = this.#channels?.()?.sdk;
+    const sessionThreadId = slackThread.threadId;
     return {
       ...createShareFileTool(requestContext, this.#deps),
       ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
+      ...(chat && sessionThreadId ? createSlackChatTools({ chat, sessionThreadId }) : {}),
     };
   }
 

@@ -342,7 +342,7 @@ describe('SlackIntegration.postToolObserver', () => {
     const post = vi.fn(async () => ({ id: 'reply-ts' }));
     const addReaction = vi.fn(async () => {});
     const channels = {
-      buildChannelContextForThread: vi.fn(async () => (platform ? { channel: { platform } } : null)),
+      buildChannelContextForThread: vi.fn(async () => (platform ? { channel: { platform }, render: { chatThread: { id: `${platform}:C1:171.1` } } } : null)),
       buildRenderContextForThread: vi.fn(async () =>
         platform ? { platform, chatThread: { id: 'slack:C123:1792771853.363419', post }, adapter: { addReaction } } : null,
       ),
