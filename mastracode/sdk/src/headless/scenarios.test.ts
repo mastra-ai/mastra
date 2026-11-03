@@ -201,7 +201,8 @@ describe('headless scenarios', () => {
     const json = JSON.parse(renderJsonResult(result));
     expect(json.text).toBe('Read the notes.');
     expect(json.toolCalls[0].name).toBe('readFile');
-    expect(json.usage).toEqual({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+    // Usage sums both steps (tool call, then final text), each reporting 10/20/30.
+    expect(json.usage).toEqual({ inputTokens: 20, outputTokens: 40, totalTokens: 60 });
     expect(json.threadId).toBeTruthy();
   });
 
