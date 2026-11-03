@@ -126,6 +126,22 @@ describe('factory_sandbox_port_url', () => {
     await expect(run(3000)).resolves.toEqual({ url });
   });
 
+  it("logs why the browser wasn't signed in when the platform fails, and still returns the link", async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const setCookies = vi.fn(async () => {});
+    const sandbox = platformSandbox();
+    sandbox.getPortAuthCookie.mockRejectedValueOnce(new Error('Platform API 503'));
+    const { run } = portUrlTool(sandbox, true, { setCookies });
+
+    await expect(run(3000)).resolves.toEqual({ url });
+    expect(setCookies).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      "[Mastra Factory] Couldn't sign the session's browser in to a sandbox port",
+      expect.objectContaining({ port: 3000, error: 'Platform API 503' }),
+    );
+    warn.mockRestore();
+  });
+
   it("returns the link alone on sandboxes that don't sign browsers in", async () => {
     const setCookies = vi.fn(async () => {});
     const { run } = portUrlTool({ networking: { getPortUrl: async () => url } }, true, { setCookies });

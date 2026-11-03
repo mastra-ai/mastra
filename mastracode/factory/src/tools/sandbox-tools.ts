@@ -91,11 +91,17 @@ export function createFactorySandboxTools(
       // The cookie never goes back to the model.
       const threadId = context?.agent?.threadId;
       if (threadId && deps.browser && hasPortAuthCookie(sandbox)) {
-        // Browsers that can't take cookies throw; the link still works, the browser just has to sign in.
+        // The link works either way; without the cookie the browser just has to sign in.
         await sandbox
           .getPortAuthCookie(port)
           .then(cookie => cookie && deps.browser!.setCookies([cookie], threadId))
-          .catch(() => {});
+          .catch(error => {
+            console.warn("[Mastra Factory] Couldn't sign the session's browser in to a sandbox port", {
+              sessionId: scope.sessionId,
+              port,
+              error: error instanceof Error ? error.message : String(error),
+            });
+          });
       }
       return { url };
     },
