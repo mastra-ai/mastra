@@ -541,8 +541,8 @@ const DEFINED_BOARD = Symbol('DefinedBoard');
  * Declares a board in code.
  *
  * @deprecated Boards are stored per project; manage them with `/web/factory/projects/:id/boards`
- * (README § Stored boards). Code boards are read-only and served alongside each project's stored
- * boards.
+ * (README § Stored boards). Each project gets an editable copy of a code board, served with the
+ * board's code behaviour attached.
  */
 export function defineBoard<
   const BoardId extends string,
