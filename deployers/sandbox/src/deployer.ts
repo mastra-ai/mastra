@@ -95,16 +95,22 @@ export class SandboxDeployer extends Deployer {
     import { createNodeServer, getToolExports } from '#server';
     import { tools } from '#tools';
 
-    // @ts-expect-error
-    await createNodeServer(mastra, { tools: getToolExports(tools), studio: ${this.studio} });
+    // No top-level await: it turns off Rolldown's chunk optimizations for the whole build.
+    (async () => {
+      // @ts-expect-error
+      await createNodeServer(mastra, { tools: getToolExports(tools), studio: ${this.studio} });
 
-    const storage = mastra.getStorage();
-    if (storage) {
-      if (!storage.disableInit) {
-        storage.init();
+      const storage = mastra.getStorage();
+      if (storage) {
+        if (!storage.disableInit) {
+          storage.init();
+        }
+        mastra.__registerInternalWorkflow(scoreTracesWorkflow);
       }
-      mastra.__registerInternalWorkflow(scoreTracesWorkflow);
-    }
+    })().catch(error => {
+      console.error(error);
+      process.exit(1);
+    });
     `;
   }
 

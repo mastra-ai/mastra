@@ -10,6 +10,6 @@ export {
 } from './filters';
 export { extractImportedBindings } from './imported-bindings';
 export { TREESHAKE_SMALLEST, bundlerLogLevel, cjsGlobalsDefine, getPlatformOptions } from './options';
-export { bareExternals, lodashImports, scopedDefine } from './plugins';
+export { bareExternals, lodashImports, pruneUnreachableChunks, scopedDefine, stripViteIgnore } from './plugins';
 export type { BareExternalsOptions } from './plugins';
 export { VIRTUAL_PREFIX, virtualModules } from './virtual';

@@ -21,6 +21,7 @@ import {
   exactIdsRegex,
   getPlatformOptions,
   lodashImports,
+  stripViteIgnore,
   virtualModules,
 } from '../rolldown';
 import type { DependencyMetadata } from '../types';
@@ -200,6 +201,7 @@ function getInputPlugins(
         } satisfies Plugin)
       : null,
     lodashImports(),
+    stripViteIgnore(),
     // hono is imported from deployer, so it falls back to resolving from here
     aliasHono({ preferProject: !bundlerOptions.noBundling }),
     // Without bundling, node_modules stay external (Rollup had no resolver in this mode).

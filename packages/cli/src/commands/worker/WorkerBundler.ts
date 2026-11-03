@@ -44,36 +44,42 @@ export function getWorkerEntry(): string {
       response.end(JSON.stringify({ status: workersReady ? 'ready' : 'starting' }));
     });
 
-    const port = Number.parseInt(process.env.PORT ?? '4111', 10);
-    await new Promise((resolve, reject) => {
-      const onError = error => reject(error);
-      healthServer.once('error', onError);
-      healthServer.listen(port, '0.0.0.0', () => {
-        healthServer.off('error', onError);
-        resolve();
+    // No top-level await: it turns off Rolldown's chunk optimizations for the whole build.
+    (async () => {
+      const port = Number.parseInt(process.env.PORT ?? '4111', 10);
+      await new Promise((resolve, reject) => {
+        const onError = error => reject(error);
+        healthServer.once('error', onError);
+        healthServer.listen(port, '0.0.0.0', () => {
+          healthServer.off('error', onError);
+          resolve();
+        });
       });
+
+      try {
+        await mastra.startWorkers();
+        workersReady = true;
+        console.log('[mastra] Workers started');
+      } catch (error) {
+        healthServer.close();
+        throw error;
+      }
+
+      const shutdown = async () => {
+        if (shuttingDown) return;
+        shuttingDown = true;
+        workersReady = false;
+        console.log('[mastra] Shutting down workers...');
+        healthServer.close();
+        await mastra.stopWorkers();
+        process.exit(0);
+      };
+      process.on('SIGINT', shutdown);
+      process.on('SIGTERM', shutdown);
+    })().catch(error => {
+      console.error(error);
+      process.exit(1);
     });
-
-    try {
-      await mastra.startWorkers();
-      workersReady = true;
-      console.log('[mastra] Workers started');
-    } catch (error) {
-      healthServer.close();
-      throw error;
-    }
-
-    const shutdown = async () => {
-      if (shuttingDown) return;
-      shuttingDown = true;
-      workersReady = false;
-      console.log('[mastra] Shutting down workers...');
-      healthServer.close();
-      await mastra.stopWorkers();
-      process.exit(0);
-    };
-    process.on('SIGINT', shutdown);
-    process.on('SIGTERM', shutdown);
     `;
 }
 

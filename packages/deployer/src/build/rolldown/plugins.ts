@@ -2,6 +2,7 @@ import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
 import type { ImportKind, Plugin } from 'rolldown';
 import { RolldownMagicString } from 'rolldown';
 import { withFilter } from 'rolldown/filter';
+import { parseSync } from 'rolldown/utils';
 import { isBareModuleSpecifier } from '../utils';
 import { BARE_SPECIFIER_FILTER, escapeRegExp, NON_USER_CODE_IDS } from './filters';
 
@@ -51,6 +52,99 @@ export function lodashImports(): Plugin {
   }) as unknown as Plugin;
 
   return withFilter(plugin, { transform: { code: /["']lodash(?:\/fp)?["']/ } });
+}
+
+const VITE_IGNORE_COMMENT = /\/\*\s*@vite-ignore\b[^]*?\*\//g;
+const SCRIPT_LANGS = new Set(['js', 'jsx', 'ts', 'tsx']);
+
+/**
+ * Removes `/* @vite-ignore *\/` from `import(...)` calls with a string literal specifier, so Rolldown resolves and
+ * bundles them like Rollup did. Rolldown skips every dynamic import that carries the comment (there is no option to
+ * turn that off), which left e.g. `import('chat')` in `@mastra/core` unbundled and missing from the output
+ * package.json. Core adds the comment for Vite and webpack, and relies on production bundlers to bundle `chat` (#19254).
+ */
+export function stripViteIgnore(): Plugin {
+  return {
+    name: 'mastra-strip-vite-ignore',
+    transform: {
+      filter: {
+        moduleType: [...SCRIPT_LANGS],
+        code: '@vite-ignore',
+      },
+      handler(code, id, meta) {
+        const lang = meta.moduleType as 'js' | 'jsx' | 'ts' | 'tsx';
+        if (!SCRIPT_LANGS.has(lang)) {
+          return null;
+        }
+
+        // Parsed so that comments inside strings, templates or other comments are never touched. Only `module` is
+        // read, which skips serializing the ESTree.
+        const { module, errors } = parseSync(id, code, { lang, sourceType: 'unambiguous' });
+        if (errors.length) {
+          return null;
+        }
+
+        const s = new RolldownMagicString(code);
+        let changed = false;
+        for (const { start, moduleRequest } of module.dynamicImports) {
+          const quote = code[moduleRequest.start];
+          if (quote !== '"' && quote !== "'") {
+            continue;
+          }
+
+          // Between `import` and the specifier there is only `(` and trivia.
+          const prefix = code.slice(start, moduleRequest.start);
+          for (const match of prefix.matchAll(VITE_IGNORE_COMMENT)) {
+            s.remove(start + match.index, start + match.index + match[0].length);
+            changed = true;
+          }
+        }
+        return changed ? { code: s } : null;
+      },
+    },
+  };
+}
+
+/**
+ * Drops chunks that no entry can load through static or dynamic imports. Rolldown 1.2.16 still emits the dynamic
+ * import targets of modules it tree-shook away, e.g. the schema vendor loaders of `@standard-community/standard-json`
+ * when only a side-effect-free import of it is left. Nothing references those files.
+ * https://github.com/rolldown/rolldown/issues/11213
+ */
+export function pruneUnreachableChunks(): Plugin {
+  return {
+    name: 'mastra-prune-unreachable-chunks',
+    generateBundle(_options, bundle) {
+      const reachable = new Set<string>();
+      const pending = Object.values(bundle)
+        .filter(file => file.type === 'chunk' && file.isEntry)
+        .map(file => file.fileName);
+
+      while (pending.length) {
+        const fileName = pending.pop()!;
+        if (reachable.has(fileName)) {
+          continue;
+        }
+        reachable.add(fileName);
+
+        const chunk = bundle[fileName];
+        if (chunk?.type === 'chunk') {
+          pending.push(...chunk.imports, ...chunk.dynamicImports);
+        }
+      }
+
+      for (const [fileName, file] of Object.entries(bundle)) {
+        if (file.type !== 'chunk' || reachable.has(fileName)) {
+          continue;
+        }
+
+        delete bundle[fileName];
+        if (file.sourcemapFileName) {
+          delete bundle[file.sourcemapFileName];
+        }
+      }
+    },
+  };
 }
 
 export type BareExternalsOptions = {

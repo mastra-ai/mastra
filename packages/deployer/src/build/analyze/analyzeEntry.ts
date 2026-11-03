@@ -18,6 +18,7 @@ import {
   getPlatformOptions,
   packagesRegex,
   scopedDefine,
+  stripViteIgnore,
   VIRTUAL_PREFIX,
   virtualModules,
 } from '../rolldown';
@@ -56,6 +57,7 @@ function getInputPlugins(
     mastraToolsAliasPlugin(),
     tsConfigPaths(),
     scopedDefine(env),
+    stripViteIgnore(),
     removeDeployer(mastraEntry, {
       sourcemap: sourcemapEnabled,
     }),

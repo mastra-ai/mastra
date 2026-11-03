@@ -20,7 +20,9 @@ import {
   exactIdsRegex,
   getPlatformOptions,
   lodashImports,
+  pruneUnreachableChunks,
   scopedDefine,
+  stripViteIgnore,
 } from './rolldown';
 import type { ExternalDependencyInfo } from './types';
 import { getPackageName, slash } from './utils';
@@ -161,9 +163,11 @@ export async function getInputOptions(
     isDev ? aliasHono() : null,
     scopedDefine(env),
     lodashImports(),
+    stripViteIgnore(),
     keepNodeModulesExternal ? nodeModulesExternals({ platform, workspaceMap: analyzedBundleInfo.workspaceMap }) : null,
     localStorageDetector(realpathOrSelf(workspaceRoot || projectRoot)),
     removeDeployer(entryFile, { sourcemap }),
+    pruneUnreachableChunks(),
     minify ? minifyOutput(sourcemap) : null,
   ];
 

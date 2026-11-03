@@ -75,35 +75,41 @@ export class BuildBundler extends Bundler {
     import { createNodeServer, getToolExports } from '#server';
     import { tools } from '#tools';
 
-    // @ts-expect-error
-    await createNodeServer(mastra, { tools: getToolExports(tools), studio: ${this.studio} });
+    // No top-level await: it turns off Rolldown's chunk optimizations for the whole build.
+    (async () => {
+      // @ts-expect-error
+      await createNodeServer(mastra, { tools: getToolExports(tools), studio: ${this.studio} });
 
-    const storage = mastra.getStorage();
-    if (storage) {
-      if (!storage.disableInit) {
-        await storage.init();
+      const storage = mastra.getStorage();
+      if (storage) {
+        if (!storage.disableInit) {
+          await storage.init();
+        }
+        mastra.__registerInternalWorkflow(scoreTracesWorkflow);
       }
-      mastra.__registerInternalWorkflow(scoreTracesWorkflow);
-    }
 
-    // Workflow restarts and durable-agent recovery work on different runs, so
-    // neither waits for the other; a long-running workflow can't hold up recovery.
-    const recoveries = [];
-    if (mastra.recoveryConfig?.workflows !== 'off') {
-      recoveries.push(
-        mastra.restartAllActiveWorkflowRuns().catch(error => {
-          mastra.getLogger().error('Failed to restart active workflow runs during server startup', { error });
-        }),
-      );
-    }
-    if (mastra.recoveryConfig?.durableAgents === 'auto') {
-      recoveries.push(
-        mastra.recoverAllDurableAgents().catch(error => {
-          mastra.getLogger().error('Failed to recover durable agent runs during server startup', { error });
-        }),
-      );
-    }
-    await Promise.all(recoveries);
+      // Workflow restarts and durable-agent recovery work on different runs, so
+      // neither waits for the other; a long-running workflow can't hold up recovery.
+      const recoveries = [];
+      if (mastra.recoveryConfig?.workflows !== 'off') {
+        recoveries.push(
+          mastra.restartAllActiveWorkflowRuns().catch(error => {
+            mastra.getLogger().error('Failed to restart active workflow runs during server startup', { error });
+          }),
+        );
+      }
+      if (mastra.recoveryConfig?.durableAgents === 'auto') {
+        recoveries.push(
+          mastra.recoverAllDurableAgents().catch(error => {
+            mastra.getLogger().error('Failed to recover durable agent runs during server startup', { error });
+          }),
+        );
+      }
+      await Promise.all(recoveries);
+    })().catch(error => {
+      console.error(error);
+      process.exit(1);
+    });
     `;
   }
 
