@@ -1263,7 +1263,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         revision: before.revision,
         updatedAt: before.updatedAt,
         acceptedAt: before.acceptedAt,
-        plansPreapprovedAt: before.plansPreapprovedAt,
       });
       const edited = await workItems.update({ orgId, userId: 'user-1', id: item.id, patch: { stages: ['done'] } });
       expect(edited?.item.revision).toBe(before.revision + 1);
