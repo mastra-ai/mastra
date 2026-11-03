@@ -153,6 +153,16 @@ describe('Factory work item relationships', () => {
     expect(relationshipLabel(linear)).toBe('Work item: ENG-24');
     expect(workItemReferenceLabel(linear)).toBe('ENG-24');
   });
+
+  it.each([
+    { source: 'jira-issue', identifier: 'ENG-42' },
+    { source: 'gitlab-issue', identifier: 'acme/app#7' },
+    { source: 'incidentio-follow-up', identifier: 'INC-42' },
+  ] as const)('names a $source card by its key', ({ source, identifier }) => {
+    const item = workItem({ id: `${source}-1`, source, metadata: { identifier } });
+
+    expect(relationshipLabel(item)).toBe(`Work item: ${identifier}`);
+  });
 });
 
 describe('related work item index', () => {
