@@ -210,6 +210,8 @@ function catalogDetails(details: StoredBoardDetails | undefined) {
   return {
     source: details.source,
     editable: details.editable,
+    ...(details.customized !== undefined ? { customized: details.customized } : {}),
+    ...(details.defaultChanged !== undefined ? { defaultChanged: details.defaultChanged } : {}),
     ...(details.problems.length > 0 ? { problems: details.problems } : {}),
   };
 }

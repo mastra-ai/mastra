@@ -1,10 +1,13 @@
 /**
  * Mastra `apiRoutes` for managing a project's stored boards.
  *
- * Reads need project membership; writes need an organization admin in tenant mode. Built-in and
- * app boards are defined in code and read-only here. Every write to a stored board is checked
- * against the rules `defineBoard()` enforces and the cards sitting on it, then invalidates the
- * project's board cache.
+ * Reads need project membership; writes need an organization admin in tenant mode. The built-in
+ * Work board and app boards are copied into each project on the first read here and edited under
+ * their own key; their code behaviour stays attached, so an edit it can't honour is refused
+ * (`code_behaviour`), and reset restores the code definition. They can't be created over or
+ * deleted. The legacy Review board stays read-only. Every write is checked against the rules
+ * `defineBoard()` enforces and the cards sitting on the board, then invalidates the project's
+ * board cache.
  */
 
 import type { ApiRoute } from '@mastra/core/server';
@@ -15,11 +18,17 @@ import type { z } from 'zod';
 import type { ProjectBoardCache } from '../boards/project-boards.js';
 import { createBoardRegistry } from '../boards/registry.js';
 import { boardForWorkItem } from '../boards/semantics.js';
-import { boardDefinitionOf, compileStoredBoard, storedBoardInputSchema } from '../boards/stored-board.js';
+import {
+  boardDefinitionOf,
+  codeBehaviourConflicts,
+  compileStoredBoard,
+  storedBoardInputSchema,
+} from '../boards/stored-board.js';
 import { findBoardSkillProblems } from '../skills/app-skills.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { StoredBoardError } from '../storage/domains/boards/base.js';
 import type {
+  CodeBoardSeed,
   StoredBoardInput,
   StoredBoardRecord,
   StoredBoardScope,
@@ -38,8 +47,8 @@ export interface BoardRoutesDeps extends RouteDependencies {
   /** Read to refuse edits that would strand cards. */
   workItems: Pick<WorkItemsStorage, 'list'>;
   storage: StoredBoardsStorage;
-  /** The per-project boards: the read-only code boards, skills, and the cache to invalidate. */
-  boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills'>;
+  /** The per-project boards: the code boards and their seeds, skills, and the cache to invalidate. */
+  boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seeds' | 'seedFor'>;
 }
 
 type Resolved = StoredBoardScope & { userId: string };
@@ -109,13 +118,22 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     return parsed.data.boardKey;
   }
 
-  /** Built-in and app boards come from code; they can't be created over, edited or deleted here. */
-  #refuseCodeBoard(key: string): void {
+  /** Code boards can't be created over; the legacy Review board can't be changed at all. */
+  #refuseCodeBoard(key: string, action: 'create' | 'edit' | 'delete'): void {
     if (!this.deps.boards.codeRegistry.has(key)) return;
+    if (action === 'edit' && this.deps.boards.seedFor(key)) return;
     throw new Refusal(409, {
       error: 'code_board',
-      message: `Board "${key}" is defined in code and can't be edited here.`,
+      message:
+        action === 'delete' && this.deps.boards.seedFor(key)
+          ? `Board "${key}" is defined in code and can't be deleted; reset it to its default instead.`
+          : `Board "${key}" is defined in code and can't be ${action === 'create' ? 'created over' : 'changed'} here.`,
     });
+  }
+
+  /** Copies the project's missing or stale code boards in; writes nothing when they are current. */
+  async #seed(scope: Resolved): Promise<void> {
+    await this.deps.storage.seedCodeBoards(scope, this.deps.boards.seeds());
   }
 
   async #existing(scope: Resolved, key: string) {
@@ -124,13 +142,23 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     return row;
   }
 
-  /** Validates a definition the way `defineBoard()` does, plus the skills its runners name. */
+  /**
+   * Validates a definition the way `defineBoard()` does, plus the skills its runners name. A code
+   * board's copy is also checked against the code behaviour of its board and phase keys.
+   */
   #validate(input: unknown): StoredBoardInput {
     const parsed = storedBoardInputSchema.safeParse(input);
     if (!parsed.success) {
       throw new Refusal(422, { error: 'invalid_board', message: issueMessage(parsed.error.issues) });
     }
-    const board = compileStoredBoard(parsed.data);
+    const code = this.deps.boards.seedFor(parsed.data.key) && this.deps.boards.codeRegistry.get(parsed.data.key);
+    if (code) {
+      const conflicts = codeBehaviourConflicts(parsed.data, code);
+      if (conflicts.length > 0) {
+        throw new Refusal(422, { error: 'code_behaviour', message: conflicts.join(' '), conflicts });
+      }
+    }
+    const board = code ? compileStoredBoard(parsed.data, code) : compileStoredBoard(parsed.data);
     const problems = findBoardSkillProblems(
       createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
       this.deps.boards.codeSkills,
@@ -173,7 +201,8 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     const project = await this.deps.boards.describe(scope);
     const details = project.details.get(key);
     const code = this.deps.boards.codeRegistry.get(key);
-    if (code) {
+    const seed = this.deps.boards.seedFor(key);
+    if (code && !seed) {
       const { description, ...definition } = boardDefinitionOf(code);
       return c.json(
         {
@@ -183,6 +212,8 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
             revision: null,
             source: details?.source ?? 'app',
             editable: false,
+            customized: false,
+            defaultChanged: false,
             problems: details?.problems ?? [],
           },
         },
@@ -191,8 +222,12 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     }
     const row = await this.deps.storage.get(scope, key);
     if (!row) return c.json({ error: 'board_not_found', message: `Board "${key}" does not exist.` }, 404);
-    // A board that failed to load is missing from the details; its error is a project problem.
-    const loadProblems = project.problems.filter(problem => problem.startsWith(`Board '${key}' could not be loaded:`));
+    // A board that failed to load, or a stored row its code board hides, is a project problem.
+    const rowProblems = project.problems.filter(
+      problem =>
+        problem.startsWith(`Board '${key}' could not be loaded:`) || problem.startsWith(`Stored board "${key}" `),
+    );
+    const customized = seed ? row.customized && row.seedHash !== null : false;
     return c.json(
       {
         board: {
@@ -201,9 +236,11 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
           description: row.description,
           phases: row.phases.map(({ position: _position, ...phase }) => phase),
           revision: row.revision,
-          source: 'stored',
+          source: seed ? (details?.source ?? 'app') : 'stored',
           editable: true,
-          problems: [...(details?.problems ?? []), ...loadProblems],
+          customized,
+          defaultChanged: customized && row.seedHash !== seed!.hash,
+          problems: [...(details?.problems ?? []), ...rowProblems.filter(p => !details?.problems.includes(p))],
         },
       },
       status,
@@ -213,7 +250,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
   async #audit(
     c: Context,
     scope: Resolved,
-    action: 'created' | 'updated' | 'deleted',
+    action: 'created' | 'updated' | 'deleted' | 'reset',
     board: { key: string; name: string },
   ) {
     await this.deps.audit.emit({
@@ -257,14 +294,18 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     return [
       this.#route(contracts.boardGet, async c => {
         const scope = await this.#resolve(c);
-        return this.#respond(c, scope, this.#boardKey(c));
+        const key = this.#boardKey(c);
+        if (boards.seedFor(key)) await this.#seed(scope);
+        return this.#respond(c, scope, key);
       }),
 
       this.#route(contracts.boardCreate, async c => {
         const scope = await this.#resolve(c);
         await this.#requireAdmin(c, scope);
-        const input = this.#validate(await this.#body(c));
-        this.#refuseCodeBoard(input.key);
+        const body = await this.#body(c);
+        const key = (body as { key?: unknown } | null)?.key;
+        if (typeof key === 'string') this.#refuseCodeBoard(key, 'create');
+        const input = this.#validate(body);
         await storage.create(scope, input, scope.userId);
         boards.invalidate(scope);
         await this.#audit(c, scope, 'created', input);
@@ -275,17 +316,23 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
         const scope = await this.#resolve(c);
         const key = this.#boardKey(c);
         await this.#requireAdmin(c, scope);
-        this.#refuseCodeBoard(key);
+        this.#refuseCodeBoard(key, 'edit');
         const parsed = contracts.boardReplace.bodySchema.safeParse(await this.#body(c));
         if (!parsed.success) {
           throw new Refusal(422, { error: 'invalid_board', message: issueMessage(parsed.error.issues) });
         }
         const { expectedRevision, ...definition } = parsed.data;
+        const seed = boards.seedFor(key);
+        if (seed) await this.#seed(scope);
         const row = await this.#existing(scope, key);
         const input = this.#validate({ key, ...definition });
         await this.#checkPhasesFree(scope, row, input.phases);
         const { key: _key, ...replacement } = input;
-        await storage.replace(scope, key, replacement, { expectedRevision, actor: scope.userId });
+        await storage.replace(scope, key, replacement, {
+          expectedRevision,
+          actor: scope.userId,
+          ...(seed ? { adoptSeedHash: seed.hash } : {}),
+        });
         boards.invalidate(scope);
         await this.#audit(c, scope, 'updated', input);
         return this.#respond(c, scope, key);
@@ -295,7 +342,7 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
         const scope = await this.#resolve(c);
         const key = this.#boardKey(c);
         await this.#requireAdmin(c, scope);
-        this.#refuseCodeBoard(key);
+        this.#refuseCodeBoard(key, 'delete');
         const parsed = contracts.boardDelete.querySchema.safeParse({
           expectedRevision: c.req.query('expectedRevision'),
         });
@@ -315,6 +362,35 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
         boards.invalidate(scope);
         await this.#audit(c, scope, 'deleted', row);
         return c.body(null, 204);
+      }),
+
+      this.#route(contracts.boardReset, async c => {
+        const scope = await this.#resolve(c);
+        const key = this.#boardKey(c);
+        await this.#requireAdmin(c, scope);
+        const parsed = contracts.boardReset.bodySchema.safeParse(await this.#body(c));
+        if (!parsed.success) {
+          throw new Refusal(422, { error: 'invalid_request', message: issueMessage(parsed.error.issues) });
+        }
+        const seed: CodeBoardSeed | undefined = boards.seedFor(key);
+        if (!seed) {
+          this.#refuseCodeBoard(key, 'edit');
+          await this.#existing(scope, key);
+          throw new Refusal(409, {
+            error: 'not_code_board',
+            message: `Board "${key}" was created in this project and has no code default to reset to.`,
+          });
+        }
+        await this.#seed(scope);
+        const row = await this.#existing(scope, key);
+        await this.#checkPhasesFree(scope, row, seed.definition.phases);
+        await storage.resetToSeed(scope, key, seed, {
+          expectedRevision: parsed.data.expectedRevision,
+          actor: scope.userId,
+        });
+        boards.invalidate(scope);
+        await this.#audit(c, scope, 'reset', row);
+        return this.#respond(c, scope, key);
       }),
     ];
   }
