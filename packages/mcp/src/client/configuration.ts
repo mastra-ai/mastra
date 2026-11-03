@@ -1404,7 +1404,7 @@ To fix this you have three different options:
         errorDetails[serverName] = error;
         continue;
       }
-      definitions[serverName] = value;
+      definitions[serverName] = modelVisibleDefinitions(value);
     }
 
     const result = { definitions, errors, errorDetails };
@@ -1856,16 +1856,22 @@ To fix this you have three different options:
 }
 
 /**
- * Drops tools an MCP App server declared for its apps only (`_meta.ui.visibility` without
- * `'model'`): per the MCP Apps spec, hosts must not hand those to the model. They stay callable
- * by the app through the server.
+ * Whether a tool may be handed to the model. MCP App servers mark helpers their app calls itself
+ * with `_meta.ui.visibility` lacking `'model'`; per the MCP Apps spec, hosts must not give those
+ * to the model. They stay callable by the app through the server.
  */
+function isModelVisible(meta: Record<string, unknown> | undefined): boolean {
+  const ui = meta?.ui;
+  const visibility = ui && typeof ui === 'object' && 'visibility' in ui ? ui.visibility : undefined;
+  return !Array.isArray(visibility) || visibility.includes('model');
+}
+
 function modelVisibleTools(tools: Record<string, Tool<any, any, any, any>>): Record<string, Tool<any, any, any, any>> {
-  return Object.fromEntries(
-    Object.entries(tools).filter(([, tool]) => {
-      const ui = tool.mcp?._meta?.ui;
-      const visibility = ui && typeof ui === 'object' && 'visibility' in ui ? ui.visibility : undefined;
-      return !Array.isArray(visibility) || visibility.includes('model');
-    }),
-  );
+  return Object.fromEntries(Object.entries(tools).filter(([, tool]) => isModelVisible(tool.mcp?._meta)));
+}
+
+function modelVisibleDefinitions(
+  definitions: Record<string, SerializableMCPToolDefinition>,
+): Record<string, SerializableMCPToolDefinition> {
+  return Object.fromEntries(Object.entries(definitions).filter(([, definition]) => isModelVisible(definition._meta)));
 }

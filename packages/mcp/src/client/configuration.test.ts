@@ -901,4 +901,18 @@ describe('MCPClient app-only tools', () => {
       await close();
     }
   });
+
+  it('keeps them out of cached tool catalogs, so agents rebuilt from a cache never get them', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      const definitions = JSON.parse(JSON.stringify(await client.listToolDefinitions()));
+      expect(Object.keys(definitions.apps ?? {}).sort()).toEqual(['plain', 'shared']);
+      expect(Object.keys(await client.toolsFromDefinitions({ definitions })).sort()).toEqual([
+        'apps_plain',
+        'apps_shared',
+      ]);
+    } finally {
+      await close();
+    }
+  });
 });
