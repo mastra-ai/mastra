@@ -9,7 +9,7 @@ import { KNOWLEDGE_GRAPH_TRANSITION_MS, useLeavingNodes } from '../../lib/useLea
 const node = (id: string) => ({ id, style: {} as { opacity?: number; pointerEvents?: string } });
 const view = (...ids: string[]) => ids.map(node);
 
-const css = readFileSync(resolve(process.cwd(), 'src/domains/knowledge/components/knowledge.css'), 'utf8');
+const css = readFileSync(resolve(import.meta.dirname, '../knowledge.css'), 'utf8');
 
 describe('useLeavingNodes', () => {
   beforeEach(() => vi.useFakeTimers());
