@@ -230,6 +230,45 @@ describe('KnowledgePageExplorer body links', () => {
     });
   });
 
+  describe('when the link index counts pages linking in', () => {
+    const render = (extra: Partial<KnowledgeExplorerSource>, view: KnowledgeExplorerView = 'page') =>
+      renderWithProviders(
+        <KnowledgePageExplorer
+          graph={graph}
+          source={{ ...source, ...extra }}
+          selectedPageId={null}
+          onSelect={() => {}}
+          view={view}
+          onViewChange={() => {}}
+        />,
+      );
+    const row = (name: string) => screen.getByRole('treeitem', { name: new RegExp(name) });
+
+    it('shows each tree row how many pages link to it, in either view', () => {
+      const asked: string[][] = [];
+      render({
+        useLinkCounts: ids => {
+          asked.push(ids);
+          return ok({ suspend: { in: 2, out: 0 }, workflows: { in: 1, out: 4 }, overview: { in: 0, out: 3 } });
+        },
+      });
+      fireEvent.click(screen.getByRole('button', { name: 'Expand Workflows' }));
+      expect(within(row('Suspend and resume')).getByTestId('knowledge-tree-links-in').getAttribute('aria-label')).toBe(
+        '2 pages link here',
+      );
+      expect(within(row('Workflows')).getByTestId('knowledge-tree-links-in').getAttribute('aria-label')).toBe(
+        '1 page links here',
+      );
+      expect(within(row('Overview')).queryByTestId('knowledge-tree-links-in')).toBeNull();
+      expect(asked.some(ids => ids.includes('suspend') && ids.includes('overview'))).toBe(true);
+    });
+
+    it('shows no badge when the server has no link index', () => {
+      render({ useLinkCounts: () => ({ isPending: false, isError: true, error: new Error('501') }) });
+      expect(screen.queryAllByTestId('knowledge-tree-links-in')).toEqual([]);
+    });
+  });
+
   describe('the graph toggles', () => {
     it('float over the graph, beside Back, and not in the toolbar', () => {
       renderWithProviders(<Host initial={null} initialView="graph" />);

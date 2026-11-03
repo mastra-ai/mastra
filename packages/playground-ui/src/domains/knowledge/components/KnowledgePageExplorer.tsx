@@ -970,6 +970,24 @@ export function KnowledgePageExplorer({
     ? (lazy.pages.find(page => page.id === focusScopeId) ?? pagesById.get(focusScopeId))
     : undefined;
   const treePages = withinScope(source.useTreeLevels ? lazy.pages : graph.pages, focusScope ? focusScopeId : null);
+  // How many pages link to each tree row, from the link index. A server with no index, or a failed
+  // fetch, leaves the rows without the badge.
+  const treeCountIds = useMemo(
+    () =>
+      treePages
+        .filter(page => !page.isScope && !isChildPlaceholder(page) && !isRestCircle(page) && !isScopeGroup(page))
+        .map(page => page.id)
+        .sort(),
+    [treePages],
+  );
+  const treeCounted = (source.useLinkCounts ?? noLinkQuery)(treeCountIds);
+  const treeLinksIn = useMemo(
+    () =>
+      treeCounted.data
+        ? new Map(Object.entries(treeCounted.data).map(([id, counts]) => [id, counts.in] as const))
+        : undefined,
+    [treeCounted.data],
+  );
   const graphPages = useMemo(
     () => withinScope(drawn.pages, focusScope ? focusScopeId : null),
     [drawn.pages, focusScope, focusScopeId],
@@ -1052,6 +1070,7 @@ export function KnowledgePageExplorer({
                 key={focusScope ? focusScope.id : 'all'}
                 pages={treePages}
                 pinnedIds={graph.pinnedIds}
+                linksIn={treeLinksIn}
                 selectedPageId={selectedPageId}
                 onSelect={selectFromTree}
                 initiallyExpanded={focusScope ? [focusScope.id] : undefined}

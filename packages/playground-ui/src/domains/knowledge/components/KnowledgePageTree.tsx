@@ -1,4 +1,4 @@
-import { ChevronRight, Pin } from 'lucide-react';
+import { ArrowDownLeft, ChevronRight, Pin } from 'lucide-react';
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
@@ -53,6 +53,7 @@ export function KnowledgePageTree({
   mayHaveChildren,
   onExpandedChange,
   loadMore,
+  linksIn,
   'aria-label': ariaLabel = 'Knowledge pages',
 }: {
   pages: KnowledgePagePayload[];
@@ -66,6 +67,8 @@ export function KnowledgePageTree({
   onExpandedChange?: (expanded: ReadonlySet<string>) => void;
   /** Parent id ({@link KNOWLEDGE_TREE_ROOT} for the roots) to a loader for its next children. */
   loadMore?: ReadonlyMap<string, () => void>;
+  /** Page id to how many pages link to it, from the link index; a row shows it when above zero. */
+  linksIn?: ReadonlyMap<string, number>;
   'aria-label'?: string;
 }) {
   const roots = useMemo(() => buildPageTree(pages), [pages]);
@@ -264,6 +267,17 @@ export function KnowledgePageTree({
                   className="shrink-0 text-caption text-muted-foreground tabular-nums"
                 >
                   {childCountLabel(row.page)}
+                </span>
+              ) : null}
+              {linksIn?.get(row.page.id) ? (
+                <span
+                  data-testid="knowledge-tree-links-in"
+                  title={`${linksIn.get(row.page.id)} ${linksIn.get(row.page.id) === 1 ? 'page links' : 'pages link'} here`}
+                  aria-label={`${linksIn.get(row.page.id)} ${linksIn.get(row.page.id) === 1 ? 'page links' : 'pages link'} here`}
+                  className="flex shrink-0 items-center gap-0.5 text-caption text-muted-foreground tabular-nums"
+                >
+                  <ArrowDownLeft size={10} aria-hidden />
+                  {linksIn.get(row.page.id)}
                 </span>
               ) : null}
               {pinned.has(row.page.id) ? (
