@@ -101,7 +101,12 @@ import {
   toJsonSchemaOrUndefined,
 } from '../workflows/dynamic';
 import { WorkflowEventProcessor } from '../workflows/evented/workflow-event-processor';
-import { cancelNestedRun, nestedRunParentOf, nestedRunRecoveryAction } from '../workflows/nested-run-recovery';
+import {
+  cancelNestedRun,
+  nestedRunParentOf,
+  nestedRunRecoveryAction,
+  nestedRunStatusOf,
+} from '../workflows/nested-run-recovery';
 import { computeScheduleDefinitionHash } from '../workflows/scheduler';
 import type { WorkflowScheduleConfig, SchedulerConfig, Scheduler } from '../workflows/scheduler';
 import { computeNextFire } from '../workflows/scheduler/cron';
@@ -4344,6 +4349,7 @@ export class Mastra<
           store: workflowsStore,
           workflowName: run.workflowName,
           runId: run.runId,
+          expectedStatus: nestedRunStatusOf(run.snapshot),
           logger: this.#logger,
         });
       }

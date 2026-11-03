@@ -50,25 +50,47 @@ export function nestedRunParentOf(snapshot: unknown): { workflowName: string; ru
 }
 
 /**
+ * The status a stored run was listed with, so a later write can compare-and-set on it.
+ */
+export function nestedRunStatusOf(snapshot: unknown): WorkflowRunStatus | undefined {
+  let parsed: any = snapshot;
+  if (typeof snapshot === 'string') {
+    try {
+      parsed = JSON.parse(snapshot);
+    } catch {
+      return undefined;
+    }
+  }
+  return parsed?.status;
+}
+
+/**
  * Marks a nested run `canceled` when its parent finished without it, so the sweep stops finding it
  * as an active run. Takes the run's ownership lease first: a live driver on another replica keeps
- * the run, and the write must not race it.
+ * the run, and the write must not race it. The write is a compare-and-set on the status the sweep
+ * listed, so a run that finished or suspended in between keeps its own result.
  */
 export async function cancelNestedRun({
   store,
   workflowName,
   runId,
+  expectedStatus,
   logger,
 }: {
   store: WorkflowsStorage;
   workflowName: string;
   runId: string;
+  expectedStatus?: WorkflowRunStatus;
   logger?: IMastraLogger;
 }): Promise<void> {
   const ownership = await claimWorkflowRunOwnership({ store, runId, force: false, logger });
   if ('owner' in ownership) return;
   try {
-    await store.updateWorkflowState({ workflowName, runId, opts: { status: 'canceled' } });
+    await store.updateWorkflowState({
+      workflowName,
+      runId,
+      opts: { status: 'canceled', ...(expectedStatus ? { expectedStatus } : {}) },
+    });
     logger?.debug('Canceled a nested workflow run whose parent finished without it', { workflowName, runId });
   } catch (error) {
     logger?.warn('Failed to cancel a nested workflow run whose parent finished without it', {

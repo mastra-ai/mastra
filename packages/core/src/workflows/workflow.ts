@@ -85,7 +85,7 @@ import type { ClassifierStepOutput } from './entry-executors';
 import { withoutAuthToken } from './evented/helpers';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
-import { cancelNestedRun, nestedRunParentOf, nestedRunRecoveryAction } from './nested-run-recovery';
+import { cancelNestedRun, nestedRunParentOf, nestedRunRecoveryAction, nestedRunStatusOf } from './nested-run-recovery';
 import { copyState, toJsonState } from './nested-state';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
@@ -3586,6 +3586,7 @@ export class Workflow<
           store: workflowsStore,
           workflowName: this.id,
           runId: runSnapshot.runId,
+          expectedStatus: nestedRunStatusOf(runSnapshot.snapshot),
           logger: this.logger,
         });
       }

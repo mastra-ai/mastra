@@ -150,6 +150,62 @@ describe('restarting a nested run whose process died', () => {
     expect((await storedStates(storage))['outer/run-1']).toMatchObject({ status: 'success' });
   });
 
+  it('cancels the leftover run from the workflow-level sweep once its parent finished', async () => {
+    const calls: number[] = [];
+    const build = (died?: () => void) => {
+      const work = createStep({
+        id: 'work',
+        inputSchema: num,
+        outputSchema: num,
+        execute: async ({ inputData }) => {
+          calls.push(inputData.n);
+          if (inputData.n === 1 && died) {
+            died();
+            return new Promise(() => {});
+          }
+          return inputData;
+        },
+      });
+      const inner = createWorkflow({ id: 'inner', inputSchema: num, outputSchema: num }).then(work).commit();
+      const outer = createWorkflow({ id: 'outer', inputSchema: z.array(num), outputSchema: z.array(num) })
+        .foreach(inner, { concurrency: 1 })
+        .commit();
+      return { outer, inner };
+    };
+    const storage = new MockStore();
+    const store = storage.stores.workflows!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    store.persistWorkflowSnapshot = args => persist({ ...args, snapshot: cloneRunData(args.snapshot) });
+    const innerStatuses = async () =>
+      Object.entries(await storedStates(storage))
+        .filter(([key]) => key.startsWith('inner/'))
+        .map(([, value]) => (value as { status?: string }).status);
+
+    let died = false;
+    const first = build(() => (died = true));
+    new Mastra({ logger: false, storage, workflows: first });
+    void (await first.outer.createRun({ runId: 'run-1' })).start({
+      inputData: [{ n: 0 }, { n: 1 }, { n: 2 }],
+    });
+    await vi.waitFor(() => expect(died).toBe(true));
+    await expireRunLeases(storage);
+
+    // The parent finishes and leaves the crash's nested run behind.
+    await new Mastra({ logger: false, storage, workflows: build() }).restartAllActiveWorkflowRuns();
+    expect(calls).toEqual([0, 1, 1, 2]);
+    expect(await innerStatuses()).toContain('running');
+
+    // `inner`'s own sweep reaches that run directly, without going through a parent restart.
+    const third = build();
+    new Mastra({ logger: false, storage, workflows: third });
+    await expireRunLeases(storage);
+    await third.inner.restartAllActiveWorkflowRuns();
+
+    expect(calls).toEqual([0, 1, 1, 2]);
+    expect(await innerStatuses()).not.toContain('running');
+    expect(await innerStatuses()).toContain('canceled');
+  });
+
   describe('a re-driven nested step whose nested run already finished', () => {
     /** A foreach over `inner`, which suspends, then appends twice once resumed. */
     const build = () => {
