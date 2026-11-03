@@ -5,7 +5,7 @@ import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { ExecutionDeadline } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType } from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan, getResumeTracingContext } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
@@ -539,13 +539,23 @@ export class InngestWorkflow<
         // Create the workflow root span durably - exports SPAN_STARTED immediately on first execution
         // On replay, returns memoized ExportedSpan data without re-creating the span
         const workflowSpanData = await step.run(`workflow.${this.id}.span.start`, async () => {
-          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-          if (!observability) return undefined;
+          if (!mastra?.observability?.getSelectedInstance({ requestContext })) return undefined;
 
-          const span = observability.startSpan({
+          // A resume continues the suspended run's trace: same sampling decision, nested under its span.
+          const suspendedTracingContext = resume
+            ? (
+                await (
+                  await mastra.getStorage()?.getStore('workflows')
+                )?.loadWorkflowSnapshot({
+                  workflowName: this.id,
+                  runId,
+                })
+              )?.tracingContext
+            : undefined;
+          const span = getOrCreateSpan({
             type: SpanType.WORKFLOW_RUN,
             outcome: null,
-            name: `workflow run: '${this.id}'`,
+            name: resume ? `workflow run: '${this.id}' (resumed)` : `workflow run: '${this.id}'`,
             entityType: EntityType.WORKFLOW_RUN,
             entityId: this.id,
             entityName: this.id,
@@ -553,10 +563,13 @@ export class InngestWorkflow<
             metadata: {
               resourceId,
               runId,
+              ...(resume ? { resumed: true, resumedFromSpanId: suspendedTracingContext?.spanId } : {}),
             },
             tracingPolicy,
             tracingOptions,
             requestContext,
+            resumeFrom: suspendedTracingContext,
+            mastra,
           });
 
           return span?.snapshot?.() ?? span?.exportSpan();
@@ -743,12 +756,7 @@ export class InngestWorkflow<
                   result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
                   error: result.status === 'failed' ? result.error : undefined,
                   requestContext: requestContext.toJSON(),
-                  tracingContext: workflowSpanData
-                    ? {
-                        traceId: workflowSpanData.traceId,
-                        spanId: workflowSpanData.id,
-                      }
-                    : undefined,
+                  tracingContext: getResumeTracingContext(workflowSpanData),
                   timestamp: Date.now(),
                 };
 
