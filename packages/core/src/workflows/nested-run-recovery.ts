@@ -72,6 +72,10 @@ export function nestedRunStatusOf(snapshot: unknown): WorkflowRunStatus | undefi
  * per leftover item. The cache is per sweep on purpose: within one sweep the parent's status can
  * only change in the window the sweep already races, and each write it makes is guarded by its own
  * compare-and-set.
+ *
+ * A rejected lookup is cached too, so siblings under a parent whose read failed don't each retry a
+ * store that is already failing. Each of them is handled by its own try/catch, which logs the
+ * failure and leaves that run for the next sweep.
  */
 export function createNestedRunParentStatusLookup({
   store,

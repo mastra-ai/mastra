@@ -278,6 +278,32 @@ describe('restarting a nested run whose process died', () => {
     expect(await innerStatuses()).toContain('running');
   });
 
+  it('reads a parent once per run when the Mastra sweep decides on the leftovers', async () => {
+    const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('paused');
+    const store = storage.stores.workflows!;
+
+    const [orphan] = (await store.listWorkflowRuns({ workflowName: 'inner' })).runs.filter(
+      run => (typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot).status === 'running',
+    );
+    for (const suffix of ['b', 'c']) {
+      await store.persistWorkflowSnapshot({
+        workflowName: 'inner',
+        runId: `inner-${suffix}`,
+        snapshot: JSON.parse(JSON.stringify(orphan!.snapshot)),
+      });
+    }
+
+    // The Mastra-level sweep is a separate loop over every active run, so its cache is its own.
+    const lookups = vi.spyOn(store, 'loadWorkflowRunStatus');
+    const third = build(calls);
+    await new Mastra({ logger: false, storage, workflows: third }).restartAllActiveWorkflowRuns();
+
+    const parentLookups = lookups.mock.calls.filter(([args]) => args.workflowName === 'outer');
+    expect(parentLookups).toHaveLength(1);
+    expect(calls).toEqual([0, 1]);
+    expect(await innerStatuses()).toContain('running');
+  });
+
   it('restarts a nested run on its own while its parent is suspended', async () => {
     const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('suspended');
 
