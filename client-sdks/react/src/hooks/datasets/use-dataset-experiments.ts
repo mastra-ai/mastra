@@ -16,7 +16,6 @@ import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/q
 
 export type { ExperimentQueriesResult } from '../shared/combine-by-ids';
 import { useInView } from '../shared/use-in-view';
-import { listAllExperimentResults } from './list-all-experiment-results';
 
 type DatasetExperimentResponse = Awaited<ReturnType<MastraClient['getDatasetExperiment']>>;
 type ExperimentResultsPage = Awaited<ReturnType<MastraClient['listDatasetExperimentResults']>>;
@@ -89,7 +88,22 @@ export const allDatasetExperimentResultsQueryOptions = (
 ): UseQueryOptions<DatasetExperimentResult[], Error, DatasetExperimentResult[], ExperimentStatusQueryKey> =>
   tanstackQueryOptions({
     queryKey: ['dataset-experiment-results-all', datasetId, experimentId, experimentStatus],
-    queryFn: () => listAllExperimentResults(client, datasetId, experimentId),
+    queryFn: async (): Promise<DatasetExperimentResult[]> => {
+      const allResults: DatasetExperimentResult[] = [];
+      let page = 0;
+
+      while (true) {
+        const response = await client.listDatasetExperimentResults(datasetId, experimentId, {
+          page,
+          perPage: RESULTS_PER_PAGE,
+        });
+        allResults.push(...response.results);
+        if (!response.pagination.hasMore || response.results.length === 0) break;
+        page++;
+      }
+
+      return allResults;
+    },
     refetchInterval: isInProgress(experimentStatus) ? POLL_INTERVAL_MS : false,
   });
 

@@ -3,7 +3,6 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import type { InfiniteData, QueryKey, UseInfiniteQueryResult, UseQueryResult } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { useMastraClient } from '../../mastra-client-context';
-import { listAllExperimentResults } from '../datasets/list-all-experiment-results';
 import { useExperimentsForDatasetFilter } from '../experiments';
 import type { ExperimentTargetFilter } from '../experiments';
 import type { MastraInfiniteQueryOptions, MastraQueryOptions } from '../shared/query-options';
@@ -111,7 +110,7 @@ const useReviewItemsByStatus = (
           const { datasetId } = exp;
           if (!datasetId) return [];
           try {
-            const results = await listAllExperimentResults(client, datasetId, exp.id);
+            const { results } = await client.listDatasetExperimentResults(datasetId, exp.id);
             return results.filter(r => r.status === status).map(r => toReviewItem(r, datasetId));
           } catch {
             return [];

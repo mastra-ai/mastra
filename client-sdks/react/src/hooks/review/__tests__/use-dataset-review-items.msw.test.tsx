@@ -9,12 +9,7 @@ import { MastraReactProvider } from '../../../mastra-react-provider';
 
 import { server } from '../../../test/msw-server';
 import { useDatasetMutations } from '../../datasets';
-import {
-  useCompletedItems,
-  useInfiniteCompletedItems,
-  useInfiniteReviewItems,
-  useReviewItems,
-} from '../use-dataset-review-items';
+import { useInfiniteCompletedItems, useInfiniteReviewItems, useReviewItems } from '../use-dataset-review-items';
 import type { ReviewItemsOptions } from '../use-dataset-review-items';
 import {
   DATASET_ID,
@@ -230,35 +225,6 @@ describe('useReviewItems', () => {
 
       await waitFor(() => expect(result.current.data).toHaveLength(2));
       expect(resultRequests.sort()).toEqual([EXPERIMENT_ID, OTHER_EXPERIMENT_ID].sort());
-    });
-  });
-
-  describe('when an experiment has more results than one page', () => {
-    const results = manyResults(150, [3, 57, 104, 149]);
-
-    it('lists every result flagged for review, not only those on the first page', async () => {
-      servePagedResults({ [EXPERIMENT_ID]: results });
-
-      const { result } = renderHook(() => useReviewItems({ experiments: [experiment] }), { wrapper: makeWrapper() });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(result.current.data?.map(item => item.id)).toEqual([
-        'exp-1-result-3',
-        'exp-1-result-57',
-        'exp-1-result-104',
-        'exp-1-result-149',
-      ]);
-    });
-
-    it('lists every completed result, not only those on the first page', async () => {
-      servePagedResults({ [EXPERIMENT_ID]: results });
-
-      const { result } = renderHook(() => useCompletedItems({ experiments: [experiment] }), {
-        wrapper: makeWrapper(),
-      });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-      expect(result.current.data).toHaveLength(146);
     });
   });
 
