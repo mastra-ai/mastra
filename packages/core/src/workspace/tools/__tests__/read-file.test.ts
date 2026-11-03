@@ -425,6 +425,7 @@ describe('workspace_read_file', () => {
     'application/x-jsonlines',
     'Application/X-NDJSON; charset=utf-8',
     'application/jsonl; charset=UTF-8',
+    'application/x-ndjson; profile="https://example.test/a;charset=v1"; charset=utf-8',
   ])('reads line-delimited JSON with MIME type %s as paginated text', async mimeType => {
     await fs.writeFile(path.join(tempDir, 'events.ndjson'), '{"a":1}\n{"a":2}\n{"a":3}');
     class NDJSONFilesystem extends LocalFilesystem {
@@ -452,6 +453,7 @@ describe('workspace_read_file', () => {
     'application/x-ndjson; charset=utf-16le',
     'text/plain; charset="UTF-16"',
     'application/json; charset=latin1',
+    'application/json; profile="https://example.test/a;charset=utf-8"; charset=utf-16le',
   ])('returns binary metadata for MIME type %s instead of decoding it as utf-8', async mimeType => {
     await fs.writeFile(path.join(tempDir, 'events.ndjson'), Buffer.from('{"a":1}\n', 'utf16le'));
     class CharsetFilesystem extends LocalFilesystem {
