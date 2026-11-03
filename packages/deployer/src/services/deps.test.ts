@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MastraError } from '@internal/core/error';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { parse } from 'yaml';
+import { parse, parseAllDocuments } from 'yaml';
 import { copyPnpmWorkspaceSettings, DepsService, getPnpmIgnoredBuildPackages, withPlaceholderVersions } from './deps';
 
 const { runChildProcess } = vi.hoisted(() => ({
@@ -16,6 +16,9 @@ vi.mock('../deploy/log.js', () => ({
 }));
 
 const tempDirs: string[] = [];
+
+// pnpm 11+ writes this environment document before the project document when `packageManager` is set.
+const pnpmEnvironmentDocument = `---\nlockfileVersion: '9.0'\n\nimporters:\n\n  .:\n    configDependencies: {}\n    packageManagerDependencies:\n      pnpm:\n        specifier: 12.15.0\n        version: 12.15.0\n\n---\n`;
 
 beforeEach(() => {
   runChildProcess.mockReset();
@@ -223,12 +226,14 @@ describe('DepsService custom pnpm workspace settings', () => {
     });
   });
 
-  it('installs with the overrides the source lockfile was resolved with (#29192)', async () => {
-    // The lockfile holds overrides with catalog and `$name` specs resolved, wherever pnpm read them from.
-    await writeFile(
-      join(sourceRoot, 'pnpm-lock.yaml'),
-      `lockfileVersion: '9.0'\n\noverrides:\n  lodash@<4.18.0: ^4.18.1\n  '@inner/shared': 1.0.0\n  local-fork: link:../forks/local-fork\n\nimporters: {}\n`,
-    );
+  const projectLockfile = `lockfileVersion: '9.0'\n\noverrides:\n  lodash@<4.18.0: ^4.18.1\n  '@inner/shared': 1.0.0\n  local-fork: link:../forks/local-fork\n\nimporters: {}\n`;
+
+  // The lockfile holds overrides with catalog and `$name` specs resolved, wherever pnpm read them from.
+  it.each([
+    ['a single-document lockfile', projectLockfile],
+    ['a lockfile with a pnpm environment document', `${pnpmEnvironmentDocument}${projectLockfile}`],
+  ])('installs with the overrides the source lockfile was resolved with, from %s (#29192)', async (_, lockfile) => {
+    await writeFile(join(sourceRoot, 'pnpm-lock.yaml'), lockfile);
 
     await new DepsService(sourceRoot).install({
       dir: outputDir,
@@ -683,14 +688,17 @@ describe('DepsService lockfile installation', () => {
     expect(runChildProcess.mock.calls[0]?.[0].cmd).toBe('bun install');
   });
 
-  it('drops workspace links for packed workspace tarballs from a copied pnpm lockfile', async () => {
+  it.each([
+    ['a single-document lockfile', ''],
+    ['a lockfile with a pnpm environment document', pnpmEnvironmentDocument],
+  ])('drops workspace links for packed workspace tarballs from %s', async (_, environmentDocument) => {
     // The app is the workspace root, so the lockfile's root importer is the app and links its
     // workspace dependency. pnpm keeps a `link:` version even when an override points elsewhere.
     const root = await mkdtemp(join(tmpdir(), 'mastra-deps-pnpm-root-app-'));
     tempDirs.push(root);
     const outputDir = join(root, '.mastra', 'output');
     await mkdir(outputDir, { recursive: true });
-    const sourceLock = `lockfileVersion: '9.0'
+    const sourceLock = `${environmentDocument}lockfileVersion: '9.0'
 
 importers:
 
@@ -722,7 +730,15 @@ packages:
       pnpmOverrides: { '@inner/shared': 'file:./workspace-module/inner-shared-1.0.0.tgz' },
     });
 
-    const outputLock = parse(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8'));
+    const outputDocuments = parseAllDocuments(await readFile(join(outputDir, 'pnpm-lock.yaml'), 'utf-8')).map(
+      document => document.toJS(),
+    );
+    const outputLock = outputDocuments.at(-1);
+    expect(outputDocuments.slice(0, -1)).toEqual(
+      parseAllDocuments(environmentDocument)
+        .map(document => document.toJS())
+        .slice(0, -1),
+    );
     expect(outputLock.importers['.'].dependencies).toEqual({ zod: { specifier: '^4.0.0', version: '4.1.0' } });
     expect(outputLock.importers['packages/shared'].devDependencies).toEqual({});
     expect(outputLock.packages).toEqual({ 'zod@4.1.0': { resolution: { integrity: 'sha512-abc' } } });

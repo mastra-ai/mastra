@@ -7,7 +7,7 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@internal/core/error';
 import type { BundlerConfig } from '@internal/deployer';
 import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
-import { parse, stringify } from 'yaml';
+import { parse, parseAllDocuments, stringify } from 'yaml';
 
 import { createChildProcessLogger } from '../deploy/log.js';
 
@@ -440,7 +440,8 @@ async function isYarnClassicLockfile(lockfilePath: string): Promise<boolean> {
  * installed and the dependency symlink dangles. Without the entries, pnpm resolves them from the overrides.
  */
 async function dropPnpmImporterDependencies(lockfilePath: string, packageNames: string[]): Promise<void> {
-  const lockfile = parse(await fsPromises.readFile(lockfilePath, 'utf-8')) as {
+  const { leadingDocuments, project } = parsePnpmLockfile(await fsPromises.readFile(lockfilePath, 'utf-8'));
+  const lockfile = project as {
     importers?: Record<string, Record<string, Record<string, unknown> | undefined> | undefined>;
   } | null;
   let changed = false;
@@ -456,8 +457,31 @@ async function dropPnpmImporterDependencies(lockfilePath: string, packageNames: 
     }
   }
   if (changed) {
-    await fsPromises.writeFile(lockfilePath, stringify(lockfile, { lineWidth: 0 }));
+    const projectDocument = stringify(lockfile, { lineWidth: 0 });
+    await fsPromises.writeFile(
+      lockfilePath,
+      leadingDocuments ? `${leadingDocuments}---\n${projectDocument}` : projectDocument,
+    );
   }
+}
+
+/**
+ * Splits a pnpm lockfile into its project document and the documents before it. pnpm 11+ writes an
+ * environment document first when `packageManager` or `configDependencies` is set.
+ */
+function parsePnpmLockfile(source: string): { leadingDocuments: string; project: unknown } {
+  const documents = parseAllDocuments(source);
+  const project = documents.at(-1);
+  if (project?.errors.length) {
+    throw project.errors[0];
+  }
+  return {
+    leadingDocuments: documents
+      .slice(0, -1)
+      .map(document => document.toString({ lineWidth: 0 }))
+      .join(''),
+    project: project ? project.toJS() : null,
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -475,7 +499,7 @@ async function readPnpmLockfileOverrides(
 ): Promise<Record<string, string>> {
   let lockfile: unknown;
   try {
-    lockfile = parse(await fsPromises.readFile(lockfilePath, 'utf-8'));
+    lockfile = parsePnpmLockfile(await fsPromises.readFile(lockfilePath, 'utf-8')).project;
   } catch {
     return {};
   }
