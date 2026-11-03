@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { FactoryRuleItemContext, FactoryRuleSource, FactoryStageRuleContext } from '../rules/types.js';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
-import { BoardDefinitionError, codeBoardOf, defineBoard } from './define-board.js';
+import { BoardDefinitionError, codeBoardOf, declarationOf, defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 import { workLaneForRole, workStageCarries } from './legacy-plan-role.js';
 import { startsInAutoPhase } from './phase-automation.js';
@@ -15,6 +15,7 @@ import {
   codeBehaviourConflicts,
   codeBoardHash,
   compileStoredBoard,
+  mergeCodeBehaviour,
   storedBoardInputSchema,
 } from './stored-board.js';
 import { workBoard } from './work.js';
@@ -587,6 +588,164 @@ describe('stored boards with code behaviour', () => {
     expect(workStageCarries(compileStoredBoard(boardDefinitionOf(workBoard)), 'planning', 'work', 'factory-plan')).toBe(
       undefined,
     );
+  });
+});
+
+describe('serving a stored row that fell out of step with code', () => {
+  it('serves a row that keeps its code shape exactly as the strict compile does', async () => {
+    const row = editWork('triage', phase => ({
+      ...phase,
+      runner: { ...phase.runner, instructions: 'Shipyard: check the changelog.' },
+    }));
+
+    const { board, problems } = mergeCodeBehaviour(row, workBoard);
+    const strict = compileStoredBoard(row, workBoard);
+
+    expect(problems).toEqual([]);
+    expect(boardDefinitionOf(board)).toEqual(boardDefinitionOf(strict));
+    expect(board.transitions).toEqual(strict.transitions);
+    expect(Object.keys(board.rules)).toEqual(Object.keys(strict.rules));
+    expect(board.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan?.onResult);
+    expect(board.events).toEqual(strict.events);
+    expect(board.sourceClosed).toEqual(strict.sourceClosed);
+    expect(codeBoardOf(board)).toBe(workBoard);
+    // #28876: the row's runner instructions reach Work's triage handler.
+    const triage = await board.rules.triage?.issue?.onEnter?.(entering(board, 'triage', 'issue'));
+    expect(triage).toMatchObject({ type: 'invokeSkill', role: 'triage', skillName: 'factory-triage' });
+    expect(triage?.type === 'invokeSkill' && triage.arguments).toContain('Shipyard: check the changelog.');
+  });
+
+  it("serves a row missing a phase newer code declares, without the board's rules that could target it", async () => {
+    const declaration = declarationOf(workBoard)!;
+    const newer = defineBoard({
+      ...declaration,
+      phases: {
+        ...declaration.phases,
+        testing: {
+          name: 'Testing',
+          kind: 'working',
+          runner: { context: 'work' },
+          nextPhases: ['done'],
+          onEnter: { issue: () => undefined },
+        },
+      },
+    } as Parameters<typeof defineBoard>[0]);
+    const row = boardDefinitionOf(workBoard);
+
+    expect(() => compileStoredBoard(row, newer)).toThrow(BoardDefinitionError);
+    const { board, problems } = mergeCodeBehaviour(row, newer);
+
+    expect(problems).toEqual([
+      'Phase "testing" isn\'t on stored board "work", so its code behaviour doesn\'t run.',
+      `Board "work" runs without its code tool rules (${Object.keys(workBoard.tools).join(', ')}): phase "testing" isn't stored.`,
+    ]);
+    expect(board.tools).toEqual({});
+    expect(board.phases).not.toHaveProperty('testing');
+    expect(board.sourceClosed).toEqual({ completed: 'done', canceled: 'canceled' });
+    const plan = await board.rules.planning?.issue?.onEnter?.(entering(board, 'planning', 'issue'));
+    expect(plan).toMatchObject({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan' });
+    expect(codeBoardOf(board)).toBe(newer);
+  });
+
+  it('serves a phase whose runner context changed without its code handlers, and keeps the other phases', async () => {
+    const row = editWork('triage', phase => ({ ...phase, runner: { context: 'work' } }));
+
+    const { board, problems } = mergeCodeBehaviour(row, workBoard);
+
+    expect(problems).toEqual([
+      'Phase "triage" runs without its code behaviour: Phase "triage" runs its code handlers in the "triage" context; keep runner.context.',
+    ]);
+    expect(board.rules.triage).toBeUndefined();
+    expect(board.roleForPhase('triage')).toBe('work');
+    const plan = await board.rules.planning?.issue?.onEnter?.(entering(board, 'planning', 'issue'));
+    expect(plan).toMatchObject({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan' });
+    expect(board.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan?.onResult);
+  });
+
+  it('serves the row without any code behaviour when the board would not compile with it', () => {
+    const row = editWork('done', phase => ({ ...phase, kind: 'resting', nextPhases: ['pr-review'] }));
+
+    const { board, problems } = mergeCodeBehaviour(row, workBoard);
+
+    expect(problems).toEqual([
+      'Phase "done" runs without its code behaviour: Phase "done" must stay terminal; its code behaviour depends on it.',
+      'Board "work" runs without its code behaviour: Board sourceClosed.completed "done" must name a terminal phase.',
+    ]);
+    expect(board.phaseKind('done')).toBe('resting');
+    expect(board.rules).toEqual({});
+    expect(board.tools).toEqual({});
+    expect(board.sourceClosed).toBeUndefined();
+    expect(codeBoardOf(board)).toBe(workBoard);
+  });
+
+  describe('an app board with outcomes and exit handlers', () => {
+    const exited: string[] = [];
+    const app = defineBoard({
+      id: 'release',
+      name: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
+        shipping: {
+          name: 'Shipping',
+          kind: 'working',
+          runner: { skill: 'ship-release', context: 'release' },
+          outcomes: { shipped: 'live' },
+          onExit: {
+            manual: context => {
+              exited.push(context.stage);
+              return undefined;
+            },
+          },
+        },
+        live: { name: 'Live', kind: 'terminal' },
+      },
+    });
+    const withShipping = (edit: (phase: StoredPhaseInput) => StoredPhaseInput): StoredBoardInput => ({
+      key: 'release',
+      name: 'Release',
+      phases: [
+        { key: 'queued', name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
+        edit({
+          key: 'shipping',
+          name: 'Shipping',
+          kind: 'working',
+          runner: { skill: 'ship-release', context: 'release' },
+          nextPhases: ['archived'],
+        }),
+        { key: 'archived', name: 'Archived', kind: 'terminal' },
+      ],
+    });
+
+    it("drops an outcome whose target the row no longer has, and keeps the phase's handlers", async () => {
+      exited.length = 0;
+      const { board, problems } = mergeCodeBehaviour(
+        withShipping(phase => phase),
+        app,
+      );
+
+      expect(problems).toEqual([
+        'Phase "shipping" runs without its code outcome "shipped": phase "live" isn\'t stored.',
+      ]);
+      expect(board.transitions.shipping).toEqual([{ outcome: null, to: 'archived' }]);
+      await board.rules.shipping?.manual?.onExit?.(entering(board, 'shipping', 'manual', { source: 'manual' }));
+      expect(exited).toEqual(['shipping']);
+      expect(codeBoardOf(board)).toBe(app);
+    });
+
+    it('serves the phase without its handlers or outcomes once its skill changed', () => {
+      const { board, problems } = mergeCodeBehaviour(
+        withShipping(phase => ({ ...phase, runner: { skill: 'ship-it-fast', context: 'release' } })),
+        app,
+      );
+
+      expect(problems).toEqual([
+        'Phase "shipping" runs without its code behaviour: Phase "shipping" code handlers run with skill "ship-release"; keep runner.skill.',
+      ]);
+      expect(board.phases.shipping).not.toHaveProperty('onExit');
+      expect(board.phases.shipping).not.toHaveProperty('outcomes');
+      expect(board.rules.shipping?.manual?.onExit).toBeUndefined();
+    });
   });
 });
 

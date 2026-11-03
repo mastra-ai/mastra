@@ -87,13 +87,151 @@ function storedNextPhases(phase: StoredPhaseInput, phases: readonly StoredPhaseI
  * behaviour can't honour ({@link codeBehaviourConflicts}) is refused.
  */
 export function compileStoredBoard(board: StoredBoardInput, code?: InstalledBoard): InstalledBoard {
+  if (!code) return compileBoardDefinition(storedBoardConfig(board));
+  const conflicts = codeBehaviourConflicts(board, code);
+  if (conflicts.length > 0) throw new BoardDefinitionError(conflicts.join(' '));
+  const declaration = codeDeclaration(code);
+  const phases: Record<string, PhaseBehaviour> = {};
+  for (const key of Object.keys(declaration.phases)) {
+    const { outcomes, onEnter, onExit } = declaration.phases[key]!;
+    phases[key] = { outcomes, onEnter, onExit };
+  }
+  return compileBoardDefinition(
+    storedBoardConfig(board, {
+      phases,
+      tools: declaration.tools,
+      events: declaration.events,
+      transitionPolicy: declaration.transitionPolicy,
+      sourceClosed: declaration.sourceClosed,
+    }),
+    code,
+  );
+}
+
+/** A board served from a stored row, and what of its code board's behaviour it runs without. */
+export interface MergedStoredBoard {
+  board: InstalledBoard;
+  /** One per piece of code behaviour the row can't run with; empty when it runs with all of it. */
+  problems: string[];
+}
+
+/**
+ * Serves a stored row of a code board's key with the code behaviour that still fits it. Unlike
+ * {@link compileStoredBoard}, nothing is refused: a row that fell out of step with its code (an
+ * edit from before a release added a phase or a code move, a row older than editable code boards)
+ * still runs as stored.
+ *
+ * - A phase's `onEnter`, `onExit` and `outcomes` attach only when the row keeps the phase in the
+ *   shape they depend on: the same kind and, on phases with code handlers, the same runner context
+ *   and skill, the declared exit tool and no other. Outcomes whose target the row lacks are dropped.
+ * - The board's `tools`, `events` and `transitionPolicy` attach only when the row has every code
+ *   phase, since their handlers may move cards to any of them; `sourceClosed` when it has both of
+ *   its phases.
+ * - If the board still fails to compile with that behaviour, it runs without any.
+ *
+ * The result links to `code` as its code board either way. Throws only when the row itself is
+ * invalid.
+ */
+export function mergeCodeBehaviour(row: StoredBoardInput, code: InstalledBoard): MergedStoredBoard {
+  const declaration = codeDeclaration(code);
+  const stored = new Map(row.phases.map(phase => [phase.key, phase]));
+  const problems: string[] = [];
+  const phases: Record<string, PhaseBehaviour> = {};
+  for (const [key, phase] of Object.entries(code.phases) as [string, BoardPhase<string>][]) {
+    const declared = declaration.phases[key];
+    const outcomes = Object.entries(declared?.outcomes ?? {});
+    if (!hasHandlers(declared) && outcomes.length === 0) continue;
+    const edited = stored.get(key);
+    if (!edited) {
+      problems.push(`Phase "${key}" isn't on stored board "${row.key}", so its code behaviour doesn't run.`);
+      continue;
+    }
+    const conflicts = phaseShapeConflicts(key, phase, declared, edited);
+    if (conflicts.length > 0) {
+      problems.push(...conflicts.map(conflict => `Phase "${key}" runs without its code behaviour: ${conflict}`));
+      continue;
+    }
+    const kept: Record<string, string> = {};
+    for (const [outcome, target] of outcomes) {
+      if (stored.has(target)) kept[outcome] = target;
+      else problems.push(`Phase "${key}" runs without its code outcome "${outcome}": phase "${target}" isn't stored.`);
+    }
+    phases[key] = {
+      onEnter: declared?.onEnter,
+      onExit: declared?.onExit,
+      outcomes: Object.keys(kept).length > 0 ? kept : undefined,
+    };
+  }
+
+  const board: BoardBehaviour = { phases };
+  const missing = Object.keys(code.phases).filter(key => !stored.has(key));
+  const unfit = missing.length > 0 ? missingPhases(missing) : undefined;
+  const tools = Object.keys(declaration.tools ?? {});
+  if (tools.length > 0) {
+    if (unfit) problems.push(`Board "${row.key}" runs without its code tool rules (${tools.join(', ')}): ${unfit}`);
+    else board.tools = declaration.tools;
+  }
+  const events = Object.keys(declaration.events ?? {});
+  if (events.length > 0) {
+    if (unfit) problems.push(`Board "${row.key}" runs without its code event rules (${events.join(', ')}): ${unfit}`);
+    else board.events = declaration.events;
+  }
+  if (declaration.transitionPolicy) {
+    if (unfit) problems.push(`Board "${row.key}" runs without its code transition policy: ${unfit}`);
+    else board.transitionPolicy = declaration.transitionPolicy;
+  }
+  const sourceClosed = declaration.sourceClosed;
+  if (sourceClosed) {
+    const closedMissing = [sourceClosed.completed, sourceClosed.canceled].filter(key => !stored.has(key));
+    if (closedMissing.length === 0) board.sourceClosed = sourceClosed;
+    else
+      problems.push(`Board "${row.key}" doesn't move cards when their source closes: ${missingPhases(closedMissing)}`);
+  }
+
+  try {
+    return { board: compileBoardDefinition(storedBoardConfig(row, board), code), problems };
+  } catch (error) {
+    if (!(error instanceof BoardDefinitionError)) throw error;
+    return {
+      board: compileBoardDefinition(storedBoardConfig(row), code),
+      problems: [...problems, `Board "${row.key}" runs without its code behaviour: ${error.message}`],
+    };
+  }
+}
+
+function missingPhases(keys: string[]): string {
+  return keys.length === 1
+    ? `phase "${keys[0]}" isn't stored.`
+    : `phases ${keys.map(key => `"${key}"`).join(', ')} aren't stored.`;
+}
+
+/** The code behaviour one stored phase runs with. */
+interface PhaseBehaviour {
+  outcomes?: Readonly<Record<string, string>>;
+  onEnter?: BoardPhaseDefinition<string>['onEnter'];
+  onExit?: BoardPhaseDefinition<string>['onExit'];
+}
+
+/** The code behaviour a stored board runs with, by phase key and for the board. */
+interface BoardBehaviour {
+  phases: Record<string, PhaseBehaviour>;
+  tools?: AnyBoardConfig['tools'];
+  events?: AnyBoardConfig['events'];
+  transitionPolicy?: AnyBoardConfig['transitionPolicy'];
+  sourceClosed?: AnyBoardConfig['sourceClosed'];
+}
+
+function codeDeclaration(code: InstalledBoard): AnyBoardConfig {
+  return declarationOf(code) ?? code;
+}
+
+/**
+ * The board config a stored definition declares, with the given code behaviour. The board is
+ * rebuilt from the declaration's handlers, so the stored runner reaches them.
+ */
+function storedBoardConfig(board: StoredBoardInput, behaviour?: BoardBehaviour): AnyBoardConfig {
   const [initial] = board.phases;
   if (!initial) throw new BoardDefinitionError('A board must define at least one phase.');
-  if (code) {
-    const conflicts = codeBehaviourConflicts(board, code);
-    if (conflicts.length > 0) throw new BoardDefinitionError(conflicts.join(' '));
-  }
-  const declaration: AnyBoardConfig | undefined = code ? (declarationOf(code) ?? code) : undefined;
   const phases: Record<string, BoardPhaseDefinition<string>> = {};
   for (const phase of board.phases) {
     if (Object.hasOwn(phases, phase.key)) {
@@ -101,8 +239,7 @@ export function compileStoredBoard(board: StoredBoardInput, code?: InstalledBoar
     }
     const runner = phase.runner ? withoutUndefined(phase.runner) : undefined;
     const exitTool = phase.exitTool ? withoutUndefined(phase.exitTool) : undefined;
-    const declared =
-      declaration && Object.hasOwn(declaration.phases, phase.key) ? declaration.phases[phase.key] : undefined;
+    const declared = behaviour && Object.hasOwn(behaviour.phases, phase.key) ? behaviour.phases[phase.key] : undefined;
     phases[phase.key] = withoutUndefined({
       name: phase.name,
       description: phase.description ?? undefined,
@@ -117,20 +254,17 @@ export function compileStoredBoard(board: StoredBoardInput, code?: InstalledBoar
       onExit: declared?.onExit,
     }) as BoardPhaseDefinition<string>;
   }
-  return compileBoardDefinition(
-    {
-      id: board.key,
-      name: board.name,
-      ...(board.description != null ? { description: board.description } : {}),
-      initialPhase: initial.key,
-      phases,
-      ...(declaration?.tools ? { tools: declaration.tools } : {}),
-      ...(declaration?.events ? { events: declaration.events } : {}),
-      ...(declaration?.transitionPolicy ? { transitionPolicy: declaration.transitionPolicy } : {}),
-      ...(declaration?.sourceClosed ? { sourceClosed: declaration.sourceClosed } : {}),
-    },
-    code,
-  );
+  return {
+    id: board.key,
+    name: board.name,
+    ...(board.description != null ? { description: board.description } : {}),
+    initialPhase: initial.key,
+    phases,
+    ...(behaviour?.tools ? { tools: behaviour.tools } : {}),
+    ...(behaviour?.events ? { events: behaviour.events } : {}),
+    ...(behaviour?.transitionPolicy ? { transitionPolicy: behaviour.transitionPolicy } : {}),
+    ...(behaviour?.sourceClosed ? { sourceClosed: behaviour.sourceClosed } : {}),
+  };
 }
 
 /** What a code board's behaviour holds fixed on each of its phases; the rest of the phase is editable. */
@@ -184,33 +318,8 @@ export function codeBehaviourConflicts(board: StoredBoardInput, code: InstalledB
       conflicts.push(`${label} has code behaviour on board "${code.id}"; it can't be removed.`);
       continue;
     }
-    if (edited.kind !== phase.kind) {
-      conflicts.push(`${label} must stay ${phase.kind}; its code behaviour depends on it.`);
-      continue;
-    }
-    if (phase.kind === 'working') {
-      if (hasHandlers(declaration.phases[key])) {
-        const context = edited.runner?.context ?? DEFAULT_PHASE_CONTEXT;
-        if (context !== phase.runner.context) {
-          conflicts.push(
-            `${label} runs its code handlers in the "${phase.runner.context}" context; keep runner.context.`,
-          );
-        }
-        if (edited.runner?.skill !== phase.runner.skill) {
-          conflicts.push(
-            phase.runner.skill
-              ? `${label} code handlers run with skill "${phase.runner.skill}"; keep runner.skill.`
-              : `${label} code handlers choose the skill; leave runner.skill unset.`,
-          );
-        }
-      }
-      if (phase.exitTool && edited.exitTool?.id !== phase.exitTool.id) {
-        conflicts.push(`${label} code behaviour waits for exit tool "${phase.exitTool.id}"; keep exitTool.id.`);
-      } else if (!phase.exitTool && edited.exitTool && hasHandlers(declaration.phases[key])) {
-        // An exit tool gates every move out of the phase, including the ones its code handlers make.
-        conflicts.push(`${label} code handlers move cards on without an exit tool; leave exitTool unset.`);
-      }
-    }
+    conflicts.push(...phaseShapeConflicts(key, phase, declaration.phases[key], edited));
+    if (edited.kind !== phase.kind) continue;
     const nextPhases = storedNextPhases(edited, board.phases);
     const outcomes = new Map(Object.entries(phase.outcomes ?? {}).map(([outcome, target]) => [target, outcome]));
     for (const target of phase.nextPhases) {
@@ -222,6 +331,42 @@ export function codeBehaviourConflicts(board: StoredBoardInput, code: InstalledB
           : `${label}: Factory's code moves cards from it to "${target}"; keep it in nextPhases.`,
       );
     }
+  }
+  return conflicts;
+}
+
+/**
+ * Why a stored phase isn't in the shape its code behaviour depends on: its kind and, on a working
+ * phase, the runner context and skill its code handlers run with and the exit tool they wait for.
+ */
+function phaseShapeConflicts(
+  key: string,
+  phase: BoardPhase<string>,
+  declared: BoardPhaseDefinition<string> | undefined,
+  edited: StoredPhaseInput,
+): string[] {
+  const label = `Phase "${key}"`;
+  if (edited.kind !== phase.kind) return [`${label} must stay ${phase.kind}; its code behaviour depends on it.`];
+  if (phase.kind !== 'working') return [];
+  const conflicts: string[] = [];
+  if (hasHandlers(declared)) {
+    const context = edited.runner?.context ?? DEFAULT_PHASE_CONTEXT;
+    if (context !== phase.runner.context) {
+      conflicts.push(`${label} runs its code handlers in the "${phase.runner.context}" context; keep runner.context.`);
+    }
+    if (edited.runner?.skill !== phase.runner.skill) {
+      conflicts.push(
+        phase.runner.skill
+          ? `${label} code handlers run with skill "${phase.runner.skill}"; keep runner.skill.`
+          : `${label} code handlers choose the skill; leave runner.skill unset.`,
+      );
+    }
+  }
+  if (phase.exitTool && edited.exitTool?.id !== phase.exitTool.id) {
+    conflicts.push(`${label} code behaviour waits for exit tool "${phase.exitTool.id}"; keep exitTool.id.`);
+  } else if (!phase.exitTool && edited.exitTool && hasHandlers(declared)) {
+    // An exit tool gates every move out of the phase, including the ones its code handlers make.
+    conflicts.push(`${label} code handlers move cards on without an exit tool; leave exitTool unset.`);
   }
   return conflicts;
 }
