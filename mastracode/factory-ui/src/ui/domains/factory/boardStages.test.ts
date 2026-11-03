@@ -29,7 +29,6 @@ function workItem(source: WorkItemSource, stages: string[]): WorkItem {
     triageType: null,
     acceptedAt: null,
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdAt: '2026-07-01T00:00:00.000Z',
     updatedAt: '2026-07-01T00:00:00.000Z',

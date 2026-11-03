@@ -110,6 +110,27 @@ describe('Factory route contracts', () => {
     expect(createWorkItemBodySchema.safeParse({ title: 'Card', stages: ['intake', 'intake'] }).success).toBe(false);
   });
 
+  it('accepts legacy card envelopes while validating normalized facts when present', () => {
+    const legacy = {
+      id: projectId,
+      title: 'Existing card',
+      externalSource: null,
+      stages: ['planning'],
+      metadata: { labels: ['docs'] },
+      revision: 7,
+      acceptedAt: '2026-10-01T01:00:00.000Z',
+      autonomyArmedAt: null,
+      plansPreapprovedAt: null,
+    };
+    const list = FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema;
+    const single = FACTORY_ROUTE_CONTRACTS.workItemCreate.responseSchema;
+    const listed = { workItems: [legacy], runningSessionIds: [], parkedSessionIds: [] };
+    expect(list.parse(listed)).toEqual(listed);
+    expect(single.parse({ workItem: legacy })).toEqual({ workItem: legacy });
+    expect(single.safeParse({ workItem: { ...legacy, workItem: { provider: 'github' } } }).success).toBe(false);
+    expect(single.safeParse({ workItem: { ...legacy, workItem: null } }).success).toBe(false);
+  });
+
   it('accepts custom transition identifiers and rejects malformed identifiers', () => {
     const request = {
       board: 'Release-board_1',
@@ -210,7 +231,21 @@ describe('Factory route contracts', () => {
     ).toBe(true);
     expect(
       FACTORY_ROUTE_CONTRACTS.workItemList.responseSchema.safeParse({
-        workItems: [{ id: projectId }],
+        workItems: [
+          {
+            id: projectId,
+            workItem: {
+              provider: 'github',
+              kind: 'issue',
+              key: 'acme/app#42',
+              url: 'https://github.com/acme/app/issues/42',
+              title: 'Fix login',
+              state: 'open',
+              labels: ['bug'],
+              author: 'reporter',
+            },
+          },
+        ],
         runningSessionIds: ['session-1'],
         parkedSessionIds: ['session-2'],
       }).success,

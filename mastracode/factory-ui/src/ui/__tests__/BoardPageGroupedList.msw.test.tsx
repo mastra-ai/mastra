@@ -34,7 +34,6 @@ function stubManualCreate(title: string) {
     triageType: null,
     acceptedAt: null,
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdAt: '2026-08-05T00:00:00.000Z',
     updatedAt: '2026-08-05T00:00:00.000Z',
@@ -65,6 +64,14 @@ describe('Default grouped issue list', () => {
     const created = await within(intake).findByText('My first card');
     await waitFor(() => expect(created).toBeVisible());
     expect(within(intake).queryByRole('button', { name: 'Create card' })).not.toBeInTheDocument();
+  });
+
+  it('names a card with no upstream key by its source', async () => {
+    renderBoard();
+    const triage = await screen.findByTestId('board-column-triage');
+    const row = await within(triage).findByRole('article', { name: 'Moved recently' });
+
+    expect(within(row).getByText('Manual')).toBeVisible();
   });
 
   it('collapses groups independently and expands them with the keyboard', async () => {
