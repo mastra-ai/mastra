@@ -1122,6 +1122,14 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
       expect(sourceDependencies.get('unicorn-magic')).toBe(sourcePinnedUnicornMagicVersion);
       expect(outputDependencies.get('unicorn-magic')).toBe(sourcePinnedUnicornMagicVersion);
       expect([...outputDependencies.keys()]).toEqual(expect.arrayContaining(Object.keys(packageJson.dependencies)));
+
+      // The app is not the workspace root, so the build must not edit its importer for the packed
+      // `@inner/subpath-only`. Any edit makes pnpm 11 recheck the lockfile against the registry (#29279).
+      const appImporter = 'apps/custom';
+      expect(getPnpmImporterDependencies(outputLockfile, appImporter).get('@inner/subpath-only')).toBe(
+        getPnpmImporterDependencies(sourceLockfile, appImporter).get('@inner/subpath-only'),
+      );
+      expect(getPnpmImporterDependencies(sourceLockfile, appImporter).get('@inner/subpath-only')).toMatch(/^link:/);
     });
 
     it('should gate boot-time workflow recovery on recovery.workflows', async () => {
