@@ -25,7 +25,9 @@ export async function evaluateLoopCondition(
     workflowId: args.workflowId,
     condition: step.condition,
     runId: args.runId,
-    stepResults: args.stepResults,
+    // The body's latest result only arrives as stepResult, so expose it to the condition's
+    // getStepResult(body) the way the default engine does (handlers/control-flow.ts).
+    stepResults: { ...args.stepResults, [getEntryId(step.step)]: stepResult },
     state: resolveCurrentState({ stepResult, stepResults: args.stepResults, state: args.state }),
     requestContext: new RequestContext(Object.entries(args.requestContext ?? {}) as any),
     actor: args.actor,

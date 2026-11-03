@@ -41,7 +41,7 @@ export function ToolList({ providerId, toolkit, selectedIds, onToggle }: ToolLis
         <SearchInput
           label="Search tools"
           size="sm"
-          placeholder="Search tools..."
+          placeholder="Search tools"
           value={query}
           onValueChange={value => {
             setQuery(value);

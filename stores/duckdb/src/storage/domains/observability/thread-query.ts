@@ -6,6 +6,7 @@ import type {
 } from '@mastra/core/storage';
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
+import { timeToFirstTokenSupported } from '../../features';
 import { payloadColumnSql } from './helpers';
 import { missingPreviewSql, readPreview } from './preview-compat';
 import { compileThreadQueryPredicate } from './trace-query';
@@ -127,14 +128,14 @@ export function compileDuckDBThreadRowsQuery(
   }
   values.push(plan.limit + 1);
   const filtered = predicateFields(plan.where);
-  const firstContext = [...contextFields, 'timeToFirstChunkMs'].filter(
+  const firstContext = [...contextFields, 'timeToFirstChunkMs', 'timeToFirstTokenMs'].filter(
     field => field === 'resourceId' || filtered.has(field),
   );
   const contextExpression = (field: string) =>
     field === 'executionSource'
       ? 'source AS executionSource'
-      : field === 'timeToFirstChunkMs'
-        ? "CASE WHEN spanType = 'agent_run' THEN timeToFirstChunkMs END AS timeToFirstChunkMs"
+      : field === 'timeToFirstChunkMs' || field === 'timeToFirstTokenMs'
+        ? `CASE WHEN spanType = 'agent_run' THEN ${field} END AS ${field}`
         : field;
   const lastFields = [
     'traceId',
@@ -240,6 +241,7 @@ export async function queryThreadRows(
     `SELECT organizationId, traceId, cursorId,
     ${contextFields.map(field => (field === 'executionSource' ? 'source AS executionSource' : field)).join(', ')},
     CASE WHEN spanType = 'agent_run' THEN timeToFirstChunkMs END AS timeToFirstChunkMs,
+    CASE WHEN spanType = 'agent_run' THEN timeToFirstTokenMs END AS timeToFirstTokenMs,
     CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
     ${(['input', 'output', 'error'] as const).map(field => `${field}Preview, CASE WHEN ${missingPreviewSql(`${field}Preview`)} THEN CAST(${field === 'error' ? field : payloadColumnSql(field)} AS VARCHAR) END AS ${field}`).join(', ')}
     FROM span_events WHERE ${keys.join(' OR ')}`,
@@ -263,6 +265,7 @@ export async function queryThreadRows(
         endedAt: row.endedAt.toISOString(),
         traceCount: Number(row.traceCount),
         timeToFirstChunkMs: first.timeToFirstChunkMs,
+        ...(timeToFirstTokenSupported && { timeToFirstTokenMs: first.timeToFirstTokenMs }),
         inputPreview: readPreview(first.inputPreview, first.input, true),
         outputPreview: readPreview(last.outputPreview, last.output, true),
         errorPreview: readPreview(last.errorPreview, last.error, true),

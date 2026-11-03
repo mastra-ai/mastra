@@ -623,7 +623,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "promptCacheOptions",
-        "type": "{ mode?: \"explicit\" | \"implicit\" | undefined; ttl?: \"30m\" | undefined; } | undefined",
+        "type": "{ mode?: \"explicit\" | \"implicit\" | undefined; ttl?: \"30m\" | \"12h\" | undefined; prewarm?: boolean | undefined; } | undefined",
         "description": "",
         "isOptional": true
     },

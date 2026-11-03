@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -703,6 +704,24 @@ describe('LocalFilesystem', () => {
       const absolutePath = path.join(tempDir, 'nonexistent', 'file.txt');
       const exists = await localFs.exists(absolutePath);
       expect(exists).toBe(false);
+    });
+
+    it('should allow missing paths under a basePath whose canonical spelling differs (#28957)', async () => {
+      const basePath = path.join(tempDir, 'ABCDEF~1');
+      await fs.mkdir(basePath);
+      // Windows realpath expands 8.3 short names such as ABCDEF~1, while lstat accepts them as written.
+      const native = realpathSync.native;
+      const spy = vi
+        .spyOn(realpathSync, 'native')
+        .mockImplementation(((p: string) => native(p).replace('ABCDEF~1', 'abcdefghij')) as typeof native);
+
+      try {
+        await new LocalFilesystem({ basePath }).writeFile('missing/nested/file.txt', 'content');
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(await fs.readFile(path.join(basePath, 'missing/nested/file.txt'), 'utf-8')).toBe('content');
     });
 
     it('should block absolute paths outside base directory', async () => {

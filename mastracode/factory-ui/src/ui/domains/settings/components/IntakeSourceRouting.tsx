@@ -130,7 +130,7 @@ function SourceRoute({
   );
 }
 
-function BoardPicker({
+export function BoardPicker({
   name,
   factoryProjectId,
   board,

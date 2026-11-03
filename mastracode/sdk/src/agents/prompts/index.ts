@@ -25,8 +25,6 @@ import { buildToolGuidance } from './tool-guidance.js';
 export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   modeId: string;
   state?: any;
-  /** The subconscious knowledge tools are registered on the agent. */
-  hasSubconscious?: boolean;
   hostInstructions?: string;
   /** Request whose credentials decide the model's transport, and so its web search tool. */
   requestContext?: RequestContextReader;
@@ -114,7 +112,6 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   const toolGuidance = buildToolGuidance(ctx.modeId, {
     hasWebSearch,
     hasWebExtract,
-    hasSubconscious: ctx.hasSubconscious === true,
     hasSubagents: ctx.hasSubagents,
     deniedTools,
     plansDir: getLocalPlansRelativeDir({ factoryProjectId }),

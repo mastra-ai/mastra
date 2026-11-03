@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   clearRemovable,
@@ -236,14 +236,23 @@ export function FilterBarProvider({
 
   const getField = useCallback((fieldId: string) => fields.find(f => f.id === fieldId), [fields]);
   const getOperator = useCallback((operatorId: string) => operators.find(o => o.id === operatorId), [operators]);
-  const getFieldOperators = useCallback(
-    (field: FilterBarField) => {
-      if (!field.operators) return operators;
-      const allowed = new Set(field.operators);
-      return operators.filter(o => allowed.has(o.id));
-    },
-    [operators],
-  );
+  // Cached per field so a chip's operator and its option list stay the same objects across renders.
+  const getFieldOperators = useMemo(() => {
+    const cache = new WeakMap<FilterBarField, FilterBarOperator[]>();
+    return (field: FilterBarField) => {
+      const cached = cache.get(field);
+      if (cached) return cached;
+      const allowed = field.operators ? new Set(field.operators) : undefined;
+      const result = operators
+        .filter(o => !allowed || allowed.has(o.id))
+        .map((o): FilterBarOperator => {
+          const label = field.operatorLabels?.[o.id];
+          return label ? { ...o, label } : o;
+        });
+      cache.set(field, result);
+      return result;
+    };
+  }, [operators]);
 
   const announce = useCallback((message: string) => setAnnouncement(message), []);
 
@@ -271,13 +280,22 @@ export function FilterBarProvider({
   // Until the consumer reflects the commit in `value`, the committed item is ours to show;
   // nodes on their way out keep their place in the previously rendered tree.
   const renderedTreeRef = useRef<FilterBarNode[]>(expression.nodes);
+  // Once `value` holds the committed item it's the consumer's: if they later drop it (e.g. a
+  // saved view replaces the filters) it must go, not come back as our pending commit.
+  const reflectedCommitIdRef = useRef<string | undefined>(undefined);
+  // Recorded once a render showing the reflected item commits, so a discarded render can't mark it.
+  useLayoutEffect(() => {
+    if (lastCommit && idsOf(expression.nodes).has(lastCommit.item.id)) {
+      reflectedCommitIdRef.current = lastCommit.item.id;
+    }
+  }, [lastCommit, expression]);
   const { rendered, items, leaving, rootGroupOf } = useMemo(() => {
     const present = idsOf(expression.nodes);
     let rendered: FilterBarExpression =
       leavingIds.size === 0
         ? expression
         : { ...expression, nodes: mergeNodes(renderedTreeRef.current, expression.nodes, leavingIds) };
-    if (lastCommit && !present.has(lastCommit.item.id)) {
+    if (lastCommit && !present.has(lastCommit.item.id) && reflectedCommitIdRef.current !== lastCommit.item.id) {
       rendered = insertItem(rendered, lastCommit.groupId, lastCommit.item);
     }
     renderedTreeRef.current = rendered.nodes;
@@ -347,12 +365,14 @@ export function FilterBarProvider({
         const condition = mergeCondition(existing, { operatorId, value }, field ? getFieldOperators(field) : []);
         const item = { ...existing, ...condition };
         emit(updateTreeItem(exprRef.current, existing.id, condition));
+        reflectedCommitIdRef.current = undefined;
         setLastCommit({ item, from, glint: true });
         announce('Filter updated');
         return;
       }
       const item = { id, fieldId, operatorId, value };
       emit(insertItem(exprRef.current, groupId, item));
+      reflectedCommitIdRef.current = undefined;
       setLastCommit({ item, from, glint: true, groupId });
       announce('Filter added');
     },

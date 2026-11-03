@@ -114,7 +114,7 @@ export const WithSources: Story = {
     docs: {
       description: {
         story:
-          'Pass `Meter.Source` children to say where the usage came from. Hover or focus the bar: it splits into one color per source, and a tooltip keys each source, its amount, and what is left. The sources should add up to `value`. Colors follow the order of the sources, from the same palette as `MetricsShareList`.',
+          'Pass `Meter.Source` children to say where the usage came from. Hover or focus the bar: it splits into one color per source, and a tooltip keys each source, its amount, and what is left. The sources should add up to `value`. Colors follow the order of the sources, from the same palette as `ShareBar`.',
       },
     },
   },

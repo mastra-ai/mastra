@@ -1,13 +1,15 @@
 // @vitest-environment jsdom
 import { SpanType } from '@mastra/core/observability';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { SpanRecord } from '../../../types';
 import { SpanDataPanelView } from '../../span-data-panel-view';
 import { SpanDetailsView } from '../../span-details-view';
 import { SpanInputRenderer } from '../span-input-renderers';
 import { SpanOutputRenderer } from '../span-output-renderers';
+import { hasSpanInputPreview, hasSpanOutputPreview } from '../span-payload-registry';
 import { SpanProcessorAttributes } from '../span-processor-attributes';
 import { SpanProcessorMutations } from '../span-processor-mutations';
 import {
@@ -17,12 +19,17 @@ import {
   processorClearedMessagesSpan,
   processorInputSpan,
   processorInputStepSpan,
+  processorLlmRequestSpan,
+  processorWithExtrasSpan,
   processorOutputStreamSpan,
   processorRequestErrorSpan,
   processorSystemMutationSpan,
   processorToolResultSpan,
   processorTripwireSpan,
+  traceWithoutToolCalls,
 } from './fixtures/span-payloads';
+import { server } from '@/test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // jsdom does not provide PointerEvent, which Base UI switches dispatch.
 beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
@@ -45,10 +52,8 @@ const sectionTitles = () =>
     found => found.firstElementChild?.firstElementChild?.textContent,
   );
 
-const LAYOUTS = [
-  ['data panel', (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
-  ['details', (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
-] as const;
+// The data panel splits a span into tabs and has its own tests below; this layout still reads top to bottom.
+const LAYOUTS = [['details', (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />]] as const;
 
 describe('SpanPayloadProcessor', () => {
   it('reads the phase from the span rather than the payload shape', () => {
@@ -95,6 +100,17 @@ describe('SpanPayloadProcessor', () => {
     expect(valueOf('Chunks')).toBe('126');
   });
 
+  it('shows the prompt an llmRequest processor got as messages, not as collapsed JSON', () => {
+    render(<SpanInputRenderer span={processorLlmRequestSpan} />);
+    expect(document.querySelectorAll('[data-slot="span-payload-messages"]').length).toBe(1);
+    expect(screen.getByText('You are Michel, a practical home chef.')).toBeTruthy();
+    expect(screen.getByText('weather in paris')).toBeTruthy();
+    expect(document.querySelectorAll('[data-role="assistant"]').length).toBe(1);
+    expect(screen.getByText('Tool result')).toBeTruthy();
+    expect(screen.queryByText(/^Prompt/)).toBeNull();
+    expect(screen.queryByText('Other fields')).toBeNull();
+  });
+
   it('shows the error a request-error processor saw', () => {
     render(<SpanInputRenderer span={processorRequestErrorSpan} />);
     expect(screen.getByText('Error')).toBeTruthy();
@@ -113,16 +129,50 @@ describe('SpanPayloadProcessor', () => {
     expect(slot('span-payload-json')?.textContent).toContain('{}');
   });
 
-  it('keeps a known field with an unexpected shape under Other fields', () => {
+  it('shows a payload it places nothing from as a plain JSON block, not under Other fields', () => {
     render(<SpanInputRenderer span={malformedProcessorSpan} />);
+    expect(screen.queryByText('Other fields')).toBeNull();
+    expect(slot('span-payload-json')?.textContent).toContain('redacted-message-content');
+  });
+
+  it('shows an llmRequest output that only says it did not short-circuit as a plain JSON block', () => {
+    render(<SpanOutputRenderer span={processorLlmRequestSpan} />);
+    expect(screen.queryByText('Other fields')).toBeNull();
+    expect(slot('span-payload-json')?.textContent).toContain('shortCircuited');
+  });
+
+  it('keeps unplaced keys under Other fields when they sit next to placed ones', () => {
+    render(<SpanInputRenderer span={processorWithExtrasSpan} />);
+    expect(screen.getByText('Be brief.')).toBeTruthy();
     fireEvent.click(screen.getByText('Other fields'));
-    expect(slot('span-payload-processor')?.textContent).toContain('redacted-message-content');
+    expect(slot('span-payload-processor')?.textContent).toContain('customFlag');
   });
 
   it('falls back to JSON for a span stored before the phase was recorded', () => {
     render(<SpanInputRenderer span={legacyProcessorSpan} />);
     expect(slot('span-payload-processor')).toBeNull();
     expect(slot('span-payload-json')).not.toBeNull();
+  });
+});
+
+describe('processor preview toggle', () => {
+  it('offers no preview when the preview would only repeat the raw JSON', () => {
+    expect(hasSpanOutputPreview(processorLlmRequestSpan)).toBe(false);
+    expect(hasSpanInputPreview(malformedProcessorSpan)).toBe(false);
+  });
+
+  it('offers a preview when it formats part of the payload', () => {
+    expect(hasSpanInputPreview(processorLlmRequestSpan)).toBe(true);
+    expect(hasSpanInputPreview(processorWithExtrasSpan)).toBe(true);
+  });
+
+  it('offers no preview when every formatted key is hidden by the caller', () => {
+    const span = makeSpan({
+      ...processorLlmRequestSpan,
+      input: { stepNumber: 1, retryCount: 0 },
+    });
+    expect(hasSpanInputPreview(span)).toBe(true);
+    expect(hasSpanInputPreview(span, ['stepNumber', 'retryCount'])).toBe(false);
   });
 });
 
@@ -244,69 +294,87 @@ describe('SpanProcessorAttributes', () => {
   });
 });
 
+const openTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name: new RegExp(name, 'i') }));
+const promptDiff = () => screen.getByRole('region', { name: 'Prompt' });
+
 describe('processor spans in the data panel', () => {
-  it('leads with what the processor did and shows the conversation it passed along', () => {
-    render(<SpanDataPanelView traceId="t" spanId="s" span={processorInputSpan} />);
-    expect(slot('span-outcome')).not.toBeNull();
-    expect(slot('span-payload-processor')).not.toBeNull();
-    expect(screen.queryByRole('button', { name: /Input & output|^Input$/ })).toBeNull();
-  });
-
-  it('shows the messages a processor added in its summary, with their actions on the headline row', () => {
-    render(<SpanDataPanelView traceId="t" spanId="s" span={processorSystemMutationSpan} />);
-    const changes = slot('span-outcome')?.querySelector('[data-slot="span-payload-section"]');
-    expect(changes?.firstElementChild?.querySelector('h3')?.textContent).toMatch(
-      /added 1 message to the system prompt$/,
+  beforeEach(() => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceWithoutToolCalls)),
     );
-    expect(changes?.querySelector('[data-slot="span-payload-view-toggle"]')).not.toBeNull();
-    expect(changes?.textContent).toContain('Answer briefly.');
-    expect(screen.queryByText('Changes')).toBeNull();
-    expect(sectionTitles()[1]).toBe('Input');
   });
 
-  it('reads as changes, then input, then output in the details layout too', () => {
-    render(<SpanDetailsView traceId="t" spanId="s" span={processorSystemMutationSpan} />);
-    expect(sectionTitles().slice(0, 2)).toEqual(['Changes', 'Input']);
+  const renderPanel = (span: SpanRecord) =>
+    renderWithProviders(<SpanDataPanelView traceId="t" spanId="s" span={span} />);
+
+  it('previews the conversation the processor got in the Input tab', () => {
+    renderPanel(processorInputSpan);
+    openTab('input');
+    expect(slot('span-payload-processor')).not.toBeNull();
   });
 
-  it('reads a processor as what it changed in the system prompt, then its input, then its output', () => {
-    const span = makeSpan({
-      ...processorInputSpan,
-      attributes: { processorPhase: 'input' },
-      input: {
-        messages: [{ role: 'user', content: 'Plan dinner' }],
-        systemMessages: [
-          { role: 'system', content: 'You are Michel.' },
-          { role: 'system', content: 'Old task list.' },
-        ],
-      },
-      output: {
-        systemMessages: [
-          { role: 'system', content: 'You are Michel.' },
-          { role: 'system', content: 'Task list state may appear.' },
-        ],
-      },
-    });
-    render(<SpanDataPanelView traceId="t" spanId="s" span={span} />);
-
-    expect(sectionTitles().slice(1, 3)).toEqual(['Input', 'Output']);
-
-    const changes = slot('span-outcome');
-    if (!changes) throw new Error('Missing summary');
-    expect(steps()).toEqual(['Removed 1 message from the system prompt']);
-    expect(changes.textContent).toContain('Old task list.');
-    expect(changes.textContent).toContain('Task list state may appear.');
-    expect(changes.textContent).not.toContain('You are Michel.');
+  it('shows what the processor added to the system prompt as a diff in the Details tab', () => {
+    renderPanel(processorSystemMutationSpan);
+    const added = promptDiff().querySelectorAll('[data-sign="added"]');
+    expect(added.length).toBeGreaterThan(0);
+    expect(promptDiff().textContent).toContain('Answer briefly.');
   });
 
-  it('still opens a processor whose mutation log holds an entry it cannot read', () => {
-    const span = makeSpan({
-      ...processorClearedMessagesSpan,
-      attributes: { processorPhase: 'input', messageListMutations: [null, { type: 'clear', count: 2 }] },
-    });
-    render(<SpanDataPanelView traceId="t" spanId="s" span={span} />);
-    expect(slot('span-outcome')?.textContent).toContain('removed 2 messages from the conversation');
-    expect(slot('span-processor-mutations')?.querySelector('[data-slot="span-payload-json"]')).not.toBeNull();
+  it('shows what it removed from the system prompt, but not the messages it kept', () => {
+    renderPanel(
+      makeSpan({
+        ...processorInputSpan,
+        attributes: { processorPhase: 'input' },
+        input: {
+          messages: [{ role: 'user', content: 'Plan dinner' }],
+          systemMessages: [
+            { role: 'system', content: 'You are Michel.' },
+            { role: 'system', content: 'Old task list.' },
+          ],
+        },
+        output: {
+          systemMessages: [
+            { role: 'system', content: 'You are Michel.' },
+            { role: 'system', content: 'Task list state may appear.' },
+          ],
+        },
+      }),
+    );
+    const diff = promptDiff();
+    expect(diff.querySelector('[data-sign="removed"]')?.textContent).toContain('Old task list.');
+    expect(diff.querySelector('[data-sign="added"]')?.textContent).toContain('Task list state may appear.');
+  });
+
+  it('leaves the Prompt section out when the processor changed nothing', () => {
+    renderPanel(legacyProcessorSpan);
+    expect(screen.queryByRole('region', { name: 'Prompt' })).toBeNull();
+  });
+
+  it('keeps the recorded attributes as folded JSON in the Details tab', () => {
+    renderPanel(processorSystemMutationSpan);
+    expect(screen.getByRole('region', { name: 'Attributes' })).toBeTruthy();
+  });
+
+  it('shows a failed processor with its error once, in the Output tab', () => {
+    renderPanel(processorRequestErrorSpan);
+    openTab('output');
+    const output = screen.getByRole('tabpanel', { name: 'Output' });
+    expect(output.textContent?.match(/Retry budget exhausted/g)).toHaveLength(1);
+  });
+
+  it('shows why a tripwire stopped the run, once, in the Output tab', () => {
+    renderPanel(processorTripwireSpan);
+    openTab('output');
+    const output = screen.getByRole('tabpanel', { name: 'Output' });
+    expect(within(output).getByRole('heading', { name: 'prompt-guard stopped the run' })).toBeTruthy();
+    expect(output.textContent?.match(/Prompt injection detected/g)).toHaveLength(1);
+    expect(within(output).getByText('Not retried.')).toBeTruthy();
+  });
+
+  it('keeps a span stored before the phase was recorded on JSON only', () => {
+    renderPanel(legacyProcessorSpan);
+    openTab('input');
+    expect(slot('span-payload-processor')).toBeNull();
   });
 });
 

@@ -2,7 +2,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
-import { incidentioClaimKey } from './claim.js';
 import { resolveIncidentioRules } from './default-rules.js';
 import type { IncidentioRuleOverrides } from './default-rules.js';
 import { IncidentioRules } from './rules.js';
@@ -76,7 +75,6 @@ describe('IncidentioRules', () => {
           type: 'upsertLinkedWorkItem',
           source: 'incidentio-follow-up',
           sourceKey: issue.id,
-          claimKey: incidentioClaimKey(issue.id),
           title: issue.title,
           url: issue.url,
           metadata: {
@@ -97,7 +95,7 @@ describe('IncidentioRules', () => {
     ]);
   });
 
-  it('does not mint a second card while another Factory holds a live card for the follow-up', async () => {
+  it('files the same follow-up in a second project while the first still holds a live card', async () => {
     const { project, service, workItems } = await setup();
     await workItems.upsert({
       orgId: 'org-1',
@@ -119,10 +117,11 @@ describe('IncidentioRules', () => {
 
     await expect(
       service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
-    ).resolves.toEqual({ status: 'missing', ingested: 1 });
+    ).resolves.toEqual({ status: 'committed', ingested: 1 });
 
-    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
-    expect(await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toEqual([]);
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      { decision: { type: 'upsertLinkedWorkItem', sourceKey: issue.id } },
+    ]);
   });
 
   it('ingests a follow-up again once the other Factory finished its card', async () => {
@@ -154,37 +153,11 @@ describe('IncidentioRules', () => {
         decision: {
           type: 'upsertLinkedWorkItem',
           sourceKey: issue.id,
-          claimKey: incidentioClaimKey(issue.id),
         },
       },
     ]);
-  });
-
-  it('finds the held card by claim key when the stored source key drifted', async () => {
-    const { project, service, workItems } = await setup();
-    await workItems.upsert({
-      orgId: 'org-1',
-      userId: 'user-1',
-      factoryProjectId: 'other-factory',
-      input: {
-        externalSource: {
-          integrationId: 'incidentio',
-          type: 'issue',
-          externalId: 'incidentio:follow-up:old-ref',
-          url: issue.url,
-        },
-        claimKey: incidentioClaimKey(issue.id),
-        title: 'Old title',
-        stages: ['intake'],
-        sessions: {},
-        metadata: {},
-      },
-    });
-
-    await expect(
-      service.ingest({ orgId: 'org-1', userId: 'user-1', factoryProjectId: project.id, issues: [issue] }),
-    ).resolves.toEqual({ status: 'missing', ingested: 1 });
-    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    const [entry] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(entry?.decision).not.toHaveProperty('claimKey');
   });
 
   it.each(['completed', 'canceled'])(

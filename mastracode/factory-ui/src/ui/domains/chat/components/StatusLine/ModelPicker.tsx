@@ -127,7 +127,7 @@ function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }
       </PopoverTrigger>
       <PopoverContent align="start" className="w-80 p-0">
         <Command loop>
-          <CommandInput placeholder="Search models…" />
+          <CommandInput placeholder="Search models" />
           <CommandList className="max-h-80">
             <CommandEmpty>No matching model.</CommandEmpty>
             {groupByProvider(modelsQuery.data ?? []).map(([provider, models]) => (
