@@ -16,6 +16,7 @@ import { resolveRunFence, runOutsideRunFenceScope, RUN_FENCE_CONFLICT_ERROR_ID }
 import type { RunFence } from '../../storage/run-fencing';
 import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows/evented';
+import { EventedExecutionEngine } from '../../workflows/evented/execution-engine';
 import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { Agent } from '../agent';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
@@ -1451,4 +1452,89 @@ it.each(['exhausted', 'healthy'] as const)(
       await rm(directory, { recursive: true, force: true });
     }
   },
+);
+
+it.each(['released', 'taken over'] as const)(
+  'stops a shared caller waiting on a run whose claim was %s, without writing to the run',
+  async loss => {
+    const directory = await mkdtemp(join(tmpdir(), 'mastra-caller-loss-'));
+    const socket = join(directory, 'pubsub.sock');
+    const storage = new InMemoryStore();
+    const workflows = (await storage.getStore('workflows'))!;
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const { model } = deliveryModel('worker answer', undefined, async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    const memory = new MockMemory({ storage });
+    const build = (pubsub: UnixSocketPubSub) =>
+      createEventedAgent({
+        agent: new Agent({ id: 'agent', name: 'agent', instructions: 'Answer.', model, memory }),
+        pubsub,
+      });
+    const apiPubsub = new UnixSocketPubSub(socket);
+    const workerPubsub = new UnixSocketPubSub(socket);
+    const apiAgent = build(apiPubsub);
+    const api = new Mastra({ agents: { agent: apiAgent }, storage, pubsub: apiPubsub, workers: false, logger: false });
+    const worker = new Mastra({ agents: { agent: build(workerPubsub) }, storage, pubsub: workerPubsub, logger: false });
+    const threadKey = 'resource\u0000thread';
+    const execute = vi.spyOn(EventedExecutionEngine.prototype, 'execute');
+    const unsubscribe = vi.spyOn(apiPubsub, 'unsubscribe');
+    let successor: ExecutionFence | undefined;
+    try {
+      await worker.startWorkers();
+      const { runId } = await apiAgent.stream('Answer the question.', {
+        runId: `caller-loss-${loss.replace(' ', '-')}`,
+        memory: { resource: 'resource', thread: 'thread' },
+      });
+      await entered.promise;
+      const started = execute.mock.results[0]!.value as Promise<unknown>;
+      const outcome = started.then(
+        () => ({ settled: 'resolved' as const }),
+        (error: { id?: string }) => ({ settled: 'rejected' as const, id: error?.id }),
+      );
+      const claimed = (await workflows.getRunOwnership({ runId }))!;
+
+      if (loss === 'released') {
+        await workflows.releaseRunOwnership({ runId, generation: claimed.generation, ownerId: claimed.ownerId });
+      } else {
+        successor = await ExecutionFence.claim({
+          workflowsStore: workflows,
+          leaseProvider: workerPubsub,
+          agentId: 'agent',
+          runId,
+          mode: 'takeover',
+        });
+        successor.stopHeartbeat();
+      }
+      const ownership = await workflows.getRunOwnership({ runId });
+      const loopRow = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+      const threadOwner = await workerPubsub.getLeaseOwner(threadKey);
+      const publish = vi.spyOn(apiPubsub, 'publish');
+
+      expect(await outcome).toEqual({
+        settled: 'rejected',
+        id: loss === 'released' ? EXECUTION_UNVERIFIED_ERROR_ID : EXECUTION_SUPERSEDED_ERROR_ID,
+      });
+      expect(unsubscribe.mock.calls.some(([topic]) => topic === 'workflows-finish')).toBe(true);
+      expect(publish.mock.calls.filter(([topic]) => topic === 'workflows' || topic === 'workflows-finish')).toEqual([]);
+      expect(await workflows.getRunOwnership({ runId })).toEqual(ownership);
+      expect(await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP })).toEqual(loopRow);
+      if (loss === 'taken over') {
+        expect(ownership).toMatchObject({ ownerId: successor!.executionId, generation: successor!.generation });
+        expect(await workerPubsub.getLeaseOwner(threadKey)).toBe(threadOwner);
+      }
+    } finally {
+      execute.mockRestore();
+      release.resolve();
+      successor?.stopHeartbeat();
+      await api.shutdown();
+      await worker.shutdown();
+      await apiPubsub.close();
+      await workerPubsub.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+  40_000,
 );
