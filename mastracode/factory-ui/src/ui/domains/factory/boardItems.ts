@@ -161,6 +161,12 @@ export function sourceCreatedAt(metadata: Record<string, unknown>): string | und
   return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
 }
 
+export function doneAt(item: Pick<WorkItem, 'stages' | 'stageHistory'>): number | undefined {
+  if (!item.stages.includes('done')) return undefined;
+  const entry = item.stageHistory.findLast(candidate => candidate.stage === 'done');
+  return entry && Date.parse(entry.enteredAt);
+}
+
 /** The upstream key a card is known by: `#123` on GitHub, `ENG-42` on Linear. */
 export function workItemKey(item: Pick<WorkItem, 'source' | 'metadata'>): string | undefined {
   const githubNumber = githubNumberForItem(item);

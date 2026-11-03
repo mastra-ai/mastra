@@ -73,6 +73,38 @@ describe('ProjectRoutes', () => {
     expect((await app.request(`/web/factory/projects/${created.project.id}`)).status).toBe(404);
   });
 
+  it("hands a deleted factory's Jira projects back so another factory can take all their issues", async () => {
+    const seed = await createFactoryStorageForTests();
+    const create = (name: string) => seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name } });
+    const platform = await create('Platform');
+    const payments = await create('Payments');
+    const growth = await create('Growth');
+    const bind = (factoryProjectId: string, labels: string[] | null) =>
+      seed.intake.setSharedBinding({
+        orgId: 'org-1',
+        integrationId: 'jira',
+        sourceId: '10000',
+        factoryProjectId,
+        board: 'work',
+        labels,
+      });
+    await bind(platform.id, null);
+    await bind(payments.id, ['payments']);
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed, undefined, undefined, undefined, { intake: seed.intake }));
+
+    expect((await app.request(`/web/factory/projects/${platform.id}`, { method: 'DELETE' })).status).toBe(204);
+
+    expect(await bind(growth.id, null)).toEqual({ conflicts: [] });
+    expect(
+      (await seed.intake.listBindings({ orgId: 'org-1' })).map(({ factoryProjectId }) => factoryProjectId).sort(),
+    ).toEqual([payments.id, growth.id].sort());
+  });
+
   it('treats the removed slackWorkItemsEnabled setting from an old client as an unknown field', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });

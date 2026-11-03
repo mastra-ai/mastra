@@ -35,6 +35,11 @@ export type { InlineLinkEntry } from './inline-media';
  */
 export type PostableMessage = string | CardElement | { markdown: string };
 
+/** What `formatError` knows about the failure beyond the error itself. */
+export interface ChannelErrorContext {
+  requestContext?: RequestContext;
+}
+
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
 export interface ChannelAdapterBaseConfig {
   adapter: Adapter<any, any>;
@@ -55,10 +60,12 @@ export interface ChannelAdapterBaseConfig {
   /**
    * Override how errors are rendered in the chat.
    * Return a user-friendly message instead of exposing the raw error.
+   * `context.requestContext` is the failed run's request context, so a host can
+   * link the message back to whatever the run belongs to.
    *
    * @default `"❌ Error: <error.message>"`
    */
-  formatError?: (error: Error) => PostableMessage;
+  formatError?: (error: Error, context: ChannelErrorContext) => PostableMessage;
 
   /**
    * Dialect for the agent's final reply text.
@@ -665,6 +672,17 @@ export interface ChannelConfig {
    * ```
    */
   inlineLinks?: InlineLinkEntry[];
+
+  /**
+   * Total bytes of channel attachments the agent may store under
+   * `channel-attachments/` in its workspace. Binary attachments that need an
+   * authenticated download (e.g. Slack files) are saved there so workspace
+   * tools can open them. When saving a file would go over this limit, the
+   * agent gets the attachment URL instead and nothing is written.
+   *
+   * @default 104857600 (100 MiB)
+   */
+  maxAttachmentStorageBytes?: number;
 
   /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
   state?: StateAdapter;

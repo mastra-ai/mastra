@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { supportsNetworking } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DirectExecWebSocket, DirectExecWebSocketFactory } from './direct-exec.js';
 import { PlatformSandbox } from './sandbox.js';
@@ -4000,5 +4001,122 @@ describe('PlatformSandbox', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(String(fetchMock.mock.calls[1]![0])).toBe('https://proxy.test/v1/railway/projects/proj_123/sandbox/sbx_1');
     });
+  });
+});
+
+describe('PlatformSandbox networking', () => {
+  beforeEach(() => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'e2b');
+    vi.stubEnv('MASTRA_WORKSPACE_PROXY_URL', 'https://proxy.test');
+  });
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
+  // What the proxy's preview-grants route answers.
+  const grant = () =>
+    json({
+      url: 'https://3000-sbx_1.preview.test/__mastra/grant?g=abc',
+      expiresAt: '2026-06-26T00:01:00.000Z',
+      cookie: { name: '__mastra_preview', value: 'signed', domain: '3000-sbx_1.preview.test', path: '/' },
+    });
+
+  function makeSandbox(...responses: Response[]) {
+    const fetchMock = vi.fn().mockResolvedValueOnce(json({ id: 'sbx_1', createdAt: '2026-06-26T00:00:00.000Z' }));
+    for (const response of responses) fetchMock.mockResolvedValueOnce(response);
+    const sandbox = new PlatformSandbox({
+      accessToken: 'sk_test',
+      projectId: 'proj_123',
+      environmentId: 'env_123',
+      fetch: fetchMock,
+    });
+    return { sandbox, fetchMock };
+  }
+
+  it('is the standard networking capability', () => {
+    expect(supportsNetworking(makeSandbox().sandbox)).toBe(true);
+  });
+
+  it("returns the port's shareable address, without the one-time sign-in link", async () => {
+    const { sandbox, fetchMock } = makeSandbox(grant());
+    await sandbox._start();
+
+    await expect(sandbox.networking!.getPortUrl(3000)).resolves.toBe('https://3000-sbx_1.preview.test/');
+    const [url, init] = fetchMock.mock.calls[1]!;
+    expect(String(url)).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/preview-grants');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({ port: 3000 });
+  });
+
+  it('gives the port auth cookie for a browser you control', async () => {
+    const { sandbox, fetchMock } = makeSandbox(grant());
+    await sandbox._start();
+
+    await expect(sandbox.getPortAuthCookie(3000)).resolves.toEqual({
+      name: '__mastra_preview',
+      value: 'signed',
+      domain: '3000-sbx_1.preview.test',
+      path: '/',
+    });
+    expect(String(fetchMock.mock.calls[1]![0])).toBe(
+      'https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/preview-grants',
+    );
+  });
+
+  it('gives no cookie for a port with no URL', async () => {
+    const { sandbox, fetchMock } = makeSandbox();
+    await sandbox._start();
+
+    await expect(sandbox.getPortAuthCookie(49983)).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("is null before the sandbox is running, and doesn't start it", async () => {
+    const { sandbox, fetchMock } = makeSandbox();
+
+    await expect(sandbox.networking!.getPortUrl(3000)).resolves.toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each([0, -1, 65_536, 3000.5, 49983])('is null for port %s, without asking the platform', async port => {
+    const { sandbox, fetchMock } = makeSandbox();
+    await sandbox._start();
+
+    await expect(sandbox.networking!.getPortUrl(port)).resolves.toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("doesn't offer networking on sandboxes whose provider can't serve ports", () => {
+    vi.stubEnv('SANDBOX_PROVIDER', 'railway');
+    const { sandbox } = makeSandbox();
+
+    expect(supportsNetworking(sandbox)).toBe(false);
+    expect(sandbox.networking).toBeUndefined();
+  });
+
+  it.each([
+    ['the sandbox was destroyed', 410],
+    ["the platform doesn't serve previews", 404],
+  ])('is null when %s', async (_name, status) => {
+    const { sandbox } = makeSandbox(json({ error: { message: 'nope', type: 'x' } }, { status }));
+    await sandbox._start();
+
+    await expect(sandbox.networking!.getPortUrl(3000)).resolves.toBeNull();
+  });
+
+  it('forgets a sandbox the platform says was destroyed', async () => {
+    const { sandbox } = makeSandbox(json({ error: { message: 'gone', type: 'sandbox_destroyed' } }, { status: 410 }));
+    await sandbox._start();
+
+    await expect(sandbox.networking!.getPortUrl(3000)).resolves.toBeNull();
+    expect(sandbox.sandboxId).toBeUndefined();
+    expect(sandbox.status).toBe('pending');
+  });
+
+  it('passes on other platform errors', async () => {
+    const { sandbox } = makeSandbox(json({ error: { message: 'boom', type: 'internal' } }, { status: 500 }));
+    await sandbox._start();
+
+    await expect(sandbox.networking!.getPortUrl(3000)).rejects.toThrow();
   });
 });

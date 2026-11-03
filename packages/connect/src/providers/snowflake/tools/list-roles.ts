@@ -72,7 +72,7 @@ async function fetchAllRows(
 
   let allData = initialData.map(row => rowToRecord(row, columns));
 
-  for (let partitionIndex = 1; partitionIndex < partitionInfo.length; partitionIndex = partitionIndex + 1) {
+  for (let partitionIndex = 1; partitionIndex < partitionInfo.length; partitionIndex += 1) {
     // https://docs.snowflake.com/en/developer-guide/sql-api/handling-responses
     const partitionResponse = await platformProxy.get({
       endpoint: `/api/v2/statements/${encodeURIComponent(statementHandle)}`,
@@ -167,7 +167,7 @@ export function listRolesTool(proxy: PlatformProxy) {
 
         while (pollResponse.status === 202 && pollAttempts < maxPollAttempts) {
           await new Promise(resolve => setTimeout(resolve, 1000));
-          pollAttempts = pollAttempts + 1;
+          pollAttempts += 1;
           // https://docs.snowflake.com/en/developer-guide/sql-api/handling-responses
           pollResponse = await platformProxy.get({
             endpoint: `/api/v2/statements/${encodeURIComponent(statementHandle)}`,

@@ -129,6 +129,6 @@ export async function resolveFactoryToolScope({
 export function requirePerson(scope: FactoryToolScope, action: string): void {
   if (scope.interactive) return;
   throw new Error(
-    `Only a person can ${action}. Nobody signed in started this turn (it came from a notification, webhook or rule); ask the person to do it from the board or by messaging this session.`,
+    `Only a person can ${action}. Nobody signed in started this turn (it came from a notification, webhook or rule); ask the person to reply in their channel or message this session, and link the item so they can find it.`,
   );
 }

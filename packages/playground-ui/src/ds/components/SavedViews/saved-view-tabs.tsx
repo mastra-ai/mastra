@@ -1,5 +1,5 @@
 import { CopyIcon, LayersIcon, LayersPlusIcon, PencilIcon, TextCursorInputIcon, Trash2Icon } from 'lucide-react';
-import { Fragment, useState } from 'react';
+import { Fragment, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { SavedViewNameInput } from './saved-view-name-input';
 import type { SavedView } from './saved-view-schema';
@@ -49,6 +49,13 @@ export function SavedViewTabs<TSettings>({
   const { draft } = views;
   const creating = draft !== undefined && draft.viewId === undefined;
   const defaultSelected = views.activeView === undefined && !creating;
+  // A blank name cancels; a failed rename stays open with what was typed so it can be retried.
+  const commitRename = async (viewId: string, name: string) => {
+    if (!name.trim()) return setRenamingViewId(undefined);
+    const renamed = views.rename(viewId, name);
+    // A synchronous controller closes in the same render; only an async one waits.
+    if (typeof renamed === 'boolean' ? renamed : await renamed) setRenamingViewId(undefined);
+  };
 
   return (
     <div role="group" aria-label={ariaLabel} className={cn('flex flex-wrap items-center gap-1.5', className)}>
@@ -62,16 +69,7 @@ export function SavedViewTabs<TSettings>({
       </button>
       {views.views.map(view => {
         if (renamingViewId === view.id) {
-          return (
-            <RenamingViewTab
-              key={view.id}
-              name={view.name}
-              onCommit={name => {
-                setRenamingViewId(undefined);
-                views.rename(view.id, name);
-              }}
-            />
-          );
+          return <RenamingViewTab key={view.id} name={view.name} onCommit={name => void commitRename(view.id, name)} />;
         }
         return (
           <SavedViewTab
@@ -90,9 +88,9 @@ export function SavedViewTabs<TSettings>({
           />
         );
       })}
-      {views.storageError && (
+      {views.error && (
         <Txt role="alert" variant="caption" className="w-full text-destructive-foreground">
-          {views.storageError}
+          {views.error}
         </Txt>
       )}
       {creating ? (
@@ -208,8 +206,11 @@ function SavedViewTab<TSettings>({
   ];
   const [menuOpen, setMenuOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // The trigger asks to open a frame after the click, when the click that selected the tab has
+  // already re-rendered it as selected. Only a click on the selected tab opens the menu.
+  const clickOpensMenuRef = useRef(true);
   const changeMenuOpen = (open: boolean) => {
-    setMenuOpen(selected && open);
+    setMenuOpen(selected && open && clickOpensMenuRef.current);
     if (open) setPreviewOpen(false);
   };
 
@@ -229,6 +230,7 @@ function SavedViewTab<TSettings>({
                         aria-pressed={selected}
                         aria-haspopup={selected ? 'menu' : undefined}
                         onClick={() => {
+                          clickOpensMenuRef.current = selected;
                           if (selected) return;
                           setPreviewOpen(false);
                           onSelect();

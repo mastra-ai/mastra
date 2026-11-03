@@ -7,11 +7,10 @@ export function getModelMethodFromAgentMethod(methodType: AgentMethodType): Mode
     return 'generate';
   } else if (methodType === 'stream' || methodType === 'streamLegacy') {
     return 'stream';
-  } else {
-    throw new MastraError({
-      id: 'INVALID_METHOD_TYPE',
-      domain: ErrorDomain.AGENT,
-      category: ErrorCategory.USER,
-    });
   }
+  throw new MastraError({
+    id: 'INVALID_METHOD_TYPE',
+    domain: ErrorDomain.AGENT,
+    category: ErrorCategory.USER,
+  });
 }

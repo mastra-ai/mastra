@@ -257,6 +257,7 @@ const agentEditorConfigSchema = z.union([
   z.object({
     instructions: z.boolean().optional(),
     tools: z.union([z.boolean(), z.object({ description: z.boolean().optional() })]).optional(),
+    model: z.boolean().optional(),
   }),
 ]);
 
@@ -794,6 +795,7 @@ const agentThreadBodySchema = z.object({
 });
 
 export const subscribeAgentThreadBodySchema = agentThreadBodySchema.extend({
+  withRunStatus: z.boolean().optional().describe('Emit thread-run-status chunks, including retained outcomes'),
   withInitialHistory: z
     .union([z.boolean(), z.object({ perPage: z.number().int().positive().optional() })])
     .optional()

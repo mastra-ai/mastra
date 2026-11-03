@@ -1,6 +1,28 @@
+import { rejectAgentDone } from './pull-request-review.js';
+import { isPullRequestCard } from './semantics.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
+/** Phases a pull request's own card may hold on Work: it is reviewed, never triaged, planned, or built. */
+const PULL_REQUEST_PHASES = new Set(['intake', 'pr-review', 'done', 'canceled']);
+
 export const workTransitionPolicy: BoardTransitionPolicy = context => {
+  if (isPullRequestCard(context.item)) {
+    if (!PULL_REQUEST_PHASES.has(context.toStage)) {
+      return {
+        type: 'reject',
+        code: 'invalid_transition',
+        reason: `A pull request card is reviewed on the Work board; it cannot enter ${context.toStage}. Move it to pr-review, done, or canceled.`,
+      };
+    }
+    return rejectAgentDone(context) ?? { type: 'allow' };
+  }
+  if (context.toStage === 'pr-review') {
+    return {
+      type: 'reject',
+      code: 'invalid_transition',
+      reason: 'PR review holds only pull request cards; this work item goes to Review after Building.',
+    };
+  }
   const { item, requestedTriageType, actor, fromStage, toStage, isHumanTransition, plansAutoApproved, planApproved } =
     context;
   const triageAgent = actor.type === 'agent' && actor.role === 'triage';
@@ -34,7 +56,7 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
       type: 'reject',
       code: 'approval_required',
       reason:
-        'Auto-approve plans is off: a maintainer must approve the plan or move this work item into Building from the Factory UI.',
+        'Auto-approve plans is off, so a person has to approve this plan. Ask them to say so in a chat they are signed in to (Slack, terminal, web); that turn can move the card into Building with factory_transition_work_item.',
     };
   }
   // A Factory review requested changes on this item's pull request. Closing the
@@ -61,7 +83,7 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
       type: 'reject',
       code: 'approval_required',
       reason:
-        'Self-review requested changes too many times and parked this work item for a maintainer. A maintainer must move it on from the Factory UI.',
+        'Self-review requested changes too many times and parked this work item for a person. Ask them to decide in a chat they are signed in to; that turn can move the card on with factory_transition_work_item.',
     };
   }
   // In Review without a change request, the card is waiting on self-review; an agent cannot close it from there.
@@ -87,7 +109,8 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
     return {
       type: 'reject',
       code: 'approval_required',
-      reason: 'A maintainer must move this non-bug work item into Planning or Execute from the Factory UI.',
+      reason:
+        'A person must accept this non-bug work item before it enters Planning or Execute. Ask them to say so in a chat they are signed in to; that turn can move the card with factory_transition_work_item.',
     };
   }
   return {

@@ -69,13 +69,13 @@ const drawerViewportVariants = cva('fixed z-50 flex', {
       side: ['left', 'right'],
       layout: 'floating',
       size: 'lg',
-      className: 'w-[calc(var(--container-2xl)+1.5rem)] sm:w-[calc(var(--container-2xl)+2rem)]',
+      className: 'w-[calc(42rem+1.5rem)] sm:w-[calc(42rem+2rem)]',
     },
     {
       side: ['left', 'right'],
       layout: 'floating',
       size: 'xl',
-      className: 'w-[calc(var(--container-4xl)+1.5rem)] sm:w-[calc(var(--container-4xl)+2rem)]',
+      className: 'w-[calc(56rem+1.5rem)] sm:w-[calc(56rem+2rem)]',
     },
     {
       side: 'bottom',

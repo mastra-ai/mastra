@@ -4,7 +4,7 @@ import { usePlatformConnectionsQuery } from '../../../../../hooks/usePlatformCon
 import { isPlatformConnectUnavailableError } from '../../../factory/services/platformConnect';
 import { ProviderConnectControl } from '../../../settings/components/PlatformProviderConnections';
 import { IncidentIoIcon, JiraIcon } from '../../../../ui/icons';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { OnboardingConnectionSkeleton } from './OnboardingConnectionSkeleton';
 import { WORK_SOURCE_NAME } from '../../hooks/useWorkSourceConnections';
 import { OnboardingConnectionRow } from './OnboardingConnectionRow';
 
@@ -20,8 +20,7 @@ export function OnboardingPlatformConnection({ provider }: { provider: 'jira' | 
   const query = usePlatformConnectionsQuery(provider);
   const name = WORK_SOURCE_NAME[provider];
   const { Icon, purpose } = PLATFORMS[provider];
-  if (query.isPending)
-    return <SkeletonRows label={`Loading ${name} connections`} rows={1} rowClassName="h-22 w-full" />;
+  if (query.isPending) return <OnboardingConnectionSkeleton label={`Loading ${name} connections`} />;
   if (isPlatformConnectUnavailableError(query.error)) return null;
   const active = query.data?.filter(connection => connection.status === 'active') ?? [];
   if (active.length) {

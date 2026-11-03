@@ -1,3 +1,4 @@
+import { DocumentNotFoundError } from 'couchbase';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { CouchbaseVector, DISTANCE_MAPPING } from './index';
 
@@ -81,10 +82,12 @@ const mockScopeSearchFn = vi.hoisted(() =>
 );
 
 const mockCollectionUpsertFn = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const mockCollectionRemoveFn = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const getMockCollection = vi.hoisted(() =>
   vi.fn().mockReturnValue({
     collection_name: test_collectionName,
     upsert: mockCollectionUpsertFn,
+    remove: mockCollectionRemoveFn,
   }),
 );
 const getMockScope = vi.hoisted(() =>
@@ -115,8 +118,10 @@ const mockVectorQueryCreateFn = vi.hoisted(() =>
   }),
 );
 
-vi.mock('couchbase', () => {
+vi.mock('couchbase', async importOriginal => {
+  const actual = await importOriginal<typeof import('couchbase')>();
   return {
+    ...actual,
     connect: mockCouchbaseConnectFn,
     SearchRequest: {
       create: mockSearchRequestCreateFn,
@@ -132,6 +137,7 @@ vi.mock('couchbase', () => {
 
 function clearAllMocks() {
   mockCollectionUpsertFn.mockClear();
+  mockCollectionRemoveFn.mockClear();
   getMockCollection.mockClear();
   getMockScope.mockClear();
   getMockBucket.mockClear();
@@ -490,6 +496,92 @@ describe('Unit Testing CouchbaseVector', () => {
       expect(mockCollectionUpsertFn).toHaveResolvedTimes(3);
       expect(vectorIds).toHaveLength(3);
       expect(vectorIds).toEqual(testVectorIds);
+    });
+
+    it('should delete multiple vectors by ID', async () => {
+      await couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['test_id_1', 'test_id_2'] });
+
+      expect(mockCollectionRemoveFn).toHaveBeenCalledTimes(2);
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_1');
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_2');
+    });
+
+    it('should reject an empty ID list without removing documents', async () => {
+      await expect(couchbase_client.deleteVectors({ indexName: test_indexName, ids: [] })).rejects.toThrow(
+        /empty ids array/i,
+      );
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should ignore missing IDs while deleting existing vectors', async () => {
+      mockCollectionRemoveFn.mockRejectedValueOnce(new DocumentNotFoundError('document not found'));
+      await couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['missing', 'test_id_1'] });
+
+      expect(mockCollectionRemoveFn).toHaveBeenCalledTimes(2);
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('missing');
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_1');
+    });
+
+    it('should reject filter-based deletion without exposing filter values in the error', async () => {
+      const error = await couchbase_client
+        .deleteVectors({ indexName: test_indexName, filter: { label: 'sensitive-user-token' } })
+        .catch(error => error);
+      expect(error.message).toContain('filter-based deletion is not supported');
+      expect(JSON.stringify(error)).not.toContain('sensitive-user-token');
+      expect(String(error)).not.toContain('sensitive-user-token');
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should reject missing deletion criteria without removing documents', async () => {
+      await expect(couchbase_client.deleteVectors({ indexName: test_indexName })).rejects.toThrow(
+        'Provide ids or filter',
+      );
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should reject ids and filter together without removing documents', async () => {
+      await expect(
+        couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['test_id_1'], filter: { label: 'x-axis' } }),
+      ).rejects.toThrow('mutually exclusive');
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should propagate failed KV removals', async () => {
+      mockCollectionRemoveFn.mockRejectedValueOnce(new Error('KV removal failed'));
+      await expect(couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['test_id_1'] })).rejects.toThrow(
+        'KV removal failed',
+      );
+    });
+
+    it('should wait for all removals before reporting a failure', async () => {
+      let finishSecondRemoval!: () => void;
+      mockCollectionRemoveFn.mockImplementation(id => {
+        if (id === 'test_id_1') return Promise.reject(new Error('KV removal failed'));
+        return new Promise(resolve => {
+          finishSecondRemoval = () => resolve({});
+        });
+      });
+
+      let failureReported = false;
+      const deletion = couchbase_client
+        .deleteVectors({ indexName: test_indexName, ids: ['test_id_1', 'test_id_2'] })
+        .catch(error => {
+          failureReported = true;
+          return error;
+        });
+
+      try {
+        await vi.waitFor(() => expect(finishSecondRemoval).toBeDefined());
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(failureReported).toBe(false);
+      } finally {
+        finishSecondRemoval?.();
+      }
+
+      const error = await deletion;
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain('KV removal failed');
+      expect(mockCollectionRemoveFn).toHaveBeenCalledTimes(2);
     });
 
     it('should throw error for invalid vector dimension', async () => {

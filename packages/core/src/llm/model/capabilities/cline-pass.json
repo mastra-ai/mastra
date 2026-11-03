@@ -45,10 +45,15 @@
     "cline-pass/qwen3.8-max"
   ],
   "reasoning": {
-    "cline-pass/kimi-k3": [
+    "cline-pass/mimo-v2.6-pro": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "cline-pass/minimax-m3": [
+      {
+        "type": "toggle"
       }
     ],
     "cline-pass/deepseek-v4-pro": [
@@ -57,16 +62,32 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "cline-pass/mimo-v2.6-pro": [
+    "cline-pass/mimo-v2.5-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "cline-pass/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "cline-pass/qwen3.7-plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "cline-pass/mimo-v2.6-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "cline-pass/deepseek-v4.1-flash": [
+    "cline-pass/glm-5.3": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "cline-pass/glm-5.2": [
@@ -81,7 +102,18 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "cline-pass/mimo-v2.5-pro": [
+    "cline-pass/mimo-v2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "cline-pass/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "cline-pass/qwen3.7-max": [
       {
         "type": "toggle"
       }
@@ -97,42 +129,10 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "cline-pass/qwen3.7-max": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "cline-pass/mimo-v2.6-flash": [
+    "cline-pass/deepseek-v4.1-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "cline-pass/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "cline-pass/minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "cline-pass/mimo-v2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "cline-pass/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "cline-pass/qwen3.7-plus": [
-      {
-        "type": "toggle"
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "cline-pass/qwen3.8-max": [

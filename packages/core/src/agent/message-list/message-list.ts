@@ -1485,13 +1485,14 @@ export class MessageList {
           this.toAIV5UIMessages(this.response.db(), { transformToolPayloads: false }),
           this.messages,
         ).filter(m => m.role === `tool` || m.role === `assistant`),
-      modelContent: (stepNumber?: number): AIV5Type.StepResult<any>['content'] => {
+      modelContent: (stepNumber?: number, stepToolCallIds?: string[]): AIV5Type.StepResult<any>['content'] => {
         if (typeof stepNumber === 'number') {
           // Delegate to StepContentExtractor for step-specific content extraction
           return StepContentExtractor.extractStepContent(
             this.response.aiV5.ui(),
             stepNumber,
             this.response.aiV5.stepContent,
+            stepToolCallIds,
           );
         }
 

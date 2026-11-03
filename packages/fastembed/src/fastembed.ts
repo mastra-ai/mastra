@@ -81,6 +81,9 @@ interface SparseModelInfo {
 type ModelInput = Record<string, ort.Tensor>;
 
 function normalize(v: number[]): number[] {
+  if (v.some(val => !Number.isFinite(val))) {
+    throw new Error('Model produced a non-finite dense embedding value');
+  }
   const norm = Math.sqrt(v.reduce((acc, val) => acc + val * val, 0));
   const epsilon = 1e-12;
   return v.map(val => val / Math.max(norm, epsilon));
@@ -98,7 +101,7 @@ function getEmbeddings(data: number[], dimensions: [number, number, number], mas
       if (masks[batchIndex]![tokenIndex] === 0n) continue;
       tokenCount++;
       for (let dimension = 0; dimension < hiddenSize; dimension++) {
-        embedding[dimension] = embedding[dimension]! + data[start + tokenIndex * hiddenSize + dimension]!;
+        embedding[dimension]! += data[start + tokenIndex * hiddenSize + dimension]!;
       }
     }
     return embedding.map(value => value / Math.max(tokenCount, 1));
@@ -195,10 +198,11 @@ function loadTokenizerFromDir(modelDir: PathLike, maxLength: number): Tokenizer 
   const tokenizer = Tokenizer.fromFile(tokenizerPath);
 
   tokenizer.setTruncation(maxLength);
+  const padToken = tokenizerConfig['pad_token'];
   tokenizer.setPadding({
     maxLength,
     padId: config['pad_token_id'],
-    padToken: tokenizerConfig['pad_token'],
+    padToken: isAddedTokenMap(padToken) ? padToken.content : padToken,
   });
 
   for (const token of Object.values(tokensMap)) {
@@ -229,10 +233,30 @@ function assertValidMaxLength(maxLength: number): void {
   }
 }
 
-// Pooling indexes token-level [batch, sequence, features] output; other ranks would silently yield empty vectors.
-function getOutputDimensions(outputName: string, tensor: ort.Tensor): [number, number, number] {
+function getRequiredOutput(outputs: Record<string, ort.Tensor>, outputName: string): ort.Tensor {
+  const tensor = outputs[outputName];
+  if (!tensor) {
+    throw new Error(
+      `Expected model output "${outputName}" was not found. Available outputs: ${Object.keys(outputs).join(', ') || '(none)'}`,
+    );
+  }
+  return tensor;
+}
+
+// Pooling indexes token-level [batch, sequence, features] output with one row per input text; other ranks would
+// silently yield empty vectors, and other batch sizes would yield the wrong number of vectors or read missing masks.
+function getOutputDimensions(
+  outputName: string,
+  tensor: ort.Tensor,
+  expectedBatchSize: number,
+): [number, number, number] {
   if (tensor.dims.length !== 3) {
     throw new Error(`Expected model output "${outputName}" to have 3 dimensions, received [${tensor.dims.join(', ')}]`);
+  }
+  if (tensor.dims[0] !== expectedBatchSize) {
+    throw new Error(
+      `Expected model output "${outputName}" to have batch size ${expectedBatchSize}, received ${tensor.dims[0]}`,
+    );
   }
   return tensor.dims as [number, number, number];
 }
@@ -406,10 +430,10 @@ export class FlagEmbedding extends Embedding {
 
       const output = await this.session.run(inputs);
 
-      const lastHiddenState = output.last_hidden_state!;
+      const lastHiddenState = getRequiredOutput(output, 'last_hidden_state');
       const embeddings = getEmbeddings(
         lastHiddenState.data as unknown[] as number[],
-        getOutputDimensions('last_hidden_state', lastHiddenState),
+        getOutputDimensions('last_hidden_state', lastHiddenState, batchTexts.length),
         this.model === EmbeddingModel.AllMiniLML6V2 || this.model === EmbeddingModel.MLE5Large ? maskArray : undefined,
       );
 
@@ -595,10 +619,14 @@ export class SparseTextEmbedding extends SparseEmbedding {
       const output = await this.session.run(inputs);
 
       // SPLADE postprocessing: log(1 + ReLU(logits))
-      const outputTensor = output.output!;
+      const outputTensor = getRequiredOutput(output, 'output');
       // @ts-expect-error cpuData exists at runtime on onnxruntime Tensor
       const logits = outputTensor.cpuData as Float32Array;
-      const [currentBatchSize, seqLen, currentVocabSize] = getOutputDimensions('output', outputTensor);
+      const [currentBatchSize, seqLen, currentVocabSize] = getOutputDimensions(
+        'output',
+        outputTensor,
+        batchTexts.length,
+      );
 
       const sparseVectors: SparseVector[] = [];
 
@@ -612,6 +640,9 @@ export class SparseTextEmbedding extends SparseEmbedding {
             for (let vocabIdx = 0; vocabIdx < currentVocabSize; vocabIdx++) {
               const logitIdx = batchIdx * seqLen * currentVocabSize + seqIdx * currentVocabSize + vocabIdx;
               const logitValue = logits[logitIdx]!;
+              if (!Number.isFinite(logitValue)) {
+                throw new Error(`Model produced a non-finite sparse embedding value at index ${logitIdx}`);
+              }
               const reluValue = Math.max(0, logitValue);
               const logValue = Math.log(1 + reluValue);
               valuesArr[vocabIdx] = Math.max(valuesArr[vocabIdx]!, logValue);

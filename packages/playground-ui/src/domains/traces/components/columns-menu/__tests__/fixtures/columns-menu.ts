@@ -16,6 +16,10 @@ export const allCapabilities: GetObservabilityCapabilitiesResponse = {
     deltaPolling: true,
     traceQuery: true,
     traceQueryRootDuration: true,
+    traceQueryTimeToFirstChunk: true,
+    traceQueryTimeToFirstChunkSort: true,
+    traceQueryTimeToFirstToken: true,
+    traceQueryTimeToFirstTokenSort: true,
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     threadQuery: true,
@@ -33,6 +37,26 @@ export const noTraceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
 export const noSpanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
   ...allCapabilities,
   capabilities: { ...allCapabilities.capabilities, spanQuery: false },
+};
+
+/** A store that runs trace queries but does not record when the root streamed its first chunk. */
+export const noTimeToFirstChunkCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...allCapabilities,
+  capabilities: {
+    ...allCapabilities.capabilities,
+    traceQueryTimeToFirstChunk: false,
+    traceQueryTimeToFirstChunkSort: false,
+  },
+};
+
+/** A store that runs trace queries but does not record when the root's model produced its first token. */
+export const noTimeToFirstTokenCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...allCapabilities,
+  capabilities: {
+    ...allCapabilities.capabilities,
+    traceQueryTimeToFirstToken: false,
+    traceQueryTimeToFirstTokenSort: false,
+  },
 };
 
 const observedField = (path: string, occurrences: number): GetTraceQueryFieldsResponse['observedFields'][number] => ({

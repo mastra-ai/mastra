@@ -96,4 +96,13 @@ describe('generateRedirects', () => {
       ]),
     ).toThrow('Duplicate redirect source: /docs/old/llms.txt')
   })
+
+  test('orders wildcard sources after the companions they would swallow', () => {
+    const redirects = generateRedirects([
+      { source: '/docs/frameworks/agents/:path*', destination: '/docs/agents/overview', permanent: true },
+    ])
+    const sources = redirects.map(redirect => redirect.source)
+
+    expect(sources).toEqual(['/docs/frameworks/agents/:path*/llms.txt', '/docs/frameworks/agents/:path*'])
+  })
 })

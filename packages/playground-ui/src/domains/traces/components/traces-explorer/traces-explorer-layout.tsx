@@ -20,6 +20,7 @@ export function TracesExplorerLayout({
   tabs,
   actionRow,
   toolbar,
+  chart,
   children,
   renderError,
 }: TracesExplorerLayoutProps) {
@@ -37,7 +38,7 @@ export function TracesExplorerLayout({
 
   return (
     <PageLayout breadcrumbs={breadcrumbs} actionRow={pinned}>
-      <TracesExplorerBody toolbar={toolbar} renderError={renderError}>
+      <TracesExplorerBody toolbar={toolbar} chart={chart} renderError={renderError}>
         {children}
       </TracesExplorerBody>
     </PageLayout>

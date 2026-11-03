@@ -8,8 +8,8 @@
     "│           └── model_step: \"step: 0\"",
     "│               ├── processor_run: \"llm request processor: provider-history-compat\"",
     "│               ├── processor_run: \"llm request processor: unsupported-file-handler\"",
-    "│               └── model_inference: \"inference: 0\"",
-    "│                   └── model_chunk: \"chunk: 'text'\"",
+    "│               ├── model_inference: \"inference: 0\"",
+    "│               └── model_chunk: \"chunk: 'text'\"",
     "└── workflow_step: \"workflow step: 'mapping_testWorkflow_1'\""
   ],
   "spans": [
@@ -107,7 +107,10 @@
                 "entityId": "workflow-agent",
                 "attributes": {
                   "instructions": "You are an agent in a workflow",
-                  "completionStartTime": "<date>"
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -138,6 +141,7 @@
                       "streaming": true,
                       "parameters": {},
                       "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
                       "finishReason": "stop",
                       "responseId": "1",
                       "responseModel": "mock-model-id",
@@ -196,8 +200,11 @@
                         "entityId": "workflow-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-1>",
                           "completionStartTime": "<date>",
+                          "timeToFirstTokenMs": "<ms>",
                           "usage": {
                             "inputTokens": 10,
                             "outputTokens": 20,
@@ -360,7 +367,7 @@
                               },
                               "finishReason": "stop",
                               "completionStartTime": "<date>",
-                              "responseModel": "mock-model-id"
+                              "timeToFirstTokenMs": "<ms>"
                             },
                             "metadata": {
                               "runId": "<runId-2>",
@@ -375,39 +382,33 @@
                                 "role": "user",
                                 "content": "test query"
                               }
-                            ],
+                            ]
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-10>",
+                            "traceId": "<trace-1>",
+                            "name": "chunk: 'text'",
+                            "type": "model_chunk",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-6>",
+                            "entityType": "agent",
+                            "entityId": "workflow-agent",
+                            "attributes": {
+                              "chunkType": "text",
+                              "sequenceNumber": 0
+                            },
+                            "metadata": {
+                              "runId": "<runId-2>",
+                              "environment": "test"
+                            },
                             "output": {
-                              "text": "Test response from agent",
-                              "toolCalls": []
+                              "text": "Test response from agent"
                             }
-                          },
-                          "children": [
-                            {
-                              "span": {
-                                "id": "<span-10>",
-                                "traceId": "<trace-1>",
-                                "name": "chunk: 'text'",
-                                "type": "model_chunk",
-                                "completed": true,
-                                "isEvent": false,
-                                "isRootSpan": false,
-                                "parentId": "<span-9>",
-                                "entityType": "agent",
-                                "entityId": "workflow-agent",
-                                "attributes": {
-                                  "chunkType": "text",
-                                  "sequenceNumber": 0
-                                },
-                                "metadata": {
-                                  "runId": "<runId-2>",
-                                  "environment": "test"
-                                },
-                                "output": {
-                                  "text": "Test response from agent"
-                                }
-                              }
-                            }
-                          ]
+                          }
                         }
                       ]
                     }

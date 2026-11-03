@@ -1620,6 +1620,10 @@ export class AgentController<TState = {}> {
     return this.config.modes;
   }
 
+  getDefaultMode(): AgentControllerMode {
+    return this.#defaultMode;
+  }
+
   private propagateRuntimeServicesToAgent(agent: Agent, _session?: Session<TState>): Agent {
     if (this.config.memory && !agent.hasOwnMemory()) {
       agent.__setMemory(this.config.memory);
@@ -2224,7 +2228,9 @@ export class AgentController<TState = {}> {
       },
       ...(tracingContext && { tracingContext }),
       ...(tracingOptions && { tracingOptions }),
-      ...(untilIdle !== undefined && { untilIdle }),
+      // Sessions report background work inside the run that started it, and their
+      // completion notices only persist, so runs stay open until that work is done.
+      untilIdle: untilIdle ?? true,
       ...(callTimeInstructions && { instructions: callTimeInstructions }),
     };
     streamOptions.toolsets = await this.buildToolsets(session, requestContext);

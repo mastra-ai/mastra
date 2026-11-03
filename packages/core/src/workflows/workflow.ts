@@ -33,6 +33,7 @@ import {
   resolveObservabilityContext,
 } from '../observability';
 import { initContextStorage } from '../observability/context-storage';
+import { executionFailureTermination } from '../observability/execution-outcome';
 import { executeWithContext } from '../observability/utils';
 import type {
   OutputResult,
@@ -333,6 +334,65 @@ function findStepInGraph(graph: SerializedStepFlowEntry[], stepId: string): Seri
     }
   }
   return undefined;
+}
+
+/** The id of the nested workflow that runs as step `stepId`, or undefined when the step is not a workflow. */
+function getNestedWorkflowId(graph: SerializedStepFlowEntry[], stepId: string): string | undefined {
+  const entry = findStepInGraph(graph, stepId) as any;
+  if (entry?.type === 'workflow') return entry.workflowId;
+  if (entry?.step?.type === 'workflow') return entry.step.workflowId;
+  if (entry?.step?.component === 'WORKFLOW') return stepId;
+  return undefined;
+}
+
+/**
+ * Cancels the suspended nested runs reachable from `snapshot`. A suspended nested run has no live execution for
+ * its parent's abort signal to reach, so only its persisted status changes. Descendants are canceled before their
+ * parent, so a nested run left suspended by a failed write is found again when cancel() is retried.
+ */
+async function cancelSuspendedNestedRuns(store: WorkflowsStorage, snapshot: WorkflowRunState): Promise<void> {
+  for (const [stepId, result] of Object.entries(snapshot.context)) {
+    if ((result as StepResult<any, any, any, any>)?.status !== 'suspended') {
+      continue;
+    }
+
+    const workflowName = getNestedWorkflowId(snapshot.serializedStepGraph, stepId);
+
+    if (!workflowName) {
+      continue;
+    }
+
+    const { suspendPayload, output } = result as any;
+    const meta = suspendPayload?.__workflow_meta;
+    // Foreach keeps one record per iteration: the default engine under foreachOutput, the evented engine as output.
+    const iterations: any[] = meta?.foreachOutput ?? (Array.isArray(output) ? output : []);
+
+    const runIds = [
+      meta?.runId,
+      ...iterations.map(iteration =>
+        iteration?.status === 'suspended' ? iteration.suspendPayload?.__workflow_meta?.runId : undefined,
+      ),
+    ];
+
+    for (const runId of new Set(runIds)) {
+      if (typeof runId !== 'string') {
+        continue;
+      }
+
+      const nested = await store.loadWorkflowSnapshot({ workflowName, runId });
+
+      if (nested?.status !== 'suspended') {
+        continue;
+      }
+
+      await cancelSuspendedNestedRuns(store, nested);
+      await store.updateWorkflowState({
+        workflowName,
+        runId,
+        opts: { status: 'canceled', expectedStatus: 'suspended' },
+      });
+    }
+  }
 }
 
 // ============================================
@@ -2064,6 +2124,14 @@ export class Workflow<
 
   __markInternal() {
     this.isInternal = true;
+    // Nested workflows of an internal workflow are its own plumbing (e.g. the
+    // background-task attempt body, the agentic loop iteration), not resources
+    // end users are granted access to.
+    for (const step of Object.values(this.steps)) {
+      if (step instanceof Workflow && !step.isInternal) {
+        step.__markInternal();
+      }
+    }
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -3192,9 +3260,9 @@ export class Workflow<
     const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
     this.__registerMastra(mastra);
 
-    // FGA authorization check
+    // FGA authorization check (internal workflows are exempt, matching Run.start)
     const fgaProvider = mastra?.getServer()?.fga;
-    if (fgaProvider) {
+    if (fgaProvider && !this.isInternal) {
       const user = requestContext?.get('user' as any);
       await requireFGA({
         fgaProvider,
@@ -3253,7 +3321,12 @@ export class Workflow<
     };
     const parentAbortCb = async () => {
       run.abortController.signal.removeEventListener('abort', nestedAbortCb);
-      await run.cancel();
+      // run.cancel() rejects when a nested snapshot can't be updated; an event listener has no caller to surface it to.
+      try {
+        await run.cancel();
+      } catch (error) {
+        mastra?.getLogger()?.error(`Failed to cancel nested workflow "${this.id}" run ${run.runId}`, error);
+      }
     };
     run.abortController.signal.addEventListener('abort', nestedAbortCb);
     abortSignal.addEventListener('abort', parentAbortCb);
@@ -3553,18 +3626,9 @@ export class Workflow<
     let finalSteps = {} as Record<string, StepResult<any, any, any, any>>;
 
     for (const step of Object.keys(steps)) {
-      const stepGraph = findStepInGraph(serializedStepGraph, step);
       finalSteps[step] = steps[step] as StepResult<any, any, any, any>;
-      const nestedWorkflowEntry =
-        stepGraph?.type === 'workflow'
-          ? stepGraph
-          : (stepGraph as any)?.step?.type === 'workflow'
-            ? (stepGraph as any).step
-            : (stepGraph as any)?.step?.component === 'WORKFLOW'
-              ? { workflowId: step }
-              : undefined;
-      if (nestedWorkflowEntry) {
-        const nestedWorkflowId = nestedWorkflowEntry.workflowId as string;
+      const nestedWorkflowId = getNestedWorkflowId(serializedStepGraph, step);
+      if (nestedWorkflowId) {
         const stepResult = steps[step] as any;
         const nestedRunIdMetadata = stepResult?.metadata?.nestedRunId;
         const invocationResults = Array.isArray(stepResult) ? stepResult : undefined;
@@ -4003,13 +4067,25 @@ export class Run<
   }
 
   /**
+   * Cancels a canceled run's suspended nested runs. Running nested runs are canceled through the abort signal.
+   * @throws When reading this run's snapshot, or reading or updating a nested run's snapshot, fails.
+   */
+  protected async cancelSuspendedNestedRuns(): Promise<void> {
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
+    if (workflowsStore && snapshot?.status === 'canceled') await cancelSuspendedNestedRuns(workflowsStore, snapshot);
+  }
+
+  /**
    * Cancels the workflow execution.
-   * This aborts any running execution and updates the workflow status to 'canceled' in storage.
+   * This aborts any running execution and updates the workflow status to 'canceled' in storage,
+   * along with the status of its suspended nested workflow runs.
    * Runs that already finished (success, failed, canceled, tripwire, bailed) are left unchanged.
+   * Canceling an already canceled run cancels any of its nested runs that are still suspended.
    */
   async cancel() {
-    // Canceling a finished run is a no-op so its final status is preserved
-    if (await this.hasReachedTerminalStatus()) return;
+    // A finished run keeps its final status. A canceled one can still have suspended nested runs.
+    if (await this.hasReachedTerminalStatus()) return this.cancelSuspendedNestedRuns();
 
     // Abort any running execution and update in-memory status
     this.abortController.abort(WORKFLOW_CANCELLED_SYMBOL);
@@ -4017,7 +4093,15 @@ export class Run<
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
-    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
+    const span = this.workflowRunSpan;
+    // Older observability implementations may only support end({ endTree: true }).
+    const endTree = span?.endTree ?? span?.end;
+    endTree?.call(span, {
+      endTree: true,
+      outcome: 'abort',
+      stopReason: 'caller_cancelled',
+      attributes: { status: 'canceled' },
+    });
 
     // Update workflow status in storage to 'canceled'
     // This is necessary for suspended/waiting workflows where the abort signal won't be checked
@@ -4033,7 +4117,11 @@ export class Run<
     } catch {
       // Storage errors should not prevent cancellation from succeeding
       // The abort signal and in-memory status are already updated
+      // Nested runs are only canceled under a run stored as canceled, so there is nothing more to do
+      return;
     }
+
+    await this.cancelSuspendedNestedRuns();
   }
 
   async #validateSchema<TInput>(schema: StandardSchemaWithJSON<TInput>, data: TInput, type: string) {
@@ -4185,6 +4273,7 @@ export class Run<
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -4225,7 +4314,7 @@ export class Run<
 
       return { inputDataToUse: validatedInput, initialStateToUse: validatedState };
     })().catch(error => {
-      workflowSpan?.error({ error: error as Error });
+      workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
       throw error;
     });
 
@@ -4262,7 +4351,7 @@ export class Run<
               : initialRunSnapshot,
           });
         } catch (error) {
-          workflowSpan?.error({ error: error as Error });
+          workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error });
           throw error;
         }
       }
@@ -5287,38 +5376,13 @@ export class Run<
       }
     });
 
-    // Build tracing options for the resumed span, linking to the original suspended span if available
-    // Priority: user-provided tracingOptions > persisted tracingContext from snapshot
     const persistedTracingContext = snapshot?.tracingContext;
-    const userProvidedTraceId = params.tracingOptions?.traceId;
-    const userProvidedParentSpanId = params.tracingOptions?.parentSpanId;
-
-    // Only fall back to persisted traceId when the caller didn't provide either tracing identifier.
-    // If the caller provided parentSpanId without traceId, using the persisted traceId would create
-    // invalid cross-trace parentage (a span in one trace claiming a parent from another trace).
-    const effectiveTraceId =
-      userProvidedTraceId ?? (!userProvidedParentSpanId ? persistedTracingContext?.traceId : undefined);
-
-    // Only use persisted spanId as parentSpanId if:
-    // 1. User didn't provide their own parentSpanId, AND
-    // 2. Either no user traceId was provided, OR user traceId matches persisted traceId
-    // This prevents cross-trace parentage where a span in one trace claims a parent from another trace
-    const shouldUsePersistedParentSpan =
-      !userProvidedParentSpanId && (!userProvidedTraceId || userProvidedTraceId === persistedTracingContext?.traceId);
-
-    const resumeTracingOptions = {
-      ...params.tracingOptions,
-      traceId: effectiveTraceId,
-    };
-
-    // The persisted resume link travels separately from tracingOptions:
-    // tracingOptions.parentSpanId is reserved for external correlation ids,
-    // while the suspended span's id is a Mastra span present in storage.
-    const resumedFromSpanId = shouldUsePersistedParentSpan ? persistedTracingContext?.spanId : undefined;
+    const isAgentLoop = Boolean(this.executionEngine.options.resumeTracingContext);
 
     // note: this span is ended inside this.executionEngine.execute()
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}' (resumed)`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -5331,11 +5395,11 @@ export class Run<
         resumedFromSpanId: persistedTracingContext?.spanId,
       },
       tracingPolicy: this.tracingPolicy,
-      tracingOptions: resumeTracingOptions,
+      tracingOptions: params.tracingOptions,
       tracingContext: observabilityContext.tracingContext,
       requestContext: requestContextToUse as RequestContext,
       mastra: this.#mastra,
-      resumedFromSpanId,
+      resumeFrom: isAgentLoop ? undefined : persistedTracingContext,
     });
 
     this.workflowRunSpan = workflowSpan;
@@ -5654,6 +5718,7 @@ export class Run<
     }
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -5802,6 +5867,7 @@ export class Run<
 
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       input: inputData,
       entityType: EntityType.WORKFLOW_RUN,
@@ -5829,7 +5895,7 @@ export class Run<
     try {
       await this.#claimRun({ workflowsStore, snapshot, operation: 'timeTravel' });
     } catch (error) {
-      workflowSpan?.error({ error: error as Error, endSpan: true });
+      workflowSpan?.error({ ...executionFailureTermination(error), error: error as Error, endSpan: true });
       throw error;
     }
 

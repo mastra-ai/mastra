@@ -48,13 +48,12 @@ export class ResourceClientActions {
       const response = await this.client.listResources();
       if (response && response.resources && Array.isArray(response.resources)) {
         return response.resources;
-      } else {
-        this.logger.warn('Resources response did not have expected structure', {
-          server: this.client.name,
-          response,
-        });
-        return [];
       }
+      this.logger.warn('Resources response did not have expected structure', {
+        server: this.client.name,
+        response,
+      });
+      return [];
     } catch (e: any) {
       // MCP Server might not support resources, so we return an empty array
       if (e.code === ProtocolErrorCode.MethodNotFound) {
@@ -92,13 +91,12 @@ export class ResourceClientActions {
       const response = await this.client.listResourceTemplates();
       if (response && response.resourceTemplates && Array.isArray(response.resourceTemplates)) {
         return response.resourceTemplates;
-      } else {
-        this.logger.warn('Resource templates response did not have expected structure', {
-          server: this.client.name,
-          response,
-        });
-        return [];
       }
+      this.logger.warn('Resource templates response did not have expected structure', {
+        server: this.client.name,
+        response,
+      });
+      return [];
     } catch (e: any) {
       // MCP Server might not support resources, so we return an empty array
       if (e.code === ProtocolErrorCode.MethodNotFound) {

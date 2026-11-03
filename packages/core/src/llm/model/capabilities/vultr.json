@@ -39,15 +39,19 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "glm-5.x-menthol": [
+    "mimo-v2.6-pro-rl": [
       {
         "type": "toggle"
       }
     ],
-    "muse-glimmer-30b": [
+    "minimax-m3": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
       }
     ],
     "qwen3.8-flash-next": [
@@ -56,7 +60,12 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "laguna-s-2.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-v4-flash-0731": [
       {
         "type": "toggle"
       },
@@ -74,18 +83,31 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "glm-5.2": [
       {
         "type": "effort",
         "values": ["none", "high", "max"]
       }
     ],
-    "nemotron-3.5-content-safety": [
+    "glm-5.3-flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "mimo-v2.6-pro-rl": [
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "glm-5.x-menthol": [
       {
         "type": "toggle"
       }
@@ -95,7 +117,7 @@
         "type": "toggle"
       }
     ],
-    "deepseek-v4-flash-0731": [
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
@@ -104,31 +126,9 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "mimo-v2.6-flash-rl": [
+    "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
-      }
-    ],
-    "laguna-s-2.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

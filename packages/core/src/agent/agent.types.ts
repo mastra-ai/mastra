@@ -698,8 +698,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /**
    * Maximum number of times processors can trigger a retry for this generation.
-   * Overrides agent's default maxProcessorRetries.
-   * If not set, defaults to the agent's maxProcessorRetries (which defaults to no retries if also unset).
+   * Overrides the agent's default maxProcessorRetries. Input and output processor
+   * retries require an explicit cap; error processors default to a cap of 3 when
+   * they resolve to a non-empty list and no cap is set.
    */
   maxProcessorRetries?: number;
 
