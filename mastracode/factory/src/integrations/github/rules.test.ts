@@ -4580,7 +4580,7 @@ describe('createGithubPullRequestReconciler', () => {
         draft: false,
         merged: false,
       }));
-      const updates = vi.spyOn(context.workItems, 'update');
+      const updates = vi.spyOn(context.workItems, 'syncCard');
       await expect(createReconciler(context, fetchPullRequest)([repositoryTarget])).resolves.toMatchObject({
         checked: 1,
         failed: 0,
