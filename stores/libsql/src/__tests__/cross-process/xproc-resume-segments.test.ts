@@ -198,6 +198,27 @@ describe('resumed and recovered durable runs keep one span pair per segment acro
       expectEndedOnce(spans);
       expect(await snapshot(runId), 'the finished run keeps no snapshot').toBeNull();
 
+      // What Studio reads: under the insert-only strategy each ended pair is its own row.
+      const observability = (await reader.getStore('observability'))!;
+      const traceId = readSegmentEvents(eventsPath).find(event => event.runId === runId)!.traceId;
+      await expect
+        .poll(
+          async () => {
+            const trace = await observability.getTrace({ traceId });
+            return (trace?.spans ?? [])
+              .filter(span => span.spanType === 'agent_run')
+              .map(span => ({ spanId: span.spanId, outcome: span.outcome, ended: !!span.endedAt }))
+              .sort((a, b) => a.spanId.localeCompare(b.spanId));
+          },
+          { timeout: DEFAULT_HANG_GUARD_MS, interval: 250 },
+        )
+        .toEqual(
+          [
+            { spanId: first!.spanId, outcome: 'suspend', ended: true },
+            { spanId: second!.spanId, outcome: 'success', ended: true },
+          ].sort((a, b) => a.spanId.localeCompare(b.spanId)),
+        );
+
       await finishWorkers(workerPeer);
     },
     CELL_TIMEOUT_MS,
