@@ -359,10 +359,11 @@ export class MastraStorageExporter extends BaseExporter {
    *
    * When the store supports conditional updates, only spans this exporter started
    * and hasn't confirmed the create for are deferred. Everything else, including
-   * spans another exporter instance started (such as a durable agent ending spans
-   * it rebuilt after a crash), goes straight to storage, and updates that didn't
-   * apply are counted as drops. Without conditional updates, updates for spans this
-   * exporter hasn't created are deferred until their create is flushed.
+   * spans another exporter instance started (a durable agent ending spans it rebuilt
+   * after a crash, or a worker finishing a run the API process started), goes straight
+   * to storage. Updates that didn't apply are retried or dropped by `retryNotApplied`.
+   * Without conditional updates, updates for spans this exporter hasn't created are
+   * deferred until their create is flushed.
    *
    * When `isEnd` is true, successfully flushed spans are removed from tracking.
    */
@@ -384,6 +385,7 @@ export class MastraStorageExporter extends BaseExporter {
       typeof storage.batchUpdateUnendedSpans === 'function' ? storage.batchUpdateUnendedSpans.bind(storage) : undefined;
 
     const partials: UpdateSpanPartial[] = [];
+    const sent: (TracingEvent & RetryCount)[] = [];
     for (const event of events) {
       const span = event.exportedSpan;
       const canSend = batchUpdateUnendedSpans
@@ -395,6 +397,7 @@ export class MastraStorageExporter extends BaseExporter {
           spanId: span.id,
           updates: buildUpdateSpanRecord(span),
         });
+        sent.push(event);
       } else {
         deferredUpdates.push(event);
       }
@@ -403,16 +406,17 @@ export class MastraStorageExporter extends BaseExporter {
     if (partials.length === 0) return FLUSH_SUCCEEDED;
 
     try {
+      let retryAttempt: number | undefined;
       if (batchUpdateUnendedSpans) {
         const { updated } = await batchUpdateUnendedSpans({ records: partials });
-        this.emitNotApplied(partials, updated);
+        retryAttempt = this.retryNotApplied(sent, updated);
       } else {
         await storage.batchUpdateSpans({ records: partials });
       }
       if (isEnd) {
         this.#eventBuffer.endFinishedSpans({ records: partials });
       }
-      return FLUSH_SUCCEEDED;
+      return retryAttempt === undefined ? FLUSH_SUCCEEDED : { failed: true, retryAttempt };
     } catch (error) {
       if (
         error instanceof MastraError &&
@@ -443,30 +447,55 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   /**
-   * Reports conditional span updates that storage didn't apply: the span wasn't
-   * stored, or it had already ended. Ended spans are immutable, so these are dropped.
+   * Handles conditional span updates that storage didn't apply. The store can't say
+   * whether the row is missing or already ended. A span this exporter created and
+   * hasn't ended must have a row, so its update is dropped as already ended. Any other
+   * span may belong to a process whose create hasn't landed yet, so its update goes
+   * back on the retry budget and is dropped only when that runs out.
+   *
+   * Returns the retry attempt to schedule when any update was re-queued.
    */
-  private emitNotApplied(partials: UpdateSpanPartial[], updated: { traceId: string; spanId: string }[]): void {
+  private retryNotApplied(
+    events: (TracingEvent & RetryCount)[],
+    updated: { traceId: string; spanId: string }[],
+  ): number | undefined {
     // Count per key: one batch can hold two ends for the same span, and only the first applies.
     const appliedCounts = new Map<string, number>();
     for (const span of updated) {
       const key = `${span.traceId}:${span.spanId}`;
       appliedCounts.set(key, (appliedCounts.get(key) ?? 0) + 1);
     }
-    let notApplied = 0;
-    for (const partial of partials) {
-      const key = `${partial.traceId}:${partial.spanId}`;
+    const retryable: BufferedEvent[] = [];
+    let alreadyEnded = 0;
+    for (const event of events) {
+      const span = event.exportedSpan;
+      const key = `${span.traceId}:${span.id}`;
       const remaining = appliedCounts.get(key) ?? 0;
       if (remaining > 0) {
         appliedCounts.set(key, remaining - 1);
+      } else if (this.#eventBuffer.spanExists(span)) {
+        alreadyEnded++;
       } else {
-        notApplied++;
+        retryable.push(event);
       }
     }
-    if (notApplied === 0) return;
+    if (retryable.length === 0 && alreadyEnded === 0) return undefined;
 
-    this.logger.debug('Span updates not applied: span not stored or already ended', { count: notApplied });
-    this.emitDrop('tracing', 'span-not-updatable', notApplied);
+    const dropped = this.#eventBuffer.reAddUpdates(retryable);
+    const notApplied = alreadyEnded + dropped.length;
+    if (notApplied > 0) {
+      this.logger.warn('Span updates dropped: span not stored or already ended', { count: notApplied });
+      this.emitDrop('tracing', 'span-not-updatable', notApplied);
+    }
+    const retryAttempt = this.retryAttempt(retryable);
+    if (retryAttempt !== undefined) {
+      this.logger.debug('Span updates not applied yet, waiting for the span to be stored', {
+        count: retryable.length - dropped.length,
+        retryAttempt,
+        nextRetryDelayMs: this.retryDelay(retryAttempt),
+      });
+    }
+    return retryAttempt;
   }
 
   /**

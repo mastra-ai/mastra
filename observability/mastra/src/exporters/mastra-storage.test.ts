@@ -1987,6 +1987,37 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
       }
     });
 
+    it('drops its own end at once when another process already ended the span', async () => {
+      const storage = new InMemoryStore();
+      const api = openProcess(storage, { maxRetries: 4, retryDelayMs: 60_000 });
+      const worker = openProcess(storage, { maxRetries: 4, retryDelayMs: 60_000 });
+      const observabilityStore = (await storage.getStore('observability'))!;
+      const conditionalUpdate = vi.spyOn(observabilityStore, 'batchUpdateUnendedSpans');
+      try {
+        const span = api.tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run started on the api' });
+        const snapshot = structuredClone(span.exportSpan());
+        await api.tracing.flush();
+
+        worker.tracing.rebuildSpan(snapshot).end({ output: 'finished on the worker' });
+        await worker.tracing.flush();
+        conditionalUpdate.mockClear();
+
+        // The api's row exists, so its late end can only mean the span already ended.
+        span.end({ output: 'finished on the api' });
+        await api.tracing.flush();
+
+        expect(conditionalUpdate).toHaveBeenCalledTimes(1);
+        expect(api.drops).toEqual([
+          expect.objectContaining({ signal: 'tracing', reason: 'span-not-updatable', count: 1 }),
+        ]);
+        expect((await getStoredSpan(storage, span))?.output).toBe('finished on the worker');
+      } finally {
+        conditionalUpdate.mockRestore();
+        await worker.mastra.shutdown();
+        await api.mastra.shutdown();
+      }
+    });
+
     it('does not create a span that was never stored', async () => {
       const storage = new InMemoryStore();
       const recovering = openProcess(storage);
