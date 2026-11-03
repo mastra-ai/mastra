@@ -5,7 +5,7 @@ import type { ScoringSamplingConfig, ScoringSource } from '../evals/types';
 import type { MastraDBMessage, StorageThreadType, SerializedMemoryConfig } from '../memory/types';
 import type { ProcessorPhase } from '../processor-provider';
 import { getZodInnerType, getZodTypeName } from '../utils/zod-utils';
-import type { WorkflowRunState, WorkflowRunStatus } from '../workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../workflows';
 
 export type StoragePagination = {
   page: number;
@@ -2335,7 +2335,7 @@ export type StorageMemoryRef =
 
 export interface UpdateWorkflowStateOptions {
   status: WorkflowRunStatus;
-  result?: WorkflowRunState['result'];
+  result?: StepResult<any, any, any, any>;
   error?: SerializedError;
   suspendedPaths?: Record<string, number[]>;
   waitingPaths?: Record<string, number[]>;

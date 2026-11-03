@@ -275,17 +275,13 @@ export async function persistStepUpdate(
       return;
     }
 
-    const written = workflowsStore
-      ? await engine.writeWorkflowSnapshot(workflowsStore, {
-          workflowName: workflowId,
-          runId,
-          resourceId,
-          snapshot: engine.options?.pruneSnapshot
-            ? engine.options.pruneSnapshot({ snapshot, workflowStatus })
-            : snapshot,
-          ...(atomicGuard ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
-        })
-      : undefined;
+    const written = await workflowsStore?.persistWorkflowSnapshot({
+      workflowName: workflowId,
+      runId,
+      resourceId,
+      snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
+      ...(atomicGuard ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
+    });
     if (atomicGuard && written === false) {
       engine.setLastPersistedStatus(runId, 'canceled');
       return;

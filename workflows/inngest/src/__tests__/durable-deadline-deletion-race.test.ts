@@ -1,7 +1,7 @@
 /**
  * At its `modelSettings.timeout.totalMs` deadline the caller deletes the run's snapshot. A worker
- * whose final write is still in flight must not bring the run back, whichever order the delete and
- * that write reach storage in.
+ * whose final write is still in flight lands it on the deleted row, then removes the row again, so
+ * the run ends up deleted whichever order the delete and that write reach storage in.
  *
  * The run finishes just before the deadline, and its finish hooks hold the worker's final write
  * past it while the caller's timer still fires. The test then holds the delete until that write has
@@ -78,11 +78,12 @@ it.each([1, 2, 3])(
     const store = (await getSharedMastra().getStorage()!.getStore('workflows'))!;
     const originalDelete = store.deleteWorkflowRunById.bind(store);
     const originalPersist = store.persistWorkflowSnapshot.bind(store);
-    const originalUpdate = store.updateWorkflowState.bind(store);
     let deadlineAt = 0;
     let runId = '';
+    /** The caller's delete at the deadline; the worker's own delete follows its late write. */
     let deletingAt = 0;
     let deletedAt = 0;
+    let deletes = 0;
     let writingAt = 0;
     let writtenAt = 0;
     let releaseWriteStarted!: () => void;
@@ -93,38 +94,30 @@ it.each([1, 2, 3])(
       params.runId === runId && params.workflowName === workflow.id;
 
     const deletion = vi.spyOn(store, 'deleteWorkflowRunById').mockImplementation(async params => {
-      if (isThisRun(params)) {
+      const callerDelete = isThisRun(params) && deletingAt === 0;
+      if (callerDelete) {
         deletingAt = Date.now();
         await Promise.race([writeStarted, new Promise(resolve => setTimeout(resolve, 2000))]);
       }
       await originalDelete(params);
-      if (isThisRun(params)) {
+      if (isThisRun(params)) deletes += 1;
+      if (callerDelete) {
         deletedAt = Date.now();
         releaseDeleted();
       }
     });
-    /** The worker's final write, by whichever store method the engine issues it. */
-    const holdLateWrite = async <T>(
-      params: { runId: string; workflowName: string },
-      status: string,
-      write: () => Promise<T>,
-    ) => {
-      const late = isThisRun(params) && status === 'success' && Date.now() >= deadlineAt && deletingAt > 0;
+    const persistence = vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async params => {
+      const late =
+        isThisRun(params) && params.snapshot.status === 'success' && Date.now() >= deadlineAt && deletingAt > 0;
       if (late) {
         writingAt = Date.now();
         releaseWriteStarted();
         await deleted;
       }
-      const value = await write();
+      const value = await originalPersist(params);
       if (late) writtenAt = Date.now();
       return value;
-    };
-    const persistence = vi
-      .spyOn(store, 'persistWorkflowSnapshot')
-      .mockImplementation(params => holdLateWrite(params, params.snapshot.status, () => originalPersist(params)));
-    const update = vi
-      .spyOn(store, 'updateWorkflowState')
-      .mockImplementation(params => holdLateWrite(params, params.opts.status, () => originalUpdate(params)));
+    });
 
     const agent = createInngestAgent({
       agent: new Agent({
@@ -164,7 +157,15 @@ it.each([1, 2, 3])(
           timeout: 8000,
         },
       );
-      const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId });
+      expect(writtenAt, 'the late write must land after the delete').toBeGreaterThanOrEqual(deletedAt);
+      await vi.waitFor(
+        async () =>
+          expect(
+            await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId }),
+            'a run the caller deleted ends up deleted',
+          ).toBeNull(),
+        { timeout: 5000, interval: 100 },
+      );
       console.log(
         'DELETE_RACE',
         JSON.stringify({
@@ -175,14 +176,11 @@ it.each([1, 2, 3])(
           deletedMs: deletedAt - startedAt,
           writeStartMs: writingAt - startedAt,
           writtenMs: writtenAt - startedAt,
-          status: snapshot?.status ?? null,
+          deletes,
         }),
       );
-      expect(writtenAt, 'the late write must land after the delete').toBeGreaterThanOrEqual(deletedAt);
-      expect(snapshot, 'a run the caller deleted stays deleted').toBeNull();
     } finally {
       cleanup();
-      update.mockRestore();
       persistence.mockRestore();
       deletion.mockRestore();
       releaseWriteStarted();

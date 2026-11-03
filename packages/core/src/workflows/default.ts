@@ -9,7 +9,6 @@ import type { PubSub } from '../events/pubsub';
 import type { ObservabilityContext, Span, SpanType, TracingPolicy, SpanOutcomeFields } from '../observability';
 import { createObservabilityContext, getWorkflowResumeTracingContext } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
-import type { WorkflowsStorage } from '../storage';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
@@ -154,18 +153,6 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         this.#snapshotWriteTails.delete(runId);
       }
     }
-  }
-
-  /**
-   * Writes a run's snapshot. An upsert, so a run's first write creates its row. An engine whose
-   * caller deletes the run at a deadline updates the row only after it, so a late write never
-   * brings a deleted run back (see `InngestExecutionEngine`).
-   */
-  async writeWorkflowSnapshot(
-    store: WorkflowsStorage,
-    params: Parameters<WorkflowsStorage['persistWorkflowSnapshot']>[0],
-  ): Promise<boolean | void> {
-    return store.persistWorkflowSnapshot(params);
   }
 
   /** Returns the current step's zero-based retry attempt, or zero outside an attempt. */

@@ -757,8 +757,7 @@ export class InngestWorkflow<
                   timestamp: Date.now(),
                 };
 
-                // A run the caller deleted at its budget deadline stays deleted.
-                await engine.writeWorkflowSnapshot(workflowsStore, {
+                await workflowsStore.persistWorkflowSnapshot({
                   workflowName: this.id,
                   runId,
                   resourceId,
@@ -766,6 +765,16 @@ export class InngestWorkflow<
                     ? this.options.pruneSnapshot({ snapshot: finalSnapshot, workflowStatus: result.status })
                     : finalSnapshot,
                 });
+
+                // A durable agent's caller deletes the run's rows at its `modelSettings.timeout.totalMs`
+                // deadline (createInngestAgent `armTotalTimeout`). A terminal row this worker wrote past
+                // that deadline would bring the run back, so it goes too, and the run converges to
+                // deleted whichever of the write and the delete landed last. Deleting a row that is
+                // already gone is a no-op, so a replay of this step is safe. A suspended row stays: the
+                // caller cleared its timer when the run parked.
+                if (executionDeadline && result.status !== 'suspended' && Date.now() >= executionDeadline.at) {
+                  await workflowsStore.deleteWorkflowRunById({ workflowName: this.id, runId });
+                }
               }
             }
 

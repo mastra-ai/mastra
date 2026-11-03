@@ -7,7 +7,6 @@ import type { PubSub } from '@mastra/core/events';
 import type { ExecutionDeadline } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
-import type { WorkflowsStorage } from '@mastra/core/storage';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
 import type {
   ExecutionContext,
@@ -298,37 +297,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    */
   getEngineContext(): Record<string, any> {
     return { step: this.inngestStep, executionDeadline: this.executionDeadline };
-  }
-
-  /** Whether the session's run-level budget has expired. */
-  executionDeadlinePassed(): boolean {
-    return this.executionDeadline !== undefined && Date.now() >= this.executionDeadline.at;
-  }
-
-  /**
-   * After the deadline the caller may have deleted the run (see createInngestAgent
-   * `armTotalTimeout`). An update lands only on a row that is still there, so a late write never
-   * brings a deleted run back, while a run that parked or finished before the deadline keeps its
-   * late write. The store applies `expectedStatus` inside the update and reports no rejection, as
-   * adapters without guarded snapshot writes do.
-   *
-   * A store without atomic read-modify-write (`supportsConcurrentUpdates()` false) may not
-   * implement the update at all, so it gets a load and then an upsert. A delete landing between
-   * the two brings the run back on those stores; their update, where they have one, reads and
-   * writes in two steps too and leaves the same window.
-   */
-  override async writeWorkflowSnapshot(
-    store: WorkflowsStorage,
-    params: Parameters<WorkflowsStorage['persistWorkflowSnapshot']>[0],
-  ): Promise<boolean | void> {
-    if (!this.executionDeadlinePassed()) return store.persistWorkflowSnapshot(params);
-    const { workflowName, runId, snapshot, fence, expectedStatus } = params;
-    if (store.supportsConcurrentUpdates()) {
-      await store.updateWorkflowState({ workflowName, runId, fence, opts: { ...snapshot, expectedStatus } });
-      return;
-    }
-    if (!(await store.loadWorkflowSnapshot({ workflowName, runId }))) return;
-    return store.persistWorkflowSnapshot(params);
   }
 
   /**
