@@ -47,7 +47,7 @@ export const knowledge = new Knowledge({
 
 Pass both or neither. [`embedderOptions`](/reference/knowledge/knowledge-class#constructor-options) works the same way it does in Memory.
 
-`knowledge_search` then merges keyword and meaning results by rank, so a close meaning match can come before a name match. Every semantic hit is read again with the run's access before it can take a place in the results. A run never sees content it can't read, and that content never takes a slot from content it can.
+`knowledge_search` then merges keyword and meaning results by rank, so a close meaning match can come before a name match. Every semantic hit is read again with the run's access before it can take a place in the results. A run never sees content it can't read, and that content never takes a slot from content it can. Search checks at most 1,000 semantic candidates, though, so when most close matches are unreadable, readable ones further down can be missed.
 
 Pages and notes are embedded when they're written. Scope pages aren't embedded, but notes on them are. Long pages are embedded in parts, and search still returns each page once. See [Limits](/reference/knowledge/limits) for the sizes.
 
