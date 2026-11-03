@@ -29,6 +29,7 @@ import { RequestContext } from '../../request-context';
 import type { WorkflowRunState } from '../../workflows/types';
 import { modelSpanAttributes } from '../model-span-attributes';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './constants';
+import { MASTRA_DURABLE_EXECUTIONS_KEY } from './execution-fence';
 import { getRunRegistryEntry } from './run-registry';
 
 /**
@@ -37,6 +38,18 @@ import { getRunRegistryEntry } from './run-registry';
  * sharing the parent's RequestContext cannot read or overwrite the parent's segment.
  */
 const MASTRA_DURABLE_SEGMENTS_KEY = 'mastra__durableSegments';
+
+/** Request-context keys the durable engine keeps for itself: the execution claim and the segment carrier. */
+const DURABLE_ENGINE_KEYS: ReadonlySet<string> = new Set([MASTRA_DURABLE_EXECUTIONS_KEY, MASTRA_DURABLE_SEGMENTS_KEY]);
+
+/**
+ * The request context user code (a tool, an approval policy) receives from a durable step: the
+ * run's values without the engine's own keys, which are plumbing rather than caller data. A copy,
+ * so the step's own context keeps them for the engine.
+ */
+export function withoutDurableEngineKeys(requestContext: RequestContext): RequestContext {
+  return new RequestContext([...requestContext.entries()].filter(([key]) => !DURABLE_ENGINE_KEYS.has(key)));
+}
 
 /**
  * Wire form. `agent: null` marks a segment that opened no spans (tracing off, or the previous

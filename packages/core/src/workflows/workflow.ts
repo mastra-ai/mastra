@@ -66,6 +66,7 @@ import {
 } from '../processors/span-payload';
 import { ProcessorStepOutputSchema, ProcessorStepInputSchema } from '../processors/step-schema';
 import type { ProcessorStepInput, ProcessorStepOutput } from '../processors/step-schema';
+import { isReservedRequestContextKey } from '../request-context';
 import { getRequestContextInputValues } from '../request-context/input-source';
 import { standardSchemaToJSONSchema, toStandardSchema } from '../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../schema';
@@ -3795,7 +3796,17 @@ export class Workflow<
       suspendedPaths: includeAllFields || fieldsSet.has('suspendedPaths') ? snapshotState.suspendedPaths : undefined,
       resumeLabels: includeAllFields || fieldsSet.has('resumeLabels') ? snapshotState.resumeLabels : undefined,
       waitingPaths: includeAllFields || fieldsSet.has('waitingPaths') ? snapshotState.waitingPaths : undefined,
-      ...(fieldsSet.has('requestContext') ? { requestContext: snapshotState.requestContext } : {}),
+      // Reserved keys are framework state (identity, auth, durable-engine plumbing), not caller
+      // data: left out here as they are from span serialization and score snapshots.
+      ...(fieldsSet.has('requestContext')
+        ? {
+            requestContext: snapshotState.requestContext
+              ? Object.fromEntries(
+                  Object.entries(snapshotState.requestContext).filter(([key]) => !isReservedRequestContextKey(key)),
+                )
+              : snapshotState.requestContext,
+          }
+        : {}),
       ...(fieldsSet.has('tracingContext') ? { tracingContext: snapshotState.tracingContext } : {}),
     };
 
