@@ -1222,3 +1222,96 @@ describe('merge request cards on the Work board', () => {
     ]);
   });
 });
+
+describe('GitLab board events', () => {
+  function issueHook(deliveryId: string, action: 'open' | 'reopen' | 'close' | 'update') {
+    const delivery = issueOpened(deliveryId);
+    return {
+      ...delivery,
+      payload: {
+        ...delivery.payload,
+        object_attributes: {
+          ...delivery.payload.object_attributes,
+          action,
+          state: action === 'close' ? 'closed' : 'opened',
+        },
+      },
+    };
+  }
+
+  async function harness() {
+    const base = await setup();
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({
+        storage: base.seeded.workItems,
+        configVersion: 'gitlab-test-v1',
+        boards: createBoardRegistry(),
+      }),
+      storage: base.seeded.workItems,
+      boards: createBoardRegistry(),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+    let tick = 0;
+    const deliver = async (delivery: ReturnType<typeof issueHook>) => {
+      await base.service.ingest(delivery);
+      for (let pass = 0; pass < 2; pass++) {
+        await dispatcher.runOnce(new Date(Date.parse('2030-01-02T00:00:00Z') + 1000 * tick++));
+      }
+    };
+    const cards = () => base.seeded.workItems.list({ orgId: 'org-1', factoryProjectId: base.project.id });
+    return { ...base, deliver, cards };
+  }
+
+  it('reports open, close and reopen as their own normalized events; GitLab closes are completed', async () => {
+    const { gitlab, service } = await harness();
+    const seen: Array<{ event: string; boardEvent: unknown }> = [];
+    const record = (context: FactoryGitLabRuleContext) => {
+      seen.push({ event: context.event, boardEvent: context.boardEvent });
+    };
+    gitlab.rules = resolveGitLabRules({
+      issueOpened: record,
+      issueClosed: record,
+      issueReopened: record,
+      issueUpdated: record,
+    });
+    for (const action of ['open', 'close', 'reopen', 'update'] as const) {
+      await service.ingest(issueHook(`board-event-${action}`, action));
+    }
+    expect(seen).toEqual([
+      { event: 'issueOpened', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
+      { event: 'issueReopened', boardEvent: { type: 'work_item.reopened' } },
+      { event: 'issueUpdated', boardEvent: undefined },
+    ]);
+  });
+
+  it('answers a reopened issue with the same intake an open got, keeping its one card', async () => {
+    const { deliver, cards, seeded, project } = await harness();
+    await deliver(issueHook('reopen-flow-open', 'open'));
+    const [opened] = await cards();
+    await deliver(issueHook('reopen-flow-close', 'close'));
+    expect((await cards()).map(card => card.stages)).toEqual([['done']]);
+    await deliver(issueHook('reopen-flow-reopen', 'reopen'));
+    expect((await cards()).map(card => card.id)).toEqual([opened!.id]);
+    const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => [entry.decision.type, entry.status])).toEqual([
+      ['upsertLinkedWorkItem', 'succeeded'],
+      ['transition', 'succeeded'],
+      ['sendMessage', 'succeeded'],
+      ['upsertLinkedWorkItem', 'succeeded'],
+    ]);
+  });
+
+  it('lets an override of issueReopened apply without changing how opens are handled', async () => {
+    const { gitlab, seeded, project, service } = await harness();
+    const reopened = vi.fn(() => undefined);
+    gitlab.rules = resolveGitLabRules({ issueReopened: reopened });
+    await service.ingest(issueHook('override-open', 'open'));
+    await service.ingest(issueHook('override-reopen', 'reopen'));
+    expect(reopened).toHaveBeenCalledTimes(1);
+    const decisions = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(entry => entry.decision.type)).toEqual(['upsertLinkedWorkItem']);
+  });
+});

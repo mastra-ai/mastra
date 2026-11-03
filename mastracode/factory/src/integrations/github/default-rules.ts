@@ -403,6 +403,7 @@ export const defaultGithubRules = Object.freeze({
   // comments on the issue don't run it again.
   issueEdited: null,
   issueClosed: issueClosed,
+  issueReopened: null,
   issueCommentCreated: null,
   issueCommentEdited: null,
   issueCommentDeleted: null,

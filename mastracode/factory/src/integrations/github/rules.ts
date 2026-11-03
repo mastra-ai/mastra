@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto';
 
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -119,6 +121,22 @@ function parseFactoryReviewCommand(
   return undefined;
 }
 
+/** The status change a GitHub delivery reports. `not_planned` and `duplicate` closes are canceled work. */
+export function boardEventFor(context: Pick<FactoryGithubRuleContext, 'event' | 'issue'>): BoardEventFacts | undefined {
+  switch (context.event) {
+    case 'issueOpened':
+      return { type: 'work_item.created' };
+    case 'issueReopened':
+      return { type: 'work_item.reopened' };
+    case 'issueClosed': {
+      const stateReason = context.issue?.stateReason;
+      return { type: 'work_item.closed', reason: closeReason(stateReason === 'not_planned' || stateReason === 'duplicate') };
+    }
+    default:
+      return undefined;
+  }
+}
+
 function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefined {
   const action = string(parsed.payload.action);
   if (parsed.event === 'issues' && action === 'opened') return 'issueOpened';
@@ -127,6 +145,7 @@ function eventName(parsed: ParsedGithubWebhook): FactoryGithubEventName | undefi
     return object(changes?.title) || object(changes?.body) ? 'issueEdited' : undefined;
   }
   if (parsed.event === 'issues' && action === 'closed') return 'issueClosed';
+  if (parsed.event === 'issues' && action === 'reopened') return 'issueReopened';
   if (parsed.event === 'issue_comment') {
     const issue = object(parsed.payload.issue);
     // A comment on a PR arrives as `issue_comment` with `issue.pull_request` set.
@@ -830,6 +849,8 @@ export class GithubRules {
             }
           : {}),
       };
+      const boardEvent = boardEventFor(context);
+      if (boardEvent) context.boardEvent = boardEvent;
 
       const rule = selectEventRule(
         this.options.github.rules,

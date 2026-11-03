@@ -1,3 +1,4 @@
+import type { BoardEventFacts } from '../boards/board-events.js';
 import type { ExternalWorkItemSource } from '../storage/domains/work-items/base.js';
 import type { WorkItemRow } from '../storage/domains/work-items/work-item-schema.js';
 
@@ -171,6 +172,7 @@ export const FACTORY_GITHUB_EVENTS = [
   'issueOpened',
   'issueEdited',
   'issueClosed',
+  'issueReopened',
   'issueCommentCreated',
   'issueCommentEdited',
   'issueCommentDeleted',
@@ -188,6 +190,7 @@ export const FACTORY_GITLAB_EVENTS = [
   'issueOpened',
   'issueUpdated',
   'issueClosed',
+  'issueReopened',
   'issueCommented',
   'mergeRequestOpened',
   'mergeRequestUpdated',
@@ -299,6 +302,8 @@ export interface FactoryToolResultRuleContext extends FactoryBoundRuleContext {
 }
 
 export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
+  /** The status change this delivery reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
@@ -406,6 +411,8 @@ export interface FactoryRuleBoardClosurePhase {
 }
 
 export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
+  /** The status change this delivery reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
@@ -462,6 +469,8 @@ export interface FactoryGitLabRuleContext extends FactoryRuleContextBase {
 }
 
 export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
+  /** The status change this delivery reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
@@ -492,6 +501,8 @@ export interface FactoryLinearRuleContext extends FactoryRuleContextBase {
 }
 
 export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
+  /** The status change this delivery reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;
@@ -522,6 +533,8 @@ export interface FactoryJiraRuleContext extends FactoryRuleContextBase {
 }
 
 export interface FactoryIncidentioRuleContext extends FactoryRuleContextBase {
+  /** The status change this delivery reports, named the same for every provider; absent for other events. */
+  boardEvent?: BoardEventFacts;
   item?: FactoryRuleItemContext;
   board?: FactoryRuleBoard;
   itemRevision?: number;

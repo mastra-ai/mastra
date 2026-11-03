@@ -1,3 +1,5 @@
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -88,11 +90,26 @@ function labelColors(value: unknown): Record<string, string> {
   );
 }
 
+/** The status change a GitLab delivery reports. GitLab gives no close reason, so every close is completed. */
+export function boardEventFor(context: Pick<FactoryGitLabRuleContext, 'event'>): BoardEventFacts | undefined {
+  switch (context.event) {
+    case 'issueOpened':
+      return { type: 'work_item.created' };
+    case 'issueReopened':
+      return { type: 'work_item.reopened' };
+    case 'issueClosed':
+      return { type: 'work_item.closed', reason: closeReason(false) };
+    default:
+      return undefined;
+  }
+}
+
 function eventName(parsed: ParsedGitLabWebhook): FactoryGitLabEventName | undefined {
   const attributes = object(parsed.payload.object_attributes);
   const action = string(attributes?.action)?.toLowerCase();
   if (parsed.event === 'Issue Hook') {
-    if (action === 'open' || action === 'reopen') return 'issueOpened';
+    if (action === 'open') return 'issueOpened';
+    if (action === 'reopen') return 'issueReopened';
     if (action === 'close') return 'issueClosed';
     return 'issueUpdated';
   }
@@ -675,6 +692,8 @@ export class GitLabRules {
           }
         : {}),
     };
+    const boardEvent = boardEventFor(context);
+    if (boardEvent) context.boardEvent = boardEvent;
     const boardRules = boardEventHandlers(
       this.options.boards,
       input.mergeRequestOpenedScope === 'intake' ? undefined : eventBoardId(context),

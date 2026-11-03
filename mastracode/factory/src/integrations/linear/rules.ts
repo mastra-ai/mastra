@@ -1,3 +1,5 @@
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -71,6 +73,17 @@ export interface LinearRulesIngress {
 }
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
+
+/**
+ * The status change a Linear sync reports: a issue seen for the first time is created, and a
+ * completed or canceled one is closed for that reason. Later sightings of an open issue report none.
+ */
+export function boardEventFor(context: Pick<FactoryLinearRuleContext, 'event' | 'issue' | 'item'>): BoardEventFacts | undefined {
+  if (context.event === 'issueClosed') {
+    return { type: 'work_item.closed', reason: closeReason(context.issue.stateType === 'canceled') };
+  }
+  return context.item ? undefined : { type: 'work_item.created' };
+}
 
 export class LinearRules {
   constructor(private readonly options: LinearRulesOptions) {}
@@ -154,6 +167,8 @@ export class LinearRules {
       event,
       issue,
     };
+    const boardEvent = boardEventFor(context);
+    if (boardEvent) context.boardEvent = boardEvent;
 
     const rule = selectEventRule(
       this.options.linearRules,

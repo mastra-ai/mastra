@@ -687,3 +687,44 @@ describe('LinearRules', () => {
     });
   });
 });
+
+describe('Linear board events', () => {
+  it('reports a first sighting as created and a completed or canceled Linear issue as closed for that reason', async () => {
+    const seen: Array<{ event: string; boardEvent: unknown }> = [];
+    const record = (context: FactoryLinearRuleContext) => {
+      seen.push({ event: context.event, boardEvent: context.boardEvent });
+    };
+    const { project, service, workItems } = await setup({ issueObserved: record, issueClosed: record });
+    const ingest = (stateType: string, updatedAt: string) =>
+      service.ingest({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        issues: [{ ...issue, stateType, updatedAt }],
+      });
+    await ingest('unstarted', '2026-07-02T00:00:00Z');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42', url: issue.url },
+        title: issue.title,
+        stages: ['planning'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await ingest('started', '2026-07-03T00:00:00Z');
+    await ingest('completed', '2026-07-04T00:00:00Z');
+    await ingest('canceled', '2026-07-05T00:00:00Z');
+
+    expect(seen).toEqual([
+      { event: 'issueObserved', boardEvent: { type: 'work_item.created' } },
+      // A later sighting of an open Linear issue is not a status change.
+      { event: 'issueObserved', boardEvent: undefined },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'canceled' } },
+    ]);
+  });
+});

@@ -201,6 +201,9 @@ export const defaultGitLabRules = Object.freeze({
   // comments on the issue don't run it again.
   issueUpdated: null,
   issueClosed,
+  // A reopen gets the same intake an open does (files a card when the issue has none), as it did
+  // before GitLab reopens had their own event.
+  issueReopened: issueOpened,
   issueCommented: null,
   mergeRequestOpened: materializeMergeRequest,
   mergeRequestUpdated,

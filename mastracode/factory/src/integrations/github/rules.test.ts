@@ -6,6 +6,7 @@ import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
+import type { FactoryGithubRuleContext } from '../../rules/types.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
 import { GithubAppIdentity } from './app-identity.js';
@@ -5565,5 +5566,79 @@ describe('pull request cards on the Work board', () => {
       role: 'review',
       skillName: 'factory-review',
     });
+  });
+});
+
+describe('GithubRules board events', () => {
+  function issueReopened(deliveryId: string) {
+    const delivery = issueClosed(deliveryId);
+    return {
+      ...delivery,
+      payload: { ...delivery.payload, action: 'reopened', issue: { ...delivery.payload.issue, state: 'open' } },
+    };
+  }
+
+  async function recording() {
+    const seen: Array<{ event: string; boardEvent: unknown }> = [];
+    const record = (context: FactoryGithubRuleContext) => {
+      seen.push({ event: context.event, boardEvent: context.boardEvent });
+    };
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write', {
+      issueOpened: record,
+      issueClosed: record,
+      issueReopened: record,
+      issueEdited: record,
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    return { seen, service, workItems, project };
+  }
+
+  it('reports each issue status change as one normalized event, with not-planned and duplicate closes canceled', async () => {
+    const { seen, service, workItems, project } = await recording();
+    await service.ingest(issueOpened('board-event-open'));
+    await createLinkedIssue(workItems, project.id);
+    await service.ingest(issueClosed('board-event-completed', 'completed'));
+    await service.ingest(issueClosed('board-event-not-planned', 'not_planned'));
+    await service.ingest(issueClosed('board-event-duplicate', 'duplicate'));
+    await service.ingest(issueClosed('board-event-no-reason'));
+    await service.ingest(issueReopened('board-event-reopened'));
+    await service.ingest(issueEdited('board-event-edited'));
+
+    expect(seen).toEqual([
+      { event: 'issueOpened', boardEvent: { type: 'work_item.created' } },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'canceled' } },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'canceled' } },
+      { event: 'issueClosed', boardEvent: { type: 'work_item.closed', reason: 'completed' } },
+      { event: 'issueReopened', boardEvent: { type: 'work_item.reopened' } },
+      // An edit is activity, not a status change.
+      { event: 'issueEdited', boardEvent: undefined },
+    ]);
+  });
+
+  it('records a reopened issue without changing its card, as before reopens had an event', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const card = await createLinkedIssue(workItems, project.id, ['done']);
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    await expect(service.ingest(issueReopened('reopen-default'))).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(issueReopened('reopen-default'))).resolves.toEqual({ status: 'replayed' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    expect(await workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ stages: ['done'], revision: card.revision });
   });
 });

@@ -1,3 +1,5 @@
+import { closeReason } from '../../boards/board-events.js';
+import type { BoardEventFacts } from '../../boards/board-events.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -71,6 +73,17 @@ export interface IncidentioRulesIngress {
 }
 
 type IngressStatus = 'committed' | 'replayed' | 'missing';
+
+/**
+ * The status change a incident.io sync reports: a follow-up seen for the first time is created, and a
+ * completed or canceled one is closed for that reason. Later sightings of an open follow-up report none.
+ */
+export function boardEventFor(context: Pick<FactoryIncidentioRuleContext, 'event' | 'issue' | 'item'>): BoardEventFacts | undefined {
+  if (context.event === 'followUpClosed') {
+    return { type: 'work_item.closed', reason: closeReason(context.issue.stateType === 'canceled') };
+  }
+  return context.item ? undefined : { type: 'work_item.created' };
+}
 
 export class IncidentioRules {
   constructor(private readonly options: IncidentioRulesOptions) {}
@@ -146,6 +159,8 @@ export class IncidentioRules {
       event,
       issue,
     };
+    const boardEvent = boardEventFor(context);
+    if (boardEvent) context.boardEvent = boardEvent;
 
     const rule = selectEventRule(
       this.options.incidentioRules,

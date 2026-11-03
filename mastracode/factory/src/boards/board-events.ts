@@ -31,6 +31,11 @@ export interface BoardEventFacts {
   reason?: CloseReason;
 }
 
+/** The close reason for a provider's own closed-state fact. */
+export function closeReason(canceled: boolean): CloseReason {
+  return canceled ? 'canceled' : 'completed';
+}
+
 /** What a route without `on` handles: placing new cards, as routes always have. */
 export const DEFAULT_ROUTE_EVENTS: readonly StatusEvent[] = ['work_item.created'];
 
