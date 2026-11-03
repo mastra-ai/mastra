@@ -78,7 +78,7 @@ export function InlineWorkItemComposer({ stage, stageLabel, onCreate, onClose }:
             event.preventDefault();
             close();
           }}
-          placeholder="Type a name…"
+          placeholder="Type a name"
           readOnly={submitting}
           aria-invalid={error !== undefined || undefined}
         />

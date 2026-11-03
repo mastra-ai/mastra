@@ -145,6 +145,36 @@ describe('TranscriptEntries signal rows', () => {
     expect(row).toHaveAttribute('data-signal-kind', 'reminder');
   });
 
+  it('names the project instructions a reminder loaded, by their path in the working directory', () => {
+    renderEntries([
+      {
+        kind: 'message',
+        id: 'sig-environment',
+        message: signalDBMessage({
+          id: 'sig-environment',
+          type: 'state',
+          tagName: 'factory-environment',
+          text: 'Factory environment: 1 repository at /sandboxes/7b45/mastra, your working directory.',
+          attributes: { workingDirectory: '/sandboxes/7b45/mastra', repositories: 1 },
+        }),
+      },
+      {
+        kind: 'message',
+        id: 'sig-agents',
+        message: signalDBMessage({
+          id: 'sig-agents',
+          type: 'reactive',
+          tagName: 'system-reminder',
+          text: 'Build from root: pnpm build:core',
+          attributes: { type: 'dynamic-agents-md', path: '/sandboxes/7b45/mastra/packages/core/AGENTS.md' },
+        }),
+      },
+    ]);
+
+    const row = screen.getByRole('group', { name: 'Signal: Project instructions' });
+    expect(within(row).getByText('packages/core/AGENTS.md')).toBeVisible();
+  });
+
   it('renders the contents of a live system reminder data part on its line', () => {
     renderEntries([
       streamedReactiveSignalEntry('sig-reminder', 'system-reminder', 'Remember to run the focused tests.'),

@@ -87,7 +87,7 @@ export function PickMultiPanel({ field, tokens, onChange }: PickMultiPanelProps)
             type="text"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder={`Search ${field.label.toLowerCase()}...`}
+            placeholder={`Search ${field.label.toLowerCase()}`}
             className={menuSearchClasses.input}
             {...passwordManagerOptOutProps}
             onKeyDown={e => {

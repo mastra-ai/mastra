@@ -67,11 +67,79 @@ describe('Knowledge page key paths', () => {
   });
 });
 
+describe('Knowledge results name pages by full ref', () => {
+  async function nested() {
+    const env = setup({ pages: [] });
+    const { call } = env;
+    const guides = await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Guides', key: 'guides' });
+    const ops = await call('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      parent: guides.page.id,
+      name: 'Observability',
+      key: 'observability',
+    });
+    const logging = await call('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      parent: ops.page.id,
+      name: 'Logging',
+      key: 'logging',
+      body: 'Logging setup for zebrafish services.',
+    });
+    // No key: only its id reads it back.
+    const loose = await call('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      parent: ops.page.id,
+      name: 'Zebrafish tracing',
+      body: 'Tracing for zebrafish services.',
+    });
+    return { ...env, guides, ops, logging, loose };
+  }
+
+  it('returns the full key path from write, search and read, and every ref reads back the same page', async () => {
+    const { call, read, logging, loose, ops } = await nested();
+    expect(logging.page.ref).toBe('org:acme#guides/observability/logging');
+    expect(logging.page).not.toHaveProperty('key');
+    expect(loose.page.ref).toBe(loose.page.id);
+
+    const { results } = await call('knowledge_search', { query: 'zebrafish' });
+    const refs = results.map((hit: any) => hit.page.ref);
+    expect(refs).toEqual(expect.arrayContaining(['org:acme#guides/observability/logging', loose.page.id]));
+    for (const hit of results) expect((await read(hit.page.ref)).id).toBe(hit.page.id);
+
+    const parent = await call('knowledge_read', { page: 'org:acme#guides/observability' });
+    expect(parent.page.ref).toBe('org:acme#guides/observability');
+    expect(parent.page.id).toBe(ops.page.id);
+    for (const child of parent.children) expect((await read(child.ref)).id).toBe(child.id);
+    expect(parent.children.map((child: any) => child.ref)).toContain('org:acme#guides/observability/logging');
+
+    expect((await call('knowledge_read', { page: 'org:acme' })).page.ref).toBe('org:acme');
+  });
+
+  it('names close matches by full ref when a guessed path is not found', async () => {
+    const { read } = await nested();
+    await expect(read('org:acme#logging')).rejects.toThrow(
+      'Knowledge page "org:acme#logging" not found. Close matches: org:acme#guides/observability/logging (Logging).',
+    );
+    await expect(read('org:acme#no-such-page')).rejects.toThrow('Knowledge page "org:acme#no-such-page" not found.');
+  });
+
+  it('lists an ambiguous name by full refs', async () => {
+    const { call, read, guides } = await nested();
+    await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Logging', key: 'logging' });
+    await expect(read('Logging')).rejects.toThrow(/use one of these refs: .*org:acme#logging/);
+    await expect(read('Logging')).rejects.toThrow(/org:acme#guides\/observability\/logging/);
+    expect(guides.page.ref).toBe('org:acme#guides');
+  });
+});
+
 describe('Knowledge template pages belong to config', () => {
   it('refuses to move or merge away a template page, by key path, id and name', async () => {
     const { call, read } = setup();
-    const refund = await read('org:acme#policies/refund');
     const other = await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Scratch' });
+    const refund = await read('org:acme#policies/refund');
     for (const page of ['org:acme#policies/refund', refund.id, 'Refund policy']) {
       await expect(call('knowledge_page', { op: 'move', page, scope: 'org:acme' })).rejects.toThrow(
         `"org:acme#policies/refund" is declared in config; change the scope's pages to move it.`,
@@ -122,28 +190,31 @@ describe('Knowledge template pages belong to config', () => {
     await expect(read('Refund draft')).rejects.toThrow(/not found/);
   });
 
-  it('creates a page added to the template in an existing scope on its next run', async () => {
+  it('creates a page added to the template in an existing scope on its next writing run', async () => {
     const first = setup();
-    await first.read('org:acme#policies');
+    await first.call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Scratch' });
     const next = setup({
       storage: first.storage,
       pages: [{ ...TEMPLATES[0]!, pages: [...TEMPLATES[0]!.pages!, { key: 'returns', name: 'Returns' }] }],
     });
+    await expect(next.read('org:acme#policies/returns')).rejects.toThrow(/not found/);
+    await next.call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Scratch 2' });
     expect((await next.read('org:acme#policies/returns')).name).toBe('Returns');
   });
 
   it('gives a newly created scope its template pages', async () => {
     const first = setup();
-    await first.read('org:acme#policies');
+    await first.call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Scratch' });
     const globex = setup({ storage: first.storage, org: 'org:globex' });
+    await globex.call('knowledge_page', { op: 'write', scope: 'org:globex', name: 'Scratch' });
     expect((await globex.read('org:globex#policies/refund')).name).toBe('Refund policy');
     expect((await globex.read('org:globex#handbook/refund')).name).toBe('Refund section');
   });
 
   it('turns a page removed from the template into an ordinary page, and re-attaches it when added back', async () => {
     const first = setup();
-    const handbook = await first.read('org:acme#handbook');
     await first.call('knowledge_page', { op: 'write', page: 'org:acme#handbook', body: 'Read me first.' });
+    const handbook = await first.read('org:acme#handbook');
 
     const removed = setup({ storage: first.storage, pages: [TEMPLATES[0]!] });
     expect((await removed.read('org:acme#handbook')).id).toBe(handbook.id);

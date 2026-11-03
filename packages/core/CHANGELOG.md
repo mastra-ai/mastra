@@ -1,5 +1,304 @@
 # @mastra/core
 
+## 1.82.0-alpha.2
+
+### Minor Changes
+
+- Added `requestId`, `serviceName`, and `experimentId` filters to advanced trace queries. Use them at trace scope or inside `spans.some` / `spans.none` with `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. ([#29194](https://github.com/mastra-ai/mastra/pull/29194))
+
+  ```ts
+  const result = await mastraClient.queryTraces({
+    timeRange: { from: '2026-11-01T00:00:00.000Z', to: '2026-11-02T00:00:00.000Z' },
+    where: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'requestId' }, right: { literal: 'req-42' } },
+        { spans: { some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'payments' } } } },
+      ],
+    },
+  });
+  ```
+
+- Added `getStepResultAsync` to workflow step, condition, sleep, and `.map()` contexts, and deprecated `getStepResult`. ([#26999](https://github.com/mastra-ai/mastra/pull/26999))
+
+  `getStepResultAsync` returns the same value as `getStepResult`, wrapped in a promise. Switching now prepares workflows for upcoming storage changes that load step results on demand instead of keeping every result in memory. `getStepResult` keeps working and will be removed in a future major release.
+
+  ```ts
+  // Before
+  const step2 = createStep({
+    execute: async ({ getStepResult }) => {
+      const step1Result = getStepResult(step1);
+    },
+  });
+
+  // After
+  const step2 = createStep({
+    execute: async ({ getStepResultAsync }) => {
+      const step1Result = await getStepResultAsync(step1);
+    },
+  });
+  ```
+
+  If your tests build step execute params by hand, add a `getStepResultAsync` function to them.
+
+- Added `knowledge_list`, a Knowledge read tool that lists the page tree under a starting point, so an agent can see how a scope or section is organized before searching. Each entry has the ref `knowledge_read` accepts, its name and child count; pass `descriptions: true` to add page descriptions. It goes up to 3 levels deep, takes a `limit` and a `cursor` for wide levels, and says when deeper levels were cut off. A result also stops at the same token cap as a `knowledge_read` body; `more` says how many entries were left out and gives the `cursor` that continues exactly where it stopped, at any depth. Scopes the run can't read are left out. `tools: { read: true }` includes it. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+  ```ts
+  // Agent tool call
+  knowledge_list({ from: 'docs:acme#guides', depth: 2 });
+  // → { from: { ref: 'docs:acme#guides', name: 'Guides' },
+  //     entries: [{ ref: 'docs:acme#guides/observability', name: 'Observability', depth: 1, children: 2 }, …] }
+  ```
+
+  Knowledge storage adapters gained `countChildPages({ parentIds, read })`, which counts the readable child pages under each parent in one query.
+
+- `knowledge_read` reads long pages by line. A body that fits in one read (1,000 tokens) comes back whole as `body`. A longer one comes back as numbered `lines` (`12│text`) with the `range` they cover and the page's `lineCount`, ending at the last whole line that fits, and `more` says where to read on with `from: { line }`. A line too long for one read, such as a wide table row, is cut by column (`from: { line, col }`). An agent can also ask for the body's `outline` (headings with their line numbers and sizes), read one `section`, or `match` one or more terms like grep: only the lines that contain them, with `context` lines before and after (default 2). ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+  ```ts
+  knowledge_read({ page: 'docs:acme#models/anthropic', outline: true });
+  knowledge_read({ page: 'docs:acme#models/anthropic', section: 'contextManagement' });
+  knowledge_read({ page: 'docs:acme#models/anthropic', match: ['excludeTools', 'cacheControl'], context: 3 });
+  knowledge_read({ page: 'docs:acme#models/anthropic', from: { line: 120 } });
+  ```
+
+  Every Knowledge read result now lists anything it cut short in `more`, with how to get the rest: the body, notes, child pages (continue with `knowledge_list`), notes that mention the page (new `mentionedInCursor`), and search results at their limit.
+
+  A whole-page read keeps a page's notes, and the notes on other pages that mention it, only while each list stays under 1,000 tokens. A longer list is left out and counted in `more`; read it on its own with `notes: true` or `mentionedIn: true`. A read with `cursor` or `mentionedInCursor` now returns only those notes, without repeating the body.
+
+  Every part of a body a read returns comes with its `range`. `knowledge_page` takes a `range` with `expectedVersion` and replaces only those lines with `body`; an empty `body` removes them. A range may be the one a read returned or a smaller one inside it, but not wider than one read from its first line shows, so text the writer never saw can't be overwritten. A body write without a range is refused when the stored body is longer than one read returns, and so is a body that still carries the read's line numbers.
+
+  ```ts
+  const { page } = await knowledge_read({ page: 'docs:acme#models/anthropic', section: 'Setup' });
+  knowledge_page({ op: 'write', page: page.ref, body: editedSetup, range: page.range, expectedVersion: page.version });
+  ```
+
+  The per-result cap is configurable: `tools: { read: { maxTokens: 3000 }, write: true }` sets how many estimated tokens one `knowledge_read` body window or match result, and one `knowledge_list` result, returns (default 1,000, at least 100). The write guard for line ranges follows the same cap.
+
+  ```ts
+  const knowledge = new Knowledge({ scopes, tools: { read: { maxTokens: 3000 }, write: true } });
+  ```
+
+- Added opt-in Editor ownership and versioned persistence for static model fallback lists. ([#27287](https://github.com/mastra-ai/mastra/pull/27287))
+
+  ```ts
+  new Agent({
+    id: 'support-agent',
+    name: 'Support agent',
+    instructions: 'Help users resolve support requests.',
+    model: [
+      { id: 'primary', model: 'openai/gpt-4o' },
+      { id: 'fallback', model: 'openai/gpt-4o-mini' },
+    ],
+    editor: { model: true },
+  });
+  ```
+
+- Suspended background tool calls can now be answered after a reload. ([#28998](https://github.com/mastra-ai/mastra/pull/28998))
+
+  **Open request saved on the tool call.** While a deferred background tool is suspended, the assistant message that holds the call keeps the open request in `metadata.suspendedTools[toolCallId]` (with `suspendPayload`, `taskId`, and `suspendedAt`). The entry is removed when the task resumes or is cancelled, so a chat that reloads the thread shows only requests that are still open.
+
+  **Resumed tools see what they asked for.** A resumed background tool now receives the payload it suspended with in `context.agent.suspendPayload`, the same as a foreground tool:
+
+  ```typescript
+  execute: async (input, context) => {
+    const { resumeData, suspendPayload, suspend } = context.agent;
+    if (!resumeData) return suspend?.({ question: 'Approve the refund?' });
+    // suspendPayload is { question: 'Approve the refund?' }
+  };
+  ```
+
+  **Resume only the suspension you read.** `BackgroundTaskManager.resume()` takes an optional `suspendedAt`, and refuses the resume when the task has resumed or suspended again since:
+
+  ```typescript
+  await mastra.backgroundTaskManager.resume(taskId, { approved: true }, { suspendedAt: task.suspendedAt });
+  ```
+
+  **The agent reports a deferred task's result after its stream ends.** When a deferred background task finishes and no `untilIdle` stream is open for its thread, the agent now gets a `background-task` notification signal on the thread. An idle thread wakes and the agent reports the outcome; a run already active on the thread gets the signal on its next model request. Before, the result was only written to memory and waited for the next user message. This covers `stream()` calls without `untilIdle` and tasks resumed after they suspended, for example an MCP task answered from the chat. Streams using `untilIdle` are unchanged: they still run their own follow-up turn, and no signal is sent. Cancelling or aborting an `untilIdle` stream still means no reply for the tasks it was waiting for.
+
+  **Opt in to ending woken runs after their turn.** A run that a signal starts on an idle thread still stays open until the background tasks it dispatched finish. Set the temporary `wokenRunsEndAfterTurn` option to end it after its own turn instead; each task then wakes the thread when it finishes. A signal's own `ifIdle.streamOptions.untilIdle` takes precedence either way.
+
+  ```typescript
+  new Mastra({ backgroundTasks: { enabled: true, wokenRunsEndAfterTurn: true } });
+  ```
+
+  In the next major release, ending after the turn becomes the only behavior and `wokenRunsEndAfterTurn` is removed. Pass `untilIdle: true` in `ifIdle.streamOptions` to keep a woken run open; channels and agent controller sessions already do.
+
+  **Turn off the completion signal.** Set `notifyAgentOnFinish: false` in the `backgroundTasks` config when your app sends its own completion signal, for example from `onTaskComplete`. With `wokenRunsEndAfterTurn` also on, your app must report the tasks of woken runs itself.
+
+- Added `knowledge.upsertPage()`, `knowledge.removePage()`, `knowledge.addNote()`, `knowledge.updateNote()` and `knowledge.removeNote()` so apps can sync outside content, such as docs, into Knowledge from server code. A page is identified by its scope and key path, so running a sync again updates the same pages and skips unchanged ones. Notes on synced pages are kept, pages are embedded when Knowledge has a vector store, and change listeners are told. ([#29159](https://github.com/mastra-ai/mastra/pull/29159))
+
+  ```ts
+  await knowledge.upsertPage({ scope: 'docs:acme', path: 'guides/install', name: 'Install', body: markdown });
+  await knowledge.removePage({ scope: 'docs:acme', path: 'guides/old' });
+
+  const note = await knowledge.addNote({ scope: 'docs:acme', path: 'guides/install', text: 'Needs Node 20.' });
+  await knowledge.updateNote({ id: note.id, text: 'Needs Node 22.' }); // returns a note with a new id
+  ```
+
+### Patch Changes
+
+- Fixed "Tenant model credential policy could not be resolved: the request has no authenticated user" errors that recurred on every message in a session with a pending tool approval. When a new user message declines a pending approval, the decline now runs with the sender's request context instead of the reattached run's empty one. ([#29231](https://github.com/mastra-ai/mastra/pull/29231))
+
+- Knowledge tool results now name each page by the ref `knowledge_read` accepts. Search, read and page results carry `ref`: the scope address for a scope page, the full key path for a nested page (`docs:acme#guides/observability/logging`), or the page id when a page on the path has no key. The old `key` field held only the last path segment, so agents that copied it got "not found" for nested pages; it is gone. A read that misses now lists up to three close matches by ref, and an ambiguous page name lists its candidates by ref. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+- Knowledge page paths ignore leading, trailing and doubled slashes, so `docs:acme#models/gateways/` names the same page as `docs:acme#models/gateways`. This holds for `upsertPage`, `removePage`, the note methods, `[[links]]` in notes, page refs given to the Knowledge tools, and `pinnedContext` refs. Previously `upsertPage` refused such paths and reads reported the page as not found. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+- `knowledge_search` finds pages that match any word of the query and ranks them by how many of the words they contain, so a long question still surfaces the page that holds most of its words. Among pages with the same number of words, a word in a page's name counts for more than one in its description, and one in its description for more than one in its body, then the newest page wins. A page whose name contains the whole query still comes first. Ranking happens inside each store (in-memory, LibSQL, PostgreSQL, MySQL and MongoDB) before the result limit, and access checks run before ranking as before. Quoted phrases are still searched as plain words. When nothing matches any word, the "no results" hint now says so. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+- `knowledge_search` handles queries agents commonly write. Quoted words (`"api" "responses"`) are searched as plain words; before, the quote marks were matched literally and nothing was found. A search that finds nothing now says so and suggests one to three key words or `knowledge_list`. Passing a page ref such as `docs:acme#models` as `scope` now explains that `scope` takes scope addresses, instead of reporting the page as not found. ([#29207](https://github.com/mastra-ai/mastra/pull/29207))
+
+  A first `knowledge_read` of a long page that stops early now also returns the `outline` of the headings it did not reach (up to about 500 tokens of them, with their line numbers and sizes), so an agent can read the section it needs next instead of paging toward it. Search results at their limit no longer tell the agent to search again; the default Knowledge instructions now say to follow `more` only when what the agent needs is not already in what it has read, and to answer once it has it.
+
+  The first `knowledge_read` of a page too long to return whole now shows the whole page at a glance: every heading with its line number and the first lines under it, with `⋯ lines a–b` where lines are left out, within the read cap. Read the part you need with `section` or `from`. A page with more headings than fit falls back to its top lines and the headings below them.
+
+- Stored spans now use the service name from the Observability config when the span metadata does not set one. ([#29201](https://github.com/mastra-ai/mastra/pull/29201))
+
+- Fixed `getStepResult` and `getStepResultAsync` returning `null` for the loop body inside `.dowhile()` and `.dountil()` conditions on the evented workflow engine. Loop conditions now see the body's latest result on every iteration, matching the default engine. ([#26999](https://github.com/mastra-ai/mastra/pull/26999))
+
+- Fixed `run.cancel()` leaving suspended nested workflow runs suspended after the parent was canceled. Nested runs, including foreach iterations, are now canceled with their parent on both the default and evented engines. Calling `cancel()` again on a run that is already canceled also cancels nested runs it left suspended. If storage fails while canceling nested runs, `cancel()` rejects and can be retried. (#24780) ([#29170](https://github.com/mastra-ai/mastra/pull/29170))
+
+- Fixed signal-started runs to use the `ifIdle.streamOptions.runId` you provide. This applies when `sendSignal`, `sendMessage`, `queueSignal` or `queueMessage` wakes an idle thread or queues a run behind the active one. The id appears in `accepted.runId`, `output.runId` and thread events. If the id already names a known run, `accepted` rejects. Calls without an id still get a random one. ([#29152](https://github.com/mastra-ai/mastra/pull/29152))
+
+  ```ts
+  const { accepted } = agent.sendSignal(
+    { type: 'user-message', contents: 'hello' },
+    { resourceId, threadId, ifIdle: { streamOptions: { runId: 'my-run-id' } } },
+  );
+  await accepted; // { action: 'wake', runId: 'my-run-id', output }
+  ```
+
+- Fixed progress from tools wrapped with `createStep` from `@mastra/core/workflows/evented` never reaching the workflow stream. The tool now receives the step `writer`, the run `actor` (including the `actor` step option) and `suspendPayload`, the same as with `createStep` from `@mastra/core/workflows`. Fixes #29164. ([#29165](https://github.com/mastra-ai/mastra/pull/29165))
+
+- Fixed type declarations for bundled AI SDK packages. When `@mastra/core` bundled two versions of the same AI SDK package, one version's types overwrote the other's, so types such as `LanguageModelV3` used by the bundled OpenAI, Google and Anthropic providers resolved to `any`. Each version now keeps its own copy, so these types are checked again. Fixes [#28732](https://github.com/mastra-ai/mastra/issues/28732). ([#29171](https://github.com/mastra-ai/mastra/pull/29171))
+
+## 1.82.0-alpha.1
+
+### Minor Changes
+
+- Added time to first token and time to first chunk measures to trace and span aggregates, so dashboards can chart streaming latency next to duration. ([#29055](https://github.com/mastra-ai/mastra/pull/29055))
+
+  The new measures are `timeToFirstToken.avg`, `.min`, `.max`, `.p50`, `.p90`, `.p95`, `.p99`, and `.count`, plus the same set for `timeToFirstChunk`. Traces and spans without a recorded value are skipped instead of counted as 0, and `.count` reports how many had one. Stores opt in through the `aggregate-time-to-first-measures` feature.
+
+### Patch Changes
+
+- Fixed durable agents (`durable: true`) ending the `model_generation` trace span without `responseId` and `responseModel`. Durable runs now record the provider's response id and model on the span, the same as non-durable agents, so a trace can be linked back to the provider's own response log. Fixes #29053. ([#29180](https://github.com/mastra-ai/mastra/pull/29180))
+
+- Fixed metadata filters in the in-memory store returning records whose nested metadata had different keys from the filter when one side contained an `undefined` value. ([#29101](https://github.com/mastra-ai/mastra/pull/29101))
+
+- Fixed directly resumed nested workflows in the evented engine so they continue suspended parent runs. ([#25979](https://github.com/mastra-ai/mastra/pull/25979))
+
+## 1.82.0-alpha.0
+
+### Minor Changes
+
+- An agent's `scopes` function can now narrow or replace a run's scopes. It receives the run's incoming scopes (from the call, `defaultOptions` and request context) and returns the run's final set. A static `scopes` list is still added to the incoming scopes. The function must keep any `resource:` or `thread:` scope it was given; dropping one throws. ([#28353](https://github.com/mastra-ai/mastra/pull/28353))
+
+  ```ts
+  const agent = new Agent({
+    id: 'support',
+    name: 'Support',
+    instructions: 'Answer support questions.',
+    model,
+    // Keep identity scopes, drop anything else the caller sent, and add the tenant's org.
+    scopes: ({ scopes, requestContext }) => [
+      ...scopes.filter(scope => typeof scope === 'string' && /^(resource|thread):/.test(scope)),
+      `org:${requestContext.get('orgId')}`,
+    ],
+  });
+  ```
+
+- Added `onDecision` to `ClassifierProcessor` for writing guardrail decisions to your own audit log (#28985). It runs after each classification, including failed classifier calls, and receives the outcome (`allowed`, `filtered` or `aborted`), the answers or the error, the call duration, and the ids of the message, thread, resource or run. ([#29070](https://github.com/mastra-ai/mastra/pull/29070))
+
+  ```ts
+  new ClassifierProcessor({
+    classifier: safety,
+    onResult,
+    onDecision: async decision => {
+      await auditLog.insert({
+        threadId: decision.ids.threadId,
+        outcome: decision.outcome,
+        answers: decision.result ? decision.result.answers : null,
+        error: decision.result ? null : String(decision.error),
+      });
+    },
+  });
+  ```
+
+  `abort` in `onResult` now accepts tripwire metadata, so the caller can tell which policy blocked the request:
+
+  ```ts
+  onResult: (answers, { abort }) => {
+    if ((answers.unsafe.probability ?? 1) > 0.8) {
+      abort('Blocked', { metadata: { policy: 'unsafe' } });
+    }
+  };
+  ```
+
+  A failed classifier call under `errorStrategy: 'strict'` now sets tripwire metadata `{ processorId, classifierId, code: 'CLASSIFIER_FAILED' }`. On agents that aren't durable, stopping a streaming reply now cancels a classifier call that is still running.
+
+- Changes to an experimental, upcoming memory feature. ([#28353](https://github.com/mastra-ai/mastra/pull/28353))
+
+  `experimental_subconscious` and the Memory `knowledge` option are removed: setting either now throws, saying to attach Knowledge to the agent instead (`knowledge: false` is still accepted). `Subconscious` and `KnowledgeSemanticIndexCoordinator` stay exported from `@mastra/memory` so older code still loads, and throw when constructed. `@mastra/core/knowledge` exports `Knowledge` with its option and result types and the Knowledge storage domain; the tool, pin and semantic-index helpers are internal.
+
+  Agent `scopes` are plain `"<type>:<value>"` strings that say who the run is; what the run may read or write comes from whoever consumes them, such as Knowledge's scope declarations.
+
+  A message can carry its own scopes: `session.sendMessage({ content, scopes })`. A run's scopes are fixed when it starts, so a message whose scopes differ from the running run's waits for it to end, then starts its own run in the same conversation. `sendSignal` reports this as `{ action: 'blocked', reason: 'scope-mismatch', runId }`. `queueMessage`, `queueSignal`, `sendNotificationSignal` and `steer` take `scopes` the same way: a queued or steering message, or a notification, whose scopes differ from the running run's starts its own run with its scopes after that run instead of joining it. A deferred notification keeps the scopes it was sent with. Scopes are set in process only: remote callers (the agent controller HTTP routes and `@mastra/client-js`) can't send them. To derive scopes from a request, give the agent a `scopes` function that reads trusted request context. When the thread's claimed owner runs in another process, a message with scopes isn't queued: `sendMessage` rejects with an error saying scopes don't cross processes. Messages without scopes still join that owner's run.
+
+  Attach Knowledge with `new Agent({ knowledge, scopes })`. Knowledge needs `scopes`, the scope types its runs may hold and who gets which role on them: `new Knowledge({ storage, scopes: { ...knowledgeMemoryScopes() } })` declares Memory's `thread:`/`resource:` scopes and an `org:` scope; `{}` declares none. A run holding a scope that isn't declared fails. Tools are off by default: `tools: true` gives the read and write tools, `tools: { read: true }` the read tools only, and `pinnedContext: true` (or `{ maxPins, maxTokens }`) delivers pinned pages every turn and adds `knowledge_pin`. `knowledge.readScopeFor(principals)` returns what holders of those scopes can read, for host code reading the store directly. `knowledge.explainAccess(runScopes, { scope } | { page })` says why a run can or can't reach a scope or page; it's host-only, so never expose it through an agent tool or an unauthenticated route. `knowledge.onChange(listener)` reports each committed write made through `knowledge.getStorage()` (tools included) by id, for live UIs; re-read each page under the viewer's read scope before showing it. A scope declaration can carry a `displayLabel` for UIs, and `knowledge.scopeDeclaration(key)` returns a declaration's display fields.
+
+  Knowledge is a tree of pages. The tools are five: `knowledge_search`, `knowledge_read` (a page with its notes, or a scope's pages), `knowledge_page` (`op: 'write' | 'move' | 'merge'`), `knowledge_note` (`op: 'add' | 'restamp' | 'remove'`) and `knowledge_pin` (`op: 'pin' | 'unpin'`). Notes are at most about 250 tokens and page descriptions about 100; long text goes in a page body.
+
+  Search is keyword search by default. Give Knowledge a `vector` store and an `embedder` and `knowledge_search` blends keyword and semantic results; pages and notes written through the tools are embedded as they're written. Every semantic hit is re-checked against what the run can read before it's ranked, so hidden content never fills result slots. `knowledge.reindex()` re-embeds everything, for content written straight to the store or after an embedding failure.
+
+- Fixed a recovered thread run losing its thread lease when the execution it replaced finished. Previously, when a run was recovered in another process, the original execution's exit released the shared lease while the recovered execution was still running, so the thread looked free and a new run could start on it. Each execution now holds the lease under its own generation, so only the live execution can renew or release it. ([#28947](https://github.com/mastra-ai/mastra/pull/28947))
+
+  Also fixed run IDs that contain the internal handover marker, or look like an encoded lease owner, being misread as a different run. Any caller-provided run ID now round-trips unchanged.
+
+  **Upgrading shared deployments**
+
+  Drain active thread runs and restart API and worker processes together. Older processes do not recognize the new lease owner format: they cannot see a run as live, even while it is renewing its lease. Follow-ups that an older process forwards to a run on this release are still delivered.
+
+### Patch Changes
+
+- Fixed resuming suspended agent runs across server instances when a process retains an earlier run segment. ([#29065](https://github.com/mastra-ai/mastra/pull/29065))
+
+- Update provider registry and model documentation with latest models and providers ([`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715))
+
+- Improved `validateStepRequestContext` typing. It now accepts any object with `id` and `requestContextSchema`, not only a full `Step`. ([#29080](https://github.com/mastra-ai/mastra/pull/29080))
+
+- Fixed skills not loading on Windows when the workspace `basePath` uses a short folder name such as `C:\Users\ABCDEF~1\...`, which `os.tmpdir()` can return. Optional skill folders that don't exist, like `references`, no longer fail with `Permission denied`. Fixes [#28957](https://github.com/mastra-ai/mastra/issues/28957). ([#29078](https://github.com/mastra-ai/mastra/pull/29078))
+
+- Fixed a signal sent to a thread while an `agent.generate()` turn was running starting a second run that could not see that turn. `generate()` now registers its run with the thread like `stream()` does, so `sendSignal`, `sendMessage` and notifications with the default `ifActive: 'deliver'` join the running turn. ([#28953](https://github.com/mastra-ai/mastra/pull/28953))
+
+  As with `stream()`, a thread-bound `generate()` now waits for a run already going on the same thread, so concurrent `generate()` calls on one thread run one after another instead of in parallel. A tool that calls `generate()` or `stream()` on its own thread waits for the run it is part of, so it deadlocks; a tool should use `sendSignal` to send a message to its own thread.
+
+- Knowledge notes returned by `knowledge_note`, `knowledge_read` and `knowledge_search` now carry `mentions`, mapping each `[[ref]]` in the note to the page id it resolves to, so a chat can link them. Refs are resolved the way the note's write resolved them; a name that no longer resolves is left out. ([#28942](https://github.com/mastra-ai/mastra/pull/28942))
+
+  ```json
+  { "id": "n1", "text": "Escalate per [[Escalation Process]].", "mentions": { "Escalation Process": "page-esc" } }
+  ```
+
+- Added read-only page-store readers to `@mastra/core/knowledge` for browsing UIs: `listKnowledgeTreeChildren` (one level of the page tree, child scopes first), `readKnowledgePage` (a page with its readable ancestors, notes, pin, referenced pages and notes that mention it), `readKnowledgePageGraph` (a bounded page graph with parent and mention edges, limits in `DEFAULT_KNOWLEDGE_PAGE_GRAPH_LIMITS`; mentions come from every note on a walked page until a graph-wide `maxNotes` budget runs out, which sets `truncated`), `searchKnowledgeExplorerPages` and `readKnowledgePageActivity`. Each takes a read scope (`'all'` for an owner view) and passes it to every store call, so pages and notes outside it never appear, mention edges included. They never write. Added `readKnowledgeScopeGrants`, which lists the declared grants onto the scope pages in a graph (principal scope, its page id when it has one, target and role), keeping only principals the read scope can read, and `knowledge.scopeGrants(scope)`, which gives each principal the declared rules name on one scope with its strongest role. ([#28362](https://github.com/mastra-ai/mastra/pull/28362))
+
+- Fixed `Property '#private' is missing` when passing a voice provider such as `new OpenAIRealtimeVoice()` to an agent's `voice` option or to `CompositeVoice` ([#29016](https://github.com/mastra-ai/mastra/issues/29016)). ([#29074](https://github.com/mastra-ai/mastra/pull/29074))
+
+  These options now accept the `IMastraVoice` interface, exported from `@mastra/core/voice`. `agent.voice` and `agent.getVoice()` return `IMastraVoice`. If you annotate a variable with a voice type, use `IMastraVoice` instead of `MastraVoice`.
+
+  ```typescript
+  import { Agent } from '@mastra/core/agent';
+  import { OpenAIRealtimeVoice } from '@mastra/voice-openai-realtime';
+
+  export const voiceAgent = new Agent({
+    id: 'voice-agent',
+    name: 'Voice Agent',
+    instructions: 'You are a voice assistant.',
+    model: 'openai/gpt-6.1-sol',
+    voice: new OpenAIRealtimeVoice(), // failed with TS2322 before this fix
+  });
+  ```
+
+- Fixed retained workflow handles and abort listeners after durable agent runs settle (#29009) ([#29065](https://github.com/mastra-ai/mastra/pull/29065))
+
 ## 1.81.0
 
 ### Minor Changes

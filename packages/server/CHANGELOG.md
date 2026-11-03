@@ -1,5 +1,106 @@
 # @mastra/server
 
+## 1.82.0-alpha.2
+
+### Minor Changes
+
+- Added `POST /api/background-tasks/:backgroundTaskId/resume` to answer a suspended background task over HTTP. ([#28998](https://github.com/mastra-ai/mastra/pull/28998))
+
+  - Send the answer as `resumeData`.
+  - Optionally send the `suspendedAt` you read from the task. If the task has resumed or suspended again since then, the server answers `409` instead of delivering a stale answer.
+  - Background task responses now include `suspendedAt`.
+  - The route needs the new `background-tasks:execute` permission.
+
+  ```bash
+  curl -X POST http://localhost:4111/api/background-tasks/$TASK_ID/resume \
+    -H 'Content-Type: application/json' \
+    -d '{"resumeData":{"approved":true},"suspendedAt":"2026-10-30T10:00:00.000Z"}'
+  ```
+
+- Added persistent model-list editing through the existing agent model reorder and update APIs for agents that opt into Editor ownership. ([#27287](https://github.com/mastra-ai/mastra/pull/27287))
+
+### Patch Changes
+
+- Trace queries that filter by `requestId`, `serviceName`, or `experimentId` now return `501` with a clear message when the configured observability store is too old to support them, instead of failing with a `500`. The capabilities route reports support as `traceQueryContextFields`. ([#29194](https://github.com/mastra-ai/mastra/pull/29194))
+
+- Updated dependencies [[`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6)]:
+  - @mastra/core@1.82.0-alpha.2
+
+## 1.82.0-alpha.1
+
+### Minor Changes
+
+- Added the `aggregateTimeToFirstMeasures` observability capability. Trace and span aggregate requests for `timeToFirstToken.*` or `timeToFirstChunk.*` measures now return `501` against stores that can't compute them, and field discovery omits those measures for such stores. ([#29055](https://github.com/mastra-ai/mastra/pull/29055))
+
+  ```typescript
+  const { capabilities } = await mastraClient.getObservabilityCapabilities();
+
+  if (capabilities.traceAggregate && capabilities.aggregateTimeToFirstMeasures) {
+    const { rows } = await mastraClient.aggregateTraces({
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
+      groupBy: ['entityName'],
+      measures: ['timeToFirstChunk.p95', 'timeToFirstChunk.count'],
+    });
+  }
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`8751dd7`](https://github.com/mastra-ai/mastra/commit/8751dd7f56eefe40d8ce57b6d44df415cadbda4f), [`682e8f3`](https://github.com/mastra-ai/mastra/commit/682e8f3e44473a5b1f608d1c4ae3a5b8fa46b563), [`0900c20`](https://github.com/mastra-ai/mastra/commit/0900c20592db49a330f467eff5c119212f26603d), [`ebf8a9a`](https://github.com/mastra-ai/mastra/commit/ebf8a9a1370105fd6bcc5706711203236a1993ff)]:
+  - @mastra/core@1.82.0-alpha.1
+
+## 1.82.0-alpha.0
+
+### Minor Changes
+
+- Added read-only Knowledge routes on the Mastra server (`GET /knowledge`, `/knowledge/:knowledgeKey/tree`, `/pages/:pageId`, `/graph`, `/search`, `/activity`) and matching `listKnowledge()` / `getKnowledge(key)` methods on the JS client. ([#29069](https://github.com/mastra-ai/mastra/pull/29069))
+
+  `GET /knowledge/:knowledgeKey/events` is a Server-Sent Events stream of the writes the caller can read, as `{ kind, op, pageId?, scopeId?, at }`; ids the caller can't read are left out. The server ends each stream after five minutes so a reconnect re-checks the caller's access; reconnect when it ends. Follow it from the client with `getKnowledge(key).events({ signal })`.
+
+  The routes are opt-in: they are not part of the default route set, so register them explicitly before they are served.
+
+  ```ts
+  import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter';
+
+  new Mastra({
+    server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
+  });
+  ```
+
+  What they return depends on whether the app configures auth. Without auth they read every scope, page and note in the instance. With auth they return only what the signed-in caller can read: set `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` on the request context in `authorize` to the caller's Knowledge principals (or `'all'` for an admin), and a caller with no mapping is refused with 403.
+
+  ```ts
+  import { MASTRA_KNOWLEDGE_PRINCIPALS_KEY } from '@mastra/server/server-adapter';
+
+  authorize: async (path, method, user, context) => {
+    if (path.startsWith('/api/knowledge')) {
+      context.get('requestContext').set(MASTRA_KNOWLEDGE_PRINCIPALS_KEY, [`team:${user.orgId}:${user.teamId}`]);
+      return true;
+    }
+    return appAuthorize(path, method, user, context); // keep your existing decision for other routes
+  };
+  ```
+
+  The routes are gated by a new `knowledge:read` permission. With an FGA provider configured, instances are checked by their registered key: `GET /knowledge` lists only the instances the caller can read, and the other routes refuse any other instance with 403.
+
+  Scope pages in tree, page, graph and search responses carry their declaration's `displayLabel` when the declaration sets one, with the address's `$params` filled in (`"$orgId policy"` on `policy:$orgId` shows as `"acme policy"` for `policy:acme`), so the explorer can caption a scope by its kind.
+
+  The graph response also lists `grants`: the declared access grants onto the scopes it shows (principal scope address, its page id when it has one, its `principalLabel`, the target scope's page id and the role), so the explorer can draw who reaches what. Only principal scopes the caller can read are included; an owner view (`'all'`) also gets declared principals nothing was written to yet. Servers on a core without grant support leave the field out.
+
+### Patch Changes
+
+- `server.auth.authorize(path, method, user, context)` can now call `context.get('requestContext')` and `context.get('mastra')` on the Express, Fastify, Koa and Elysia adapters, as it already could on Hono. Values an app sets on the request context in `authorize` now reach route handlers on every adapter. ([#29069](https://github.com/mastra-ai/mastra/pull/29069))
+
+  ```ts
+  authorize: async (path, method, user, context) => {
+    context.get('requestContext').set('tenantId', user.orgId); // read it in any route handler
+    return appAuthorize(path, method, user, context);
+  };
+  ```
+
+- Updated dependencies [[`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d), [`4d3ebbd`](https://github.com/mastra-ai/mastra/commit/4d3ebbd304509acb118f319e8467fc932079e715), [`a4d1537`](https://github.com/mastra-ai/mastra/commit/a4d1537e8bac1d3634059bdbc843d787f1ac91f2), [`5a37eef`](https://github.com/mastra-ai/mastra/commit/5a37eefdafb239ccc6514018113f3fb1a025ce9b), [`41dc481`](https://github.com/mastra-ai/mastra/commit/41dc481f1b3509ec6c2a06e63caaa4f630cafa80), [`500edeb`](https://github.com/mastra-ai/mastra/commit/500edeb84e7ec665b5af26e99fced33cf3c85bfd), [`0a553f0`](https://github.com/mastra-ai/mastra/commit/0a553f0f6ff4150fa5d9897b53824a647f7ddd1e), [`697ea99`](https://github.com/mastra-ai/mastra/commit/697ea99ae93f6dae203cab0f059bc5f9d8316c1e), [`cbe76c0`](https://github.com/mastra-ai/mastra/commit/cbe76c0d76e5543866f918fd41041c4d73a1a172), [`49e59f2`](https://github.com/mastra-ai/mastra/commit/49e59f251e45de082262e3892b599f48c1ddb413), [`b3b2cd2`](https://github.com/mastra-ai/mastra/commit/b3b2cd292a314ed4b422dd055f8d1580c781860a), [`99ca92b`](https://github.com/mastra-ai/mastra/commit/99ca92b60272063a5cb978628e5d286f86c37d4d)]:
+  - @mastra/core@1.82.0-alpha.0
+
 ## 1.81.0
 
 ### Minor Changes

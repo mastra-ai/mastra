@@ -27,6 +27,7 @@ import type {
 } from '../../types';
 import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
+import { responseRecordSchema } from '../shared/schemas';
 
 /**
  * Input schema for the durable LLM mapping step.
@@ -65,6 +66,7 @@ const durableLLMMappingOutputSchema = z.object({
   deferredStepFinishChunk: z.any().optional(),
   completionStartTime: z.coerce.date().optional(),
   timeToFirstTokenMs: z.number().optional(),
+  response: responseRecordSchema.optional(),
 });
 
 /**
@@ -416,6 +418,7 @@ export function createDurableLLMMappingStep() {
         deferredStepFinishChunk,
         completionStartTime: llmOutput.completionStartTime,
         timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
+        response: llmOutput.response,
       };
 
       // Close the MODEL_STEP span for tool-calling iterations: the LLM step defers it so

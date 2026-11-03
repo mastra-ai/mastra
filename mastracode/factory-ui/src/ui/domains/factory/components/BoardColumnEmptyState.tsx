@@ -60,6 +60,11 @@ function boardColumnEmptyCopy(
         title: 'Nothing awaiting review',
         description: 'Drag built work here when it is ready for review.',
       };
+    case 'pr-review':
+      return {
+        title: 'No pull requests in review',
+        description: 'Press Review on a pull request card in Intake to start a review.',
+      };
     case 'done':
       if (kind === 'review')
         return {

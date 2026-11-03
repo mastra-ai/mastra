@@ -9,6 +9,8 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { selfReviewApprovedHead } from './self-review-gate.js';
 import { createSourceControlTools, FACTORY_TEST_CHECK_NAME } from './source-control-tools.js';
 
 function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
@@ -257,6 +259,65 @@ describe('createSourceControlTools', () => {
       const { setup, run } = await gated(approved, approved.toUpperCase());
       await expect(run()).resolves.toMatchObject({ id: '17' });
       expect(setup.closePullRequest).not.toHaveBeenCalled();
+    });
+
+    // The gate as the Factory wires it, reading the bound card and project from real storage.
+    const boundTo = async (source: 'github-issue' | 'github-pr', role: 'work' | 'review') => {
+      const seeded = await createFactoryStorageForTests();
+      const project = await seeded.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
+      await seeded.projects.update({ orgId: 'org-1', id: project.id, input: { selfReviewEnabled: true } });
+      await seeded.workItems.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        workItem: {
+          input: {
+            board: 'work',
+            externalSource: {
+              integrationId: 'github',
+              type: source === 'github-pr' ? 'pull-request' : 'issue',
+              externalId: `${source}:1`,
+            },
+            title: 'Factory item',
+            stages: ['review'],
+            sessions: {},
+            metadata: { authorTrusted: true },
+          },
+        },
+        role,
+        session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+        resourceId: 'project-1',
+        kickoffKey: 'kickoff-1',
+        kickoffMessage: null,
+      });
+      const setup = await fixture();
+      setup.storage.connectionsRows[0]!.factoryProjectId = project.id;
+      const context = requestContext();
+      const controller = context.get('controller') as AgentControllerRequestContext;
+      context.set('controller', {
+        ...controller,
+        getState: () => ({ factoryProjectId: project.id, projectRepositoryId: 'repo-link-1' }),
+      } as AgentControllerRequestContext);
+      const tools = await createSourceControlTools({
+        requestContext: context,
+        providers: [{ id: 'gitlab', storage: setup.storage, versionControl: setup.versionControl }],
+        audit: setup.audit,
+        selfReviewApprovedHead: () =>
+          selfReviewApprovedHead({ requestContext: context, workItems: seeded.workItems, projects: seeded.projects }),
+      });
+      return { setup, run: () => (tools.source_control_create_change_request!.execute as any)({ title: 'Ship it' }) };
+    };
+
+    it("leaves a pull request card's reviewer on Work free to open a change request", async () => {
+      const { setup, run } = await boundTo('github-pr', 'review');
+      await expect(run()).resolves.toMatchObject({ id: '17' });
+      expect(setup.createPullRequest).toHaveBeenCalled();
+    });
+
+    it('still holds a Work issue card to self-review in the same project', async () => {
+      const { setup, run } = await boundTo('github-issue', 'work');
+      await expect(run()).rejects.toThrow('Self-review has not approved');
+      expect(setup.createPullRequest).not.toHaveBeenCalled();
     });
   });
 

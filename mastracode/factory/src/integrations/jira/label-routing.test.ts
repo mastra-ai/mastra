@@ -262,7 +262,7 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     }
   });
 
-  it('leaves labels with the all-issues factory until the label factory has a board, and keeps its cards there', async () => {
+  it('leaves labels with the all-issues factory until the label factory has a board, then both hold a card', async () => {
     const triage = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'triage' } })).id;
     const bindTriage = (board: string | null) =>
       seed.intake.setSharedBinding({
@@ -288,7 +288,12 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     expect(await poll(factories.platform)).not.toContain('OPS-2');
     expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
     expect(await poll(triage)).toEqual(['OPS-2']);
-    expect(await filed(triage)).toEqual([]);
+    expect(await filed(triage)).toEqual(['OPS-2']);
+    await fileProposedCards();
+    for (const factoryProjectId of [factories.platform, triage]) {
+      const cards = await seed.workItems.list({ orgId: 'org1', factoryProjectId });
+      expect(cards.filter(card => card.title.startsWith('OPS-2'))).toHaveLength(1);
+    }
   });
 
   it("hands a deleted factory's filed issues to the factory that takes over its Jira project", async () => {

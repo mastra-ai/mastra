@@ -330,7 +330,7 @@ export default function Workspace() {
             value={selectedWorkspace?.id}
             onValueChange={setSelectedWorkspaceId}
             placeholder="Select workspace"
-            searchPlaceholder="Search workspaces..."
+            searchPlaceholder="Search workspaces"
             emptyText="No workspaces found."
           />
           {isReadOnly && (
