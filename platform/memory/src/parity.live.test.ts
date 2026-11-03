@@ -35,8 +35,9 @@ const live = !!liveFlag;
 const envFile = liveFlag && liveFlag !== '1' ? liveFlag : path.join(tmpdir(), 'platform-memory-parity.json');
 const MODEL_PORT = Number(process.env.PARITY_MODEL_PORT ?? 4555);
 
-/** Matches the harness: observe after 50 unobserved tokens, never reflect, no async buffering. */
-const THRESHOLDS = { messageTokens: 50, observationTokens: 100_000 } as const;
+/** Matches the harness; use a separate low-threshold run to exercise reflection. */
+const reflectionTokens = process.env.PARITY_REFLECTION_TOKENS;
+const THRESHOLDS = { messageTokens: 50, observationTokens: reflectionTokens ? Number(reflectionTokens) : 100_000 };
 // Set PARITY_BUFFER_TOKENS (and start the harness with the same value) to run with async buffering on.
 const BUFFER_TOKENS: number | false = process.env.PARITY_BUFFER_TOKENS
   ? Number(process.env.PARITY_BUFFER_TOKENS)
@@ -48,7 +49,10 @@ const TAIL = `<current-task>Chatting with Ada.</current-task>
 <suggested-response>Greet Ada by name.</suggested-response>`;
 /** Every prompt the observer received, from the server (HTTP) and the local backends. */
 const observerSeen: string[] = [];
-const observerOutput = () => `<observations>\n${BODY}\n</observations>\n${TAIL}`;
+const observerOutput = (reflecting = false) =>
+  reflecting
+    ? '<observations>\n* 🔴 Ada lives in Kyoto (reflected).\n</observations>'
+    : `<observations>\n${BODY}\n</observations>\n${TAIL}`;
 
 /** OpenAI-compatible observer the Platform server calls through its Gateway URL. */
 function scriptedObserver(port: number): Promise<Server> {
@@ -60,7 +64,7 @@ function scriptedObserver(port: number): Promise<Server> {
       // another replica while it is still running.
       await new Promise(r => setTimeout(r, Number(process.env.PARITY_OBSERVER_DELAY_MS ?? 0)));
       observerSeen.push(raw);
-      const text = observerOutput();
+      const text = observerOutput(raw.includes('observation reflector'));
       const base = { id: 'x', created: 0, model: 'scripted' };
       const usage = { prompt_tokens: 10, completion_tokens: 10, total_tokens: 20 };
       if (!JSON.parse(raw).stream) {
@@ -100,8 +104,9 @@ const textParts = (text: string) => [
 const localObserver = () =>
   new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
-      observerSeen.push(JSON.stringify(prompt));
-      return streamOf(textParts(observerOutput()));
+      const text = JSON.stringify(prompt);
+      observerSeen.push(text);
+      return streamOf(textParts(observerOutput(text.includes('observation reflector'))));
     },
   });
 
@@ -414,7 +419,7 @@ beforeAll(async () => {
 });
 afterAll(() => observer?.close());
 
-describe.skipIf(!live).each(BACKENDS)('OM agent (%s)', (_name, makeBackend) => {
+describe.skipIf(!live || !!reflectionTokens).each(BACKENDS)('OM agent (%s)', (_name, makeBackend) => {
   const run = `${Date.now()}`;
   const ids = (name: string) => ({ thread: `${name}-${run}`, resource: `res-${name}-${run}` });
   const setup = () => {
@@ -532,7 +537,7 @@ describe.skipIf(!live).each(BACKENDS)('OM agent (%s)', (_name, makeBackend) => {
   });
 });
 
-describe.skipIf(!live)('what the agent model sees', () => {
+describe.skipIf(!live || !!reflectionTokens)('what the agent model sees', () => {
   // No accepted differences: every step of every turn must reach the model identically.
   it('is identical on every step of every turn for Memory and PlatformMemory', async () => {
     // Distinct thread per backend: OM keeps process-wide state keyed by thread, which would leak
@@ -576,4 +581,41 @@ describe.skipIf(!live)('what the agent model sees', () => {
       }
     }
   }, 120_000);
+});
+
+describe.skipIf(!live || !reflectionTokens)('Observer and Reflector lifecycle', () => {
+  it.each([['Memory', localBackend], ['PlatformMemory', platformBackend]] as const)(
+    '%s persists reflected observations and replays them on a later Agent turn',
+    async (_name, createBackend) => {
+      const backend = createBackend();
+      const prompts: string[] = [];
+      const agent = new Agent({
+        id: 'reflection-parity',
+        name: 'reflection-parity',
+        instructions: 'Always use the test tool first.',
+        model: agentModel(prompts) as never,
+        tools: { test: testTool },
+        memory: backend.memory,
+      });
+      const stamp = `${_name}-${Date.now()}`;
+      const thread = `reflection-${stamp}`;
+      const resource = `resource-${stamp}`;
+      const start = observerSeen.length;
+      for (let turn = 0; turn < 5; turn++) {
+        await agent.generate(`Ada's Kyoto conversation turn ${turn}`, { memory: { thread, resource } });
+        if ((await backend.observations(thread, resource))?.includes('(reflected)')) break;
+      }
+      const inference = observerSeen.slice(start);
+      expect(inference.some(prompt => prompt.includes('observation reflector'))).toBe(true);
+      expect(await backend.observations(thread, resource)).toContain('Ada lives in Kyoto (reflected)');
+      if (_name === 'PlatformMemory') {
+        expect(await platformBackend().observations(thread, resource)).toContain('Ada lives in Kyoto (reflected)');
+      }
+      prompts.length = 0;
+      await agent.generate('What did we discuss?', { memory: { thread, resource } });
+      expect(prompts[0]).toContain('Ada lives in Kyoto (reflected)');
+      expect((await backend.messages(thread)).filter(m => m.role === 'user').length).toBeGreaterThanOrEqual(2);
+    },
+    120_000,
+  );
 });
