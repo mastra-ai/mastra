@@ -34,7 +34,7 @@
     "@arizeai/openinference-genai": "0.4.0",
     "@arizeai/openinference-semantic-conventions": "^2.15.0",
     "@mastra/otel-exporter": "workspace:*",
-    "@opentelemetry/api": "^1.10.0",
+    "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/core": "^2.12.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.223.0",
     "@opentelemetry/resources": "^2.12.0",

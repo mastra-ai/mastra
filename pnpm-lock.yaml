@@ -2936,7 +2936,7 @@ importers:
         specifier: workspace:*
         version: link:../otel-exporter
       '@opentelemetry/api':
-        specifier: ^1.10.0
+        specifier: ^1.9.0
         version: 1.10.0
       '@opentelemetry/core':
         specifier: ^2.12.0
@@ -2994,7 +2994,7 @@ importers:
         specifier: workspace:*
         version: link:../otel-exporter
       '@opentelemetry/api':
-        specifier: ^1.10.0
+        specifier: ^1.9.0
         version: 1.10.0
       '@opentelemetry/core':
         specifier: ^2.12.0
@@ -3166,7 +3166,7 @@ importers:
         specifier: workspace:*
         version: link:../mastra
       '@opentelemetry/api':
-        specifier: ^1.10.0
+        specifier: ^1.9.0
         version: 1.10.0
       '@opentelemetry/exporter-trace-otlp-proto':
         specifier: ^0.223.0
@@ -3358,7 +3358,7 @@ importers:
         specifier: workspace:*
         version: link:../otel-exporter
       '@opentelemetry/api':
-        specifier: ^1.10.0
+        specifier: ^1.9.0
         version: 1.10.0
       '@opentelemetry/api-logs':
         specifier: ^0.223.0
@@ -3413,7 +3413,7 @@ importers:
         specifier: workspace:*
         version: link:../mastra
       '@opentelemetry/api':
-        specifier: ^1.10.0
+        specifier: ^1.9.0
         version: 1.10.0
       '@opentelemetry/api-logs':
         specifier: ^0.223.0
