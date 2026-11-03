@@ -1,7 +1,7 @@
 import type { StepFlowEntry, StepResult } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
-import type { Mastra } from '../../../mastra';
+import type { RunStorage } from '../../run-storage';
 import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import { resolveForeachConcurrency } from '../../utils';
 import { resolveCurrentState, withoutAuthToken } from '../helpers';
@@ -159,11 +159,11 @@ export async function processWorkflowForEach(
   }: ProcessorArgs,
   {
     pubsub,
-    mastra,
+    runStorage,
     step,
   }: {
     pubsub: PubSub;
-    mastra: Mastra;
+    runStorage: RunStorage;
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
   },
 ) {
@@ -357,15 +357,12 @@ export async function processWorkflowForEach(
       // PendingMarker ({ __mastra_pending__: true }) tells the storage layer
       // "force this to null, don't preserve the existing suspended result."
       // See inmemory.ts updateWorkflowResults for the merge logic.
-      const workflowsStore = await mastra.getStorage()?.getStore('workflows');
       const updatedOutput = [...currentResult.output];
       for (const suspIdx of indicesToResume) {
         updatedOutput[suspIdx] = createPendingMarker() as any;
       }
 
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      await runStorage.mergeStepResult({
         stepId: getEntryId(step.step),
         result: {
           ...currentResult,
@@ -417,8 +414,6 @@ export async function processWorkflowForEach(
       return;
     }
   }
-
-  const workflowsStore = await mastra.getStorage()?.getStore('workflows');
   const stepId = getEntryId(step.step);
   const preservedForeachOutput = currentResult?.suspendPayload?.__workflow_meta?.foreachOutput;
 
@@ -436,9 +431,7 @@ export async function processWorkflowForEach(
         : ({ [FOREACH_QUEUED]: true } as { [FOREACH_QUEUED]: true }),
     );
 
-    await workflowsStore?.updateWorkflowResults({
-      workflowName: workflowId,
-      runId,
+    await runStorage.mergeStepResult({
       stepId,
       result: currentResult,
       requestContext: withoutAuthToken(requestContext),
@@ -462,9 +455,7 @@ export async function processWorkflowForEach(
       for (const index of indicesToRun) {
         updatedOutput[index] = createPendingMarker() as any;
       }
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      await runStorage.mergeStepResult({
         stepId,
         result: { ...currentResult, output: updatedOutput } as any,
         requestContext: withoutAuthToken(requestContext),
@@ -543,9 +534,7 @@ export async function processWorkflowForEach(
         endedAt: Date.now(),
         payload: (prevResult as any)?.output,
       };
-      await workflowsStore?.updateWorkflowResults({
-        workflowName: workflowId,
-        runId,
+      await runStorage.mergeStepResult({
         stepId: getEntryId(step.step),
         result,
         requestContext: withoutAuthToken(requestContext),
@@ -591,9 +580,7 @@ export async function processWorkflowForEach(
     const concurrency = Math.min(resolvedConcurrency, targetLen);
     const dummyResult = Array.from({ length: concurrency }, () => null);
 
-    await workflowsStore?.updateWorkflowResults({
-      workflowName: workflowId,
-      runId,
+    await runStorage.mergeStepResult({
       stepId: getEntryId(step.step),
       result: {
         status: 'success',
@@ -648,9 +635,7 @@ export async function processWorkflowForEach(
   }
 
   (currentResult as any).output.push(null);
-  await workflowsStore?.updateWorkflowResults({
-    workflowName: workflowId,
-    runId,
+  await runStorage.mergeStepResult({
     stepId: getEntryId(step.step),
     result: {
       status: 'success',

@@ -54,7 +54,6 @@ import {
 import type { ProcessorStepOutput } from '../../processors/step-schema';
 import { toStandardSchema } from '../../schema';
 import type { InferPublicSchema, InferStandardSchemaOutput, PublicSchema, StandardSchemaWithJSON } from '../../schema';
-import type { WorkflowsStorage } from '../../storage/domains/workflows/base';
 
 import { WorkflowRunOutput } from '../../stream/RunOutput';
 import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../stream/types';
@@ -88,7 +87,6 @@ import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
 import type { StreamChunkWriter } from '../stream-utils';
-import { waitForSuspendedSnapshot } from '../utils';
 import { Workflow, Run } from '../workflow';
 import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
@@ -1875,14 +1873,12 @@ export class EventedWorkflow<
         error: undefined,
         timestamp: Date.now(),
       };
-      await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: this.id,
-        runId: runIdToUse,
-        resourceId: options?.resourceId,
-        snapshot: this.options?.pruneSnapshot
+      await run.runStorage.writeSnapshot(
+        this.options?.pruneSnapshot
           ? this.options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
           : initialSnapshot,
-      });
+        options?.resourceId,
+      );
     }
 
     return run;
@@ -1989,7 +1985,6 @@ export class EventedRun<
       state: initialStateToUse as Record<string, any>,
     });
 
-    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
     // aggregation (aggregateBranchResults reads stepResults via storage).
@@ -2007,14 +2002,12 @@ export class EventedRun<
       waitingPaths: {},
       timestamp: Date.now(),
     };
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      snapshot: this.executionEngine.options?.pruneSnapshot
+    await this.runStorage.writeSnapshot(
+      this.executionEngine.options?.pruneSnapshot
         ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
         : initialRunSnapshot,
-    });
+      this.resourceId,
+    );
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
@@ -2127,7 +2120,6 @@ export class EventedRun<
       state: initialStateToUse as Record<string, any>,
     });
 
-    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
     // Always persist the initial run record regardless of shouldPersistSnapshot.
     // The evented engine relies on this record for parallel branch result
     // aggregation (aggregateBranchResults reads stepResults via storage).
@@ -2145,14 +2137,12 @@ export class EventedRun<
       waitingPaths: {},
       timestamp: Date.now(),
     };
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      resourceId: this.resourceId,
-      snapshot: this.executionEngine.options?.pruneSnapshot
+    await this.runStorage.writeSnapshot(
+      this.executionEngine.options?.pruneSnapshot
         ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'running' })
         : initialRunSnapshot,
-    });
+      this.resourceId,
+    );
 
     if (!this.mastra?.pubsub) {
       throw new Error('Mastra instance with pubsub is required for workflow execution');
@@ -2360,21 +2350,14 @@ export class EventedRun<
     return this.streamOutput;
   }
 
-  async #claimResume(workflowsStore: WorkflowsStorage): Promise<void> {
-    const claimed = await workflowsStore.updateWorkflowState({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      opts: { status: 'running', expectedStatus: 'suspended' },
-    });
+  async #claimResume(): Promise<void> {
+    const claimed = await this.runStorage.updateHeader({ status: 'running', expectedStatus: 'suspended' });
 
     if (claimed) {
       return;
     }
 
-    const current = await workflowsStore.loadWorkflowSnapshot({
-      workflowName: this.workflowId,
-      runId: this.runId,
-    });
+    const current = await this.runStorage.loadHeader();
 
     if (!current) {
       throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
@@ -2440,7 +2423,7 @@ export class EventedRun<
     if (!workflowsStore) {
       throw new Error('Cannot resume workflow: workflows store is required');
     }
-    const snapshot = await waitForSuspendedSnapshot(workflowsStore, this.workflowId, this.runId);
+    const snapshot = await this.runStorage.loadForResume({ wait: true });
     if (!snapshot) {
       throw new Error(`Cannot resume workflow: no snapshot found for runId ${this.runId}`);
     }
@@ -2555,37 +2538,15 @@ export class EventedRun<
     }
 
     this.setupAbortHandler();
-    await this.#claimResume(workflowsStore);
+    await this.#claimResume();
 
     const releaseClaimIfUnused = async () => {
       try {
-        const current = await workflowsStore.loadWorkflowSnapshot({
-          workflowName: this.workflowId,
-          runId: this.runId,
-        });
-
-        const claimedPaths = Object.keys(snapshot.suspendedPaths ?? {});
-        const currentPaths = Object.keys(current?.suspendedPaths ?? {});
-        const claimedStepIds = Object.keys(snapshot.context ?? {});
-        const currentStepIds = Object.keys(current?.context ?? {});
-        const resumedStepResult = current?.context?.[steps?.[0] ?? ''] as { status?: string } | undefined;
-        const engineNeverStarted =
-          current?.status === 'running' &&
-          currentPaths.length === claimedPaths.length &&
-          claimedPaths.every(path => currentPaths.includes(path)) &&
-          currentStepIds.length === claimedStepIds.length &&
-          claimedStepIds.every(stepId => currentStepIds.includes(stepId)) &&
-          resumedStepResult?.status === 'suspended';
-
-        if (!engineNeverStarted) {
+        if (!(await this.runStorage.isClaimUnused(snapshot, steps?.[0] ?? ''))) {
           return;
         }
 
-        await workflowsStore.updateWorkflowState({
-          workflowName: this.workflowId,
-          runId: this.runId,
-          opts: { status: 'suspended', expectedStatus: 'running' },
-        });
+        await this.runStorage.updateHeader({ status: 'suspended', expectedStatus: 'running' });
       } catch (releaseError) {
         this.mastra
           ?.getLogger()
@@ -2675,14 +2636,7 @@ export class EventedRun<
     if (await this.hasReachedTerminalStatus()) return;
 
     // Update storage directly for immediate status update (same pattern as Inngest)
-    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    await workflowsStore?.updateWorkflowState({
-      workflowName: this.workflowId,
-      runId: this.runId,
-      opts: {
-        status: 'canceled',
-      },
-    });
+    await this.runStorage.updateHeader({ status: 'canceled' });
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.

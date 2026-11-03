@@ -3115,7 +3115,7 @@ export class Workflow<
         error: undefined,
         timestamp: Date.now(),
       };
-      await run.runStorage.writeInitial(
+      await run.runStorage.writeSnapshot(
         // Storage v2 doesn't prune; a nested workflow with the hook can still run as v2 under a v2 parent.
         this.#options.pruneSnapshot && storageVersion === 1
           ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
@@ -4325,7 +4325,7 @@ export class Run<
           timestamp: Date.now(),
         };
         try {
-          await this.runStorage.writeInitial(
+          await this.runStorage.writeSnapshot(
             this.executionEngine.options.pruneSnapshot && this.storageVersion === 1
               ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
               : initialRunSnapshot,

@@ -3,7 +3,7 @@ import type { StateRef, StepResultSummary, WorkflowRunHeader } from '../storage/
 import { getSnapshotMemoryInfo } from '../storage/domains/workflows/snapshot-memory-info';
 import type { UpdateWorkflowStateOptions } from '../storage/types';
 import { stubStepResult } from './run-journal';
-import type { WorkflowRunState } from './types';
+import type { StepResult, WorkflowRunState } from './types';
 import { waitForSuspendedSnapshot } from './utils';
 
 /**
@@ -21,11 +21,11 @@ export interface RunStorage {
   /** Fully materialized, for restart and time travel. */
   loadFull(): Promise<WorkflowRunState | null>;
   /**
-   * The pending/waiting snapshot written before the engine runs. With `stateBase` (a storage v2
-   * nested run starting from a stored version of its parent's state), the state is stored as that
-   * version instead of a copy.
+   * Replaces the stored run: the pending/waiting snapshot written before the engine runs, or a
+   * pruned one. With `stateBase` (a storage v2 nested run starting from a stored version of its
+   * parent's state), the state is stored as that version instead of a copy.
    */
-  writeInitial(snapshot: WorkflowRunState, resourceId?: string, opts?: { stateBase?: StateRef }): Promise<void>;
+  writeSnapshot(snapshot: WorkflowRunState, resourceId?: string, opts?: { stateBase?: StateRef }): Promise<void>;
   /** After a claim: has nothing been written to the run since `claimed` was loaded? */
   isClaimUnused(claimed: WorkflowRunState, resumedStepId: string): Promise<boolean>;
   /**
@@ -38,7 +38,31 @@ export interface RunStorage {
    * resume that started the drive. Undefined for v1, or when the run or that version isn't stored.
    */
   loadDriveStartState(): Promise<Record<string, any> | undefined>;
+
+  // The evented engine's operations. Storage v2 doesn't implement them yet.
+
+  loadResourceId(): Promise<string | undefined>;
+  /** The header and `stepId`'s result. v1 loads every step. */
+  loadStep(stepId: string): Promise<WorkflowRunState | null>;
+  /**
+   * Returns every step's result after the write: `{}` when the run isn't stored, undefined
+   * without a store. `state` is written in the same write.
+   */
+  writeStepResult(write: StepResultWrite): Promise<StepResults | undefined>;
+  /** A foreach step's write: the store merges `result.output` into the stored array by index. */
+  mergeStepResult(write: StepResultWrite): Promise<StepResults | undefined>;
+  writeState(state: Record<string, any>, requestContext: Record<string, any>): Promise<void>;
+  delete(): Promise<void>;
 }
+
+type StepResults = Record<string, StepResult<any, any, any, any>>;
+
+type StepResultWrite = {
+  stepId: string;
+  result: StepResult<any, any, any, any>;
+  requestContext: Record<string, any>;
+  state?: Record<string, any>;
+};
 
 type RunStorageArgs = {
   workflowName: string;
@@ -102,7 +126,7 @@ class RunStorageV1 implements RunStorage {
     return this.#load(await this.#getStore());
   }
 
-  async writeInitial(snapshot: WorkflowRunState, resourceId?: string): Promise<void> {
+  async writeSnapshot(snapshot: WorkflowRunState, resourceId?: string): Promise<void> {
     const store = await this.#getStore();
     await store?.persistWorkflowSnapshot({
       workflowName: this.#workflowName,
@@ -137,6 +161,46 @@ class RunStorageV1 implements RunStorage {
 
   storedState(): undefined {
     return undefined;
+  }
+
+  async loadResourceId(): Promise<string | undefined> {
+    const store = await this.#getStore();
+    const run = await store?.getWorkflowRunById({
+      workflowName: this.#workflowName,
+      runId: this.#runId,
+      storageVersion: 1,
+    });
+    return run?.resourceId;
+  }
+
+  async loadStep(): Promise<WorkflowRunState | null> {
+    return this.#load(await this.#getStore());
+  }
+
+  async writeStepResult({ stepId, result, requestContext, state }: StepResultWrite): Promise<StepResults | undefined> {
+    const store = await this.#getStore();
+    return store?.updateWorkflowResults({
+      workflowName: this.#workflowName,
+      runId: this.#runId,
+      stepId,
+      result,
+      requestContext,
+      ...(state !== undefined ? { state } : {}),
+    });
+  }
+
+  mergeStepResult(write: StepResultWrite): Promise<StepResults | undefined> {
+    // v1 stores already merge a foreach result's array by index.
+    return this.writeStepResult(write);
+  }
+
+  async writeState(state: Record<string, any>, requestContext: Record<string, any>): Promise<void> {
+    await this.writeStepResult({ stepId: '__state', result: state as StepResult<any, any, any, any>, requestContext });
+  }
+
+  async delete(): Promise<void> {
+    const store = await this.#getStore();
+    await store?.deleteWorkflowRunById({ workflowName: this.#workflowName, runId: this.#runId });
   }
 
   async loadDriveStartState(): Promise<undefined> {
@@ -217,7 +281,7 @@ class RunStorageV2 implements RunStorage {
     return snapshot;
   }
 
-  async writeInitial(
+  async writeSnapshot(
     snapshot: WorkflowRunState,
     resourceId?: string,
     { stateBase }: { stateBase?: StateRef } = {},
@@ -270,4 +334,32 @@ class RunStorageV2 implements RunStorage {
       claimedPaths.every(path => currentPaths.includes(path))
     );
   }
+
+  async loadResourceId(): Promise<string | undefined> {
+    throw notOnV2('loadResourceId');
+  }
+
+  async loadStep(): Promise<WorkflowRunState | null> {
+    throw notOnV2('loadStep');
+  }
+
+  async writeStepResult(): Promise<StepResults | undefined> {
+    throw notOnV2('writeStepResult');
+  }
+
+  async mergeStepResult(): Promise<StepResults | undefined> {
+    throw notOnV2('mergeStepResult');
+  }
+
+  async writeState(): Promise<void> {
+    throw notOnV2('writeState');
+  }
+
+  async delete(): Promise<void> {
+    throw notOnV2('delete');
+  }
+}
+
+function notOnV2(operation: string): Error {
+  return new Error(`RunStorage.${operation} doesn't support storage v2 runs yet`);
 }

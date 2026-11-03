@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createRunStorage } from '../../run-storage';
 import { processWorkflowForEach } from './loop';
 
 /**
@@ -40,7 +41,12 @@ async function kickOffForeach({
       published.push(event);
     },
   } as any;
-  const mastra = { getStorage: () => undefined } as any;
+  const runStorage = createRunStorage({
+    storageVersion: 1,
+    workflowName: 'wf',
+    runId: 'run-1',
+    getStore: async () => undefined,
+  });
 
   await processWorkflowForEach(
     {
@@ -66,7 +72,7 @@ async function kickOffForeach({
       prevResult: { status: 'success', output: items, startedAt: 1, endedAt: 2, payload: {} },
       requestContext: {},
     } as any,
-    { pubsub, mastra, step: makeForeachStep(concurrency) },
+    { pubsub, runStorage, step: makeForeachStep(concurrency) },
   );
 
   return published;
