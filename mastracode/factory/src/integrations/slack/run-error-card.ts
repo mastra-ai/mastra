@@ -51,6 +51,8 @@ function recoveryLinks(requestContext: RequestContext, recoveries: RunErrorRecov
         return settingsUrl ? [{ url: settingsUrl, label: 'Review credentials' }] : [];
       case 'model':
         return sessionUrl ? [{ url: sessionUrl, label: 'Change model' }] : [];
+      case 'credits':
+        return [];
       // A reply in the thread continues the run; a mention in a new thread starts a new session.
       case 'continue':
       case 'new_session':

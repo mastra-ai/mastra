@@ -161,6 +161,18 @@ describe('slackRunErrorCard', () => {
     expect(card).toContain(`${PUBLIC_URL}/factories/factory-1/settings/models`);
   });
 
+  it('explains a run out of Mastra Gateway credits and links the session to change model', () => {
+    const outOfCredits = Object.assign(
+      new Error("You don't have inference credits left. Add credits at https://gateway.mastra.ai/"),
+      { name: 'AI_APICallError', statusCode: 402 },
+    );
+    const card = rendered(slackRunErrorCard(outOfCredits, slackRun()));
+
+    expect(card).toContain('Out of Mastra Gateway credits');
+    expect(card).toContain('Change model');
+    expect(card).toContain(SLACK_SESSION_URL);
+  });
+
   it('explains a raw stream error frame the channel could only wrap', () => {
     const frame = {
       type: 'error',
