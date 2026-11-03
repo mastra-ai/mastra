@@ -110,6 +110,19 @@ function boardEvent(value: unknown, label: string): BoardEventFacts {
   return { type, ...(reason ? { reason } : {}) };
 }
 
+function linkedItemAttachment(value: unknown): { workItemId: string; review: boolean } | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new FactoryRuleValidationError('Factory linked work item attachTo must be an object.');
+  }
+  assertExactKeys(value as Record<string, unknown>, ['workItemId', 'review'], 'Factory linked work item attachTo');
+  const { workItemId, review } = value as Record<string, unknown>;
+  if (typeof review !== 'boolean') {
+    throw new FactoryRuleValidationError('Factory linked work item attachTo.review must be a boolean.');
+  }
+  return { workItemId: boundedString(workItemId, 'Factory linked work item attachTo.workItemId', 128), review };
+}
+
 export function assertFactoryDecisionTarget(
   decision: FactoryRuleDecision,
   boards: BoardRegistry,
@@ -312,6 +325,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
           'url',
           'stage',
           'skipRules',
+          'attachTo',
           'metadata',
         ],
         'Factory linked work item decision',
@@ -324,6 +338,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         throw new FactoryRuleValidationError('Factory linked work item URL is invalid.');
       }
       const metadata = sanitizeMetadata(value.metadata);
+      const attachTo = linkedItemAttachment(value.attachTo);
       return {
         type,
         ...commonCommitFields(value),
@@ -334,6 +349,7 @@ export function validateFactoryRuleDecision(value: unknown, causalDepth = 0): Fa
         url,
         stage: boardIdentifier(value.stage, 'Factory linked work item stage'),
         ...(value.skipRules === true ? { skipRules: true } : {}),
+        ...(attachTo ? { attachTo } : {}),
         ...(metadata ? { metadata } : {}),
       };
     }

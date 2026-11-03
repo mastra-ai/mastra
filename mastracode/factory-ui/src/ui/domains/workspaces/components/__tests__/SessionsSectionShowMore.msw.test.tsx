@@ -66,7 +66,7 @@ describe('Sessions sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
     expect(within(group).queryByRole('link', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 
@@ -165,7 +165,7 @@ describe('Sessions sidebar show more', () => {
 
     const rendered = renderSection();
     await waitForMutationsIdle(rendered.client);
-    const group = screen.getByRole('region', { name: 'Review sessions' });
+    const group = screen.getByRole('region', { name: 'Work sessions' });
     await user.click(within(group).getByRole('button', { name: 'Show 3 more' }));
     await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20001' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Pin session' }));
@@ -178,7 +178,7 @@ describe('Sessions sidebar show more', () => {
 
     rendered.unmount();
     renderSection();
-    const remountedGroup = await screen.findByRole('region', { name: 'Review sessions' });
+    const remountedGroup = await screen.findByRole('region', { name: 'Work sessions' });
     expect(within(remountedGroup).getByRole('link', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(remountedGroup).getByLabelText('factory/pr-20001 pinned')).toBeInTheDocument();
 
@@ -192,7 +192,7 @@ describe('Sessions sidebar show more', () => {
 
     renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review sessions' });
+    const group = await screen.findByRole('region', { name: 'Work sessions' });
     expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Show \d+ more/ })).not.toBeInTheDocument();
   });

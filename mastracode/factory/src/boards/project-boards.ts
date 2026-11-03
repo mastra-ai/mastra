@@ -7,13 +7,14 @@ import type {
   StoredBoardScope,
   StoredBoardsStorage,
 } from '../storage/domains/boards/base.js';
-import { codeBoardOf } from './define-board.js';
+import { LEGACY_REVIEW_BOARD } from '../storage/domains/work-items/legacy-review.js';
 import { createBoardRegistry, defaultBoards } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
-import { reviewBoard } from './review.js';
 import { boardDefinitionOf, compileStoredBoard, mergeCodeBehaviour } from './stored-board.js';
 
 const DEFAULT_RECHECK_MS = 1000;
+/** A row under the retired Review board's key can't be served: its cards read as Work. */
+const RESERVED_REVIEW_ROW = `Stored board "${LEGACY_REVIEW_BOARD}" isn't served: the key is reserved for the retired Review board, whose cards now live on Work.`;
 const PRELOAD_CONCURRENCY = 8;
 const SNAPSHOT_ATTEMPTS = 3;
 
@@ -22,20 +23,9 @@ export type BoardSourceKind = 'builtin' | 'app' | 'stored';
 
 export interface StoredBoardDetails {
   source: BoardSourceKind;
-  /**
-   * Stored boards, the built-in Work board and app boards can be edited; the legacy Review board,
-   * which is being retired, stays read-only.
-   */
+  /** Stored boards, the built-in Work board and app boards can all be edited. */
   editable: boolean;
   problems: string[];
-}
-
-/**
- * Code boards Factory stores in each project: every code board except the legacy Review board,
- * which is being retired and is served from code.
- */
-function isEditableCodeBoard(board: InstalledBoard): boolean {
-  return codeBoardOf(board) !== reviewBoard;
 }
 
 /** A project's boards: the code boards plus its stored boards, and what to report about each board. */
@@ -102,8 +92,7 @@ function scopeKey(scope: StoredBoardScope): string {
 /**
  * The per-project board cache. A project's boards are its rows: the Work and app boards Factory
  * stored in it, in code order, then the others. A Work or app board's row runs with the code
- * behaviour of its board and phase keys that still fits it ({@link mergeCodeBehaviour}); only the
- * legacy Review board is served from code. The first load of each project in a process stores the
+ * behaviour of its board and phase keys that still fits it ({@link mergeCodeBehaviour}). The first load of each project in a process stores the
  * boards Factory hasn't stored in it yet, each once ({@link StoredBoardsStorage.seedBoards}); a
  * release never rewrites them. Loads recheck the project's board version at most every
  * `recheckMs` and recompile when it changed, so stored edits on other replicas arrive within that
@@ -139,14 +128,12 @@ export class ProjectBoardCache implements ProjectBoardSource {
         board.id,
         {
           source: defaultBoards.includes(board) ? 'builtin' : 'app',
-          editable: isEditableCodeBoard(board),
+          editable: true,
           problems: this.#skillProblems(board),
         },
       ]),
     );
-    this.#seeds = new Map(
-      [...this.codeRegistry.values()].filter(isEditableCodeBoard).map(board => [board.id, boardDefinitionOf(board)]),
-    );
+    this.#seeds = new Map([...this.codeRegistry.values()].map(board => [board.id, boardDefinitionOf(board)]));
   }
 
   /** The boards Factory stores in each project once, in order. */
@@ -291,11 +278,6 @@ export class ProjectBoardCache implements ProjectBoardSource {
     // Work and app boards keep their code order, each served from its row.
     for (const code of this.codeRegistry.values()) {
       const row = byKey.get(code.id);
-      if (!this.#seeds.has(code.id)) {
-        if (row) problems.push(`Stored board "${row.key}" is hidden by the code board with the same key.`);
-        boards.push(code);
-        continue;
-      }
       if (!row) {
         details.delete(code.id);
         // Stored once and deleted since, or not stored because storing failed.
@@ -322,6 +304,10 @@ export class ProjectBoardCache implements ProjectBoardSource {
     }
     for (const row of rows) {
       if (this.codeRegistry.has(row.key)) continue;
+      if (row.key === LEGACY_REVIEW_BOARD) {
+        report(row, [RESERVED_REVIEW_ROW]);
+        continue;
+      }
       let board: InstalledBoard;
       try {
         board = compileStoredBoard(row);

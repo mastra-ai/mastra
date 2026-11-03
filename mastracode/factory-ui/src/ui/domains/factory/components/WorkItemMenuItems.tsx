@@ -53,7 +53,7 @@ export function WorkItemMenuItems({
 }: WorkItemMenuProps): ReactElement {
   const catalog = useBoardCatalog(item.githubProjectId);
   const boardId = itemBoard(item);
-  const custom = boardId !== 'work' && boardId !== 'review';
+  const custom = boardId !== 'work';
   const board = catalog.data?.find(candidate => candidate.id === boardId);
   const targets = board?.phases.find(phase => phase.id === columnStage)?.transitions ?? [];
   const stages = custom

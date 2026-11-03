@@ -16,7 +16,6 @@ import { ProjectBoardCache, toBoardSource } from './project-boards.js';
 import type { ProjectBoardCacheOptions } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
 import type { BoardRegistry, InstalledBoard } from './registry.js';
-import { reviewBoard } from './review.js';
 import { boardDefinitionOf } from './stored-board.js';
 import { workBoard } from './work.js';
 
@@ -138,7 +137,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     await storage.ops.updateMany('factory_board_definition_versions', project, { version: randomUUID() });
   }
 
-  it("stores a project's Work and app boards on its first load and serves each from its row, Review from code", async () => {
+  it("stores a project's Work and app boards on its first load and serves each from its row", async () => {
     const { a, scope } = await setup();
     let now = 0;
     const release = appBoard('release');
@@ -151,16 +150,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
       ['release', 1, 'factory'],
     ]);
     expect(await a.boards.readVersion(scope)).not.toBeNull();
-    expect([...first.registry.keys()]).toEqual(['work', 'review', 'release']);
-    expect(first.registry.get('review')).toBe(reviewBoard);
+    expect([...first.registry.keys()]).toEqual(['work', 'release']);
     expect(codeBoardOf(first.registry.get('work')!)).toBe(workBoard);
     expect(codeBoardOf(first.registry.get('release')!)).toBe(release);
     expect(first.details.get('work')).toEqual({ source: 'builtin', editable: true, problems: [] });
-    expect(first.details.get('review')).toEqual({ source: 'builtin', editable: false, problems: [] });
     expect(first.details.get('release')).toEqual({ source: 'app', editable: true, problems: [] });
     expect(first.problems).toEqual([]);
     expect(boards.seeds().map(seed => seed.key)).toEqual(['work', 'release']);
     expect(boards.seedFor('review')).toBeUndefined();
+    expect(first.details.has('review')).toBe(false);
 
     // The row is the board: an unedited copy changed in the database is what the project runs.
     await writeOutsideApi(a.storage, scope, 'factory_boards', { board_key: 'work' }, { name: 'Our work' });
@@ -205,7 +203,6 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(work.rules.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(work.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan!.onResult);
     expect(described.details.get('work')).toEqual({ source: 'builtin', editable: true, problems: [] });
-    expect(described.registry.get('review')).toBe(reviewBoard);
 
     now = RECHECK_MS - 1;
     expect((await replicaB.load(scope)).get('work')!.phases.planning!.autoStartWhen).toBeUndefined();
@@ -304,7 +301,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
 
     const described = await cache(a.boards, createBoardRegistry({ boards: [] })).describe(scope);
 
-    expect([...described.registry.keys()]).toEqual(['work', 'review', 'release']);
+    expect([...described.registry.keys()]).toEqual(['work', 'release']);
     const release = described.registry.get('release')!;
     expect(release.phases.shipping!.name).toBe('Shipping');
     expect(codeBoardOf(release)).toBe(release);
@@ -345,7 +342,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     replicaA.invalidate(scope);
 
     const described = await replicaA.describe(scope);
-    expect([...described.registry.keys()]).toEqual(['work', 'review', 'release', 'bugs']);
+    expect([...described.registry.keys()]).toEqual(['work', 'release', 'bugs']);
     expect(described.registry.get('bugs')!.initialPhase).toBe('reported');
     expect(described.details.get('bugs')).toEqual({ source: 'stored', editable: true, problems: [] });
     now = RECHECK_MS - 1;
@@ -360,7 +357,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     const { a, scope } = await setup();
     const release = appBoard('release');
     await a.boards.create(scope, { ...boardDefinitionOf(release), name: 'Stored release' }, 'user-1');
-    await a.boards.create(scope, { ...boardDefinitionOf(reviewBoard), name: 'Stored review' }, 'user-1');
+    await a.boards.create(scope, { ...bugsBoard(), key: 'review', name: 'Stored review' }, 'user-1');
     await a.boards.create(scope, bugsBoard(), 'user-1');
 
     const described = await cache(a.boards, createBoardRegistry({ boards: [release] })).describe(scope);
@@ -369,10 +366,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(served.name).toBe('Stored release');
     expect(codeBoardOf(served)).toBe(release);
     expect(served.rules.shipping?.manual?.onEnter).toBe(shipped);
-    expect(described.registry.get('review')).toBe(reviewBoard);
+    expect(described.registry.has('review')).toBe(false);
     expect(described.details.get('release')).toEqual({ source: 'app', editable: true, problems: [] });
     expect(described.registry.has('bugs')).toBe(true);
-    expect(described.problems).toEqual(['Stored board "review" is hidden by the code board with the same key.']);
+    expect(described.problems).toEqual([
+      'Stored board "review" isn\'t served: the key is reserved for the retired Review board, whose cards now live on Work.',
+    ]);
     expect((await a.boards.get(scope, 'release'))!).toMatchObject({ name: 'Stored release', revision: 1 });
   });
 
@@ -390,7 +389,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     const warnings: string[] = [];
     const described = await cache(a.boards, undefined, { warn: message => warnings.push(message) }).describe(scope);
 
-    expect([...described.registry.keys()]).toEqual(['work', 'review', 'release', 'chores']);
+    expect([...described.registry.keys()]).toEqual(['work', 'release', 'chores']);
     expect(described.problems).toEqual([expect.stringMatching(/^Board 'bugs' could not be loaded: .*resting/)]);
     expect(warnings).toEqual([expect.stringContaining("Board 'bugs' could not be loaded")]);
   });
@@ -403,7 +402,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     await a.boards.create(first, bugsBoard(), 'user-1');
 
     expect((await boards.load(first)).has('bugs')).toBe(true);
-    expect([...(await boards.load(second)).keys()]).toEqual(['work', 'review', 'release']);
+    expect([...(await boards.load(second)).keys()]).toEqual(['work', 'release']);
   });
 
   it('serves no built-in boards when the app turns them off', async () => {
@@ -463,7 +462,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     expect(await a.boards.readVersion(first)).toBe(version);
     expect((await a.boards.list(first)).map(row => [row.key, row.revision])).toEqual(revisions);
     expect(boards.forProject(first).has('bugs')).toBe(true);
-    expect([...boards.forProject(second).keys()]).toEqual(['work', 'review', 'release']);
+    expect([...boards.forProject(second).keys()]).toEqual(['work', 'release']);
     expect((await a.boards.list(second)).map(row => [row.key, row.revision])).toEqual([
       ['work', 1],
       ['release', 1],
@@ -496,7 +495,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
 
     const restarted = await cache(a.boards).describe(scope);
 
-    expect([...restarted.registry.keys()]).toEqual(['work', 'review']);
+    expect([...restarted.registry.keys()]).toEqual(['work']);
     expect(restarted.details.has('release')).toBe(false);
     expect(restarted.problems).toEqual([]);
     expect((await a.boards.list(scope)).map(row => row.key)).toEqual(['work']);
@@ -512,7 +511,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('ProjectBoardCac
     const failed = await boards.describe(scope);
 
     expect(await a.boards.list(scope)).toEqual([]);
-    expect([...failed.registry.keys()]).toEqual(['review']);
+    expect([...failed.registry.keys()]).toEqual([]);
     const missing = (key: string) =>
       `Board "${key}" isn't stored in this project yet; Factory stores it on the next load.`;
     expect(failed.problems).toEqual([missing('work'), missing('release')]);

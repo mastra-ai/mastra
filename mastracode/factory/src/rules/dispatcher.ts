@@ -11,7 +11,7 @@ import {
   isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
-  pullRequestReviewPhase,
+  PULL_REQUEST_REVIEW_PHASE,
   reviewsPullRequest,
   workItemPhaseSemantics,
 } from '../boards/index.js';
@@ -43,7 +43,11 @@ import { isHumanActorId } from '../storage/domains/audit/actors.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import { withWorkItemFeed } from '../storage/domains/comments/feed-context.js';
 import type { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
-import { FACTORY_RULE_MATERIALIZATION_KEY } from '../storage/domains/work-items/base.js';
+import {
+  externalSourceKey,
+  FACTORY_RULE_MATERIALIZATION_KEY,
+  WorkItemSourceConflictError,
+} from '../storage/domains/work-items/base.js';
 import type {
   FactoryDeferredDecisionRecord,
   FactoryDispatchFailureCode,
@@ -606,14 +610,17 @@ function requestsConsent(
 // The Factory reviewing code it wrote is part of the same work, not new work to
 // consent to: a push to a Factory-authored PR re-reviews without a person's click.
 function reviewsFactoryAuthoredCode(
-  item: Pick<Card, 'metadata' | 'externalSource'>,
+  item: Pick<Card, 'metadata' | 'externalSource' | 'workItem'>,
   decision: FactoryCommitDecision,
 ): boolean {
   if (item.metadata?.factoryAuthored !== true) return false;
   if (decision.type === 'transition') {
     return (
-      decision.stage === pullRequestReviewPhase(decision.board) &&
-      reviewsPullRequest({ board: decision.board, item: { source: workItemSource(item.externalSource) } })
+      decision.stage === PULL_REQUEST_REVIEW_PHASE &&
+      reviewsPullRequest({
+        board: decision.board,
+        item: { source: workItemSource(item.externalSource), workItem: item.workItem },
+      })
     );
   }
   return decision.type === 'invokeSkill' && decision.role === 'review';
@@ -1606,6 +1613,14 @@ export class FactoryDecisionDispatcher {
       factoryProjectId: record.factoryProjectId,
       source: externalSourceForDecision(requested),
     });
+    // A pull request attached to its issue's card is filed already. Re-filing it (a replayed
+    // or swept "opened") must not write its facts onto the card's primary issue source.
+    if (
+      existing &&
+      externalSourceKey(existing.externalSource) !== externalSourceKey(externalSourceForDecision(requested))
+    )
+      return;
+    if (!existing && requested.attachTo && (await this.#attachLinkedItem(record, requested, causalChain))) return;
     const materializedHere = existing?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
     // Filing the card *was* the placement, so a retry of the same decision has
     // nothing left to apply — and must not drag a card that has since moved
@@ -1673,14 +1688,7 @@ export class FactoryDecisionDispatcher {
           reuseMode: 'preserve',
         });
     const itemBoard = boardForWorkItem(result.item);
-    // New pull request cards are filed on Work, but one filed on Review before
-    // that stays there: filing its pull request again acts on it where it sits.
-    const board =
-      itemBoard === 'review' &&
-      decision.board === 'work' &&
-      isPullRequestCard({ source: workItemSource(result.item.externalSource) })
-        ? itemBoard
-        : decision.board;
+    const board = decision.board;
     if (!skipRules && itemBoard !== board) {
       throw new Error(`The work item belongs to board "${itemBoard}", not "${board}".`);
     }
@@ -1728,15 +1736,21 @@ export class FactoryDecisionDispatcher {
       // reconcile pass reacting to a label change, say — is placed there the
       // same way, through the relocation the label routes use, so no phase rule
       // runs for it and no transition is recorded.
-      if (!result.created) {
-        await moveCardToBoard({
+      // Another decision of the same delivery (a pull request attaching to this card, say) can
+      // change the card in between; a placement skipped for that reason is retried on a fresh read.
+      let item: Card | null = result.created ? null : result.item;
+      for (let attempt = 0; item && attempt < 3; attempt += 1) {
+        const outcome = await moveCardToBoard({
           workItems: this.#storage,
           boardRegistry: boards,
           userId: 'factory-rule-dispatcher',
-          item: result.item,
+          item,
           targetBoard: board,
           targetStage: decision.stage,
         });
+        if (outcome !== 'skipped') break;
+        const fresh = await this.#storage.get({ orgId: record.orgId, id: item.id });
+        item = fresh && fresh.revision !== item.revision ? fresh : null;
       }
       return;
     }
@@ -1781,6 +1795,61 @@ export class FactoryDecisionDispatcher {
       causalChain,
     });
     if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
+  }
+
+  /**
+   * Files a pull or merge request on the existing card `attachTo` names, as one more source.
+   * Returns false when that card can no longer take it (gone, finished, off Work, a pull
+   * request's own card, or another card took the record first), so the caller files the
+   * record on a card of its own as usual. Intake routes never run: the card is already placed.
+   */
+  async #attachLinkedItem(
+    record: FactoryDeferredDecisionRecord,
+    decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
+    causalChain: FactoryRuleCausalEntry[],
+  ): Promise<boolean> {
+    const target = decision.attachTo!;
+    const boards = await this.#boards.load(record);
+    const card = await this.#storage.get({ orgId: record.orgId, id: target.workItemId });
+    if (
+      !card ||
+      card.factoryProjectId !== record.factoryProjectId ||
+      boardForWorkItem(card) !== 'work' ||
+      isTerminalWorkItem(boards, card) ||
+      isPullRequestCard({ source: workItemSource(card.externalSource) })
+    ) {
+      return false;
+    }
+    let attached: Card;
+    try {
+      const result = await this.#storage.attachSource({
+        orgId: record.orgId,
+        id: card.id,
+        source: externalSourceForDecision(decision),
+        metadata: decision.metadata ?? null,
+      });
+      if (!result) return false;
+      attached = result.item;
+    } catch (error) {
+      if (error instanceof WorkItemSourceConflictError) return false;
+      throw error;
+    }
+    const stage = attached.stages.length === 1 ? attached.stages[0] : undefined;
+    if (!target.review || (stage !== 'intake' && stage !== 'canceled')) return true;
+    const moved = await this.#transitionService.transition({
+      orgId: record.orgId,
+      factoryProjectId: record.factoryProjectId,
+      workItemId: attached.id,
+      board: 'work',
+      stage: PULL_REQUEST_REVIEW_PHASE,
+      expectedRevision: attached.revision,
+      actor: { type: 'system', id: 'factory-rule-dispatcher' },
+      ingress: { type: 'rule', identity: `decision:${record.idempotencyKey}:${attached.id}:attach` },
+      cause: 'linked_item_attached',
+      causalChain,
+    });
+    if (moved.status === 'rejected') throw new Error(`${moved.code}: ${moved.reason}`);
+    return true;
   }
 
   /**

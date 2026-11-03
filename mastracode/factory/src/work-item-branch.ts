@@ -118,6 +118,20 @@ export function workItemBranch(item: WorkItemBranchInput): string {
   return `factory/item-${item.id}`;
 }
 
+/**
+ * The branch a card's pull or merge request is reviewed on. A PR's own card gets
+ * the same name {@link workItemBranch} gives it; an issue card reviewing a PR
+ * attached to it gets a branch apart from its builder's issue branch, so the
+ * reviewer and the builder never share a checkout.
+ */
+export function pullRequestBranch(input: { id: string; provider: 'github' | 'gitlab'; number: number }): string {
+  const suffix = itemSuffix(input.id);
+  if (input.provider === 'gitlab') {
+    return suffix ? `factory/gitlab-mr-${input.number}-${suffix}` : `factory/item-${input.id}-mr-${input.number}`;
+  }
+  return suffix ? `factory/pr-${input.number}-${suffix}` : `factory/pr-${input.number}`;
+}
+
 /** The pre-suffix GitHub branch, for reusing sessions opened before card names were unique. */
 export function legacyGithubWorkItemBranch(branch: string): string | undefined {
   const match = /^(factory\/(?:issue|pr)-[1-9]\d*)-[a-z0-9]{1,12}$/.exec(branch);

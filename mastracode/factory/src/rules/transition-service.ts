@@ -2,6 +2,7 @@ import type { BoardRegistry } from '../boards/index.js';
 import { autoApprovedExitTool } from '../boards/phase-automation.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
+import { boardForWorkItem, hasPullRequest } from '../boards/semantics.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
 import { workPullRequestCardRejection } from '../boards/work.js';
 import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
@@ -377,8 +378,8 @@ export class FactoryTransitionService {
     const itemSource = workItemSource(item.externalSource);
     const source = factoryRuleSourceForWorkItem(itemSource);
     const isPullRequest = source === 'pullRequest' || source === 'gitlabPullRequest';
-    const legacyBoard = isPullRequest ? 'review' : 'work';
-    if (item.board === null && !boards.has(legacyBoard)) {
+    // Rows filed before boards were persisted belong to Work.
+    if (item.board === null && !boards.has('work')) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -386,22 +387,13 @@ export class FactoryTransitionService {
         'This legacy work item has no assigned board. Assign an installed board and phase through the work-item PATCH endpoint before transitioning it.',
       );
     }
-    const itemBoard = item.board ?? legacyBoard;
+    const itemBoard = boardForWorkItem(item);
     if (request.board !== itemBoard) {
       return this.#commitRejection(
         request,
         transitionId,
         'invalid_transition',
         `The work item belongs to board "${itemBoard}", not "${request.board}".`,
-      );
-    }
-    // Review holds only pull requests; Work holds both, and keeps a pull request's card to review.
-    if (itemBoard === 'review' && !isPullRequest) {
-      return this.#commitRejection(
-        request,
-        transitionId,
-        'invalid_transition',
-        'The work item does not belong to the requested board.',
       );
     }
     const board = boards.get(request.board);
@@ -425,7 +417,15 @@ export class FactoryTransitionService {
     // The Work board's own reason comes first: its phase graph alone only says the move is not
     // declared, which leaves an agent moving an issue card to PR review guessing why.
     const pullRequestCardRejection =
-      request.board === 'work' ? workPullRequestCardRejection(isPullRequest, request.stage) : undefined;
+      request.board === 'work'
+        ? workPullRequestCardRejection(
+            {
+              standalonePullRequest: isPullRequest,
+              hasPullRequest: hasPullRequest({ workItem: item.workItem, source: itemSource }),
+            },
+            request.stage,
+          )
+        : undefined;
     if (pullRequestCardRejection) {
       return this.#commitRejection(request, transitionId, 'invalid_transition', pullRequestCardRejection);
     }

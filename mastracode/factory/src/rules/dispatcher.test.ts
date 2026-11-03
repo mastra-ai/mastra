@@ -2,7 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry, defineBoard, reviewBoard, workBoard } from '../boards/index.js';
+import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
 import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { publishReviewStatus } from '../integrations/github/review-status.js';
@@ -352,10 +352,7 @@ function plansAutoApprovedBoards(): BoardRegistry {
       execute: { ...workBoard.phases.execute, exitTool: { id: 'submit_plan', autoApprove: true } },
     },
   });
-  return new Map([
-    [board.id, board],
-    [reviewBoard.id, reviewBoard],
-  ]);
+  return new Map([[board.id, board]]);
 }
 
 /** A card whose run someone asked for: a pending start still waiting to be sent. */
@@ -3569,7 +3566,7 @@ describe('FactoryDecisionDispatcher', () => {
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
-      decisions: [{ type: 'transition', board: 'review', stage: 'review', idempotencyKey: 're-review-1' }],
+      decisions: [{ type: 'transition', board: 'work', stage: 'pr-review', idempotencyKey: 're-review-1' }],
       causalChain: [],
       now: new Date('2030-01-01T00:00:00Z'),
     });
@@ -3614,7 +3611,7 @@ describe('FactoryDecisionDispatcher', () => {
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'factory-platform[bot]', trusted: true, factoryAuthored: true },
       outcome: { status: 'accepted' },
-      decisions: [{ type: 'transition', board: 'review', stage: 'review', idempotencyKey: 're-review-f' }],
+      decisions: [{ type: 'transition', board: 'work', stage: 'pr-review', idempotencyKey: 're-review-f' }],
       causalChain: [],
       now: new Date('2030-01-01T00:00:00Z'),
     });
@@ -3631,7 +3628,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     const rows = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(rows.find(row => row.idempotencyKey === 're-review-f')?.status).toBe('succeeded');
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['pr-review']);
     const run = rows.find(row => row.decision.type === 'invokeSkill');
     expect(run?.decision).toMatchObject({ skillName: 'factory-rereview' });
     expect(run?.status).not.toBe('proposed');
@@ -3713,7 +3710,7 @@ describe('FactoryDecisionDispatcher', () => {
       expectedRevision: armed?.revision ?? item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
-      decisions: [{ type: 'transition', board: 'review', stage: 'review', idempotencyKey: 're-review-2' }],
+      decisions: [{ type: 'transition', board: 'work', stage: 'pr-review', idempotencyKey: 're-review-2' }],
       causalChain: [],
       now: new Date('2030-01-01T00:00:30Z'),
     });
@@ -3730,7 +3727,7 @@ describe('FactoryDecisionDispatcher', () => {
 
     const rows = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(rows.find(row => row.idempotencyKey === 're-review-2')?.status).toBe('succeeded');
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['pr-review']);
   });
 
   it('carries the approval of a parked external move into the run its lane queues', async () => {
@@ -3749,7 +3746,7 @@ describe('FactoryDecisionDispatcher', () => {
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: false, factoryAuthored: false },
       outcome: { status: 'accepted' },
-      decisions: [{ type: 'transition', board: 'review', stage: 'review', idempotencyKey: 're-review-3' }],
+      decisions: [{ type: 'transition', board: 'work', stage: 'pr-review', idempotencyKey: 're-review-3' }],
       causalChain: [],
       now: new Date('2030-01-01T00:00:00Z'),
     });
@@ -3776,7 +3773,7 @@ describe('FactoryDecisionDispatcher', () => {
     );
     await dispatcher.runOnce(new Date('2030-01-01T00:03:00Z'));
 
-    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['pr-review']);
     const queued = (await storage.listDeferredDecisions('org-1', PROJECT_ID)).filter(
       row => row.decision.type === 'invokeSkill',
     );
@@ -3889,7 +3886,7 @@ describe('FactoryDecisionDispatcher', () => {
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
-      decisions: [{ type: 'transition', board: 'review', stage: 'canceled', idempotencyKey: 'closed-after-done' }],
+      decisions: [{ type: 'transition', board: 'work', stage: 'canceled', idempotencyKey: 'closed-after-done' }],
       causalChain: [],
       now: new Date('2030-01-01T00:00:00Z'),
     });
@@ -5190,7 +5187,7 @@ describe('FactoryDecisionDispatcher', () => {
           onEnter: () => ({
             type: 'upsertLinkedWorkItem',
             idempotencyKey: 'linked-pr-1',
-            board: 'review',
+            board: 'work',
             source: 'github-pr',
             sourceKey: 'github-pr:2',
             title: 'Linked PR',
@@ -5246,7 +5243,7 @@ describe('FactoryDecisionDispatcher', () => {
         {
           type: 'upsertLinkedWorkItem',
           idempotencyKey: 'linked-pr-late-provenance',
-          board: 'review',
+          board: 'work',
           source: 'github-pr',
           sourceKey: 'github-pr:2',
           title: 'Linked PR',
@@ -5321,7 +5318,7 @@ describe('FactoryDecisionDispatcher', () => {
         {
           type: 'upsertLinkedWorkItem',
           idempotencyKey: 'linked-pr-polled-again',
-          board: 'review',
+          board: 'work',
           source: 'github-pr',
           sourceKey: 'github-pr:3',
           title: 'Linked PR',
@@ -5371,7 +5368,7 @@ describe('FactoryDecisionDispatcher', () => {
           },
           parentWorkItemId: null,
           title: 'Linked PR',
-          stages: ['review'],
+          stages: ['pr-review'],
           sessions: {},
           metadata: { author: 'human-edited' },
         },
@@ -5390,7 +5387,7 @@ describe('FactoryDecisionDispatcher', () => {
           {
             type: 'upsertLinkedWorkItem',
             idempotencyKey: 'linked-pr-backfill',
-            board: 'review',
+            board: 'work',
             source: 'github-pr',
             sourceKey: 'github-pr:3',
             title: 'Linked PR',
@@ -5443,7 +5440,7 @@ describe('FactoryDecisionDispatcher', () => {
       });
       expect(updated?.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY]).toBeUndefined();
       // Preserved: not re-entered into intake.
-      expect(updated?.stages).toEqual(['review']);
+      expect(updated?.stages).toEqual(['pr-review']);
     },
   );
 
@@ -6704,7 +6701,7 @@ describe('custom-board deferred targets', () => {
     expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toHaveLength(1);
   });
 
-  it('places a pull request card filed on Review before where it sits, not on Work', async () => {
+  it('places a pull request card stored on the retired Review board in Work’s PR review', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item } = await storage.upsert({
       orgId: 'org-1',
@@ -6723,7 +6720,7 @@ describe('custom-board deferred targets', () => {
       ...linkedDecision,
       idempotencyKey: 'legacy-placement',
       board: 'work',
-      stage: 'review',
+      stage: 'pr-review',
       source: 'github-pr',
       sourceKey: 'github-pr:legacy-placement',
       skipRules: true,
@@ -6731,9 +6728,8 @@ describe('custom-board deferred targets', () => {
 
     await dispatcherFor(storage, createLifecycleTestRegistry({})).runOnce();
 
-    // The same board the rule-running path resolves: a legacy Review card is
-    // acted on where it sits, so placement does not relocate it onto Work.
-    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'review', stages: ['review'] });
+    // A legacy Review card reads as Work, so placement lands it in PR review there.
+    expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'work', stages: ['pr-review'] });
     expect(await decisionByKey(storage, 'legacy-placement')).toMatchObject({ status: 'succeeded' });
   });
 
@@ -7646,10 +7642,7 @@ describe('board phase automation', () => {
       transitionPolicy: workBoard.transitionPolicy,
       phases: { ...workBoard.phases, execute: { ...workBoard.phases.execute, ...fields } },
     });
-    return new Map([
-      [board.id, board],
-      [reviewBoard.id, reviewBoard],
-    ]);
+    return new Map([[board.id, board]]);
   }
 
   async function queueBuild(storage: WorkItemsStorage, labels: string[], key: string) {

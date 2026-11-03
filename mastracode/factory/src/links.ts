@@ -14,9 +14,9 @@ function factoryUrl(factoryProjectId: string, path: string): string | undefined 
   return origin ? `${origin}/factories/${encodeURIComponent(factoryProjectId)}${path}` : undefined;
 }
 
-/** Board path segment: the built-in boards have their own routes, others live under /boards/:id. */
+/** Board path segment: the built-in Work board has its own route, others live under /boards/:id. */
 function boardSegment(board: string): string {
-  return board === 'work' || board === 'review' ? `/${board}` : `/boards/${encodeURIComponent(board)}`;
+  return board === 'work' ? '/work' : `/boards/${encodeURIComponent(board)}`;
 }
 
 export function factoryBoardUrl(factoryProjectId: string, board: string): string | undefined {

@@ -5,7 +5,6 @@ import type { FactoryStageRuleContext } from '../rules/types.js';
 import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { cardRuleFacts } from './card-facts.js';
 import { BoardDefinitionError, defineBoard } from './define-board.js';
-import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
 
 const LOW_EFFORT: RuleGroup = {
@@ -366,7 +365,6 @@ describe('defineBoard phase fields', () => {
       },
     });
     defineBoard({ id: 'work-again', name: 'Work', initialPhase: 'intake', phases: workBoard.phases });
-    defineBoard({ id: 'review-again', name: 'Review', initialPhase: 'intake', phases: reviewBoard.phases });
 
     expect(warn).not.toHaveBeenCalled();
   });
@@ -415,7 +413,6 @@ describe('defineBoard phase fields', () => {
     vi.resetModules();
 
     await import('./work.js');
-    await import('./review.js');
 
     expect(warn).not.toHaveBeenCalled();
   });

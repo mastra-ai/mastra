@@ -196,8 +196,22 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/work-items`, async ({ request }) => {
       const body = (await request.json()) as Record<string, unknown>;
       state.created.push(body);
+      // Like the server, the filed card carries the source it was filed from.
+      const external = body.externalSource as { integrationId?: string; type?: string } | undefined;
+      const source =
+        external?.type === 'pull-request'
+          ? external.integrationId === 'gitlab'
+            ? ('gitlab-pr' as const)
+            : ('github-pr' as const)
+          : workItems[0].source;
       return HttpResponse.json({
-        workItem: toWireWorkItem({ ...workItems[0], id: 'work-item-filed', title: String(body.title) }),
+        workItem: toWireWorkItem({
+          ...workItems[0],
+          id: 'work-item-filed',
+          title: String(body.title),
+          source,
+          board: typeof body.board === 'string' ? body.board : undefined,
+        }),
       });
     }),
     http.post(
@@ -495,7 +509,7 @@ describe('Global search', () => {
     expect(within(results).getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
       'Work',
-      'Review',
+      'Pull requests',
       'Rules',
       'Preferences',
       'Manage Factory',
@@ -720,12 +734,15 @@ describe('Global search', () => {
     expect(requests.created).toEqual([
       expect.objectContaining({
         title: 'Search GitLab MR',
-        board: 'review',
+        board: 'work',
         stages: ['intake'],
         externalSource: expect.objectContaining({ integrationId: 'gitlab', type: 'pull-request' }),
       }),
     ]);
-    expect(requests.transitions[0]).toMatchObject({ itemId: 'work-item-filed', body: { stage: 'review' } });
+    expect(requests.transitions[0]).toMatchObject({
+      itemId: 'work-item-filed',
+      body: { board: 'work', stage: 'pr-review' },
+    });
   });
 
   it.each(['#900', '900', 'PR #900'])('finds the review session by GitHub identifier "%s"', async query => {
@@ -777,7 +794,7 @@ describe('Global search', () => {
     await waitFor(() => expect(requests.transitions).toHaveLength(1));
     expect(requests.transitions[0]).toMatchObject({
       itemId: 'work-item-unstarted-review',
-      body: { board: 'review', stage: 'review', cause: 'card_action' },
+      body: { board: 'work', stage: 'pr-review', cause: 'card_action' },
     });
     expect(requests.createSessionRequests).toBe(0);
   });
@@ -965,9 +982,12 @@ describe('Global search', () => {
     await waitFor(() => expect(requests.transitions).toHaveLength(1));
     await waitForMutationsIdle(client);
     expect(requests.created).toEqual([
-      expect.objectContaining({ title: 'Harden the review board drop target', board: 'review', stages: ['intake'] }),
+      expect.objectContaining({ title: 'Harden the review board drop target', board: 'work', stages: ['intake'] }),
     ]);
-    expect(requests.transitions[0]).toMatchObject({ itemId: 'work-item-filed', body: { stage: 'review' } });
+    expect(requests.transitions[0]).toMatchObject({
+      itemId: 'work-item-filed',
+      body: { board: 'work', stage: 'pr-review' },
+    });
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
     expect(requests.createSessionRequests).toBe(0);
   });
