@@ -2,6 +2,7 @@ import { KnowledgeNotFoundError } from '../storage/domains/knowledge/base';
 import type { KnowledgeStorage } from '../storage/domains/knowledge/base';
 import { assertKnowledgeNoteTextWithinBound, knowledgePagePath } from '../storage/domains/knowledge/pages';
 import type { KnowledgeNote, KnowledgePage, KnowledgeProvenance } from '../storage/domains/knowledge/pages';
+import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
 import type { KnowledgeSemanticIndex } from './semantic';
 
@@ -163,7 +164,10 @@ export async function upsertKnowledgePage(
   for (let depth = 1; depth < keys.length; depth++) {
     const path = keys.slice(0, depth);
     const parent = await upsertAt(storage, scope.id, parentId, path, { name: path.at(-1)! }, provenance, false);
-    if (parent.status === 'created') await embed(host, index => index.indexPage(parent.page));
+    if (parent.status === 'created') {
+      await embed(host, index => index.indexPage(parent.page));
+      await updateKnowledgeLinks(host.warn, () => refreshKnowledgeLinksTo(storage, [parent.page]));
+    }
     parentId = parent.page.id;
   }
   const result = await upsertAt(
@@ -175,7 +179,13 @@ export async function upsertKnowledgePage(
     provenance,
     true,
   );
-  if (result.status !== 'unchanged') await embed(host, index => index.indexPage(result.page));
+  if (result.status !== 'unchanged') {
+    await embed(host, index => index.indexPage(result.page));
+    await updateKnowledgeLinks(host.warn, async () => {
+      await syncKnowledgePageBodyLinks(storage, result.page);
+      await refreshKnowledgeLinksTo(storage, [result.page]);
+    });
+  }
   return result;
 }
 
@@ -207,6 +217,10 @@ export async function removeKnowledgePage(
     throw error;
   }
   await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
+  await updateKnowledgeLinks(host.warn, async () => {
+    await syncKnowledgePageBodyLinks(storage, deleted);
+    await refreshKnowledgeLinksTo(storage, [deleted]);
+  });
   return deleted;
 }
 

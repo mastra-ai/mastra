@@ -123,4 +123,24 @@ describe('Knowledge page link index', () => {
     expect(await knowledge.reindexLinks()).toBeGreaterThanOrEqual(3);
     expect(await out(hub.id)).toEqual([target.id]);
   });
+
+  it('indexes links written and removed through upsertPage and removePage', async () => {
+    const { knowledge, out, store } = setup();
+    const hub = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'docs/hub',
+      name: 'Hub',
+      body: 'See [[org:acme#docs/guide]].',
+    });
+    expect(await out(hub.page.id)).toEqual([]);
+    const guide = await knowledge.upsertPage({ scope: 'org:acme', path: 'docs/guide', name: 'Guide', body: 'g' });
+    expect(await out(hub.page.id)).toEqual([guide.page.id]);
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'docs/hub', name: 'Hub', body: 'Nothing linked.' });
+    expect(await out(hub.page.id)).toEqual([]);
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'docs/hub', name: 'Hub', body: 'Back to [[Guide]].' });
+    expect(await out(hub.page.id)).toEqual([guide.page.id]);
+    await knowledge.removePage({ scope: 'org:acme', path: 'docs/guide' });
+    expect(await out(hub.page.id)).toEqual([]);
+    expect(await (await store()).listPageBodyLinkSources({ toPageIds: [guide.page.id] })).toEqual([]);
+  });
 });
