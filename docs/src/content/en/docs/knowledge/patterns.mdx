@@ -60,7 +60,9 @@ A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, beca
 
 ## A policy every agent follows
 
-A compliance desk edits an account's data-handling rules, and every run on the account has them in context without searching. Declare the page and pin it in config:
+Your compliance team owns each account's data-handling rules. Every agent that works on an account, whether it handles sales, support or billing, needs those rules in front of it on every turn, not only when it thinks to search. Only compliance may change them.
+
+Declare the page on the account scope and pin it in config:
 
 ```typescript oxfmt:false
 'account:$accountId': {
@@ -73,7 +75,30 @@ A compliance desk edits an account's data-handling rules, and every run on the a
 },
 ```
 
-When compliance edits the page, running agents get the change on their next step. See [Pinned context](/docs/knowledge/pinned-context).
+Once compliance writes the page, every run holding `account:umbrella` starts with it in context:
+
+```text
+<pinned-knowledge count="1">
+  • Data handling rules (account:umbrella#data-handling, v2, no notes): Never paste customer card numbers into chat. Ask for the last four digits only.
+</pinned-knowledge>
+```
+
+When compliance edits the page, agents that are already running get only the change on their next turn:
+
+```text
+<pinned-knowledge-update changes="1">
+  ~ changed Data handling rules (account:umbrella#data-handling, v3, no notes): Never paste customer card numbers into chat. Ask for the last four digits only. Never read a full card number back.
+</pinned-knowledge-update>
+```
+
+The policy stays where compliance put it:
+
+- **Agents can read it but not change it.** The account's runs are viewers. A sales agent that tries to edit the page is refused with `Editing a page needs editor on "account:umbrella"; this run has viewer there.`
+- **Agents can't unpin it.** A pin in config comes from your declaration, not from storage, so the pin tool can't remove it.
+- **It can't be moved or deleted.** Pages declared in `pages` belong to the config.
+- **It reaches only runs that can read it.** A run on another account gets nothing, and pinning never widens who can read a page.
+
+See [Pinned context](/docs/knowledge/pinned-context).
 
 ## Coding conventions that carry over
 
