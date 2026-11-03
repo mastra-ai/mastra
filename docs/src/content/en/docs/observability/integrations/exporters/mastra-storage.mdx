@@ -207,7 +207,7 @@ Events are dropped for these reasons:
 
 - `unsupported-storage`: The storage provider doesn't implement the signal type.
 - `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it, or shut down while a retry was still waiting.
-- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but found no open span to apply to, because ended spans never change. An update for a span this exporter still tracks as open is dropped at once, since its row exists and has already ended. Any other update is retried up to `maxRetries` times with the exporter's backoff between attempts, which lets a worker end a span whose create the API process hasn't written yet. A call to `flush()` sends a waiting update too, so a worker that flushes before it exits ends the span as soon as its row is stored, and a miss on that flush doesn't spend a retry.
+- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but found no open span to apply to, because ended spans never change. An update for a span this exporter still tracks as open, or whose end it already stored, is dropped at once, since its row exists and has already ended. Any other update is retried up to `maxRetries` times with the exporter's backoff between attempts, which lets a worker end a span whose create the API process hasn't written yet. A call to `flush()` sends a waiting update too, so a worker that flushes before it exits ends the span as soon as its row is stored, and a miss on that flush doesn't spend a retry.
 
 The following example demonstrates forwarding drop details to a monitoring endpoint:
 
