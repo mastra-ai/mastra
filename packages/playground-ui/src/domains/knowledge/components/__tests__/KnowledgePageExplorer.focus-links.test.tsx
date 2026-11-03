@@ -161,6 +161,24 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     expect(container.querySelector('[data-testid="knowledge-page-dot"][data-page-id="far-out"]')).toBeNull();
   });
 
+  it('draws link ends in the faded farther-page style, and the focus and its children in the regular one', () => {
+    const { container } = render({
+      notes: [note('n1', 'ward', ['note-target'])],
+      mentionedBy: [note('m1', 'note-source', ['ward'])],
+      reachable,
+    });
+    const circle = (id: string) =>
+      container.querySelector(`[data-testid="knowledge-page-node"][data-page-id="${id}"] .knowledge-circle`);
+    for (const id of ['far-out', 'other-out', 'note-target', 'note-source']) {
+      expect(circle(id)?.getAttribute('data-far'), id).toBe('true');
+      // Long names are cut to fit the circle, so only the start is compared.
+      expect(circle(id)?.querySelector('[data-testid="knowledge-circle-name"]')?.textContent, id).toContain(
+        id.slice(0, 4),
+      );
+    }
+    for (const id of ['ward', 'authors']) expect(circle(id)?.getAttribute('data-far'), id).toBeNull();
+  });
+
   it('says nothing is left out when every link end is drawn', () => {
     renderWithProviders(<div />);
     const { container } = render({ reachable });

@@ -84,6 +84,8 @@ export interface GraphShape {
   via: Map<string, string | null>;
   /** Pages that sit above others and always draw as labelled circles: scopes, and the focus's ancestors. */
   level: Map<string, GraphLevel>;
+  /** The focus's link ends drawn as circles: farther pages, not neighbours in the hierarchy. */
+  linked: Set<string>;
   /** The page the layout centres on: the focus, else the first root; `null` only when there are no pages. */
   center: string | null;
 }
@@ -161,16 +163,18 @@ export function graphShape(
   }
   const rootCircles = promotedCircles(children, centerPage);
   const form = new Map<string, GraphNodeForm>();
+  const linked = new Set<string>();
   let farCircles = 0;
   for (const page of live) {
     const at = depth.get(page.id);
     const near = at !== undefined && (at <= FULL_CIRCLE_DEPTH || rootCircles.has(page.id)) && !isChildPlaceholder(page);
     const higher = at !== undefined && level.has(page.id) && !isChildPlaceholder(page);
     // The focus's own link ends are as much its neighbours as its children: they read as named circles too.
-    const linked = at === undefined && linkEnds.has(page.id) && !isChildPlaceholder(page);
-    form.set(page.id, near || linked || (higher && farCircles++ < HIGHER_LEVEL_CAP) ? 'full' : 'dot');
+    const linkedEnd = at === undefined && linkEnds.has(page.id) && !isChildPlaceholder(page);
+    if (linkedEnd) linked.add(page.id);
+    form.set(page.id, near || linkedEnd || (higher && farCircles++ < HIGHER_LEVEL_CAP) ? 'full' : 'dot');
   }
-  return { depth, form, branch, via, level, center };
+  return { depth, form, branch, via, level, linked, center };
 }
 
 type Point = { x: number; y: number };

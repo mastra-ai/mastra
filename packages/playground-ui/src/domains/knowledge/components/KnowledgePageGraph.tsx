@@ -54,6 +54,8 @@ const SCOPE_STYLE: CircleStyle = {
   background: 'color-mix(in oklab, var(--chart-blue) 16%, var(--card))',
 };
 const PAGE_STYLE: CircleStyle = { '--knowledge-color': 'var(--border-strong)' };
+/** A farther page that is still drawn as a circle: the regular circle, faded and light grey. */
+const FAR_STYLE: CircleStyle = { '--knowledge-color': 'var(--border)', opacity: 0.6 };
 
 const PARENT_EDGE_STYLE = {
   stroke: 'var(--foreground)',
@@ -130,6 +132,8 @@ type PageNodeData = PageFlowNode['data'] & {
   level?: GraphLevel;
   /** The focused page's parent: its circle says so. */
   isParent?: boolean;
+  /** A page the focus links to or from rather than one of its neighbours in the hierarchy: drawn faded. */
+  far?: boolean;
 };
 
 /** `4 links in, 14 links out`: what the arrows in a link badge say, for its label and a dot's tooltip. */
@@ -395,8 +399,9 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
       <div
         className="knowledge-circle flex size-full flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-2 text-center shadow-raised"
         data-selected={selected || undefined}
+        data-far={data.far || undefined}
         style={{
-          ...(placeholder || rest ? PLACEHOLDER_STYLE : page.isScope ? SCOPE_STYLE : PAGE_STYLE),
+          ...(placeholder || rest ? PLACEHOLDER_STYLE : data.far ? FAR_STYLE : page.isScope ? SCOPE_STYLE : PAGE_STYLE),
           paddingInline: size * ((1 - CIRCLE_TEXT_SHARE) / 2),
         }}
       >
@@ -1154,6 +1159,7 @@ function KnowledgePageGraphInner({
             showCount: showCounts,
             level: laidOut.shape.form.get(node.id) === 'full' ? laidOut.shape.level.get(node.id) : undefined,
             isParent: node.id === focusParentId,
+            far: laidOut.shape.linked.has(node.id) || undefined,
           },
         };
       }),
