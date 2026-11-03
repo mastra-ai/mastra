@@ -224,35 +224,52 @@ function overflowLine(names: string[], more: number): string {
 export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudget): Promise<PinEntry[]> {
   // Store calls per turn: (pinnedContextPriority tiers the run holds) + 3 (one count, one getPages for pin
   // pages, one countNotes) + one getPages per page-tree level above the pinned pages, plus the config-pin
-  // lookups; never one per pin.
+  // lookups and one tree walk per pinned listing; never one per page pin.
   const configPinned = await configPins(run);
   const configured = configPinned.pages.filter(page => page.body?.trim());
   const listings = configPinned.listings;
 
   const slots = Math.max(budget.maxPins - configured.length - listings.length, 0);
-  const { pins, total } = await rankedStoredPins(
+  const ranked = await rankedStoredPins(
     run,
     configured.map(page => page.id),
     slots + OVERFLOW_NAMES,
   );
+  // A stored listing of a page config already lists is delivered once, as the config listing.
+  const configListed = new Set(listings.map(listing => listing.origin.id));
+  const pins = ranked.pins.filter(pin => !(pin.kind === 'list' && configListed.has(pin.pageId)));
+  const total = ranked.total - (ranked.pins.length - pins.length);
+  const slotPins = pins.slice(0, slots);
   const pages = new Map(
-    (await run.storage.getPages({ ids: pins.slice(0, slots).map(pin => pin.pageId), read: run.read })).map(page => [
+    (await run.storage.getPages({ ids: [...new Set(slotPins.map(pin => pin.pageId))], read: run.read })).map(page => [
       page.id,
       page,
     ]),
   );
-  const { labels, scopes } = await pinLabels(run, [...configured, ...pages.values()]);
+  // One tree walk per stored listing, as for config listings.
+  const storedListings = new Map<string, PinnedListing>();
+  for (const pin of slotPins) {
+    const page = pages.get(pin.pageId);
+    if (pin.kind === 'list' && page) storedListings.set(pin.id, await resolveListing(run, page, pin.depth ?? 1));
+  }
+  const pinnedPages = slotPins.flatMap(pin => {
+    // A store from before pin kinds returns no kind: those are page pins.
+    const page = pin.kind !== 'list' ? pages.get(pin.pageId) : undefined;
+    return page ? [page] : [];
+  });
+  const { labels, scopes } = await pinLabels(run, [...configured, ...pinnedPages]);
   const labelOf = (page: KnowledgePage) => labels.get(page.id)!;
-  const listingRefs = listings.length
+  const allListings = [...listings, ...storedListings.values()];
+  const listingRefs = allListings.length
     ? (
         await knowledgePageRefs(
           run.storage,
           run.read,
-          listings.map(listing => listing.origin),
+          allListings.map(listing => listing.origin),
         )
       ).refs
     : new Map<string, string>();
-  for (const listing of listings) {
+  for (const listing of allListings) {
     if (!listing.origin.isScope) continue;
     const scope = listing.origin.address;
     if (scope) listingRefs.set(listing.origin.id, scope);
@@ -279,34 +296,37 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
 
   const minimum = estimateTokenCount(PIN_TRUNCATION_MARKER) + 8;
   let used = entries.reduce((sum, entry) => sum + estimateTokenCount(entry.text), 0);
-  const delivered: PinEntry[] = [];
+  const delivered: Array<{ entry: PinEntry; pin: KnowledgeListedPin }> = [];
   const left: KnowledgeListedPin[] = [];
   for (const [i, pin] of pins.entries()) {
     const page = i < slots ? pages.get(pin.pageId) : undefined;
+    const listing = pin.kind === 'list' ? storedListings.get(pin.id) : undefined;
     const remaining = budget.maxTokens - used;
-    if (!page || remaining < minimum) {
+    if (!page || (pin.kind === 'list' && !listing) || remaining < minimum) {
       left.push(pin);
       continue;
     }
-    const text = render(page, labelOf(page), remaining);
-    used += estimateTokenCount(text);
-    delivered.push({ id: page.id, text });
+    const entry: PinEntry = listing
+      ? { id: `${PIN_LIST_ID_PREFIX}${page.id}`, text: renderListing(listing, listingRef(listing), remaining) }
+      : { id: page.id, text: render(page, labelOf(page), remaining) };
+    used += estimateTokenCount(entry.text);
+    delivered.push({ entry, pin });
   }
 
   // The overflow line must fit too: give back the lowest-ranked delivered pins until it does.
   const line = () =>
     overflowLine(
-      left.slice(0, OVERFLOW_NAMES).map(pin => pin.pageName),
+      left.slice(0, OVERFLOW_NAMES).map(pin => (pin.kind === 'list' ? `${pin.pageName} (listing)` : pin.pageName)),
       total - delivered.length - Math.min(left.length, OVERFLOW_NAMES),
     );
   while (total > delivered.length && delivered.length > 0 && used + estimateTokenCount(line()) > budget.maxTokens) {
     const dropped = delivered.pop()!;
-    used -= estimateTokenCount(dropped.text);
-    left.unshift(pins.find(pin => pin.pageId === dropped.id)!);
+    used -= estimateTokenCount(dropped.entry.text);
+    left.unshift(dropped.pin);
   }
-  entries.push(...delivered);
-  const byId = new Map([...configured, ...pages.values()].map(page => [page.id, page]));
-  for (const listing of listings) byId.set(`${PIN_LIST_ID_PREFIX}${listing.origin.id}`, listing.origin);
+  entries.push(...delivered.map(({ entry }) => entry));
+  const byId = new Map([...configured, ...pinnedPages].map(page => [page.id, page]));
+  for (const listing of allListings) byId.set(`${PIN_LIST_ID_PREFIX}${listing.origin.id}`, listing.origin);
   for (const entry of entries) {
     const page = byId.get(entry.id)!;
     entry.name = page.name;

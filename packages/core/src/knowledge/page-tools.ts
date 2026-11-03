@@ -4,9 +4,14 @@ import type {
   KnowledgeNote,
   KnowledgePage,
   KnowledgePageSearchHit,
+  KnowledgePinKind,
   KnowledgeStorage,
 } from '../storage/domains/knowledge';
-import { KnowledgePageHasChildrenError, knowledgeScopeReadable } from '../storage/domains/knowledge';
+import {
+  KnowledgePageHasChildrenError,
+  knowledgeScopeReadable,
+  MAX_KNOWLEDGE_PIN_LIST_DEPTH,
+} from '../storage/domains/knowledge';
 import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import { knowledgeRoleOn } from './access';
@@ -1421,31 +1426,63 @@ function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => v
   return createTool({
     id: 'knowledge_pin',
     description:
-      'Pin a page into the context of every run holding one of the audience scopes, every turn; or unpin it. Pinned pages cost tokens on every turn: pin only standing instructions, durable preferences and hard constraints that apply without being asked for. ' +
-      "Needs editor on the page's scope and, for each audience, holding it or editor on it. A pinned page is delivered only to runs that can read it.",
+      'Pin a page into the context of every run holding one of the audience scopes, every turn; or unpin it. With kind "list", pin a listing of the pages under it instead (refs, names and child counts, like knowledge_list from it, `depth` levels down), kept current as pages are added, renamed or removed. Pinned pages cost tokens on every turn: pin only standing instructions, durable preferences and hard constraints that apply without being asked for, and listings agents need to find their way. ' +
+      "Needs editor on the page's scope and, for each audience, holding it or editor on it. A pinned page is delivered only to runs that can read it, and a listing shows only the pages they can read.",
     inputSchema: {
       type: 'object',
       properties: {
         op: { type: 'string', enum: ['pin', 'unpin'] },
         page: { type: 'string', minLength: 1, description: pageRefDescription },
         audience: { ...scopeListSchema, description: 'Scope addresses whose runs receive the pin.' },
+        kind: {
+          type: 'string',
+          enum: ['page', 'list'],
+          description:
+            '"page" (default) pins the page; "list" pins a listing of the pages under it. Each is pinned and unpinned on its own.',
+        },
+        depth: {
+          type: 'integer',
+          minimum: 1,
+          maximum: MAX_KNOWLEDGE_PIN_LIST_DEPTH,
+          description: `Levels a "list" pin shows below the page, 1 to ${MAX_KNOWLEDGE_PIN_LIST_DEPTH}. Default 1; pinning again sets a new depth.`,
+        },
       },
       required: ['op', 'page', 'audience'],
       additionalProperties: false,
     } satisfies JSONSchema7,
     execute: async (input, context) => {
-      const { op, page: ref, audience } = input as { op: 'pin' | 'unpin'; page: string; audience: string[] };
+      const {
+        op,
+        page: ref,
+        audience,
+        kind = 'page',
+        depth,
+      } = input as { op: 'pin' | 'unpin'; page: string; audience: string[]; kind?: KnowledgePinKind; depth?: number };
+      if (depth !== undefined && (kind !== 'list' || op !== 'pin')) {
+        throw new Error('depth only goes with op "pin" and kind "list".');
+      }
       const run = await start(host, context);
       const page = await run.page(ref, 'editor');
-      await run.require(await run.scopeOf(page), 'editor', op === 'pin' ? 'Pinning a page' : 'Unpinning a page');
+      const what = kind === 'list' ? 'a page listing' : 'a page';
+      await run.require(await run.scopeOf(page), 'editor', op === 'pin' ? `Pinning ${what}` : `Unpinning ${what}`);
       await requireAudienceAuthority(run, audience);
       const author = run.provenance.author;
       const pin =
         op === 'pin'
-          ? await run.storage.addPinAudience({ pageId: page.id, audience, createdBy: author })
-          : await run.storage.removePinAudience({ pageId: page.id, audience, removedBy: author });
+          ? await run.storage.addPinAudience({ pageId: page.id, kind, depth, audience, createdBy: author })
+          : await run.storage.removePinAudience({ pageId: page.id, kind, audience, removedBy: author });
       onChange?.(context);
-      return { page: page.id, audience: pin?.audience ?? [] };
+      if (op === 'pin' && kind === 'list' && pin?.kind !== 'list') {
+        throw new Error(
+          'This Knowledge storage adapter predates listing pins and stored a page pin instead. Upgrade the storage package, then unpin the page and pin the listing again.',
+        );
+      }
+      return {
+        page: page.id,
+        kind,
+        ...(pin?.depth === undefined ? {} : { depth: pin.depth }),
+        audience: pin?.audience ?? [],
+      };
     },
   });
 }

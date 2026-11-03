@@ -8,7 +8,7 @@
  */
 
 import { knowledgePageKeyProblem } from '@internal/core/knowledge-compat';
-import { parseKnowledgePageRef } from '../storage/domains/knowledge/pages';
+import { MAX_KNOWLEDGE_PIN_LIST_DEPTH, parseKnowledgePageRef } from '../storage/domains/knowledge/pages';
 import { decodeKnowledgeScopeValue, encodeKnowledgeScopeValue } from './scope-address';
 
 /** @experimental */
@@ -73,11 +73,6 @@ export interface KnowledgeScopeDeclarationInfo {
 }
 
 /**
- * A keyed page created with its scope. `key` is unique among its siblings and can't contain `/`, `#`
- * or `%`; nested `pages` sit under it, addressed `<scope>#<key>/<child key>`.
- * @experimental
- */
-/**
  * A pinned listing: the readable pages under `list`, as `knowledge_list` returns them (ref, name and
  * child count each), kept current in the run's pinned context.
  * @experimental
@@ -88,9 +83,6 @@ export interface KnowledgePinnedList {
   /** Levels below `list` to include, 1 to 3. Default 1. */
   depth?: number;
 }
-
-/** Most levels a pinned listing goes down, as for `knowledge_list`. */
-export const MAX_KNOWLEDGE_PINNED_LIST_DEPTH = 3;
 
 /**
  * A pinnedContext entry as scope pattern and key path (empty for a listing of the scope itself), or
@@ -103,12 +95,17 @@ export function knowledgePinTarget(
   const ref = entry.list;
   if (typeof ref !== 'string' || !ref) return null;
   const depth = entry.depth ?? 1;
-  if (!Number.isInteger(depth) || depth < 1 || depth > MAX_KNOWLEDGE_PINNED_LIST_DEPTH) return null;
+  if (!Number.isInteger(depth) || depth < 1 || depth > MAX_KNOWLEDGE_PIN_LIST_DEPTH) return null;
   if (!ref.includes('#')) return { scope: ref, path: [], depth };
   const parsed = parseKnowledgePageRef(ref);
   return parsed && { ...parsed, depth };
 }
 
+/**
+ * A keyed page created with its scope. `key` is unique among its siblings and can't contain `/`, `#`
+ * or `%`; nested `pages` sit under it, addressed `<scope>#<key>/<child key>`.
+ * @experimental
+ */
 export interface KnowledgePageTemplate {
   key: string;
   name: string;
@@ -569,7 +566,7 @@ export function compileKnowledgeScopes(declarations: KnowledgeScopeDeclarations)
         throw new KnowledgeDeclarationError(
           typeof entry === 'string'
             ? `Knowledge pinnedContext entry "${ref}" on "${owner}" must be "<scope>#<key>[/<key>…]" naming a keyed page, e.g. "policy:$orgId#refund-policy" or "org:$orgId#policies/refund"; keys can't be empty or contain "/", "#" or "%".`
-            : `Knowledge pinnedContext listing "${ref}" on "${owner}" must name a scope or "<scope>#<key>[/<key>…]", e.g. { list: "docs:$orgId#guides", depth: 1 }, with depth 1 to ${MAX_KNOWLEDGE_PINNED_LIST_DEPTH}; keys can't be empty or contain "/", "#" or "%".`,
+            : `Knowledge pinnedContext listing "${ref}" on "${owner}" must name a scope or "<scope>#<key>[/<key>…]", e.g. { list: "docs:$orgId#guides", depth: 1 }, with depth 1 to ${MAX_KNOWLEDGE_PIN_LIST_DEPTH}; keys can't be empty or contain "/", "#" or "%".`,
         );
       }
       const pattern = typedPattern(parsed.scope, `Knowledge pinnedContext scope on "${owner}"`);

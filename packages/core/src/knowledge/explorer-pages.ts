@@ -234,7 +234,7 @@ export async function readKnowledgePage(
       cursor: input.noteCursor,
       limit: input.noteLimit ?? DEFAULT_KNOWLEDGE_PAGE_NOTE_LIMIT,
     }),
-    store.listPins({ audience: 'all', read, pageIds: [pageId], limit: 1 }),
+    store.listPins({ audience: 'all', read, kind: 'page', pageIds: [pageId], limit: 1 }),
     store.listNotesMentioning({ pageId, read, limit: DEFAULT_KNOWLEDGE_PAGE_NOTE_LIMIT }),
     readableAncestors(store, page, read),
   ]);
@@ -401,6 +401,7 @@ export async function readKnowledgePageGraph(
       const result = await store.listPins({
         audience: 'all',
         read,
+        kind: 'page',
         pageIds: ids.slice(start, start + MAX_KNOWLEDGE_PAGE_LIST_LIMIT),
         cursor,
       });
