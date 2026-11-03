@@ -51,6 +51,26 @@ export const dashboardAppResource: ReadMcpServerResourceResponse = {
   contents: [{ uri: 'ui://dashboard/app', text: '<!DOCTYPE html><html><body>dashboard</body></html>' }],
 };
 
+/** The dashboard app's data relay: callable by the app only. */
+export const relayTool: McpToolInfo = {
+  id: 'mastraApi',
+  name: 'mastraApi',
+  description: 'Reads observability data for the app',
+  inputSchema: JSON.stringify({ type: 'object', properties: {} }),
+  _meta: { ui: { visibility: ['app'] } },
+};
+
+/** A tool the server keeps for the model: apps must not call it. */
+export const modelOnlyTool: McpToolInfo = {
+  id: 'deleteTraces',
+  name: 'deleteTraces',
+  description: 'Deletes traces',
+  inputSchema: JSON.stringify({ type: 'object', properties: {} }),
+  _meta: { ui: { visibility: ['model'] } },
+};
+
+export const dashboardServerTools: McpServerToolListResponse = { tools: [dashboardTool, relayTool, modelOnlyTool] };
+
 export const emptyToolList: McpServerToolListResponse = { tools: [] };
 
 export const toolList: McpServerToolListResponse = {

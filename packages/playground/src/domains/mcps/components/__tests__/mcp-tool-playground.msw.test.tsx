@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { McpToolPlayground } from '../mcp-tool-playground';
-import { authDisabled, dashboardAppResource, dashboardTool } from './fixtures/mcp-servers';
+import { authDisabled, dashboardAppResource, dashboardServerTools, dashboardTool } from './fixtures/mcp-servers';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -56,13 +56,20 @@ async function renderPlaygroundApp() {
   return app;
 }
 
+function serveDashboardApp() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabled)),
+    http.post(`${SERVER_URL}/resources/read`, () => HttpResponse.json(dashboardAppResource)),
+    http.get(`${SERVER_URL}/tools`, () => HttpResponse.json(dashboardServerTools)),
+  );
+}
+
 describe('McpToolPlayground', () => {
-  describe('when the app calls another tool on its server', () => {
+  describe('when the app calls another app-visible tool on its server', () => {
     it('runs the tool the app asked for and hands it the unwrapped output', async () => {
       const onRelay = vi.fn<(body: unknown) => void>();
+      serveDashboardApp();
       server.use(
-        http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabled)),
-        http.post(`${SERVER_URL}/resources/read`, () => HttpResponse.json(dashboardAppResource)),
         // Any call to the viewed tool would hit MSW's unhandled-request error instead.
         http.post(`${SERVER_URL}/tools/mastraApi/execute`, async ({ request }) => {
           onRelay(await request.json());
@@ -78,6 +85,25 @@ describe('McpToolPlayground', () => {
 
       expect(onRelay).toHaveBeenCalledWith({ data: { method: 'POST', path: '/observability/metrics/aggregate' } });
       expect(result.structuredContent).toEqual({ status: 200, body: { value: 12 } });
+    });
+  });
+
+  describe('when the app calls a tool its server keeps for the model', () => {
+    it('refuses the call without running the tool', async () => {
+      const onExecute = vi.fn();
+      serveDashboardApp();
+      server.use(
+        http.post(`${SERVER_URL}/tools/deleteTraces/execute`, () => {
+          onExecute();
+          return HttpResponse.json({ result: 'deleted' });
+        }),
+      );
+      const app = await renderPlaygroundApp();
+
+      await expect(app.callServerTool({ name: 'deleteTraces', arguments: {} })).rejects.toThrow(
+        /isn't available to apps/,
+      );
+      expect(onExecute).not.toHaveBeenCalled();
     });
   });
 });

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { App } from '@modelcontextprotocol/ext-apps';
+import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -22,7 +23,7 @@ afterEach(async () => {
  * Renders the viewer and connects a real MCP App to it, standing in for the sandbox proxy page
  * it loads: the proxy announces itself, then relays JSON-RPC between the viewer and the app.
  */
-async function renderApp(props: Partial<McpAppViewerProps> = {}) {
+async function renderApp(props: Partial<McpAppViewerProps> = {}, setup?: (app: App) => void) {
   const { container } = render(
     <McpAppViewer html={HTML} toolName="showDashboard" sandboxUrl={SANDBOX_URL} {...props} />,
   );
@@ -52,6 +53,7 @@ async function renderApp(props: Partial<McpAppViewerProps> = {}) {
   fromSandbox({ jsonrpc: '2.0', method: 'ui/notifications/sandbox-proxy-ready', params: {} });
   const app = new App({ name: 'test-app', version: '1.0.0' }, {}, { autoResize: false });
   apps.add(app);
+  setup?.(app);
   await app.connect(transport);
   return app;
 }
@@ -74,6 +76,30 @@ describe('McpAppViewer', () => {
       message: {},
       updateModelContext: { text: {}, structuredContent: {} },
     });
+  });
+
+  it("hands the app the tool's structured output, with its JSON as the text fallback", async () => {
+    const output = { definition: { widgets: [] }, scope: 'project' };
+    const received = new Promise<CallToolResult>(resolve => {
+      void renderApp({ toolResult: output }, app => {
+        app.ontoolresult = resolve;
+      });
+    });
+
+    expect(await received).toEqual({
+      content: [{ type: 'text', text: JSON.stringify(output) }],
+      structuredContent: output,
+    });
+  });
+
+  it('hands the app plain-text tool output as text only', async () => {
+    const received = new Promise<CallToolResult>(resolve => {
+      void renderApp({ toolResult: 'done' }, app => {
+        app.ontoolresult = resolve;
+      });
+    });
+
+    expect(await received).toEqual({ content: [{ type: 'text', text: 'done' }] });
   });
 
   it('runs the tool the app asks for and returns its output as structured content', async () => {

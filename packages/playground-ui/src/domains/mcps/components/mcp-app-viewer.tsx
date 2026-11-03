@@ -119,10 +119,12 @@ export function McpAppViewer({
     if (toolResult && typeof toolResult === 'object' && Array.isArray((toolResult as CallToolResult).content)) {
       return toolResult as CallToolResult;
     }
+    const text = typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult);
+    // Apps render from structuredContent; the JSON text is the model-facing channel the spec asks to mirror it in.
+    const isRecord = toolResult !== null && typeof toolResult === 'object' && !Array.isArray(toolResult);
     return {
-      content: [
-        { type: 'text' as const, text: typeof toolResult === 'string' ? toolResult : JSON.stringify(toolResult) },
-      ],
+      content: [{ type: 'text' as const, text }],
+      ...(isRecord && { structuredContent: toolResult as Record<string, unknown> }),
     };
   }, [toolResult]);
 
