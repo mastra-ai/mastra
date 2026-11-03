@@ -9,6 +9,8 @@ import { useMetricsFilters } from '../../metrics/hooks/use-metrics-filters';
 import { useScorers } from '../hooks/use-scorers';
 import type { DashboardScope } from '../lib/definition';
 import type { Scorer } from '../lib/scores';
+import { WidgetDragHandle } from '../widget-layout/drag-handle';
+import type { WidgetDragHandleProps } from '../widget-layout/widget-layout';
 import { EDITOR_KINDS, findEntry, isTimeseriesKind } from './catalogue';
 import type { EditorKind } from './catalogue';
 import { draftToWidget, effectiveKind, misfit, widgetToDraft } from './codec';
@@ -56,6 +58,8 @@ export type WidgetEditorProps = {
   onChange: (change: WidgetEditorChange) => void;
   /** Adds a "Delete" button on the card's far right. The page removes the widget and stops editing. */
   onRemove?: () => void;
+  /** Adds a grip left of the title to drag the widget by on the layout. */
+  dragHandle?: WidgetDragHandleProps;
   className?: string;
 };
 
@@ -63,7 +67,15 @@ export type WidgetEditorProps = {
  * Edits one widget as the card it is on the dashboard: the title is renamed in place, and the
  * kind, metrics, filters, split and views sit in the card's settings popover. The card draws live.
  */
-export function WidgetEditor({ definition, widgetId, scope, onChange, onRemove, className }: WidgetEditorProps) {
+export function WidgetEditor({
+  definition,
+  widgetId,
+  scope,
+  onChange,
+  onRemove,
+  dragHandle,
+  className,
+}: WidgetEditorProps) {
   const scorers = useEditorScorers();
   // Read once: the editor owns the draft from here on, and the page may write each change back.
   const [opened] = useState(() => {
@@ -80,8 +92,8 @@ export function WidgetEditor({ definition, widgetId, scope, onChange, onRemove, 
     <div
       role="group"
       aria-label={opened.creating ? 'New widget' : `Edit ${opened.initial?.title ?? widgetId}`}
-      // An outline outside the card marks it as being edited, without changing its size.
-      className={cn('rounded-xl outline-1 outline-offset-4 outline-border-strong outline-dashed', className)}
+      // Stretched like the card it stands for, so widgets on a row keep one height.
+      className={cn('flex flex-col *:flex-1', className)}
     >
       {opened.initial ? (
         <WidgetEditorCard
@@ -92,11 +104,15 @@ export function WidgetEditor({ definition, widgetId, scope, onChange, onRemove, 
           scope={scope}
           onChange={onChange}
           onRemove={onRemove}
+          dragHandle={dragHandle}
         />
       ) : (
-        <Notice variant="info" title="This widget can't be edited here">
-          It uses settings this editor has no fields for. You can still resize and move it in layout mode.
-        </Notice>
+        <div className="flex items-start gap-2">
+          {dragHandle && <WidgetDragHandle {...dragHandle} />}
+          <Notice variant="info" title="This widget can't be edited here">
+            It uses settings this editor has no fields for. You can still resize and move it in layout mode.
+          </Notice>
+        </div>
       )}
     </div>
   );
@@ -119,9 +135,19 @@ type WidgetEditorCardProps = {
   scope: DashboardScope;
   onChange: (change: WidgetEditorChange) => void;
   onRemove?: () => void;
+  dragHandle?: WidgetDragHandleProps;
 };
 
-function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange, onRemove }: WidgetEditorCardProps) {
+function WidgetEditorCard({
+  initial,
+  creating,
+  others,
+  scorers,
+  scope,
+  onChange,
+  onRemove,
+  dragHandle,
+}: WidgetEditorCardProps) {
   const methods = useForm<WidgetDraft>({ defaultValues: initial });
   const { control, register, setValue } = methods;
   const draft = useWatch({ control }) as WidgetDraft;
@@ -219,9 +245,13 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange,
     />
   );
 
+  const grip = dragHandle && <WidgetDragHandle {...dragHandle} className="-my-1 -ml-2" />;
   const heading = (
     <div className="flex min-w-0 flex-col gap-2">
-      <TitleInput {...titleProps} />
+      <div className="flex min-w-0 items-center gap-2">
+        {grip}
+        <TitleInput {...titleProps} />
+      </div>
       {tabs}
     </div>
   );
@@ -257,7 +287,7 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange,
             afterClose.current = undefined;
           }}
         >
-          <div className="group/frame relative">
+          <div className="group/frame relative flex flex-col *:flex-1">
             {activeEmpty ? (
               <ChartCard title={draft.title || 'Untitled widget'}>
                 <div className="flex h-full items-center justify-center">
@@ -269,7 +299,12 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange,
               </ChartCard>
             ) : cardless ? (
               <div className="flex flex-col gap-3">
-                {tabs}
+                {(grip || tabs) && (
+                  <div className="flex items-center gap-2">
+                    {grip}
+                    {tabs}
+                  </div>
+                )}
                 <Preview draft={draft} span={span} kind={kind} activeView={activeView} scope={scope} />
               </div>
             ) : (

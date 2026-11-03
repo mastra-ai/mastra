@@ -1,9 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { setWidgetDragData } from './drag-data';
+import { WidgetDragHandle } from './drag-handle';
 import type { WidgetLayoutRow } from './layout';
 import { WidgetLayout } from './widget-layout';
-import type { WidgetLayoutChange } from './widget-layout';
+import type { WidgetDragHandleProps, WidgetLayoutChange } from './widget-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/ds/components/Card';
 import { Txt } from '@/ds/components/Txt';
 
@@ -40,10 +41,11 @@ const SEEDED: WidgetLayoutRow[] = [
   { widgets: [{ id: 'entities', span: 12 }] },
 ];
 
-function PlaceholderWidget({ id, span }: { id: string; span: number }) {
+function PlaceholderWidget({ id, span, dragHandle }: { id: string; span: number; dragHandle: WidgetDragHandleProps }) {
   return (
     <Card elevation="flat" className="h-full min-h-40">
-      <CardHeader>
+      <CardHeader className="flex-row items-center gap-1 space-y-0">
+        <WidgetDragHandle {...dragHandle} className="-ml-2" />
         <CardTitle>{TITLES[id] ?? id}</CardTitle>
       </CardHeader>
       <CardContent>
@@ -88,7 +90,12 @@ function Harness({ initial }: { initial: WidgetLayoutRow[] }) {
           </Txt>
         )}
       </div>
-      <WidgetLayout rows={rows} onRowsChange={onRowsChange} renderWidget={w => <PlaceholderWidget {...w} />} />
+      <WidgetLayout
+        rows={rows}
+        onRowsChange={onRowsChange}
+        renderWidget={(w, dragHandle) => <PlaceholderWidget {...w} dragHandle={dragHandle} />}
+        createWidget={() => `metric-${created + 1}`}
+      />
     </div>
   );
 }
@@ -104,7 +111,7 @@ export default meta;
 type Story = StoryObj<typeof Harness>;
 
 /**
- * Hover a widget for its move handle (top centre) and the resize handles between widgets. Drag a
+ * Hover the layout for the resize handles between widgets and a + on every gap to add a widget there. Drag a
  * widget, or a palette item, into a gap; a line shows where it lands: horizontal for a new row, vertical to join a row.
  * Widths stay on the spans a dashboard stores (2, 3, 4, 6, 12), so two widgets alone in a row are
  * always 6 + 6 and their handle stays inert.

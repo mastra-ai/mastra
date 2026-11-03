@@ -1,5 +1,5 @@
 import { SigmaIcon, XIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { chartColor } from '../lib/format';
@@ -310,7 +310,8 @@ function ItemChip({ label, name, description, color, onRemove, children }: ItemC
           className={cn(editableSegmentClass, 'text-foreground')}
           aria-label={`${label} settings`}
         >
-          <SeriesMark color={color ? chartColor(color) : undefined} />
+          {/* Only a metric drawn as one series owns a colour; split series are coloured per value. */}
+          {color && <SeriesMark color={chartColor(color)} />}
           <span className="truncate">{label}</span>
         </PopoverTrigger>
         <PopoverContent align="start" className="flex w-80 flex-col gap-4">
@@ -596,6 +597,16 @@ type SplitByProps = {
 function SplitBy({ view, entry, kind, hasScores, fits, sortItems, onChange }: SplitByProps) {
   const timeseries = isTimeseriesKind(kind);
   const { values, isLoading } = useDimensionValues(entry, timeseries ? view.splitBy : undefined);
+  // A chart split by a dimension draws only the values picked, so picking a dimension also picks its
+  // busiest value once they load: the chart keeps showing data instead of asking for values.
+  const [seeding, setSeeding] = useState<string>();
+  useEffect(() => {
+    // Wait for the form to hold the new dimension and for its values to load.
+    if (!seeding || seeding !== view.splitBy || isLoading) return;
+    setSeeding(undefined);
+    const [busiest] = values;
+    if (view.splitValues.length === 0 && busiest) onChange({ splitValues: [busiest] });
+  }, [seeding, isLoading, values, view.splitBy, view.splitValues.length, onChange]);
   const items = [
     { value: NONE, label: kind === 'table' ? 'Pick a dimension' : 'None' },
     // A filtered dimension holds one value, so splitting it would draw a single series.
@@ -613,7 +624,11 @@ function SplitBy({ view, entry, kind, hasScores, fits, sortItems, onChange }: Sp
       <div className="flex flex-wrap items-center gap-2">
         <Select
           value={view.splitBy ?? NONE}
-          onValueChange={value => onChange({ splitBy: !value || value === NONE ? undefined : value, splitValues: [] })}
+          onValueChange={value => {
+            const splitBy = !value || value === NONE ? undefined : value;
+            onChange({ splitBy, splitValues: [] });
+            if (timeseries) setSeeding(splitBy);
+          }}
           items={items}
         >
           <SelectTrigger size="sm" aria-label={splitLabel(kind)} className="w-auto">
