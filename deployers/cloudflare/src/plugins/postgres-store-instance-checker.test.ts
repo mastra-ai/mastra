@@ -1,3 +1,5 @@
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { rolldown } from 'rolldown';
@@ -40,6 +42,40 @@ describe('Check PostgresStore instance', () => {
       );
     },
   );
+
+  it('should not count PostgresStore instances inside dependencies', async () => {
+    // `@mastra/pg` itself contains `new PostgresStore(`, which must not count against the app's single instance.
+    const root = await mkdtemp(join(tmpdir(), 'cf-pg-checker-'));
+    try {
+      await mkdir(join(root, 'node_modules', 'fake-pg'), { recursive: true });
+      await writeFile(
+        join(root, 'node_modules', 'fake-pg', 'package.json'),
+        JSON.stringify({ name: 'fake-pg', main: 'index.js' }),
+      );
+      await writeFile(
+        join(root, 'node_modules', 'fake-pg', 'index.js'),
+        `export class PostgresStore {}\nexport const defaultStore = () => new PostgresStore();\n`,
+      );
+      await writeFile(
+        join(root, 'entry.js'),
+        `import { PostgresStore, defaultStore } from 'fake-pg';\nexport const store = new PostgresStore();\nexport { defaultStore };\n`,
+      );
+
+      const build = await rolldown({
+        logLevel: 'silent',
+        input: join(root, 'entry.js'),
+        platform: 'browser',
+        plugins: [postgresStoreInstanceChecker()],
+      });
+      try {
+        await expect(build.generate({ format: 'esm' })).resolves.toBeDefined();
+      } finally {
+        await build.close();
+      }
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 
   it('should not count instances from a previous build of the same plugin', async () => {
     const plugin = postgresStoreInstanceChecker();

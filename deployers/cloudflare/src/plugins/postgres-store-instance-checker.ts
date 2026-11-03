@@ -5,7 +5,8 @@ import type { PostgresStoreInstance } from '../babel/postgres-store-instance-che
 import { getBabelParserPlugins } from './babel-parser-plugins';
 
 export function postgresStoreInstanceChecker(): Plugin {
-  // Instances are counted across all modules of one build.
+  // Instances are counted across the app's modules of one build. Dependencies are skipped: `@mastra/pg` itself
+  // contains `new PostgresStore(`.
   const instances: PostgresStoreInstance[] = [];
   const babelPlugin = () => postgresStoreInstanceCheckerBabel(instances);
 
@@ -16,7 +17,11 @@ export function postgresStoreInstanceChecker(): Plugin {
       instances.length = 0;
     },
     transform: {
-      filter: { code: /\bPostgresStore\b/, moduleType: ['js', 'jsx', 'ts', 'tsx'] },
+      filter: {
+        id: { exclude: /[\\/]node_modules[\\/]/ },
+        code: /\bPostgresStore\b/,
+        moduleType: ['js', 'jsx', 'ts', 'tsx'],
+      },
       handler(code, id, meta) {
         // Only validates, so the generated code is skipped and the module is left untouched.
         transformSync(code, {

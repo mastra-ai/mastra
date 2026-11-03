@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { basename, isAbsolute, join, relative } from 'node:path';
-import { transformAsync, transformSync } from '@babel/core';
+import { transformSync } from '@babel/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@internal/core/error';
 import type { IMastraLogger } from '@internal/core/logger';
 import type { OutputAsset, OutputChunk } from 'rolldown';
@@ -13,7 +13,7 @@ import { analyzeEntry } from './analyze/analyzeEntry';
 import { bundleExternals } from './analyze/bundleExternals';
 import { DEPS_TO_IGNORE } from './analyze/constants';
 import { normalizeExternals } from './analyze/externals';
-import { checkConfigExport } from './babel/check-config-export';
+import { checkMastraConfigExport } from './analyzeEntryProjectType';
 import { detectPinoTransports } from './babel/detect-pino-transports';
 import { getPackageMetadata } from './package-info';
 import type { DependencyMetadata, ExternalDependencyInfo, InternalBundlerOptions } from './types';
@@ -400,14 +400,7 @@ export async function analyzeBundle(
   },
   logger: IMastraLogger,
 ) {
-  const mastraConfig = await readFile(mastraEntry, 'utf-8');
-  const mastraConfigResult: { hasValidConfig: boolean; projectType?: string } = { hasValidConfig: false };
-
-  await transformAsync(mastraConfig, {
-    filename: mastraEntry,
-    presets: [import.meta.resolve('@babel/preset-typescript')],
-    plugins: [() => checkConfigExport(mastraConfigResult)],
-  });
+  const mastraConfigResult = await checkMastraConfigExport(mastraEntry);
 
   if (!mastraConfigResult.hasValidConfig) {
     logger.warn('Invalid Mastra config', {
@@ -455,7 +448,13 @@ export async function analyzeBundle(
     });
 
     // Detect pino transports in the bundled output. Skips the Babel parse when nothing can match.
-    if (analyzeResult.output.code.includes('pino') && /\.transport\s*\(/.test(analyzeResult.output.code)) {
+    // A false match parses the whole chunk (~750ms on a real app), so require a quoted `pino` or a `pino.transport`.
+    const code = analyzeResult.output.code;
+    if (
+      code.includes('pino') &&
+      /\.transport\s*\(/.test(code) &&
+      (/(['"`])pino\1/.test(code) || /\bpino\s*\.\s*(?:default\s*\.\s*)?transport\b/.test(code))
+    ) {
       transformSync(analyzeResult.output.code, {
         filename: 'pino-detection.js',
         plugins: [() => detectPinoTransports(detectedPinoTransports)],
