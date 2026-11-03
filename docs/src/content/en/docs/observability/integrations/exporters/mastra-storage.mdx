@@ -187,7 +187,7 @@ For both batch strategies (`batch-with-updates` and `insert-only`), traces are f
 
 1. **Size trigger**: Buffer reaches `maxBatchSize` spans
 1. **Time trigger**: `maxBatchWaitMs` elapsed since first event
-1. **Emergency flush**: Buffer approaches `maxBufferSize` limit
+1. **Emergency flush**: Due events reach `maxBufferSize`. Updates waiting out a retry delay aren't counted
 1. **Shutdown**: Force flush all pending events
 
 ### Error handling

@@ -45,7 +45,7 @@ interface MastraStorageExporterConfig extends BaseExporterConfig {
   /** Maximum number of spans per batch. Default: 1000 */
   maxBatchSize?: number
 
-  /** Maximum total buffer size before emergency flush. Default: 10000 */
+  /** Due events that force an immediate flush. Updates waiting out a retry delay aren't counted. Also bounds how many ended spans are remembered. Default: 10000 */
   maxBufferSize?: number
 
   /** Maximum time to wait before flushing batch in milliseconds. Default: 5000 */
@@ -171,7 +171,7 @@ The buffer flushes when any of these conditions are met:
 
 - Buffer size reaches `maxBatchSize`
 - Time since first buffered event exceeds `maxBatchWaitMs`
-- Buffer size reaches `maxBufferSize` (emergency flush)
+- Due events reach `maxBufferSize` (emergency flush)
 - `shutdown()` is called
 
 ### Retry Logic
