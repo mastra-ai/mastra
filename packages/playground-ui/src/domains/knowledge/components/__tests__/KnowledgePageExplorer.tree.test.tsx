@@ -214,16 +214,22 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       restore();
     });
 
-    it('leaves the scroll alone once the user has scrolled the tree themselves', () => {
-      const restore = stubLayout();
-      renderWithProviders(<Host requested={[]} extraSiblings={3} />);
-      fireEvent.click(row('Articles'));
-      fireEvent.click(row('Second article'));
-      const first = selectedScrolls();
-      fireEvent.wheel(screen.getByRole('tree'));
-      fireEvent.click(screen.getByRole('button', { name: 'Expand Extra 0' }));
-      expect(selectedScrolls()).toBe(first);
-      restore();
+    describe.each([
+      ['scrolls the wheel', (tree: HTMLElement) => fireEvent.wheel(tree)],
+      ['presses a key in the tree', (tree: HTMLElement) => fireEvent.keyDown(tree, { key: 'ArrowDown' })],
+      ['presses the pointer on the tree (a scrollbar drag)', (tree: HTMLElement) => fireEvent.pointerDown(tree)],
+    ])('when the user %s', (_name, act) => {
+      it('leaves the scroll alone as more rows load', () => {
+        const restore = stubLayout();
+        renderWithProviders(<Host requested={[]} extraSiblings={3} />);
+        fireEvent.click(row('Articles'));
+        fireEvent.click(row('Second article'));
+        const first = selectedScrolls();
+        act(screen.getByRole('tree'));
+        fireEvent.click(screen.getByRole('button', { name: 'Expand Extra 0' }));
+        expect(selectedScrolls()).toBe(first);
+        restore();
+      });
     });
 
     it('scrolls once per selection, not on every refresh', () => {

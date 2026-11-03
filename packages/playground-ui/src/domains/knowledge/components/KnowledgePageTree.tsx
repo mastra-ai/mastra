@@ -82,8 +82,8 @@ export function KnowledgePageTree({
     [roots, expanded, mayHaveChildren],
   );
   // Bring the selected row into view when it is selected, as soon as it exists, and again if rows that load
-  // later push it out of view (a deep page's levels arrive one after another). Once the user scrolls the
-  // tree themselves it is left alone. `nearest` leaves a row already on screen where it is; keyboard focus
+  // later push it out of view (a deep page's levels arrive one after another). Once the user scrolls, presses a key or
+  // a pointer in the tree it is left alone. `nearest` leaves a row already on screen where it is; keyboard focus
   // is not moved.
   const scroller = useRef<HTMLDivElement>(null);
   const scrolledTo = useRef<string | null>(null);
@@ -167,6 +167,8 @@ export function KnowledgePageTree({
       className="min-h-0 overflow-y-auto py-1"
       onWheel={() => (userScrolled.current = true)}
       onTouchMove={() => (userScrolled.current = true)}
+      onPointerDown={() => (userScrolled.current = true)}
+      onKeyDown={() => (userScrolled.current = true)}
     >
       {rows.map((row, index) => {
         const selected = row.page.id === selectedPageId;
