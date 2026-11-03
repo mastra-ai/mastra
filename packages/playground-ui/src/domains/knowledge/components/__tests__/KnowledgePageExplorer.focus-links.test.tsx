@@ -171,12 +171,22 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
       container.querySelector(`[data-testid="knowledge-page-node"][data-page-id="${id}"] .knowledge-circle`);
     for (const id of ['far-out', 'other-out', 'note-target', 'note-source']) {
       expect(circle(id)?.getAttribute('data-far'), id).toBe('true');
+      // The farther-page variant: the legend dot's solid grey, no "Page" caption, no fade, name readable on it.
+      expect((circle(id) as HTMLElement).style.background, id).toBe('var(--muted-foreground)');
+      expect((circle(id) as HTMLElement).style.opacity, id).toBe('');
+      expect(circle(id)?.querySelector('[data-testid="knowledge-page-caption"]'), id).toBeNull();
+      expect((circle(id)?.querySelector('[data-testid="knowledge-circle-name"]') as HTMLElement).style.color, id).toBe(
+        'var(--background)',
+      );
       // Long names are cut to fit the circle, so only the start is compared.
       expect(circle(id)?.querySelector('[data-testid="knowledge-circle-name"]')?.textContent, id).toContain(
         id.slice(0, 4),
       );
     }
-    for (const id of ['ward', 'authors']) expect(circle(id)?.getAttribute('data-far'), id).toBeNull();
+    for (const id of ['ward', 'authors']) {
+      expect(circle(id)?.getAttribute('data-far'), id).toBeNull();
+      expect(circle(id)?.querySelector('[data-testid="knowledge-page-caption"]'), id).not.toBeNull();
+    }
   });
 
   it('says nothing is left out when every link end is drawn', () => {

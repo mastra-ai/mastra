@@ -55,8 +55,9 @@ const SCOPE_STYLE: CircleStyle = {
   background: 'color-mix(in oklab, var(--chart-blue) 16%, var(--card))',
 };
 const PAGE_STYLE: CircleStyle = { '--knowledge-color': 'var(--border-strong)' };
-/** A farther page that is still drawn as a circle: the regular circle, faded and light grey. */
-const FAR_STYLE: CircleStyle = { '--knowledge-color': 'var(--border)', opacity: 0.6 };
+/** A farther page drawn as a named circle: the legend's "Farther page" dot grown, same solid grey fill, name in the page background colour to read on it. */
+const FAR_FILL = 'var(--muted-foreground)';
+const FAR_STYLE: CircleStyle = { '--knowledge-color': FAR_FILL, background: FAR_FILL };
 
 const PARENT_EDGE_STYLE = {
   stroke: 'var(--foreground)',
@@ -406,22 +407,25 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
           paddingInline: size * ((1 - CIRCLE_TEXT_SHARE) / 2),
         }}
       >
-        <Txt
-          as="span"
-          variant="meta"
-          tone={page.isScope ? undefined : 'muted'}
-          className="pointer-events-none inline-flex max-w-full items-center justify-center gap-1 whitespace-nowrap uppercase"
-          style={page.isScope ? { color: 'var(--chart-blue)' } : undefined}
-          data-testid={page.isScope ? 'knowledge-scope-caption' : 'knowledge-page-caption'}
-        >
-          {data.level ? <LevelIcon level={data.level} /> : null}
-          <span className="truncate">{rest ? 'More' : data.isParent ? 'Parent' : kind}</span>
-        </Txt>
+        {data.far ? null : (
+          <Txt
+            as="span"
+            variant="meta"
+            tone={page.isScope ? undefined : 'muted'}
+            className="pointer-events-none inline-flex max-w-full items-center justify-center gap-1 whitespace-nowrap uppercase"
+            style={page.isScope ? { color: 'var(--chart-blue)' } : undefined}
+            data-testid={page.isScope ? 'knowledge-scope-caption' : 'knowledge-page-caption'}
+          >
+            {data.level ? <LevelIcon level={data.level} /> : null}
+            <span className="truncate">{rest ? 'More' : data.isParent ? 'Parent' : kind}</span>
+          </Txt>
+        )}
         <Txt
           as="span"
           variant={compact ? 'meta' : 'label'}
           tone="ink"
           className={`pointer-events-none max-w-full overflow-hidden [overflow-wrap:normal] ${compact ? 'line-clamp-2' : 'line-clamp-3'}`}
+          style={data.far ? { color: 'var(--background)' } : undefined}
           data-testid="knowledge-circle-name"
         >
           {page.isScope && page.address && !group ? (
