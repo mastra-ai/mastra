@@ -257,6 +257,11 @@ export interface FactoryProjectPayload {
   selfReviewEnabled?: boolean;
 }
 
+/** A Factory project row from `GET /web/factory/projects`, with its linked repositories. */
+export interface ListedFactoryProjectPayload extends FactoryProjectPayload {
+  repositories: ProjectListRepository[];
+}
+
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
 interface ProjectRepositoryPayload {
   id: string;
@@ -265,12 +270,9 @@ interface ProjectRepositoryPayload {
   repository: { externalId: string; slug: string; defaultBranch: string } | null;
 }
 
-/** A source-control connection (with linked repos) from the Factory project routes. */
 interface ProjectConnectionPayload {
   id: string;
-  integrationId?: string;
   installationId: string;
-  repositories: ProjectRepositoryPayload[];
 }
 
 /** Browser-shaped view of a repository linked to a Factory project. */
@@ -292,17 +294,19 @@ export interface FactoryProjectSnapshot extends FactoryProjectPayload {
 export type FactoryProject = FactoryProjectSnapshot;
 
 function toLinkedRepositoryPayload(
-  project: FactoryProjectPayload,
-  link: ProjectRepositoryPayload,
-  integrationId?: string,
+  projectName: string,
+  repository: Pick<
+    ProjectListRepository,
+    'projectRepositoryId' | 'integrationId' | 'externalId' | 'slug' | 'defaultBranch' | 'branch' | 'sandboxWorkdir'
+  >,
 ): LinkedRepositoryPayload {
   return {
-    projectRepositoryId: link.id,
-    provider: integrationId === 'gitlab' ? 'gitlab' : 'github',
-    externalId: link.repository?.externalId,
-    slug: link.repository?.slug ?? project.name,
-    gitBranch: link.branch ?? link.repository?.defaultBranch,
-    sandboxWorkdir: link.sandboxWorkdir,
+    projectRepositoryId: repository.projectRepositoryId,
+    provider: repository.integrationId === 'gitlab' ? 'gitlab' : 'github',
+    externalId: repository.externalId ?? undefined,
+    slug: repository.slug ?? projectName,
+    gitBranch: repository.branch ?? repository.defaultBranch ?? undefined,
+    sandboxWorkdir: repository.sandboxWorkdir,
   };
 }
 
@@ -318,27 +322,10 @@ async function listProjectConnections(baseUrl: string, factoryProjectId: string)
   return connections;
 }
 
-/** A linked repository as the project list returns it, in the shape the browser uses. */
-function fromProjectListRepository(
-  project: FactoryProjectPayload,
-  repository: ProjectListRepository,
-): LinkedRepositoryPayload {
-  return {
-    projectRepositoryId: repository.projectRepositoryId,
-    provider: repository.integrationId === 'gitlab' ? 'gitlab' : 'github',
-    externalId: repository.externalId ?? undefined,
-    slug: repository.slug ?? project.name,
-    gitBranch: repository.branch ?? repository.defaultBranch ?? undefined,
-    sandboxWorkdir: repository.sandboxWorkdir,
-  };
-}
-
 /**
- * List the org's Factory projects with their linked repositories, which the
- * server returns with the list so the app needs one request before it
- * renders. Resolves to `null` when the caller is unauthenticated, org-less,
- * or the feature is off, so hydration can keep the local cache instead of
- * wiping it.
+ * List the org's Factory projects with their linked repositories. Resolves to
+ * `null` when the caller is unauthenticated, org-less, or the feature is off,
+ * so hydration can keep the local cache instead of wiping it.
  */
 export async function listFactoryProjects(baseUrl: string): Promise<FactoryProjectSnapshot[] | null> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
@@ -346,12 +333,13 @@ export async function listFactoryProjects(baseUrl: string): Promise<FactoryProje
     headers: { Accept: 'application/json' },
   });
   if (res.status === 401 || res.status === 403 || res.status === 404) return null;
-  const { projects } = await readJsonOrThrow<{
-    projects: Array<FactoryProjectPayload & { repositories: ProjectListRepository[] }>;
-  }>(res, 'Failed to list Factories');
+  const { projects } = await readJsonOrThrow<{ projects: ListedFactoryProjectPayload[] }>(
+    res,
+    'Failed to list Factories',
+  );
   return projects.map(project => ({
     ...project,
-    repositories: project.repositories.map(repository => fromProjectListRepository(project, repository)),
+    repositories: project.repositories.map(repository => toLinkedRepositoryPayload(project.name, repository)),
   }));
 }
 
@@ -559,11 +547,15 @@ export async function linkRepository(
     res,
     `Failed to link ${gitlab ? 'GitLab' : 'GitHub'} repository`,
   );
-  return toLinkedRepositoryPayload(
-    { id: factoryProjectId, name: repo.fullName },
-    projectRepository,
-    gitlab ? 'gitlab' : 'github',
-  );
+  return toLinkedRepositoryPayload(repo.fullName, {
+    projectRepositoryId: projectRepository.id,
+    integrationId: gitlab ? 'gitlab' : 'github',
+    externalId: projectRepository.repository?.externalId ?? null,
+    slug: projectRepository.repository?.slug ?? null,
+    defaultBranch: projectRepository.repository?.defaultBranch ?? null,
+    branch: projectRepository.branch,
+    sandboxWorkdir: projectRepository.sandboxWorkdir,
+  });
 }
 
 /**

@@ -325,11 +325,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return null;
   }
 
-  /**
-   * The projects' connections across every integration, each with its installation and linked repositories.
-   * Orphaned connections, whose installation was pruned when the GitHub App was uninstalled, are left out: one
-   * of them must not fail the read, since the web UI cannot leave its page loader until it succeeds.
-   */
   async #connectionsWithRepositories(orgId: string, factoryProjectIds: string[]) {
     if (factoryProjectIds.length === 0 || this.#versionControlIntegrationIds.size === 0) return [];
     const perIntegration = await Promise.all(
@@ -338,7 +333,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return perIntegration.flat();
   }
 
-  /** Each project's linked repositories, in connection order, without the installation behind them. */
   async #linkedRepositoriesByProject(orgId: string, factoryProjectIds: string[]) {
     const byProject = new Map<string, ProjectListRepository[]>();
     for (const connection of await this.#connectionsWithRepositories(orgId, factoryProjectIds)) {
@@ -575,8 +569,6 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
           const projects = await (await this.#projects()).list({ orgId: tenant.orgId });
-          // The web UI waits for this list before it renders anything, so the repositories come with it instead
-          // of from one source-control-connections request per project.
           const repositories = await this.#linkedRepositoriesByProject(
             tenant.orgId,
             projects.map(project => project.id),

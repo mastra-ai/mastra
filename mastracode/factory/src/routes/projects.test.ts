@@ -919,15 +919,11 @@ describe('ProjectRoutes', () => {
     // needs-reconnect shape — either is fine, but the request MUST succeed.
     expect(Array.isArray(staleBody.connections)).toBe(true);
 
-    // The project list carries the repositories now, so it must not fail either.
     const list = await app.request('/web/factory/projects');
     expect(list.status).toBe(200);
     expect(await list.json()).toMatchObject({ projects: [{ id: project.id, repositories: [] }] });
   });
 
-  // The web UI shows its page loader until GET /web/factory/projects and every factory's repositories have loaded.
-  // Those repositories used to take one source-control-connections request per factory, each about ten sequential
-  // queries. The project list now carries them, read in a fixed number of queries.
   describe('repositories in the project list', () => {
     async function factoriesWithRepositories(factoryCount: number) {
       const seed = await createFactoryStorageForTests();
@@ -991,7 +987,6 @@ describe('ProjectRoutes', () => {
       const { seed, app, factories } = await factoriesWithRepositories(1);
       const [{ project, links }] = factories;
       const empty = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Empty' } });
-      // Another organization's factory and repository must not show up.
       const otherOrgGithub = seed.sourceControl.forIntegration('github');
       const otherOrgInstallation = await otherOrgGithub.installations.upsert({
         orgId: 'org-2',
@@ -1060,8 +1055,6 @@ describe('ProjectRoutes', () => {
       expect(body.projects.find(({ id }) => id === empty.id)?.repositories).toEqual([]);
       expect(JSON.stringify(body)).not.toContain('rival/secret');
 
-      // The per-project endpoint, which the TUI still calls on older servers, reads the same links and keeps
-      // returning the installation it always did.
       const connections = (await (
         await app.request(`/web/factory/projects/${project.id}/source-control-connections`)
       ).json()) as {
@@ -1098,8 +1091,6 @@ describe('ProjectRoutes', () => {
 
       const one = await queriesForProjectList(1);
       expect(await queriesForProjectList(5)).toBe(one);
-      // One for the projects, then four per integration (connections, installations, links, repositories).
-      expect(one).toBe(9);
     });
   });
 

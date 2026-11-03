@@ -1,8 +1,6 @@
-import type { ProjectListRepository } from '@mastra/factory/routes/contracts';
-
 import { listedRepository } from '../../../../../../../e2e/ui/factory-projects';
 import type { WorkItem } from '../../../../factory/services/workItems';
-import type { FactoryProjectPayload } from '../../../services/github';
+import type { ListedFactoryProjectPayload } from '../../../services/github';
 import type { FactoryUserSession } from '../../../services/user-sessions';
 
 export const factoryId = 'fp-1';
@@ -68,7 +66,7 @@ function toWireWorkItem(item: WorkItem) {
 }
 
 export function createSessionHoverDetailsFixtures(updatedAt: string) {
-  const project: FactoryProjectPayload & { repositories: ProjectListRepository[] } = {
+  const project: ListedFactoryProjectPayload = {
     id: factoryId,
     name: 'Mastra',
     repositories: [

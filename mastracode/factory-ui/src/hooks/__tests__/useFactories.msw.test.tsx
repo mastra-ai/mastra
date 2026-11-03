@@ -328,8 +328,6 @@ describe('useLinkRepositoryMutation', () => {
 });
 
 describe('useFactoriesQuery', () => {
-  // The app shows its page loader until this query resolves. It used to wait for the project list and then one
-  // source-control-connections request per Factory; the list now carries every Factory's repositories.
   it('loads every Factory with its linked repositories from the project list alone', async () => {
     const requested: string[] = [];
     const onRequest = ({ request }: { request: Request }) => {
@@ -352,7 +350,6 @@ describe('useFactoriesQuery', () => {
                   defaultBranch: 'trunk',
                   externalId: '10',
                 }),
-                // The repository row behind this link is gone.
                 listedRepository('ghp_2', 'unused', { slug: null, defaultBranch: null }),
               ],
             },

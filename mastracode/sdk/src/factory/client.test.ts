@@ -64,8 +64,6 @@ describe('refreshingFetch', () => {
 });
 
 describe('listFactoryProjects', () => {
-  // The TUI talks to Factory servers of any version. Current servers return each project's repositories with the
-  // project list; older ones only return them from one source-control-connections request per project.
   async function serveFactory(routes: Record<string, unknown>) {
     const requested: string[] = [];
     const server = createServer((req, res) => {
@@ -105,7 +103,6 @@ describe('listFactoryProjects', () => {
         repositories: [
           { projectRepositoryId: 'pr-1', slug: 'acme/api', branch: 'release' },
           { projectRepositoryId: 'pr-2', slug: 'acme/web', branch: 'trunk' },
-          // The repository row is gone: fall back to the project name, as before.
           { projectRepositoryId: 'pr-3', slug: 'Platform', branch: undefined },
         ],
       },

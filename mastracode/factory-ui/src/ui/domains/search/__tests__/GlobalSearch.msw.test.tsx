@@ -73,10 +73,23 @@ function resourceIdFromRequestBody(body: unknown): string {
   return body.resourceId;
 }
 
-function listProjects(repositories: Record<string, ProjectListRepository[]>) {
+function projectListResponse(repositories: Record<string, ProjectListRepository[]>) {
   return HttpResponse.json({
     projects: factoryProjects.map(project => ({ ...project, repositories: repositories[project.id] ?? [] })),
   });
+}
+
+function activeFactoryRepositories(options: StubSearchOptions): ProjectListRepository[] {
+  if (options.activeFactoryHasRepositories === false) return [];
+  if (!options.activeRepositories) return factoryRepositories[ACTIVE_FACTORY_ID];
+  return options.activeRepositories.map(repository =>
+    listedRepository(repository.projectRepositoryId, repository.slug, {
+      integrationId: repository.provider ?? 'github',
+      externalId: repository.externalId ?? null,
+      branch: 'main',
+      sandboxWorkdir: '/repo',
+    }),
+  );
 }
 
 function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
@@ -100,20 +113,7 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      listProjects({
-        ...factoryRepositories,
-        [ACTIVE_FACTORY_ID]:
-          options.activeFactoryHasRepositories === false
-            ? []
-            : (options.activeRepositories?.map(repository =>
-                listedRepository(repository.projectRepositoryId, repository.slug, {
-                  integrationId: repository.provider ?? 'github',
-                  externalId: repository.externalId ?? null,
-                  branch: 'main',
-                  sandboxWorkdir: '/repo',
-                }),
-              ) ?? factoryRepositories[ACTIVE_FACTORY_ID]),
-      }),
+      projectListResponse({ ...factoryRepositories, [ACTIVE_FACTORY_ID]: activeFactoryRepositories(options) }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId`, ({ params }) => {
       const project = factoryProjects.find(candidate => candidate.id === String(params.factoryProjectId));
@@ -649,7 +649,7 @@ describe('Global search', () => {
     let githubIntakeRequests = 0;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        listProjects({
+        projectListResponse({
           ...factoryRepositories,
           [ACTIVE_FACTORY_ID]: [{ ...factoryRepositories[ACTIVE_FACTORY_ID][0], integrationId: 'gitlab' }],
         }),
