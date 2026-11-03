@@ -4353,6 +4353,17 @@ export class Mastra<
             expectedStatus: nestedRunStatusOf(run.snapshot),
             logger: this.#logger,
           });
+        } else if (recovery === 'skip') {
+          // Nothing is wrong here: the parent can still drive this run. Logged because a nested
+          // run left waiting on a parent that never restarts is otherwise only visible in the
+          // nested workflow's own active runs.
+          this.#logger.debug('Left a nested workflow run for its parent to drive', {
+            workflow: run.workflowName,
+            runId: run.runId,
+            parentWorkflow: parent.workflowName,
+            parentRunId: parent.runId,
+            parentStatus,
+          });
         }
       } catch (error) {
         // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.

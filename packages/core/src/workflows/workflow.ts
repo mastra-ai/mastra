@@ -3590,6 +3590,17 @@ export class Workflow<
             expectedStatus: nestedRunStatusOf(runSnapshot.snapshot),
             logger: this.logger,
           });
+        } else if (recovery === 'skip') {
+          // The parent can still drive this run, so there is nothing to do here. Logged because a
+          // nested run left waiting on a parent that never restarts is otherwise only visible in
+          // the nested workflow's own active runs.
+          this.logger.debug('Left a nested workflow run for its parent to drive', {
+            workflowId: this.id,
+            runId: runSnapshot.runId,
+            parentWorkflow: parent.workflowName,
+            parentRunId: parent.runId,
+            parentStatus,
+          });
         }
       } catch (error) {
         // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.

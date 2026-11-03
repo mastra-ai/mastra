@@ -261,13 +261,24 @@ describe('restarting a nested run whose process died', () => {
 
   it('leaves a nested run alone while its parent is paused', async () => {
     const { calls, storage, innerStatuses, build } = await crashForeachWithParentStatus('paused');
+    const debug = vi.fn();
 
-    await new Mastra({ logger: false, storage, workflows: build(calls) }).restartAllActiveWorkflowRuns();
+    await new Mastra({
+      logger: { debug, info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() } as any,
+      storage,
+      workflows: build(calls),
+    }).restartAllActiveWorkflowRuns();
 
     // The sweep never restarts a paused parent, so restarting the child here would run the item
     // again while the parent can still drive it after a resume.
     expect(calls).toEqual([0, 1]);
     expect(await innerStatuses()).toContain('running');
+    // A nested run waiting on a parent that nothing here restarts is only visible in `inner`'s own
+    // active runs, so the sweep says out loud that it left it alone.
+    expect(debug).toHaveBeenCalledWith(
+      'Left a nested workflow run for its parent to drive',
+      expect.objectContaining({ workflow: 'inner', parentWorkflow: 'outer', parentStatus: 'paused' }),
+    );
     expect(await innerStatuses()).not.toContain('canceled');
   });
 
