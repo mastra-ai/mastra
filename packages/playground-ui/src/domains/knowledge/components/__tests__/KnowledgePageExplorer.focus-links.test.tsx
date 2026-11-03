@@ -196,7 +196,7 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
       reachable,
     });
     expect(container.querySelector('[data-testid="knowledge-page-dot"]')).toBeNull();
-    expect(container.querySelector('[data-testid="knowledge-legend-dot"]')?.textContent).toBe('Farther page');
+    expect(container.querySelector('[data-testid="knowledge-legend-dot"]')?.textContent).toBe('Page in another branch');
   });
 
   it('says nothing is left out when every link end is drawn', () => {

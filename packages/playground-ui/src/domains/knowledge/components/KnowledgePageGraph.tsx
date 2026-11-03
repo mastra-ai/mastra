@@ -55,7 +55,7 @@ const SCOPE_STYLE: CircleStyle = {
   background: 'color-mix(in oklab, var(--chart-blue) 16%, var(--card))',
 };
 const PAGE_STYLE: CircleStyle = { '--knowledge-color': 'var(--border-strong)' };
-/** A farther page drawn as a named circle: the legend's "Farther page" dot grown, same solid grey fill, name in the page background colour to read on it. */
+/** A farther page drawn as a named circle: the legend's "Page in another branch" dot grown, same solid grey fill, name in the page background colour to read on it. */
 const FAR_FILL = 'var(--muted-foreground)';
 const FAR_STYLE: CircleStyle = { '--knowledge-color': FAR_FILL, background: FAR_FILL };
 
@@ -685,7 +685,7 @@ function GraphLegend({
         <li className="flex items-center gap-2" data-testid="knowledge-legend-dot">
           <span className="inline-block size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
           <Txt as="span" variant="meta" tone="muted">
-            {dots ? 'Farther page (hover to name it)' : 'Farther page'}
+            Page in another branch
           </Txt>
         </li>
       ) : null}

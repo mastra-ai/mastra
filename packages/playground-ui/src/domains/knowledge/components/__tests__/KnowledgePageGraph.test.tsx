@@ -491,6 +491,12 @@ describe('KnowledgePageGraph', () => {
         expect(Number.parseFloat(dot('ticket').style.width)).toBe(KNOWLEDGE_COUNTED_DOT_SIZE);
       });
 
+      it('names the grey dots "Page in another branch", with no hover hint', () => {
+        renderGraph({ pages: linked, knownLinks: known });
+        const legend = within(screen.getByRole('list', { name: 'Legend' }));
+        expect(legend.getByTestId('knowledge-legend-dot').textContent).toBe('Page in another branch');
+      });
+
       it('explains the line styles drawn while hovering it, and only those', () => {
         renderGraph({ pages: linked, knownLinks: known });
         const legend = within(screen.getByRole('list', { name: 'Legend' }));
