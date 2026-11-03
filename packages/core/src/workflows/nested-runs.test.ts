@@ -317,6 +317,29 @@ describe('restarting a nested run whose process died', () => {
 
   it('keeps sweeping when a nested run parent lookup fails', async () => {
     const { calls, storage, build } = await crashForeachWithParentStatus('paused');
+
+    // An unrelated top-level run that hangs until it is restarted, so the sweep has something to
+    // recover besides the nested run whose lookup throws.
+    const soloCalls: number[] = [];
+    const solo = createWorkflow({ id: 'solo', inputSchema: num, outputSchema: num })
+      .then(
+        createStep({
+          id: 'work',
+          inputSchema: num,
+          outputSchema: num,
+          execute: async ({ inputData }) => {
+            soloCalls.push(inputData.n);
+            if (soloCalls.length === 1) return new Promise(() => {});
+            return inputData;
+          },
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({ logger: false, storage, workflows: { ...build(calls), solo } });
+    void (await solo.createRun({ runId: 'solo-1' })).start({ inputData: { n: 0 } });
+    await vi.waitFor(() => expect(soloCalls).toEqual([0]));
+    await expireRunLeases(storage);
+
     const store = storage.stores.workflows!;
     const loadStatus = store.loadWorkflowRunStatus.bind(store);
     store.loadWorkflowRunStatus = async args => {
@@ -324,11 +347,10 @@ describe('restarting a nested run whose process died', () => {
       return loadStatus(args);
     };
 
-    // The failure belongs to one nested run's lookup. It must not reject the sweep, or every other
-    // run the sweep was going to restart goes unrecovered.
-    await expect(
-      new Mastra({ logger: false, storage, workflows: build(calls) }).restartAllActiveWorkflowRuns(),
-    ).resolves.toBeUndefined();
+    // The failure belongs to one nested run's lookup. It must not reject the sweep or stop it, or
+    // every other run the sweep was going to restart goes unrecovered.
+    await expect(mastra.restartAllActiveWorkflowRuns()).resolves.toBeUndefined();
+    expect(soloCalls).toEqual([0, 0]);
     expect(calls).toEqual([0, 1]);
   });
 
