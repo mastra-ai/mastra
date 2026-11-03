@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed request context writes made through a durable processor forEach callback. Resumed evented runs now pass their execution span to remote scorers, preserving the sampling decision and score attribution across workers.
+Resumed evented runs that finish on another worker now score against the resumed run's span. A run the sampler declined stays unscored, and a sampled one keeps its score linked to the right trace.
