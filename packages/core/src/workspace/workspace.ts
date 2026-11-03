@@ -284,12 +284,13 @@ export interface WorkspaceConfig<
   /**
    * Vector store for semantic search.
    * When provided along with embedder, enables vector and hybrid search.
+   * A store that generates embeddings itself (`isSelfEmbedding`) needs no embedder.
    */
   vectorStore?: MastraVector;
 
   /**
    * Embedder function for generating vectors.
-   * Required when vectorStore is provided.
+   * Required when vectorStore is provided, unless the store generates embeddings itself.
    */
   embedder?: Embedder;
 
@@ -316,7 +317,8 @@ export interface WorkspaceConfig<
 
   /**
    * Custom index name for the vector store.
-   * If not provided, defaults to a sanitized version of `${id}_search`.
+   * If not provided, defaults to a sanitized version of `${id}_search`, or
+   * `${id}_search_selfembed` when the vector store generates embeddings itself.
    *
    * Must be a valid SQL identifier for SQL-based stores (PgVector, LibSQL):
    * - Start with a letter or underscore
@@ -697,16 +699,21 @@ export class Workspace<
       this._browser = config.browser;
     }
 
-    // Validate vector search config - embedder is required with vectorStore
-    if (config.vectorStore && !config.embedder) {
-      throw new WorkspaceError('vectorStore requires an embedder', 'INVALID_SEARCH_CONFIG');
+    // Validate vector search config - an embedder is required unless the store embeds itself
+    const selfEmbedding = !!config.vectorStore && !config.embedder && config.vectorStore.isSelfEmbedding;
+    if (config.vectorStore && !config.embedder && !selfEmbedding) {
+      throw new WorkspaceError(
+        'vectorStore requires an embedder, or a vector store that generates embeddings itself',
+        'INVALID_SEARCH_CONFIG',
+      );
     }
 
     // Create search engine if search is configured
-    if (config.bm25 || (config.vectorStore && config.embedder)) {
+    if (config.bm25 || config.vectorStore) {
       const buildIndexName = (): string => {
-        // Sanitize default name: replace all non-alphanumeric chars with underscores
-        const defaultName = `${this.id}_search`.replace(/[^a-zA-Z0-9_]/g, '_');
+        // Sanitize default name: replace all non-alphanumeric chars with underscores.
+        // Self-embedded data gets its own index so it never mixes with client-supplied vectors.
+        const defaultName = `${this.id}_search${selfEmbedding ? '_selfembed' : ''}`.replace(/[^a-zA-Z0-9_]/g, '_');
         const indexName = config.searchIndexName ?? defaultName;
 
         // Validate SQL identifier format
@@ -729,14 +736,13 @@ export class Workspace<
 
       this._searchEngine = new SearchEngine({
         bm25: config.bm25 ? parseBM25Config(config.bm25) : undefined,
-        vector:
-          config.vectorStore && config.embedder
-            ? {
-                vectorStore: config.vectorStore,
-                embedder: config.embedder,
-                indexName: buildIndexName(),
-              }
-            : undefined,
+        vector: config.vectorStore
+          ? {
+              vectorStore: config.vectorStore,
+              embedder: config.embedder,
+              indexName: buildIndexName(),
+            }
+          : undefined,
       });
     }
 

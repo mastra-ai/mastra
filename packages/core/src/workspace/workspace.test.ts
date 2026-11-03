@@ -415,6 +415,79 @@ Line 3 conclusion`;
       expect(capturedIndexName).toMatch(SQL_IDENTIFIER_PATTERN);
     });
 
+    describe('self-embedding vector store', () => {
+      const createStore = (isSelfEmbedding: boolean) => ({
+        id: 'mock-vector',
+        isSelfEmbedding,
+        createIndex: vi.fn(async () => {}),
+        upsert: vi.fn(async () => []),
+        query: vi.fn(async () => [{ id: '/doc.txt', score: 0.9, metadata: { id: '/doc.txt', text: 'Test content' } }]),
+        deleteVector: vi.fn(async () => {}),
+      });
+
+      it('enables vector and hybrid search without an embedder', async () => {
+        const store = createStore(true);
+        const workspace = new Workspace({
+          id: 'my-workspace-id',
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: store as any,
+          bm25: true,
+        });
+
+        expect(workspace.canVector).toBe(true);
+        expect(workspace.canHybrid).toBe(true);
+
+        await workspace.index('/doc.txt', 'Test content');
+        const results = await workspace.search('test', { mode: 'vector' });
+
+        expect(store.upsert.mock.calls[0]![0]).toMatchObject({
+          indexName: 'my_workspace_id_search_selfembed',
+          documents: ['Test content'],
+          ids: ['/doc.txt'],
+        });
+        expect(store.query.mock.calls[0]![0]).toMatchObject({
+          indexName: 'my_workspace_id_search_selfembed',
+          queryText: 'test',
+        });
+        expect(results[0]?.id).toBe('/doc.txt');
+      });
+
+      it('respects a custom searchIndexName', async () => {
+        const store = createStore(true);
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: store as any,
+          searchIndexName: 'custom_index',
+        });
+
+        await workspace.index('/doc.txt', 'Test content');
+        expect(store.upsert.mock.calls[0]![0].indexName).toBe('custom_index');
+      });
+
+      it('keeps the default index name when an embedder is provided', async () => {
+        const store = createStore(true);
+        const workspace = new Workspace({
+          id: 'ws',
+          filesystem: new LocalFilesystem({ basePath: tempDir }),
+          vectorStore: store as any,
+          embedder: vi.fn(async () => [0.1, 0.2]),
+        });
+
+        await workspace.index('/doc.txt', 'Test content');
+        expect(store.upsert.mock.calls[0]![0]).toMatchObject({ indexName: 'ws_search', vectors: [[0.1, 0.2]] });
+      });
+
+      it('still rejects a store that cannot embed when no embedder is provided', () => {
+        expect(
+          () =>
+            new Workspace({
+              filesystem: new LocalFilesystem({ basePath: tempDir }),
+              vectorStore: createStore(false) as any,
+            }),
+        ).toThrow(/requires an embedder/);
+      });
+    });
+
     it('should allow custom searchIndexName configuration', async () => {
       let capturedIndexName: string | undefined;
 
