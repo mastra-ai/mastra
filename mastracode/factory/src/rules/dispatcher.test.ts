@@ -5501,7 +5501,8 @@ describe('FactoryDecisionDispatcher', () => {
           metadata: { linearIssueId: 'issue-1' },
         },
       });
-      await db.ops.updateMany('work_items', { id: item.id }, { created_at: new Date(createdAt) });
+      await db.ops.updateMany('factory_board_items', { id: item.id }, { created_at: new Date(createdAt) });
+      expect((await storage.get({ orgId: 'org-1', id: item.id }))?.createdAt).toEqual(new Date(createdAt));
       return item;
     };
     const finished = await fileCard('OLD-1', 'done', finishedAt);
