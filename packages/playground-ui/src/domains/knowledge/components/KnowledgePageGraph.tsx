@@ -22,6 +22,7 @@ import type { CSSProperties } from 'react';
 import { fitWords } from '../lib/circleText';
 import { edgeOffsets, rimToRim } from '../lib/edgeOffsets';
 import type { Circle, EdgeOffset } from '../lib/edgeOffsets';
+import { fitTargets } from '../lib/fitTargets';
 import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
   KNOWLEDGE_DOT_HIT_MARGIN,
@@ -43,7 +44,7 @@ import { KNOWLEDGE_PAGE_SIZE, grantGraph, pageGraphEdges, pageNeighbourIds, toPa
 import { childCountLabel } from '../lib/pageTree';
 import { chooseTooltipSide } from '../lib/tooltipSide';
 import type { Box, TooltipPlacementInput, TooltipSide } from '../lib/tooltipSide';
-import { prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
+import { KNOWLEDGE_GRAPH_TRANSITION_MS, prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 
 import { Txt } from '@/ds/components/Txt';
@@ -1267,8 +1268,9 @@ function KnowledgePageGraphInner({
   // moved. State is read through a ref so a refetch with the same selection never moves the view.
   // Pages that just left the view stay a moment, fading, so a refocus reads as a change and not a cut.
   const drawnNodes = useLeavingNodes(emphasisedNodes, prefersMotion());
-  const fitState = useRef({ nodes, allEdges, selectedPageId, centerId, reactFlow });
-  fitState.current = { nodes, allEdges, selectedPageId, centerId, reactFlow };
+  const linkedIds = laidOut.shape.linked;
+  const fitState = useRef({ nodes, allEdges, selectedPageId, centerId, reactFlow, linkedIds });
+  fitState.current = { nodes, allEdges, selectedPageId, centerId, reactFlow, linkedIds };
   // Set when a fit found the pane 0×0, so the next non-zero size fits even if it matches the last one seen.
   const fitPending = useRef(false);
   const fit = useCallback((focusSelection: boolean, duration?: number) => {
@@ -1286,9 +1288,10 @@ function KnowledgePageGraphInner({
       selectedPageId: selected,
       centerId: centre,
       reactFlow: flow,
+      linkedIds: linked,
     } = fitState.current;
     const focus = focusSelection && selected ? pageNeighbourIds(selected, edgesNow) : null;
-    const targets = focus ? current.filter(node => focus.has(node.id)) : current;
+    const targets = fitTargets(current, focus, linked);
     const bounds = graphBounds(targets);
     if (!bounds) return;
     const viewport = getViewportForBounds(bounds, width, height, READABLE_MIN_ZOOM, focus ? 1.5 : 2, focus ? 0.3 : 0.1);
@@ -1340,7 +1343,7 @@ function KnowledgePageGraphInner({
     const fromGraph = selectedHere.current === selectedPageId;
     selectedHere.current = null;
     if (fromGraph) return;
-    fit(true, 300);
+    fit(true, prefersMotion() ? KNOWLEDGE_GRAPH_TRANSITION_MS : 0);
   }, [selectedPageId, selectedIsLoaded, fit]);
 
   // First click selects; a click on the page that is already selected opens it. A double-click is the two.
