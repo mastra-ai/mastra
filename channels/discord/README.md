@@ -88,7 +88,7 @@ Because core owns the loop (there is no `stopGatewayListener`), `disconnect()` r
 
 ### Known caveat: reactions on a thread's starter message
 
-An @mention in a channel opens a **new thread**, and Discord gives that thread an id equal to the starter message's id. `@chat-adapter/discord` 4.40.0 and later handles this: when a reaction `PUT` against `/channels/{threadId}/messages/{messageId}/reactions/…` answers **404 `Unknown Message` (code 10008)** — the starter message is not a message _inside_ the thread, it is the message the thread hangs off — the adapter retries against the parent channel automatically. Replies were never affected: `AgentChannels` suppresses `tool-error` chunks for its own channel tools, so the agent's response still posts.
+An @mention in a channel opens a **new thread**, and Discord gives that thread an id equal to the starter message's id. Since 4.40.0, `@chat-adapter/discord` handles this: when a reaction `PUT` against `/channels/{threadId}/messages/{messageId}/reactions/…` answers **404 `Unknown Message` (code 10008)** — the starter message is not a message _inside_ the thread, it is the message the thread hangs off — the adapter retries against the parent channel automatically. Replies were never affected: `AgentChannels` suppresses `tool-error` chunks for its own channel tools, so the agent's response still posts.
 
 ### Commands
 
