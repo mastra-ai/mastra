@@ -17,7 +17,7 @@ new GithubIntegration({
   slug,
   rules: {
     issueCommentCreated: context => {
-      if (context.board !== 'work' || !context.item?.url) return;
+      if (context.board !== 'work' || context.item?.source !== 'github-issue' || !context.item.url) return;
       // Factory's own comments must not restart the run that wrote them.
       if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
       const stage = context.item.stages.length === 1 ? context.item.stages[0] : undefined;
