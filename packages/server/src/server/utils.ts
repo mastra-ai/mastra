@@ -233,12 +233,18 @@ export function getWorkflowInfo(workflow: Workflow, partial: boolean = false): W
   };
 }
 
+type AnyMastra = Mastra<any, any, any, any, any, any, any, any, any>;
+
 /**
  * Workflow Registry for temporarily registering additional workflows
  * that are not part of the user's Mastra instance (e.g., internal template workflows)
  */
 export class WorkflowRegistry {
   private static additionalWorkflows: Record<string, Workflow> = {};
+  // Registrations made for a Mastra instance live under that instance, so concurrent requests for different
+  // instances never resolve each other's workflows. `requests` counts in-flight requests; the entry is
+  // dropped when the last one cleans up, which also releases the instance.
+  private static instanceWorkflows = new Map<AnyMastra, { workflows: Record<string, Workflow>; requests: number }>();
 
   /**
    * Register a workflow temporarily
@@ -248,40 +254,52 @@ export class WorkflowRegistry {
   }
 
   /**
-   * Register all workflows from map
+   * Register all workflows from map. With `mastra`, binds them to that instance and keeps them registered until
+   * the matching `cleanup(mastra)`.
    */
-  static registerTemporaryWorkflows(
-    workflows: Record<string, Workflow>,
-    mastra?: Mastra<any, any, any, any, any, any, any, any, any>,
-  ): void {
-    for (const [id, workflow] of Object.entries(workflows)) {
-      // Register Mastra instance with the workflow if provided
-      if (mastra) {
-        workflow.__registerMastra(mastra);
-        workflow.__registerPrimitives({
-          logger: mastra.getLogger(),
-          storage: mastra.getStorage(),
-          agents: mastra.listAgents(),
-          tts: mastra.getTTS(),
-          vectors: mastra.listVectors(),
-        });
-      }
-      this.additionalWorkflows[id] = workflow;
+  static registerTemporaryWorkflows(workflows: Record<string, Workflow>, mastra?: AnyMastra): void {
+    if (!mastra) {
+      Object.assign(this.additionalWorkflows, workflows);
+      return;
     }
+
+    for (const workflow of Object.values(workflows)) {
+      workflow.__registerMastra(mastra);
+      workflow.__registerPrimitives({
+        logger: mastra.getLogger(),
+        storage: mastra.getStorage(),
+        agents: mastra.listAgents(),
+        tts: mastra.getTTS(),
+        vectors: mastra.listVectors(),
+      });
+    }
+
+    const entry = this.instanceWorkflows.get(mastra) ?? { workflows: {}, requests: 0 };
+    Object.assign(entry.workflows, workflows);
+    entry.requests++;
+    this.instanceWorkflows.set(mastra, entry);
   }
 
   /**
-   * Get a workflow by ID from the registry (returns undefined if not found)
+   * Get a workflow by ID from the registry (returns undefined if not found). With `mastra`, only that
+   * instance's registrations and the ones made without an instance are searched.
    */
-  static getWorkflow(workflowId: string): Workflow | undefined {
-    return this.additionalWorkflows[workflowId];
+  static getWorkflow(workflowId: string, mastra?: AnyMastra): Workflow | undefined {
+    const registries = mastra
+      ? [this.instanceWorkflows.get(mastra)?.workflows ?? {}, this.additionalWorkflows]
+      : [this.getAllWorkflows()];
+    // Own properties only, so ids like `constructor` don't resolve to Object.prototype members
+    const registry = registries.find(workflows => Object.hasOwn(workflows, workflowId));
+    return registry?.[workflowId];
   }
 
   /**
    * Get all workflows from the registry
    */
   static getAllWorkflows(): Record<string, Workflow> {
-    return { ...this.additionalWorkflows };
+    const all = { ...this.additionalWorkflows };
+    for (const { workflows } of this.instanceWorkflows.values()) Object.assign(all, workflows);
+    return all;
   }
 
   /**
@@ -289,27 +307,36 @@ export class WorkflowRegistry {
    */
   static cleanupTemporaryWorkflow(workflowId: string): void {
     delete this.additionalWorkflows[workflowId];
+    for (const { workflows } of this.instanceWorkflows.values()) delete workflows[workflowId];
   }
+
   /**
-   * Clean up all registered workflows
+   * Clean up registered workflows. With `mastra`, releases one registration made for that instance; without it,
+   * clears everything.
    */
-  static cleanup(): void {
-    // Clear all workflows (since we register all agent-builder workflows each time)
-    this.additionalWorkflows = {};
+  static cleanup(mastra?: AnyMastra): void {
+    if (!mastra) {
+      this.additionalWorkflows = {};
+      this.instanceWorkflows.clear();
+      return;
+    }
+
+    const entry = this.instanceWorkflows.get(mastra);
+    if (entry && --entry.requests <= 0) this.instanceWorkflows.delete(mastra);
   }
 
   /**
    * Check if a workflow ID is a valid agent-builder workflow
    */
-  static isAgentBuilderWorkflow(workflowId: string): boolean {
-    return workflowId in this.additionalWorkflows;
+  static isAgentBuilderWorkflow(workflowId: string, mastra?: AnyMastra): boolean {
+    return this.getWorkflow(workflowId, mastra) !== undefined;
   }
 
   /**
    * Get all registered temporary workflow IDs (for debugging)
    */
   static getRegisteredWorkflowIds(): string[] {
-    return Object.keys(this.additionalWorkflows);
+    return Object.keys(this.getAllWorkflows());
   }
 }
 

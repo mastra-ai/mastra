@@ -11,7 +11,11 @@ import { emitKnowledgeChanges } from './changes';
 import type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
 import type { KnowledgeConfig } from './config';
 import { KnowledgeDeclarationError, strongerKnowledgeRole } from './declarations';
-import type { KnowledgeRole, KnowledgeScopeDeclarationInfo } from './declarations';
+import type {
+  KnowledgeRole,
+  KnowledgeScopeDeclaration as ScopeDeclaration,
+  KnowledgeScopeDeclarationInfo,
+} from './declarations';
 import {
   addKnowledgeNote,
   removeKnowledgeNote,
@@ -73,12 +77,12 @@ export class Knowledge extends MastraBase {
   /** Config pins are never dropped, so a scope with more of them than the budget holds is a setup mistake. */
   #warnOnPinOvercommit(budget: PinBudget) {
     const { declarations, concrete } = this.#runtime.compiled;
-    const entries: Array<[string, string[] | undefined]> = [
+    const entries: Array<[string, ScopeDeclaration['pinnedContext']]> = [
       ...[...declarations.values()].map(
-        compiled => [compiled.key, compiled.declaration.pinnedContext] as [string, string[] | undefined],
+        compiled => [compiled.key, compiled.declaration.pinnedContext] as [string, ScopeDeclaration['pinnedContext']],
       ),
       ...[...concrete].map(
-        ([address, entry]) => [address, entry.declaration.pinnedContext] as [string, string[] | undefined],
+        ([address, entry]) => [address, entry.declaration.pinnedContext] as [string, ScopeDeclaration['pinnedContext']],
       ),
     ];
     for (const [key, pins] of entries) {
@@ -488,6 +492,7 @@ export type { KnowledgeConfig } from './config';
 export { knowledgeScopeAddress, knowledgeMemoryScopes, KnowledgeDeclarationError } from './declarations';
 export type {
   KnowledgePageTemplate,
+  KnowledgePinnedList,
   KnowledgeScopeDeclaration,
   KnowledgeScopeDeclarationInfo,
   KnowledgeScopeDeclarations,

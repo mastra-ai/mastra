@@ -1350,6 +1350,70 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(await listed('all')).toEqual([]);
       });
 
+      it('keeps a page pin and a list pin per page apart, with the list depth, through listing, merge and delete', async () => {
+        const acme = await scope('org:acme', ORG);
+        const p = await page(acme.id, 'P', { body: '' });
+        const target = await page(acme.id, 'Target', { body: 'Target.' });
+        const pagePin = await store.addPinAudience({ pageId: p.id, audience: ['org:acme'], createdBy: 'agent:alex' });
+        expect(pagePin).toMatchObject({ kind: 'page', pageId: p.id });
+        expect(pagePin.depth).toBeUndefined();
+        const listPin = await store.addPinAudience({
+          pageId: p.id,
+          kind: 'list',
+          audience: ['team:acme:eng'],
+          createdBy: 'agent:alex',
+        });
+        expect(listPin).toMatchObject({ kind: 'list', depth: 1, audience: ['team:acme:eng'] });
+        expect(listPin.id).not.toBe(pagePin.id);
+        // Pinning again adds audience and sets the new depth; the page pin is untouched.
+        const deeper = await store.addPinAudience({
+          pageId: p.id,
+          kind: 'list',
+          depth: 3,
+          audience: ['org:acme'],
+          createdBy: 'agent:bo',
+        });
+        expect(deeper.id).toBe(listPin.id);
+        expect(deeper.depth).toBe(3);
+        expect([...deeper.audience].sort()).toEqual(['org:acme', 'team:acme:eng']);
+
+        const acmeRead = read(['org:acme']);
+        const kinds = async (input: Partial<Parameters<typeof store.listPins>[0]> = {}) =>
+          (await store.listPins({ audience: ['org:acme'], read: acmeRead, ...input })).pins
+            .map(pin => `${pin.kind}:${pin.pageId}:${pin.depth ?? '-'}`)
+            .sort();
+        expect(await kinds()).toEqual([`list:${p.id}:3`, `page:${p.id}:-`]);
+        expect(await kinds({ kind: 'list' })).toEqual([`list:${p.id}:3`]);
+        expect(await kinds({ kind: 'page' })).toEqual([`page:${p.id}:-`]);
+        // withBody and excludePageIds leave list pins alone.
+        expect(await kinds({ withBody: true })).toEqual([`list:${p.id}:3`]);
+        expect(await kinds({ excludePageIds: [p.id] })).toEqual([`list:${p.id}:3`]);
+        expect((await store.listPins({ audience: ['org:acme'], read: acmeRead, count: true })).total).toBe(2);
+
+        // Removing from one kind leaves the other.
+        expect(
+          await store.removePinAudience({ pageId: p.id, audience: ['org:acme'], removedBy: 'agent:alex' }),
+        ).toBeNull();
+        expect(await kinds()).toEqual([`list:${p.id}:3`]);
+
+        // A merge moves each kind onto the target's pin of that kind.
+        await store.addPinAudience({ pageId: target.id, kind: 'list', audience: ['resource:u1'], createdBy: 'a' });
+        await store.addPinAudience({ pageId: p.id, audience: ['org:acme'], createdBy: 'a' });
+        await store.mergePages({ sourceId: p.id, sourceVersion: p.version, targetId: target.id, provenance: host });
+        const merged = (await store.listPins({ audience: 'all', read: 'all' })).pins
+          .map(pin => [pin.kind, pin.pageId, [...pin.audience].sort()])
+          .sort();
+        expect(merged).toEqual([
+          ['list', target.id, ['org:acme', 'resource:u1', 'team:acme:eng']],
+          ['page', target.id, ['org:acme']],
+        ]);
+
+        // Deleting the page drops both.
+        const live = (await store.getPage({ id: target.id, read: 'all' }))!;
+        await store.deletePage({ id: target.id, expectedVersion: live.version, deletedBy: 'host' });
+        expect((await store.listPins({ audience: 'all', read: 'all' })).pins).toEqual([]);
+      });
+
       it('lists pins with page names, newest first, filtered by body and excluded pages, with a total', async () => {
         const acme = await scope('org:acme', ORG);
         const secret = await scope('org:secret', ORG);

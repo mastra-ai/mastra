@@ -66,11 +66,22 @@ export interface KnowledgeExplorerQueryState<T> {
   error: Error | null;
 }
 
+export interface KnowledgeExplorerPageLinks {
+  edges: Array<{ fromPageId: string; toPageId: string; kind: 'body' | 'note'; count: number }>;
+  pages: KnowledgePagePayload[];
+  truncated: boolean;
+}
+
 /** One request for a tree level: `parentId: null` for the root scopes. */
 export interface KnowledgeExplorerTreeRequest {
   parentId: string | null;
   cursor?: string;
 }
+
+/** Page ids are ULIDs; a bare `[[id]]` is askable, a bare `[[Name]]` is not. */
+const PAGE_ID_SHAPE = /^[0-9A-Z]{26}$/;
+const JUST_CREATED_MS = 60_000;
+const isJustCreated = (page: KnowledgePagePayload) => Date.now() - Date.parse(page.createdAt) < JUST_CREATED_MS;
 
 /**
  * Host data hooks. Each host binds them to its own routes (Studio to the Mastra client, Factory to its
@@ -91,6 +102,14 @@ export interface KnowledgeExplorerSource {
    * links to loaded pages are drawn. A key the host can't resolve should come back as an error.
    */
   useLinkedPages?: (keys: string[]) => Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>>;
+  /**
+   * Exact links into and out of each page (by `[[ref]]` or note mention), counted over the whole store, for
+   * the pages the graph draws. Without it, or when it errors (a server with no link index answers 501), the
+   * graph counts only the links between pages it has loaded.
+   */
+  useLinkCounts?: (pageIds: string[]) => KnowledgeExplorerQueryState<Record<string, { in: number; out: number }>>;
+  /** One page's links with the pages at their other ends; fetched for the page under the pointer. Null disables it. */
+  usePageLinks?: (pageId: string | null) => KnowledgeExplorerQueryState<KnowledgeExplorerPageLinks>;
   /** A page's recent activity, newest first. */
   useActivity?: (pageId: string) => KnowledgeExplorerQueryState<KnowledgeExplorerActivity>;
 }
@@ -189,6 +208,34 @@ const FOCUS_HISTORY_CAP = 50;
 const noTreeLevels = () => [];
 const noKeys: string[] = [];
 const noLinkedPages = (): Array<KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>> => [];
+const noLinkQuery = <T,>(): KnowledgeExplorerQueryState<T> => ({ isPending: false, isError: false, error: null });
+/** Longest a pointer rests on a page before its links are fetched, so sweeping across the graph fetches none. */
+const HOVER_FETCH_DELAY_MS = 150;
+
+/** Per page, the links into and out of it that none of `shown` draws, given the exact totals. */
+function undrawnLinks(
+  exact: ReadonlyMap<string, { in: number; out: number }>,
+  shown: readonly KnowledgePageEdge[],
+): Map<string, { in: number; out: number }> {
+  const drawn = new Map<string, { in: number; out: number }>();
+  const pairs = new Set<string>();
+  for (const edge of shown) {
+    if (edge.kind === 'parent' || pairs.has(`${edge.source}\u0000${edge.target}`)) continue;
+    pairs.add(`${edge.source}\u0000${edge.target}`);
+    const out = drawn.get(edge.source) ?? { in: 0, out: 0 };
+    out.out++;
+    drawn.set(edge.source, out);
+    const into = drawn.get(edge.target) ?? { in: 0, out: 0 };
+    into.in++;
+    drawn.set(edge.target, into);
+  }
+  const hidden = new Map<string, { in: number; out: number }>();
+  for (const [id, total] of exact) {
+    const seen = drawn.get(id) ?? { in: 0, out: 0 };
+    hidden.set(id, { in: Math.max(0, total.in - seen.in), out: Math.max(0, total.out - seen.out) });
+  }
+  return hidden;
+}
 const noActivity = (): KnowledgeExplorerQueryState<KnowledgeExplorerActivity> => ({
   isPending: false,
   isError: false,
@@ -595,12 +642,15 @@ function useLazyTree(
     () => (graph.truncated ? null : new Set(graph.pages.map(page => page.parentId).filter(id => id !== null))),
     [graph],
   );
-  // A counted page has children exactly when its count says so; otherwise guess from the graph.
+  // A counted page has children exactly when its count says so. An uncounted one is guessed from the graph,
+  // except a page created a moment ago, which has no children yet and shows no arrow while its level is counted.
   const mayHaveChildren = useCallback(
     (page: KnowledgePagePayload) =>
       !loaded.has(page.id) &&
       (page.childCountCapped ||
-        (page.childCount !== undefined ? page.childCount > 0 : graphParents ? graphParents.has(page.id) : true)),
+        (page.childCount !== undefined
+          ? page.childCount > 0
+          : !isJustCreated(page) && (graphParents ? graphParents.has(page.id) : true))),
     [loaded, graphParents],
   );
   const loadMore = useMemo(() => {
@@ -687,6 +737,7 @@ export function KnowledgePageExplorer({
   // The selected page's own links: its notes' mentions and `[[links]]` in its body going out, notes
   // elsewhere that mention it coming in. Each end is a page id or a ref; the ends the explorer holds
   // resolve at once, the rest are fetched (up to twice FOCUS_LINK_CAP keys each way, outranking sibling dots).
+  const focusLinkList = (source.usePageLinks ?? noLinkQuery)(view === 'graph' ? selectedPageId : null).data;
   const linkEnds = useMemo(() => {
     const detail = selected.data;
     if (!detail || detail.page.id !== selectedPageId) return null;
@@ -698,9 +749,27 @@ export function KnowledgePageExplorer({
       .map(ref => ref.trim())
       .filter(key => key && key !== own);
     const out = [...mentions, ...refs];
-    const into = (detail.mentionedBy ?? []).map(note => note.pageId).filter(id => id !== own);
+    // The page route resolves ids and `scope#path` refs, never a bare name: a `[[Name]]` the explorer does not hold
+    // is not fetched (the link index supplies its edge), so it does not 404.
+    const mentioned = new Set(mentions);
+    const unaskable = new Set(
+      refs.filter(ref => !ref.includes(':') && !PAGE_ID_SHAPE.test(ref) && !mentioned.has(ref)),
+    );
+    // Notes that mention this page, and (when the host lists links) bodies that link to it: a note edge is a
+    // mention, a body edge a link, so a page that both links and mentions draws each once.
+    const listed = (focusLinkList?.edges ?? []).filter(edge => edge.toPageId === own);
+    const noteInto = [
+      ...new Set([
+        ...(detail.mentionedBy ?? []).map(note => note.pageId),
+        ...listed.filter(edge => edge.kind === 'note').map(edge => edge.fromPageId),
+      ]),
+    ].filter(id => id !== own);
+    const bodyInto = [...new Set(listed.filter(edge => edge.kind === 'body').map(edge => edge.fromPageId))].filter(
+      id => id !== own,
+    );
+    const into = [...new Set([...noteInto, ...bodyInto])];
     const lookup = (key: string) => known.get(key) ?? index.resolve(key);
-    const missing = (keys: string[]) => [...new Set(keys.filter(key => !lookup(key)))];
+    const missing = (keys: string[]) => [...new Set(keys.filter(key => !lookup(key) && !unaskable.has(key)))];
     const resolvedCount = (keys: string[]) => new Set(keys.flatMap(key => lookup(key)?.id ?? [])).size;
     const room = (keys: string[]) => Math.max(0, FOCUS_LINK_FETCH_CAP - resolvedCount(keys));
     const wantOut = missing(out);
@@ -711,6 +780,8 @@ export function KnowledgePageExplorer({
       mentions,
       refs,
       into,
+      noteInto,
+      bodyInto,
       lookup,
       fetchKeys: [...wantOut.slice(0, room(out)), ...wantIn.slice(0, room(into))],
       unfetched: {
@@ -718,7 +789,7 @@ export function KnowledgePageExplorer({
         in: Math.max(0, wantIn.length - room(into)),
       },
     };
-  }, [selected.data, selectedPageId, lazy.pages]);
+  }, [selected.data, selectedPageId, lazy.pages, focusLinkList]);
   const fetchKeys = linkEnds?.fetchKeys ?? noKeys;
   const fetchedStates = (source.useLinkedPages ?? noLinkedPages)(fetchKeys);
   const fetchedSignature = fetchKeys
@@ -735,7 +806,7 @@ export function KnowledgePageExplorer({
   }, [fetchedSignature]);
   const focusLinks = useMemo(() => {
     if (!linkEnds) return { edges: [], pages: [], unfetched: { in: 0, out: 0 } };
-    const { detail, lookup, mentions, refs, into } = linkEnds;
+    const { detail, lookup, mentions, refs, noteInto, bodyInto } = linkEnds;
     const resolve = (key: string) => lookup(key) ?? fetchedPages.get(key);
     const own = detail.page.id;
     const edges: KnowledgePageEdge[] = [];
@@ -745,7 +816,7 @@ export function KnowledgePageExplorer({
       if (!target || target.id === own) {
         // An unfetched id still draws its edge, counted as not shown until its page arrives.
         if (!target && kind === 'mention' && side === 'out') edges.push({ source: own, target: key, kind });
-        if (!target && side === 'in') edges.push({ source: key, target: own, kind: 'mention' });
+        if (!target && side === 'in') edges.push({ source: key, target: own, kind });
         return;
       }
       pages.set(target.id, target);
@@ -753,7 +824,8 @@ export function KnowledgePageExplorer({
     };
     for (const key of mentions) reach(key, 'mention', 'out');
     for (const key of refs) reach(key, 'link', 'out');
-    for (const key of into) reach(key, 'mention', 'in');
+    for (const key of noteInto) reach(key, 'mention', 'in');
+    for (const key of bodyInto) reach(key, 'link', 'in');
     return {
       edges: edges.filter(edge => edge.source !== edge.target),
       pages: [...pages.values()],
@@ -775,19 +847,64 @@ export function KnowledgePageExplorer({
   const [focusScopeId, setFocusScopeId] = useState<string | null>(null);
   // Every link the explorer knows of: mentions the host's graph found, `[[links]]` in loaded bodies,
   // and the selected page's own. Only the selected page's are drawn (capped) unless all links are on.
-  const knownLinks = useMemo(
-    () => [...graph.edges.filter(edge => edge.kind === 'mention'), ...bodyLinkEdges(drawn.pages), ...focusLinks.edges],
-    [graph.edges, drawn.pages, focusLinks.edges],
-  );
+  const knownLinks = useMemo(() => {
+    // A body link the loaded page shows and the link index lists is one line, not two.
+    const seen = new Set<string>();
+    return [
+      ...graph.edges.filter(edge => edge.kind === 'mention'),
+      ...bodyLinkEdges(drawn.pages),
+      ...focusLinks.edges,
+    ].filter(edge => {
+      const key = `${edge.kind}:${edge.source}>${edge.target}`;
+      return seen.has(key) ? false : (seen.add(key), true);
+    });
+  }, [graph.edges, drawn.pages, focusLinks.edges]);
   const linkView = useMemo(
     () => visibleLinks(knownLinks, pagesById, selectedPageId, allLinks),
     [knownLinks, pagesById, selectedPageId, allLinks],
   );
   const linkEdges = linkView.edges;
-  const moreLinks = {
-    in: linkView.more.in + focusLinks.unfetched.in,
-    out: linkView.more.out + focusLinks.unfetched.out,
-  };
+  // Exact counts for the pages the graph holds, in batches the host's route accepts; a failure (a
+  // server with no link index) leaves the counts to what the loaded pages show.
+  const countIds = useMemo(
+    () =>
+      drawn.pages
+        .filter(page => !isChildPlaceholder(page) && !isRestCircle(page) && !isScopeGroup(page))
+        .map(page => page.id)
+        .sort(),
+    [drawn.pages],
+  );
+  const counted = (source.useLinkCounts ?? noLinkQuery)(view === 'graph' ? countIds : []);
+  const exactCounts = useMemo(() => (counted.data ? new Map(Object.entries(counted.data)) : undefined), [counted.data]);
+  const hiddenLinks = useMemo(
+    () => (exactCounts ? undrawnLinks(exactCounts, linkEdges) : linkView.hidden),
+    [exactCounts, linkEdges, linkView.hidden],
+  );
+  // The page under the pointer: once it rests there its real links are fetched and drawn to whichever
+  // ends are on screen; the rest are counted as not shown.
+  // Only a pointer that rests re-renders the explorer: passing over pages sets and clears a timer.
+  const [hoverFetchId, setHoverFetchId] = useState<string | null>(null);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const setHoveredId = useCallback((id: string | null) => {
+    clearTimeout(hoverTimer.current);
+    if (id) hoverTimer.current = setTimeout(() => setHoverFetchId(id), HOVER_FETCH_DELAY_MS);
+    else setHoverFetchId(null);
+  }, []);
+  useEffect(() => () => clearTimeout(hoverTimer.current), []);
+  const hovered = (source.usePageLinks ?? noLinkQuery)(hoverFetchId);
+  const hoverEdges = useMemo<KnowledgePageEdge[]>(
+    () =>
+      hoverFetchId && hovered.data
+        ? hovered.data.edges.map(edge => ({
+            source: edge.fromPageId,
+            target: edge.toPageId,
+            kind: edge.kind === 'body' ? ('link' as const) : ('mention' as const),
+            count: edge.count,
+          }))
+        : [],
+    [hoverFetchId, hovered.data],
+  );
+
   // A clicked mention line shows the notes that make the mention; opening the page from there marks them.
   const [mention, setMention] = useState<MentionSelection | null>(null);
   const [marked, setMarked] = useState<{ source: string; target: string } | null>(null);
@@ -894,19 +1011,6 @@ export function KnowledgePageExplorer({
       {!lazyMode && graph.truncated && !showPage ? (
         <p className="text-ui-sm text-muted-foreground">
           The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
-        </p>
-      ) : null}
-      {!showPage && (moreLinks.in > 0 || moreLinks.out > 0) ? (
-        <p className="text-ui-sm text-muted-foreground" data-testid="knowledge-graph-more-links">
-          +{moreLinks.in + moreLinks.out} more links of this page not drawn ({moreLinks.in} in, {moreLinks.out} out).
-        </p>
-      ) : null}
-      {focusedInGraph && children && (children.hidden > 0 || focusedInGraph.childCountCapped) ? (
-        <p className="text-ui-sm text-muted-foreground" data-testid="knowledge-graph-more-children">
-          {focusedInGraph.childCountCapped
-            ? `${childCountLabel(focusedInGraph)} pages under ${focusedInGraph.name}, ${children.drawn} drawn.`
-            : `+${children.hidden} more ${children.hidden === 1 ? 'page' : 'pages'} under ${focusedInGraph.name} not drawn.`}{' '}
-          Open the tree to see them all.
         </p>
       ) : null}
       {selectedPageId && !showPage && isNotFound(selected.error) ? (
@@ -1025,8 +1129,11 @@ export function KnowledgePageExplorer({
                 grants={graph.grants}
                 selectedPageId={selectedPageId}
                 centerId={drawn.hub}
-                hiddenLinks={linkView.hidden}
+                hiddenLinks={hiddenLinks}
                 knownLinks={knownLinks}
+                fetchedLinks={hoverEdges}
+                exactLinkCounts={exactCounts}
+                onHover={setHoveredId}
                 nearIds={focusLinkIds}
                 settled={graphSettled}
                 showCounts={dotCounts}

@@ -24,6 +24,7 @@ import type {
   KnowledgePageStore,
   KnowledgeListedPin,
   KnowledgePin,
+  KnowledgePinKind,
   KnowledgeProvenance,
   KnowledgeReadScope,
   KnowledgeScopeDeclarationCount,
@@ -121,7 +122,9 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
     )`,
     `CREATE TABLE IF NOT EXISTS ${q(t.pins)} (
       "id" text PRIMARY KEY,
-      "pageId" text NOT NULL UNIQUE REFERENCES ${q(t.pages)} ("id"),
+      "pageId" text NOT NULL REFERENCES ${q(t.pages)} ("id"),
+      "kind" text NOT NULL DEFAULT 'page',
+      "depth" integer,
       "audience" text[] NOT NULL,
       "createdBy" text NOT NULL,
       "createdAt" timestamptz NOT NULL,
@@ -160,6 +163,12 @@ export function pgKnowledgePagesDDL(schemaName?: string): string[] {
     index('mastra_knowledge_mentions_page_idx', t.mentions, '"pageId"'),
     `CREATE INDEX IF NOT EXISTS "mastra_knowledge_pins_audience_gin" ON ${q(t.pins)} USING gin ("audience")`,
     index('mastra_knowledge_pins_created_idx', t.pins, '"createdAt","id"'),
+    // Pin kinds arrived after schema 4 shipped: a page holds one pin per kind. Additive, idempotent,
+    // no version bump; pins from before kinds stay page pins.
+    `ALTER TABLE ${q(t.pins)} ADD COLUMN IF NOT EXISTS "kind" text NOT NULL DEFAULT 'page'`,
+    `ALTER TABLE ${q(t.pins)} ADD COLUMN IF NOT EXISTS "depth" integer`,
+    `ALTER TABLE ${q(t.pins)} DROP CONSTRAINT IF EXISTS "${t.pins}_pageId_key"`,
+    index('mastra_knowledge_pins_page_kind_idx', t.pins, '"pageId","kind"', '', true),
     // Body links arrived after schema 4 shipped: additive, idempotent, no version bump.
     `CREATE TABLE IF NOT EXISTS ${q(t.links)} (
       "fromPageId" text NOT NULL,
@@ -361,6 +370,8 @@ function toPin(row: Row): KnowledgePin {
   return {
     id: String(row.id),
     pageId: String(row.pageId),
+    kind: String(row.kind) as KnowledgePinKind,
+    ...(row.depth == null ? {} : { depth: Number(row.depth) }),
     audience: (row.audience as string[]) ?? [],
     createdBy: String(row.createdBy),
     createdAt: new Date(row.createdAt as string | Date),
@@ -1143,17 +1154,21 @@ export class PgKnowledgePages implements KnowledgePageStore {
       );
       await tx.query(`UPDATE ${this.#mentions} SET "pageId" = $2 WHERE "pageId" = $1`, [source.id, target.id]);
 
-      const sourcePin = (
-        await this.#rows(tx, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 FOR UPDATE`, [source.id])
-      )[0];
-      if (sourcePin) {
-        await this.#upsertPinAudience(
-          tx,
-          target.id,
-          (sourcePin.audience as string[]) ?? [],
-          String(sourcePin.createdBy),
+      const sourcePins = await this.#rows(
+        tx,
+        `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 ORDER BY "kind" FOR UPDATE`,
+        [source.id],
+      );
+      for (const sourcePin of sourcePins) {
+        await this.#upsertPinAudience(tx, {
+          pageId: target.id,
+          kind: String(sourcePin.kind) as KnowledgePinKind,
+          depth: sourcePin.depth == null ? null : Number(sourcePin.depth),
+          audience: (sourcePin.audience as string[]) ?? [],
+          createdBy: String(sourcePin.createdBy),
           now,
-        );
+          keepDepth: true,
+        });
         await tx.query(`DELETE FROM ${this.#pins} WHERE "id" = $1`, [String(sourcePin.id)]);
       }
 
@@ -1709,11 +1724,19 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   // Pins -----------------------------------------------------------------------------------------
 
-  async addPinAudience(input: { pageId: string; audience: string[]; createdBy: string }): Promise<KnowledgePin> {
+  async addPinAudience(input: Parameters<KnowledgePageStore['addPinAudience']>[0]): Promise<KnowledgePin> {
+    const kind = input.kind ?? 'page';
     return this.#tx(async tx => {
       const page = await this.#requireLivePage(tx, input.pageId, false);
       const now = new Date();
-      const { pin, changed } = await this.#upsertPinAudience(tx, page.id, input.audience, input.createdBy, now);
+      const { pin, changed } = await this.#upsertPinAudience(tx, {
+        pageId: page.id,
+        kind,
+        depth: kind === 'list' ? (input.depth ?? 1) : null,
+        audience: input.audience,
+        createdBy: input.createdBy,
+        now,
+      });
       if (changed) {
         await this.#logActivity(tx, {
           action: 'pin-added',
@@ -1727,41 +1750,51 @@ export class PgKnowledgePages implements KnowledgePageStore {
     });
   }
 
+  /** `keepDepth` (merges) leaves an existing pin's depth as it is instead of setting `depth`. */
   async #upsertPinAudience(
     db: Queryable,
-    pageId: string,
-    audience: string[],
-    createdBy: string,
-    now: Date,
+    input: {
+      pageId: string;
+      kind: KnowledgePinKind;
+      depth: number | null;
+      audience: string[];
+      createdBy: string;
+      now: Date;
+      keepDepth?: boolean;
+    },
   ): Promise<{ pin: KnowledgePin; changed: boolean }> {
-    const existing = (await this.#rows(db, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 FOR UPDATE`, [pageId]))[0];
+    const { pageId, kind, audience, now } = input;
+    const existing = (
+      await this.#rows(db, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 AND "kind" = $2 FOR UPDATE`, [pageId, kind])
+    )[0];
     if (!existing) {
       const rows = await this.#rows(
         db,
-        `INSERT INTO ${this.#pins} ("id","pageId","audience","createdBy","createdAt","updatedAt") VALUES ($1,$2,$3::text[],$4,$5,$5) RETURNING *`,
-        [createKnowledgeUlid(), pageId, [...new Set(audience)], createdBy, iso(now)],
+        `INSERT INTO ${this.#pins} ("id","pageId","kind","depth","audience","createdBy","createdAt","updatedAt") VALUES ($1,$2,$3,$4,$5::text[],$6,$7,$7) RETURNING *`,
+        [createKnowledgeUlid(), pageId, kind, input.depth, [...new Set(audience)], input.createdBy, iso(now)],
       );
       return { pin: toPin(rows[0]!), changed: true };
     }
     const current = (existing.audience as string[]) ?? [];
     const merged = [...new Set([...current, ...audience])];
-    if (merged.length === current.length) return { pin: toPin(existing), changed: false };
+    const currentDepth = existing.depth == null ? null : Number(existing.depth);
+    const depth = input.keepDepth ? currentDepth : input.depth;
+    if (merged.length === current.length && depth === currentDepth) return { pin: toPin(existing), changed: false };
     const rows = await this.#rows(
       db,
-      `UPDATE ${this.#pins} SET "audience" = $2::text[], "updatedAt" = $3 WHERE "id" = $1 RETURNING *`,
-      [String(existing.id), merged, iso(now)],
+      `UPDATE ${this.#pins} SET "audience" = $2::text[], "depth" = $3, "updatedAt" = $4 WHERE "id" = $1 RETURNING *`,
+      [String(existing.id), merged, depth, iso(now)],
     );
     return { pin: toPin(rows[0]!), changed: true };
   }
 
-  async removePinAudience(input: {
-    pageId: string;
-    audience: string[];
-    removedBy: string;
-  }): Promise<KnowledgePin | null> {
+  async removePinAudience(input: Parameters<KnowledgePageStore['removePinAudience']>[0]): Promise<KnowledgePin | null> {
     return this.#tx(async tx => {
       const existing = (
-        await this.#rows(tx, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 FOR UPDATE`, [input.pageId])
+        await this.#rows(tx, `SELECT * FROM ${this.#pins} WHERE "pageId" = $1 AND "kind" = $2 FOR UPDATE`, [
+          input.pageId,
+          input.kind ?? 'page',
+        ])
       )[0];
       if (!existing) return null;
       const current = (existing.audience as string[]) ?? [];
@@ -1816,6 +1849,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
   async listPins(input: {
     audience: string[] | 'all';
     read: KnowledgeReadScope;
+    kind?: KnowledgePinKind;
     pageIds?: string[];
     excludePageIds?: string[];
     withBody?: boolean;
@@ -1829,9 +1863,13 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const filter = new ReadFilter(input.read, params, this.#pages);
     const where = [`p."deletedAt" IS NULL`, filter.readable('s')];
     if (input.audience !== 'all') where.push(`pn."audience" && ${params.add(input.audience)}::text[]`);
+    if (input.kind) where.push(`pn."kind" = ${params.add(input.kind)}`);
     if (input.pageIds) where.push(`pn."pageId" = ANY(${params.add(input.pageIds)}::text[])`);
-    if (input.excludePageIds?.length) where.push(`pn."pageId" <> ALL(${params.add(input.excludePageIds)}::text[])`);
-    if (input.withBody) where.push(`p."body" ~ '\\S'`);
+    // Page exclusions and the body check concern page pins; a listing pin stands for the tree below.
+    if (input.excludePageIds?.length) {
+      where.push(`(pn."kind" <> 'page' OR pn."pageId" <> ALL(${params.add(input.excludePageIds)}::text[]))`);
+    }
+    if (input.withBody) where.push(`(pn."kind" <> 'page' OR p."body" ~ '\\S')`);
     const from = `FROM ${this.#pins} pn JOIN ${this.#pages} p ON p."id" = pn."pageId" JOIN ${this.#pages} s ON s."id" = p."scopeId"`;
     // The total ignores the cursor and the limit; it shares every other condition and parameter.
     const totalWhere = where.join(' AND ');

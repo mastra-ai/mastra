@@ -403,7 +403,7 @@
       "groupName": "Chat adapter",
       "commitMessageTopic": "Chat adapter",
       "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
-      "matchPackageNames": ["@chat-adapter/slack", "chat"],
+      "matchPackageNames": ["@chat-adapter/*", "chat"],
       "matchUpdateTypes": ["minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies", "pnpm.catalog.default", "pnpm-workspace.overrides"]
     },

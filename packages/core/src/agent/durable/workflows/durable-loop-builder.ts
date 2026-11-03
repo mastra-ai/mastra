@@ -22,7 +22,12 @@ import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
-import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
+import {
+  isExecutionFenceError,
+  isForeignExecutionContext,
+  watchExecutionLoss,
+  withExecutionFence,
+} from '../execution-fence';
 import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
@@ -483,6 +488,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // (the evented engine otherwise merges, marks failed, or deletes it).
           isOwnershipLostError: isExecutionFenceError,
           isForeignExecution: isForeignExecutionContext,
+          watchExecutionLoss,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads. The declared reads below cover every
           // same-iteration step-result read (see pruneSnapshotHook).
@@ -958,6 +964,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           persistResumeClaim: true,
           isOwnershipLostError: isExecutionFenceError,
           isForeignExecution: isForeignExecutionContext,
+          watchExecutionLoss,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads. This loop reads iteration state from workflow
           // `value`, so it has no declared step-result reads (see pruneSnapshotHook).

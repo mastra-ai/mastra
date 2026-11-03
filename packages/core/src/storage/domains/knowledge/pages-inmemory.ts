@@ -12,6 +12,7 @@ import {
   KnowledgePageDepthError,
   KnowledgePageHasChildrenError,
   KnowledgePageKeyConflictError,
+  knowledgePinDepth,
   knowledgePositionBetween,
   knowledgeScopeReadable,
   MAX_KNOWLEDGE_MOVE_PAGES,
@@ -31,6 +32,7 @@ import type {
   KnowledgePageSearchHit,
   KnowledgePageStore,
   KnowledgePin,
+  KnowledgePinKind,
   KnowledgeProvenance,
   KnowledgeReadScope,
 } from './pages';
@@ -65,6 +67,9 @@ const newestFirst = <T extends { createdAt: Date; id: string }>(a: T, b: T) =>
 const oldestFirst = <T extends { createdAt: Date; id: string }>(a: T, b: T) => newestFirst(b, a);
 
 const clone = <T>(value: T): T => structuredClone(value);
+
+const PIN_KINDS: KnowledgePinKind[] = ['page', 'list'];
+const pinKey = (pageId: string, kind: KnowledgePinKind) => `${kind}:${pageId}`;
 
 /**
  * In-memory schema-4 page store: the reference implementation of {@link KnowledgePageStore} that the
@@ -634,15 +639,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
         note.mentions = [...new Set(note.mentions.map(id => (id === source.id ? target.id : id)))];
       }
     }
-    const sourcePin = this.#pins.get(source.id);
-    if (sourcePin) {
-      this.#pins.delete(source.id);
-      const targetPin = this.#pins.get(target.id);
+    for (const kind of PIN_KINDS) {
+      const sourcePin = this.#pins.get(pinKey(source.id, kind));
+      if (!sourcePin) continue;
+      this.#pins.delete(pinKey(source.id, kind));
+      const targetPin = this.#pins.get(pinKey(target.id, kind));
       if (targetPin) {
         targetPin.audience = [...new Set([...targetPin.audience, ...sourcePin.audience])];
         targetPin.updatedAt = this.#now();
       } else {
-        this.#pins.set(target.id, { ...sourcePin, pageId: target.id, updatedAt: this.#now() });
+        this.#pins.set(pinKey(target.id, kind), { ...sourcePin, pageId: target.id, updatedAt: this.#now() });
       }
     }
     const now = this.#now();
@@ -667,7 +673,7 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
     page.deletedBy = input.deletedBy;
     page.version++;
     page.updatedAt = now;
-    this.#pins.delete(page.id);
+    for (const kind of PIN_KINDS) this.#pins.delete(pinKey(page.id, kind));
     this.#log('page-deleted', page, { author: input.deletedBy });
     return clone(page);
   }
@@ -881,37 +887,47 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
   async addPinAudience(input: Parameters<Store['addPinAudience']>[0]) {
     const page = this.#livePage(input.pageId);
     if (!input.audience.length) throw new Error('A Knowledge pin needs at least one audience scope');
+    const kind = input.kind ?? 'page';
+    const depth = knowledgePinDepth(kind, input.depth);
     const now = this.#now();
-    const existing = this.#pins.get(page.id);
+    const existing = this.#pins.get(pinKey(page.id, kind));
     const pin: KnowledgePin = existing
-      ? { ...existing, audience: [...new Set([...existing.audience, ...input.audience])], updatedAt: now }
+      ? {
+          ...existing,
+          ...(depth === undefined ? {} : { depth }),
+          audience: [...new Set([...existing.audience, ...input.audience])],
+          updatedAt: now,
+        }
       : {
           id: crypto.randomUUID(),
           pageId: page.id,
+          kind,
+          ...(depth === undefined ? {} : { depth }),
           audience: [...new Set(input.audience)],
           createdBy: input.createdBy,
           createdAt: now,
           updatedAt: now,
         };
-    this.#pins.set(page.id, pin);
+    this.#pins.set(pinKey(page.id, kind), pin);
     this.#log('pin-added', page, { author: input.createdBy });
     return clone(pin);
   }
 
   async removePinAudience(input: Parameters<Store['removePinAudience']>[0]) {
     const page = this.#page(input.pageId);
-    const existing = this.#pins.get(page.id);
+    const key = pinKey(page.id, input.kind ?? 'page');
+    const existing = this.#pins.get(key);
     if (!existing) return null;
     const removed = new Set(input.audience);
     const audience = existing.audience.filter(entry => !removed.has(entry));
     if (audience.length === existing.audience.length) return clone(existing);
     this.#log('pin-removed', page, { author: input.removedBy });
     if (!audience.length) {
-      this.#pins.delete(page.id);
+      this.#pins.delete(key);
       return null;
     }
     const pin = { ...existing, audience, updatedAt: this.#now() };
-    this.#pins.set(page.id, pin);
+    this.#pins.set(key, pin);
     return clone(pin);
   }
 
@@ -921,9 +937,10 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       .filter(pin => {
         const page = this.#pages.get(pin.pageId);
         if (!page || page.deletedAt || !this.#pageReadable(page, input.read)) return false;
+        if (input.kind && pin.kind !== input.kind) return false;
         if (input.pageIds && !input.pageIds.includes(pin.pageId)) return false;
-        if (input.excludePageIds?.includes(pin.pageId)) return false;
-        if (input.withBody && !/\S/.test(page.body ?? '')) return false;
+        if (pin.kind === 'page' && input.excludePageIds?.includes(pin.pageId)) return false;
+        if (pin.kind === 'page' && input.withBody && !/\S/.test(page.body ?? '')) return false;
         return !audience || pin.audience.some(entry => audience.has(entry));
       })
       .sort(newestFirst);
