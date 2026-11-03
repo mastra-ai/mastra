@@ -61,6 +61,8 @@ export class AISDKV5InputStream extends MastraModelInput {
       'reasoning-end': 'reasoning-delta',
       'tool-input-end': 'tool-input-delta',
     } as const;
+    // Provider metadata of a tool-input delta that was held back in full, re-attached when it is released.
+    const heldToolInputMetadata = new Map<string, unknown>();
 
     const emit = (rawChunk: StreamPart) => {
       const transformedChunk = convertFullStreamChunkToMastra(rawChunk, { runId });
@@ -88,9 +90,12 @@ export class AISDKV5InputStream extends MastraModelInput {
     // Text held back by a sanitizer waiting for a marker to close is released
     // as a trailing delta before the part ends, or before the step finishes.
     const flushHeldDeltas = (type: keyof typeof citationSanitizers, id?: string) => {
-      const held = id === undefined ? citationSanitizers[type].flushAll() : [[id, citationSanitizers[type].flush(id)]];
+      const held: Array<[string, string]> =
+        id === undefined ? citationSanitizers[type].flushAll() : [[id, citationSanitizers[type].flush(id)]];
       for (const [heldId, delta] of held) {
-        if (delta) emit({ type, id: heldId, delta } as StreamPart);
+        const providerMetadata = type === 'tool-input-delta' ? heldToolInputMetadata.get(heldId) : undefined;
+        if (type === 'tool-input-delta') heldToolInputMetadata.delete(heldId);
+        if (delta) emit({ type, id: heldId, delta, ...(providerMetadata ? { providerMetadata } : {}) } as StreamPart);
       }
     };
     const flushAllHeldDeltas = () => {
@@ -110,9 +115,19 @@ export class AISDKV5InputStream extends MastraModelInput {
       switch (rawChunk.type) {
         case 'text-delta':
         case 'reasoning-delta':
-        case 'tool-input-delta':
           rawChunk = { ...rawChunk, delta: citationSanitizers[rawChunk.type].push(rawChunk.id, rawChunk.delta) };
           break;
+        case 'tool-input-delta': {
+          const delta = citationSanitizers[rawChunk.type].push(rawChunk.id, rawChunk.delta);
+          const heldMetadata = heldToolInputMetadata.get(rawChunk.id);
+          if (delta && heldMetadata) heldToolInputMetadata.delete(rawChunk.id);
+          rawChunk = {
+            ...rawChunk,
+            delta,
+            providerMetadata: rawChunk.providerMetadata ?? (delta ? heldMetadata : undefined),
+          } as StreamPart;
+          break;
+        }
         case 'text-end':
         case 'reasoning-end':
         case 'tool-input-end':
@@ -127,10 +142,13 @@ export class AISDKV5InputStream extends MastraModelInput {
           break;
       }
 
-      // A tool-input delta made empty by the sanitizer carries nothing; text and
-      // reasoning deltas are left to the converter, which keeps empty deltas
-      // that still carry provider metadata.
-      if (rawChunk.type === 'tool-input-delta' && !rawChunk.delta) continue;
+      // A tool-input delta held back in full is dropped and its metadata kept for
+      // the release; text and reasoning deltas are left to the converter, which
+      // keeps empty deltas that still carry provider metadata.
+      if (rawChunk.type === 'tool-input-delta' && !rawChunk.delta) {
+        if (rawChunk.providerMetadata) heldToolInputMetadata.set(rawChunk.id, rawChunk.providerMetadata);
+        continue;
+      }
 
       emit(rawChunk);
     }
