@@ -24,9 +24,9 @@ export type SeriesHue = (typeof SERIES_HUES)[number] | 'neutral';
 export const LAB_HUES: Record<string, SeriesHue> = {
   anthropic: 'orange',
   openai: 'green',
-  google: 'blue',
+  google: 'indigo',
   typesafe: 'pink',
-  deepseek: 'indigo',
+  deepseek: 'blue',
   xai: 'neutral',
   meta: 'cyan',
   mistral: 'amber',
@@ -36,18 +36,21 @@ export const LAB_HUES: Record<string, SeriesHue> = {
   zai: 'teal',
 };
 
+/** Lab hues as a map, so lookups by any string never hit `Object.prototype`. */
+const LAB_HUE = new Map(Object.entries(LAB_HUES));
+
 /** Other spellings of the labs' provider ids. */
-const LAB_ALIASES: Record<string, string> = {
-  'x-ai': 'xai',
-  'z-ai': 'zai',
-  'meta-llama': 'meta',
-  llama: 'meta',
-  mistralai: 'mistral',
-  gemini: 'google',
-  alibaba: 'qwen',
-  moonshot: 'moonshotai',
-  jev: 'typesafe',
-};
+const LAB_ALIASES = new Map([
+  ['x-ai', 'xai'],
+  ['z-ai', 'zai'],
+  ['meta-llama', 'meta'],
+  ['llama', 'meta'],
+  ['mistralai', 'mistral'],
+  ['gemini', 'google'],
+  ['alibaba', 'qwen'],
+  ['moonshot', 'moonshotai'],
+  ['jev', 'typesafe'],
+]);
 
 /** Model names, for rows a host served (OpenRouter, Groq, Bedrock) or rows without a provider. */
 const MODEL_LABS: [RegExp, string][] = [
@@ -95,15 +98,34 @@ const HOSTS = new Set([
 /** Segments of a hosted model's resource path that aren't a lab. */
 const PATH_WORDS = new Set(['models', 'accounts', 'projects', 'deployments']);
 
-const MODEL_LAB_IDS = new Set(MODEL_LABS.map(([, lab]) => lab));
+/** Every lab id this file knows, with or without a hue. */
+const KNOWN_LABS = new Set([...LAB_HUE.keys(), ...MODEL_LABS.map(([, lab]) => lab)]);
 
 const cleanLab = (id: string) => {
   const [v = id] = id.toLowerCase().split('.');
-  return LAB_ALIASES[v] ?? v;
+  return LAB_ALIASES.get(v) ?? v;
 };
 
+const isHost = (id: string) => HOSTS.has(cleanLab(id));
+
+/** The lab a model id names: its `lab/` prefix, a lab inside a dotted id, or its name. */
+function modelLab(model: string): string | undefined {
+  const parts = model.toLowerCase().split('/');
+  const name = parts.pop() ?? '';
+  // `lab/model`, unless the segment is a host or part of a resource path (`accounts/x/models/y`).
+  const prefix = parts.pop();
+  if (prefix && !isHost(prefix) && !PATH_WORDS.has(prefix)) return cleanLab(prefix);
+  // Dotted ids name the lab inside (`us.anthropic.claude-…`, `meta.llama3-…` on Bedrock).
+  const dotted = name
+    .split('.')
+    .map(cleanLab)
+    .find(seg => KNOWN_LABS.has(seg));
+  if (dotted) return dotted;
+  return MODEL_LABS.find(([re]) => re.test(name))?.[1];
+}
+
 /**
- * The lab behind a series: its provider, or for rows a host served the model's `lab/` prefix or name.
+ * The lab behind a series: its provider, or for rows a host served the lab its model names.
  *
  * @example
  * seriesLab('anthropic.messages', 'claude-opus-5-5') // 'anthropic'
@@ -111,20 +133,11 @@ const cleanLab = (id: string) => {
  * seriesLab('groq', 'llama-4-maverick') // 'meta'
  * seriesLab(undefined, 'gpt-5-mini') // 'openai'
  */
-export function seriesLab(provider?: string | null, model?: string | null): string | undefined {
+export function seriesLab(provider?: string, model?: string): string | undefined {
   const lab = provider ? cleanLab(provider) : undefined;
   if (lab && !HOSTS.has(lab)) return lab;
-  if (!model) return lab;
-  const parts = model.toLowerCase().split('/');
-  const name = parts.pop() ?? '';
-  // `lab/model`, unless the segment is a host or part of a resource path (`accounts/x/models/y`).
-  const prefix = parts.pop();
-  if (prefix && !HOSTS.has(cleanLab(prefix)) && !PATH_WORDS.has(prefix)) return cleanLab(prefix);
-  // Dotted ids name the lab inside (`us.anthropic.claude-…`, `meta.llama3-…` on Bedrock).
-  const dotted = name.split('.').map(cleanLab);
-  const known = dotted.find(seg => seg in LAB_HUES || MODEL_LAB_IDS.has(seg));
-  if (known) return known;
-  return MODEL_LABS.find(([re]) => re.test(name))?.[1] ?? lab;
+  const fromModel = model ? modelLab(model) : undefined;
+  return fromModel ?? lab;
 }
 
 /**
@@ -177,8 +190,8 @@ const FREE_ORDER: SeriesHue[] = [
 export type SeriesColorItem = {
   /** What the lookup is keyed by: a model name, a provider id, an API key id. */
   key: string;
-  provider?: string | null;
-  model?: string | null;
+  provider?: string;
+  model?: string;
 };
 
 /**
@@ -200,10 +213,10 @@ export function seriesColors(items: SeriesColorItem[]) {
   };
   /** The next hue for a series or lab with none: unused first, then the least used. */
   const nextFree = () => {
-    const unused = FREE_ORDER.filter(h => !used.has(h));
-    if (unused.length) return unused[0] ?? 'blue';
+    const unused = FREE_ORDER.find(h => !used.has(h));
+    if (unused) return unused;
     const least = Math.min(...FREE_ORDER.map(h => used.get(h) ?? 0));
-    return FREE_ORDER.find(h => (used.get(h) ?? 0) === least) ?? 'blue';
+    return FREE_ORDER.find(h => used.get(h) === least) ?? 'blue';
   };
 
   const labs = items.map(it => seriesLab(it.provider, it.model));
@@ -212,7 +225,7 @@ export function seriesColors(items: SeriesColorItem[]) {
   // Labs with a hue reserve it first, so a lab's largest series always gets the pure color.
   items.forEach((it, i) => {
     const lab = labs[i];
-    const hue = lab ? LAB_HUES[lab] : undefined;
+    const hue = lab ? LAB_HUE.get(lab) : undefined;
     if (lab && hue && !labHue.has(lab)) {
       labHue.set(lab, hue);
       take(it.key, hue);
