@@ -23,7 +23,7 @@ import {
   scoreEntryId,
 } from './catalogue';
 import type { Aggregation, CatalogueEntry, EditorKind } from './catalogue';
-import { combineKey } from './draft';
+import { combineKey, suggestKind } from './draft';
 import type {
   ChartColor,
   CombineDraft,
@@ -84,8 +84,6 @@ export type EncodedView = {
   /** Absent while the view has an issue. */
   view?: DashboardWidgetView;
   issues: string[];
-  /** Why a metric or combination, by key, isn't shown in this kind. Flagged items are kept in the form. */
-  flags: Record<string, string>;
 };
 
 export type EncodedWidget = {
@@ -169,6 +167,34 @@ function resolveMetrics(view: ViewDraft, kind: EditorKind, scorers: readonly Sco
     }
   }
   return { shown, combos, flags };
+}
+
+/** Why `kind` can't draw every metric and combination of the views; `undefined` when it can. */
+export function misfit(views: readonly ViewDraft[], kind: EditorKind, scorers: readonly Scorer[]) {
+  for (const view of views) {
+    const [reason] = Object.values(resolveMetrics(view, kind, scorers).flags);
+    if (reason) return reason;
+  }
+  return undefined;
+}
+
+/** The kind the widget draws as: the one picked, else the first view's suggestion, else the first kind that fits. */
+export function effectiveKind(draft: WidgetDraft, scorers: readonly Scorer[]): EditorKind {
+  if (draft.kindPicked) return draft.kind;
+  const [first] = draft.views;
+  const suggested = first ? suggestKind(first, scorers) : 'line';
+  const candidates = [suggested, ...EDITOR_KINDS.map(k => k.value)];
+  return candidates.find(k => !misfit(draft.views, k, scorers)) ?? suggested;
+}
+
+/**
+ * Whether the draft, with view `index` patched, still draws every item. The editor only offers
+ * changes that pass, so a metric or combination is never left out of the widget.
+ */
+export function fitsWith(draft: WidgetDraft, index: number, patch: Partial<ViewDraft>, scorers: readonly Scorer[]) {
+  const views = draft.views.map((v, i) => (i === index ? { ...v, ...patch } : v));
+  const next = { ...draft, views };
+  return !misfit(views, effectiveKind(next, scorers), scorers);
 }
 
 function valueOf(shown: Shown, group?: string): ValueExpr {
@@ -405,7 +431,7 @@ function encodeScores(view: ViewDraft, shown: Shown): ViewParts {
 }
 
 export function encodeView(view: ViewDraft, kind: EditorKind, scorers: readonly Scorer[]): EncodedView {
-  const { shown, combos, flags } = resolveMetrics(view, kind, scorers);
+  const { shown, combos } = resolveMetrics(view, kind, scorers);
   const issues = [...filterIssues(view, shown)];
   if (!view.label.trim()) issues.push('Name this view.');
   if (!shown.length) issues.push(view.metrics.length ? 'None of the metrics can be shown here.' : 'Add a metric.');
@@ -423,8 +449,8 @@ export function encodeView(view: ViewDraft, kind: EditorKind, scorers: readonly 
     } else if (kind === 'kpis') parts = encodeKpis(view, shown, combos);
     else parts = encodeScores(view, first);
   }
-  if (issues.length || !parts) return { issues, flags };
-  return { view: { label: view.label.trim(), ...parts }, issues, flags };
+  if (issues.length || !parts) return { issues };
+  return { view: { label: view.label.trim(), ...parts }, issues };
 }
 
 const WIDGET_KIND: Record<EditorKind, string> = {

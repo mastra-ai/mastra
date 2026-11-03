@@ -88,6 +88,9 @@ export const emptyView = (label: string): ViewDraft => ({
   sortDirection: 'desc',
 });
 
+/** The view without its split: what switching kinds starts from, since a split means rows in a table but picked series in a chart. */
+export const unsplit = (view: ViewDraft): ViewDraft => ({ ...view, splitBy: undefined, splitValues: [] });
+
 /** "New widget N" with the first N no other widget's title uses. */
 export function newWidgetTitle(titles: readonly (string | undefined)[]) {
   const used = new Set(titles);

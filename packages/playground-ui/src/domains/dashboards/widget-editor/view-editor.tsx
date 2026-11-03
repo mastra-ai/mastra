@@ -1,4 +1,4 @@
-import { PlusIcon, SigmaIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
+import { PlusIcon, SigmaIcon, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { chartColor } from '../lib/format';
@@ -15,7 +15,7 @@ import {
   isTimeseriesKind,
 } from './catalogue';
 import type { Aggregation, CatalogueEntry, EditorKind } from './catalogue';
-import { defaultComboLabel, defaultIcon, defaultMetricLabel, seriesColor } from './codec';
+import { defaultComboLabel, defaultIcon, defaultMetricLabel, fitsWith, seriesColor } from './codec';
 import { COMBINE_OPS, MAX_METRICS_PER_VIEW, combineKey, metricKey, splitLabel } from './draft';
 import type { ChartColor, CombineDraft, KpiIcon, MetricDraft, ViewDraft, WidgetDraft } from './draft';
 import { HintButton } from './hint-button';
@@ -44,7 +44,6 @@ import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar';
 import { chipClass, editableSegmentClass, removeSegmentClass } from '@/ds/components/FilterBar/filter-bar-chip';
 import { Input } from '@/ds/components/Input';
-import { Notice } from '@/ds/components/Notice';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
 import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
@@ -71,26 +70,23 @@ export type ViewEditorProps = {
   index: number;
   /** The kind the widget draws as, picked or suggested. */
   kind: EditorKind;
-  /** The kind the catalogue is filtered by: a suggested kind changes as metrics are added, so it doesn't hide any. */
-  pickerKind: EditorKind;
   scorers: readonly Scorer[];
-  /** Why a metric or combination, by key, isn't shown in this kind. */
-  flags: Record<string, string>;
 };
 
-/** One view's form: metrics and combinations as chips, filters, then the split. */
-export function ViewEditor({ index, kind, pickerKind, scorers, flags }: ViewEditorProps) {
+/**
+ * One view's form: metrics and combinations as chips, filters, then the split. Every choice it
+ * offers keeps each metric and combination drawable in the widget's kind; the rest is left out.
+ */
+export function ViewEditor({ index, kind, scorers }: ViewEditorProps) {
   const { control, getValues, setValue } = useFormContext<WidgetDraft>();
+  const draft = useWatch({ control }) as WidgetDraft;
   const view = useWatch({ control, name: `views.${index}` });
   const set = (patch: Partial<ViewDraft>) =>
     setValue(`views.${index}`, { ...getValues(`views.${index}`), ...patch }, { shouldDirty: true });
+  const fits = (patch: Partial<ViewDraft>) => fitsWith(draft, index, patch, scorers);
 
   const entries = view.metrics.map(m => findEntry(m.entry, scorers));
-  const shownEntries = view.metrics.flatMap((m, i) => {
-    const entry = entries[i];
-    return entry && !flags[m.key] ? [entry] : [];
-  });
-  const lock = isTimeseriesKind(pickerKind) ? shownEntries[0]?.format : undefined;
+  const shownEntries = entries.filter(e => e !== undefined);
   const hasScores = entries.some(e => e?.source === 'scores');
   const split = splitLabel(kind);
 
@@ -99,18 +95,26 @@ export function ViewEditor({ index, kind, pickerKind, scorers, flags }: ViewEdit
   const updateCombo = (key: string, patch: Partial<CombineDraft>) =>
     set({ combos: view.combos.map(c => (c.key === key ? { ...c, ...patch } : c)) });
 
-  const removeMetric = (key: string) =>
-    set({
-      metrics: view.metrics.filter(m => m.key !== key),
-      sort: view.sort === key ? undefined : view.sort,
-    });
+  // A combination goes with either of its metrics.
+  const removeMetric = (key: string) => {
+    const metrics = view.metrics.filter(m => m.key !== key);
+    const combos = view.combos.filter(c => c.a !== key && c.b !== key);
+    const kept = [...metrics, ...combos].some(item => item.key === view.sort);
+    set({ metrics, combos, sort: kept ? view.sort : undefined });
+  };
   const removeCombo = (key: string) =>
     set({ combos: view.combos.filter(c => c.key !== key), sort: view.sort === key ? undefined : view.sort });
 
-  const addCombo = (op: CombineDraft['op']) => {
-    const [a, b] = view.metrics;
-    if (a && b) set({ combos: [...view.combos, { key: combineKey(), op, a: a.key, b: b.key }] });
-  };
+  const withCombo = (combo: CombineDraft) => ({ combos: [...view.combos, combo] });
+  // Each formula is offered over the first pair of metrics it can combine here.
+  const comboStarts = COMBINE_OPS.flatMap(op => {
+    for (const a of view.metrics)
+      for (const b of view.metrics) {
+        const combo = { key: combineKey(), op: op.value, a: a.key, b: b.key };
+        if (a !== b && fits(withCombo(combo))) return [combo];
+      }
+    return [];
+  });
 
   const metricOptions = view.metrics.map((m, i) => ({
     value: m.key,
@@ -119,14 +123,27 @@ export function ViewEditor({ index, kind, pickerKind, scorers, flags }: ViewEdit
   const labelOf = (key: string) => metricOptions.find(o => o.value === key)?.label ?? key;
   const comboLabel = (c: CombineDraft) => c.label || defaultComboLabel(c.op, labelOf(c.a), labelOf(c.b));
 
-  // A series takes the palette color of its place among the shown ones, as the codec draws it.
-  const colors = isTimeseriesKind(kind) && !view.splitBy ? seriesColors(view, flags) : undefined;
+  // A series takes the palette color of its place, as the codec draws it.
+  const colors = isTimeseriesKind(kind) && !view.splitBy ? seriesColors(view) : undefined;
 
   const atLimit = view.metrics.length >= MAX_METRICS_PER_VIEW;
   const splitBlocksCombos = isTimeseriesKind(kind) && !!view.splitBy;
   const empty = view.metrics.length === 0 && view.combos.length === 0;
-  const pickMetric = (entry: CatalogueEntry) =>
-    set({ metrics: [...view.metrics, { key: metricKey(), entry: entry.id }] });
+
+  // An entry is offered with the first aggregation that fits; the default one stays implicit.
+  const withMetric = (metric: MetricDraft) => ({ metrics: [...view.metrics, metric] });
+  const pickable = atLimit
+    ? []
+    : catalogue(scorers).flatMap(entry => {
+        const tries = entry.source === 'metrics' ? [undefined, ...entry.aggregations] : [undefined];
+        const aggregation = tries.find(a => fits(withMetric({ key: 'probe', entry: entry.id, aggregation: a })));
+        const fitting = aggregation !== undefined || fits(withMetric({ key: 'probe', entry: entry.id }));
+        return fitting ? [{ entry, aggregation }] : [];
+      });
+  const pickMetric = (entry: CatalogueEntry) => {
+    const aggregation = pickable.find(p => p.entry.id === entry.id)?.aggregation;
+    set(withMetric({ key: metricKey(), entry: entry.id, aggregation }));
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -134,15 +151,19 @@ export function ViewEditor({ index, kind, pickerKind, scorers, flags }: ViewEdit
         <div className="flex flex-wrap items-center gap-1.5">
           {view.metrics.map((metric, i) => {
             const entry = entries[i];
-            const options = entry?.source === 'metrics' ? (aggregationsFor(entry, kind) ?? entry.aggregations) : [];
-            const aggregation = metric.aggregation ?? options[0];
+            const allowed = entry?.source === 'metrics' ? (aggregationsFor(entry, kind) ?? []) : [];
+            const aggregation = metric.aggregation ?? allowed[0];
+            const options = allowed.filter(
+              a =>
+                a === aggregation ||
+                fits({ metrics: view.metrics.map(m => (m.key === metric.key ? { ...m, aggregation: a } : m)) }),
+            );
             const placeholder = entry ? defaultMetricLabel(entry, aggregation) : metric.entry;
             return (
               <ItemChip
                 key={metric.key}
                 label={metric.label || placeholder}
                 color={colors?.[metric.key]?.color}
-                flag={flags[metric.key]}
                 onRemove={() => removeMetric(metric.key)}
               >
                 {entry && (
@@ -173,10 +194,14 @@ export function ViewEditor({ index, kind, pickerKind, scorers, flags }: ViewEdit
               key={combo.key}
               label={comboLabel(combo)}
               color={colors?.[combo.key]?.color}
-              flag={flags[combo.key]}
               onRemove={() => removeCombo(combo.key)}
             >
-              <ComboOperands combo={combo} options={metricOptions} onChange={patch => updateCombo(combo.key, patch)} />
+              <ComboOperands
+                combo={combo}
+                options={metricOptions}
+                fits={patch => fits({ combos: view.combos.map(c => (c.key === combo.key ? { ...c, ...patch } : c)) })}
+                onChange={patch => updateCombo(combo.key, patch)}
+              />
               <Presentation
                 draft={combo}
                 kind={kind}
@@ -187,15 +212,21 @@ export function ViewEditor({ index, kind, pickerKind, scorers, flags }: ViewEdit
               />
             </ItemChip>
           ))}
-          <MetricPicker kind={pickerKind} lock={lock} scorers={scorers} disabled={atLimit} onPick={pickMetric} />
+          <MetricPicker entries={pickable.map(p => p.entry)} disabled={atLimit} onPick={pickMetric} />
           {view.metrics.length >= 2 && (
             <CombineMenu
+              ops={comboStarts.map(c => c.op)}
               disabledReason={
                 splitBlocksCombos
                   ? "Combinations can't be split into series. Remove the split to combine metrics."
-                  : undefined
+                  : comboStarts.length === 0
+                    ? 'These metrics have different units, so they can’t be combined.'
+                    : undefined
               }
-              onPick={addCombo}
+              onPick={op => {
+                const combo = comboStarts.find(c => c.op === op);
+                if (combo) set(withCombo(combo));
+              }}
             />
           )}
         </div>
@@ -224,9 +255,10 @@ export function ViewEditor({ index, kind, pickerKind, scorers, flags }: ViewEdit
             entry={shownEntries[0]}
             kind={kind}
             hasScores={hasScores}
+            fits={fits}
             sortItems={[
-              ...view.metrics.filter(m => !flags[m.key]).map(m => ({ value: m.key, label: labelOf(m.key) })),
-              ...view.combos.filter(c => !flags[c.key]).map(c => ({ value: c.key, label: comboLabel(c) })),
+              ...view.metrics.map(m => ({ value: m.key, label: labelOf(m.key) })),
+              ...view.combos.map(c => ({ value: c.key, label: comboLabel(c) })),
             ]}
             onChange={patch => set(patch)}
           />
@@ -238,11 +270,10 @@ export function ViewEditor({ index, kind, pickerKind, scorers, flags }: ViewEdit
 
 type SeriesColor = { color: ChartColor; fallback: ChartColor };
 
-function seriesColors(view: ViewDraft, flags: Record<string, string>) {
+function seriesColors(view: ViewDraft) {
   const colors: Record<string, SeriesColor> = {};
   let place = 0;
   for (const item of [...view.metrics, ...view.combos]) {
-    if (flags[item.key]) continue;
     const fallback = seriesColor(place++);
     colors[item.key] = { color: item.color ?? fallback, fallback };
   }
@@ -264,33 +295,25 @@ type ItemChipProps = {
   label: string;
   /** The series color, when the chart draws one per item. */
   color: ChartColor | undefined;
-  /** Why the item isn't drawn in this kind. */
-  flag: string | undefined;
   onRemove: () => void;
   /** The item's settings, in the chip's popover. */
   children: ReactNode;
 };
 
 /** A metric or combination: its mark and label; a click opens its settings. */
-function ItemChip({ label, color, flag, onRemove, children }: ItemChipProps) {
+function ItemChip({ label, color, onRemove, children }: ItemChipProps) {
   return (
-    <span className={cn(chipClass, flag && 'opacity-60')}>
+    <span className={chipClass}>
       <Popover>
         <PopoverTrigger
           render={<button type="button" />}
           className={cn(editableSegmentClass, 'text-foreground')}
-          title={flag}
-          aria-label={flag ? `${label}, not shown: ${flag}` : `${label} settings`}
+          aria-label={`${label} settings`}
         >
-          {flag ? (
-            <TriangleAlertIcon className="text-warning-indicator" />
-          ) : (
-            <SeriesMark color={color ? chartColor(color) : undefined} />
-          )}
-          <span className={cn('truncate', flag && 'line-through')}>{label}</span>
+          <SeriesMark color={color ? chartColor(color) : undefined} />
+          <span className="truncate">{label}</span>
         </PopoverTrigger>
         <PopoverContent align="start" className="flex w-80 flex-col gap-4">
-          {flag && <Notice variant="warning">{flag}</Notice>}
           {children}
         </PopoverContent>
       </Popover>
@@ -339,29 +362,37 @@ function AggregationSelect({
 type ComboOperandsProps = {
   combo: CombineDraft;
   options: { value: string; label: string }[];
+  /** Whether the combination, patched, still draws. */
+  fits: (patch: Partial<CombineDraft>) => boolean;
   onChange: (patch: Partial<CombineDraft>) => void;
 };
 
-function ComboOperands({ combo, options, onChange }: ComboOperandsProps) {
+function ComboOperands({ combo, options, fits, onChange }: ComboOperandsProps) {
   const op = COMBINE_OPS.find(o => o.value === combo.op);
-  const opItems = COMBINE_OPS.map(o => ({ value: o.value, label: o.label }));
-  const operand = (side: 'a' | 'b') => (
-    <Field>
-      <FieldLabel>{side.toUpperCase()}</FieldLabel>
-      <Select value={combo[side]} onValueChange={value => value && onChange({ [side]: value })} items={options}>
-        <SelectTrigger size="sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map(o => (
-            <SelectItem key={o.value} value={o.value}>
-              {o.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </Field>
-  );
+  const opItems = COMBINE_OPS.filter(o => o.value === combo.op || fits({ op: o.value })).map(o => ({
+    value: o.value,
+    label: o.label,
+  }));
+  const operand = (side: 'a' | 'b') => {
+    const items = options.filter(o => o.value === combo[side] || fits({ [side]: o.value }));
+    return (
+      <Field>
+        <FieldLabel>{side.toUpperCase()}</FieldLabel>
+        <Select value={combo[side]} onValueChange={value => value && onChange({ [side]: value })} items={items}>
+          <SelectTrigger size="sm">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {items.map(o => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+    );
+  };
   return (
     <>
       <Field>
@@ -436,17 +467,14 @@ function Presentation({ draft, kind, placeholder, defaultIcon, color, onChange }
 }
 
 type MetricPickerProps = {
-  kind: EditorKind;
-  /** Charts keep one unit; only entries in it are offered. */
-  lock?: CatalogueEntry['format'];
-  scorers: readonly Scorer[];
+  /** The catalogue entries the view can take as they stand. */
+  entries: CatalogueEntry[];
   disabled?: boolean;
   onPick: (entry: CatalogueEntry) => void;
 };
 
-/** The catalogue, grouped, with what the kind can't show left out. */
-function MetricPicker({ kind, lock, scorers, disabled, onPick }: MetricPickerProps) {
-  const offered = catalogue(scorers).filter(e => aggregationsFor(e, kind) && (!lock || e.format === lock));
+/** The catalogue, grouped, with what the view can't draw left out. */
+function MetricPicker({ entries: offered, disabled, onPick }: MetricPickerProps) {
   const groups = METRIC_GROUPS.map(group => ({ value: group, items: offered.filter(e => e.group === group) })).filter(
     g => g.items.length > 0,
   );
@@ -491,13 +519,15 @@ function MetricPicker({ kind, lock, scorers, disabled, onPick }: MetricPickerPro
 const dimensionsFor = (hasScores: boolean) => DIMENSIONS.filter(d => !(hasScores && d.metricsOnly));
 
 type CombineMenuProps = {
+  /** The formulas the view's metrics can take. */
+  ops: CombineDraft['op'][];
   /** Set when the view can't hold combinations right now. */
   disabledReason: string | undefined;
   onPick: (op: CombineDraft['op']) => void;
 };
 
 /** Adds a preset formula over two of the view's metrics. */
-function CombineMenu({ disabledReason, onPick }: CombineMenuProps) {
+function CombineMenu({ ops, disabledReason, onPick }: CombineMenuProps) {
   if (disabledReason)
     return (
       <HintButton size="sm" variant="ghost" icon={<SigmaIcon />} disabled hint={disabledReason}>
@@ -514,7 +544,7 @@ function CombineMenu({ disabledReason, onPick }: CombineMenuProps) {
         }
       />
       <DropdownMenu.Content align="start">
-        {COMBINE_OPS.map(op => (
+        {COMBINE_OPS.filter(op => ops.includes(op.value)).map(op => (
           <DropdownMenu.Item key={op.value} onClick={() => onPick(op.value)}>
             <div className="flex flex-col">
               <Txt as="span" variant="body-sm" tone="ink">
@@ -542,9 +572,11 @@ type ViewFiltersProps = {
 /** One `dimension is value` chip per dimension; queries hold one value per dimension. */
 function ViewFilters({ view, entry, hasScores, onChange }: ViewFiltersProps) {
   const suggest = useDimensionSuggestions(entry);
+  // The split dimension isn't offered: filtering it too would chart its other values as flat lines.
   const fields: FilterBarField[] = dimensionsFor(hasScores).map(d => ({
     id: d.id,
     label: d.label,
+    hidden: d.id === view.splitBy,
     suggestions: suggest(d.id),
   }));
   const items: FilterBarItem[] = view.filters.map(f => ({
@@ -576,52 +608,68 @@ type SplitByProps = {
   entry: CatalogueEntry | undefined;
   kind: EditorKind;
   hasScores: boolean;
+  /** Whether the view, patched, still draws every item. */
+  fits: (patch: Partial<ViewDraft>) => boolean;
   /** The table's value columns, by key, for its sort. */
   sortItems: { value: string; label: string }[];
   onChange: (patch: Partial<ViewDraft>) => void;
 };
 
-function SplitBy({ view, entry, kind, hasScores, sortItems, onChange }: SplitByProps) {
+function SplitBy({ view, entry, kind, hasScores, fits, sortItems, onChange }: SplitByProps) {
   const timeseries = isTimeseriesKind(kind);
   const { values, isLoading } = useDimensionValues(entry, timeseries ? view.splitBy : undefined);
   const items = [
     { value: NONE, label: kind === 'table' ? 'Pick a dimension' : 'None' },
-    ...dimensionsFor(hasScores).map(d => ({ value: d.id, label: d.label })),
+    // A filtered dimension holds one value, so splitting it would draw a single series.
+    ...dimensionsFor(hasScores)
+      .filter(
+        d =>
+          d.id === view.splitBy ||
+          (!view.filters.some(f => f.dimension === d.id) && fits({ splitBy: d.id, splitValues: [] })),
+      )
+      .map(d => ({ value: d.id, label: d.label })),
   ];
   const options = [...new Set([...values, ...view.splitValues])].map(v => ({ value: v, label: v }));
+  const blocked = !view.splitBy && !fits({ splitBy: 'environment', splitValues: [] });
   return (
     <div className="flex flex-col gap-3">
-      <Select
-        value={view.splitBy ?? NONE}
-        onValueChange={value => onChange({ splitBy: !value || value === NONE ? undefined : value, splitValues: [] })}
-        items={items}
-      >
-        <SelectTrigger size="sm" aria-label={splitLabel(kind)}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {items.map(i => (
-            <SelectItem key={i.value} value={i.value}>
-              {i.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      {timeseries && view.splitBy && (
-        <Field>
-          <FieldLabel>{dimensionLabel(view.splitBy)} values</FieldLabel>
+      {blocked && (
+        <Txt variant="caption" tone="muted">
+          Combinations, scores and percentiles can't be split. Remove them to split this view.
+        </Txt>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
+        <Select
+          value={view.splitBy ?? NONE}
+          onValueChange={value => onChange({ splitBy: !value || value === NONE ? undefined : value, splitValues: [] })}
+          items={items}
+        >
+          <SelectTrigger size="sm" aria-label={splitLabel(kind)} className="w-auto">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {items.map(i => (
+              <SelectItem key={i.value} value={i.value}>
+                {i.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {timeseries && view.splitBy && (
           <Combobox
             multiple
             size="sm"
+            className="min-w-48 flex-1"
+            aria-label={`${dimensionLabel(view.splitBy)} values`}
             options={options}
             value={view.splitValues}
             onValueChange={splitValues => onChange({ splitValues })}
-            placeholder={isLoading ? 'Loading values…' : 'Pick values, one series each'}
+            placeholder={isLoading ? 'Loading values…' : `Pick ${dimensionLabel(view.splitBy)} values`}
             searchPlaceholder="Search values…"
             emptyText="No values in this range."
           />
-        </Field>
-      )}
+        )}
+      </div>
       {kind === 'table' && <TableOrder view={view} sortItems={sortItems} onChange={onChange} />}
     </div>
   );

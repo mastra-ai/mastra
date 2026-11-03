@@ -9,8 +9,8 @@ import type { DashboardScope } from '../lib/definition';
 import type { Scorer } from '../lib/scores';
 import { EDITOR_KINDS, findEntry, isTimeseriesKind } from './catalogue';
 import type { EditorKind } from './catalogue';
-import { draftToWidget, widgetToDraft } from './codec';
-import { copyLabel, defaultSpan, emptyView, emptyWidget, newWidgetTitle, nextViewLabel, suggestKind } from './draft';
+import { draftToWidget, effectiveKind, misfit, widgetToDraft } from './codec';
+import { copyLabel, defaultSpan, emptyView, emptyWidget, newWidgetTitle, nextViewLabel, unsplit } from './draft';
 import type { WidgetDraft } from './draft';
 import { TitleInput } from './title-input';
 import { ViewEditor } from './view-editor';
@@ -142,9 +142,7 @@ function WidgetEditorForm({ initial, creating, takenIds, scorers, scope, onSave 
   const [active, setActive] = useState(0);
   const [triedSave, setTriedSave] = useState(false);
 
-  const [firstView] = draft.views;
-  const suggested = firstView ? suggestKind(firstView, scorers) : 'line';
-  const kind: EditorKind = draft.kindPicked ? draft.kind : suggested;
+  const kind: EditorKind = effectiveKind(draft, scorers);
   const encoded = draftToWidget({ ...draft, kind, span: creating ? defaultSpan(kind) : draft.span }, scorers);
   const activeView = encoded.views[active];
 
@@ -154,7 +152,13 @@ function WidgetEditorForm({ initial, creating, takenIds, scorers, scope, onSave 
   if (creating && takenIds.includes(draft.id)) issues.unshift('Another widget has this id.');
 
   const hasScore = draft.views.some(v => v.metrics.some(m => findEntry(m.entry, scorers)?.source === 'scores'));
-  const kinds = EDITOR_KINDS.filter(k => k.value !== 'scores' || hasScore || kind === 'scores');
+  // Switching kinds drops the split, so a kind is judged on the views without it. One that would
+  // still leave a metric out isn't offered: switching never strikes items through.
+  const unsplitViews = draft.views.map(unsplit);
+  const kinds = EDITOR_KINDS.filter(k => k.value !== 'scores' || hasScore || kind === 'scores').map(k => ({
+    ...k,
+    misfit: misfit(k.value === kind ? draft.views : unsplitViews, k.value, scorers),
+  }));
   const hasMetrics = draft.views.some(v => v.metrics.length > 0);
 
   const views = draft.views;
@@ -190,12 +194,19 @@ function WidgetEditorForm({ initial, creating, takenIds, scorers, scope, onSave 
             size="sm"
             value={kind}
             onValueChange={value => {
+              if (value === kind) return;
+              setValue('views', unsplitViews, { shouldDirty: true });
               setValue('kind', value, { shouldDirty: true });
               setValue('kindPicked', true, { shouldDirty: true });
             }}
           >
             {kinds.map(k => (
-              <SegmentedControlItem key={k.value} value={k.value}>
+              <SegmentedControlItem
+                key={k.value}
+                value={k.value}
+                disabled={!!k.misfit && k.value !== kind}
+                title={k.misfit}
+              >
                 {k.label}
               </SegmentedControlItem>
             ))}
@@ -232,14 +243,7 @@ function WidgetEditorForm({ initial, creating, takenIds, scorers, scope, onSave 
               <ScrollArea className="min-h-0 flex-1" mask>
                 <ScrollAreaViewport className="h-full">
                   <div className="p-5">
-                    <ViewEditor
-                      key={active}
-                      index={active}
-                      kind={kind}
-                      pickerKind={draft.kindPicked ? kind : 'line'}
-                      scorers={scorers}
-                      flags={activeView?.flags ?? {}}
-                    />
+                    <ViewEditor key={active} index={active} kind={kind} scorers={scorers} />
                   </div>
                 </ScrollAreaViewport>
               </ScrollArea>
