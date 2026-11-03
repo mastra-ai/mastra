@@ -462,7 +462,7 @@ These routes aren't registered by default. Add them with `KNOWLEDGE_ROUTES` from
 | `GET` | `/api/knowledge/:knowledgeKey/graph` | Get a bounded graph of pages with parent and mention edges and scope grants |
 | `GET` | `/api/knowledge/:knowledgeKey/search` | Search page names, descriptions, bodies and notes |
 | `GET` | `/api/knowledge/:knowledgeKey/activity` | List recent changes, optionally for one scope or page |
-| `GET` | `/api/knowledge/:knowledgeKey/events` | Stream the caller's readable writes as Server-Sent Events |
+| `GET` | `/api/knowledge/:knowledgeKey/events` | Stream the caller's readable writes as Server-Sent Events. See [Knowledge events](#knowledge-events) |
 
 `:knowledgeKey` is the key the instance is registered under in `knowledge: { ... }`.
 
@@ -492,6 +492,24 @@ Without `server.auth` or `studio.auth`, the routes read as the instance owner an
 With an FGA provider, each instance is checked as resource type `knowledge`, by its registered key, with `knowledge:read`. `GET /api/knowledge` lists only the instances the caller can read. With `requireForProtectedRoutes`, `GET /api/knowledge` is refused, because like other list routes it has no FGA metadata. Without an RBAC provider, the `knowledge:read` check is skipped.
 
 The NestJS adapter doesn't serve these routes yet.
+
+### Knowledge events
+
+`GET /api/knowledge/:knowledgeKey/events` sends one event per committed write that the caller can read:
+
+```typescript oxfmt:false
+{
+  kind: 'scope' | 'page' | 'note' | 'pin';
+  op: string;       // such as 'create', 'update', 'delete' or 'merge'
+  pageId?: string;  // left out when the caller can't read the page, including a deleted one
+  scopeId?: string; // left out when the caller can't read the scope
+  at: string;       // ISO timestamp
+}
+```
+
+Writes that touch nothing the caller can read aren't sent. Events carry IDs, not content, so fetch what changed with the other routes. When `pageId` is missing, refresh the scope in `scopeId`.
+
+The server sends a keepalive comment every 25 seconds and closes the stream after five minutes. Reconnect when it closes. The new stream reads the caller's scopes again, so revoked access stops updates. Writes made while disconnected aren't replayed, so refresh what you show after reconnecting.
 
 ## Vectors
 
