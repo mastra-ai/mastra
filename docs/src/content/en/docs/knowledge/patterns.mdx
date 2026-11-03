@@ -68,7 +68,7 @@ A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, beca
 
 Your compliance team owns each account's data-handling rules. Every agent that works on an account, whether it handles sales, support or billing, needs those rules in front of it on every turn, not only when it thinks to search. Only compliance may change them.
 
-Declare the page on the account scope and pin it in config:
+Declare the page on the account scope and pin it in config. Pins reach a run only when the `Knowledge` instance sets `pinnedContext: true` and the agent has Memory, which the pin examples on this page assume:
 
 ```typescript oxfmt:false
 'account:$accountId': {
