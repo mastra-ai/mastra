@@ -17,7 +17,7 @@ describe('healthy durable workers survive API loss (COR-1490)', () => {
     { signal: 'SIGKILL', local: false, thread: true, scenario: 'thread accepts the next message after API SIGKILL' },
     { signal: 'SIGKILL', local: false, thread: false, scenario: 'remote abort reaches workers after API loss' },
     {
-      signal: 'SIGKILL',
+      signal: 'SIGTERM',
       local: false,
       thread: false,
       scenario: 'worker shutdown leaves interrupted deliveries retryable',
@@ -146,6 +146,7 @@ describe('healthy durable workers survive API loss (COR-1490)', () => {
           await waitForLine(aborter, 'abort-requested');
           await waitForLine(worker, 'tool-aborted:operation-3');
           await waitFor(async () => terminal !== undefined, AGENT_LEASE_TTL_MS * 3);
+          expect(terminal?.type).toBe('workflow.end');
           await waitFor(async () => (await workflows!.getRunOwnership({ runId }))?.leaseExpiresAt === null);
           return;
         }
