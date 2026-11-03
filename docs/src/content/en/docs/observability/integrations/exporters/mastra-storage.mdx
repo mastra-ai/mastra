@@ -206,8 +206,8 @@ The MastraStorageExporter includes reliable error handling for production use:
 Events are dropped for these reasons:
 
 - `unsupported-storage`: The storage provider doesn't implement the signal type.
-- `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it.
-- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but found no open span to apply to. A span this exporter started is dropped at once, because its row exists and has already ended. A span another process started is retried up to `maxRetries` times first, so a worker can end a span whose create the API process hasn't written yet. Ended spans don't change.
+- `retry-exhausted`: The exporter retried a batch up to `maxRetries` times and then dropped it, or shut down while a retry was still waiting.
+- `span-not-updatable`: Under `realtime` or `batch-with-updates`, a span update or end reached storage but found no open span to apply to, because ended spans never change. An update for a span this exporter still tracks as open is dropped at once, since its row exists and has already ended. Any other update is retried up to `maxRetries` times with the exporter's backoff between attempts, which lets a worker end a span whose create the API process hasn't written yet.
 
 The following example demonstrates forwarding drop details to a monitoring endpoint:
 

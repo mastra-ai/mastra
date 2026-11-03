@@ -185,7 +185,7 @@ When storage doesn't support a signal or retries are exhausted, `DefaultExporter
 For `batch-with-updates` strategy:
 
 - Tracks which spans have been created
-- Holds updates/ends for spans whose create isn't written yet, and retries them
+- Rejects updates/ends for spans not yet created
 - Logs warnings for out-of-order events
 - Maintains sequence numbers for ordered updates
 
