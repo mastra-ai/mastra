@@ -705,6 +705,9 @@ export function KnowledgePageExplorer({
   }, [selected.data, selectedPageId, lazy.pages]);
   const fetchKeys = linkEnds?.fetchKeys ?? noKeys;
   const fetchedStates = (source.useLinkedPages ?? noLinkedPages)(fetchKeys);
+  const fetchedSignature = fetchKeys
+    .map((key, index) => `${key}=${fetchedStates[index]?.data?.page?.id ?? ''}`)
+    .join('|');
   const fetchedPages = useMemo(() => {
     const byKey = new Map<string, KnowledgePagePayload>();
     fetchKeys.forEach((key, index) => {
@@ -712,8 +715,8 @@ export function KnowledgePageExplorer({
       if (page) byKey.set(key, page);
     });
     return byKey;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- states are new arrays each render; their pages are what matters
-  }, [fetchKeys, ...fetchedStates.map(state => state.data?.page)]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- states are new arrays each render; the signature names which pages arrived
+  }, [fetchedSignature]);
   const focusLinks = useMemo(() => {
     if (!linkEnds) return { edges: [], pages: [], unfetched: { in: 0, out: 0 } };
     const { detail, lookup, mentions, refs, into } = linkEnds;
