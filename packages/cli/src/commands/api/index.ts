@@ -713,6 +713,44 @@ export function registerApiCommand(program: CommanderCommand): void {
     routePlacement: 'origin',
   });
 
+  const factoryIntakeRoute = factory
+    .command('intake-route')
+    .description("Manage a Factory project's intake routes: where new cards land and which wait for a person");
+  addAction(factoryIntakeRoute, 'list', FACTORY_API_ROUTE_CATALOG.intakeRouteList, {
+    description: "List a project's intake routes in order, and what applies when none matches",
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeRoute, 'get', FACTORY_API_ROUTE_CATALOG.intakeRouteGet, {
+    description: 'Get an intake route',
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeRoute, 'create', FACTORY_API_ROUTE_CATALOG.intakeRouteCreate, {
+    description: "Add an intake route at the end of a project's routes",
+    input: 'required',
+    routePlacement: 'origin',
+    examples: [
+      {
+        description: 'Send issues from trusted authors straight to Triage',
+        command: `mastra api factory intake-route create <project-id> '{"name":"Trusted to Triage","when":{"operator":"AND","conditions":[{"field":"author.trusted","operator":"equals","value":true}]},"target":{"boardKey":"work","phaseKey":"triage"}}'`,
+      },
+    ],
+  });
+  addAction(factoryIntakeRoute, 'update', FACTORY_API_ROUTE_CATALOG.intakeRouteUpdate, {
+    description: 'Change fields of an intake route using its expected revision',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeRoute, 'delete', FACTORY_API_ROUTE_CATALOG.intakeRouteDelete, {
+    description: 'Delete an intake route using its expected revision',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+  addAction(factoryIntakeRoute, 'reorder', FACTORY_API_ROUTE_CATALOG.intakeRouteReorder, {
+    description: 'Set the order of every intake route of a project',
+    input: 'required',
+    routePlacement: 'origin',
+  });
+
   addAction(factory, 'metrics', FACTORY_API_ROUTE_CATALOG.metricsGet, {
     description: 'Get Factory project metrics',
     input: 'optional',

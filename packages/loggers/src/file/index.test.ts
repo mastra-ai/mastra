@@ -143,12 +143,11 @@ describe('FileTransport', () => {
     expect((await transportError).message).toMatch(/EISDIR/);
   });
 
-  it('should flush remaining data when stream ends', () => {
+  it('should flush remaining data when stream ends', async () => {
     const endSpy = vi.spyOn(fileLogger.fileStream, 'end');
 
-    fileLogger._flush(() => {
-      expect(endSpy).toHaveBeenCalled();
-    });
+    await new Promise<void>(resolve => fileLogger._flush(resolve));
+    expect(endSpy).toHaveBeenCalled();
   });
 
   describe('listLogs and listLogsByRunId', () => {

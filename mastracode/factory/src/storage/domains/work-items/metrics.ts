@@ -12,7 +12,7 @@
  */
 
 import { isAgentActor } from './base.js';
-import type { WorkItemRow } from './base.js';
+import type { Card } from './base.js';
 
 /** Default window span (days) when the request omits or malforms the range. */
 export const DEFAULT_METRICS_WINDOW = 30;
@@ -50,7 +50,7 @@ function isPipelineStage(stage: string): boolean {
  * those outnumber the Factory's own work by an order of magnitude, so counting
  * them reports the upstream repo's flow as the Factory's.
  */
-function hasFactoryRun(item: WorkItemRow): boolean {
+function hasFactoryRun(item: Card): boolean {
   return Object.keys(item.sessions).length > 0;
 }
 
@@ -154,7 +154,7 @@ function parseTime(iso: string): number {
 }
 
 /** Asserted up front so a corrupt row fails every window, not just the ones that read it. */
-function assertParsableHistory(items: WorkItemRow[]): void {
+function assertParsableHistory(items: Card[]): void {
   for (const item of items) {
     for (const entry of item.stageHistory) {
       parseTime(entry.enteredAt);
@@ -177,7 +177,7 @@ function utcDay(time: number): string {
 }
 
 /** Stages the item was holding at `time`, replayed from its history. */
-function stagesHeldAt(item: WorkItemRow, time: number): Set<string> {
+function stagesHeldAt(item: Card, time: number): Set<string> {
   const held = new Set<string>();
   for (const entry of item.stageHistory) {
     if (parseTime(entry.enteredAt) >= time) continue;
@@ -196,7 +196,7 @@ type Window = { windowStart: number; windowEnd: number };
  * twice. Days before the oldest card are left out rather than gap-filled with
  * zeroes that would drag the daily average down.
  */
-function completions(items: WorkItemRow[], { windowStart, windowEnd }: Window) {
+function completions(items: Card[], { windowStart, windowEnd }: Window) {
   let earliestItem = Infinity;
   for (const item of items) earliestItem = Math.min(earliestItem, item.createdAt.getTime());
   const boardStart = Number.isFinite(earliestItem) ? utcDayStart(earliestItem) : -Infinity;
@@ -220,12 +220,12 @@ function completions(items: WorkItemRow[], { windowStart, windowEnd }: Window) {
 }
 
 /** Cards holding at least one pipeline stage right now — window-independent. */
-function countInFlight(items: WorkItemRow[]): number {
+function countInFlight(items: Card[]): number {
   return items.filter(item => item.stages.some(isPipelineStage)).length;
 }
 
 /** Where the window's cards came from, most common first. */
-function demandMix(items: WorkItemRow[], { windowStart, windowEnd }: Window): FactoryMetrics['sourceMix'] {
+function demandMix(items: Card[], { windowStart, windowEnd }: Window): FactoryMetrics['sourceMix'] {
   const counts = new Map<string, number>();
   for (const item of items) {
     const created = item.createdAt.getTime();
@@ -242,7 +242,7 @@ function demandMix(items: WorkItemRow[], { windowStart, windowEnd }: Window): Fa
  * counted exit; only pipeline stages get rows, since intake and terminal
  * stages have no pass to hand over.
  */
-function agentCoverage(items: WorkItemRow[], { windowStart, windowEnd }: Window): FactoryMetrics['agentCoverage'] {
+function agentCoverage(items: Card[], { windowStart, windowEnd }: Window): FactoryMetrics['agentCoverage'] {
   const byStage = new Map<string, FactoryMetrics['agentCoverage'][number]>();
   for (const item of items) {
     const heldAtWindowEnd = stagesHeldAt(item, windowEnd);
@@ -281,7 +281,7 @@ function agentCoverage(items: WorkItemRow[], { windowStart, windowEnd }: Window)
   return [...byStage.values()];
 }
 
-export function computeFactoryMetrics(boardItems: WorkItemRow[], window: Window): FactoryMetrics {
+export function computeFactoryMetrics(boardItems: Card[], window: Window): FactoryMetrics {
   const items = boardItems.filter(hasFactoryRun);
   assertParsableHistory(items);
 

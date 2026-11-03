@@ -27,6 +27,10 @@ const serveBackgroundTask = () => {
   const requests: string[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
+    http.get(
+      `${TEST_BASE_URL}/api/background-tasks/stream`,
+      () => new HttpResponse('', { headers: { 'Content-Type': 'text/event-stream' } }),
+    ),
     http.get(`${TEST_BASE_URL}/api/background-tasks/:taskId`, ({ params }) => {
       requests.push(String(params.taskId));
       return HttpResponse.json(backgroundTask(status));
