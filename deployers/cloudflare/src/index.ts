@@ -4,31 +4,21 @@ import { builtinModules } from 'node:module';
 import { dirname, join, relative } from 'node:path';
 import { Deployer } from '@mastra/deployer';
 import type { analyzeBundle } from '@mastra/deployer/analyze';
+import { virtualModules } from '@mastra/deployer/build';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
-import virtual from '@rollup/plugin-virtual';
-import type { Plugin } from 'rollup';
+import { esmExternalRequirePlugin } from 'rolldown/plugins';
 import type { Unstable_RawConfig } from 'wrangler'; // Unstable_RawConfig is unstable, and no stable alternative exists. However, `wrangler` is a peerDep, allowing users to use latest properties.
 import { mastraInstanceWrapper } from './plugins/mastra-instance-wrapper';
 import { postgresStoreInstanceChecker } from './plugins/postgres-store-instance-checker';
 
-const nodeBuiltins = new Set(builtinModules);
-
 /**
- * Rollup plugin that marks bare Node.js builtin imports (e.g. `process`, `path`)
- * as external. Cloudflare Workers with `nodejs_compat` provides these at runtime,
- * so they must not be resolved to npm polyfill packages during bundling.
+ * Node.js builtins (e.g. `process`, `path`, `fs/promises`), with or without `node:`. Cloudflare Workers with
+ * `nodejs_compat` provides these at runtime, so they must not be resolved to npm polyfill packages during bundling.
+ * Only exact builtin ids match: polyfill imports such as `process/` or `buffer/` still resolve to npm packages.
  */
-function nodeBuiltinsExternal(): Plugin {
-  return {
-    name: 'node-builtins-external',
-    resolveId(id) {
-      if (nodeBuiltins.has(id)) {
-        return { id, external: true };
-      }
-      return null;
-    },
-  };
-}
+const NODE_BUILTINS_RE = new RegExp(
+  `^(?:${builtinModules.map(name => (name.startsWith('node:') ? name : `(?:node:)?${name}`)).join('|')})$`,
+);
 
 /**
  * Whether a package is in a node_modules directory at or above `fromDirectory`, which is where
@@ -294,6 +284,7 @@ throw new Error('@opentelemetry/api is not installed');
     await this.writeFiles(outputDirectory);
   }
 
+  // The return type is named through Deployer so the emitted declaration doesn't reference bundler types directly.
   protected async getBundlerOptions(
     serverFile: string,
     mastraEntryFile: string,
@@ -302,7 +293,7 @@ throw new Error('@opentelemetry/api is not installed');
     bundlerOptions: BundlerOptions,
     additionalEntries: Record<string, string>,
     toolProjectRoot: string,
-  ) {
+  ): ReturnType<Deployer['getBundlerOptions']> {
     const inputOptions = await super.getBundlerOptions(
       serverFile,
       mastraEntryFile,
@@ -320,9 +311,12 @@ throw new Error('@opentelemetry/api is not installed');
 
     if (Array.isArray(inputOptions.plugins)) {
       inputOptions.plugins = [
-        nodeBuiltinsExternal(),
-        virtual({
-          '#polyfills': `
+        // Not top-level `external`: there, `require()` of a builtin from CommonJS stays a `__require()` call, which
+        // throws in Workers. This plugin turns it into a hoisted import, like @rollup/plugin-commonjs did.
+        esmExternalRequirePlugin({ external: [NODE_BUILTINS_RE] }),
+        virtualModules(
+          {
+            '#polyfills': `
 try {
   if (!process.versions) {
     Object.defineProperty(process, 'versions', { value: {}, configurable: true });
@@ -332,7 +326,9 @@ try {
   }
 } catch {}
       `,
-        }),
+          },
+          { name: 'cloudflare-polyfills' },
+        ),
         ...inputOptions.plugins,
         mastraInstanceWrapper(mastraEntryFile),
       ];

@@ -7,23 +7,30 @@ import type { analyzeBundle } from '@mastra/deployer/analyze';
 import type { BundlerOptions } from '@mastra/deployer/bundler';
 import { DepsService } from '@mastra/deployer/services';
 import { move, writeJson } from 'fs-extra/esm';
+import type { Plugin } from 'rolldown';
 
 /** Bare Node.js built-in module names (excludes internal `_`-prefixed ones). */
 const builtins = new Set(builtinModules.filter(m => !m.startsWith('_')));
 
+/** Bare builtins and their subpaths, e.g. `events`, `fs/promises`. Ids that already have `node:` don't match. */
+const BARE_BUILTIN_RE = new RegExp(
+  `^(?:${[...builtins].filter(m => !m.includes('/') && !m.startsWith('node:')).join('|')})(?:/|$)`,
+);
+
 /**
- * Rollup plugin that adds the `node:` prefix to bare Node.js built-in imports.
+ * Rolldown plugin that adds the `node:` prefix to bare Node.js built-in imports.
  * Deno requires `node:events` instead of `events`, `node:fs` instead of `fs`, etc.
  */
-function nodeBuiltinPrefix() {
+function nodeBuiltinPrefix(): Plugin {
   return {
     name: 'node-builtin-prefix',
-    resolveId(source: string) {
-      const base = source.split('/')[0]!;
-      if (builtins.has(base) && !source.startsWith('node:')) {
+    resolveId: {
+      // `pre` so it wins over Rolldown's built-in esm-external-require plugin, which would keep the bare id.
+      order: 'pre',
+      filter: { id: BARE_BUILTIN_RE },
+      handler(source) {
         return { id: `node:${source}`, external: true };
-      }
-      return null;
+      },
     },
   };
 }
@@ -32,22 +39,26 @@ function nodeBuiltinPrefix() {
 const EDGE_INCOMPATIBLE_MODULES = ['bufferutil', 'utf-8-validate', 'typescript'];
 
 /**
- * Rollup plugin that replaces edge-incompatible modules with an empty stub so
+ * Rolldown plugin that replaces edge-incompatible modules with an empty stub so
  * they do not appear as external imports in the bundle.
  */
-function stubEdgeIncompatibleModules() {
-  const stubs = new Set(EDGE_INCOMPATIBLE_MODULES);
+function stubEdgeIncompatibleModules(): Plugin {
   const STUB_ID = '\0mastra-netlify-edge-stub';
   return {
     name: 'stub-edge-incompatible-modules',
-    resolveId(source: string) {
-      return stubs.has(source) ? STUB_ID : null;
+    resolveId: {
+      // `pre` so it wins over Rolldown's built-in esm-external-require plugin, which would keep them external.
+      order: 'pre',
+      filter: { id: new RegExp(`^(?:${EDGE_INCOMPATIBLE_MODULES.join('|')})$`) },
+      handler() {
+        return STUB_ID;
+      },
     },
-    load(id: string) {
-      if (id === STUB_ID) {
+    load: {
+      filter: { id: new RegExp(`^${STUB_ID}$`) },
+      handler() {
         return 'export default undefined;';
-      }
-      return null;
+      },
     },
   };
 }
@@ -110,6 +121,8 @@ export class NetlifyDeployer extends Deployer {
     await super.prepare(outputDirectory);
   }
 
+  // The return type is named through Deployer so the emitted declaration doesn't import `rolldown`, which is only a
+  // devDependency here.
   protected async getBundlerOptions(
     serverFile: string,
     mastraEntryFile: string,
@@ -118,7 +131,7 @@ export class NetlifyDeployer extends Deployer {
     bundlerOptions: BundlerOptions,
     additionalEntries: Record<string, string>,
     toolProjectRoot: string,
-  ) {
+  ): ReturnType<Deployer['getBundlerOptions']> {
     const inputOptions = await super.getBundlerOptions(
       serverFile,
       mastraEntryFile,
@@ -136,7 +149,7 @@ export class NetlifyDeployer extends Deployer {
       // Run before subpathExternalsResolver so the resolveId hooks win.
       inputOptions.plugins.unshift(nodeBuiltinPrefix(), stubEdgeIncompatibleModules());
 
-      // Drop edge-incompatible modules from Rollup's external list so the stub plugin can redirect them.
+      // Drop edge-incompatible modules from the external list so the stub plugin can redirect them.
       if (Array.isArray(inputOptions.external)) {
         inputOptions.external = inputOptions.external.filter(id => !EDGE_INCOMPATIBLE_MODULES.includes(id as string));
       }

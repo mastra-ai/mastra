@@ -1,34 +1,29 @@
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { basename } from 'node:path/posix';
-import { ErrorCategory, ErrorDomain, MastraBaseError } from '@internal/core/error';
-import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import commonjs from '@rollup/plugin-commonjs';
-import json from '@rollup/plugin-json';
-import nodeResolve from '@rollup/plugin-node-resolve';
-import virtual from '@rollup/plugin-virtual';
 import * as resolve from 'resolve.exports';
-import { rollup } from 'rollup';
-import type { OutputChunk, OutputAsset, Plugin } from 'rollup';
+import { rolldown } from 'rolldown';
+import type { OutputChunk, OutputAsset, Plugin } from 'rolldown';
+import { esmExternalRequirePlugin } from 'rolldown/plugins';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
-import { getPackageRootPath, getPackageInfo } from '../package-info';
-import { esbuild } from '../plugins/esbuild';
-import { esmShim } from '../plugins/esm-shim';
 import { aliasHono } from '../plugins/hono-alias';
+import { missingNativeBuildResolver } from '../plugins/missing-native-build';
 import { moduleAlias } from '../plugins/module-alias';
-import { moduleResolveMap } from '../plugins/module-resolve-map';
 import { nodeGypDetector } from '../plugins/node-gyp-detector';
-import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
-import { subpathExternalsResolver } from '../plugins/subpath-externals-resolver';
+import { subpathExternals } from '../plugins/subpath-externals-resolver';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
-import type { DependencyMetadata } from '../types';
 import {
-  getCompiledDepCachePath,
-  getNodeResolveOptions,
-  isDependencyPartOfPackage,
-  rollupSafeName,
-  slash,
-} from '../utils';
+  EXTERNAL_PROTOCOL_RE,
+  bareExternals,
+  bundlerLogLevel,
+  cjsGlobalsDefine,
+  exactIdsRegex,
+  getPlatformOptions,
+  lodashImports,
+  virtualModules,
+} from '../rolldown';
+import type { DependencyMetadata } from '../types';
+import { getCompiledDepCachePath, isDependencyPartOfPackage, rollupSafeName, slash } from '../utils';
 import type { BundlerPlatform } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
 import type { NormalizedExternals } from './externals';
@@ -131,13 +126,14 @@ export function createVirtualDependencies(
 }
 
 /**
- * Configures and returns Rollup plugins for bundling external dependencies.
- * Sets up virtual modules, TypeScript compilation, CommonJS transformation, and workspace resolution.
+ * Configures the Rolldown plugins for bundling external dependencies.
+ *
+ * TypeScript in workspace packages (and `transpilePackages`) is handled by Rolldown's built-in transform, and
+ * CommonJS/JSON natively, so only resolution concerns are left as plugins.
  */
-async function getInputPlugins(
+function getInputPlugins(
   virtualDependencies: Map<string, { name: string; virtual: string }>,
   {
-    transpilePackages,
     workspaceMap,
     bundlerOptions,
     projectRoot,
@@ -145,8 +141,8 @@ async function getInputPlugins(
     externals,
     platform,
     alias,
+    requiredExternals,
   }: {
-    transpilePackages: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     bundlerOptions: { noBundling: boolean };
     projectRoot: string;
@@ -154,153 +150,83 @@ async function getInputPlugins(
     externals: string[];
     platform: BundlerPlatform;
     alias: Record<string, string>;
+    requiredExternals: Set<string>;
   },
-) {
-  const transpilePackagesMap = new Map<string, string>();
-  for (const pkg of transpilePackages) {
-    const dir = await getPackageRootPath(pkg);
+): Plugin[] {
+  const subpath = subpathExternals(externals, workspaceMap);
+  const virtualDependencyIds = exactIdsRegex(virtualDependencies.keys());
 
-    if (dir) {
-      transpilePackagesMap.set(pkg, slash(dir));
-    } else {
-      transpilePackagesMap.set(pkg, workspaceMap.get(pkg)?.location ?? pkg);
-    }
-  }
-
-  return [
-    virtual(
-      Array.from(virtualDependencies.entries()).reduce<Record<string, string>>((acc, [dep, virtualDep]) => {
-        acc[`#virtual-${dep}`] = virtualDep.virtual;
-        return acc;
-      }, {}),
+  const plugins: (Plugin | null)[] = [
+    virtualModules(
+      Object.fromEntries(
+        Array.from(virtualDependencies.entries()).map(([dep, virtualDep]) => [`#virtual-${dep}`, virtualDep.virtual]),
+      ),
+      { name: 'virtual-dependencies' },
     ),
+    // Built-in: externals that are `require()`d become hoisted imports, like `@rollup/plugin-commonjs` did, so they
+    // show up in `chunk.imports` and can be stubbed during validation.
+    subpath.patterns.length ? (esmExternalRequirePlugin({ external: subpath.patterns }) as unknown as Plugin) : null,
     moduleAlias(alias, path.join(rootDir, 'package.json'), platform),
     tsConfigPaths({ cwd: projectRoot }),
-    protocolExternalResolver(),
-    subpathExternalsResolver(externals, workspaceMap),
-    transpilePackagesMap.size
-      ? esbuild({
-          format: 'esm',
-          include: [
-            // Match files from transpilePackages by their actual directory paths
-            // but exclude any nested node_modules
-            ...[...transpilePackagesMap.values()].map(p => {
-              if (path.isAbsolute(p)) {
-                return new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
-              }
-              return new RegExp(`\/${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
-            }),
-            // Also match workspace packages resolved through node_modules symlinks
-            // (common in pnpm workspaces). Match by package name in node_modules path.
-            ...[...transpilePackagesMap.keys()].map(pkgName => {
-              const escapedPkgName = pkgName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              return new RegExp(`/node_modules/${escapedPkgName}/(?!.*node_modules).*$`);
-            }),
-          ],
-          // Disable the default /node_modules/ exclusion from rollup-plugin-esbuild.
-          // In pnpm workspaces, nodeResolve resolves workspace packages through node_modules
-          // symlinks, so the resolved paths contain "node_modules". Without this, workspace
-          // package .ts files won't be transpiled even if they match the include patterns.
-          exclude: [],
-        })
-      : null,
-    bundlerOptions.noBundling
+    subpath.plugin,
+    bundlerOptions.noBundling && virtualDependencyIds
       ? ({
           name: 'alias-optimized-deps',
-          async resolveId(id, importer, options) {
-            if (!virtualDependencies.has(id)) {
-              return null;
-            }
+          resolveId: {
+            filter: { id: virtualDependencyIds },
+            async handler(id, importer, options) {
+              const info = virtualDependencies.get(id)!;
+              // go from ./node_modules/.cache/index.js to ./pkg
+              const packageRootPath = path.join(rootDir, path.dirname(path.dirname(path.dirname(info.name))));
+              const pkgJsonBuffer = await readFile(path.join(packageRootPath, 'package.json'), 'utf-8');
+              const pkgJson = JSON.parse(pkgJsonBuffer);
+              if (!pkgJson) {
+                return null;
+              }
 
-            const info = virtualDependencies.get(id)!;
-            // go from ./node_modules/.cache/index.js to ./pkg
-            const packageRootPath = path.join(rootDir, path.dirname(path.dirname(path.dirname(info.name))));
-            const pkgJsonBuffer = await readFile(path.join(packageRootPath, 'package.json'), 'utf-8');
-            const pkgJson = JSON.parse(pkgJsonBuffer);
-            if (!pkgJson) {
-              return null;
-            }
+              const pkgName = pkgJson.name || '';
+              let resolvedPath: string | undefined = resolve.exports(pkgJson, id.replace(pkgName, '.'))?.[0];
+              if (!resolvedPath) {
+                resolvedPath = pkgJson!.main ?? 'index.js';
+              }
 
-            const pkgName = pkgJson.name || '';
-            let resolvedPath: string | undefined = resolve.exports(pkgJson, id.replace(pkgName, '.'))?.[0];
-            if (!resolvedPath) {
-              resolvedPath = pkgJson!.main ?? 'index.js';
-            }
-
-            const resolved = await this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, options);
-            return resolved;
+              return this.resolve(path.posix.join(packageRootPath, resolvedPath!), importer, {
+                ...options,
+                skipSelf: true,
+              });
+            },
           },
         } satisfies Plugin)
       : null,
-    optimizeLodashImports({
-      include: '**/*.{js,ts,mjs,cjs}',
-    }),
-    commonjs({
-      strictRequires: 'strict',
-      transformMixedEsModules: true,
-      ignoreTryCatch: false,
-    }),
+    lodashImports(),
+    // hono is imported from deployer, so it falls back to resolving from here
+    aliasHono({ preferProject: !bundlerOptions.noBundling }),
+    // Without bundling, node_modules stay external (Rollup had no resolver in this mode).
     bundlerOptions.noBundling
-      ? null
-      : nodeResolve({
-          ...getNodeResolveOptions(platform),
-          rootDir: projectRoot,
-          modulePaths: [path.join(rootDir, 'node_modules')],
-        }),
-    bundlerOptions.noBundling ? esmShim() : null,
-    // hono is imported from deployer, so we need to resolve from here instead of the project root
-    aliasHono(),
-    json(),
+      ? bareExternals({
+          onExternal: (id, kind) => {
+            // `require()` of an external stays a lazy `createRequire` call, which `chunk.imports` doesn't list.
+            if (kind === 'require-call') {
+              requiredExternals.add(id);
+            }
+          },
+        })
+      : null,
     nodeGypDetector(),
-    moduleResolveMap(externals, rootDir),
-    {
-      name: 'not-found-resolver',
-      resolveId: {
-        order: 'post',
-        async handler(id, importer) {
-          if (!importer) {
-            return null;
-          }
+    missingNativeBuildResolver(),
+  ];
 
-          if (!id.endsWith('.node')) {
-            return null;
-          }
-
-          const pkgInfo = await getPackageInfo(importer);
-          const packageName = pkgInfo?.packageJson?.name || id;
-          throw new MastraBaseError({
-            id: 'DEPLOYER_BUNDLE_EXTERNALS_MISSING_NATIVE_BUILD',
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-            details: {
-              importFile: importer,
-              packageName,
-            },
-            text: `We found a possible binary dependency in your bundle. ${id} was not found when imported at ${importer}.
-
-Please consider adding \`${packageName}\` to your externals, or updating this import to not end with ".node".
-
-export const mastra = new Mastra({
-  bundler: {
-    externals: ["${packageName}"],
-  }
-})`,
-          });
-        },
-      },
-    } satisfies Plugin,
-  ].filter(Boolean);
+  return plugins.filter(plugin => plugin !== null);
 }
 
 /**
- * Executes the Rollup build process for virtual dependencies using configured plugins.
+ * Executes the Rolldown build for virtual dependencies using configured plugins.
  * Bundles all virtual dependency modules into optimized ESM files with proper external handling.
  */
 async function buildExternalDependencies(
   virtualDependencies: Map<string, VirtualDependency>,
   {
     externals,
-    packagesToTranspile,
     workspaceMap,
     projectRoot,
     rootDir,
@@ -308,9 +234,9 @@ async function buildExternalDependencies(
     bundlerOptions,
     platform,
     alias,
+    requiredExternals,
   }: {
     externals: string[];
-    packagesToTranspile: Set<string>;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     projectRoot: string;
     rootDir: string;
@@ -321,41 +247,44 @@ async function buildExternalDependencies(
     };
     platform: BundlerPlatform;
     alias: Record<string, string>;
+    requiredExternals: Set<string>;
   },
 ) {
   /**
-   * If there are no virtual dependencies to bundle, return an empty array to avoid Rollup errors.
+   * If there are no virtual dependencies to bundle, return an empty array to avoid Rolldown errors.
    */
   if (virtualDependencies.size === 0) {
     return [] as unknown as [OutputChunk, ...(OutputAsset | OutputChunk)[]];
   }
 
   const noBundling = bundlerOptions.isDev || bundlerOptions.externalsPreset;
+  const aliasSources = new Set(Object.keys(alias));
 
-  const plugins = await getInputPlugins(virtualDependencies, {
-    transpilePackages: packagesToTranspile,
+  const plugins = getInputPlugins(virtualDependencies, {
     workspaceMap,
     bundlerOptions: {
       noBundling,
     },
     projectRoot,
     rootDir,
-    externals,
+    externals: externals.filter(external => !aliasSources.has(external)),
     platform,
     alias,
+    requiredExternals,
   });
 
-  const aliasSources = new Set(Object.keys(alias));
-  const rollupExternals = externals.filter(external => !aliasSources.has(external));
-
-  const bundler = await rollup({
-    logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
+  const bundler = await rolldown({
+    logLevel: bundlerLogLevel(),
     input: Array.from(virtualDependencies.entries()).reduce<Record<string, string>>((acc, [dep, virtualDep]) => {
       acc[virtualDep.name] = `#virtual-${dep}`;
       return acc;
     }, {}),
-    external: rollupExternals,
-    treeshake: noBundling ? false : 'safest',
+    cwd: projectRoot,
+    ...getPlatformOptions(platform, { modules: [path.join(rootDir, 'node_modules')] }),
+    // Without bundling these files are loaded as-is at runtime, so CommonJS globals need the ESM shim here.
+    transform: { target: 'node20', define: cjsGlobalsDefine(noBundling, platform) },
+    external: [EXTERNAL_PROTOCOL_RE],
+    treeshake: !noBundling,
     plugins,
   });
 
@@ -401,7 +330,6 @@ async function buildExternalDependencies(
       return `${outputDirRelative}/[name].mjs`;
     },
     assetFileNames: `${outputDirRelative}/[name][extname]`,
-    hoistTransitiveImports: false,
   });
 
   await bundler.close();
@@ -479,10 +407,8 @@ export async function bundleExternals(
     bundlerOptions,
     platform = 'node',
   } = options;
-  const { externalsPreset, mergedExternals, transpilePackages = [], isDev = false, alias = {} } = bundlerOptions;
-
-  const workspacePackagesNames = Array.from(workspaceMap.keys());
-  const packagesToTranspile = new Set([...transpilePackages, ...workspacePackagesNames]);
+  // `transpilePackages` needs no handling anymore: Rolldown transpiles TypeScript in every module.
+  const { externalsPreset, mergedExternals, isDev = false, alias = {} } = bundlerOptions;
 
   /**
    * When externals: true, we need to extract non-workspace deps from depsToOptimize
@@ -510,9 +436,10 @@ export async function bundleExternals(
     },
   });
 
+  const requiredExternals = new Set<string>();
   const output = await buildExternalDependencies(optimizedDependencyEntries, {
     externals: mergedExternals,
-    packagesToTranspile,
+    requiredExternals,
     workspaceMap,
     projectRoot,
     rootDir: workspaceRoot || projectRoot,
@@ -545,13 +472,10 @@ export async function bundleExternals(
           moduleResolveMap.set(fullPath, innerMap);
         }
 
-        if (importer.moduleIds.length) {
-          innerMap.set(
-            external,
-            importer.moduleIds[importer.moduleIds.length - 1]?.startsWith('\x00virtual:#virtual')
-              ? importer.moduleIds[importer.moduleIds.length - 2]!
-              : importer.moduleIds[importer.moduleIds.length - 1]!,
-          );
+        // Skip virtual ids (`\0virtual:#virtual-*`, `\0rolldown/runtime.js`) and built-in helper modules.
+        const importerModuleId = importer.moduleIds.findLast(id => path.isAbsolute(id));
+        if (importerModuleId) {
+          innerMap.set(external, importerModuleId);
         }
       }
     }
@@ -582,5 +506,5 @@ export async function bundleExternals(
     usedExternals[syntheticPath] = externalsObj;
   }
 
-  return { output, fileNameToDependencyMap, usedExternals };
+  return { output, fileNameToDependencyMap, usedExternals, requiredExternals };
 }

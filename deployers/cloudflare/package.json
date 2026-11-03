@@ -44,10 +44,8 @@
   "dependencies": {
     "@babel/core": "^8.0.9",
     "@mastra/deployer": "workspace:^",
-    "@rollup/plugin-virtual": "3.0.2",
     "cloudflare": "^5.2.0",
-    "rollup": "^4.65.0",
-    "rollup-plugin-esbuild": "^6.2.1"
+    "rolldown": "^1.2.16"
   },
   "devDependencies": {
     "@babel/types": "^8.0.8",

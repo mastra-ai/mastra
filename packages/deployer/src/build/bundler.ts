@@ -1,33 +1,48 @@
+import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { optimizeLodashImports } from '@optimize-lodash/rollup-plugin';
-import commonjs from '@rollup/plugin-commonjs';
-import json from '@rollup/plugin-json';
-import nodeResolve from '@rollup/plugin-node-resolve';
-import { rollup } from 'rollup';
-import type { InputOptions, OutputOptions, Plugin } from 'rollup';
-import { minify as esbuildMinify } from 'rollup-plugin-esbuild';
+import { rolldown } from 'rolldown';
+import type { InputOptions, OutputOptions, Plugin, RolldownLog } from 'rolldown';
+import { esmExternalRequirePlugin } from 'rolldown/plugins';
 import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
-import { esbuild } from './plugins/esbuild';
-import { esmShim } from './plugins/esm-shim';
+import { aliasHono } from './plugins/hono-alias';
 import { localStorageDetector } from './plugins/local-storage-detector';
 import { moduleAlias } from './plugins/module-alias';
-import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
-import { protocolExternalResolver } from './plugins/protocol-external-resolver';
+import { nodeModulesExternals, UNRESOLVED_WORKSPACE_IMPORT } from './plugins/node-modules-extension-resolver';
 import { removeDeployer } from './plugins/remove-deployer';
-import { subpathExternalsResolver } from './plugins/subpath-externals-resolver';
+import { subpathExternals } from './plugins/subpath-externals-resolver';
 import { tsConfigPaths } from './plugins/tsconfig-paths';
+import {
+  EXTERNAL_PROTOCOL_RE,
+  TREESHAKE_SMALLEST,
+  bundlerLogLevel,
+  cjsGlobalsDefine,
+  exactIdsRegex,
+  getPlatformOptions,
+  lodashImports,
+  scopedDefine,
+} from './rolldown';
 import type { ExternalDependencyInfo } from './types';
-import { getPackageName, getNodeResolveOptions, slash } from './utils';
+import { getPackageName, slash } from './utils';
 import type { BundlerPlatform } from './utils';
 
-export function mastraInternalAliasPlugin(entryFile: string): Plugin {
-  const normalizedEntryFile = slash(entryFile);
+function realpathOrSelf(path: string) {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+export function mastraInternalAliasPlugin(entryFile: string, { preserveSymlinks = false } = {}): Plugin {
+  // Must match the id Rolldown gives the file when it's imported by path, or the entry would be bundled twice.
+  const normalizedEntryFile = slash(preserveSymlinks ? entryFile : realpathOrSelf(entryFile));
 
   return {
     name: 'mastra-internal-alias',
     resolveId: {
       order: 'pre',
+      filter: { id: /^(?:#server|#mastra|@mastra\/server\/)/ },
       handler(id) {
         if (id === '#server') {
           return slash(fileURLToPath(import.meta.resolve('@mastra/deployer/server')));
@@ -48,13 +63,24 @@ export function mastraInternalAliasPlugin(entryFile: string): Plugin {
 export function mastraToolsAliasPlugin(): Plugin {
   return {
     name: 'tools-rewriter',
-    resolveId(id: string) {
-      if (id === '#tools') {
+    resolveId: {
+      filter: { id: /^#tools$/ },
+      handler() {
         return {
           id: './tools.mjs',
           external: true,
         };
-      }
+      },
+    },
+  };
+}
+
+/** Makes Rolldown minify whole chunks (the replacement for `rollup-plugin-esbuild`'s `minify` at `renderChunk`). */
+function minifyOutput(sourcemap: boolean): Plugin {
+  return {
+    name: 'mastra-minify',
+    outputOptions(options) {
+      return { ...options, minify: true, sourcemap: options.sourcemap ?? sourcemap };
     },
   };
 }
@@ -91,98 +117,69 @@ export async function getInputOptions(
     alias?: Record<string, string>;
   },
 ): Promise<InputOptions> {
-  const nodeResolvePlugin = nodeResolve({
-    ...getNodeResolveOptions(platform),
-    rootDir: projectRoot,
-    modulePaths: workspaceRoot ? [join(workspaceRoot, 'node_modules')] : [],
-  });
-
-  const externalsCopy = new Set<string>(analyzedBundleInfo.externalDependencies.keys());
-  const externals = externalsPreset ? explicitExternals : Array.from(externalsCopy);
+  const externals = externalsPreset ? explicitExternals : Array.from(analyzedBundleInfo.externalDependencies.keys());
   const aliasSources = new Set(Object.keys(alias));
-  const rollupExternals = externals.filter(external => !aliasSources.has(external));
+  const subpath = subpathExternals(
+    externals.filter(external => !aliasSources.has(external)),
+    analyzedBundleInfo.workspaceMap,
+  );
+  // During `mastra dev` (and with `externals: true`) node_modules stay external.
+  const keepNodeModulesExternal = isDev || externalsPreset;
+  const optimizedDeps = exactIdsRegex(analyzedBundleInfo.dependencies.keys());
+
+  const plugins: (Plugin | null)[] = [
+    // Built-in: externals that are `require()`d become hoisted imports, like `@rollup/plugin-commonjs` did.
+    subpath.patterns.length ? (esmExternalRequirePlugin({ external: subpath.patterns }) as unknown as Plugin) : null,
+    moduleAlias(alias, entryFile, platform),
+    subpath.plugin,
+    optimizedDeps
+      ? ({
+          name: 'alias-optimized-deps',
+          resolveId: {
+            filter: { id: optimizedDeps },
+            handler(id: string) {
+              const filename = analyzedBundleInfo.dependencies.get(id)!;
+              const absolutePath = join(workspaceRoot || projectRoot, filename);
+
+              // During `mastra dev` we want to keep deps as external
+              if (isDev) {
+                return {
+                  id: process.platform === 'win32' ? pathToFileURL(absolutePath).href : absolutePath,
+                  external: true,
+                };
+              }
+
+              return absolutePath;
+            },
+          },
+        } satisfies Plugin)
+      : null,
+    mastraInternalAliasPlugin(entryFile),
+    tsConfigPaths(isDev ? { localResolve: true } : { cwd: projectRoot }),
+    mastraToolsAliasPlugin(),
+    // hono is imported by the deployer's server, so it is bundled from here during `mastra dev`.
+    isDev ? aliasHono() : null,
+    scopedDefine(env),
+    lodashImports(),
+    keepNodeModulesExternal ? nodeModulesExternals({ platform, workspaceMap: analyzedBundleInfo.workspaceMap }) : null,
+    localStorageDetector(realpathOrSelf(workspaceRoot || projectRoot)),
+    removeDeployer(entryFile, { sourcemap }),
+    minify ? minifyOutput(sourcemap) : null,
+  ];
 
   return {
-    logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
-    treeshake: 'smallest',
-    preserveSymlinks: true,
-    external: externalsPreset ? [] : rollupExternals,
-    plugins: [
-      protocolExternalResolver(),
-      moduleAlias(alias, entryFile, platform),
-      subpathExternalsResolver(externals, analyzedBundleInfo.workspaceMap),
-      {
-        name: 'alias-optimized-deps',
-        resolveId(id: string) {
-          if (!analyzedBundleInfo.dependencies.has(id)) {
-            return null;
-          }
-
-          const filename = analyzedBundleInfo.dependencies.get(id)!;
-          const absolutePath = join(workspaceRoot || projectRoot, filename);
-
-          // During `mastra dev` we want to keep deps as external
-          if (isDev) {
-            return {
-              id: process.platform === 'win32' ? pathToFileURL(absolutePath).href : absolutePath,
-              external: true,
-            };
-          }
-
-          // For production builds return the absolute path as-is so Rollup can handle itself
-          return {
-            id: absolutePath,
-            external: false,
-          };
-        },
-      } satisfies Plugin,
-      mastraInternalAliasPlugin(entryFile),
-      tsConfigPaths({ cwd: projectRoot }),
-      mastraToolsAliasPlugin(),
-      esbuild({
-        platform,
-        define: env,
-      }),
-      optimizeLodashImports({
-        include: '**/*.{js,ts,mjs,cjs}',
-      }),
-      commonjs({
-        extensions: ['.js', '.ts', '.cjs'],
-        transformMixedEsModules: true,
-        esmExternals(id) {
-          return externals.includes(id);
-        },
-      }),
-      enableEsmShim ? esmShim() : undefined,
-      externalsPreset ? nodeModulesExtensionResolver() : nodeResolvePlugin,
-      // for debugging
-      // {
-      //   name: 'logger',
-      //   //@ts-expect-error
-      //   resolveId(id, ...args) {
-      //     console.log({ id, args });
-      //   },
-      //   // @ts-expect-error
-      // transform(code, id) {
-      //   if (code.includes('class Duplexify ')) {
-      //     console.log({ duplex: id });
-      //   }
-      // },
-      // },
-      json(),
-      localStorageDetector(workspaceRoot || projectRoot),
-      removeDeployer(entryFile, { sourcemap }),
-      // treeshake unused imports
-      esbuild({
-        include: entryFile,
-        platform,
-      }),
-      // Runs at renderChunk, so the emitted chunks are minified as a whole rather
-      // than module by module. Last in the list so nothing transforms after it.
-      // `sourceMap` follows the build's own setting: the plugin defaults it to true,
-      // which would build a map Rollup then discards on a non-sourcemap build.
-      minify ? esbuildMinify({ target: 'node20', sourceMap: sourcemap }) : null,
-    ].filter(Boolean),
+    logLevel: bundlerLogLevel(),
+    treeshake: TREESHAKE_SMALLEST,
+    cwd: projectRoot,
+    ...getPlatformOptions(platform, {
+      modules: workspaceRoot ? [join(workspaceRoot, 'node_modules')] : [],
+    }),
+    transform: {
+      target: 'node20',
+      define: cjsGlobalsDefine(enableEsmShim, platform),
+    },
+    external: [EXTERNAL_PROTOCOL_RE],
+    plugins: plugins.filter(plugin => plugin !== null),
   } satisfies InputOptions;
 }
 
@@ -190,7 +187,7 @@ export async function createBundler(
   inputOptions: InputOptions,
   outputOptions: Partial<OutputOptions> & { dir: string },
 ) {
-  const bundler = await rollup(inputOptions);
+  const bundler = await rolldown(inputOptions);
 
   return {
     write: () => {
@@ -208,19 +205,20 @@ export async function createBundler(
 }
 
 /**
- * Checks whether a Rollup warning is an UNRESOLVED_IMPORT for a workspace package.
+ * Checks whether a bundler log reports an unresolved import of a workspace package.
  * Returns the original import specifier if it's a workspace package that leaked
  * through, or undefined if it's not.
  */
 export function getUnresolvedWorkspaceImport(
-  warning: { code: string; source?: string; id?: string },
+  log: Pick<RolldownLog, 'code' | 'exporter' | 'pluginCode'>,
   workspaceMap: Map<string, WorkspacePackageInfo>,
 ): string | undefined {
-  if (warning.code !== 'UNRESOLVED_IMPORT') {
+  // Rolldown reports the import specifier as `exporter` (`id` is the importer).
+  if (log.code !== 'UNRESOLVED_IMPORT' && log.pluginCode !== UNRESOLVED_WORKSPACE_IMPORT) {
     return undefined;
   }
 
-  const src = warning.source ?? warning.id ?? '';
+  const src = log.exporter ?? '';
   if (!src) {
     return undefined;
   }

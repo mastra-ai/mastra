@@ -1,14 +1,11 @@
 import { dirname, posix } from 'node:path';
 import { noopLogger } from '@internal/core/logger';
 import * as pkg from 'empathic/package';
-import type { InputOptions, OutputOptions, Plugin } from 'rollup';
-import { watch } from 'rollup';
+import { watch } from 'rolldown';
+import type { InputOptions, OutputOptions, RolldownWatcher } from 'rolldown';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
 import { analyzeBundle } from './analyze';
 import { getInputOptions as getBundlerInputOptions } from './bundler';
-import { aliasHono } from './plugins/hono-alias';
-import { nodeModulesExtensionResolver } from './plugins/node-modules-extension-resolver';
-import { tsConfigPaths } from './plugins/tsconfig-paths';
 import { workspaceDepsWatcher } from './plugins/workspace-deps-watcher';
 import type { BundlerOptions } from './types';
 import { getPackageName, slash } from './utils';
@@ -71,32 +68,8 @@ export async function getInputOptions(
     { sourcemap, isDev: true, workspaceRoot, projectRoot, externalsPreset: bundlerOptions?.externals === true },
   );
 
+  // `isDev` already keeps node_modules external, bundles hono from the deployer and uses local tsconfig resolution.
   if (Array.isArray(inputOptions.plugins)) {
-    // filter out node-resolve plugin so all node_modules are external
-    // and tsconfig-paths plugin as we are injection a custom one
-    const plugins = [] as Plugin[];
-    inputOptions.plugins.forEach(plugin => {
-      if ((plugin as Plugin | undefined)?.name === 'node-resolve') {
-        return;
-      }
-
-      if ((plugin as Plugin | undefined)?.name === 'tsconfig-paths') {
-        plugins.push(
-          tsConfigPaths({
-            localResolve: true,
-          }),
-        );
-        return;
-      }
-
-      plugins.push(plugin as Plugin);
-    });
-
-    inputOptions.plugins = plugins;
-    inputOptions.plugins.push(aliasHono());
-    // fixes imports like lodash/fp/get
-    inputOptions.plugins.push(nodeModulesExtensionResolver());
-
     const depsToOptimize = analyzeEntryResult.depsToOptimize;
     const resolvedWorkspaceRoot = analyzeEntryResult.workspaceRoot || workspaceRoot;
     if (depsToOptimize?.size && resolvedWorkspaceRoot) {
@@ -117,8 +90,11 @@ export async function getInputOptions(
   return inputOptions;
 }
 
-export async function createWatcher(inputOptions: InputOptions, outputOptions: OutputOptions) {
-  const watcher = await watch({
+export async function createWatcher(
+  inputOptions: InputOptions,
+  outputOptions: OutputOptions,
+): Promise<RolldownWatcher> {
+  const watcher = watch({
     ...inputOptions,
     output: {
       ...outputOptions,
@@ -126,6 +102,14 @@ export async function createWatcher(inputOptions: InputOptions, outputOptions: O
       entryFileNames: '[name].mjs',
       chunkFileNames: '[name].mjs',
     },
+  });
+
+  // Rolldown keeps each build alive until its result is closed (`closeBundle` runs then). Registered first so it runs
+  // before listeners added by callers.
+  watcher.on('event', async event => {
+    if (event.code === 'BUNDLE_END' || event.code === 'ERROR') {
+      await event.result?.close();
+    }
   });
 
   return watcher;

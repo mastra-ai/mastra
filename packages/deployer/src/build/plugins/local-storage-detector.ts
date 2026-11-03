@@ -1,4 +1,6 @@
-import type { Plugin } from 'rollup';
+import type { Plugin } from 'rolldown';
+import { parseSync } from 'rolldown/utils';
+import type { ParserOptions } from 'rolldown/utils';
 
 /**
  * Connection-string-shaped patterns that resolve to the build host and will
@@ -78,6 +80,36 @@ function collectEnvRefs(code: string): Set<string> {
   return refs;
 }
 
+function collectLocalHostMatches(code: string): ModuleMatch[] {
+  const matches: ModuleMatch[] = [];
+  for (const { pattern, hint } of LOCAL_HOST_PATTERNS) {
+    const re = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
+    for (const m of code.matchAll(re)) {
+      matches.push({ value: m[0], hint });
+    }
+  }
+  return matches;
+}
+
+function parserLang(id: string): NonNullable<ParserOptions['lang']> {
+  if (/\.[cm]?ts$/.test(id)) return 'ts';
+  if (id.endsWith('.tsx')) return 'tsx';
+  if (id.endsWith('.jsx')) return 'jsx';
+  return 'js';
+}
+
+/** Blanks out comments so regexes only see code, keeping offsets intact. */
+function stripComments(code: string, comments: Array<{ start: number; end: number }>): string {
+  if (comments.length === 0) return code;
+  let result = '';
+  let last = 0;
+  for (const { start, end } of comments) {
+    result += code.slice(last, start) + ' '.repeat(end - start);
+    last = end;
+  }
+  return result + code.slice(last);
+}
+
 /* ------------------------------------------------------------------ */
 /*  AST guard analysis                                                */
 /* ------------------------------------------------------------------ */
@@ -91,9 +123,34 @@ function isAstNode(v: unknown): v is AstNode {
   return typeof v === 'object' && v !== null && typeof (v as AstNode).type === 'string';
 }
 
+// Type-only subtrees: their literals never exist at runtime, so they must not count as unguarded occurrences.
+const TYPE_ONLY_KEYS = new Set([
+  'typeAnnotation',
+  'typeParameters',
+  'typeArguments',
+  'returnType',
+  'superTypeArguments',
+]);
+
+const TS_EXPRESSION_WRAPPERS = new Set([
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TSTypeAssertion',
+]);
+
+/** `x as T`, `x satisfies T`, `x!` and `<T>x` evaluate to `x`. */
+function unwrapTs(node: AstNode | undefined): AstNode | undefined {
+  while (node && TS_EXPRESSION_WRAPPERS.has(node.type)) {
+    node = node.expression as AstNode | undefined;
+  }
+  return node;
+}
+
 function walkAst(node: AstNode, visit: (node: AstNode) => void): void {
   visit(node);
-  for (const value of Object.values(node)) {
+  for (const [key, value] of Object.entries(node)) {
+    if (TYPE_ONLY_KEYS.has(key)) continue;
     if (Array.isArray(value)) {
       for (const item of value) {
         if (isAstNode(item)) walkAst(item, visit);
@@ -122,7 +179,10 @@ type WorkersConfig = {
   custom: string[];
 };
 
-function staticJsonValue(node: AstNode): JsonValue | undefined {
+function staticJsonValue(input: AstNode): JsonValue | undefined {
+  const node = unwrapTs(input);
+  if (!node) return undefined;
+
   if (node.type === 'Literal') {
     const value = node.value;
     if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
@@ -181,14 +241,16 @@ function staticObjectValue(node: AstNode | undefined): Record<string, JsonValue>
   return typeof value === 'object' && value !== null && !Array.isArray(value) ? value : {};
 }
 
-function isConfigured(node: AstNode | undefined): boolean {
+function isConfigured(input: AstNode | undefined): boolean {
+  const node = unwrapTs(input);
   if (!node) return false;
   if (node.type === 'Literal') return node.value !== null && node.value !== false;
   return node.type !== 'Identifier' || node.name !== 'undefined';
 }
 
-function unwrapAwait(node: AstNode | undefined): AstNode | undefined {
-  return node?.type === 'AwaitExpression' ? (node.argument as AstNode | undefined) : node;
+function unwrapAwait(input: AstNode | undefined): AstNode | undefined {
+  const node = unwrapTs(input);
+  return node?.type === 'AwaitExpression' ? unwrapTs(node.argument as AstNode | undefined) : node;
 }
 
 function findPreparedConfigSources(ast: AstNode): Map<string, AstNode> {
@@ -198,9 +260,9 @@ function findPreparedConfigSources(ast: AstNode): Map<string, AstNode> {
   walkAst(ast, node => {
     if (node.type !== 'VariableDeclarator') return;
     const id = node.id as AstNode | undefined;
-    const init = node.init as AstNode | undefined;
+    const init = unwrapTs(node.init as AstNode | undefined);
     const callee = init?.type === 'NewExpression' ? (init.callee as AstNode | undefined) : undefined;
-    const config = (init?.arguments as AstNode[] | undefined)?.[0];
+    const config = unwrapTs((init?.arguments as AstNode[] | undefined)?.[0]);
     if (
       id?.type === 'Identifier' &&
       callee?.type === 'Identifier' &&
@@ -216,7 +278,7 @@ function findPreparedConfigSources(ast: AstNode): Map<string, AstNode> {
     const id = node.id as AstNode | undefined;
     const init = unwrapAwait(node.init as AstNode | undefined);
     const callee = init?.type === 'CallExpression' ? (init.callee as AstNode | undefined) : undefined;
-    const object = callee?.type === 'MemberExpression' ? (callee.object as AstNode | undefined) : undefined;
+    const object = callee?.type === 'MemberExpression' ? unwrapTs(callee.object as AstNode | undefined) : undefined;
     const property = callee?.type === 'MemberExpression' ? (callee.property as AstNode | undefined) : undefined;
     const isPrepareCall =
       (property?.type === 'Identifier' && property.name === 'prepare') ||
@@ -247,7 +309,7 @@ function resolvedObjectProperty(
     }
     if (property.type !== 'SpreadElement') continue;
 
-    const argument = property.argument as AstNode | undefined;
+    const argument = unwrapTs(property.argument as AstNode | undefined);
     const spreadConfig = argument?.type === 'Identifier' ? preparedConfigs.get(argument.name as string) : undefined;
     if (!spreadConfig) continue;
     const spreadValue = resolvedObjectProperty(spreadConfig, name, preparedConfigs, seen);
@@ -291,7 +353,8 @@ function findStaticCustomWorkerNames(ast: AstNode, workers: AstNode | undefined)
 
   const names = new Set<string>();
   const seen = new Set<AstNode>();
-  const visit = (node: AstNode | undefined): void => {
+  const visit = (input: AstNode | undefined): void => {
+    const node = unwrapTs(input);
     if (!node || seen.has(node)) return;
     seen.add(node);
 
@@ -333,12 +396,12 @@ function findWorkersConfig(ast: AstNode): WorkersConfig | undefined {
     if (workersConfig || node.type !== 'NewExpression') return;
     const callee = node.callee as AstNode | undefined;
     if (callee?.type !== 'Identifier' || callee.name !== 'Mastra') return;
-    const config = (node.arguments as AstNode[] | undefined)?.[0];
+    const config = unwrapTs((node.arguments as AstNode[] | undefined)?.[0]);
     if (config?.type !== 'ObjectExpression') return;
 
     const storage = resolvedObjectProperty(config, 'storage', preparedConfigs);
     const pubsub = resolvedObjectProperty(config, 'pubsub', preparedConfigs);
-    const workers = resolvedObjectProperty(config, 'workers', preparedConfigs);
+    const workers = unwrapTs(resolvedObjectProperty(config, 'workers', preparedConfigs));
     if (!isConfigured(storage) || !isConfigured(pubsub) || (workers?.type === 'Literal' && workers.value === false)) {
       return;
     }
@@ -363,7 +426,7 @@ function findFirstEnvRef(node: AstNode): string | undefined {
   walkAst(node, n => {
     if (found !== undefined) return;
     if (n.type !== 'MemberExpression') return;
-    const object = n.object as AstNode | undefined;
+    const object = unwrapTs(n.object as AstNode | undefined);
     if (
       !object ||
       object.type !== 'MemberExpression' ||
@@ -402,7 +465,7 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
       return;
     }
     if (node.type === 'LogicalExpression' && (node.operator === '||' || node.operator === '??')) {
-      const right = node.right as AstNode | undefined;
+      const right = unwrapTs(node.right as AstNode | undefined);
       if (right?.type === 'Literal' && typeof right.value === 'string') {
         const envName = findFirstEnvRef(node.left as AstNode);
         if (envName) guardedLiterals.set(right, envName);
@@ -424,7 +487,7 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
 }
 
 /**
- * Rollup plugin that detects host-local storage URLs (e.g. `file:./mastra.db`,
+ * Rolldown plugin that detects host-local storage URLs (e.g. `file:./mastra.db`,
  * `postgres://localhost`) in **user source modules** during bundling, and
  * collects the env vars user code reads via `process.env.X`.
  *
@@ -433,10 +496,9 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
  * (like Agent Builder prompt templates or JSDoc examples in `@mastra/core`)
  * is naturally excluded.  When `rootDir` is given, modules outside it are
  * also excluded — symlinked dependencies (pnpm `link:`/`file:`) resolve to
- * real paths that never contain `node_modules`.  Tree-shaken modules are
- * excluded via
- * `generateBundle` — only modules that actually contribute rendered code to
- * the output are reported.
+ * real paths that never contain `node_modules`.  The scan runs in
+ * `generateBundle`, so only modules that actually contribute rendered code to
+ * the output are inspected.
  *
  * When a detected literal is the fallback arm of a `process.env.X || literal`
  * expression, `guardedBy: "X"` is recorded so the CLI preflight can apply
@@ -449,10 +511,54 @@ function findGuardedValues(ast: AstNode, values: Set<string>): Map<string, strin
  *   older globally-installed CLI paired with a newer project-local deployer
  *   doesn't lose the LOCAL_STORAGE_PATH check.
  */
+interface ModuleAnalysis {
+  matches: ModuleMatch[];
+  envRefs: Set<string>;
+  workersConfig?: WorkersConfig;
+}
+
+/**
+ * `code` is the module source after all JS transform hooks but before oxc strips
+ * TypeScript, so it can contain type syntax and comments. Rollup ran this after
+ * esbuild had already dropped comments; masking them keeps commented-out
+ * examples (e.g. template hints like `change to file:../mastra.db`) from being
+ * reported.
+ */
+function analyzeModule(id: string, code: string): ModuleAnalysis {
+  let matches = collectLocalHostMatches(code);
+  let envRefs = collectEnvRefs(code);
+
+  // Best-effort structural pass: only parse modules that may contain Mastra
+  // worker config, env refs or local paths. On parse failure the regex
+  // results stay as-is and local-path matches remain unguarded.
+  if (!code.includes('Mastra') && matches.length === 0 && envRefs.size === 0) {
+    return { matches, envRefs };
+  }
+
+  const parsed = parseSync(id, code, { lang: parserLang(id), preserveParens: false });
+  if (parsed.errors.length > 0) {
+    return { matches, envRefs };
+  }
+
+  const stripped = stripComments(code, parsed.comments);
+  if (stripped !== code) {
+    matches = collectLocalHostMatches(stripped);
+    envRefs = collectEnvRefs(stripped);
+  }
+
+  const ast = parsed.program as unknown as AstNode;
+  if (matches.length > 0) {
+    const guarded = findGuardedValues(ast, new Set(matches.map(m => m.value)));
+    for (const match of matches) {
+      const guardedBy = guarded.get(match.value);
+      if (guardedBy) match.guardedBy = guardedBy;
+    }
+  }
+
+  return { matches, envRefs, workersConfig: code.includes('Mastra') ? findWorkersConfig(ast) : undefined };
+}
+
 export function localStorageDetector(rootDir?: string): Plugin {
-  const userModuleMatches = new Map<string, ModuleMatch[]>();
-  const userModuleEnvRefs = new Map<string, Set<string>>();
-  const userModuleWorkersConfigs = new Map<string, WorkersConfig>();
   let normalizedRoot: string | undefined;
   if (rootDir) {
     let root = rootDir.replace(/\\/g, '/');
@@ -460,58 +566,19 @@ export function localStorageDetector(rootDir?: string): Plugin {
     normalizedRoot = root + '/';
   }
 
+  const isUserModule = (id: string): boolean => {
+    if (id.startsWith('\0')) return false;
+    if (id.includes('node_modules')) return false;
+    if (MASTRA_BUILD_DIR.test(id)) return false;
+    // Modules outside the project/workspace root are dependencies resolved
+    // through symlinks (pnpm `link:`, `file:`, monorepo dev setups) whose
+    // real path escapes `node_modules` — library code, not user code.
+    if (normalizedRoot && !id.replace(/\\/g, '/').startsWith(normalizedRoot)) return false;
+    return true;
+  };
+
   return {
     name: 'mastra-local-storage-detector',
-
-    transform(_code, id) {
-      if (id.includes('node_modules')) return null;
-      if (MASTRA_BUILD_DIR.test(id)) return null;
-      // Modules outside the project/workspace root are dependencies resolved
-      // through symlinks (pnpm `link:`, `file:`, monorepo dev setups) whose
-      // real path escapes `node_modules` — library code, not user code.
-      if (normalizedRoot && !id.replace(/\\/g, '/').startsWith(normalizedRoot)) return null;
-
-      const refs = collectEnvRefs(_code);
-      if (refs.size > 0) {
-        userModuleEnvRefs.set(id, refs);
-      }
-
-      const matches: ModuleMatch[] = [];
-      for (const { pattern, hint } of LOCAL_HOST_PATTERNS) {
-        const re = new RegExp(pattern.source, pattern.flags.includes('g') ? pattern.flags : pattern.flags + 'g');
-        for (const m of _code.matchAll(re)) {
-          matches.push({ value: m[0], hint });
-        }
-      }
-
-      // Best-effort structural pass: only parse modules that may contain
-      // Mastra worker config or need guard analysis for a detected local path.
-      // Existing local-path matches remain unguarded on parse failure.
-      if (_code.includes('Mastra') || matches.length > 0) {
-        try {
-          const ast = this.parse(_code) as unknown as AstNode;
-          const workersConfig = findWorkersConfig(ast);
-          if (workersConfig) {
-            userModuleWorkersConfigs.set(id, workersConfig);
-          }
-          if (matches.length > 0) {
-            const guarded = findGuardedValues(ast, new Set(matches.map(m => m.value)));
-            for (const match of matches) {
-              const guardedBy = guarded.get(match.value);
-              if (guardedBy) match.guardedBy = guardedBy;
-            }
-          }
-        } catch {
-          // ignore — optional static metadata is best-effort
-        }
-      }
-
-      if (matches.length > 0) {
-        userModuleMatches.set(id, matches);
-      }
-
-      return null;
-    },
 
     generateBundle(_, bundle) {
       const detections: LocalStorageDetection[] = [];
@@ -523,15 +590,16 @@ export function localStorageDetector(rootDir?: string): Plugin {
         if (chunk.type !== 'chunk') continue;
 
         for (const [moduleId, moduleInfo] of Object.entries(chunk.modules)) {
-          if (moduleInfo.renderedLength === 0) continue;
+          if (moduleInfo.renderedLength === 0 || !isUserModule(moduleId)) continue;
 
-          for (const ref of userModuleEnvRefs.get(moduleId) ?? []) {
+          const code = this.getModuleInfo(moduleId)?.code;
+          if (!code) continue;
+
+          const { matches, envRefs, workersConfig: moduleWorkersConfig } = analyzeModule(moduleId, code);
+          for (const ref of envRefs) {
             userEnvRefs.add(ref);
           }
-          workersConfig ??= userModuleWorkersConfigs.get(moduleId);
-
-          const matches = userModuleMatches.get(moduleId);
-          if (!matches) continue;
+          workersConfig ??= moduleWorkersConfig;
 
           for (const { value, hint, guardedBy } of matches) {
             const key = `${hint}::${value}`;

@@ -374,6 +374,93 @@ describe('DevBundler', () => {
       }
     });
 
+    it('enables circular dependency checks and only reports cycles that involve user code', async () => {
+      const devBundler = new DevBundler();
+      const { createWatcher } = await import('@mastra/deployer/build');
+      const warn = vi.spyOn((devBundler as any).logger, 'warn').mockImplementation(() => {});
+      const tmpDir = '.test-tmp';
+
+      try {
+        await devBundler.watch('test-entry.js', tmpDir, []);
+        const input = vi.mocked(createWatcher).mock.calls[0]![0] as any;
+        expect(input.checks).toEqual(expect.objectContaining({ circularDependency: true }));
+
+        const defaultHandler = vi.fn();
+        const userA = join(process.cwd(), 'src', 'a.ts');
+        const userB = join(process.cwd(), 'src', 'b.ts');
+        input.onLog(
+          'warn',
+          {
+            code: 'CIRCULAR_DEPENDENCY',
+            message: '\u001b[33m[CIRCULAR_DEPENDENCY] \u001b[0mCircular dependency: a.ts -> b.ts -> a.ts.\n',
+            ids: [userA, userB, userA],
+          },
+          defaultHandler,
+        );
+        expect(warn).toHaveBeenCalledWith('Circular dependency found', {
+          dependency: [join('src', 'a.ts'), join('src', 'b.ts'), join('src', 'a.ts')].join(' -> '),
+        });
+
+        warn.mockClear();
+        input.onLog(
+          'warn',
+          {
+            code: 'CIRCULAR_DEPENDENCY',
+            message: 'Circular dependency',
+            ids: ['/project/node_modules/x/a.js', '/project/node_modules/x/b.js', '/project/node_modules/x/a.js'],
+          },
+          defaultHandler,
+        );
+        input.onLog('warn', { code: 'EVAL', message: 'eval' }, defaultHandler);
+        expect(warn).not.toHaveBeenCalled();
+        expect(defaultHandler).not.toHaveBeenCalled();
+
+        const infoLog = { code: 'SOMETHING', message: 'info' };
+        input.onLog('info', infoLog, defaultHandler);
+        expect(defaultHandler).toHaveBeenCalledWith('info', infoLog);
+      } finally {
+        await remove(tmpDir);
+      }
+    });
+
+    it('does not make rolldown skip listeners registered after the initial bundle listener', async () => {
+      const { createWatcher } = await import('@mastra/deployer/build');
+      // Mirrors rolldown's WatcherEmitter: listeners are awaited in order and off() splices the array.
+      const listeners: Array<(event: { code: string }) => unknown> = [];
+      const watcher = {
+        on: vi.fn((_event: string, cb: (event: { code: string }) => unknown) => {
+          listeners.push(cb);
+          return watcher;
+        }),
+        off: vi.fn((_event: string, cb: (event: { code: string }) => unknown) => {
+          const index = listeners.indexOf(cb);
+          if (index !== -1) listeners.splice(index, 1);
+          return watcher;
+        }),
+      };
+      vi.mocked(createWatcher).mockResolvedValueOnce(watcher as any);
+      const emit = async (event: { code: string }) => {
+        for (const listener of listeners) await listener(event);
+      };
+
+      const devBundler = new DevBundler();
+      const tmpDir = '.test-tmp';
+      try {
+        const watchPromise = devBundler.watch('test-entry.js', tmpDir, []);
+        await vi.waitFor(() => expect(listeners).toHaveLength(1));
+
+        const laterListener = vi.fn();
+        listeners.push(laterListener);
+        await emit({ code: 'BUNDLE_END' });
+
+        await expect(watchPromise).resolves.toBe(watcher);
+        expect(laterListener).toHaveBeenCalledWith({ code: 'BUNDLE_END' });
+        await vi.waitFor(() => expect(listeners).toEqual([laterListener]));
+      } finally {
+        await remove(tmpDir);
+      }
+    });
+
     it('selects factory-dev.entry.js template in Factory mode', async () => {
       const devBundler = new DevBundler(undefined, true);
       const { createWatcher } = await import('@mastra/deployer/build');

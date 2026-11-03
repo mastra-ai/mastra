@@ -1,47 +1,36 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rollup } from 'rollup';
-import esbuild from 'rollup-plugin-esbuild';
+import { rolldown } from 'rolldown';
 import { describe, it, expect } from 'vitest';
 import { mastraInstanceWrapper } from '../plugins/mastra-instance-wrapper';
 
 describe('Wrap Mastra instance', () => {
   const _dirname = dirname(fileURLToPath(import.meta.url));
 
-  it.for([['./__fixtures__/empty-mastra.js'], ['./__fixtures__/basic.js']])(
+  it.for([['./__fixtures__/empty-mastra.js'], ['./__fixtures__/basic.js'], ['./__fixtures__/typed-mastra.ts']])(
     'should wrap Mastra instance in %s',
     async ([fileName]) => {
       const file = join(_dirname, fileName as string);
 
-      const bundle = await rollup({
+      const bundle = await rolldown({
         logLevel: 'silent',
         input: file,
-        cache: false,
-        treeshake: 'smallest',
-        plugins: [
-          {
-            name: 'externalize-all',
-            resolveId(id) {
-              return {
-                id,
-                external: id !== file,
-              };
-            },
-          },
-          esbuild({
-            target: `esnext`,
-            platform: 'browser',
-            minify: false,
-          }),
-          mastraInstanceWrapper(file),
-        ],
+        treeshake: true,
+        external: id => id !== file,
+        platform: 'browser',
+        plugins: [mastraInstanceWrapper(file)],
+        experimental: { attachDebugInfo: 'none' },
       });
 
-      const result = await bundle.generate({
-        format: 'esm',
-      });
+      try {
+        const result = await bundle.generate({ format: 'esm' });
+        const code = result.output[0].code;
 
-      expect(result?.output[0].code).toMatchSnapshot();
+        expect(code).toMatch(/const mastra = \(\) => new Mastra\(/);
+        expect(code).toMatchSnapshot();
+      } finally {
+        await bundle.close();
+      }
     },
   );
 });

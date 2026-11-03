@@ -33,8 +33,7 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
-    "fs-extra": "^11.4.1",
-    "rollup": "^4.65.0"
+    "fs-extra": "^11.4.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -44,6 +43,7 @@
     "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
+    "rolldown": "^1.2.16",
     "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"

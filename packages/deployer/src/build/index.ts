@@ -1,5 +1,7 @@
 export { createBundler, getInputOptions as getBundlerInputOptions } from './bundler';
 export { createWatcher, getInputOptions as getWatcherInputOptions } from './watcher';
+export type { RolldownPluginOption, RolldownWatcher, RolldownWatcherEvent } from 'rolldown';
+export { exactPathRegex, virtualModules } from './rolldown';
 export { analyzeBundle } from './analyze';
 export { analyzeEntryProjectType } from './analyzeEntryProjectType';
 export { FileService } from '../services/fs';

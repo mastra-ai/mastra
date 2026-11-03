@@ -1,7 +1,6 @@
-import { existsSync } from 'node:fs';
-import { stat } from 'node:fs/promises';
+import { existsSync, realpathSync } from 'node:fs';
 import { resolve } from 'node:path';
-import type { Plugin } from 'rollup';
+import type { Plugin } from 'rolldown';
 import { glob } from 'tinyglobby';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { bundleExternals } from '../analyze/bundleExternals';
@@ -29,7 +28,7 @@ export type WorkspaceDepsWatcherOptions = {
 
 /**
  * During `mastra dev`, workspace packages are pre-transpiled into
- * `<pkg>/node_modules/.cache/*.mjs` and marked external in the main Rollup
+ * `<pkg>/node_modules/.cache/*.mjs` and marked external in the main Rolldown
  * watch graph. This plugin:
  * 1. Watches the original workspace package sources so edits trigger rebuilds.
  * 2. Regenerates the optimized `.cache` outputs when those sources change (or
@@ -41,12 +40,20 @@ export function workspaceDepsWatcher(options: WorkspaceDepsWatcherOptions): Plug
     options;
 
   let isFirstBuild = true;
+  let isDirty = false;
 
   const usedPackageRoots = collectUsedPackageRoots(depsToOptimize, workspaceMap);
   const cachePaths = collectAbsoluteCachePaths(optimizedDependencyFiles, workspaceRoot);
+  const rootPrefixes = usedPackageRoots.map(root => `${root}/`);
 
   return {
     name: 'workspace-deps-watcher',
+    watchChange(id) {
+      const changed = slash(id);
+      if (rootPrefixes.some(prefix => changed.startsWith(prefix))) {
+        isDirty = true;
+      }
+    },
     async buildStart() {
       const sourceFiles = await discoverWorkspaceSourceFiles(usedPackageRoots);
 
@@ -60,28 +67,35 @@ export function workspaceDepsWatcher(options: WorkspaceDepsWatcherOptions): Plug
         return;
       }
 
-      const needsReoptimize = await isWorkspaceOutputStale(sourceFiles, cachePaths);
-
-      if (!needsReoptimize) {
+      if (!isDirty && !isCacheMissing(cachePaths)) {
         return;
       }
+
+      // Reset before the async work so edits made while re-optimizing trigger another pass;
+      // restored on failure so the next rebuild retries.
+      isDirty = false;
 
       // bundleExternals may mutate the map when externalsPreset is true; copy first.
       const depsCopy = cloneDepsToOptimize(depsToOptimize);
 
       const { externalsPreset, mergedExternals } = normalizeExternals(bundlerOptions?.externals ?? true);
 
-      await bundleExternals(depsCopy, outputDir, {
-        bundlerOptions: {
-          externalsPreset,
-          mergedExternals,
-          isDev: true,
-        },
-        projectRoot: workspaceRoot,
-        workspaceRoot,
-        workspaceMap,
-        platform,
-      });
+      try {
+        await bundleExternals(depsCopy, outputDir, {
+          bundlerOptions: {
+            externalsPreset,
+            mergedExternals,
+            isDev: true,
+          },
+          projectRoot: workspaceRoot,
+          workspaceRoot,
+          workspaceMap,
+          platform,
+        });
+      } catch (error) {
+        isDirty = true;
+        throw error;
+      }
     },
   };
 }
@@ -97,19 +111,26 @@ function collectUsedPackageRoots(
       continue;
     }
 
-    if (metadata.rootPath) {
-      roots.add(slash(metadata.rootPath));
-      continue;
-    }
-
     const pkgName = getPackageName(dep);
-    const location = pkgName ? workspaceMap.get(pkgName)?.location : undefined;
+    const location = metadata.rootPath || (pkgName ? workspaceMap.get(pkgName)?.location : undefined);
     if (location) {
-      roots.add(slash(location));
+      roots.add(slash(toRealPath(location)));
     }
   }
 
   return Array.from(roots);
+}
+
+/**
+ * Rolldown's file watcher reports changes under the real path, so a root reached
+ * through a symlink (e.g. macOS `/var` -> `/private/var`) would never match.
+ */
+function toRealPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
 }
 
 function collectAbsoluteCachePaths(optimizedDependencyFiles: Map<string, string>, workspaceRoot: string): string[] {
@@ -135,43 +156,8 @@ async function discoverWorkspaceSourceFiles(packageRoots: string[]): Promise<str
   return files.flat();
 }
 
-async function isCacheMissing(cachePaths: string[]): Promise<boolean> {
-  for (const cachePath of cachePaths) {
-    if (!existsSync(cachePath)) {
-      return true;
-    }
-  }
-  return false;
-}
-
-async function isWorkspaceOutputStale(sourceFiles: string[], cachePaths: string[]): Promise<boolean> {
-  if (await isCacheMissing(cachePaths)) {
-    return true;
-  }
-
-  let cacheBaselineMs = 0;
-  for (const cachePath of cachePaths) {
-    try {
-      const { mtimeMs } = await stat(cachePath);
-      cacheBaselineMs = Math.max(cacheBaselineMs, mtimeMs);
-    } catch {
-      return true;
-    }
-  }
-
-  for (const file of sourceFiles) {
-    try {
-      const { mtimeMs } = await stat(file);
-      if (mtimeMs > cacheBaselineMs) {
-        return true;
-      }
-    } catch {
-      // File may have been deleted; treat as dirty so we re-optimize.
-      return true;
-    }
-  }
-
-  return false;
+function isCacheMissing(cachePaths: string[]): boolean {
+  return cachePaths.some(cachePath => !existsSync(cachePath));
 }
 
 function cloneDepsToOptimize(deps: Map<string, DependencyMetadata>): Map<string, DependencyMetadata> {

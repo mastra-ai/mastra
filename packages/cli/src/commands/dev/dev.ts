@@ -10,6 +10,7 @@ import {
   writeFsAgentsEntry,
   mirrorFsAgentWorkspaces,
 } from '@mastra/deployer/build';
+import type { RolldownWatcherEvent } from '@mastra/deployer/build';
 import { execa } from 'execa';
 import getPort from 'get-port';
 import pc from 'picocolors';
@@ -597,7 +598,8 @@ export async function dev({
     startOptions,
   );
 
-  watcher.on('event', (event: { code: string }) => {
+  // Must not `await`: rolldown awaits listeners sequentially, so a slow restart would stall the watcher.
+  watcher.on('event', (event: RolldownWatcherEvent) => {
     if (event.code === 'BUNDLE_START') {
       devLogger.bundling();
     }

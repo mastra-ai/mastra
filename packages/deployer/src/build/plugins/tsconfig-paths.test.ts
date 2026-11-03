@@ -2,8 +2,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rollup } from 'rollup';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { rolldown } from 'rolldown';
+import type { Plugin, PluginContext, ResolveIdExtraOptions } from 'rolldown';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { tsConfigPaths, hasPaths } from './tsconfig-paths';
 
 describe('tsconfig-paths plugin', () => {
@@ -121,7 +122,7 @@ describe('tsconfig-paths plugin', () => {
       fs.writeFileSync(join(srcDir, 'utils.ts'), `export const hello = 'world';`);
       fs.writeFileSync(join(srcDir, 'index.ts'), `import { hello } from '@src/utils';\nconsole.log(hello);`);
 
-      const bundle = await rollup({
+      const bundle = await rolldown({
         logLevel: 'silent',
         input: join(srcDir, 'index.ts'),
         plugins: [tsConfigPaths({ tsConfigPath })],
@@ -153,7 +154,7 @@ describe('tsconfig-paths plugin', () => {
       const indexFile = join(srcDir, 'index.ts');
       fs.writeFileSync(indexFile, `import { source } from 'utils';\nconsole.log(source);`);
 
-      const bundle = await rollup({
+      const bundle = await rolldown({
         logLevel: 'silent',
         input: indexFile,
         plugins: [
@@ -193,7 +194,7 @@ describe('tsconfig-paths plugin', () => {
       const indexFile = join(appDir, 'index.ts');
       fs.writeFileSync(indexFile, `import { value } from '@lib/utils';\nconsole.log(value);`);
 
-      const bundle = await rollup({
+      const bundle = await rolldown({
         logLevel: 'silent',
         input: indexFile,
         plugins: [tsConfigPaths({ tsConfigPath })],
@@ -234,8 +235,8 @@ describe('tsconfig-paths plugin', () => {
       // Create plugin
       const plugin = tsConfigPaths({ tsConfigPath });
 
-      // Build using rollup
-      const bundle = await rollup({
+      // Build using rolldown
+      const bundle = await rolldown({
         logLevel: 'silent',
         input: indexFile,
         plugins: [
@@ -285,7 +286,7 @@ describe('tsconfig-paths plugin', () => {
       const indexFile = join(srcDir, 'index.ts');
       fs.writeFileSync(indexFile, `import { loggerName } from '~/utils/build-flags.js';\nconsole.log(loggerName);`);
 
-      const bundle = await rollup({
+      const bundle = await rolldown({
         logLevel: 'silent',
         input: indexFile,
         plugins: [tsConfigPaths({ tsConfigPath })],
@@ -324,7 +325,7 @@ describe('tsconfig-paths plugin', () => {
         `import { kind } from 'src/repositories/keyword-repository.interface';\nimport { fixture } from 'src/repositories/keyword.fixtures';\nconsole.log(kind, fixture);`,
       );
 
-      const bundle = await rollup({
+      const bundle = await rolldown({
         logLevel: 'silent',
         input: indexFile,
         plugins: [tsConfigPaths({ tsConfigPath })],
@@ -355,22 +356,78 @@ describe('tsconfig-paths plugin', () => {
       fs.writeFileSync(valueFile, `export const value = 'resolved';`);
       fs.writeFileSync(join(srcDir, 'index.js'), `import { value } from '@/value';`);
 
-      const plugin = tsConfigPaths({ cwd: tempDir });
-      const resolveId = typeof plugin.resolveId === 'object' ? plugin.resolveId.handler : plugin.resolveId!;
-      let resolvedImporter: string | undefined;
-      await resolveId.call(
-        {
-          resolve: async (_id: string, importer: string | undefined) => {
-            resolvedImporter = importer;
-            return null;
-          },
-        } as any,
-        'unmapped-package',
+      const { handler } = getResolveIdHook(tsConfigPaths({ cwd: tempDir }));
+      const resolve = vi.fn(async (id: string) => ({ id, external: false as const }));
+      const result = await handler.call(
+        { resolve } as unknown as PluginContext,
+        '@/value',
         'apps/custom/src/index.js',
-        { attributes: {}, isEntry: false },
+        { kind: 'import-statement', isEntry: false } as ResolveIdExtraOptions,
       );
 
-      expect(resolvedImporter).toBe(join(srcDir, 'index.js'));
+      expect(resolve).toHaveBeenCalledWith(
+        valueFile,
+        join(srcDir, 'index.js'),
+        expect.objectContaining({ skipSelf: true }),
+      );
+      expect(result).toMatchObject({ id: valueFile });
+    });
+
+    // Rollup's version fell through to `this.resolve` for every unmapped id. In Rolldown that reaches the native
+    // resolver, which would pull bare packages from node_modules and bypass each pass's externals logic.
+    it('returns null for ids that match no paths pattern without resolving them', async () => {
+      const tsConfigPath = join(tempDir, 'tsconfig.json');
+      fs.writeFileSync(tsConfigPath, JSON.stringify({ compilerOptions: { paths: { '@/*': ['src/*'] } } }));
+
+      const { handler } = getResolveIdHook(tsConfigPaths({ tsConfigPath }));
+      const resolve = vi.fn();
+      const ctx = { resolve } as unknown as PluginContext;
+      const options = { kind: 'import-statement', isEntry: false } as ResolveIdExtraOptions;
+      const importer = join(tempDir, 'src', 'index.ts');
+
+      expect(await handler.call(ctx, 'unmapped-package', importer, options)).toBeNull();
+      expect(await handler.call(ctx, '@scope/pkg', importer, options)).toBeNull();
+      expect(await handler.call(ctx, 'node:fs', importer, options)).toBeNull();
+      expect(resolve).not.toHaveBeenCalled();
+    });
+
+    it('only runs the hook for ids that can be paths aliases', () => {
+      const { filter } = getResolveIdHook(tsConfigPaths());
+
+      for (const id of ['@/value', '@scope/pkg', '~/utils', '#internal', 'src/utils', 'lodash']) {
+        expect(filter.test(id), id).toBe(true);
+      }
+      for (const id of ['./local', '../parent', '/abs/file.ts', '\0virtual:x', 'C:\\project\\file.ts', 'C:/file.ts']) {
+        expect(filter.test(id), id).toBe(false);
+      }
+    });
+
+    it('caches tsconfig lookups per directory', async () => {
+      fs.writeFileSync(
+        join(tempDir, 'tsconfig.json'),
+        JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@/*': ['src/*'] } } }),
+      );
+      const srcDir = join(tempDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+      fs.writeFileSync(join(srcDir, 'a.ts'), `export const a = 1;`);
+
+      const { handler } = getResolveIdHook(tsConfigPaths());
+      const ctx = { resolve: async (id: string) => ({ id, external: false as const }) } as unknown as PluginContext;
+      const options = { kind: 'import-statement', isEntry: false } as ResolveIdExtraOptions;
+      const existsSync = vi.spyOn(fs, 'existsSync');
+
+      try {
+        await handler.call(ctx, '@/a', join(srcDir, 'index.ts'), options);
+        const firstLookup = existsSync.mock.calls.filter(([file]) => String(file).includes('tsconfig')).length;
+        expect(firstLookup).toBeGreaterThan(0);
+
+        existsSync.mockClear();
+        await handler.call(ctx, '@/a', join(srcDir, 'other.ts'), options);
+        await handler.call(ctx, 'lodash', join(srcDir, 'other.ts'), options);
+        expect(existsSync.mock.calls.filter(([file]) => String(file).includes('tsconfig'))).toEqual([]);
+      } finally {
+        existsSync.mockRestore();
+      }
     });
 
     it('should not externalize @mastra/server imports from aliased modules', async () => {
@@ -408,7 +465,7 @@ describe('tsconfig-paths plugin', () => {
       );
       fs.writeFileSync(serverAdapterFile, `export const createRoute = value => 'created:' + value;`);
 
-      const bundle = await rollup({
+      const bundle = await rolldown({
         logLevel: 'silent',
         input: indexFile,
         plugins: [
@@ -431,5 +488,67 @@ describe('tsconfig-paths plugin', () => {
       expect(result.output[0].code).toContain('created:');
       expect(result.output[0].imports).not.toContain(serverAdapterFile);
     });
+
+    it('externalizes resolved bare imports of aliased modules with localResolve', async () => {
+      const tsConfigPath = join(tempDir, 'tsconfig.json');
+      fs.writeFileSync(
+        tsConfigPath,
+        JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@/*': ['src/*'] } } }),
+      );
+
+      const srcDir = join(tempDir, 'src');
+      fs.mkdirSync(srcDir, { recursive: true });
+      const indexFile = join(srcDir, 'index.ts');
+      const aliasedDepFile = join(tempDir, 'aliased-dep.ts');
+      const localDepFile = join(tempDir, 'local-dep.ts');
+      const honoFile = join(tempDir, 'hono.ts');
+
+      fs.writeFileSync(
+        indexFile,
+        `import { route } from '@/route';\nimport { internal } from './internal.ts';\nconsole.log(route, internal);`,
+      );
+      fs.writeFileSync(
+        join(srcDir, 'route.ts'),
+        `import { dep } from 'aliased-dep';\nimport { Hono } from 'hono';\nexport const route = dep + Hono;`,
+      );
+      fs.writeFileSync(join(srcDir, 'internal.ts'), `import { dep } from 'local-dep';\nexport const internal = dep;`);
+      fs.writeFileSync(aliasedDepFile, `export const dep = 'aliased-dep-code';`);
+      fs.writeFileSync(localDepFile, `export const dep = 'local-dep-code';`);
+      fs.writeFileSync(honoFile, `export const Hono = 'hono-code';`);
+
+      const packages: Record<string, string> = {
+        'aliased-dep': aliasedDepFile,
+        'local-dep': localDepFile,
+        hono: honoFile,
+      };
+      const bundle = await rolldown({
+        logLevel: 'silent',
+        input: indexFile,
+        plugins: [
+          tsConfigPaths({ tsConfigPath, localResolve: true }),
+          {
+            name: 'package-resolver',
+            resolveId(id) {
+              return packages[id] ?? null;
+            },
+          },
+        ],
+      });
+
+      const result = await bundle.generate({ format: 'esm' });
+      expect(result.output[0].imports).toEqual([aliasedDepFile]);
+      expect(result.output[0].code).not.toContain('aliased-dep-code');
+      expect(result.output[0].code).toContain('local-dep-code');
+      expect(result.output[0].code).toContain('hono-code');
+    });
   });
 });
+
+function getResolveIdHook(plugin: Plugin) {
+  const hook = plugin.resolveId;
+  const filter = hook && typeof hook === 'object' && hook.filter && 'id' in hook.filter ? hook.filter.id : undefined;
+  if (!hook || typeof hook !== 'object' || !(filter instanceof RegExp)) {
+    throw new Error('expected an object resolveId hook with an id filter');
+  }
+  return { handler: hook.handler, filter };
+}

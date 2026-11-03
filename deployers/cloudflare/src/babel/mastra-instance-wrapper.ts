@@ -33,10 +33,17 @@ export function mastraInstanceWrapper(): PluginObject {
       ExportNamedDeclaration(path) {
         if (t.isVariableDeclaration(path.node?.declaration)) {
           for (const declaration of path.node.declaration.declarations) {
+            // The entry may still be TypeScript, so look through `as`/`satisfies`/`!` around the instance.
+            let init = declaration?.init;
+            while (t.isTSAsExpression(init) || t.isTSSatisfiesExpression(init) || t.isTSNonNullExpression(init)) {
+              init = init.expression;
+            }
+
             if (
-              t.isIdentifier(declaration?.id, { name: exportName }) &&
-              t.isNewExpression(declaration?.init) &&
-              t.isIdentifier(declaration.init.callee, { name: className })
+              declaration?.init &&
+              t.isIdentifier(declaration.id, { name: exportName }) &&
+              t.isNewExpression(init) &&
+              t.isIdentifier(init.callee, { name: className })
             ) {
               declaration.init = t.arrowFunctionExpression([], declaration.init);
               // there should be only one "mastra" export, so we can exit the loop

@@ -1,8 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import nodeResolve from '@rollup/plugin-node-resolve';
-import { rollup } from 'rollup';
+import { rolldown } from 'rolldown';
 import { afterEach, describe, expect, it } from 'vitest';
 import type { BundlerPlatform } from '../utils';
 import { moduleAlias } from './module-alias';
@@ -26,10 +25,12 @@ async function generate(
   external?: string[],
   platform: BundlerPlatform = 'node',
 ) {
-  const bundle = await rollup({
+  const bundle = await rolldown({
     input: entry,
     external,
-    plugins: [moduleAlias(alias, resolveFrom, platform), nodeResolve()].filter(Boolean),
+    platform: platform === 'browser' ? 'browser' : 'node',
+    logLevel: 'silent',
+    plugins: [moduleAlias(alias, resolveFrom, platform)],
   });
 
   try {
@@ -53,7 +54,7 @@ describe('moduleAlias', () => {
     const code = await generate(entry, { ajv: shim });
 
     expect(code).toContain('shim-value');
-    expect(code).not.toContain("from 'ajv'");
+    expect(code).not.toMatch(/from ["']ajv["']/);
   });
 
   it('requires separate aliases for subpath specifiers', async () => {
@@ -74,7 +75,7 @@ describe('moduleAlias', () => {
 
     expect(code).toContain('root-shim');
     expect(code).toContain('subpath-shim');
-    expect(code).toContain("from 'ajv/other'");
+    expect(code).toMatch(/from ["']ajv\/other["']/);
   });
 
   it('applies an alias whose specifier is also another alias target', async () => {
@@ -156,9 +157,10 @@ describe('moduleAlias', () => {
     const entry = join(root, 'entry.mjs');
     await writeFile(entry, `import value from 'original'; export { value };`);
 
+    // Rolldown wraps plugin errors; the original MastraError is kept in `errors`.
     await expect(generate(entry, { original: 'missing-replacement' })).rejects.toMatchObject({
-      id: 'DEPLOYER_ALIAS_TARGET_NOT_FOUND',
       message: expect.stringContaining('missing-replacement'),
+      errors: [expect.objectContaining({ id: 'DEPLOYER_ALIAS_TARGET_NOT_FOUND' })],
     });
   });
 });

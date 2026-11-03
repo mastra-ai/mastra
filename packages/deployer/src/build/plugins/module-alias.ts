@@ -1,16 +1,20 @@
 import { dirname, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { ErrorCategory, ErrorDomain, MastraError } from '@internal/core/error';
-import rollupAlias from '@rollup/plugin-alias';
 import { resolveModule } from 'local-pkg';
 import * as resolveExports from 'resolve.exports';
-import type { Plugin, ResolveIdHook } from 'rollup';
+import type { Plugin } from 'rolldown';
+import { exactRegex } from 'rolldown/filter';
 import { getPackageInfo } from '../package-info';
-import { getNodeResolveOptions, getPackageName, isBareModuleSpecifier } from '../utils';
+import { getPackageName, isBareModuleSpecifier } from '../utils';
 import type { BundlerPlatform } from '../utils';
 
-function exactMatch(specifier: string) {
-  return new RegExp(`^${specifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+// resolve.exports always adds `default` and `import`; `browser: true` swaps its `node` condition for `browser`.
+function getExportsOptions(platform: BundlerPlatform): resolveExports.Options {
+  if (platform === 'browser') {
+    return { browser: true, conditions: ['browser', 'worker', 'default'] };
+  }
+  return { browser: false, conditions: ['node'] };
 }
 
 async function resolveBareTarget(id: string, resolveFrom: string, platform: BundlerPlatform) {
@@ -20,13 +24,8 @@ async function resolveBareTarget(id: string, resolveFrom: string, platform: Bund
   const resolutionBase = pathToFileURL(`${dirname(resolveFrom)}${sep}`).href;
   const packageInfo = await getPackageInfo(packageName, { paths: [resolutionBase] });
   if (packageInfo?.packageJson.exports) {
-    const nodeResolveOptions = getNodeResolveOptions(platform);
     try {
-      const [entry] =
-        resolveExports.exports(packageInfo.packageJson, id, {
-          browser: nodeResolveOptions.browser === true,
-          conditions: nodeResolveOptions.exportConditions,
-        }) ?? [];
+      const [entry] = resolveExports.exports(packageInfo.packageJson, id, getExportsOptions(platform)) ?? [];
       if (entry) return resolve(packageInfo.rootPath, entry);
     } catch {
       return undefined;
@@ -36,51 +35,49 @@ async function resolveBareTarget(id: string, resolveFrom: string, platform: Bund
   return resolveModule(id, { paths: [resolutionBase] });
 }
 
+function isVirtualId(id: string) {
+  return id.startsWith('\0') || id.startsWith('#');
+}
+
 export function moduleAlias(
   alias: Record<string, string>,
   resolveFrom: string,
   platform: BundlerPlatform = 'node',
 ): Plugin | null {
-  const entries = Object.entries(alias);
-  if (entries.length === 0) {
+  const keys = Object.keys(alias);
+  if (keys.length === 0) {
     return null;
   }
 
-  const plugin = rollupAlias({
-    entries: entries.map(([specifier, target]) => ({
-      find: exactMatch(specifier),
-      replacement: target,
-      customResolver: async function (id, importer, options) {
-        const resolveImporter = importer && !importer.startsWith('\0') ? importer : resolveFrom;
-        const resolvedBareTarget = isBareModuleSpecifier(id)
-          ? await resolveBareTarget(id, resolveImporter, platform)
-          : undefined;
-        const resolved = resolvedBareTarget ? undefined : await this.resolve(id, resolveImporter, options);
-
-        if (!resolvedBareTarget && !resolved) {
-          throw new MastraError({
-            id: 'DEPLOYER_ALIAS_TARGET_NOT_FOUND',
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-            details: {
-              alias: specifier,
-              target,
-            },
-            text: `Could not resolve deployer alias \`${specifier}\` to \`${target}\`.`,
-          });
-        }
-
-        return resolvedBareTarget ?? resolved;
-      },
-    })),
-  });
-
   return {
-    ...plugin,
     name: 'module-alias',
     resolveId: {
       order: 'pre',
-      handler: plugin.resolveId as ResolveIdHook,
+      filter: { id: keys.map(key => exactRegex(key)) },
+      async handler(id, importer, { kind, custom }) {
+        if (!Object.hasOwn(alias, id)) return null;
+        const target = alias[id]!;
+
+        const resolveImporter = importer && !isVirtualId(importer) ? importer : resolveFrom;
+        const resolvedBareTarget = isBareModuleSpecifier(target)
+          ? await resolveBareTarget(target, resolveImporter, platform)
+          : undefined;
+        if (resolvedBareTarget) return resolvedBareTarget;
+
+        const resolved = await this.resolve(target, resolveImporter, { kind, custom, skipSelf: true });
+        if (resolved) return resolved;
+
+        throw new MastraError({
+          id: 'DEPLOYER_ALIAS_TARGET_NOT_FOUND',
+          domain: ErrorDomain.DEPLOYER,
+          category: ErrorCategory.USER,
+          details: {
+            alias: id,
+            target,
+          },
+          text: `Could not resolve deployer alias \`${id}\` to \`${target}\`.`,
+        });
+      },
     },
   };
 }

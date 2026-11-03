@@ -1,8 +1,8 @@
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { rollup } from 'rollup';
-import esbuild from 'rollup-plugin-esbuild';
+import { rolldown } from 'rolldown';
 import { describe, it, expect } from 'vitest';
+import { TREESHAKE_SMALLEST } from '../rolldown';
 import { removeAllOptionsFromMastraExceptPlugin } from './remove-all-except';
 
 describe('Remove deployer', () => {
@@ -15,14 +15,16 @@ describe('Remove deployer', () => {
     ['./__fixtures__/basic-with-import.js'],
     ['./__fixtures__/basic-with-spread.js'],
     ['./__fixtures__/basic-with-function.js'],
+    ['./__fixtures__/basic-with-types.ts'],
   ])('should remove the deployer from %s', async ([fileName]) => {
     const file = join(_dirname, fileName);
 
-    const bundle = await rollup({
+    const bundle = await rolldown({
       logLevel: 'silent',
       input: file,
-      cache: false,
-      treeshake: 'smallest',
+      platform: 'node',
+      treeshake: TREESHAKE_SMALLEST,
+      experimental: { attachDebugInfo: 'none' },
       plugins: [
         {
           name: 'externalize-all',
@@ -34,17 +36,13 @@ describe('Remove deployer', () => {
           },
         },
         removeAllOptionsFromMastraExceptPlugin(file, 'deployer', { hasCustomConfig: false }),
-        esbuild({
-          target: `esnext`,
-          platform: 'node',
-          minify: false,
-        }),
       ],
     });
 
     const result = await bundle.generate({
       format: 'esm',
     });
+    await bundle.close();
 
     expect(result?.output[0].code).toMatchSnapshot();
   });

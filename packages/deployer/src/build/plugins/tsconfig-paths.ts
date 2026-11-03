@@ -3,11 +3,13 @@ import { builtinModules } from 'node:module';
 import path from 'node:path';
 import { createPathsMatcher, parseTsconfig } from 'get-tsconfig';
 import type { PathsMatcher } from 'get-tsconfig';
-import type { Plugin } from 'rollup';
+import type { Plugin } from 'rolldown';
 
 const PLUGIN_NAME = 'tsconfig-paths';
 const JS_IMPORT_SOURCE_EXTENSIONS = ['.ts', '.tsx', '.js', '.jsx'];
 const CORE_MODULES = new Set([...builtinModules, ...builtinModules.map(moduleName => `node:${moduleName}`)]);
+// `paths` keys can start with `#`, `@`, `~` or a letter, but never point at relative, absolute or virtual ids.
+const ALIAS_CANDIDATE_FILTER = /^(?![./\0]|[A-Za-z]:[\\/])/;
 
 export type PluginOptions = {
   tsConfigPath?: string;
@@ -15,6 +17,8 @@ export type PluginOptions = {
   localResolve?: boolean;
   cwd?: string;
 };
+
+type MatchedConfig = { matcher: PathsMatcher | null; patterns: string[] };
 
 /**
  * Check if a tsconfig file has path mappings configured.
@@ -32,13 +36,23 @@ export function hasPaths(tsConfigPath: string): boolean {
   }
 }
 
+function matchesPattern(request: string, pattern: string) {
+  const wildcardIndex = pattern.indexOf('*');
+  return wildcardIndex === -1
+    ? request === pattern
+    : request.startsWith(pattern.slice(0, wildcardIndex)) && request.endsWith(pattern.slice(wildcardIndex + 1));
+}
+
 export function tsConfigPaths({
   tsConfigPath,
   respectCoreModule = true,
   localResolve,
   cwd,
 }: PluginOptions = {}): Plugin {
-  const matcherCache = new Map<string, { matcher: PathsMatcher | null; patterns: string[] } | null>();
+  const matcherCache = new Map<string, MatchedConfig | null>();
+  const configByDir = new Map<string, string | null>();
+  // Modules reached through an alias. With `localResolve`, their bare imports are resolved from their own location.
+  const aliasedModules = new Set<string>();
 
   function resolveImportToSourceFile(moduleName: string): string {
     if (fs.existsSync(moduleName) && fs.statSync(moduleName).isFile()) {
@@ -57,37 +71,43 @@ export function tsConfigPaths({
     return candidates.find(candidate => fs.existsSync(candidate)) ?? moduleName;
   }
 
-  // Find tsconfig.json file starting from a directory and walking up
-  function findTsConfigForFile(filePath: string): string | null {
-    let currentDir = path.dirname(filePath);
+  // Nearest tsconfig.json (or NX-style tsconfig.base.json) with `paths`, walking up from `dir`. Every visited
+  // directory is cached so sibling and nested importers don't touch the filesystem again.
+  function findTsConfigForDir(dir: string): string | null {
+    const visited: string[] = [];
+    let currentDir = dir;
+    let found: string | null = null;
     const root = path.parse(currentDir).root;
 
     while (currentDir !== root) {
-      const tsConfigPath = path.join(currentDir, 'tsconfig.json');
-
-      if (fs.existsSync(tsConfigPath)) {
-        // Check if this tsconfig has path mappings
-        if (hasPaths(tsConfigPath)) {
-          return tsConfigPath;
-        }
+      const cached = configByDir.get(currentDir);
+      if (cached !== undefined) {
+        found = cached;
+        break;
       }
 
-      // Also check for tsconfig.base.json (common in NX)
-      const tsConfigBasePath = path.join(currentDir, 'tsconfig.base.json');
-      if (fs.existsSync(tsConfigBasePath)) {
-        if (hasPaths(tsConfigBasePath)) {
-          return tsConfigBasePath;
-        }
+      visited.push(currentDir);
+
+      const candidate = ['tsconfig.json', 'tsconfig.base.json']
+        .map(name => path.join(currentDir, name))
+        .find(file => fs.existsSync(file) && hasPaths(file));
+      if (candidate) {
+        found = candidate;
+        break;
       }
 
       currentDir = path.dirname(currentDir);
     }
 
-    return null;
+    for (const visitedDir of visited) {
+      configByDir.set(visitedDir, found);
+    }
+
+    return found;
   }
 
-  function getMatcherForFile(filePath: string): { matcher: PathsMatcher | null; patterns: string[] } | null {
-    const configPath = tsConfigPath ?? findTsConfigForFile(filePath);
+  function getMatcherForFile(filePath: string): MatchedConfig | null {
+    const configPath = tsConfigPath ?? findTsConfigForDir(path.dirname(filePath));
     if (!configPath) {
       return null;
     }
@@ -114,19 +134,8 @@ export function tsConfigPaths({
   }
 
   function resolveAliases(request: string, importer: string): string[] {
-    if (respectCoreModule && CORE_MODULES.has(request)) {
-      return [];
-    }
-
     const matchedConfig = getMatcherForFile(importer);
-    if (
-      !matchedConfig?.patterns.some(pattern => {
-        const wildcardIndex = pattern.indexOf('*');
-        return wildcardIndex === -1
-          ? request === pattern
-          : request.startsWith(pattern.slice(0, wildcardIndex)) && request.endsWith(pattern.slice(wildcardIndex + 1));
-      })
-    ) {
+    if (!matchedConfig?.patterns.some(pattern => matchesPattern(request, pattern))) {
       return [];
     }
 
@@ -137,8 +146,13 @@ export function tsConfigPaths({
     name: PLUGIN_NAME,
     resolveId: {
       order: 'pre',
+      filter: { id: ALIAS_CANDIDATE_FILTER },
       async handler(request, importer, options) {
-        if (!importer || request.startsWith('\0') || importer.charCodeAt(0) === 0) {
+        if (!importer || importer.charCodeAt(0) === 0) {
+          return null;
+        }
+
+        if (respectCoreModule && CORE_MODULES.has(request)) {
           return null;
         }
 
@@ -151,52 +165,32 @@ export function tsConfigPaths({
         const moduleNames = resolveAliases(request, importer);
         for (const moduleName of moduleNames) {
           const resolvedModuleName = resolveImportToSourceFile(moduleName);
-          const resolved = await this.resolve(resolvedModuleName, importer, { skipSelf: true, ...options });
+          const resolved = await this.resolve(resolvedModuleName, importer, { ...options, skipSelf: true });
 
           if (resolved) {
-            return {
-              ...resolved,
-              meta: {
-                ...resolved.meta,
-                [PLUGIN_NAME]: {
-                  resolved: true,
-                },
-              },
-            };
+            aliasedModules.add(resolved.id);
+            return resolved;
           }
         }
 
-        const resolved = await this.resolve(request, importer, { skipSelf: true, ...options });
+        // Ids that match no alias are left to the rest of the pipeline. Resolving them here would let Rolldown's
+        // native resolver pick them from node_modules and bypass the externals logic of each pass.
+        if (moduleNames.length || !localResolve || !aliasedModules.has(importer)) {
+          return null;
+        }
+
+        // `mastra dev`: an aliased module can live outside the project (e.g. another monorepo package), so its
+        // dependencies are resolved from where it lives and kept external. Hono is the exception and stays bundled.
+        const resolved = await this.resolve(request, importer, { ...options, skipSelf: true });
         if (!resolved) {
           return null;
         }
 
-        // If localResolve is true, we need to check if the importer has been resolved by the tsconfig-paths plugin
-        // if so, we need to resolve the request from the importer instead of the root and mark it as external
-        if (localResolve) {
-          const importerInfo = this.getModuleInfo(importer);
-          const importerPluginMeta = importerInfo?.meta?.[PLUGIN_NAME];
-
-          if (
-            !path.isAbsolute(request) &&
-            !request.startsWith('./') &&
-            !request.startsWith('../') &&
-            importerPluginMeta?.resolved
-          ) {
-            return {
-              ...resolved,
-              external: !request.startsWith('hono/') && request !== 'hono',
-            };
-          }
-        }
-
         return {
           ...resolved,
-          meta: {
-            ...(resolved.meta || {}),
-          },
+          external: resolved.external || (!request.startsWith('hono/') && request !== 'hono'),
         };
       },
     },
-  } satisfies Plugin;
+  };
 }

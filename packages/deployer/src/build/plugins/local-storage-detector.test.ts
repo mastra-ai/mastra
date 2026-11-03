@@ -1,17 +1,22 @@
-import { mkdtempSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdtempSync, realpathSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { rollup } from 'rollup';
-import type { Plugin } from 'rollup';
-import { parseAst } from 'rollup/parseAst';
-import { describe, expect, it } from 'vitest';
+import { rolldown } from 'rolldown';
+import type { Plugin } from 'rolldown';
+import { parseSync } from 'rolldown/utils';
+import { describe, expect, it, vi } from 'vitest';
 import { localStorageDetector } from './local-storage-detector';
 import type { LocalStorageDetection, PreflightMetadata } from './local-storage-detector';
 
+vi.mock('rolldown/utils', async importOriginal => {
+  const actual = await importOriginal<typeof import('rolldown/utils')>();
+  return { ...actual, parseSync: vi.fn(actual.parseSync) };
+});
+
 /**
- * Drives the plugin the way Rollup does: `transform` for each module (with a
- * `this.parse` context, like Rollup provides), then `generateBundle` with a
- * chunk whose `modules` map controls tree-shaking (`renderedLength`).
+ * Drives `generateBundle` the way Rolldown does: a chunk whose `modules` map
+ * controls tree-shaking (`renderedLength`), with module sources served through
+ * `this.getModuleInfo(id).code`.
  */
 function runPlugin(
   modules: Array<{ id: string; code: string; renderedLength?: number }>,
@@ -23,23 +28,17 @@ function runPlugin(
   emitted: Array<{ fileName: string; source: string }>;
   parseCalls: number;
 } {
-  const plugin = localStorageDetector(rootDir) as Plugin & { transform: Function; generateBundle: Function };
-
-  let parseCalls = 0;
-  const transformCtx = {
-    parse: (code: string) => {
-      parseCalls += 1;
-      return parseAst(code);
-    },
-  };
-  for (const { id, code } of modules) {
-    plugin.transform.call(transformCtx, code, id);
-  }
+  const plugin = localStorageDetector(rootDir) as Plugin & { generateBundle: Function };
+  vi.mocked(parseSync).mockClear();
 
   const emitted: Array<{ fileName: string; source: string }> = [];
+  const sources = new Map(modules.map(({ id, code }) => [id, code]));
   const generateCtx = {
     emitFile(file: { fileName: string; source: string }) {
       emitted.push(file);
+    },
+    getModuleInfo(id: string) {
+      return sources.has(id) ? { id, code: sources.get(id)! } : null;
     },
   };
   const chunkModules: Record<string, { renderedLength: number }> = {};
@@ -47,6 +46,7 @@ function runPlugin(
     chunkModules[id] = { renderedLength: renderedLength ?? 100 };
   }
   plugin.generateBundle.call(generateCtx, {}, { 'index.mjs': { type: 'chunk', modules: chunkModules } });
+  const parseCalls = vi.mocked(parseSync).mock.calls.length;
 
   const metadataFile = emitted.find(f => f.fileName === 'preflight-metadata.json');
   const legacyFile = emitted.find(f => f.fileName === 'preflight-local-paths.json');
@@ -378,6 +378,24 @@ describe('localStorageDetector', () => {
     expect(metadata.localPaths).toHaveLength(0);
   });
 
+  it('ignores local paths and env refs that only appear in comments', () => {
+    // Module code reaches the plugin before oxc strips comments, unlike the
+    // post-esbuild code Rollup saw. Scaffolded projects carry hints like this.
+    const { metadata } = runPlugin([
+      {
+        id: '/project/src/mastra/index.ts',
+        code: `export const storage = new LibSQLStore({
+          // stores observability into memory storage, if it needs to persist, change to file:../mastra.db
+          url: ':memory:', /* or postgresql://localhost/db via process.env.COMMENTED_URL */
+        });
+        const key = process.env.OPENAI_API_KEY;`,
+      },
+    ]);
+
+    expect(metadata.localPaths).toEqual([]);
+    expect(metadata.userEnvRefs).toEqual(['OPENAI_API_KEY']);
+  });
+
   it('emits empty arrays when nothing is found', () => {
     const { metadata, legacy } = runPlugin([
       { id: '/project/src/clean.ts', code: `const x = 'hello world';`, renderedLength: 30 },
@@ -499,11 +517,9 @@ describe('localStorageDetector', () => {
     });
   });
 
-  it('produces correct metadata through a real Rollup build (end-to-end)', async () => {
+  it('produces correct metadata through a real Rolldown build (end-to-end)', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'local-storage-detector-e2e-'));
     try {
-      // Shaped like esbuild-transpiled user output — the plugin runs
-      // post-esbuild in the deployer's chain.
       writeFileSync(
         join(dir, 'entry.mjs'),
         `const url = process.env.TURSO_DATABASE_URL || "file:./.mastra-demo.db";\n` +
@@ -512,7 +528,7 @@ describe('localStorageDetector', () => {
           `export default { url, key, bare };\n`,
       );
 
-      const bundle = await rollup({
+      const bundle = await rolldown({
         input: join(dir, 'entry.mjs'),
         plugins: [localStorageDetector()],
         logLevel: 'silent',
@@ -536,6 +552,79 @@ describe('localStorageDetector', () => {
       );
       expect(legacy.map(d => d.value)).toEqual(['file:./.mastra-demo.db', 'file:./other.db']);
       expect(Object.keys(legacy[0]!)).toEqual(['value', 'hint', 'module']);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('analyzes raw TypeScript user modules through a real Rolldown build', async () => {
+    // Rolldown reports real paths, and macOS tmpdir() is a symlink.
+    const dir = realpathSync(mkdtempSync(join(tmpdir(), 'local-storage-detector-ts-')));
+    try {
+      writeFileSync(
+        join(dir, 'unused.ts'),
+        `export const unusedUrl: string = 'file:./unused.db';\nexport const unusedKey = process.env.UNUSED_KEY;\n`,
+      );
+      writeFileSync(
+        join(dir, 'entry.ts'),
+        `import { unusedUrl } from './unused';
+import type { Mastra as MastraType } from './types';
+
+interface StorageConfig { url: string }
+type Url = 'file:./.mastra-demo.db' | (string & {});
+
+declare class MastraWorker { name: string }
+declare class Mastra { constructor(config: Record<string, unknown>) }
+declare const pubsub: unknown;
+
+class CleanupWorker extends MastraWorker {
+  override name: string = 'cleanup-jobs' as const;
+}
+
+// if it needs to persist, change to file:../mastra.db
+const url: Url = (process.env.TURSO_DATABASE_URL as string | undefined) || ('file:./.mastra-demo.db' as Url);
+const storage = { url } satisfies StorageConfig;
+
+export const mastra = new Mastra({
+  storage: storage!,
+  pubsub,
+  scheduler: { enabled: false, batchSize: 25 } as const,
+  backgroundTasks: <Record<string, unknown>>{ enabled: true },
+  workers: [new CleanupWorker()] satisfies MastraWorker[],
+} satisfies Record<string, unknown>) as unknown as MastraType;
+`,
+      );
+      writeFileSync(join(dir, 'types.ts'), `export type Mastra = { readonly brand: 'mastra' };\n`);
+
+      const bundle = await rolldown({
+        input: join(dir, 'entry.ts'),
+        plugins: [localStorageDetector(dir)],
+        logLevel: 'silent',
+      });
+      await bundle.write({ dir: join(dir, 'out'), format: 'esm' });
+      await bundle.close();
+
+      const metadata: PreflightMetadata = JSON.parse(
+        readFileSync(join(dir, 'out', 'preflight-metadata.json'), 'utf-8'),
+      );
+      expect(metadata.localPaths).toEqual([
+        {
+          value: 'file:./.mastra-demo.db',
+          hint: 'LibSQL/SQLite file path relative to the build host',
+          module: join(dir, 'entry.ts'),
+          guardedBy: 'TURSO_DATABASE_URL',
+        },
+      ]);
+      expect(metadata.userEnvRefs).toEqual(['TURSO_DATABASE_URL']);
+
+      const workersConfig = JSON.parse(readFileSync(join(dir, 'out', 'workers.json'), 'utf-8'));
+      expect(workersConfig).toEqual({
+        version: 1,
+        orchestration: { enabled: true },
+        scheduler: { enabled: false, batchSize: 25 },
+        backgroundTasks: { enabled: true },
+        custom: ['cleanup-jobs'],
+      });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

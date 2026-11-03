@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { realpathSync } from 'node:fs';
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
@@ -113,6 +114,7 @@ describe('workspaceDepsWatcher', () => {
 
       const addWatchFile = vi.fn();
       const buildStart = plugin.buildStart as (this: { addWatchFile: typeof addWatchFile }) => Promise<void>;
+      const watchChange = plugin.watchChange as (id: string, change: { event: 'update' }) => void;
 
       // First buildStart skips re-optimize (already done by analyzeBundle).
       await buildStart.call({ addWatchFile });
@@ -120,6 +122,8 @@ describe('workspaceDepsWatcher', () => {
 
       // Edit workspace package only — this is the core HMR bug case.
       await writeFile(sourceFile, `export const PACKAGE_VALUE = 'Package value is AFTER.';\n`);
+      // Rolldown reports changes by real path.
+      watchChange(realpathSync(sourceFile), { event: 'update' });
 
       await buildStart.call({ addWatchFile });
 
@@ -129,16 +133,20 @@ describe('workspaceDepsWatcher', () => {
 
       // Simulate an app-only rebuild: touch app entry without reverting package.
       // Cache must still reflect the package AFTER value (no stale optimizer output).
+      const cacheMtimeBeforeAppEdit = (await stat(cachePath)).mtimeMs;
       await writeFile(
         entryFile,
         `import { PACKAGE_VALUE } from '@internal/shared-lib';\nexport const APP_SUFFIX = 'App value is AFTER.';\nexport const value = \`\${PACKAGE_VALUE} \${APP_SUFFIX}\`;\n`,
       );
+      watchChange(realpathSync(entryFile), { event: 'update' });
 
       await buildStart.call({ addWatchFile });
 
       const afterAppEdit = await readFile(cachePath, 'utf-8');
       expect(afterAppEdit).toContain('Package value is AFTER.');
       expect(afterAppEdit).not.toContain('Package value is BEFORE.');
+      // App-only changes must not re-run the workspace optimizer.
+      expect((await stat(cachePath)).mtimeMs).toBe(cacheMtimeBeforeAppEdit);
     } finally {
       process.chdir(originalCwd);
     }
@@ -193,4 +201,34 @@ describe('workspaceDepsWatcher', () => {
       process.chdir(originalCwd);
     }
   }, 30000);
+
+  it('watches workspace roots reached through a symlink by their real path', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'workspace-deps-symlink-'));
+    tempDirs.push(tempDir);
+
+    const realPackageDir = join(tempDir, 'real', 'shared-lib');
+    const linkedPackageDir = join(tempDir, 'linked-shared-lib');
+    await mkdir(join(realPackageDir, 'src'), { recursive: true });
+    await writeFile(join(realPackageDir, 'src', 'index.ts'), `export const value = 1;\n`);
+    await symlink(realPackageDir, linkedPackageDir);
+
+    const plugin = workspaceDepsWatcher({
+      depsToOptimize: new Map([
+        ['@internal/shared-lib', { exports: ['value'], rootPath: linkedPackageDir, isWorkspace: true }],
+      ]),
+      optimizedDependencyFiles: new Map(),
+      workspaceMap: new Map(),
+      workspaceRoot: tempDir,
+      outputDir: join(tempDir, '.mastra', '.build'),
+      platform: 'node',
+    });
+
+    const addWatchFile = vi.fn();
+    const buildStart = plugin.buildStart as (this: { addWatchFile: typeof addWatchFile }) => Promise<void>;
+    await buildStart.call({ addWatchFile });
+
+    expect(addWatchFile).toHaveBeenCalledWith(realpathSync(join(realPackageDir, 'src', 'index.ts')));
+    expect(addWatchFile).not.toHaveBeenCalledWith(expect.stringContaining('linked-shared-lib'));
+  });
 });

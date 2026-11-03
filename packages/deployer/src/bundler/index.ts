@@ -5,14 +5,14 @@ import { MastraBase } from '@internal/core/base';
 import { MastraError, ErrorDomain, ErrorCategory } from '@internal/core/error';
 import { loadEnvVars } from '@internal/deployer';
 import type { BundlerConfig, IBundler } from '@internal/deployer';
-import virtual from '@rollup/plugin-virtual';
 import * as pkg from 'empathic/package';
 import fsExtra, { copy, ensureDir, emptyDir, readJSON } from 'fs-extra/esm';
-import type { InputOptions, OutputOptions } from 'rollup';
+import type { InputOptions, OutputOptions } from 'rolldown';
 import { glob } from 'tinyglobby';
 import { analyzeBundle } from '../build/analyze';
 import { createBundler as createBundlerUtil, getInputOptions, getUnresolvedWorkspaceImport } from '../build/bundler';
 import { getBundlerOptions } from '../build/bundlerOptions';
+import { exactPathRegex, virtualModules } from '../build/rolldown';
 import type { ExternalDependencyInfo, InternalBundlerOptions } from '../build/types';
 import type { BundlerPlatform } from '../build/utils';
 import { getPackageName, isBareModuleSpecifier, shouldSkipInstall, slash } from '../build/utils';
@@ -533,10 +533,11 @@ export abstract class Bundler extends MastraBase implements IBundler {
     inputOptions.input = { ...entryInputs, ...toolsInputOptions };
 
     if (Object.keys(virtualEntries).length > 0) {
+      const virtualEntriesPlugin = virtualModules(virtualEntries, { name: 'virtual-entries' });
       if (Array.isArray(inputOptions.plugins)) {
-        inputOptions.plugins.unshift(virtual(virtualEntries));
+        inputOptions.plugins.unshift(virtualEntriesPlugin);
       } else {
-        inputOptions.plugins = [virtual(virtualEntries)];
+        inputOptions.plugins = [virtualEntriesPlugin];
       }
     }
 
@@ -755,30 +756,35 @@ export abstract class Bundler extends MastraBase implements IBundler {
         {
           ...inputOptions,
           logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
-          onwarn: warning => {
-            const unresolvedWorkspaceDep = getUnresolvedWorkspaceImport(
-              warning as { code: string; source?: string; id?: string },
-              analyzedBundleInfo.workspaceMap,
-            );
+          // Rolldown only reports circular dependencies when asked to.
+          checks: { ...inputOptions.checks, circularDependency: true },
+          onLog: (level, log) => {
+            if (level !== 'warn') {
+              return;
+            }
+
+            const unresolvedWorkspaceDep = getUnresolvedWorkspaceImport(log, analyzedBundleInfo.workspaceMap);
             if (unresolvedWorkspaceDep) {
               unresolvedWorkspaceImports.push({ source: unresolvedWorkspaceDep });
             }
 
-            if (warning.code === 'CIRCULAR_DEPENDENCY') {
-              if (warning.ids?.[0]?.includes('node_modules')) {
+            if (log.code === 'CIRCULAR_DEPENDENCY') {
+              const ids = log.ids ?? [];
+              if (!ids.length || ids.every(id => id.includes('node_modules'))) {
                 return;
               }
 
               this.logger.warn('Circular dependency found', {
-                dependency: warning.message.replace('Circular dependency: ', ''),
+                dependency: ids.map(id => relative(projectRoot, id)).join(' -> '),
               });
             }
           },
         },
         {
           dir: bundleLocation,
-          manualChunks: {
-            mastra: ['#mastra'],
+          // `#mastra` resolves to the entry file; its dependencies follow it into the same chunk.
+          codeSplitting: {
+            groups: [{ name: 'mastra', test: exactPathRegex(mastraEntryFile) }],
           },
           sourcemap: internalBundlerOptions.enableSourcemap,
         },

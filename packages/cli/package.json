@@ -89,7 +89,6 @@
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "memfs": "^4.80.0",
-    "rollup": "^4.65.0",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "type-fest": "^5.10.0",

@@ -1,57 +1,35 @@
 import { pathToFileURL } from 'node:url';
 import type { IMastraLogger } from '@internal/core/logger';
-import commonjs from '@rollup/plugin-commonjs';
-import json from '@rollup/plugin-json';
-import virtual from '@rollup/plugin-virtual';
 import { resolveModule } from 'local-pkg';
-import { rollup } from 'rollup';
-import type { OutputChunk, Plugin, SourceMap } from 'rollup';
+import { rolldown } from 'rolldown';
+import type { Plugin, SourceMap } from 'rolldown';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { mastraInternalAliasPlugin, mastraToolsAliasPlugin } from '../bundler';
 import { getPackageMetadata, getPackageRootPath } from '../package-info';
-import { esbuild } from '../plugins/esbuild';
 import { moduleAlias } from '../plugins/module-alias';
-import { protocolExternalResolver } from '../plugins/protocol-external-resolver';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
+import {
+  EXTERNAL_PROTOCOL_RE,
+  bareExternals,
+  bundlerLogLevel,
+  extractImportedBindings,
+  getPlatformOptions,
+  packagesRegex,
+  scopedDefine,
+  VIRTUAL_PREFIX,
+  virtualModules,
+} from '../rolldown';
 import type { DependencyMetadata } from '../types';
-import { getPackageName, isBareModuleSpecifier, isDependencyPartOfPackage, slash } from '../utils';
+import { getPackageName, isBareModuleSpecifier, slash } from '../utils';
 import type { BundlerPlatform } from '../utils';
 import { DEPS_TO_IGNORE } from './constants';
 
-function analysisExternals({
-  workspaceMap,
-  externals,
-  externalsPreset,
-}: {
-  workspaceMap: Map<string, WorkspacePackageInfo>;
-  externals: string[];
-  externalsPreset: boolean;
-}): Plugin {
-  return {
-    name: 'analysis-externals',
-    resolveId(source) {
-      if (!isBareModuleSpecifier(source)) {
-        return null;
-      }
-
-      const packageName = getPackageName(source);
-      if (packageName && workspaceMap.has(packageName)) {
-        return null;
-      }
-
-      if (externalsPreset || externals.some(external => isDependencyPartOfPackage(source, external))) {
-        return { id: source, external: true };
-      }
-
-      return null;
-    },
-  };
-}
-
 /**
- * Configures and returns the Rollup plugins needed for analyzing entry files.
- * Sets up module resolution, transpilation, and custom alias handling for Mastra-specific imports.
+ * Configures the Rolldown plugins used to analyze entry files.
+ *
+ * Every bare import stays external (workspace packages are analyzed recursively instead), which is what Rollup did
+ * implicitly by leaving unresolved imports external. `externals`/`externalsPreset` therefore don't change this pass.
  */
 function getInputPlugins(
   { entry, isVirtualFile }: { entry: string; isVirtualFile: boolean },
@@ -59,68 +37,52 @@ function getInputPlugins(
   {
     sourcemapEnabled,
     env,
-    workspaceMap,
-    externals,
-    externalsPreset,
     alias,
     platform,
+    requiredExternals,
   }: {
     sourcemapEnabled: boolean;
     env: Record<string, string>;
-    workspaceMap: Map<string, WorkspacePackageInfo>;
-    externals: string[];
-    externalsPreset: boolean;
     alias: Record<string, string>;
     platform: BundlerPlatform;
+    requiredExternals: Set<string>;
   },
 ): Plugin[] {
-  let virtualPlugin = null;
-  if (isVirtualFile) {
-    virtualPlugin = virtual({
-      '#entry': entry,
-    });
-    entry = '#entry';
-  }
+  const plugins: (Plugin | null)[] = [
+    isVirtualFile ? virtualModules({ '#entry': entry }) : null,
+    mastraInternalAliasPlugin(mastraEntry, { preserveSymlinks: true }),
+    moduleAlias(alias, mastraEntry, platform),
+    mastraToolsAliasPlugin(),
+    tsConfigPaths(),
+    scopedDefine(env),
+    removeDeployer(mastraEntry, {
+      sourcemap: sourcemapEnabled,
+    }),
+    bareExternals({
+      onExternal: (id, kind) => {
+        if (kind === 'require-call') {
+          requiredExternals.add(id);
+        }
+      },
+    }),
+  ];
 
-  const plugins = [];
-  if (virtualPlugin) {
-    plugins.push(virtualPlugin);
-  }
-
-  const aliasPlugin = moduleAlias(alias, mastraEntry, platform);
-  plugins.push(
-    ...[
-      protocolExternalResolver(),
-      mastraInternalAliasPlugin(mastraEntry),
-      ...(aliasPlugin ? [aliasPlugin] : []),
-      mastraToolsAliasPlugin(),
-      tsConfigPaths(),
-      analysisExternals({ workspaceMap, externals, externalsPreset }),
-      json(),
-      esbuild({ define: env }),
-      commonjs({
-        strictRequires: 'debug',
-        ignoreTryCatch: false,
-        transformMixedEsModules: true,
-        extensions: ['.js', '.ts'],
-      }),
-      removeDeployer(mastraEntry, {
-        sourcemap: sourcemapEnabled,
-      }),
-      esbuild(),
-    ],
-  );
-
-  return plugins;
+  return plugins.filter(plugin => plugin !== null);
 }
 
+type AnalyzedChunk = {
+  facadeModuleId: string | null;
+  importedBindings: Record<string, string[]>;
+  dynamicImports: string[];
+};
+
 /**
- * Extracts and categorizes dependencies from Rollup output to determine which ones need optimization.
+ * Extracts and categorizes dependencies from the analyzed chunk to determine which ones need optimization.
  * Analyzes both static imports and dynamic imports while filtering out Node.js built-ins and ignored dependencies.
  * Identifies workspace packages and resolves package root paths for proper bundling optimization.
  */
 async function captureDependenciesToOptimize(
-  output: OutputChunk,
+  output: AnalyzedChunk,
   workspaceMap: Map<string, WorkspacePackageInfo>,
   projectRoot: string,
   {
@@ -158,7 +120,7 @@ async function captureDependenciesToOptimize(
   }
 
   let entryRootPath = projectRoot;
-  if (!output.facadeModuleId.startsWith('\x00virtual:')) {
+  if (!output.facadeModuleId.startsWith(VIRTUAL_PREFIX)) {
     entryRootPath = (await getPackageRootPath(output.facadeModuleId)) || projectRoot;
   }
 
@@ -208,7 +170,7 @@ async function captureDependenciesToOptimize(
         continue;
       }
 
-      const importerFile = output.facadeModuleId!.startsWith('\x00virtual:')
+      const importerFile = output.facadeModuleId!.startsWith(VIRTUAL_PREFIX)
         ? mastraEntry || projectRoot
         : output.facadeModuleId!;
       const importerPath = pathToFileURL(importerFile).href;
@@ -391,35 +353,40 @@ export async function analyzeEntry(
   }
 
   try {
-    const optimizerBundler = await rollup({
-      logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
+    const requiredExternals = new Set<string>();
+    const optimizerBundler = await rolldown({
+      logLevel: bundlerLogLevel(),
       input: isVirtualFile ? '#entry' : entry,
+      // Relative imports from the virtual entry resolve against the cwd, like Rollup did.
+      cwd: process.cwd(),
       treeshake: false,
-      preserveSymlinks: true,
+      ...getPlatformOptions(platform, { preserveSymlinks: true }),
       plugins: getInputPlugins({ entry, isVirtualFile }, mastraEntry, {
         sourcemapEnabled,
         env,
-        workspaceMap,
-        externals,
-        externalsPreset,
         alias,
         platform,
+        requiredExternals,
       }),
-      external: id => DEPS_TO_IGNORE.some(dep => isDependencyPartOfPackage(id, dep)),
+      external: [EXTERNAL_PROTOCOL_RE, packagesRegex(DEPS_TO_IGNORE)!],
     });
 
     const { output } = await (async () => {
       try {
         return await optimizerBundler.generate({
           format: 'esm',
-          inlineDynamicImports: true,
+          codeSplitting: false,
         });
       } finally {
         await optimizerBundler.close();
       }
     })();
 
-    const depsToOptimize = await captureDependenciesToOptimize(output[0] as OutputChunk, workspaceMap, projectRoot, {
+    const chunk = output[0];
+    const { importedBindings, dynamicImports } = extractImportedBindings(chunk.code, requiredExternals);
+    const analyzedChunk: AnalyzedChunk = { facadeModuleId: chunk.facadeModuleId, importedBindings, dynamicImports };
+
+    const depsToOptimize = await captureDependenciesToOptimize(analyzedChunk, workspaceMap, projectRoot, {
       logger,
       mastraEntry,
       shouldCheckTransitiveDependencies,
@@ -435,8 +402,8 @@ export async function analyzeEntry(
     const result: AnalyzeEntryResult = {
       dependencies: depsToOptimize,
       output: {
-        code: output[0].code,
-        map: output[0].map as SourceMap,
+        code: chunk.code,
+        map: chunk.map,
       },
     };
 

@@ -1,263 +1,184 @@
-import { readFile } from 'node:fs/promises';
-import { getPackageInfo } from 'local-pkg';
-import type { Plugin, PluginContext } from 'rollup';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { mkdir, mkdtemp, realpath, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
+import type { Plugin } from 'rolldown';
+import { rolldown } from 'rolldown';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
+import { nodeModulesExternals } from './node-modules-extension-resolver';
 
-const mockNodeResolveHandler = vi.fn();
+const tempDirs: string[] = [];
 
-vi.mock('node:fs/promises', () => ({
-  exists: vi.fn(),
-  readFile: vi.fn(),
-}));
+afterEach(async () => {
+  await Promise.all(tempDirs.splice(0).map(dir => rm(dir, { recursive: true, force: true })));
+});
 
-vi.mock('local-pkg', () => ({
-  getPackageInfo: vi.fn(),
-}));
+async function createFixture(files: Record<string, string>) {
+  // Rolldown reports realpath'd importers (macOS tmpdir is a symlink to /private/var).
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'mastra-node-modules-externals-')));
+  tempDirs.push(root);
+  await Promise.all(
+    Object.entries(files).map(async ([path, content]) => {
+      const file = join(root, path);
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(file, content);
+    }),
+  );
+  return root;
+}
 
-vi.mock('@rollup/plugin-node-resolve', () => ({
-  default: () => ({
-    resolveId: { handler: mockNodeResolveHandler },
-  }),
-}));
+const pkg = (json: Record<string, unknown>) => JSON.stringify(json);
 
-describe('nodeModulesExtensionResolver', () => {
-  let plugin: Plugin;
-  let mockContext: PluginContext;
-
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    vi.resetModules();
-
-    const mod = await import('./node-modules-extension-resolver');
-    plugin = mod.nodeModulesExtensionResolver();
-    mockContext = {} as PluginContext;
+async function build(
+  root: string,
+  {
+    workspaceMap = new Map<string, WorkspacePackageInfo>(),
+    onWorkspaceImport,
+    plugins = [],
+  }: {
+    workspaceMap?: Map<string, WorkspacePackageInfo>;
+    onWorkspaceImport?: (id: string, importer: string) => void;
+    plugins?: Plugin[];
+  } = {},
+) {
+  const bundle = await rolldown({
+    input: join(root, 'src/entry.mjs'),
+    platform: 'node',
+    logLevel: 'silent',
+    plugins: [nodeModulesExternals({ platform: 'node', workspaceMap, onWorkspaceImport }), ...plugins],
   });
 
-  const resolveId = (id: string, importer?: string) => {
-    const fn = plugin.resolveId as Function;
-    return fn.call(mockContext, id, importer, {});
-  };
+  try {
+    const { output } = await bundle.generate({ format: 'esm' });
+    return output[0];
+  } finally {
+    await bundle.close();
+  }
+}
 
-  describe('skips resolution for', () => {
-    it('relative imports', async () => {
-      const result = await resolveId('./utils', '/project/src/index.ts');
-      expect(result).toBeNull();
+describe('nodeModulesExternals', () => {
+  it('adds the file extension to subpath imports of packages without exports', async () => {
+    const root = await createFixture({
+      'src/entry.mjs': `
+        import get from 'nox/fp/get';
+        import withExt from 'nox/fp/get.js';
+        import dir from 'nox/dir';
+        import sibling from 'nox/lib/sibling';
+        export { get, withExt, dir, sibling };
+      `,
+      'node_modules/nox/package.json': pkg({ name: 'nox', main: 'index.js' }),
+      'node_modules/nox/fp/get.js': `module.exports = 1;`,
+      'node_modules/nox/dir/index.js': `module.exports = 1;`,
+      'node_modules/nox/lib/sibling.ts': `export default 1;`,
+      'node_modules/nox/lib/sibling.js': `module.exports = 1;`,
     });
 
-    it('absolute paths', async () => {
-      const result = await resolveId('/absolute/path', '/project/src/index.ts');
-      expect(result).toBeNull();
-    });
+    const chunk = await build(root);
 
-    it('absolute windows paths', async () => {
-      const result = await resolveId('C:\\absolute\\path', '/project/src/index.ts');
-      expect(result).toBeNull();
-    });
-
-    it('imports without an importer path', async () => {
-      const result = await resolveId('lodash', undefined);
-      expect(result).toBeNull();
-    });
-
-    it('virtual importers', async () => {
-      const result = await resolveId('lodash/get', '\0virtual:#entry');
-      expect(result).toBeNull();
-      expect(getPackageInfo).not.toHaveBeenCalled();
-    });
-
-    it('builtin modules', async () => {
-      const result = await resolveId('fs', '/project/src/index.ts');
-      expect(result).toBeNull();
-    });
-
-    it('node: prefixed builtins', async () => {
-      const result = await resolveId('node:path', '/project/src/index.ts');
-      expect(result).toBeNull();
-    });
-
-    it('protocol imports', async () => {
-      const result = await resolveId('cloudflare:workers', '/project/src/index.ts');
-      expect(result).toBeNull();
-    });
-
-    it('direct package imports (non-scoped)', async () => {
-      const result = await resolveId('lodash', '/project/src/index.ts');
-      expect(result).toBeNull();
-    });
-
-    it('direct package imports (scoped)', async () => {
-      const result = await resolveId('@mastra/core', '/project/src/index.ts');
-      expect(result).toBeNull();
-    });
-
-    it('imports with an extension that have exports mapping', async () => {
-      const pkgJson = { name: 'hono', exports: { 'hono/utils/mime.js': './dist/utils/mime.js' } };
-      vi.mocked(getPackageInfo).mockResolvedValue({
-        name: 'hono',
-        version: '1.0.0',
-        rootPath: '/project/node_modules/hono',
-        packageJsonPath: '/project/node_modules/hono/package.json',
-        packageJson: { name: 'hono', version: '1.0.0' },
-      });
-      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
-
-      const result = await resolveId('hono/utils/mime.js', '/project/src/index.ts');
-
-      expect(result).toBeNull();
-    });
+    expect(chunk.imports.sort()).toEqual(['nox/dir/index.js', 'nox/fp/get.js', 'nox/lib/sibling.js']);
   });
 
-  describe('imports with JS extension', () => {
-    it('It will resolve the import to the correct path if no exports present', async () => {
-      const pkgJson = { name: 'lodash' };
-      vi.mocked(getPackageInfo).mockResolvedValue({
-        name: 'lodash',
-        version: '1.0.0',
-        rootPath: '/project/node_modules/lodash',
-        packageJsonPath: '/project/node_modules/lodash/package.json',
-        packageJson: { name: 'lodash', version: '1.0.0' },
-      });
-      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
-
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.js' });
-
-      const result = await resolveId('lodash/fp/get.js', '/project/src/index.ts');
-
-      expect(result).toMatchObject({
-        external: true,
-        id: 'lodash/fp/get.js',
-      });
+  it('keeps subpath specifiers of packages with exports', async () => {
+    const root = await createFixture({
+      'src/entry.mjs': `import sub from 'exp/sub'; export { sub };`,
+      'node_modules/exp/package.json': pkg({ name: 'exp', exports: { './sub': './dist/sub.js' } }),
+      'node_modules/exp/dist/sub.js': `export default 1;`,
     });
 
-    it('handles .mjs extension', async () => {
-      const pkgJson = { name: 'lodash' };
-      vi.mocked(getPackageInfo).mockResolvedValue({
-        name: 'lodash',
-        version: '1.0.0',
-        rootPath: '/project/node_modules/lodash',
-        packageJsonPath: '/project/node_modules/lodash/package.json',
-        packageJson: { name: 'lodash', version: '1.0.0' },
-      });
-      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
+    const chunk = await build(root);
 
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.mjs' });
-
-      const result = await resolveId('lodash/fp/get.mjs', '/project/src/index.ts');
-
-      expect(result).toMatchObject({
-        external: true,
-        id: 'lodash/fp/get.mjs',
-      });
-    });
-
-    it('handles .cjs extension', async () => {
-      const pkgJson = { name: 'lodash' };
-      vi.mocked(getPackageInfo).mockResolvedValue({
-        name: 'lodash',
-        version: '1.0.0',
-        rootPath: '/project/node_modules/lodash',
-        packageJsonPath: '/project/node_modules/lodash/package.json',
-        packageJson: { name: 'lodash', version: '1.0.0' },
-      });
-      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
-
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.cjs' });
-
-      const result = await resolveId('lodash/fp/get.cjs', '/project/src/index.ts');
-
-      expect(result).toMatchObject({
-        external: true,
-        id: 'lodash/fp/get.cjs',
-      });
-    });
+    expect(chunk.imports).toEqual(['exp/sub']);
   });
 
-  describe('imports without extension', () => {
-    it('resolves the import to the correct path if no exports present', async () => {
-      const pkgJson = { name: 'lodash' };
-      vi.mocked(getPackageInfo).mockResolvedValue({
-        name: 'lodash',
-        version: '1.0.0',
-        rootPath: '/project/node_modules/lodash',
-        packageJsonPath: '/project/node_modules/lodash/package.json',
-        packageJson: { name: 'lodash', version: '1.0.0' },
-      });
-      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
-
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/lodash/fp/get.cjs' });
-
-      const result = await resolveId('lodash/fp/get', '/project/src/index.ts');
-
-      expect(result).toMatchObject({
-        external: true,
-        id: 'lodash/fp/get.cjs',
-      });
+  it('externalizes root imports, builtins and unresolvable specifiers without bundling them', async () => {
+    const root = await createFixture({
+      'src/entry.mjs': `
+        import hono from 'hono';
+        import fs from 'node:fs';
+        import path from 'path';
+        import missing from 'missing-pkg/sub';
+        export { hono, fs, path, missing };
+      `,
+      'node_modules/hono/package.json': pkg({ name: 'hono', main: 'index.js' }),
+      'node_modules/hono/index.js': `export default 'bundled-hono';`,
     });
 
-    it('returns null when resolution fails completely', async () => {
-      mockNodeResolveHandler.mockResolvedValue(null);
+    const chunk = await build(root);
 
-      const result = await resolveId('nonexistent/module', '/project/src/index.ts');
-
-      expect(result).toBeNull();
-    });
+    expect(chunk.imports.sort()).toEqual(['hono', 'missing-pkg/sub', 'node:fs', 'path']);
+    expect(chunk.code).not.toContain('bundled-hono');
   });
 
-  describe('scoped packages', () => {
-    it('handles scoped package subpath imports with exports', async () => {
-      const pkgJson = { name: '@my/lodash', exports: {} };
-      vi.mocked(getPackageInfo).mockResolvedValue({
-        name: '@my/lodash',
-        version: '1.0.0',
-        rootPath: '/project/node_modules/@my/lodash',
-        packageJsonPath: '/project/node_modules/@my/lodash/package.json',
-        packageJson: { name: '@my/lodash', version: '1.0.0' },
-      });
-      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
-
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/@my/lodash/fp/get.cjs' });
-
-      const result = await resolveId('@my/lodash/fp/get', '/project/src/index.ts');
-
-      expect(result).toBeNull();
+  it('computes the path from the package root when a nested package.json is closer', async () => {
+    const root = await createFixture({
+      'src/entry.mjs': `import x from 'nox/esm/x'; export { x };`,
+      'node_modules/nox/package.json': pkg({ name: 'nox' }),
+      'node_modules/nox/esm/package.json': pkg({ type: 'module' }),
+      'node_modules/nox/esm/x.js': `export default 1;`,
     });
 
-    it('adds extension for scoped package without exports', async () => {
-      const pkgJson = { name: '@my/lodash' };
-      vi.mocked(getPackageInfo).mockResolvedValue({
-        name: '@my/lodash',
-        version: '1.0.0',
-        rootPath: '/project/node_modules/@my/lodash',
-        packageJsonPath: '/project/node_modules/@my/lodash/package.json',
-        packageJson: { name: '@my/lodash', version: '1.0.0' },
-      });
-      vi.mocked(readFile).mockResolvedValue(JSON.stringify(pkgJson));
-      mockNodeResolveHandler.mockResolvedValue({ id: '/project/node_modules/@my/lodash/utils.cjs' });
+    const chunk = await build(root);
 
-      const result = await resolveId('@my/lodash/utils', '/project/src/index.ts');
-
-      expect(result).toEqual({ id: '@my/lodash/utils.cjs', external: true });
-    });
+    expect(chunk.imports).toEqual(['nox/esm/x.js']);
   });
 
-  describe('edge cases', () => {
-    it('handles package.json read failure gracefully', async () => {
-      vi.mocked(getPackageInfo).mockResolvedValue({
-        name: '@my/lodash',
-        version: '1.0.0',
-        rootPath: '/project/node_modules/@my/lodash',
-        packageJsonPath: '/project/node_modules/@my/lodash/package.json',
-        packageJson: { name: '@my/lodash', version: '1.0.0' },
-      });
-
-      vi.mocked(readFile).mockImplementation(() => {
-        throw new Error('ENOENT');
-      });
-
-      const result = await resolveId('broken/utils', '/project/src/index.ts');
-
-      // Falls through to non-exports path
-      expect(result).toBeNull();
+  it('handles scoped packages', async () => {
+    const root = await createFixture({
+      'src/entry.mjs': `
+        import utils from '@my/nox/utils';
+        import sub from '@my/exp/sub';
+        export { utils, sub };
+      `,
+      'node_modules/@my/nox/package.json': pkg({ name: '@my/nox' }),
+      'node_modules/@my/nox/utils.js': `module.exports = 1;`,
+      'node_modules/@my/exp/package.json': pkg({ name: '@my/exp', exports: { './sub': './sub.js' } }),
+      'node_modules/@my/exp/sub.js': `export default 1;`,
     });
+
+    const chunk = await build(root);
+
+    expect(chunk.imports.sort()).toEqual(['@my/exp/sub', '@my/nox/utils.js']);
+  });
+
+  it('externalizes workspace imports and reports them', async () => {
+    const root = await createFixture({
+      'src/entry.mjs': `
+        import ws from '@ws/pkg';
+        import sub from '@ws/pkg/sub';
+        export { ws, sub };
+      `,
+      'packages/pkg/package.json': pkg({ name: '@ws/pkg', main: 'index.js' }),
+    });
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      ['@ws/pkg', { location: join(root, 'packages/pkg'), dependencies: {}, version: '1.0.0' }],
+    ]);
+    const onWorkspaceImport = vi.fn();
+
+    const chunk = await build(root, { workspaceMap, onWorkspaceImport });
+
+    expect(chunk.imports.sort()).toEqual(['@ws/pkg', '@ws/pkg/sub']);
+    const entry = join(root, 'src/entry.mjs');
+    expect(onWorkspaceImport.mock.calls.sort()).toEqual([
+      ['@ws/pkg', entry],
+      ['@ws/pkg/sub', entry],
+    ]);
+  });
+
+  it('runs after plugins that resolve bare imports themselves', async () => {
+    const root = await createFixture({
+      'src/entry.mjs': `import local from 'nox/aliased'; export { local };`,
+      'src/aliased.mjs': `export default 'aliased-value';`,
+    });
+    const alias: Plugin = {
+      name: 'test-alias',
+      resolveId(id) {
+        return id === 'nox/aliased' ? join(root, 'src/aliased.mjs') : null;
+      },
+    };
+
+    const chunk = await build(root, { plugins: [alias] });
+
+    expect(chunk.imports).toEqual([]);
+    expect(chunk.code).toContain('aliased-value');
   });
 });

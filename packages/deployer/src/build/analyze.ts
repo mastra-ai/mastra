@@ -4,7 +4,7 @@ import { basename, isAbsolute, join, relative } from 'node:path';
 import { transformAsync, transformSync } from '@babel/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@internal/core/error';
 import type { IMastraLogger } from '@internal/core/logger';
-import type { OutputAsset, OutputChunk } from 'rollup';
+import type { OutputAsset, OutputChunk } from 'rolldown';
 import * as stackTraceParser from 'stacktrace-parser';
 import { getWorkspaceInformation } from '../bundler/workspaceDependencies';
 import type { WorkspacePackageInfo } from '../bundler/workspaceDependencies';
@@ -454,14 +454,16 @@ export async function analyzeBundle(
       platform,
     });
 
-    // Detect pino transports in the bundled output
-    transformSync(analyzeResult.output.code, {
-      filename: 'pino-detection.js',
-      plugins: [() => detectPinoTransports(detectedPinoTransports)],
-      configFile: false,
-      babelrc: false,
-      code: false,
-    });
+    // Detect pino transports in the bundled output. Skips the Babel parse when nothing can match.
+    if (analyzeResult.output.code.includes('pino') && /\.transport\s*\(/.test(analyzeResult.output.code)) {
+      transformSync(analyzeResult.output.code, {
+        filename: 'pino-detection.js',
+        plugins: [() => detectPinoTransports(detectedPinoTransports)],
+        configFile: false,
+        babelrc: false,
+        code: false,
+      });
+    }
 
     // Write the entry file to the output dir so that we can use it for workspace resolution stuff
     await writeFile(join(outputDir, `entry-${index++}.mjs`), analyzeResult.output.code);
@@ -523,34 +525,38 @@ export async function analyzeBundle(
   logger.info('Optimizing dependencies...');
   logger.debug('Sorted dependencies', { deps: sortedDeps });
 
-  const { output, fileNameToDependencyMap, usedExternals } = await bundleExternals(depsToOptimize, outputDir, {
-    bundlerOptions: {
-      externalsPreset,
-      mergedExternals,
-      isDev,
-      alias: bundlerOptions?.alias,
+  const { output, fileNameToDependencyMap, usedExternals, requiredExternals } = await bundleExternals(
+    depsToOptimize,
+    outputDir,
+    {
+      bundlerOptions: {
+        externalsPreset,
+        mergedExternals,
+        isDev,
+        alias: bundlerOptions?.alias,
+      },
+      projectRoot,
+      workspaceRoot,
+      workspaceMap,
+      platform,
     },
-    projectRoot,
-    workspaceRoot,
-    workspaceMap,
-    platform,
-  });
+  );
 
-  // Filesystem-relative workspace paths for filtering workspace imports from rollup output.
+  // Filesystem-relative workspace paths for filtering workspace imports from bundler output.
   // Normalize to forward slashes so the startsWith check works on Windows where
-  // path.relative() produces backslashes but rollup uses forward slashes.
+  // path.relative() produces backslashes but the bundler uses forward slashes.
   const relativeWorkspaceFolderPaths = Array.from(workspaceMap.values()).map(pkgInfo =>
     slash(relative(workspaceRoot || projectRoot, pkgInfo.location)),
   );
 
-  for (const o of output) {
-    if (o.type === 'asset') {
-      continue;
-    }
+  const externalImports: Array<{ imports: Iterable<string>; importerId: string | undefined }> = output
+    .filter(o => o.type === 'chunk')
+    .map(o => ({ imports: o.imports, importerId: getLastConcreteModuleId(o.moduleIds) }));
+  // `require()`d externals stay lazy `createRequire` calls and are missing from `chunk.imports`.
+  externalImports.push({ imports: requiredExternals, importerId: undefined });
 
-    const importerId = getLastConcreteModuleId(o.moduleIds);
-
-    for (const i of o.imports) {
+  for (const { imports, importerId } of externalImports) {
+    for (const i of imports) {
       if (isBuiltinModule(i)) {
         continue;
       }

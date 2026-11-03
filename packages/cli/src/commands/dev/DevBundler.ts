@@ -1,5 +1,5 @@
 import { readFile, writeFile } from 'node:fs/promises';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FileService } from '@mastra/deployer';
 import {
@@ -9,10 +9,14 @@ import {
   prepareFsAgentsEntry,
   writeFsAgentsEntry,
 } from '@mastra/deployer/build';
-import type { DiscoveredFsAgent, PrepareFsAgentsEntryResult } from '@mastra/deployer/build';
+import type {
+  DiscoveredFsAgent,
+  PrepareFsAgentsEntryResult,
+  RolldownPluginOption,
+  RolldownWatcherEvent,
+} from '@mastra/deployer/build';
 import { Bundler } from '@mastra/deployer/bundler';
 import * as fsExtra from 'fs-extra';
-import type { InputPluginOption, RollupWatcherEvent } from 'rollup';
 
 import { devLogger } from '../../utils/dev-logger.js';
 import { shouldSkipDotenvLoading } from '../utils.js';
@@ -26,7 +30,7 @@ interface FsRoutingWatchOptions {
 
 /**
  * Files whose contents are inlined into the generated fs-agents module rather
- * than imported by it. Rollup can't see them through the module graph, so the
+ * than imported by it. Rolldown can't see them through the module graph, so the
  * dev watcher has to register them explicitly or edits won't trigger a rebuild.
  */
 function collectInlinedPaths(agents: DiscoveredFsAgent[]): string[] {
@@ -142,19 +146,29 @@ export class DevBundler extends Bundler {
       {
         ...inputOptions,
         logLevel: inputOptions.logLevel === 'silent' ? 'warn' : inputOptions.logLevel,
-        onwarn: warning => {
-          if (warning.code === 'CIRCULAR_DEPENDENCY') {
-            if (warning.ids?.[0]?.includes('node_modules')) {
-              return;
-            }
-
-            this.logger.warn('Circular dependency found', {
-              dependency: warning.message.replace('Circular dependency: ', ''),
-            });
+        checks: { ...inputOptions.checks, circularDependency: true },
+        onLog: (level, log, defaultHandler) => {
+          if (level !== 'warn') {
+            defaultHandler(level, log);
+            return;
           }
+
+          // Like the previous `onwarn`, only circular dependencies are surfaced. Rolldown's
+          // message carries ANSI codes and a `[CODE]` prefix, so the chain is rebuilt from `ids`.
+          if (log.code !== 'CIRCULAR_DEPENDENCY' || !log.ids?.length) {
+            return;
+          }
+
+          if (log.ids.every(id => id.includes('node_modules'))) {
+            return;
+          }
+
+          this.logger.warn('Circular dependency found', {
+            dependency: log.ids.map(id => relative(process.cwd(), id)).join(' -> '),
+          });
         },
         plugins: [
-          ...(inputOptions.plugins as InputPluginOption[]),
+          ...(inputOptions.plugins as RolldownPluginOption[]),
           {
             name: 'env-watcher',
             buildStart() {
@@ -221,17 +235,29 @@ export class DevBundler extends Bundler {
 
     devLogger.info('Preparing development environment...');
     return new Promise((resolve, reject) => {
-      const cb = (event: RollupWatcherEvent) => {
+      let settled = false;
+      // Rolldown iterates its listener array while awaiting each listener, and `off()` splices
+      // that array, so removing `cb` synchronously (or in a microtask) skips the next listener.
+      const settle = () => {
+        settled = true;
+        setImmediate(() => watcher.off('event', cb));
+      };
+
+      const cb = (event: RolldownWatcherEvent) => {
+        if (settled) {
+          return;
+        }
+
         if (event.code === 'BUNDLE_END') {
           devLogger.success('Initial bundle complete');
-          watcher.off('event', cb);
+          settle();
           resolve(watcher);
         }
 
         if (event.code === 'ERROR') {
           console.info(event);
           devLogger.error('Bundling failed - check console for details');
-          watcher.off('event', cb);
+          settle();
           reject(event);
         }
       };

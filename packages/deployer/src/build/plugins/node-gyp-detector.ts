@@ -1,46 +1,47 @@
-import { getPackageInfo } from 'local-pkg';
-import type { Plugin } from 'rollup';
+import type { Plugin } from 'rolldown';
+import { getPackageInfo } from '../package-info';
+import { slash } from '../utils';
 
+/**
+ * Emits `binary-map.json` (chunk fileName -> names of packages in that chunk that load native addons through
+ * `node-gyp-build`), used to point at the right package when a binary fails to load at runtime.
+ */
 export function nodeGypDetector(): Plugin {
-  const modulesToTrack = new Set<string>();
-  const modulesToTrackPackageInfo = new Map<string, ReturnType<typeof getPackageInfo>>();
-
   return {
     name: 'node-gyp-build-detector',
-    moduleParsed(info) {
-      if (!info.meta?.commonjs?.requires?.length) {
-        return;
-      }
-
-      const hasNodeGypBuild = info.meta.commonjs.requires.some((m: { resolved?: { id: string } }) =>
-        m?.resolved?.id.endsWith('node-gyp-build/index.js'),
-      );
-      if (!hasNodeGypBuild) {
-        return;
-      }
-
-      modulesToTrack.add(info.id);
-      modulesToTrackPackageInfo.set(info.id, getPackageInfo(info.id));
-    },
-
-    async generateBundle(options, bundle) {
-      const binaryMapByChunk = new Map<string, Set<string>>();
-      // Iterate through all output chunks
+    async generateBundle(_options, bundle) {
+      const chunkByModuleId = new Map<string, string>();
       for (const [fileName, chunk] of Object.entries(bundle)) {
-        // Only chunks have modules, assets don't
-        if (chunk.type === 'chunk') {
-          for (const moduleId of chunk.moduleIds) {
-            if (modulesToTrackPackageInfo.has(moduleId)) {
-              const pkgInfo = await modulesToTrackPackageInfo.get(moduleId)!;
+        if (chunk.type !== 'chunk') {
+          continue;
+        }
+        for (const moduleId of chunk.moduleIds) {
+          chunkByModuleId.set(moduleId, fileName);
+        }
+      }
 
-              if (!binaryMapByChunk.has(fileName)) {
-                binaryMapByChunk.set(fileName, new Set());
-              }
+      const binaryMapByChunk = new Map<string, Set<string>>();
+      for (const moduleId of chunkByModuleId.keys()) {
+        if (!slash(moduleId).endsWith('/node-gyp-build/index.js')) {
+          continue;
+        }
 
-              if (pkgInfo?.packageJson?.name) {
-                binaryMapByChunk.get(fileName)!.add(pkgInfo.packageJson.name);
-              }
-            }
+        for (const importer of this.getModuleInfo(moduleId)?.importers ?? []) {
+          // Importers that were tree-shaken away are not part of any chunk.
+          const fileName = chunkByModuleId.get(importer);
+          if (!fileName) {
+            continue;
+          }
+
+          let packageNames = binaryMapByChunk.get(fileName);
+          if (!packageNames) {
+            packageNames = new Set();
+            binaryMapByChunk.set(fileName, packageNames);
+          }
+
+          const pkgInfo = await getPackageInfo(importer);
+          if (pkgInfo?.packageJson?.name) {
+            packageNames.add(pkgInfo.packageJson.name);
           }
         }
       }
@@ -49,7 +50,6 @@ export function nodeGypDetector(): Plugin {
         Array.from(binaryMapByChunk.entries()).map(([key, value]) => [key, Array.from(value)]),
       );
 
-      // store all binaries used by a module to show in the error message
       this.emitFile({
         type: 'asset',
         name: 'binary-map.json',
