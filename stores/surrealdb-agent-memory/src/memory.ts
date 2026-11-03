@@ -175,6 +175,21 @@ export class AgentMemory extends MastraMemory {
    * otherwise the resource's and thread's regions (the same region writes are tagged
    * with). Returns undefined when there is nothing to scope the read to.
    */
+  /**
+   * The thread id when it may join a read lens: a thread stored for a different
+   * resource is dropped, so pairing your own resourceId with someone else's
+   * threadId never reads their thread's facts.
+   */
+  private async ownedThreadId(
+    threadId: string | undefined,
+    resourceId: string | undefined,
+  ): Promise<string | undefined> {
+    if (!threadId || !resourceId) return threadId;
+    const store = await this.getMemoryStore();
+    const thread = await store.getThreadById({ threadId });
+    return thread && thread.resourceId !== resourceId ? undefined : threadId;
+  }
+
   private recallLens(resourceId: string | undefined, threadId: string | undefined): string[][] | undefined {
     if (this.recallScope === 'thread') {
       return threadId ? [[threadScope(this.scopePrefix, threadId)]] : undefined;
@@ -322,7 +337,7 @@ export class AgentMemory extends MastraMemory {
     }
 
     const threadId = Array.isArray(listArgs.threadId) ? listArgs.threadId[0] : listArgs.threadId;
-    const lens = this.recallLens(listArgs.resourceId, threadId);
+    const lens = this.recallLens(listArgs.resourceId, await this.ownedThreadId(threadId, listArgs.resourceId));
     // Without a resource or thread there is no region to read, and an unscoped
     // recall would search every user's facts in the shared context.
     if (!lens) {
@@ -493,13 +508,19 @@ export class AgentMemory extends MastraMemory {
     memoryConfig?: MemoryConfigInternal;
   }): Promise<string | null> {
     if (!this.injectProfile) return null;
+    const lens = memoryLens(
+      this.scopePrefix,
+      input.resourceId,
+      await this.ownedThreadId(input.threadId, input.resourceId),
+    );
+    if (!lens) return null;
     // Read only the region this thread's writes are tagged with (its resource and thread scopes),
     // so one user's profile never reaches another user's prompt.
     const res = await this.guard(
       () =>
         this.agentMemory.context('What is known about this user?', {
           k: 10,
-          lens: this.scopesFor(input.resourceId, input.threadId),
+          lens,
         }),
       undefined,
     );

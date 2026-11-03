@@ -177,6 +177,24 @@ describe('AgentMemory', () => {
     expect(await memory.getThreadById({ threadId: 'thread-1' })).toBeNull();
   });
 
+  it("does not add another resource's thread to the recall or profile lens", async () => {
+    const contextCalls: unknown[] = [];
+    const fake = makeFakeAgentMemory({
+      context: async (_query: string, options: unknown) => {
+        contextCalls.push(options);
+        return { context: 'known things', queryMs: 0, tier: '' };
+      },
+    });
+    const mem = new AgentMemory({ agentMemory: fake.agentMemory, storage: new InMemoryStore(), injectProfile: true });
+    await mem.saveThread({ thread: { ...thread, id: 'thread-2', resourceId: 'user-2' } });
+
+    await mem.recall({ threadId: 'thread-2', resourceId: 'user-1', vectorSearchString: 'hobbies' } as never);
+    await mem.getSystemMessage({ threadId: 'thread-2', resourceId: 'user-1' });
+
+    expect(fake.calls.recall[0]?.options).toMatchObject({ lens: [['mastra/resource/user-1']] });
+    expect(contextCalls[0]).toMatchObject({ lens: [['mastra/resource/user-1']] });
+  });
+
   it('does not call AgentMemoryClient recall when no vectorSearchString', async () => {
     await memory.saveMessages({ messages: [textMsg('m1', 'user', 'hi')] });
     const res = await memory.recall({
