@@ -259,14 +259,12 @@ export async function runDurableFinishSideEffects({
 
   // A signal drained on the last allowed step rotates the id, then the loop stops before any
   // reply uses it. Attach data to the final reply instead of saving it as its own message.
-  const replyMessageId = () => {
-    const responses = messageList.get.response.db();
-    if (responses.some(message => message.id === messageId)) return messageId;
-    return (
-      responses.findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult)?.id ??
-      messageId
-    );
-  };
+  // Resolved before processors run so their own writes can't become the fallback.
+  const responses = messageList.get.response.db();
+  const replyMessageId = responses.some(message => message.id === messageId)
+    ? messageId
+    : (responses.findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult)
+        ?.id ?? messageId);
 
   // This step has no pubsub (remote engines call it too), so chunks are buffered for the
   // caller. Non-transient ones go into the MessageList now so the flush below saves them.
@@ -276,7 +274,7 @@ export async function runDurableFinishSideEffects({
       data: { type: string; data?: unknown; transient?: boolean },
       writerOptions?: { messageId?: string },
     ) => {
-      persistProcessorDataChunk(messageList, writerOptions?.messageId ?? replyMessageId(), data);
+      persistProcessorDataChunk(messageList, writerOptions?.messageId ?? replyMessageId, data);
       outputResultChunks.push(data as ChunkType);
     },
   };
