@@ -1144,6 +1144,20 @@ export class AgentThreadStreamRuntime {
     );
   }
 
+  /** @internal Stop this process renewing an abandoned execution's thread lease, then release it. */
+  async abandonDurableThreadLease(
+    pubsub: PubSub,
+    runId: string,
+    threadId: string,
+    resourceId?: string,
+    generation?: number,
+    executionId?: string,
+  ): Promise<void> {
+    const owner = threadLeaseOwner(runId, generation, executionId);
+    if (this.#getState(pubsub).leaseOwners.get(runId) === owner) this.#stopLeaseRenewal(pubsub, runId);
+    await this.#getLeaseProvider(pubsub).releaseLease(this.#threadKey(resourceId, threadId), owner);
+  }
+
   async #acquireThreadLease(
     pubsub: PubSub,
     key: string,

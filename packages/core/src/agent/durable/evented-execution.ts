@@ -137,17 +137,30 @@ export async function participateInDurableExecution<T>(
   }
 }
 
-/** Stop renewing the claim of a root terminal delivery the processor abandoned, so another worker can recover the run. */
-export async function stopAbandonedDurableExecution(mastra: Mastra, event: Event): Promise<void> {
+/**
+ * Stop renewing the claim of a root terminal delivery the processor abandoned, so another worker can recover the run.
+ * `published` is whether the processor published a compensating terminal for it; that delivery settles the run.
+ */
+export async function stopAbandonedDurableExecution(mastra: Mastra, event: Event, published: boolean): Promise<void> {
   if (!isRootTerminal(event)) return;
   const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
   const claim = getExecutionClaim(context, event.runId);
   if (!claim) return;
   await mastra.__getRunScope(event.runId)?.get(PARTICIPANTS)?.get(claim.executionId)?.stop();
-  // An abandoned workflow.fail publishes no further terminal, so no finish ever reaches the coordinator.
-  // Release the captured generation so the coordinator's next renewal sees the loss instead of holding the run.
-  // Other terminals publish workflow.fail on exhaustion, and that delivery settles the claim.
-  if (event.type === 'workflow.fail') await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim);
+  if (published) return;
+  // Nothing is left to settle the run. Release the captured claim and thread lease so the coordinator sees the
+  // loss and the thread can take a new run. Both releases are fenced to this execution, never a successor's.
+  await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim);
+  if (claim.threadId) {
+    await agentThreadStreamRuntime.abandonDurableThreadLease(
+      mastra.pubsub,
+      event.runId,
+      claim.threadId,
+      claim.resourceId,
+      claim.generation,
+      claim.executionId,
+    );
+  }
 }
 
 /** Retry only conditional cleanup after a terminal delivery released its claim before broker acknowledgement. */

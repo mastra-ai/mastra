@@ -217,6 +217,8 @@ export class WorkflowEventProcessor extends EventProcessor {
   // release them; otherwise a later restart of the same runId would pick up an
   // already-aborted controller.
   private controlAbortedControllers: WeakSet<AbortController> = new WeakSet();
+  // Deliveries the processor gave up on without publishing a compensating terminal for their run.
+  #abandonedUnpublished = new WeakSet<Event>();
   // Runs whose workflow.start this processor handled. Their abort controller and
   // parent link belong to the start path and live until cleanupRun; for other
   // runs, the step path drops both once its last step releases the run.
@@ -4567,7 +4569,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         const result = await this.#handleDelivery(event);
         if (result.ok) await settleEventedDurableExecution(this.mastra, event);
         // No delivery is left to settle an abandoned root terminal, so stop renewing its claim.
-        else if (!result.retry) await stopAbandonedDurableExecution(this.mastra, event);
+        else if (!result.retry)
+          await stopAbandonedDurableExecution(this.mastra, event, !this.#abandonedUnpublished.has(event));
         return result;
       };
       return await participateInDurableExecution(this.mastra, event, execute);
@@ -4782,6 +4785,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (event.type === 'workflow.fail' || !failWorkflowData?.workflowId || !failWorkflowData.runId) {
       this.pendingFailures.delete(eventKey);
       this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
+      this.#abandonedUnpublished.add(event);
       return { ok: false, retry: false };
     }
     const publishAttempts = pending.publishAttempts + 1;
@@ -4812,6 +4816,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
         return { ok: false, retry: true };
       }
+      this.#abandonedUnpublished.add(event);
     }
     this.pendingFailures.delete(eventKey);
     this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
