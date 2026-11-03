@@ -11,7 +11,11 @@ import { emitKnowledgeChanges } from './changes';
 import type { KnowledgeChangeEvent, KnowledgeChangeListener } from './changes';
 import type { KnowledgeConfig } from './config';
 import { KnowledgeDeclarationError, strongerKnowledgeRole } from './declarations';
-import type { KnowledgeRole, KnowledgeScopeDeclarationInfo } from './declarations';
+import type {
+  KnowledgeRole,
+  KnowledgeScopeDeclaration as ScopeDeclaration,
+  KnowledgeScopeDeclarationInfo,
+} from './declarations';
 import {
   addKnowledgeNote,
   removeKnowledgeNote,
@@ -32,7 +36,6 @@ import { reindexKnowledgeLinks } from './links';
 import { buildKnowledgePageTools } from './page-tools';
 import { DEFAULT_MAX_PINS, DEFAULT_PINNED_MAX_TOKENS, knowledgeDeliveredPins } from './pinned';
 import type { PinBudget, PinEntry } from './pinned';
-import type { KnowledgeScopeDeclaration as ScopeDeclaration } from './declarations';
 import { PINNED_READ_MEMO_KEY } from './pinned-state-processor';
 import { KnowledgeRun, knowledgeRunPrincipals } from './run';
 import type { KnowledgeRunContext } from './run';

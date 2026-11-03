@@ -3,8 +3,8 @@ import { knowledgeScopeReadable } from '../storage/domains/knowledge';
 import type { KnowledgeListedPin, KnowledgePage } from '../storage/domains/knowledge';
 import { knowledgePinTarget, knowledgeScopeAddress } from './declarations';
 import type { CompiledKnowledgeScopes, KnowledgePinnedList } from './declarations';
-import { LIST_DEFAULT_LIMIT, listKnowledgeTree } from './page-tools';
 import { knowledgePageRefs } from './page-refs';
+import { LIST_DEFAULT_LIMIT, listKnowledgeTree } from './page-tools';
 import type { KnowledgeRun } from './run';
 
 export const PINNED_KNOWLEDGE_STATE_ID = 'knowledge';
