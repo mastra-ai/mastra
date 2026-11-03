@@ -413,6 +413,37 @@ describe('engine-private request context keys', () => {
   });
 });
 
+describe('clearing durable request context values', () => {
+  for (const view of ['engine', 'processor', 'tool'] as const) {
+    it.each(['context', 'callback map'] as const)(
+      `${view}: %s clear keeps the segment and clears the claim like main`,
+      surface => {
+        const caller = new RequestContext();
+        caller.set('tenant', 'acme');
+        caller.setRaw('mastra__durableExecutions', { [RUN_ID]: { executionId: 'exec-1' } });
+        const engine = withCarriedSegments(caller, { [SEGMENTS_KEY]: { [RUN_ID]: carriedSecond } });
+        const context =
+          view === 'engine'
+            ? engine
+            : view === 'processor'
+              ? withoutDurableEngineKeys(engine)
+              : toolRequestContext(engine, undefined)!;
+        if (surface === 'context') context.clear();
+        else context.forEach((_value, _key, map) => map.clear());
+
+        expect(context.has('tenant')).toBe(false);
+        expect(caller.has('tenant')).toBe(false);
+        expect(engine.getRaw(SEGMENTS_KEY)).toEqual({ [RUN_ID]: carriedSecond });
+        expect(engine.hasRaw('mastra__durableExecutions')).toBe(false);
+        expect(
+          currentSegment({ mastra: undefined, requestContext: engine, runId: RUN_ID, state: first }).agentSpanData?.id,
+        ).toBe('agent-2');
+        if (view !== 'engine') expect([...context.entries()]).toEqual([]);
+      },
+    );
+  }
+});
+
 describe('a filtered request context keeps mutable values live', () => {
   it.each(['get', 'getRaw', 'entries', 'values', 'all', 'toJSON'] as const)('%s shares stored objects', method => {
     const caller = carrying(carriedSecond);
@@ -468,6 +499,6 @@ describe('a filtered request context keeps mutable values live', () => {
     retained?.set('flag', 'retained');
     expect(caller.get('flag')).toBe('retained');
     retained?.clear();
-    expect(caller.size()).toBe(0);
+    expect(caller.toJSON()).toEqual({ [SEGMENTS_KEY]: { [RUN_ID]: carriedSecond } });
   });
 });

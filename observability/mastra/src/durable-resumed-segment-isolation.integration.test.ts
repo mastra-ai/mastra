@@ -7,8 +7,8 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent, DurableStepIds, globalRunRegistry } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType } from '@mastra/core/observability';
-import type { RequestContext } from '@mastra/core/request-context';
+import { SpanType, TracingEventType } from '@mastra/core/observability';
+import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { describe, expect, it } from 'vitest';
@@ -108,8 +108,13 @@ describe('a resumed segment keeps its span pair private to the engine', () => {
 describe('a resumed segment keeps the engine keys out of processors', () => {
   const PROCESSOR_SURFACES = ['processInputStep', 'processOutputStep', 'processOutputResult'] as const;
   for (const engine of ['durable', 'evented'] as const) {
-    for (const cold of [false, true]) {
-      it(`${engine} ${cold ? 'cold' : 'warm'}: processors see neither the segment carrier nor the execution claim`, async () => {
+    for (const [cold, clear] of [
+      [false, false],
+      [false, true],
+      [true, false],
+      [true, true],
+    ]) {
+      it(`${engine} ${cold ? 'cold' : 'warm'} ${clear ? 'clear' : 'read'}: processors see neither the segment carrier nor the execution claim`, async () => {
         let calls = 0;
         const model = new MockLanguageModelV2({
           doStream: async () => ({
@@ -147,6 +152,7 @@ describe('a resumed segment keeps the engine keys out of processors', () => {
                 id: 'record-input',
                 processInputStep: async ({ requestContext, messageList }: any) => {
                   record('processInputStep', requestContext);
+                  if (clear) requestContext.clear();
                   return messageList;
                 },
               } as any,
@@ -202,6 +208,22 @@ describe('a resumed segment keeps the engine keys out of processors', () => {
             { toolCallId: 'call-1', maxSteps: 5 },
           );
           expect(resumed.finishReason).toBe('stop');
+
+          if (clear && engine === 'durable') {
+            await mastra.observability?.flush();
+            for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION]) {
+              const started = exporter.events.filter(
+                event => event.type === TracingEventType.SPAN_STARTED && event.exportedSpan.type === type,
+              );
+              expect(started).toHaveLength(2);
+              for (const event of started) {
+                const ends = exporter.events.filter(
+                  end => end.type === TracingEventType.SPAN_ENDED && end.exportedSpan.id === event.exportedSpan.id,
+                );
+                expect(ends, `${type} ${event.exportedSpan.id} ends once`).toHaveLength(1);
+              }
+            }
+          }
 
           for (const [surface, list] of Object.entries(seen)) {
             for (const keys of list) expect(keys, `${surface} never sees the carrier`).not.toContain(CARRIER_KEY);
@@ -309,4 +331,80 @@ describe('a resumed segment reports only clocks measured under its own MODEL_GEN
     expect(second?.completionStartTime).toBeUndefined();
     expect(second?.timeToFirstTokenMs).toBeUndefined();
   }, 30_000);
+});
+
+describe('resumed run listings keep the carrier in storage only', () => {
+  it.each(['durable', 'evented'] as const)(
+    '%s lists user values and the claim without changing the stored snapshot',
+    async engine => {
+      let calls = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'tool-call', toolCallId: `call-${++calls}`, toolName: 'approve', input: '{}' },
+            { type: 'finish', finishReason: 'tool-calls', usage },
+          ]),
+        }),
+      });
+      const agent = new Agent({
+        id: `listing-${engine}`,
+        name: 'listing',
+        instructions: 'Use tools.',
+        model,
+        tools: {
+          approve: createTool({
+            id: 'approve',
+            description: 'Wait for approval',
+            inputSchema: z.object({}),
+            requireApproval: true,
+            execute: async () => ({ approved: true }),
+          }),
+        },
+      });
+      const runner = engine === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
+      const storage = new InMemoryStore();
+      const mastra = new Mastra({ agents: { runner }, storage, logger: false });
+      try {
+        const first = await runner.generate('Approve twice.', {
+          maxSteps: 5,
+          requestContext: new RequestContext([
+            ['tag', 'customer'],
+            ['mastra__other', 'keep'],
+          ]),
+        });
+        expect(first.finishReason).toBe('suspended');
+        const resumed = await runner.resumeGenerate(
+          first.runId,
+          { approved: true },
+          { toolCallId: 'call-1', maxSteps: 5 },
+        );
+        expect(resumed.finishReason).toBe('suspended');
+        const workflow = runner.getWorkflow();
+        const store = (await storage.getStore('workflows'))!;
+        const stored = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: first.runId });
+        expect(stored?.requestContext?.[CARRIER_KEY]).toBeDefined();
+        const before = structuredClone(stored);
+        for (const listed of [
+          await workflow.listWorkflowRuns(),
+          await mastra.getWorkflow(workflow.id).listWorkflowRuns(),
+        ]) {
+          const row = listed.runs.find(run => run.runId === first.runId)!;
+          if (typeof row.snapshot === 'string') throw new Error('Expected parsed snapshot');
+          expect(row.snapshot.requestContext).not.toHaveProperty(CARRIER_KEY);
+          expect(row.snapshot.requestContext).toEqual({
+            tag: 'customer',
+            mastra__other: 'keep',
+            [CLAIM_KEY]: stored!.requestContext![CLAIM_KEY],
+          });
+          expect(row.snapshot.requestContext?.[CLAIM_KEY]).toBeDefined();
+        }
+        expect(await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: first.runId })).toEqual(before);
+        expect(JSON.stringify(await runner.listSuspendedRuns())).not.toContain(CARRIER_KEY);
+      } finally {
+        await mastra.shutdown();
+      }
+    },
+    30_000,
+  );
 });
