@@ -1,6 +1,7 @@
 import { createVectorTestSuite } from '@internal/storage-test-utils';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { SurrealDBConnector } from '../shared/connector';
 import { testConfig } from '../storage/test-utils';
 import { SurrealFilterTranslator } from './filter';
 import { SurrealVector } from './index';
@@ -106,5 +107,57 @@ describe('SurrealFilterTranslator', () => {
 
   it('rejects unsupported operators', () => {
     expect(() => translate({ field: { $unknown: 1 } })).toThrow();
+  });
+});
+
+describe('SurrealVector upsert with deleteFilter', () => {
+  const connector = new SurrealDBConnector(testConfig('vector_replace'));
+  const store = new SurrealVector({ id: 'surrealdb-vector-replace', connector });
+  const indexName = `surreal_replace_${Date.now()}`;
+
+  beforeAll(async () => {
+    await store.createIndex({ indexName, dimension: 2, metric: 'cosine' });
+  });
+
+  afterAll(async () => {
+    await store.deleteIndex({ indexName });
+    await connector.close();
+  });
+
+  it('replaces more than one batch of rows in a single transaction', async () => {
+    await store.upsert({
+      indexName,
+      ids: ['old-1', 'old-2'],
+      vectors: [
+        [1, 0],
+        [0, 1],
+      ],
+      metadata: [{ source: 'doc' }, { source: 'doc' }],
+    });
+
+    const count = 1_201;
+    const transaction = vi.spyOn(connector, 'transaction');
+    try {
+      await store.upsert({
+        indexName,
+        ids: Array.from({ length: count }, (_, i) => `new-${i}`),
+        vectors: Array.from({ length: count }, (_, i) => [1, i + 1]),
+        metadata: Array.from({ length: count }, () => ({ source: 'doc' })),
+        deleteFilter: { source: 'doc' },
+      });
+
+      // One request holds the delete and all three insert batches.
+      expect(transaction).toHaveBeenCalledTimes(1);
+      const [statements] = transaction.mock.calls[0]!;
+      expect(statements[0]).toMatch(/^DELETE /);
+      expect(statements.filter(statement => statement.startsWith('INSERT INTO'))).toHaveLength(3);
+    } finally {
+      transaction.mockRestore();
+    }
+
+    const stats = await store.describeIndex({ indexName });
+    expect(stats.count).toBe(count);
+    const results = await store.query({ indexName, queryVector: [1, 0], topK: 5, filter: { source: 'doc' } });
+    expect(results.every(result => result.id.startsWith('new-'))).toBe(true);
   });
 });

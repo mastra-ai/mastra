@@ -203,15 +203,24 @@ export class SurrealVector extends MastraVector<SurrealVectorFilter> {
         ? new SurrealFilterTranslator().translate(deleteFilter as SurrealVectorFilter, bindings)
         : undefined;
 
+      const insert = (param: string) =>
+        `INSERT INTO ${table} $${param} ON DUPLICATE KEY UPDATE embedding = $input.embedding, metadata = $input.metadata RETURN NONE`;
+
+      if (deleteCondition) {
+        // The delete and every insert batch commit together, so a failed batch never
+        // leaves the old rows deleted and only part of the replacement written.
+        const statements = [`DELETE ${table} WHERE ${deleteCondition}`];
+        const batchBindings: Record<string, unknown> = { ...bindings };
+        for (let start = 0, batch = 0; start < rows.length; start += UPSERT_BATCH_SIZE, batch++) {
+          batchBindings[`rows${batch}`] = rows.slice(start, start + UPSERT_BATCH_SIZE);
+          statements.push(insert(`rows${batch}`));
+        }
+        await this.#connector.transaction(statements, batchBindings);
+        return vectorIds;
+      }
+
       for (let start = 0; start < rows.length; start += UPSERT_BATCH_SIZE) {
-        const statements = [
-          `INSERT INTO ${table} $rows ON DUPLICATE KEY UPDATE embedding = $input.embedding, metadata = $input.metadata RETURN NONE`,
-        ];
-        if (start === 0 && deleteCondition) statements.unshift(`DELETE ${table} WHERE ${deleteCondition}`);
-        await this.#connector.transaction(statements, {
-          ...bindings,
-          rows: rows.slice(start, start + UPSERT_BATCH_SIZE),
-        });
+        await this.#connector.transaction([insert('rows')], { rows: rows.slice(start, start + UPSERT_BATCH_SIZE) });
       }
       return vectorIds;
     } catch (error) {
