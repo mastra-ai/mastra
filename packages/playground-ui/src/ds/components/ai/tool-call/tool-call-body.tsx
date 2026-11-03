@@ -10,9 +10,11 @@ export interface ToolCallBodyProps extends ToolCallView {
 }
 
 function commandOutput(view: ToolCallView, result: string | undefined): string | undefined {
-  // Only the result carries a command's exit code and any error.
-  if (view.status === 'error' && result) return result;
-  return view.output || result;
+  if (view.status !== 'error' || !result || !view.output) return view.output || result;
+  // The result is cut to what the model saw; its last paragraph says how the command ended.
+  const endingStart = result.lastIndexOf('\n\n');
+  const ending = endingStart === -1 ? result : result.slice(endingStart + 2);
+  return `${view.output.trimEnd()}\n\n${ending}`;
 }
 
 function CommandBody({ command, output }: { command: string; output?: string }) {

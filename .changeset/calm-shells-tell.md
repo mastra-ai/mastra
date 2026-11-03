@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Studio now marks a command that exits with a non-zero code as failed, on its own row and in the failure count of its tool call group. Before, only the `exit N` chip set it apart from a successful call. Opening it shows the full result, including the error when the command could not run, instead of only what it printed.
+Studio now shows how a sandbox command ended. Before, chat messages never handed a command's streamed output, exit code or workspace link to its tool call, so a command that failed after printing something looked like a success. Now a non-zero exit marks the call failed, on its own row and in its tool group's failure count, next to an `exit N` or `killed` chip. Opening it shows what the command printed, followed by its exit code and any error.
 
 Added the pieces Studio uses to draw a tool call, so other chat UIs can show tool calls and their failures the same way:
 

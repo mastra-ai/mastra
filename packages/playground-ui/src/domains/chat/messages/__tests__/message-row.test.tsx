@@ -369,6 +369,36 @@ describe('MessageRow', () => {
     expect(document.querySelector('[data-testid="tool-badge"]')).toBeTruthy();
   });
 
+  describe('when a command exits non-zero, as the stream saves its exit', () => {
+    it('marks the call failed and says how it exited', () => {
+      renderRow(
+        baseMessage({
+          content: {
+            format: 2,
+            metadata: { mode: 'stream' },
+            parts: [
+              {
+                type: 'tool-invocation',
+                toolInvocation: {
+                  toolName: 'mastra_workspace_execute_command',
+                  toolCallId: 'call-1',
+                  state: 'result',
+                  args: { command: 'grep -rl DashboardQuery src/schema' },
+                  result: 'Exit code: 1',
+                },
+              } as never,
+              { type: 'data-sandbox-exit', data: { exitCode: 1, success: false, toolCallId: 'call-1' } } as never,
+            ],
+          },
+        }),
+      );
+      const line = screen.getByTestId('sandbox-execution-badge');
+
+      expect(within(line).getByRole('img', { name: 'Failed' })).toBeTruthy();
+      expect(within(line).getByText('exit 1')).toBeTruthy();
+    });
+  });
+
   describe('when a completed tool result has image model output', () => {
     it('renders the generated image in the assistant message', () => {
       const toolPart: ToolInvocationPart = {

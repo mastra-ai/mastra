@@ -19,17 +19,28 @@ describe('Factory tool body', () => {
   });
 
   describe('when a command fails after printing a long output', () => {
-    const listing = Array.from({ length: 120 }, (_, index) => `file-${index}.ts`).join('\n');
-    const failedCommand = { ...commandTool, status: 'error' as const, result: `${listing}\n\nExit code: 1` };
+    const lines = Array.from({ length: 300 }, (_, index) => `file-${index}.ts`);
+    const failedCommand = {
+      ...commandTool,
+      status: 'error' as const,
+      result: `${lines.slice(-200).join('\n')}\n\nExit code: 1`,
+    };
 
     it.each([
-      ['live, with its output streamed', listing],
+      ['live, with its output streamed', lines.join('\n')],
       ['after a reload, with no streamed output', ''],
     ])('shows how it exited, %s', async (_, output) => {
       renderWithProviders(<ToolCard tool={{ ...failedCommand, output }} />);
       await userEvent.click(screen.getByRole('button', { name: /Run/ }));
 
       expect(screen.getByText(/Exit code: 1/)).toBeVisible();
+    });
+
+    it('keeps the streamed lines its result dropped', async () => {
+      renderWithProviders(<ToolCard tool={{ ...failedCommand, output: lines.join('\n') }} />);
+      await userEvent.click(screen.getByRole('button', { name: /Run/ }));
+
+      expect(screen.getByText(/file-0\.ts/)).toBeVisible();
     });
   });
 
