@@ -18,7 +18,7 @@ import type {
 import { AgentMemory as AgentMemoryClient, AgentMemoryError } from '@surrealdb/memory';
 import { isAgentMemoryInstanceConfig } from './config';
 import type { AgentMemoryConfig } from './config';
-import { memoryLens, memoryScopes } from './scopes';
+import { memoryLens, memoryScopes, threadScope } from './scopes';
 
 /** Marker written onto synthesized recall messages so they never round-trip as facts. */
 const AGENT_MEMORY_MARKER = '__agentMemory';
@@ -177,7 +177,7 @@ export class AgentMemory extends MastraMemory {
    */
   private recallLens(resourceId: string | undefined, threadId: string | undefined): string[][] | undefined {
     if (this.recallScope === 'thread') {
-      return threadId ? [[this.scopePrefix, 'thread', threadId]] : undefined;
+      return threadId ? [[threadScope(this.scopePrefix, threadId)]] : undefined;
     }
     return memoryLens(this.scopePrefix, resourceId, threadId);
   }

@@ -21,7 +21,18 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | { error: string }> {
 export interface AgentMemoryToolsOptions {
   /** Scope prefix for the agent's resource and thread. Match `AgentMemory`'s `scopePrefix`. Defaults to `'mastra'`. */
   scopePrefix?: string;
+  /**
+   * Let the tools read and write the whole Agent Memory context when the agent
+   * call has no resource or thread. Only for a context that serves a single user.
+   * Defaults to `false`: such calls return an error instead.
+   */
+  allowUnscoped?: boolean;
 }
+
+const MISSING_IDENTITY = {
+  error:
+    'Agent Memory tools need the agent to run with memory (a resourceId or threadId). Set allowUnscoped to use the whole context.',
+} as const;
 
 type ToolContext = { agent?: { resourceId?: string; threadId?: string } } | undefined;
 
@@ -39,7 +50,15 @@ type ToolContext = { agent?: { resourceId?: string; threadId?: string } } | unde
  */
 export function createAgentMemoryTools(agentMemory: AgentMemoryClient, options: AgentMemoryToolsOptions = {}) {
   const prefix = options.scopePrefix ?? 'mastra';
-  const scopesOf = (context: ToolContext) => memoryLens(prefix, context?.agent?.resourceId, context?.agent?.threadId);
+  /**
+   * Runs `fn` with the agent's scopes. Without an identity the call would reach
+   * every user's facts in a shared context, so it is refused unless opted into.
+   */
+  const scoped = <T>(context: ToolContext, fn: (scopes: string[][] | undefined) => Promise<T>) => {
+    const scopes = memoryLens(prefix, context?.agent?.resourceId, context?.agent?.threadId);
+    if (!scopes && !options.allowUnscoped) return Promise.resolve(MISSING_IDENTITY);
+    return safe(() => fn(scopes));
+  };
 
   return {
     agentMemoryRemember: createTool({
@@ -50,7 +69,7 @@ export function createAgentMemoryTools(agentMemory: AgentMemoryClient, options: 
         labels: z.array(z.string()).optional().describe('Optional key=value labels to tag the memory.'),
       }),
       execute: async (input, context) =>
-        safe(() => agentMemory.remember(input.text, { labels: input.labels, scopes: scopesOf(context) })),
+        scoped(context, scopes => agentMemory.remember(input.text, { labels: input.labels, scopes })),
     }),
 
     agentMemoryRecall: createTool({
@@ -61,23 +80,27 @@ export function createAgentMemoryTools(agentMemory: AgentMemoryClient, options: 
         k: z.number().int().positive().optional().describe('Maximum number of hits to return.'),
       }),
       execute: async (input, context) =>
-        safe(async () => {
-          const res = await agentMemory.recall(input.query, {
-            k: input.k,
-            lens: scopesOf(context),
-          });
+        scoped(context, async lens => {
+          const res = await agentMemory.recall(input.query, { k: input.k, lens });
           return { hits: res.hits };
         }),
     }),
 
     agentMemoryForget: createTool({
       id: 'agent-memory-forget',
-      description: 'Forget memory matching a natural-language query.',
+      description: 'Forget memory matching a natural-language query across the whole memory context.',
       inputSchema: z.object({
         query: z.string().describe('What to forget.'),
         purge: z.boolean().optional().describe('Hard-delete instead of tombstoning.'),
       }),
-      execute: async input => safe(() => agentMemory.forget(input.query, { purge: input.purge })),
+      // Agent Memory's forget cannot be scoped, so it always reaches the whole context.
+      execute: async input =>
+        options.allowUnscoped
+          ? safe(() => agentMemory.forget(input.query, { purge: input.purge }))
+          : {
+              error:
+                'agentMemoryForget acts on the whole Agent Memory context. Set allowUnscoped to enable it for a single-user context.',
+            },
     }),
 
     agentMemoryContext: createTool({
@@ -88,7 +111,7 @@ export function createAgentMemoryTools(agentMemory: AgentMemoryClient, options: 
         k: z.number().int().positive().optional(),
       }),
       execute: async (input, context) =>
-        safe(() => agentMemory.context(input.query, { k: input.k, lens: scopesOf(context) })),
+        scoped(context, lens => agentMemory.context(input.query, { k: input.k, lens })),
     }),
 
     agentMemorySearchDocuments: createTool({

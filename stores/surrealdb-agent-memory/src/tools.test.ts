@@ -24,10 +24,7 @@ function makeClient() {
 const agentContext = {
   agent: { agentId: 'assistant', toolCallId: 'call-1', resourceId: 'user-1', threadId: 'thread-1' },
 };
-const userScopes = [
-  ['mastra', 'resource', 'user-1'],
-  ['mastra', 'thread', 'thread-1'],
-];
+const userScopes = [['mastra/resource/user-1'], ['mastra/thread/thread-1']];
 
 describe('createAgentMemoryTools', () => {
   it("scopes writes and reads to the agent's resource and thread", async () => {
@@ -51,19 +48,43 @@ describe('createAgentMemoryTools', () => {
 
     expect(calls.recall[0]).toEqual({
       k: undefined,
-      lens: [
-        ['app', 'resource', 'user-1'],
-        ['app', 'thread', 'thread-1'],
-      ],
+      lens: [['app/resource/user-1'], ['app/thread/thread-1']],
     });
   });
 
-  it('leaves calls unscoped when no agent memory identity is available', async () => {
+  it('refuses calls without an agent memory identity unless allowUnscoped is set', async () => {
     const { client, calls } = makeClient();
-    const tools = createAgentMemoryTools(client);
 
-    await tools.agentMemoryRecall.execute!({ query: 'hobbies' }, {} as never);
+    const refused = await createAgentMemoryTools(client).agentMemoryRecall.execute!({ query: 'hobbies' }, {} as never);
+    expect(refused).toHaveProperty('error');
+    expect(calls.recall).toHaveLength(0);
 
+    await createAgentMemoryTools(client, { allowUnscoped: true }).agentMemoryRecall.execute!(
+      { query: 'hobbies' },
+      {} as never,
+    );
     expect(calls.recall[0]).toEqual({ k: undefined, lens: undefined });
+  });
+
+  it('only enables the context-wide forget tool with allowUnscoped', async () => {
+    let forgets = 0;
+    const { client } = makeClient();
+    (client as unknown as { forget: () => Promise<unknown> }).forget = async () => {
+      forgets++;
+      return { deleted: 0 };
+    };
+
+    const refused = await createAgentMemoryTools(client).agentMemoryForget.execute!(
+      { query: 'alice' },
+      agentContext as never,
+    );
+    expect(refused).toHaveProperty('error');
+    expect(forgets).toBe(0);
+
+    await createAgentMemoryTools(client, { allowUnscoped: true }).agentMemoryForget.execute!(
+      { query: 'alice' },
+      agentContext as never,
+    );
+    expect(forgets).toBe(1);
   });
 });

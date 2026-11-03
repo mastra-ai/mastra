@@ -23,4 +23,4 @@ const agent = new Agent({
 });
 ```
 
-This replaces the `@surrealdb/mastra-ai/agent-memory` subpath. Semantic recall, the agent tools and, with `injectProfile` enabled, the profile added to the system prompt now only read facts from the current resource and thread.
+This replaces the `@surrealdb/mastra-ai/agent-memory` subpath. Semantic recall, the agent tools and, with `injectProfile` enabled, the profile added to the system prompt now only read facts from the current resource and thread. Facts are tagged with the scope paths `mastra/resource/<resourceId>` and `mastra/thread/<threadId>`. Facts written by `@surrealdb/mastra-ai` used a different scope layout and are not returned.

@@ -148,10 +148,7 @@ describe('AgentMemory', () => {
     expect(calls.recall[0]?.options).toEqual({
       k: 3,
       sessionId: undefined,
-      lens: [
-        ['mastra', 'resource', 'user-1'],
-        ['mastra', 'thread', 'thread-1'],
-      ],
+      lens: [['mastra/resource/user-1'], ['mastra/thread/thread-1']],
     });
   });
 
@@ -169,7 +166,7 @@ describe('AgentMemory', () => {
     expect(fake.calls.recall[0]?.options).toEqual({
       k: 3,
       sessionId: 'sess-1',
-      lens: [['mastra', 'thread', 'thread-1']],
+      lens: [['mastra/thread/thread-1']],
     });
   });
 
@@ -228,10 +225,7 @@ describe('AgentMemory', () => {
     expect(message).toContain('Alice hikes');
     expect(contextCalls[0]?.options).toEqual({
       k: 10,
-      lens: [
-        ['mastra', 'resource', 'user-1'],
-        ['mastra', 'thread', 'thread-1'],
-      ],
+      lens: [['mastra/resource/user-1'], ['mastra/thread/thread-1']],
     });
   });
 });
