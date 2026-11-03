@@ -47,10 +47,11 @@ const DURABLE_ENGINE_KEYS: ReadonlySet<string> = new Set([MASTRA_DURABLE_EXECUTI
  * run's values without the engine's own keys, which are plumbing rather than caller data. A copy,
  * so the step's own context keeps them for the engine.
  */
-export function withoutDurableEngineKeys(requestContext: RequestContext): RequestContext {
+export function withoutDurableEngineKeys<T extends RequestContext | undefined>(requestContext: T): T {
+  if (!requestContext) return requestContext;
   return new RequestContext<unknown>(
     [...requestContext.entries()].filter(([key]) => !DURABLE_ENGINE_KEYS.has(key)) as [string, unknown][],
-  );
+  ) as T;
 }
 
 /**
