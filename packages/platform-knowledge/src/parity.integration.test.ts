@@ -45,6 +45,13 @@ describe.runIf(apiUrl && databaseUrl && instanceId && token)('Postgres and Platf
         expect((await store.listPages({ read })).pages.map(p => p.name)).toContain('Integration guide');
         expect((await store.searchPages({ query: 'integration', read })).map(hit => hit.page.name)).toContain('Integration guide');
         expect((await store.getPage({ id: page.page.id, read }))?.body).toBe('Knowledge integration works');
+        const unchanged = await knowledge.upsertPage({ scope: rootScope, path: 'integration-guide', name: 'Integration guide', body: 'Knowledge integration works' });
+        expect(unchanged.status).toBe('unchanged');
+        const updated = await knowledge.upsertPage({ scope: rootScope, path: 'integration-guide', name: 'Integration guide', body: 'Knowledge integration works again' });
+        expect(updated.status).toBe('updated');
+        const when = new Date('2026-01-02T03:04:05Z');
+        const note = await knowledge.addNote({ scope: rootScope, path: 'integration-guide', text: 'Confirmed by host', when });
+        expect((await store.getNote({ id: note.id, read }))?.when).toEqual(when);
         const agent = new Agent({ id: `reader-${randomUUID()}`, name: 'Reader', instructions: 'Search knowledge.', model: searchModel(), knowledge, scopes: [rootScope] });
         const result = await agent.generate('Find the integration guide.', { maxSteps: 2, memory: { thread: 'thread-1', resource: runId } });
         expect(JSON.stringify(result.steps.flatMap(step => step.toolResults))).toContain('Integration guide');
