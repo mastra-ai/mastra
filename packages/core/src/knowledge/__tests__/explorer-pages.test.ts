@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { KnowledgeReadScope } from '../../storage';
+import { KnowledgeUnsupportedCapabilityError } from '../../storage';
 import { InMemoryKnowledgePageStore } from '../../storage/domains/knowledge/pages-inmemory';
 import {
   listKnowledgeTreeChildren,
@@ -8,6 +9,8 @@ import {
   readKnowledgePage,
   readKnowledgePageActivity,
   readKnowledgePageGraph,
+  readKnowledgePageLinkCounts,
+  readKnowledgePageLinks,
   searchKnowledgeExplorerPages,
 } from '../explorer-pages';
 
@@ -360,5 +363,70 @@ describe('search and activity', () => {
     const firstPage = await readKnowledgePageActivity(store, { read: 'all', limit: 2 });
     expect(firstPage.events).toHaveLength(2);
     expect(firstPage.nextCursor).toBeDefined();
+  });
+});
+
+describe('page link readers', () => {
+  async function linked() {
+    const world = await seed();
+    const { store } = world;
+    const a = await store.createPage({ parentId: world.support.id, name: 'Authors', provenance: host });
+    const posts = await Promise.all(
+      ['p1', 'p2', 'p3'].map(name => store.createPage({ parentId: world.support.id, name, provenance: host })),
+    );
+    // Abhi's page links out to three posts the UI never loaded; one post links back.
+    await store.replacePageBodyLinks({
+      pageId: a.id,
+      links: posts.map((post, index) => ({ ref: `p${index + 1}`, toPageId: post.id, count: 1 })),
+    });
+    await store.replacePageBodyLinks({ pageId: posts[0]!.id, links: [{ ref: 'Authors', toPageId: a.id, count: 1 }] });
+    return { ...world, a, posts };
+  }
+
+  it('counts the links in and out of pages whatever has been loaded', async () => {
+    const { store, a, posts } = await linked();
+    const counts = await readKnowledgePageLinkCounts(store, { pageIds: [a.id, posts[1]!.id], read: 'all' });
+    expect(counts?.[a.id]).toEqual({ in: 1, out: 3 });
+    expect(counts?.[posts[1]!.id]).toEqual({ in: 1, out: 0 });
+  });
+
+  it('counts a page the caller cannot read as no links, like a page that is not there', async () => {
+    const { store, a } = await linked();
+    const read: KnowledgeReadScope = { addresses: ['team:acme:eng'], prefixes: [], children: [] };
+    const counts = await readKnowledgePageLinkCounts(store, { pageIds: [a.id, 'missing'], read });
+    expect(counts).toEqual({ [a.id]: { in: 0, out: 0 }, missing: { in: 0, out: 0 } });
+  });
+
+  it("lists a page's links with the pages at their other ends", async () => {
+    const { store, a, posts } = await linked();
+    const links = await readKnowledgePageLinks(store, { pageId: a.id, read: 'all' });
+    expect(links?.edges.map(edge => `${edge.fromPageId === a.id ? 'out' : 'in'}:${edge.kind}`).sort()).toEqual([
+      'in:body',
+      'out:body',
+      'out:body',
+      'out:body',
+    ]);
+    expect(links?.pages.map(page => page.id).sort()).toEqual(posts.map(post => post.id).sort());
+    expect(links?.truncated).toBe(false);
+  });
+
+  it('lists nothing for a page the caller cannot read', async () => {
+    const { store, a } = await linked();
+    const read: KnowledgeReadScope = { addresses: ['team:acme:eng'], prefixes: [], children: [] };
+    expect(await readKnowledgePageLinks(store, { pageId: a.id, read })).toEqual({
+      edges: [],
+      pages: [],
+      truncated: false,
+    });
+  });
+
+  it('answers null when the store has no link index', async () => {
+    const { store, a } = await linked();
+    const unsupported = Object.assign(store, {
+      countPageLinks: () => Promise.reject(new KnowledgeUnsupportedCapabilityError('links')),
+      listPageLinks: () => Promise.reject(new KnowledgeUnsupportedCapabilityError('links')),
+    });
+    expect(await readKnowledgePageLinkCounts(unsupported, { pageIds: [a.id], read: 'all' })).toBeNull();
+    expect(await readKnowledgePageLinks(unsupported, { pageId: a.id, read: 'all' })).toBeNull();
   });
 });

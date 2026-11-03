@@ -210,6 +210,11 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
   ): ReturnType<KnowledgePageStore['listChildScopes']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('listChildScopes'));
   }
+  countChildScopes(
+    _input: Parameters<KnowledgePageStore['countChildScopes']>[0],
+  ): ReturnType<KnowledgePageStore['countChildScopes']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('countChildScopes'));
+  }
   getPage(_input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('getPage'));
   }
@@ -257,6 +262,26 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
     _input: Parameters<KnowledgePageStore['countChildPages']>[0],
   ): ReturnType<KnowledgePageStore['countChildPages']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('countChildPages'));
+  }
+  replacePageBodyLinks(
+    _input: Parameters<KnowledgePageStore['replacePageBodyLinks']>[0],
+  ): ReturnType<KnowledgePageStore['replacePageBodyLinks']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('replacePageBodyLinks'));
+  }
+  listPageBodyLinkSources(
+    _input: Parameters<KnowledgePageStore['listPageBodyLinkSources']>[0],
+  ): ReturnType<KnowledgePageStore['listPageBodyLinkSources']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('listPageBodyLinkSources'));
+  }
+  countPageLinks(
+    _input: Parameters<KnowledgePageStore['countPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['countPageLinks']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('countPageLinks'));
+  }
+  listPageLinks(
+    _input: Parameters<KnowledgePageStore['listPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['listPageLinks']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('listPageLinks'));
   }
   countNotes(_input: Parameters<KnowledgePageStore['countNotes']>[0]): ReturnType<KnowledgePageStore['countNotes']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('countNotes'));

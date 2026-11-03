@@ -6,6 +6,8 @@ import { knowledgeBodyChunks, KNOWLEDGE_EMBED_CHUNK_TOKENS } from './page-body';
 
 /** How many distinct pages and notes one semantic search looks at before it stops refilling. */
 const MAX_CANDIDATES = 1000;
+/** Chunk embeddings one page requests at once. */
+const EMBED_CONCURRENCY = 4;
 /** Largest vector query one search sends (Pinecone's topK ceiling); chunks share it with whole pages. */
 const MAX_TOP_K = 10_000;
 /** Most of a chunk the page's name and description may take, so a long name can't crowd out the body. */
@@ -56,8 +58,10 @@ export class KnowledgeSemanticIndex {
     );
     const chunks = page.body ? knowledgeBodyChunks(page.body, room).slice(0, KNOWLEDGE_MAX_PAGE_CHUNKS) : [''];
     const ids = pageChunkIds(page.id, 0, chunks.length);
-    const embeddings: number[][] = [];
-    for (const chunk of chunks) embeddings.push(await this.#embed([head, chunk].filter(Boolean).join('\n')));
+    const pMap = (await import('p-map')).default;
+    const embeddings = await pMap(chunks, chunk => this.#embed([head, chunk].filter(Boolean).join('\n')), {
+      concurrency: EMBED_CONCURRENCY,
+    });
     await this.#store(
       ids,
       embeddings,
@@ -103,6 +107,7 @@ export class KnowledgeSemanticIndex {
         // A page's chunks share one candidate, ranked at the best of them (the first to come back).
         const candidate = result.id.replace(/#\d+$/, '');
         if (seen.has(candidate)) continue;
+        if (seen.size >= MAX_CANDIDATES) return accepted;
         seen.add(candidate);
         const colon = candidate.indexOf(':');
         const kind = candidate.slice(0, colon);

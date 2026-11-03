@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
@@ -107,6 +107,28 @@ describe('knowledge_list', () => {
       { ref: 'team:acme:secret', name: 'team:acme:secret', depth: 1, children: 1, scope: true },
       { ref: 'team:acme:secret#plans', name: 'Secret plans', depth: 2, children: 0 },
     ]);
+  });
+
+  it('has the store leave out child scopes the run cannot read, instead of reading them all', async () => {
+    const { call, storage } = await site();
+    for (let i = 0; i < 30; i++) {
+      const team = `team:acme:t${String(i).padStart(2, '0')}`;
+      await call([...ORG, 'docs:acme', team], 'knowledge_read', { page: team });
+    }
+    const store = (await storage.getStore('knowledge'))!;
+    const listed = vi.spyOn(store, 'listChildScopes');
+
+    const member = await call([...ORG, 'team:acme:secret'], 'knowledge_list', { from: 'docs:acme', depth: 2 });
+    expect(member.entries.slice(0, 3).map((entry: any) => entry.ref)).toEqual([
+      'team:acme:secret',
+      'team:acme:secret#plans',
+      'docs:acme#guides',
+    ]);
+    expect(member.entries.filter((entry: any) => entry.scope)).toHaveLength(1);
+    // Every scope page the store handed back was one the run can read.
+    const returned = await Promise.all(listed.mock.results.map(result => result.value));
+    expect(listed.mock.calls.every(([input]) => input.read !== undefined)).toBe(true);
+    expect(returned.flatMap(result => result.pages).map(scope => scope.address)).toEqual(['team:acme:secret']);
   });
 
   it('pages through a wide level by cursor without repeats', async () => {

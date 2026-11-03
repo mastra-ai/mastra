@@ -21,6 +21,7 @@ import type {
 } from '../../vector';
 import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
+import { KnowledgeSemanticIndex } from '../semantic';
 
 /** A real exact-cosine vector store held in memory; records every topK it is asked for. */
 class MemoryVector extends MastraVector {
@@ -502,5 +503,52 @@ describe('Knowledge semantic search', () => {
 
   it('needs both vector and embedder', () => {
     expect(() => new Knowledge({ scopes: {}, vector })).toThrow(/needs both `vector` and `embedder`/);
+  });
+});
+
+describe('KnowledgeSemanticIndex bounds', () => {
+  it('looks at no more than 1,000 distinct candidates in one search', async () => {
+    const vector = new MemoryVector();
+    const index = new KnowledgeSemanticIndex(vector, conceptEmbedder({ fail: false, calls: 0 }));
+    // 3,000 notes, none the run can read: every one is a candidate that takes no slot.
+    await index.indexNote({ id: 'n0', text: 'refund' } as never);
+    const [indexName] = await vector.listIndexes();
+    const rows = vector.indexes.get(indexName!)!.rows;
+    for (let i = 1; i < 3_000; i++) rows.set(`note:n${i}`, [1, 0.01, 0.01, 0.01 + i / 1e6]);
+
+    let looked = 0;
+    const found = await index.search('refund', 10, async () => {
+      looked++;
+      return null;
+    });
+    expect(found).toEqual([]);
+    expect(looked).toBe(1_000);
+  });
+
+  it("embeds a long page's chunks a few at a time, not one by one", async () => {
+    let inFlight = 0;
+    let most = 0;
+    const embedder = {
+      specificationVersion: 'v2',
+      provider: 'test',
+      modelId: 'slow',
+      maxEmbeddingsPerCall: 1,
+      supportsParallelCalls: true,
+      doEmbed: async ({ values }: { values: string[] }) => {
+        most = Math.max(most, ++inFlight);
+        await new Promise(resolve => setTimeout(resolve, 5));
+        inFlight--;
+        return { embeddings: values.map(() => [1, 0, 0, 0]) };
+      },
+    } as unknown as MastraEmbeddingModel<string>;
+    const index = new KnowledgeSemanticIndex(new MemoryVector(), embedder);
+    const body = Array.from(
+      { length: 12 },
+      (_, i) => `## Part ${i}\n\n${'Lorem ipsum dolor sit amet. '.repeat(200)}`,
+    ).join('\n\n');
+    await index.indexPage({ id: 'p1', name: 'Long', body, isScope: false } as never);
+
+    expect(most).toBeGreaterThan(1);
+    expect(most).toBeLessThanOrEqual(4);
   });
 });
