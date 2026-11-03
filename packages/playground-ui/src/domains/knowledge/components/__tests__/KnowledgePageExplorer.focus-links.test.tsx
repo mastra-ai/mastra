@@ -189,6 +189,23 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     }
   });
 
+  it('draws link ends smaller than the focus and its neighbours', () => {
+    const { container } = render({
+      notes: [note('n1', 'ward', ['note-target'])],
+      mentionedBy: [note('m1', 'note-source', ['ward'])],
+      reachable,
+    });
+    const width = (id: string) =>
+      Number.parseFloat(
+        container.querySelector<HTMLElement>(`[data-testid="knowledge-page-node"][data-page-id="${id}"]`)?.style
+          .width ?? '',
+      );
+    expect(width('authors')).toBeGreaterThan(0);
+    for (const id of ['far-out', 'other-out', 'note-target', 'note-source']) {
+      expect(width(id), id).toBeLessThan(width('authors'));
+    }
+  });
+
   it('lists the farther-page style in the legend when link ends use it and no far dots are drawn', () => {
     const { container } = render({
       notes: [note('n1', 'ward', ['note-target'])],

@@ -858,6 +858,8 @@ function useStableEdges<E extends Edge>(edges: E[]): E[] {
 
 /** The focused page's circle is this much larger than its neighbours'. */
 const FOCUSED_SCALE = 1.2;
+/** Pages in other branches that the focus links to draw a little smaller than its own neighbours. */
+const LINK_END_SCALE = 0.8;
 /** Most branch colours the legend names; the rest are counted. */
 const LEGEND_BRANCH_CAP = 4;
 /** Most links a hovered page draws that aren't drawn already. */
@@ -1023,7 +1025,7 @@ function KnowledgePageGraphInner({
         node.data.size = counted ? KNOWLEDGE_COUNTED_DOT_SIZE : KNOWLEDGE_DOT_SIZE;
       } else if (node.id === shape.center) node.data.size = Math.round(node.data.size * FOCUSED_SCALE);
       // Circles at one level share a size, scopes included, so the ring reads evenly.
-      else node.data.size = KNOWLEDGE_PAGE_SIZE;
+      else node.data.size = Math.round(KNOWLEDGE_PAGE_SIZE * (shape.linked.has(node.id) ? LINK_END_SCALE : 1));
     }
     // A page with dozens of children draws them smaller, so the ring stays a size that can be read and fitted.
     const ring = flow.nodes.filter(node => shape.depth.get(node.id) === 1 && shape.form.get(node.id) === 'full');

@@ -343,7 +343,26 @@ export function radialLayout(
   const unreached = live.filter(page => !positions.has(page.id)).sort((a, b) => (a.id < b.id ? -1 : 1));
   const close = unreached.filter(page => near.has(page.id) && shape.form.get(page.id) === 'full');
   const linkDots = unreached.filter(page => near.has(page.id) && shape.form.get(page.id) !== 'full');
-  if (close.length && shape.center) {
+  let linkRingReach = 0;
+  const parentId = shape.center ? byId.get(shape.center)?.parentId : undefined;
+  const hasChildren = firstRing.some(id => id !== parentId);
+  if (close.length && shape.center && hasChildren) {
+    // A focus with children keeps its ring to them: pages in other branches go on a ring beyond the
+    // children and the dots under them, a link from the centre crossing that band to reach each one.
+    const half = Math.max(...close.map(page => sizeOf(page))) / 2;
+    let extent = 0;
+    for (const [id, point] of positions) {
+      const page = byId.get(id);
+      if (page) extent = Math.max(extent, Math.hypot(point.x, point.y) + sizeOf(page) / 2);
+    }
+    const ring = Math.max(extent + LINK_GAP + half, (close.length * (half * 2 + LINK_GAP)) / (2 * Math.PI));
+    // Start opposite the focus's parent, which sits at the top, and go round.
+    close.forEach((page, index) => {
+      const angle = Math.PI / 2 + (index / close.length) * 2 * Math.PI;
+      positions.set(page.id, { x: Math.cos(angle) * ring, y: Math.sin(angle) * ring });
+    });
+    linkRingReach = ring + half;
+  } else if (close.length && shape.center) {
     const linked = layoutLinkEnds(close, shape.center, positions, firstRing, sizeOf);
     // The first ring and everything beyond it make room for the circles inside it.
     const firstSize = Math.max(
@@ -365,7 +384,7 @@ export function radialLayout(
   });
   const far = unreached.filter(page => !near.has(page.id));
   if (far.length) {
-    const outer = radius(radii.length) + DOT_RING_GAP;
+    const outer = Math.max(radius(radii.length), linkRingReach) + DOT_RING_GAP;
     far.forEach((page, index) => {
       const angle = -Math.PI / 2 + (index / far.length) * 2 * Math.PI;
       positions.set(page.id, { x: Math.cos(angle) * outer, y: Math.sin(angle) * outer });

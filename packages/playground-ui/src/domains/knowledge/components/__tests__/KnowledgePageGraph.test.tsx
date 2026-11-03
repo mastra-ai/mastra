@@ -426,11 +426,7 @@ describe('KnowledgePageGraph', () => {
       renderGraph({ pages: deep });
       const rows = within(screen.getByRole('list', { name: 'Legend' })).getAllByTestId('knowledge-legend-branch');
       expect(rows.map(row => row.textContent)).toEqual(['Under parent scope']);
-      expect(
-        within(rows[0])
-          .getByText('Under parent scope')
-          .getAttribute('title'),
-      ).toBe('Support');
+      expect(within(rows[0]).getByText('Under parent scope').getAttribute('title')).toBe('Support');
     });
 
     it('says "Under parent page" when the dots hang under a page, not a scope', () => {

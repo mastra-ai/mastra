@@ -275,6 +275,58 @@ describe('radialLayout', () => {
     });
   });
 
+  describe('when the focus has children and links to pages in other branches', () => {
+    // hub has 14 children, each with a grandchild (a dot), and 14 links into other branches.
+    const kids = Array.from({ length: 14 }, (_, index) => page(`kid-${index}`, 'hub'));
+    const grandkids = kids.map(kid => page(`${kid.id}-child`, kid.id));
+    const strays = Array.from({ length: 14 }, (_, index) => page(`stray-${index}`, 'elsewhere'));
+    const all = [page('site', null), page('hub', 'site'), ...kids, ...grandkids, page('elsewhere', null), ...strays];
+    const near = new Set(strays.map(stray => stray.id));
+    const shape = graphShape(all, 'hub', near);
+    const sizeOf = (p: KnowledgePagePayload) =>
+      strays.some(s => s.id === p.id) ? 86 : shape.form.get(p.id) === 'full' ? 76 : 20;
+    const positions = radialLayout(all, shape, sizeOf, near);
+    const at = (id: string) => positions.get(id) ?? { x: NaN, y: NaN };
+    const from = (id: string) => Math.hypot(at(id).x, at(id).y);
+    const reach = (id: string) => from(id) + sizeOf(all.find(p => p.id === id) as KnowledgePagePayload) / 2;
+
+    it('puts the link ends on a ring beyond the children and the dots under them', () => {
+      const inner = Math.max(...kids.map(kid => reach(kid.id)), ...grandkids.map(kid => reach(kid.id)));
+      for (const stray of strays) expect(from(stray.id) - 43, stray.id).toBeGreaterThanOrEqual(inner);
+    });
+
+    it('keeps every link end at least 16px clear of every other drawn page', () => {
+      const drawn = all.filter(p => positions.has(p.id) && p.id !== 'elsewhere');
+      for (const stray of strays) {
+        for (const other of drawn.filter(p => p.id !== stray.id)) {
+          const gap =
+            Math.hypot(at(stray.id).x - at(other.id).x, at(stray.id).y - at(other.id).y) - (86 + sizeOf(other)) / 2;
+          expect(gap, `${stray.id} vs ${other.id}`).toBeGreaterThanOrEqual(other.id.startsWith('stray') ? 16 : 0);
+        }
+      }
+    });
+
+    it('leaves the children ring where it was', () => {
+      const without = radialLayout(all, graphShape(all, 'hub'), sizeOf);
+      for (const kid of kids) expect(positions.get(kid.id)).toEqual(without.get(kid.id));
+    });
+  });
+
+  describe('when the focus has no children but links to pages in other branches', () => {
+    const strays = Array.from({ length: 4 }, (_, index) => page(`stray-${index}`, 'elsewhere'));
+    const all = [page('site', null), page('ward', 'site'), page('elsewhere', null), ...strays];
+    const near = new Set(strays.map(stray => stray.id));
+    const shape = graphShape(all, 'ward', near);
+    const positions = radialLayout(all, shape, p => (strays.some(s => s.id === p.id) ? 86 : 76), near);
+
+    it('keeps them on a ring close around it, not floating far off', () => {
+      for (const stray of strays) {
+        const { x, y } = positions.get(stray.id) ?? { x: NaN, y: NaN };
+        expect(Math.hypot(x, y), stray.id).toBeLessThan(300);
+      }
+    });
+  });
+
   it('lays the same pages out the same way every time', () => {
     const shape = graphShape(pages, 'blog');
     expect(radialLayout(pages, shape, size)).toEqual(radialLayout([...pages].reverse(), shape, size));
