@@ -12,7 +12,7 @@ import { SurrealDBConnector } from '../shared/connector';
 import { MemoryStorageSurrealDB } from './domains/memory';
 import { ScoresStorageSurrealDB } from './domains/scores';
 import { WorkflowsStorageSurrealDB } from './domains/workflows';
-import { connectedClient, testConfig } from './test-utils';
+import { connectedClient, SURREALDB_URL, testConfig } from './test-utils';
 import { SurrealDBStore } from './index';
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
@@ -88,6 +88,33 @@ createClientAcceptanceTests({
 });
 
 describe('SurrealDBStore with a caller-managed client', () => {
+  it('selects the default namespace and database on a client with none selected', async () => {
+    const client = new Surreal({ codecOptions: { useNativeDates: true } });
+    await client.connect(SURREALDB_URL, {
+      authentication: {
+        username: process.env.SURREALDB_USERNAME || 'root',
+        password: process.env.SURREALDB_PASSWORD || 'root',
+      },
+    });
+    const store = new SurrealDBStore({ id: 'surrealdb-no-selection', db: client });
+    try {
+      await store.init();
+      const memory = (await store.getStore('memory'))!;
+      const threadId = `no-selection-${Date.now()}`;
+      const now = new Date();
+      await memory.saveThread({
+        thread: { id: threadId, resourceId: 'resource-1', title: 'Thread', createdAt: now, updatedAt: now },
+      });
+
+      const [selection] = await client.query('RETURN [session::ns(), session::db()]').collect<[string[]]>();
+      expect(selection).toEqual(['mastra', 'mastra']);
+      expect((await memory.getThreadById({ threadId }))?.resourceId).toBe('resource-1');
+    } finally {
+      await store.close();
+      await client.close();
+    }
+  });
+
   it('keeps the client on the namespace and database it selected', async () => {
     const client = await connectedClient('own_selection');
     // A separate connection, so the check does not go through the store's client.
@@ -103,7 +130,7 @@ describe('SurrealDBStore with a caller-managed client', () => {
       });
 
       const [selection] = await client.query('RETURN [session::ns(), session::db()]').collect<[string[]]>();
-      expect(selection).toEqual(['mastra_test', 'own_selection']);
+      expect(selection).toEqual([process.env.SURREALDB_NAMESPACE || 'mastra_test', 'own_selection']);
 
       const [row] = await reader
         .query(`SELECT VALUE resourceId FROM ONLY type::record('mastra_threads', $id)`, { id: threadId })

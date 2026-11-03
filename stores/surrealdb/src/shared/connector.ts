@@ -104,8 +104,12 @@ export class SurrealDBConnector {
       const config = this.#config;
       // A caller-managed client with no configured namespace or database keeps the
       // selection its owner made; switching it would move the owner's own queries too.
+      // A client with nothing selected yet falls through to the defaults below.
       if (isInstanceConfig(config) && config.namespace === undefined && config.database === undefined) {
-        return;
+        const [selection] = await this.db
+          .query('RETURN [session::ns(), session::db()]')
+          .collect<[(string | null | undefined)[]]>();
+        if (selection?.[0] && selection[1]) return;
       }
       try {
         await this.db
