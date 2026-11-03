@@ -168,6 +168,24 @@ describe('generateSourceMap', () => {
     });
   });
 
+  it('leaves out bindings that a chunk re-exports from another package', () => {
+    const resolver = memoryResolver({
+      '/pkg/dist/index.js': 'export { n as MessageHistory, t as Memory } from "./src-abc.js";',
+      '/pkg/dist/index.d.ts':
+        'export declare class Memory {}\nexport { MessageHistory } from "@mastra/core/processors";',
+      '/pkg/dist/src-abc.js': [
+        'import { MessageHistory } from "@mastra/core/processors";',
+        'class Memory {}',
+        'export { Memory as t, MessageHistory as n };',
+      ].join('\n'),
+    });
+
+    const map = generateSourceMap('/pkg', { name: 'pkg', version: '1.0.0' }, [], resolver);
+
+    assert.deepEqual(Object.keys(map.exports), ['Memory']);
+    assert.equal(map.exports.Memory?.line, 2);
+  });
+
   const coreRoot = path.join(MONOREPO_ROOT, 'packages/core');
   const coreBuilt = fs.existsSync(path.join(coreRoot, 'dist/agent/index.js'));
 

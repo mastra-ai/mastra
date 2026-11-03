@@ -238,9 +238,12 @@ export class SourceMapResolver {
     const target = this.resolveJs(entry.from, entry.source);
     if (!target) return undefined;
     if (entry.imported === '*') return { file: target, identifier: '*' };
-    return (
-      this.resolveImplementation(target, entry.imported, depth + 1) ?? { file: target, identifier: entry.imported }
-    );
+    // A target that exports the name decides the outcome, including `undefined` for bindings
+    // it re-exports from another package. Only fall back to the target when it has no such export.
+    if (this.publicExports(target).has(entry.imported)) {
+      return this.resolveImplementation(target, entry.imported, depth + 1);
+    }
+    return { file: target, identifier: entry.imported };
   }
 
   /** Follows `name` exported from the `.d.ts` `file` through re-exports to the `.d.ts` that declares it. */
