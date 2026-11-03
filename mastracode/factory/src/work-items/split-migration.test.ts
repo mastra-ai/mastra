@@ -360,7 +360,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('work item split
         triage_type: card.triageType,
         accepted_at: card.acceptedAt,
         autonomy_armed_at: card.autonomyArmedAt,
-        plans_preapproved_at: card.plansPreapprovedAt,
+        plans_preapproved_at: null,
         parent_board_item_id: card.parentWorkItemId,
         stages: card.stages,
         revision: card.revision,
