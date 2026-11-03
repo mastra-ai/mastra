@@ -1398,9 +1398,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         ),
       options,
     );
-    await bumpBoardVersions(super.ops, changed.values());
-    // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
-    for (const scope of queued.values()) this.#claimableWork(scope);
+    try {
+      await bumpBoardVersions(super.ops, changed.values());
+    } finally {
+      // Only after commit: a dispatcher woken earlier could miss the uncommitted row and go idle.
+      for (const scope of queued.values()) this.#claimableWork(scope);
+    }
     return result;
   }
 

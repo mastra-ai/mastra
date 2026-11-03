@@ -5,10 +5,16 @@
  */
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { WorkItemsStorage } from './base.js';
 import type { FactoryClaimableWorkScope, FactoryDeferredDecisionRecord } from './base.js';
+import * as boardVersion from './board-version.js';
+
+vi.mock('./board-version.js', async importOriginal => {
+  const actual = await importOriginal<typeof import('./board-version.js')>();
+  return { ...actual, bumpBoardVersions: vi.fn(actual.bumpBoardVersions) };
+});
 
 const SCOPE = { orgId: 'org1', factoryProjectId: 'p1' };
 const NOW = new Date('2030-01-01T00:00:00.000Z');
@@ -137,6 +143,18 @@ describe('claimable-work wakes', () => {
 
     await storage.approveDeferredDecision(SCOPE.orgId, SCOPE.factoryProjectId, proposed.id, NOW, 'u');
     expect(woken).toEqual([SCOPE, SCOPE]);
+  });
+
+  it('still wakes when the post-commit board version bump fails', async () => {
+    const { storage, woken, visibleAtWake } = await makeStorage();
+    const workItemId = await seedWorkItem(storage);
+    woken.length = 0;
+    visibleAtWake.length = 0;
+    vi.mocked(boardVersion.bumpBoardVersions).mockRejectedValueOnce(new Error('transient'));
+
+    await expect(queueDecision(storage, workItemId, 'bump-fails')).rejects.toThrow('transient');
+    expect(woken).toEqual([SCOPE]);
+    expect(await Promise.all(visibleAtWake)).toEqual([1]);
   });
 });
 
