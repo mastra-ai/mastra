@@ -137,8 +137,9 @@ async function openSession(requestContext: RequestContext, deps: ShareFileToolDe
     return false;
   };
 
-  const requesterIsLimited = () =>
-    (limited ??= (async () => {
+  const requesterIsLimited = () => {
+    if (limited) return limited;
+    limited = (async () => {
       if (!requester) return false;
       const user = (await call('users.info', { user: requester }, 'look up the person you are working for')).user ?? {};
       const { teamId } = await getAuth();
@@ -149,7 +150,11 @@ async function openSession(requestContext: RequestContext, deps: ShareFileToolDe
         user.is_stranger ||
         (teamId && user.team_id && user.team_id !== teamId),
       );
-    })());
+    })();
+    // A failed lookup refuses this call but is retried on the next one.
+    limited.catch(() => (limited = undefined));
+    return limited;
+  };
 
   const session: SlackSession = {
     adapter,

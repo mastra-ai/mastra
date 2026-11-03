@@ -283,6 +283,21 @@ describe('Slack workspace tools', () => {
     expect(postMessage).not.toHaveBeenCalled();
   });
 
+  it('retries the requester lookup after a transient failure', async () => {
+    const { run, apiCall } = await slackSession();
+    const slack = apiCall.getMockImplementation()!;
+    let failNext = true;
+    apiCall.mockImplementation(async (method, args) => {
+      if (method === 'users.info' && args?.user === 'UDUSTIN' && failNext) {
+        failNext = false;
+        throw Object.assign(new Error('ratelimited'), { data: { error: 'ratelimited' } });
+      }
+      return slack(method, args);
+    });
+    await expect(run(SLACK_READ_TOOL_NAME, { target: 'C2' })).rejects.toThrow();
+    await expect(run(SLACK_READ_TOOL_NAME, { target: 'C2' })).resolves.toMatchObject({ channel: { id: 'C2' } });
+  });
+
   it('explains a missing scope instead of surfacing the raw API error', async () => {
     const { run, apiCall } = await slackSession();
     apiCall.mockRejectedValueOnce(
