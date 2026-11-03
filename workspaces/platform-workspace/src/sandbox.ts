@@ -302,8 +302,8 @@ export type CaptureCheckpointResult =
 /** E2B's sandbox control port (envd). Never a preview. */
 const E2B_CONTROL_PORT = 49983;
 
-/** A sandbox preview cookie, in the shape browsers like Playwright accept. */
-export interface SandboxPreviewCookie {
+/** A cookie that signs a browser in to a sandbox port, in the shape browsers like Playwright accept. */
+export interface SandboxPortAuthCookie {
   name: string;
   value: string;
   domain: string;
@@ -571,11 +571,11 @@ export class PlatformSandbox extends MastraSandbox {
    *
    * `null` in the same cases as `networking.getPortUrl()`.
    */
-  async getPreviewCookie(port: number): Promise<SandboxPreviewCookie | null> {
+  async getPortAuthCookie(port: number): Promise<SandboxPortAuthCookie | null> {
     return (await this._previewGrant(port))?.cookie ?? null;
   }
 
-  private async _previewGrant(port: number): Promise<{ url: string; cookie: SandboxPreviewCookie } | null> {
+  private async _previewGrant(port: number): Promise<{ url: string; cookie: SandboxPortAuthCookie } | null> {
     if (!Number.isInteger(port) || port < 1 || port > 65_535 || port === E2B_CONTROL_PORT) return null;
     // Only E2B-backed sandboxes serve their ports.
     if (this._client.sandboxProvider !== 'e2b') return null;
@@ -590,7 +590,7 @@ export class PlatformSandbox extends MastraSandbox {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ port }),
       });
-      const { url, cookie } = (await response.json()) as { url: string; cookie: SandboxPreviewCookie };
+      const { url, cookie } = (await response.json()) as { url: string; cookie: SandboxPortAuthCookie };
       return { url: `${new URL(url).origin}/`, cookie };
     } catch (error) {
       if (error instanceof PlatformApiError && error.status === 410) {

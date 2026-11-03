@@ -4048,11 +4048,11 @@ describe('PlatformSandbox networking', () => {
     expect(JSON.parse(init.body)).toEqual({ port: 3000 });
   });
 
-  it('gives the preview cookie for a browser you control', async () => {
+  it('gives the port auth cookie for a browser you control', async () => {
     const { sandbox, fetchMock } = makeSandbox(grant());
     await sandbox._start();
 
-    await expect(sandbox.getPreviewCookie(3000)).resolves.toEqual({
+    await expect(sandbox.getPortAuthCookie(3000)).resolves.toEqual({
       name: '__mastra_preview',
       value: 'signed',
       domain: '3000-sbx_1.preview.test',
@@ -4067,7 +4067,7 @@ describe('PlatformSandbox networking', () => {
     const { sandbox, fetchMock } = makeSandbox();
     await sandbox._start();
 
-    await expect(sandbox.getPreviewCookie(49983)).resolves.toBeNull();
+    await expect(sandbox.getPortAuthCookie(49983)).resolves.toBeNull();
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 

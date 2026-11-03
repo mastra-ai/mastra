@@ -466,10 +466,10 @@ Ports are private: the URL opens in a browser for members of the sandbox's organ
 
 `networking` is `undefined` on a sandbox whose ports can't be opened. `getPortUrl()` returns `null` without starting the sandbox when the sandbox isn't running or has been destroyed, for a port that isn't a whole number from 1 to 65535, and for the sandbox's reserved control port. Other platform errors, such as an invalid access token, are thrown.
 
-A browser you control, such as an agent's browser, can't sign in. `getPreviewCookie(port)` returns a cookie that lets it open the port's URL for an hour without signing in. Don't share the cookie: anyone holding it can open the port.
+A browser you control, such as an agent's browser, can't sign in. `getPortAuthCookie(port)` returns a cookie that lets it open the port's URL for an hour without signing in. Don't share the cookie: anyone holding it can open the port.
 
 ```typescript
-const cookie = await sandbox.getPreviewCookie(3000)
+const cookie = await sandbox.getPortAuthCookie(3000)
 if (cookie) await browserContext.addCookies([cookie])
 ```
 
@@ -566,8 +566,8 @@ if (cookie) await browserContext.addCookies([cookie])
       'Capture the configured recovery checkpoint immediately. Resolves without work when no caller-provided id exists or the sandbox is not running.',
   },
   {
-    name: 'getPreviewCookie',
-    type: '(port: number) => Promise<SandboxPreviewCookie | null>',
+    name: 'getPortAuthCookie',
+    type: '(port: number) => Promise<SandboxPortAuthCookie | null>',
     description:
       "Return a cookie that lets a browser you control open the port's URL for an hour without signing in, in the shape Playwright's `addCookies()` accepts. `null` in the same cases as `networking.getPortUrl()`. See [Port URLs](#port-urls).",
   },

@@ -20,12 +20,12 @@ export interface FactorySandboxToolDependencies {
 }
 
 /** A sandbox that can sign a browser in to a private port, like `PlatformSandbox`. */
-interface PreviewCookieSandbox {
-  getPreviewCookie(port: number): Promise<BrowserCookie | null>;
+interface PortAuthCookieSandbox {
+  getPortAuthCookie(port: number): Promise<BrowserCookie | null>;
 }
 
-function hasPreviewCookie(sandbox: object): sandbox is PreviewCookieSandbox {
-  return typeof (sandbox as Partial<PreviewCookieSandbox>).getPreviewCookie === 'function';
+function hasPortAuthCookie(sandbox: object): sandbox is PortAuthCookieSandbox {
+  return typeof (sandbox as Partial<PortAuthCookieSandbox>).getPortAuthCookie === 'function';
 }
 
 /** Tools a session uses on its own sandbox. Every session with a sandbox gets them. */
@@ -87,13 +87,13 @@ export function createFactorySandboxTools(
       }
       const url = await (sandbox as WorkspaceSandbox).networking!.getPortUrl(port);
       if (!url) throw new Error(`Port ${port} can't be opened from this sandbox.`);
-      // The browser tool can't sign in, so it gets the preview cookie directly.
+      // The browser tool can't sign in, so it gets the port auth cookie directly.
       // The cookie never goes back to the model.
       const threadId = context?.agent?.threadId;
-      if (threadId && deps.browser && hasPreviewCookie(sandbox)) {
+      if (threadId && deps.browser && hasPortAuthCookie(sandbox)) {
         // Browsers that can't take cookies throw; the link still works, the browser just has to sign in.
         await sandbox
-          .getPreviewCookie(port)
+          .getPortAuthCookie(port)
           .then(cookie => cookie && deps.browser!.setCookies([cookie], threadId))
           .catch(() => {});
       }

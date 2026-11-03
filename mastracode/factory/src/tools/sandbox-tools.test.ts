@@ -84,7 +84,7 @@ describe('factory_sandbox_port_url', () => {
   // A Platform sandbox: the standard port URL, plus a cookie for its own browser.
   const platformSandbox = (overrides: { getPortUrl?: () => Promise<string | null> } = {}) => ({
     networking: { getPortUrl: vi.fn(overrides.getPortUrl ?? (async () => url)) },
-    getPreviewCookie: vi.fn(async () => cookie),
+    getPortAuthCookie: vi.fn(async () => cookie),
   });
 
   it("returns only the shareable link from the calling session's own sandbox", async () => {
@@ -96,14 +96,14 @@ describe('factory_sandbox_port_url', () => {
     expect(sandbox.networking.getPortUrl).toHaveBeenCalledWith(3000);
   });
 
-  it("signs the session's own browser in with the preview cookie", async () => {
+  it("signs the session's own browser in with the port auth cookie", async () => {
     const setCookies = vi.fn(async () => {});
     const sandbox = platformSandbox();
     const { run } = portUrlTool(sandbox, true, { setCookies });
 
     const result = await run(3000);
 
-    expect(sandbox.getPreviewCookie).toHaveBeenCalledWith(3000);
+    expect(sandbox.getPortAuthCookie).toHaveBeenCalledWith(3000);
     expect(setCookies).toHaveBeenCalledWith([cookie], 'thread-1');
     // Nothing that signs a browser in goes back to the model.
     expect(JSON.stringify(result)).not.toContain('secret');
