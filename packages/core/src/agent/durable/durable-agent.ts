@@ -19,14 +19,8 @@ import type { Mastra } from '../../mastra';
 import { createRunScope } from '../../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
 import type { MemoryConfig } from '../../memory';
-import {
-  createObservabilityContext,
-  getOrCreateSpan,
-  getResumeTracingContext,
-  SpanType,
-  EntityType,
-} from '../../observability';
-import type { AIModelGenerationSpan, ExportedSpan, Span } from '../../observability';
+import { createObservabilityContext } from '../../observability';
+import type { AIModelGenerationSpan, Span, SpanType } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_SCOPES_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { DeclaredAgentSchedule } from '../../schedules/define';
 import { toStandardSchema } from '../../schema';
@@ -49,7 +43,6 @@ import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
-import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
 import { applyResolvedAgentScopes, incomingAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
@@ -95,6 +88,7 @@ import {
   globalRunRegistry,
   markResumeInFlight,
 } from './run-registry';
+import { openSegment, segmentEndedBeforeCrash, segmentFromSnapshot } from './segment-spans';
 import {
   createDurableAgentStream,
   createRunGenerationFilter,
@@ -239,18 +233,6 @@ interface RehydratedRecoveryState {
   recoverAgentSpan?: Span<SpanType.AGENT_RUN>;
   recoverModelSpan?: AIModelGenerationSpan;
   registryEntry: any;
-}
-
-/**
- * Whether a crashed run's persisted AGENT_RUN/MODEL_GENERATION spans were
- * already ended: map-final-output ends them on completion, and a suspension
- * ends them as `suspended` (a recorded `resumedAt` means one happened). The
- * spans of a segment after a resume live only in the lost process.
- */
-function originalSpansEndedBeforeCrash(snapshot: WorkflowRunState): boolean {
-  const context = snapshot.context as Record<string, { status?: string; resumedAt?: number } | undefined> | undefined;
-  if (context?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success') return true;
-  return Object.values(context ?? {}).some(result => result?.resumedAt != null);
 }
 
 /**
@@ -1482,14 +1464,15 @@ export class DurableAgent<
     workflowInput,
     abortController,
     executionFence,
-    originalSpansEnded,
+    snapshot,
     latestMessageListState,
   }: {
     runId: string;
     workflowInput: DurableAgenticWorkflowInput;
     abortController: AbortController;
     executionFence: ExecutionFence;
-    originalSpansEnded: boolean;
+    /** The crashed run's persisted state, re-read after the claim. */
+    snapshot: WorkflowRunState;
     /** The transcript as of the crash; `workflowInput` only has the one the run started with. */
     latestMessageListState?: unknown;
   }): Promise<RehydratedRecoveryState> {
@@ -1640,75 +1623,45 @@ export class DurableAgent<
     executionFence.throwIfLost();
 
     const processorStates = new Map<string, any>();
-    const origAgentSpanData = workflowInput.agentSpanData as ExportedSpan<SpanType.AGENT_RUN> | undefined;
-    const origModelSpanData = workflowInput.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
-    let recoverAgentSpan: Span<SpanType.AGENT_RUN> | undefined;
-    let recoverModelSpan: AIModelGenerationSpan | undefined;
-    if (this.#mastra?.observability) {
-      // The crashed process never ended the original spans, and stores persist
+    // The segment the run was executing when it crashed: its first pair, or the pair a resume
+    // or an earlier recovery carried in the persisted request context.
+    const crashed = segmentFromSnapshot(snapshot, runId);
+    if (this.#mastra?.observability && !segmentEndedBeforeCrash(snapshot, runId)) {
+      // The crashed process never ended that segment's spans, and stores persist
       // only span-end events, so end them here — otherwise the recovered span
       // below is parented under a root that never lands (or stays RUNNING).
-      // Skip when they were already ended: as `suspended` before a resume, or
-      // by map-final-output before the crash.
-      if (!originalSpansEnded) {
-        try {
-          const observability = this.#mastra.observability.getSelectedInstance({ requestContext });
-          const output = { status: 'interrupted' as const, reason: 'run recovered after its process stopped' };
-          if (origModelSpanData)
-            observability
-              ?.rebuildSpan(origModelSpanData)
-              ?.end({ output, outcome: 'interrupted', stopReason: null, stopReasonContext: null });
-          if (origAgentSpanData)
-            observability
-              ?.rebuildSpan(origAgentSpanData)
-              ?.end({ output, outcome: 'interrupted', stopReason: null, stopReasonContext: null });
-        } catch (error) {
-          this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to end interrupted spans: ${error}`);
-        }
-      }
       try {
-        const persistedHead = persistedModelList?.find(entry => entry.enabled);
-        const rawConfig =
-          typeof (wrapped as any).toRawConfig === 'function' ? (wrapped as any).toRawConfig() : undefined;
-        const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
-        const agentTracingPolicy =
-          typeof wrapped.getTracingPolicy === 'function' ? wrapped.getTracingPolicy() : undefined;
-        recoverAgentSpan = getOrCreateSpan({
-          type: SpanType.AGENT_RUN,
-          outcome: null,
-          name: `agent run: '${wrapped.id}' (recovered)`,
-          entityType: EntityType.AGENT,
-          entityId: wrapped.id,
-          entityName: wrapped.name,
-          // The persisted list is the run's shape: the recovered step tries its
-          // first enabled entry first, as the live model rebound to that id, or
-          // rebuilt from the serialized config when the resolver no longer returns it.
-          attributes: modelSpanAttributes(
-            modelList?.find(entry => entry.id === persistedHead?.id)?.model ?? persistedHead?.config ?? model,
-          ),
-          metadata: {
-            runId,
-            recovered: true,
-            ...(origAgentSpanData?.id ? { recoveredFromSpanId: origAgentSpanData.id } : {}),
-            ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
-          },
-          tracingPolicy: agentTracingPolicy,
-          resumeFrom: getResumeTracingContext(origAgentSpanData),
-          requestContext,
-          mastra: this.#mastra,
-        });
-        recoverModelSpan = recoverAgentSpan?.createChildSpan({
-          type: SpanType.MODEL_GENERATION,
-          outcome: null,
-          name: `llm: '${model?.modelId ?? ''}'`,
-          attributes: { model: model?.modelId, provider: model?.provider, streaming: true },
-          metadata: { runId, recovered: true },
-          requestContext,
-        });
+        const observability = this.#mastra.observability.getSelectedInstance({ requestContext });
+        const output = { status: 'interrupted' as const, reason: 'run recovered after its process stopped' };
+        if (crashed.modelSpanData)
+          observability
+            ?.rebuildSpan(crashed.modelSpanData)
+            ?.end({ output, outcome: 'interrupted', stopReason: null, stopReasonContext: null });
+        if (crashed.agentSpanData)
+          observability
+            ?.rebuildSpan(crashed.agentSpanData)
+            ?.end({ output, outcome: 'interrupted', stopReason: null, stopReasonContext: null });
       } catch (error) {
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open recover span: ${error}`);
+        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to end interrupted spans: ${error}`);
       }
     }
+    // The persisted list is the run's shape: the recovered step tries its first enabled entry
+    // first, as the live model rebound to that id, or rebuilt from the serialized config when
+    // the resolver no longer returns it.
+    const persistedHead = persistedModelList?.find(entry => entry.enabled);
+    const recovered = openSegment({
+      mastra: this.#mastra,
+      kind: 'recovered',
+      runId,
+      agent: wrapped,
+      model: modelList?.find(entry => entry.id === persistedHead?.id)?.model ?? persistedHead?.config ?? model,
+      previous: crashed.agentSpanData,
+      requestContext,
+      // `run.restart()` forwards this context to the workers, which end the recovered pair.
+      carryInto: requestContext,
+    });
+    const recoverAgentSpan = recovered?.agentSpan;
+    const recoverModelSpan = recovered?.modelSpan;
     executionFence.throwIfLost();
 
     const restoredCompletion = await restoreCompletionPolicy({
@@ -1740,14 +1693,10 @@ export class DurableAgent<
       memory,
       saveQueueManager,
       requestContext,
+      // The pair this process opened: the recovered stream parents under it and the error
+      // paths end it. The crashed pair ended above is never held here.
       agentSpan: recoverAgentSpan,
-      // Same override resume() installs: steps nest under, and terminal
-      // end()/error() target, the recovered spans instead of the persisted
-      // originals ended above.
-      resumeAgentSpan: recoverAgentSpan,
-      resumeModelSpan: recoverModelSpan,
-      resumeAgentSpanData: recoverAgentSpan?.snapshot?.() ?? recoverAgentSpan?.exportSpan(),
-      resumeModelSpanData: recoverModelSpan?.snapshot?.() ?? recoverModelSpan?.exportSpan(),
+      modelSpan: recoverModelSpan,
       // abortController/abortSignal are installed by
       // #installAbortWithTotalTimeout below, with the run-level budget
       // composed in.
@@ -3654,7 +3603,8 @@ export class DurableAgent<
       // The resume below applies the suspended run's scopes, so preparation does not resolve them again.
       await this.prepare([], {
         [SCOPES_ALREADY_APPLIED]: true,
-        [RESUMED_SPAN_DATA]: { agentSpanData: workflowInput.agentSpanData, modelSpanData: workflowInput.modelSpanData },
+        // The pair the suspension persisted, so the resume continues that segment.
+        [RESUMED_SPAN_DATA]: segmentFromSnapshot(coldSnapshot, runId),
         ...(options as AgentExecutionOptions<TOutput>),
         runId,
         requestContext: options?.requestContext ?? snapshotRequestContext,
@@ -3839,11 +3789,12 @@ export class DurableAgent<
     let initialToolCalls: ToolCallChunk[];
     let resumedText: { priorText: string; stepText: string } | undefined;
     let resumeOffset: number | 'latest';
+    let current: WorkflowRunState | null | undefined;
     try {
       // A concurrent resume of the same suspension may have claimed and run it while this one
       // waited for the execution claim. Report that as a lost race, not a generic failure.
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      const current = await workflowsStore?.loadWorkflowSnapshot({
+      current = await workflowsStore?.loadWorkflowSnapshot({
         workflowName: DurableStepIds.AGENTIC_LOOP,
         runId,
       });
@@ -3982,68 +3933,43 @@ export class DurableAgent<
     const globalEntry = getRunRegistryEntry(runId, this.#mastra);
     const resumeModel = globalEntry?.model as any;
 
-    // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same
-    // traceId — the originals were ended as `suspended` and can't be reopened. Post-resume
-    // steps + terminal end() target these via the registry override.
-    // Opened before the stream adapter so per-chunk processor spans parent under it.
-    const origTraceId = entry.agentSpan?.traceId;
-    const origSpanId = entry.agentSpan?.id;
-    // Spans this resume opened, ended by it alone if it turns out to have lost the run.
-    const ownResumeSpans: Array<{ error: (options: { error: Error; endSpan: boolean }) => void } | undefined> = [];
-    if (origTraceId && this.#mastra?.observability) {
-      try {
-        const ag = this.#wrappedAgent as Agent<string, any, any>;
-        // Match non-durable Agent.stream() resume-span shape.
-        const rawConfig = typeof (ag as any).toRawConfig === 'function' ? (ag as any).toRawConfig() : undefined;
-        const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
-        const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
-        const resumeAgentSpan = getOrCreateSpan({
-          type: SpanType.AGENT_RUN,
-          outcome: null,
-          name: `agent run: '${ag.id}' (resumed)`,
-          entityType: EntityType.AGENT,
-          entityId: ag.id,
-          entityName: ag.name,
-          attributes: modelSpanAttributes(resumeModel),
-          metadata: {
-            runId,
-            resumed: true,
-            ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
-            ...(resolvedVersionId ? { entityVersionId: resolvedVersionId } : {}),
-          },
-          resumeFrom: getResumeTracingContext(entry.agentSpan),
-          tracingPolicy: agentTracingPolicy,
-          tracingOptions: { traceId: origTraceId, ...entry.agentSpan?.traceState },
-          traceState: entry.agentSpan?.traceState,
-          samplingDecision: entry.agentSpan?.isValid,
-          requestContext: resolvedOptions.requestContext,
-          mastra: this.#mastra,
-        });
-        const resumeModelSpan = resumeAgentSpan?.createChildSpan({
-          type: SpanType.MODEL_GENERATION,
-          outcome: null,
-          name: `llm: '${resumeModel?.modelId ?? ''}'`,
-          attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
-          metadata: { runId, resumed: true },
-          requestContext: resolvedOptions.requestContext,
-        });
-        ownResumeSpans.push(resumeModelSpan, resumeAgentSpan);
-        for (const reg of [entry, getRunRegistryEntry(runId, this.#mastra)]) {
-          if (!reg) continue;
-          reg.resumeAgentSpan = resumeAgentSpan;
-          reg.resumeModelSpan = resumeModelSpan;
-          reg.resumeAgentSpanData = resumeAgentSpan?.snapshot?.() ?? resumeAgentSpan?.exportSpan();
-          reg.resumeModelSpanData = resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan();
-          // Fresh spans capture their own first-chunk clock, never a prior segment's.
-          reg.resumeCompletionStartTime = undefined;
-          reg.resumeTimeToFirstTokenMs = undefined;
-        }
-      } catch (error) {
-        // Span bookkeeping must never block resume.
-        this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to open resume spans: ${error}`);
-      }
+    // Open a fresh AGENT_RUN + MODEL_GENERATION for the resumed segment on the same traceId
+    // (the previous pair was ended as `suspended` and can't be reopened) and carry it to the
+    // workers in the request context `run.resume()` forwards. Opened before the stream adapter
+    // so per-chunk processor spans parent under it. The segment it continues is the one the
+    // persisted suspension names; a warm resume keeps the live span of that same segment.
+    const persisted = segmentFromSnapshot(current ?? undefined, runId).agentSpanData;
+    const previous =
+      entry.agentSpan && (!persisted || entry.agentSpan.id === persisted.id) ? entry.agentSpan : persisted;
+    // The registry holds only spans this process opened for the segment it drives: a cold
+    // resume's rebuilt previous pair must not stay there, or an error path re-ends it.
+    for (const reg of [entry, globalEntry]) {
+      if (!reg) continue;
+      reg.agentSpan = undefined;
+      reg.modelSpan = undefined;
     }
-    const resumeSegmentSpan = entry.resumeAgentSpan ?? entry.agentSpan;
+    const opened = openSegment({
+      mastra: this.#mastra,
+      kind: 'resumed',
+      runId,
+      agent: this.#wrappedAgent as Agent<string, any, any>,
+      model: resumeModel,
+      previous,
+      requestContext: resumeRequestContext,
+      // The object `run.resume()` forwards to the steps.
+      carryInto: resumeRequestContext,
+    });
+    for (const reg of [entry, globalEntry]) {
+      if (!reg) continue;
+      reg.agentSpan = opened?.agentSpan;
+      reg.modelSpan = opened?.modelSpan;
+    }
+    // Spans this resume opened, ended by it alone if it turns out to have lost the run.
+    const ownResumeSpans: Array<{ error: (options: { error: Error; endSpan: boolean }) => void } | undefined> = [
+      opened?.modelSpan,
+      opened?.agentSpan,
+    ];
+    const resumeSegmentSpan = opened?.agentSpan;
 
     // Same default-false semantics as the initial stream() path.
     const closeOnSuspend = (resolvedOptions as DurableAgentStreamOptions<TOutput>).closeOnSuspend ?? false;
@@ -4143,7 +4069,7 @@ export class DurableAgent<
                 label: resolvedOptions.toolCallId,
                 requestContext,
                 actor: resolvedOptions.actor,
-                ...createObservabilityContext({ currentSpan: entry.resumeAgentSpan ?? entry.agentSpan }),
+                ...createObservabilityContext({ currentSpan: resumeSegmentSpan }),
               }),
             );
           } catch (error) {
@@ -4439,7 +4365,7 @@ export class DurableAgent<
         workflowInput,
         abortController,
         executionFence,
-        originalSpansEnded: originalSpansEndedBeforeCrash(loaded.snapshot),
+        snapshot: loaded.snapshot,
         latestMessageListState: await this.#loadLatestMessageListState(workflowsStore, runId, loaded.snapshot),
       });
       // Memory is resolved from the rehydrated context; rehydration does not write to it.
@@ -5661,7 +5587,7 @@ export class DurableAgent<
 
     const localEntry = this.#runRegistry.get(runId);
     const observedEntry = localEntry ?? getRunRegistryEntry(runId, this.#mastra);
-    const observedAgentSpan = observedEntry?.resumeAgentSpan ?? observedEntry?.agentSpan;
+    const observedAgentSpan = observedEntry?.agentSpan;
     let structuredOutput = observedEntry?.structuredOutput;
     let outputProcessors = observedEntry?.outputProcessors;
     const processorStates = observedEntry?.processorStates;

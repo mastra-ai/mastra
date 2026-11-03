@@ -566,10 +566,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     });
   }
 
-  // OBS-754: Inngest still reuses the pre-suspension identity. Separate resume
-  // spans are deferred until their identity can travel to the executing worker.
-  const itSeparateResume = engine === 'inngest' ? it.fails : it;
-  itSeparateResume('preserves suspension when approval creates a new successful execution', async () => {
+  it('preserves suspension when approval creates a new successful execution', async () => {
     const { observability, ended } = capture();
     const { output, approvals } = await runApprovalScenario({
       engine,

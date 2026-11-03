@@ -215,10 +215,10 @@ function stripTerminalPayloadState<T>(value: T): T {
  * prompt, recorded on the exported AGENT_RUN span. The durable loop carries
  * `agentSpanData` forward on every iteration, so each step result holds another
  * copy of the prompt on its payload/output side, rewritten at every snapshot
- * boundary. Every `rebuildSpan` site reads
- * `reg?.resumeAgentSpanData ?? initData.agentSpanData` (i.e.
- * `snapshot.context.input`, which is never touched here), and the live span was
- * already exported during streaming. Span ids and other attributes stay.
+ * boundary. Every `rebuildSpan` site resolves the segment's spans through
+ * `currentSegment()` (the request-context carrier, else `snapshot.context.input`,
+ * which is never touched here), and the live span was already exported during
+ * streaming. Span ids and other attributes stay.
  */
 function stripAgentSpanInstructions<T>(value: T): T {
   if (!isPlainObject(value)) return value;

@@ -1,32 +1,7 @@
 import type { LanguageModelUsage, StepTripwireData } from '../../../../stream/types';
-import type { DurableAgenticExecutionOutput, RunRegistryEntry } from '../../types';
+import { nextSegmentClocks } from '../../segment-spans';
+import type { DurableAgenticExecutionOutput } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
-
-interface SpanClocks {
-  completionStartTime?: Date | string;
-  timeToFirstTokenMs?: number;
-}
-
-/**
- * The first-chunk clocks for spans rebuilt from a run-start snapshot. A
- * resumed segment keeps them on the run registry beside its fresh spans; the
- * originals keep them in the loop state. Undefined when none was captured yet.
- */
-export function carriedSpanClocks(
-  registry:
-    | Pick<RunRegistryEntry, 'resumeModelSpanData' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
-    | undefined,
-  state: SpanClocks,
-): { completionStartTime?: Date; timeToFirstTokenMs?: number } | undefined {
-  const clocks: SpanClocks = registry?.resumeModelSpanData
-    ? { completionStartTime: registry.resumeCompletionStartTime, timeToFirstTokenMs: registry.resumeTimeToFirstTokenMs }
-    : state;
-  const attributes = {
-    ...(clocks.completionStartTime ? { completionStartTime: new Date(clocks.completionStartTime) } : {}),
-    ...(clocks.timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs: clocks.timeToFirstTokenMs } : {}),
-  };
-  return Object.keys(attributes).length ? attributes : undefined;
-}
 
 /**
  * Input for creating iteration state update
@@ -101,7 +76,12 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     toolCalls: executionOutput.output.toolCalls,
     // Tracing facts stay off the step records, which `stream.steps` and the finish payload expose.
     toolResults: executionOutput.toolResults?.map(
-      ({ stepSpanData: _stepSpanData, tracingDelegationFailure: _tracingDelegationFailure, ...result }) => result,
+      ({
+        stepSpanData: _stepSpanData,
+        tracingDelegationFailure: _tracingDelegationFailure,
+        clockSpanId: _clockSpanId,
+        ...result
+      }) => result,
     ),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
@@ -219,14 +199,10 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,
-    // First inference wins; later iterations never overwrite it. Both values travel
-    // together, so state saved with only the clock never gains a later step's number.
-    ...(currentState.completionStartTime
-      ? { completionStartTime: currentState.completionStartTime, timeToFirstTokenMs: currentState.timeToFirstTokenMs }
-      : {
-          completionStartTime: executionOutput.completionStartTime,
-          timeToFirstTokenMs: executionOutput.timeToFirstTokenMs,
-        }),
+    // First inference of a segment wins; a resumed segment's first inference replaces the
+    // previous segment's clocks. Both values travel together, so state saved with only the
+    // clock never gains a later step's number.
+    ...nextSegmentClocks(currentState, executionOutput),
     // The latest iteration's response, even when it has none, as in the main loop: a run
     // whose final step is aborted or rejected mid-stream ends with no response on the span.
     lastResponse: signalPreempted ? currentState.lastResponse : executionOutput.response,

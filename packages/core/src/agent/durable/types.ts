@@ -438,6 +438,8 @@ export interface DurableLLMStepOutput {
   completionStartTime?: Date;
   /** Time to first token of the inference that streamed this step's first chunk (kept with that chunk's clock) */
   timeToFirstTokenMs?: number;
+  /** The MODEL_GENERATION the clocks were measured under, so a resumed segment keeps its own */
+  clockSpanId?: string;
   /** Outcome of a step that ended the run itself (fatal model failure or a tripwire), for the root spans */
   tracingTermination?: SpanTermination;
 }
@@ -464,6 +466,8 @@ export interface DurableToolCallInput {
   completionStartTime?: Date;
   /** Time to first token of the same step, applied the same way */
   timeToFirstTokenMs?: number;
+  /** The MODEL_GENERATION those clocks were measured under, see DurableLLMStepOutput */
+  clockSpanId?: string;
   /**
    * Serialized from the step's *effective* tool set at emission time (processors may add
    * tools that never appear in the run-start `toolsMetadata`). Persisted with the call so
@@ -606,6 +610,8 @@ export interface DurableAgenticExecutionOutput {
   completionStartTime?: Date;
   /** Time to first token of the inference that streamed this iteration's first chunk */
   timeToFirstTokenMs?: number;
+  /** The MODEL_GENERATION those clocks were measured under, see DurableLLMStepOutput */
+  clockSpanId?: string;
   /** Provider id and model of this iteration's response */
   response?: ResponseRecord;
   /** Outcome of a step that ended the run itself, see DurableLLMStepOutput */
@@ -869,24 +875,14 @@ export interface RunRegistryEntry {
   backgroundTaskManager?: BackgroundTaskManager;
   /** Agent background tasks configuration */
   backgroundTasksConfig?: AgentBackgroundConfig;
-  /** Live AGENT_RUN span for this run (non-serializable; used to parent the workflow run) */
-  agentSpan?: Span<SpanType.AGENT_RUN>;
-  /** Live MODEL_GENERATION span for this run (non-serializable) */
-  modelSpan?: AIModelGenerationSpan;
   /**
-   * On resume, a fresh AGENT_RUN span is opened for the resumed segment (the
-   * original was ended as `suspended`). These override the frozen span IDs so
-   * post-resume steps nest under the resumed root and end it on completion.
+   * Live AGENT_RUN span of the segment this process opened and drives (non-serializable). A
+   * resume or recovery replaces it with the span it opened; a span this process only rebuilt
+   * from a snapshot never lives here, so an error path cannot end another process's segment.
    */
-  resumeAgentSpan?: Span<SpanType.AGENT_RUN>;
-  resumeModelSpan?: AIModelGenerationSpan;
-  /** Exported forms of the resume spans, read by the workflow steps (same process). */
-  resumeAgentSpanData?: unknown;
-  resumeModelSpanData?: unknown;
-  /** First-chunk clock of the resumed segment's spans; the originals' clock lives in the loop state. */
-  resumeCompletionStartTime?: Date;
-  /** Time to first token of the resumed segment's spans, kept the same way. */
-  resumeTimeToFirstTokenMs?: number;
+  agentSpan?: Span<SpanType.AGENT_RUN>;
+  /** Live MODEL_GENERATION span of that segment (non-serializable) */
+  modelSpan?: AIModelGenerationSpan;
   /**
    * Loop stop-condition predicate(s). Non-serializable (a closure), so the
    * durable workflow reads this from the in-process registry rather than from

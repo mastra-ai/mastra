@@ -12,7 +12,6 @@ import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
 import type { StepResultReads } from '../../../loop/workflows/prune-snapshot';
 import type { Mastra } from '../../../mastra';
 import { InternalSpans } from '../../../observability';
-import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '../../../observability';
 import { calculateObservedUsage, isUsageIncomplete } from '../../../observability/usage';
 import { ChunkFrom } from '../../../stream/types';
 import { PUBSUB_SYMBOL } from '../../../workflows/constants';
@@ -21,9 +20,15 @@ import { markNonRedeliverable } from '../../../workflows/evented/helpers';
 import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
-import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
+import {
+  DURABLE_STOP_WHEN_ERROR_ID,
+  DurableStepIds,
+  DurableAgentDefaults,
+  MAP_FINAL_OUTPUT_STEP_ID,
+} from '../constants';
 import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
 import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
+import { currentSegment } from '../segment-spans';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -53,7 +58,6 @@ import {
   storeMessageListState,
   buildDeferredStepFinishChunk,
   expandDurableSteps,
-  carriedSpanClocks,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -65,11 +69,6 @@ import {
 } from './steps';
 
 const COLLECT_TOOL_RESULTS_STEP_ID = 'collect-tool-results';
-
-/**
- * The outer step that publishes FINISH. Recovery reads its saved status to tell
- * whether FINISH already went out before a crash.
- */
 
 /**
  * Copies step params with some fields overridden, keeping accessors intact.
@@ -84,7 +83,7 @@ function withParams<T extends object, O extends object>(params: T, overrides: O)
   return Object.defineProperties({}, descriptors) as Omit<T, keyof O> & O;
 }
 
-export const MAP_FINAL_OUTPUT_STEP_ID = 'map-final-output';
+export { MAP_FINAL_OUTPUT_STEP_ID };
 
 /**
  * Options for creating a durable agentic workflow
@@ -545,6 +544,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               modelSpanData: state.modelSpanData,
               completionStartTime: state.completionStartTime,
               timeToFirstTokenMs: state.timeToFirstTokenMs,
+              clockSpanId: state.clockSpanId,
             };
           },
           { id: 'map-to-llm-input' },
@@ -560,6 +560,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               stepSpanData: llmOutput.stepSpanData,
               completionStartTime: llmOutput.completionStartTime,
               timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
+              clockSpanId: llmOutput.clockSpanId,
               // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
               stepUsage: llmOutput.stepResult?.totalUsage,
             })) as DurableToolCallInput[];
@@ -1126,18 +1127,19 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             // abandon it, but wait only after FINISH has released stream/generate callers.
             await finishResult.titleGeneration;
 
-            // End MODEL_GENERATION then AGENT_RUN once at completion. After a resume the
-            // originals were ended as `suspended`, so end the *resume* spans (registry override).
+            // End MODEL_GENERATION then AGENT_RUN once at completion, on the segment this
+            // execution reports under: the originals, or the pair a resume or recovery opened.
             try {
-              const observability = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({
-                requestContext,
-              });
               const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
-              const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
-              const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
+              const segment = currentSegment({
+                mastra: mastra as Mastra | undefined,
+                requestContext,
+                runId: state.runId,
+                state,
+              });
               // Rebuilt spans end from snapshots taken at run start, so the clocks the
               // steps carried are applied here.
-              const clocks = carriedSpanClocks(reg, state);
+              const clocks = segment.clocks(state);
               // The state carries the facts across workers; the registry is the fallback for
               // runs whose snapshots predate those fields.
               const finishReason = finalOutput.stepResult?.reason;
@@ -1158,49 +1160,36 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                       tripwire: tripwire ?? state.lastStepResult?.tripwire,
                       maxSteps: initData.options?.maxSteps,
                     });
-              if (observability) {
-                if (modelSpanData) {
-                  const modelSpan =
-                    reg?.resumeModelSpan ??
-                    reg?.modelSpan ??
-                    (observability.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
-                      | AIModelGenerationSpan
-                      | undefined);
-                  // Surface every tool call made during the run so exporters (e.g. PostHog)
-                  // see the same { toolCallId, toolName, args } shape as the in-process loop.
-                  const toolCalls = state.accumulatedSteps.flatMap(step =>
-                    ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
-                      toolCallId: tc.toolCallId,
-                      toolName: tc.toolName,
-                      args: tc.args,
-                    })),
-                  );
-                  const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
-                  modelSpan?.createTracker()?.endGeneration({
-                    ...termination,
-                    output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
-                    attributes: {
-                      finishReason: finalOutput.stepResult?.reason,
-                      ...(usageIncomplete ? { usageIncomplete: true } : {}),
-                      ...clocks,
-                      responseId: state.lastResponse?.id,
-                      responseModel: state.lastResponse?.modelId,
-                    },
-                    usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
-                  });
-                }
-                if (agentSpanData) {
-                  const agentSpan =
-                    reg?.resumeAgentSpan ??
-                    reg?.agentSpan ??
-                    observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
-                  agentSpan?.end({
-                    ...termination,
-                    output: { text: finalText },
-                    ...(clocks ? { attributes: clocks } : {}),
-                  });
-                }
-              }
+              // Surface every tool call made during the run so exporters (e.g. PostHog)
+              // see the same { toolCallId, toolName, args } shape as the in-process loop.
+              const toolCalls = state.accumulatedSteps.flatMap(step =>
+                ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
+                  toolCallId: tc.toolCallId,
+                  toolName: tc.toolName,
+                  args: tc.args,
+                })),
+              );
+              const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
+              segment
+                .modelSpan()
+                ?.createTracker()
+                ?.endGeneration({
+                  ...termination,
+                  output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
+                  attributes: {
+                    finishReason: finalOutput.stepResult?.reason,
+                    ...(usageIncomplete ? { usageIncomplete: true } : {}),
+                    ...clocks,
+                    responseId: state.lastResponse?.id,
+                    responseModel: state.lastResponse?.modelId,
+                  },
+                  usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
+                });
+              segment.agentSpan()?.end({
+                ...termination,
+                output: { text: finalText },
+                ...(clocks ? { attributes: clocks } : {}),
+              });
             } catch (error) {
               logger?.warn?.(`[DurableAgent] Error ending observability spans: ${error}`);
             }

@@ -220,6 +220,9 @@ export const baseIterationStateSchema = z.object({
   completionStartTime: z.coerce.date().optional(),
   // Time to first token of the inference that streamed that chunk, carried the same way
   timeToFirstTokenMs: z.number().optional(),
+  // The MODEL_GENERATION those clocks were measured under; absent on older state, whose
+  // clocks belong to the run's first segment
+  clockSpanId: z.string().optional(),
   // Provider id and model of the latest response, carried the same way
   lastResponse: responseRecordSchema.optional(),
   // How the run ended, as decided at the runtime boundary. Carried in the state so the

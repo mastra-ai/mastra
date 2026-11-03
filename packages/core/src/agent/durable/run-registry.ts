@@ -249,20 +249,20 @@ export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<voi
 }
 
 /**
- * End a run's root spans (MODEL_GENERATION then AGENT_RUN) with an error so the trace
- * still exports — stores persist only span-end events. After a resume the fresh resume
- * spans are the active root, so prefer them. Ending an already-ended span is a no-op,
- * so the duplicate error paths (workflow failure + emitError) are safe. Never throws.
+ * End the root spans this process opened for the run (MODEL_GENERATION then AGENT_RUN) with an
+ * error so the trace still exports — stores persist only span-end events. Ending an
+ * already-ended span is a no-op, so the duplicate error paths (workflow failure + emitError)
+ * are safe. Never throws.
  */
 export function endRunSpansWithError(runId: string, error: Error, options: { endSpan?: boolean } = {}): void {
   try {
     const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
-    (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({
+    entry?.modelSpan?.error({
       error,
       ...executionFailureTermination(error),
       endSpan: options.endSpan ?? true,
     });
-    (entry?.resumeAgentSpan ?? entry?.agentSpan)?.error({
+    entry?.agentSpan?.error({
       error,
       ...executionFailureTermination(error),
       endSpan: options.endSpan ?? true,
