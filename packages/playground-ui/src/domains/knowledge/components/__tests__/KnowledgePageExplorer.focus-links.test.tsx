@@ -147,6 +147,17 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     );
   });
 
+  it('does not fetch a [[Name]] link, which the page route cannot resolve, but still fetches its scope ref', () => {
+    const requested: string[][] = [];
+    render({
+      wardPage: page('ward', 'authors', { body: 'See [[Pricing]] and [[site:mastra#blog/far-out-post]].' }),
+      reachable,
+      requested,
+    });
+    expect(requested.flat()).not.toContain('Pricing');
+    expect(requested[requested.length - 1]).toEqual(['site:mastra#blog/far-out-post']);
+  });
+
   it('draws the pages it links to and the pages that link to it, with their edges', () => {
     const { container } = render({
       notes: [note('n1', 'ward', ['note-target'])],
@@ -243,7 +254,7 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
   });
 
   it(`draws at most ${FOCUS_LINK_CAP} links each way and counts the rest as more`, () => {
-    const many = Array.from({ length: FOCUS_LINK_CAP + 5 }, (_, index) => `ref-${index}`);
+    const many = Array.from({ length: FOCUS_LINK_CAP + 5 }, (_, index) => `site:mastra#blog/ref-${index}`);
     const heavy = page('ward', 'authors', { body: many.map(ref => `[[${ref}]]`).join(' ') });
     const requested: string[][] = [];
     const reachableMany = Object.fromEntries(many.map(ref => [ref, page(`id-${ref}`, 'blog')]));

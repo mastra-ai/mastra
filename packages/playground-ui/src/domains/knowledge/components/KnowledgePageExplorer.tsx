@@ -83,6 +83,9 @@ export interface KnowledgeExplorerTreeRequest {
  * project-scoped routes), so the explorer never knows a URL or an id outside the page ids it shows.
  * Pass the same functions every render: they are called as hooks.
  */
+const JUST_CREATED_MS = 60_000;
+const isJustCreated = (page: KnowledgePagePayload) => Date.now() - Date.parse(page.createdAt) < JUST_CREATED_MS;
+
 export interface KnowledgeExplorerSource {
   /** One page; `noteCursor` fetches a later page of its notes. Disabled when `pageId` is null. */
   usePage: (pageId: string | null, noteCursor?: string) => KnowledgeExplorerQueryState<KnowledgeExplorerPageDetail>;
@@ -637,12 +640,15 @@ function useLazyTree(
     () => (graph.truncated ? null : new Set(graph.pages.map(page => page.parentId).filter(id => id !== null))),
     [graph],
   );
-  // A counted page has children exactly when its count says so; otherwise guess from the graph.
+  // A counted page has children exactly when its count says so. An uncounted one is guessed from the graph,
+  // except a page created a moment ago, which has no children yet and shows no arrow while its level is counted.
   const mayHaveChildren = useCallback(
     (page: KnowledgePagePayload) =>
       !loaded.has(page.id) &&
       (page.childCountCapped ||
-        (page.childCount !== undefined ? page.childCount > 0 : graphParents ? graphParents.has(page.id) : true)),
+        (page.childCount !== undefined
+          ? page.childCount > 0
+          : !isJustCreated(page) && (graphParents ? graphParents.has(page.id) : true))),
     [loaded, graphParents],
   );
   const loadMore = useMemo(() => {
@@ -741,6 +747,10 @@ export function KnowledgePageExplorer({
       .map(ref => ref.trim())
       .filter(key => key && key !== own);
     const out = [...mentions, ...refs];
+    // The page route resolves ids and `scope#path` refs, never a bare name: a `[[Name]]` the explorer does not hold
+    // is not fetched (the link index supplies its edge), so it does not 404.
+    const mentioned = new Set(mentions);
+    const unaskable = new Set(refs.filter(ref => !ref.includes(':') && !mentioned.has(ref)));
     // Notes that mention this page, and (when the host lists links) bodies that link to it: a note edge is a
     // mention, a body edge a link, so a page that both links and mentions draws each once.
     const listed = (focusLinkList?.edges ?? []).filter(edge => edge.toPageId === own);
@@ -755,7 +765,7 @@ export function KnowledgePageExplorer({
     );
     const into = [...new Set([...noteInto, ...bodyInto])];
     const lookup = (key: string) => known.get(key) ?? index.resolve(key);
-    const missing = (keys: string[]) => [...new Set(keys.filter(key => !lookup(key)))];
+    const missing = (keys: string[]) => [...new Set(keys.filter(key => !lookup(key) && !unaskable.has(key)))];
     const resolvedCount = (keys: string[]) => new Set(keys.flatMap(key => lookup(key)?.id ?? [])).size;
     const room = (keys: string[]) => Math.max(0, FOCUS_LINK_FETCH_CAP - resolvedCount(keys));
     const wantOut = missing(out);

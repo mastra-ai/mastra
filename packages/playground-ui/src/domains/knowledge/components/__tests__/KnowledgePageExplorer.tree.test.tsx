@@ -60,12 +60,15 @@ function Host({
   siteChildCount,
   siteCapped,
   extraSiblings = 0,
+  freshLeaf = false,
 }: {
   requested: KnowledgeExplorerTreeRequest[];
   siteChildCount?: number;
   siteCapped?: boolean;
   /** Extra pages under the site, each with one child waiting. */
   extraSiblings?: number;
+  /** A page under the site that no count covers yet, created just now. */
+  freshLeaf?: boolean;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [view, setView] = useState<KnowledgeExplorerView>('graph');
@@ -82,7 +85,20 @@ function Host({
     }),
   );
   const levelOf = (parentId: string): KnowledgeExplorerTreeLevel => {
-    if (parentId === 'site') return { pages: [articles, pricing, ...extras] };
+    if (parentId === 'site')
+      return {
+        pages: [
+          articles,
+          pricing,
+          ...(freshLeaf
+            ? [
+                page('fresh', 'site', { name: 'Fresh', position: 'a2', createdAt: new Date().toISOString() }),
+                page('stale', 'site', { name: 'Stale', position: 'a3' }),
+              ]
+            : []),
+          ...extras,
+        ],
+      };
     if (parentId.startsWith('x'))
       return { pages: [page(`y-${parentId}`, parentId, { name: `Child of ${parentId}`, childCount: 0 })] };
     return levels[parentId] ?? { pages: [] };
@@ -148,6 +164,14 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(within(row('Pricing')).queryByRole('button')).toBeNull();
       expect(row('Pricing').getAttribute('aria-expanded')).toBeNull();
       expect(within(row('Articles')).getByRole('button', { name: 'Expand Articles' })).toBeTruthy();
+    });
+  });
+
+  describe('when a page was just created and no count covers it yet', () => {
+    it('offers no expand arrow, while an older uncounted page still does', () => {
+      renderWithProviders(<Host requested={[]} freshLeaf />);
+      expect(within(row('Fresh')).queryByRole('button')).toBeNull();
+      expect(within(row('Stale')).getByRole('button', { name: 'Expand Stale' })).toBeTruthy();
     });
   });
 
