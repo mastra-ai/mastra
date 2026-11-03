@@ -100,9 +100,30 @@ describe('dashboard renderer app', () => {
   });
 
   describe('when the user drills into a chart', () => {
-    it('asks for that data in the chat', async () => {
+    it('hands the host the exact filters, then asks for that data in the chat', async () => {
       server.use(http.post(TIME_SERIES_API, () => HttpResponse.json(emptyTimeSeries)));
       const host = await renderWithHost(app);
+      await host.sendToolResult({ content: [], structuredContent: { definition: supportRunsChart } });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'View in traces' }));
+
+      await expect.poll(() => host.chat).toEqual(['context', 'message']);
+      expect(host.modelContexts).toEqual([
+        {
+          content: [
+            { type: 'text', text: 'The user drilled into the traces for entityName "support", over the last 24h.' },
+          ],
+          structuredContent: {
+            drilldown: { page: 'traces', filters: { entityName: 'support' }, timeRange: { preset: '24h' } },
+          },
+        },
+      ]);
+      expect(host.messages).toEqual(['Show me the traces for the selection I drilled into.']);
+    });
+
+    it('spells the filters out in the message on hosts without model context', async () => {
+      server.use(http.post(TIME_SERIES_API, () => HttpResponse.json(emptyTimeSeries)));
+      const host = await renderWithHost(app, { capabilities: { serverTools: {}, message: {} } });
       await host.sendToolResult({ content: [], structuredContent: { definition: supportRunsChart } });
 
       fireEvent.click(await screen.findByRole('button', { name: 'View in traces' }));
@@ -110,6 +131,7 @@ describe('dashboard renderer app', () => {
       await expect
         .poll(() => host.messages)
         .toEqual(['Show me the traces for entityName "support", over the last 24h.']);
+      expect(host.modelContexts).toEqual([]);
     });
 
     it('offers no drilldown on hosts without a chat to continue', async () => {

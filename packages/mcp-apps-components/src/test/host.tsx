@@ -44,23 +44,35 @@ type HostOptions = {
 /**
  * Renders `app` as its iframe entry does, connected over an in-memory transport to an
  * `AppBridge`: the same host side real MCP clients embed. The host relays tool calls to its
- * server and accepts chat messages, unless `capabilities` says otherwise. Resolves once the app
+ * server and accepts chat messages and model context, unless `capabilities` says otherwise. Resolves once the app
  * has started, with the messages a host sends it and what the app asked of the host.
  */
 export async function renderWithHost<Input>(
   definition: McpAppDefinition<Input>,
-  { hostContext = {}, capabilities = { serverTools: {}, message: {} } }: HostOptions = {},
+  {
+    hostContext = {},
+    capabilities = { serverTools: {}, message: {}, updateModelContext: { text: {}, structuredContent: {} } },
+  }: HostOptions = {},
 ) {
   const [appTransport, hostTransport] = InMemoryTransport.createLinkedPair();
   const bridge = new AppBridge(null, { name: 'test-host', version: '1.0.0' }, capabilities, { hostContext });
   const toolCalls: string[] = [];
   const messages: string[] = [];
+  const modelContexts: unknown[] = [];
+  // What the app asked of the host's chat, in order: a model context update or a message.
+  const chat: Array<'context' | 'message'> = [];
   bridge.oncalltool = async ({ name, arguments: args }) => {
     toolCalls.push(name);
     if (name !== MASTRA_API_TOOL) return { isError: true, content: [{ type: 'text', text: `Unknown tool ${name}` }] };
     return relayToServer(args);
   };
+  bridge.onupdatemodelcontext = async params => {
+    chat.push('context');
+    modelContexts.push(params);
+    return {};
+  };
   bridge.onmessage = async ({ content }) => {
+    chat.push('message');
     messages.push(content.flatMap(block => (block.type === 'text' ? [block.text] : [])).join('\n'));
     return {};
   };
@@ -79,6 +91,8 @@ export async function renderWithHost<Input>(
   return {
     toolCalls,
     messages,
+    modelContexts,
+    chat,
     sendToolResult: (params: Parameters<AppBridge['sendToolResult']>[0]) => act(() => bridge.sendToolResult(params)),
     sendToolCancelled: () => act(() => bridge.sendToolCancelled({})),
     setHostContext: (context: McpUiHostContext) =>
