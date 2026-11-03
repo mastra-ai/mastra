@@ -21,7 +21,8 @@ interface ToolGuidanceOptions {
 
 export function buildToolGuidance(modeId: string, options: ToolGuidanceOptions = {}): string {
   const denied = options.deniedTools ?? new Set<string>();
-  const plansDir = options.plansDir ?? DEFAULT_PLANS_DIR;
+  // Name the dir with `/` so the win32 default (`.mastracode\plans`) still matches DEFAULT_PLANS_DIR.
+  const plansDir = (options.plansDir ?? DEFAULT_PLANS_DIR).replaceAll('\\', '/');
   const sections: string[] = [];
 
   sections.push(`# Tool Usage Rules

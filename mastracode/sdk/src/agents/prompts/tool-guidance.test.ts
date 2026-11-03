@@ -1,3 +1,5 @@
+import path from 'node:path';
+
 import { describe, expect, it } from 'vitest';
 
 import { buildToolGuidance } from './tool-guidance.js';
@@ -46,5 +48,15 @@ describe('buildToolGuidance knowledge tools', () => {
     expect(guidance).not.toContain('Subconscious');
     expect(guidance).not.toContain('ask_memory');
     expect(guidance).not.toContain('knowledge_search');
+  });
+
+  it('treats the win32 default plans dir as the default in build-mode guidance', () => {
+    const guidance = buildToolGuidance('build', { plansDir: path.win32.join('.mastracode', 'plans') });
+
+    expect(guidance).toContain(
+      'Write plan files under `.mastracode/plans/` (e.g. `.mastracode/plans/add-dark-mode.md`).',
+    );
+    expect(guidance).not.toContain('never under');
+    expect(guidance).not.toContain('.mastracode\\plans');
   });
 });
