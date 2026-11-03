@@ -1168,6 +1168,15 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         ]);
       });
 
+      it('uses only the first 16 distinct words of a long query', async () => {
+        const acme = await scope('org:acme', ORG);
+        const early = await page(acme.id, 'Alpha guide', { body: 'Body.' });
+        await page(acme.id, 'Zulu guide', { body: 'Body.' });
+        const filler = Array.from({ length: 15 }, (_, i) => `filler${i}`).join(' ');
+        const hits = await store.searchPages({ query: `alpha ${filler} zulu`, read: read(['org:acme']) });
+        expect(hits.map(hit => (hit.type === 'page' ? hit.page.name : hit.note.text))).toEqual([early.name]);
+      });
+
       it('never counts a hidden note toward search results or the limit', async () => {
         const acme = await scope('org:acme', ORG);
         const user = await scope('resource:u1', RESOURCE);
