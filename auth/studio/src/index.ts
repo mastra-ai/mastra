@@ -216,6 +216,9 @@ export class MastraAuthStudio
    */
   private pendingResponseHeaders = new WeakMap<Request, Record<string, string>>();
 
+  /** The request's current sealed cookie once a shared API call renewed it: the inbound one's refresh token is spent. */
+  private renewedSessionCookies = new WeakMap<Request, string>();
+
   constructor(options?: MastraAuthStudioOptions) {
     super({ name: 'mastra-studio', ...options });
     const explicitSharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL;
@@ -847,6 +850,7 @@ export class MastraAuthStudio
       const rawRequest = getWebRequest(request);
       if (rawRequest) {
         this.pendingResponseHeaders.set(rawRequest, reissued);
+        this.renewedSessionCookies.set(rawRequest, rotatedValue);
       } else {
         // The browser keeps the old cookie, whose refresh token this rotation
         // used up, so the user will be signed out on a later request.
@@ -874,12 +878,13 @@ export class MastraAuthStudio
    * Call the shared API as the request's signed-in user, forwarding their
    * session cookie (e.g. Factory creating a Mastra Gateway key for the user's
    * organization). A rotated cookie is queued for
-   * {@link consumePendingResponseHeaders}. Returns `null` without a session.
+   * {@link consumePendingResponseHeaders} and sent by later calls for the same
+   * request. Returns `null` without a session.
    *
    * @param path Shared API path, e.g. `/gateway/organization/v2/keys`.
    */
   async fetchAsRequestUser(request: Request, path: string, init: RequestInit = {}): Promise<Response | null> {
-    const sessionCookie = this.getSessionIdFromRequest(request);
+    const sessionCookie = this.renewedSessionCookies.get(request) ?? this.getSessionIdFromRequest(request);
     if (!sessionCookie) return null;
     const headers = new Headers(init.headers);
     headers.set('Cookie', `${COOKIE_NAME}=${sessionCookie}`);

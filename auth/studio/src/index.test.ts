@@ -1182,6 +1182,28 @@ describe('MastraAuthStudio', () => {
     });
   });
 
+  describe('fetchAsRequestUser', () => {
+    it('sends the renewed session cookie once an earlier call in the request renewed it', async () => {
+      fetchSpy
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': 'wos-session=sealed-v2; Path=/' },
+          }),
+        )
+        .mockResolvedValueOnce(Response.json({ keyId: 'key-1', apiKey: 'msk_1' }, { status: 201 }));
+      const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+
+      await auth.fetchAsRequestUser(req, '/auth/me');
+      await auth.fetchAsRequestUser(req, '/gateway/organization/v2/keys', { method: 'POST' });
+
+      const sentCookies = fetchSpy.mock.calls.map(([, init]) =>
+        new Headers((init as RequestInit | undefined)?.headers).get('Cookie'),
+      );
+      expect(sentCookies).toEqual(['wos-session=sealed-v1', 'wos-session=sealed-v2']);
+    });
+  });
+
   describe('getUser', () => {
     it('should return null (not supported)', async () => {
       const user = await auth.getUser('user-1');
