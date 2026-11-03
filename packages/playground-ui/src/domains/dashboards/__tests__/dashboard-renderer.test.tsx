@@ -413,6 +413,13 @@ describe('DashboardRenderer', () => {
       expect(within(card).queryByRole('button', { name: 'Token usage' })).toBeNull();
     });
 
+    it('names the link after the first view when the widget title is blank', async () => {
+      const { container } = renderDashboard(definition({ ...metricsWidget('token-usage'), title: '  ' }), {
+        expand,
+      });
+      expect(await within(cell(container, 'token-usage')).findByRole('link', { name: 'Token usage' })).toBeDefined();
+    });
+
     it('links a scores card the same way', async () => {
       const { container } = renderDashboard(definition(scoresWidget), { expand });
       const link = await within(cell(container, 'scores')).findByRole('link', { name: 'Scores' }, { timeout: 5000 });

@@ -38,7 +38,9 @@ export function viewTitle(
 ): ViewHeading {
   const href = expand?.href(widget);
   if (href) {
-    return { title: widget.title ?? viewLabel(views[0]?.label, 0), href, LinkComponent: expand?.LinkComponent };
+    // A link needs a name: a blank title falls back to the first view's label.
+    const title = widget.title?.trim() ? widget.title : viewLabel(views[0]?.label, 0);
+    return { title, href, LinkComponent: expand?.LinkComponent };
   }
   if (views.length < 2) return { title: widget.title ?? '' };
   const options = views.map((v, i) => ({ value: viewValue(v.label, i), label: viewLabel(v.label, i) }));
