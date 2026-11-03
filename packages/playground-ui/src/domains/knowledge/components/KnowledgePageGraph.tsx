@@ -617,6 +617,7 @@ function GraphLegend({
   drawn,
   counts,
   dots,
+  linkEnds,
   focused,
   levels,
   branches,
@@ -626,6 +627,8 @@ function GraphLegend({
   /** Some circle carries an in/out link badge. */
   counts: boolean;
   dots: boolean;
+  /** Link ends drawn as circles in the farther-page grey. */
+  linkEnds: boolean;
   /** A page is focused, drawn larger and ringed at the centre. */
   focused: boolean;
   /** Which kinds of higher-level circle are drawn, to explain their icons. */
@@ -678,11 +681,11 @@ function GraphLegend({
           </Txt>
         </li>
       ) : null}
-      {dots ? (
+      {dots || linkEnds ? (
         <li className="flex items-center gap-2" data-testid="knowledge-legend-dot">
           <span className="inline-block size-2 shrink-0 rounded-full bg-muted-foreground" aria-hidden />
           <Txt as="span" variant="meta" tone="muted">
-            Farther page (hover to name it)
+            {dots ? 'Farther page (hover to name it)' : 'Farther page'}
           </Txt>
         </li>
       ) : null}
@@ -1397,6 +1400,7 @@ function KnowledgePageGraphInner({
         levels={drawnLevels}
         focused={!!selectedPageId && laidOut.positions.has(selectedPageId)}
         dots={[...laidOut.shape.form.values()].includes('dot')}
+        linkEnds={laidOut.shape.linked.size > 0}
         drawn={drawnEdgeStyles}
         counts={[...(hiddenLinks ?? [])].some(
           ([id, hidden]) => laidOut.shape.form.get(id) === 'full' && (hidden.in > 0 || hidden.out > 0),

@@ -189,6 +189,16 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     }
   });
 
+  it('lists the farther-page style in the legend when link ends use it and no far dots are drawn', () => {
+    const { container } = render({
+      notes: [note('n1', 'ward', ['note-target'])],
+      mentionedBy: [note('m1', 'note-source', ['ward'])],
+      reachable,
+    });
+    expect(container.querySelector('[data-testid="knowledge-page-dot"]')).toBeNull();
+    expect(container.querySelector('[data-testid="knowledge-legend-dot"]')?.textContent).toBe('Farther page');
+  });
+
   it('says nothing is left out when every link end is drawn', () => {
     renderWithProviders(<div />);
     const { container } = render({ reachable });
