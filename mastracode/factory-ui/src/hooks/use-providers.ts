@@ -1,3 +1,4 @@
+import { toast } from '@mastra/playground-ui/components/Toaster';
 import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 
@@ -5,6 +6,7 @@ import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
+  GatewayCreditPurchase,
   MastraGatewayCredits,
   OAuthPollResponse,
   OAuthStartResponse,
@@ -12,6 +14,7 @@ import type {
   ProvidersResponse,
   SaveProviderKeyResponse,
 } from '../api/types';
+import { formatWholeDollars } from '../ui/domains/workspaces/components/mastra-gateway-credits';
 
 /**
  * A credential change (key saved/removed, OAuth completed, signed out) alters
@@ -90,13 +93,36 @@ export function useConnectMastraGateway() {
   });
 }
 
-/** Credits are added on the Mastra platform in another tab, so coming back refetches them. */
-export function useMastraGatewayCreditsQuery() {
+/** A payment finished in another tab lands in the balance when the user comes back. */
+export function useMastraGatewayCreditsQuery({ enabled = true }: { enabled?: boolean } = {}) {
   const { client } = useApiConfig();
   return useQuery({
     queryKey: queryKeys.mastraGatewayCredits(),
     queryFn: () => client.get<MastraGatewayCredits>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`),
+    enabled,
     refetchOnWindowFocus: true,
+  });
+}
+
+/**
+ * Buy gateway credits. A purchase Mastra settled on the saved card counts in the
+ * balance at once, and its toast outlives the notice it hides.
+ */
+export function useAddGatewayCredits() {
+  const { client } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (amount: number) =>
+      client.post<GatewayCreditPurchase>(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`, {
+        amount,
+      }),
+    onSuccess: (purchase, amount) => {
+      if (purchase.status !== 'added') return;
+      toast.success(`Added ${formatWholeDollars(amount)} to your organization’s Mastra credits`);
+      queryClient.setQueryData<MastraGatewayCredits>(queryKeys.mastraGatewayCredits(), credits =>
+        credits ? { ...credits, remaining: (credits.remaining ?? 0) + amount } : credits,
+      );
+    },
   });
 }
 

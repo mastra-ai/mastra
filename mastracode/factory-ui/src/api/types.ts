@@ -41,9 +41,16 @@ import type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
-import type { MastraGatewayCredits } from '@mastra/factory/routes/mastra-gateway';
+import type { GatewayCreditPurchase, MastraGatewayCredits } from '@mastra/factory/routes/mastra-gateway';
 
-export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, MastraGatewayCredits };
+export type {
+  ProviderInfo,
+  CustomProviderInfo,
+  OMConfigInfo,
+  ProviderOMDefaultsResponse,
+  MastraGatewayCredits,
+  GatewayCreditPurchase,
+};
 export type {
   ArtifactEntry,
   ArtifactListing,

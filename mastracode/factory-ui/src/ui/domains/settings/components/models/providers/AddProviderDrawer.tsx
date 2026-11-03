@@ -15,7 +15,12 @@ import { Box } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
-import { useConnectMastraGateway, useStartProviderOAuth } from '../../../../../../hooks/use-providers';
+import {
+  useConnectMastraGateway,
+  useMastraGatewayCreditsQuery,
+  useStartProviderOAuth,
+} from '../../../../../../hooks/use-providers';
+import { mastraGatewayBilling } from '../../../../workspaces/components/mastra-gateway-credits';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import {
   CREDENTIAL_LABEL,
@@ -189,9 +194,10 @@ function AddProviderRow({
   onAddKey: () => void;
 }) {
   const displayName = providerDisplayName(provider.provider);
+  const { data: gatewayCredits } = useMastraGatewayCreditsQuery({ enabled: isGateway(provider) });
   const label =
     connectionLabel(provider, credentialScope) ??
-    (isGateway(provider) ? 'Any model, on your Mastra account’s credits' : undefined);
+    (isGateway(provider) ? mastraGatewayBilling(gatewayCredits) : undefined);
   const starting = startingProvider !== undefined;
   return (
     <li className="flex min-h-12 items-center gap-3 py-2 pr-2 pl-3">

@@ -17,6 +17,7 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
+import { MAX_GATEWAY_CREDIT_PURCHASE, MIN_GATEWAY_CREDIT_PURCHASE } from '../gateway-credit-purchase.js';
 import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
@@ -37,7 +38,13 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
-import { createGatewayKey, getGatewayCredits, MastraGatewayError, revokeGatewayKey } from './mastra-gateway.js';
+import {
+  createGatewayKey,
+  getGatewayCredits,
+  MastraGatewayError,
+  purchaseGatewayCredits,
+  revokeGatewayKey,
+} from './mastra-gateway.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -1139,6 +1146,40 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (ctx.mode !== 'tenant') return c.json({ error: 'mastra_sign_in_required' }, 400);
           try {
             return c.json(await getGatewayCredits(auth, loose(c), ctx.orgId));
+          } catch (error) {
+            return gatewayFailure(loose(c), error);
+          }
+        },
+      }),
+
+      registerApiRoute(`/web/config/providers/${MASTRA_GATEWAY_CATALOG_PROVIDER}/credits`, {
+        method: 'POST',
+        requiresAuth: false,
+        handler: async c => {
+          const ctx = await resolveCredentialContext({ c: loose(c), auth, credentials: options.modelCredentials });
+          if ('response' in ctx) return ctx.response;
+          if (ctx.mode !== 'tenant') return c.json({ error: 'mastra_sign_in_required' }, 400);
+          let body: unknown;
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const parsed = z
+            .object({
+              amount: z.number().int().min(MIN_GATEWAY_CREDIT_PURCHASE).max(MAX_GATEWAY_CREDIT_PURCHASE),
+            })
+            .safeParse(body);
+          if (!parsed.success) {
+            return c.json(
+              {
+                error: `Credits come in whole dollars, from $${MIN_GATEWAY_CREDIT_PURCHASE} to $${MAX_GATEWAY_CREDIT_PURCHASE}.`,
+              },
+              400,
+            );
+          }
+          try {
+            return c.json(await purchaseGatewayCredits(auth, loose(c), ctx.orgId, parsed.data.amount));
           } catch (error) {
             return gatewayFailure(loose(c), error);
           }

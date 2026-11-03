@@ -1,10 +1,12 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 
+import { useMastraGatewayCreditsQuery } from '../../../../../hooks/use-providers';
 import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ProviderConnection } from '../../hooks/useProviderConnection';
 import { matchesProviderQuery } from '../../hooks/useProviderConnection';
+import { mastraGatewayBilling } from '../mastra-gateway-credits';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
@@ -15,6 +17,7 @@ export interface CreateFactoryProviderRowsProps {
 }
 
 export function CreateFactoryProviderRows({ connection, query, error }: CreateFactoryProviderRowsProps) {
+  const { data: gatewayCredits } = useMastraGatewayCreditsQuery({ enabled: connection.gatewayProvider !== undefined });
   if (connection.isPending) {
     return <PaletteRowsSkeleton label="Loading model providers" rows={3} />;
   }
@@ -41,7 +44,7 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
           <CommandPaletteItem
             icon={<ProviderBrandIcon provider={gateway.provider} />}
             title={providerDisplayName(gateway.provider)}
-            subtitle="Any model, on your Mastra account’s credits"
+            subtitle={mastraGatewayBilling(gatewayCredits)}
             badge={connection.isConfigured(gateway) ? 'Connected' : undefined}
             value={`gateway-${gateway.provider}`}
             disabled={connection.pending}

@@ -8,9 +8,11 @@ import { useId, useState } from 'react';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { useMastraGatewayCreditsQuery } from '../../../../hooks/use-providers';
 import { CustomProviderForm } from '../../settings/components/CustomProviderForm';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../hooks/useProviderConnection';
+import { mastraGatewayBilling } from './mastra-gateway-credits';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
 
 type ProviderPickerTab = ProviderConnectionMethod | 'custom';
@@ -25,6 +27,7 @@ export function ModelProviderPicker({
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<ProviderPickerTab>(connection.method ?? 'api_key');
   const connectedDescriptionId = useId();
+  const { data: gatewayCredits } = useMastraGatewayCreditsQuery({ enabled: connection.gatewayProvider !== undefined });
   if (connection.isPending)
     return (
       <div role="status" aria-label="Loading model providers">
@@ -77,7 +80,10 @@ export function ModelProviderPicker({
                   </Badge>
                 </Txt>
                 <Txt variant="caption" tone="muted" className="mt-1">
-                  Run any model on your Mastra account’s credits. No provider keys to manage.
+                  Connects in one click and runs any model, with no provider keys to manage.
+                </Txt>
+                <Txt variant="meta" tone="muted" className="mt-1">
+                  {mastraGatewayBilling(gatewayCredits)}
                 </Txt>
               </div>
             </div>
