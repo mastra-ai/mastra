@@ -64,8 +64,6 @@ export interface WorkItem {
   /** When a person first moved the card into Planning/Build, which is the approval agents then honor. */
   acceptedAt: string | null;
   commentCount: number;
-  /** Bumped server-side on every feed mutation; clients refetch comments when it moves. */
-  feedActivityAt: string | null;
   revision: number;
   createdAt: string;
   updatedAt: string;
@@ -100,21 +98,12 @@ interface ExternalWorkItemSource {
 
 interface WireWorkItem extends Omit<
   WorkItem,
-  | 'githubProjectId'
-  | 'source'
-  | 'sourceKey'
-  | 'url'
-  | 'metadata'
-  | 'commentCount'
-  | 'feedActivityAt'
-  | 'triageType'
-  | 'acceptedAt'
+  'githubProjectId' | 'source' | 'sourceKey' | 'url' | 'metadata' | 'commentCount' | 'triageType' | 'acceptedAt'
 > {
   factoryProjectId: string;
   externalSource: ExternalWorkItemSource | null;
   metadata: Record<string, unknown> | null;
   commentCount?: number;
-  feedActivityAt?: string | null;
   triageType?: WorkItem['triageType'];
   acceptedAt?: string | null;
 }
@@ -191,8 +180,7 @@ function externalSourceUrl(source: ExternalWorkItemSource | null): string | null
 }
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
-  const { factoryProjectId, externalSource, metadata, commentCount, feedActivityAt, triageType, acceptedAt, ...rest } =
-    item;
+  const { factoryProjectId, externalSource, metadata, commentCount, triageType, acceptedAt, ...rest } = item;
   return {
     ...rest,
     githubProjectId: factoryProjectId,
@@ -205,7 +193,6 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
         : (item.workItem?.url ?? externalSourceUrl(externalSource)),
     metadata: metadata ?? {},
     commentCount: commentCount ?? 0,
-    feedActivityAt: feedActivityAt ?? null,
     triageType: triageType ?? null,
     acceptedAt: acceptedAt ?? null,
   };

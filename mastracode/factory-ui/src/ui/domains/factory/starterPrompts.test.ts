@@ -32,7 +32,6 @@ function card(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
     triageType: null,
     acceptedAt: null,
     commentCount: 0,
-    feedActivityAt: null,
     revision: 1,
     createdAt: daysAgo(30),
     updatedAt: daysAgo(30),
