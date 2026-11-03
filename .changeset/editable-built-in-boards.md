@@ -12,8 +12,8 @@ curl -X PATCH "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work" -H 'conte
 curl -X POST "$FACTORY_URL/web/factory/projects/$PROJECT/boards/work/reset" -H 'content-type: application/json' -d '{"expectedRevision": 3}'
 ```
 
-**What you can change:** names and descriptions, next phases, when a phase starts on its own, when its exit tool is approved on its own, runner instructions, and new phases.
+**What you can change:** names and descriptions, extra next phases, when a phase starts on its own, when its exit tool is approved on its own, runner instructions, and new phases.
 
-**What stays fixed:** phases the code declares, their kind, the first phase, the runner context and skill of phases whose work runs in code, declared exit tools and outcome targets. Edits that change these are refused with `422 code_behaviour`, listing each conflict.
+**What stays fixed:** phases the code declares, their kind, the first phase, the runner context and skill of phases whose work runs in code, declared exit tools, and the moves Factory's code makes between phases. Edits that change these are refused with `422 code_behaviour`, listing each conflict.
 
 Board responses now include `customized` and `defaultChanged`, so you can see when Factory's default changed after your edit. Unedited boards keep following the running Factory version. Code boards still can't be deleted or created over (`409 code_board`), and the legacy Review board stays read-only.

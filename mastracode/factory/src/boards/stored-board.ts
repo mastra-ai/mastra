@@ -139,7 +139,7 @@ export interface CodePhaseBehaviour {
   handlers: boolean;
   /** The exit tool its code behaviour waits for, if any. */
   exitToolId: string | null;
-  /** Phases its code outcomes move cards to; they stay in its nextPhases. */
+  /** Phases code moves cards to from it; they stay in its nextPhases. */
   requiredNextPhases: string[];
 }
 
@@ -152,7 +152,7 @@ export function codeBehaviourOf(code: InstalledBoard): Record<string, CodePhaseB
       {
         handlers: phase.kind === 'working' && hasHandlers(declaration.phases[key]),
         exitToolId: phase.kind === 'working' ? (phase.exitTool?.id ?? null) : null,
-        requiredNextPhases: [...new Set(Object.values(phase.outcomes ?? {}))],
+        requiredNextPhases: [...phase.nextPhases],
       },
     ]),
   );
@@ -165,9 +165,10 @@ function hasHandlers(phase: BoardPhaseDefinition<string> | undefined): boolean {
 /**
  * Why a stored definition of a code board's key can't run with that board's code behaviour, one
  * reason per locked change; empty when it can. Code handlers and checks name the board's phases,
- * its first phase, the context and skill of phases with handlers, and their exit tools, so those
- * stay as code declares them. Names, descriptions, `nextPhases`, start and approval conditions,
- * runner instructions and new phases are free.
+ * its first phase, the context, skill and exit tool of phases with handlers, and the moves code
+ * makes between phases (tool and event rules, `sourceClosed`, integrations, handler prompts), so
+ * those stay as code declares them. Names, descriptions, added moves, start and approval
+ * conditions, runner instructions and new phases are free.
  */
 export function codeBehaviourConflicts(board: StoredBoardInput, code: InstalledBoard): string[] {
   const declaration: AnyBoardConfig = declarationOf(code) ?? code;
@@ -205,13 +206,21 @@ export function codeBehaviourConflicts(board: StoredBoardInput, code: InstalledB
       }
       if (phase.exitTool && edited.exitTool?.id !== phase.exitTool.id) {
         conflicts.push(`${label} code behaviour waits for exit tool "${phase.exitTool.id}"; keep exitTool.id.`);
+      } else if (!phase.exitTool && edited.exitTool && hasHandlers(declaration.phases[key])) {
+        // An exit tool gates every move out of the phase, including the ones its code handlers make.
+        conflicts.push(`${label} code handlers move cards on without an exit tool; leave exitTool unset.`);
       }
     }
     const nextPhases = storedNextPhases(edited, board.phases);
-    for (const [outcome, target] of Object.entries(phase.outcomes ?? {})) {
-      if (!nextPhases.includes(target)) {
-        conflicts.push(`${label} outcome "${outcome}" moves cards to "${target}"; keep it in nextPhases.`);
-      }
+    const outcomes = new Map(Object.entries(phase.outcomes ?? {}).map(([outcome, target]) => [target, outcome]));
+    for (const target of phase.nextPhases) {
+      if (nextPhases.includes(target)) continue;
+      const outcome = outcomes.get(target);
+      conflicts.push(
+        outcome
+          ? `${label} outcome "${outcome}" moves cards to "${target}"; keep it in nextPhases.`
+          : `${label}: Factory's code moves cards from it to "${target}"; keep it in nextPhases.`,
+      );
     }
   }
   return conflicts;

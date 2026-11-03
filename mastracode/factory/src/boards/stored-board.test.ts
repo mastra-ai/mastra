@@ -6,6 +6,8 @@ import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { BoardDefinitionError, codeBoardOf, defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 import { workLaneForRole, workStageCarries } from './legacy-plan-role.js';
+import { startsInAutoPhase } from './phase-automation.js';
+import { createBoardRegistry } from './registry.js';
 import type { InstalledBoard } from './registry.js';
 import { reviewBoard } from './review.js';
 import {
@@ -402,6 +404,19 @@ describe('stored boards with code behaviour', () => {
       'Phase "planning" code behaviour waits for exit tool "submit_plan"; keep exitTool.id.',
     ]);
     expect(conflicts(editWork('planning', phase => ({ ...phase, exitTool: undefined })))).toHaveLength(1);
+    // An approved plan moves the card to Building in code, and a merged pull request closes its card.
+    expect(
+      conflicts(
+        editWork('planning', phase => ({ ...phase, nextPhases: phase.nextPhases?.filter(next => next !== 'execute') })),
+      ),
+    ).toEqual(['Phase "planning": Factory\'s code moves cards from it to "execute"; keep it in nextPhases.']);
+    expect(conflicts(editWork('pr-review', phase => ({ ...phase, nextPhases: ['intake', 'canceled'] })))).toEqual([
+      'Phase "pr-review": Factory\'s code moves cards from it to "done"; keep it in nextPhases.',
+    ]);
+    // An exit tool would hold back the moves Building's code makes.
+    expect(conflicts(editWork('execute', phase => ({ ...phase, exitTool: { id: 'submit_plan' } })))).toEqual([
+      'Phase "execute" code handlers move cards on without an exit tool; leave exitTool unset.',
+    ]);
 
     const outcomes = defineBoard({
       id: 'outcomes',
@@ -447,7 +462,7 @@ describe('stored boards with code behaviour', () => {
                 runner: { context: 'work', instructions: 'Keep plans short.' },
               }
             : phase.key === 'pr-review'
-              ? { ...phase, autoStart: true, nextPhases: ['done', 'canceled'] }
+              ? { ...phase, autoStart: true, nextPhases: ['intake', 'done', 'canceled', 'docs'] }
               : phase,
         ),
         {
@@ -464,7 +479,7 @@ describe('stored boards with code behaviour', () => {
     const board = compileStoredBoard(edited, workBoard);
     expect(board.name).toBe('Shipyard work');
     expect(board.roleForPhase('docs')).toBe('docs');
-    expect(board.allowsTransition('pr-review', 'intake')).toBe(false);
+    expect(board.allowsTransition('pr-review', 'docs')).toBe(true);
   });
 
   it('refuses to compile a conflicting edit against its code board', () => {
@@ -572,5 +587,57 @@ describe('stored boards with code behaviour', () => {
     expect(workStageCarries(compileStoredBoard(boardDefinitionOf(workBoard)), 'planning', 'work', 'factory-plan')).toBe(
       undefined,
     );
+  });
+});
+
+describe('the reviewer seat on an edited Work board', () => {
+  const card = (board: string, stage: string) => ({
+    board,
+    externalSource: null,
+    stages: [stage],
+    title: 'Fix the crash',
+    metadata: {},
+    workItem: null,
+  });
+  const review = {
+    type: 'invokeSkill',
+    idempotencyKey: 'review-1',
+    role: 'review',
+    skillName: 'factory-self-review',
+  } as const;
+
+  it("starts self-review on its own once Work's Review phase starts on its own", () => {
+    const edited = compileStoredBoard(
+      editWork('review', phase => ({ ...phase, autoStart: true })),
+      workBoard,
+    );
+    expect(
+      startsInAutoPhase(
+        createBoardRegistry({ boards: [edited], includeDefaultBoards: false }),
+        card('work', 'review'),
+        review,
+      ),
+    ).toBe(true);
+    // The default Review phase still waits for a person.
+    expect(startsInAutoPhase(createBoardRegistry(), card('work', 'review'), review)).toBe(false);
+  });
+
+  it('does not treat a stored board phase keyed pr-review as the reviewer seat', () => {
+    const bugs = compileStoredBoard({
+      key: 'bugs',
+      name: 'Bugs',
+      phases: [
+        { key: 'reported', name: 'Reported', kind: 'resting' },
+        { key: 'pr-review', name: 'PR review', kind: 'working', runner: { context: 'work' }, autoStart: true },
+        { key: 'fixed', name: 'Fixed', kind: 'terminal' },
+      ],
+    });
+    expect(
+      startsInAutoPhase(
+        createBoardRegistry({ boards: [bugs], includeDefaultBoards: false }),
+        card('bugs', 'pr-review'),
+        review,
+      ),
+    ).toBe(false);
   });
 });

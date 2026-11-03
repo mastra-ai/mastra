@@ -338,7 +338,8 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
         await storage.replace(scope, key, replacement, {
           expectedRevision,
           actor: scope.userId,
-          ...(seed ? { adoptSeedHash: seed.hash } : {}),
+          // A copy of a code board this Factory no longer defines becomes a plain stored board.
+          ...(seed ? { adoptSeedHash: seed.hash } : { forgetSeed: true }),
         });
         boards.invalidate(scope);
         await this.#audit(c, scope, 'updated', input);
