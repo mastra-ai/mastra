@@ -698,6 +698,18 @@ export function lazyStepResults(
 }
 
 /**
+ * The `steps()` of a storage v2 result whose step results were read already, as when `restart()`
+ * returns a finished run's stored result.
+ *
+ * @internal
+ */
+export function loadedStepResults(stepResults: StepResults): () => Promise<StepResults> {
+  const steps = async () => stepResults;
+  residentResults.set(steps, stepResults);
+  return steps;
+}
+
+/**
  * The step results a storage v2 result's `steps` loader holds without reading storage: every result
  * but the successful ones that were evicted, which are stubs. Undefined for anything else (a v1
  * result's `steps` record). For the engine's own reads of a nested run's suspended and failed steps.

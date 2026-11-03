@@ -472,17 +472,31 @@ export interface WorkflowStartCallbackInfo {
 }
 
 /**
+ * How a run's result holds its step results, by the workflow's `storageVersion`. On `1` it's the
+ * record. On `2` it's an async loader, so returning the result reads none of the step results the
+ * run kept only in storage: `await result.steps()` reads them. A version the type doesn't know
+ * (`any`) keeps the record, and `1 | 2` is either, told apart with `typeof steps === 'function'`.
+ */
+// `[TStorageVersion] extends [1]` only holds for `any` here, which keeps the record. Written this way,
+// rather than as an `any` check, a result for `1` is still assignable to one for `1 | 2`.
+export type WorkflowStepResults<TStepResults, TStorageVersion extends 1 | 2 = 1> = TStorageVersion extends 2
+  ? [TStorageVersion] extends [1]
+    ? TStepResults
+    : () => Promise<TStepResults>
+  : TStepResults;
+
+/**
  * Result object passed to the onFinish callback when a workflow completes.
  */
-export interface WorkflowFinishCallbackResult {
+export interface WorkflowFinishCallbackResult<TStorageVersion extends 1 | 2 = 1> {
   /** The final status of the workflow */
   status: WorkflowRunStatus;
   /** The workflow result (only for successful workflows) */
   result?: any;
   /** Error details (only for failed workflows) */
   error?: SerializedError;
-  /** All step results */
-  steps: Record<string, StepResult<any, any, any, any>>;
+  /** All step results. On storage v2, an async loader that reads them. */
+  steps: WorkflowStepResults<Record<string, StepResult<any, any, any, any>>, TStorageVersion>;
   /** Tripwire info (only if failure was due to tripwire) */
   tripwire?: StepTripwireInfo;
   /** The unique workflow run ID */
@@ -507,13 +521,13 @@ export interface WorkflowFinishCallbackResult {
 /**
  * Error info object passed to the onError callback when a workflow fails.
  */
-export interface WorkflowErrorCallbackInfo {
+export interface WorkflowErrorCallbackInfo<TStorageVersion extends 1 | 2 = 1> {
   /** The failure status (either 'failed' or 'tripwire') */
   status: 'failed' | 'tripwire';
   /** Error details */
   error?: SerializedError;
-  /** All step results */
-  steps: Record<string, StepResult<any, any, any, any>>;
+  /** All step results. On storage v2, an async loader that reads them. */
+  steps: WorkflowStepResults<Record<string, StepResult<any, any, any, any>>, TStorageVersion>;
   /** Tripwire info (only if status is 'tripwire') */
   tripwire?: StepTripwireInfo;
   /** The unique workflow run ID */
@@ -544,7 +558,7 @@ export type ShouldPersistSnapshotFn = (params: {
   workflowStatus: WorkflowRunStatus;
 }) => boolean;
 
-export interface WorkflowOptions {
+export interface WorkflowOptions<TStorageVersion extends 1 | 2 = 1> {
   tracingPolicy?: TracingPolicy;
   validateInputs?: boolean;
   /**
@@ -639,9 +653,12 @@ export interface WorkflowOptions {
    * version they were created with: resuming a run after changing this option
    * throws.
    *
+   * On version 2 a run's result holds its step results as an async loader,
+   * `await result.steps()`, so returning a result doesn't read them all back.
+   *
    * @experimental
    */
-  storageVersion?: 1 | 2;
+  storageVersion?: TStorageVersion;
 
   /**
    * Called before a workflow run starts executing, and awaited.
@@ -662,14 +679,14 @@ export interface WorkflowOptions {
    * This callback is invoked server-side without requiring client-side .watch().
    * Errors thrown in this callback are caught and logged, not propagated.
    */
-  onFinish?: (result: WorkflowFinishCallbackResult) => Promise<void> | void;
+  onFinish?: (result: WorkflowFinishCallbackResult<TStorageVersion>) => Promise<void> | void;
 
   /**
    * Called only when workflow execution fails (failed or tripwire status).
    * This callback is invoked server-side without requiring client-side .watch().
    * Errors thrown in this callback are caught and logged, not propagated.
    */
-  onError?: (errorInfo: WorkflowErrorCallbackInfo) => Promise<void> | void;
+  onError?: (errorInfo: WorkflowErrorCallbackInfo<TStorageVersion>) => Promise<void> | void;
 }
 
 export type WorkflowInfo = {
@@ -683,7 +700,7 @@ export type WorkflowInfo = {
   outputSchema: string | undefined;
   stateSchema: string | undefined;
   requestContextSchema: string | undefined;
-  options?: WorkflowOptions;
+  options?: WorkflowOptions<any>;
   stepCount?: number;
   /** Whether this workflow is a processor workflow (auto-generated from agent processors) */
   isProcessorWorkflow?: boolean;
@@ -1112,7 +1129,29 @@ export type ToolStep<
   execute: (input: TSchemaIn, context?: TContext) => Promise<any>;
 };
 
-export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, any, any, any, any, any>[]> =
+/** A workflow's step results, typed by each step's schemas. */
+type TypedStepResults<TSteps extends Step<string, any, any, any, any, any>[]> = {
+  [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
+    ? StepResult<unknown, unknown, unknown, unknown>
+    : StepResult<
+        InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
+        StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
+          ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
+          : unknown,
+        StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
+          ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
+          : unknown,
+        InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
+      >;
+};
+
+export type WorkflowResult<
+  TState,
+  TInput,
+  TOutput,
+  TSteps extends Step<string, any, any, any, any, any>[],
+  TStorageVersion extends 1 | 2 = 1,
+> =
   | ({
       status: 'success';
       state?: TState;
@@ -1120,20 +1159,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       result: TOutput;
       input: TInput;
-      steps: {
-        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown, unknown>
-          : StepResult<
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
-              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
-                : unknown,
-              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
-                : unknown,
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
-            >;
-      };
+      steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
     } & TracingProperties)
   | ({
       status: 'failed';
@@ -1141,20 +1167,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       state?: TState;
       stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
-      steps: {
-        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown, unknown>
-          : StepResult<
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
-              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
-                : unknown,
-              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
-                : unknown,
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
-            >;
-      };
+      steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
       error: Error;
     } & TracingProperties)
   | ({
@@ -1163,20 +1176,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       state?: TState;
       stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
-      steps: {
-        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown, unknown>
-          : StepResult<
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
-              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
-                : unknown,
-              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
-                : unknown,
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
-            >;
-      };
+      steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
       /** Tripwire data including reason, retry flag, metadata, and processor ID */
       tripwire: StepTripwireInfo;
     } & TracingProperties)
@@ -1186,20 +1186,7 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       state?: TState;
       stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
-      steps: {
-        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown, unknown>
-          : StepResult<
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
-              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
-                : unknown,
-              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
-                : unknown,
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
-            >;
-      };
+      steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
       suspendPayload: any;
       suspended: [string[], ...string[][]];
     } & TracingProperties)
@@ -1209,41 +1196,21 @@ export type WorkflowResult<TState, TInput, TOutput, TSteps extends Step<string, 
       stepExecutionPath?: string[];
       resumeLabels?: Record<string, { stepId: string; forEachIndex?: number }>;
       input: TInput;
-      steps: {
-        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown, unknown>
-          : StepResult<
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
-              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
-                : unknown,
-              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
-                : unknown,
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
-            >;
-      };
+      steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
     } & TracingProperties);
 
-export type WorkflowStreamResult<TState, TInput, TOutput, TSteps extends Step<string, any, any>[]> =
-  | WorkflowResult<TState, TInput, TOutput, TSteps>
+export type WorkflowStreamResult<
+  TState,
+  TInput,
+  TOutput,
+  TSteps extends Step<string, any, any>[],
+  TStorageVersion extends 1 | 2 = 1,
+> =
+  | WorkflowResult<TState, TInput, TOutput, TSteps, TStorageVersion>
   | {
       status: 'running' | 'waiting' | 'pending' | 'canceled';
       input: TInput;
-      steps: {
-        [K in keyof StepsRecord<TSteps>]: StepsRecord<TSteps>[K]['outputSchema'] extends undefined
-          ? StepResult<unknown, unknown, unknown, unknown>
-          : StepResult<
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['inputSchema']>,
-              StepsRecord<TSteps>[K]['resumeSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['resumeSchema']>
-                : unknown,
-              StepsRecord<TSteps>[K]['suspendSchema'] extends StandardSchemaWithJSON<any>
-                ? InferStandardSchemaOutput<StepsRecord<TSteps>[K]['suspendSchema']>
-                : unknown,
-              InferStandardSchemaOutput<StepsRecord<TSteps>[K]['outputSchema']>
-            >;
-      };
+      steps: WorkflowStepResults<TypedStepResults<TSteps>, TStorageVersion>;
     };
 
 export type WorkflowConfig<
@@ -1253,6 +1220,7 @@ export type WorkflowConfig<
   TOutput,
   TSteps extends Step[],
   TRequestContext extends Record<string, any> | unknown = unknown,
+  TStorageVersion extends 1 | 2 = 1,
 > = {
   mastra?: Mastra;
   id: TWorkflowId;
@@ -1273,7 +1241,7 @@ export type WorkflowConfig<
     attempts?: number;
     delay?: number;
   };
-  options?: WorkflowOptions;
+  options?: WorkflowOptions<TStorageVersion>;
   /** Type of workflow - 'processor' for processor workflows, 'default' otherwise */
   type?: WorkflowType;
   /**
@@ -1334,6 +1302,7 @@ export type CreateWorkflowParams<
   TOutputSchema extends PublicSchema<any> = PublicSchema<any>,
   TSteps extends Step[] = Step[],
   TRequestContextSchema extends PublicSchema<any> | undefined = undefined,
+  TStorageVersion extends 1 | 2 = 1,
 > = {
   mastra?: Mastra;
   id: TWorkflowId;
@@ -1346,7 +1315,7 @@ export type CreateWorkflowParams<
   executionEngine?: ExecutionEngine;
   steps?: TSteps;
   retryConfig?: { attempts?: number; delay?: number };
-  options?: WorkflowOptions;
+  options?: WorkflowOptions<TStorageVersion>;
   type?: WorkflowType;
   schedule?: WorkflowScheduleInput<
     NoInfer<InferSchemaOutput<TInputSchema>>,
