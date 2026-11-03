@@ -100,6 +100,8 @@ interface SessionedItem {
   readonly stageHistory?: readonly { readonly stage: string }[];
 }
 
+type BranchedItem = Pick<Card, 'id' | 'externalSource'> & { readonly workItem: Pick<Card['workItem'], 'metadata'> };
+
 /**
  * Whether building has started on the card: a builder (`work`) session is bound, or the card
  * has been in Building. From then on, a pull request someone else opens for the card's issue
@@ -116,10 +118,7 @@ export function hasBuilderSession(item: SessionedItem): boolean {
  * one of its session branches, or the branch Factory builds the card on (stable even after its
  * session is deleted).
  */
-export function cardOwnsBranch(
-  item: SessionedItem & Pick<Card, 'id' | 'externalSource' | 'workItem'>,
-  headBranch: string | undefined,
-): boolean {
+export function cardOwnsBranch(item: SessionedItem & BranchedItem, headBranch: string | undefined): boolean {
   if (!headBranch) return false;
   const buildBranch = workItemBranch({
     id: item.id,
@@ -131,7 +130,7 @@ export function cardOwnsBranch(
 
 /** The newest open pull request the card's own sessions opened, other than `except`. */
 export function newestOwnedOpenPullRequestNumber(
-  item: SessionedItem & Pick<Card, 'id' | 'externalSource' | 'workItem'>,
+  item: SourcedItem & SessionedItem & BranchedItem,
   except?: number,
 ): number | null {
   const open = pullRequestSources(item).filter(

@@ -1598,6 +1598,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(card!.workItem.sources[2]).toMatchObject({ state: 'merged' });
     });
 
+    it("gives someone else's merge request its own card when the issue has been in Building, even with no session left", async () => {
+      const h = await harness();
+      const issue = await h.issueCard('execute');
+
+      await h.ingest(mergeRequest(17, 'Closes #42'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
+    });
+
     const builderSession = {
       work: { sessionId: 'sess-work', threadId: 'thread-work', branch: 'factory/gitlab-issue-42', startedBy: 'user-1' },
     };
