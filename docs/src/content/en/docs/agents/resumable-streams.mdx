@@ -109,7 +109,7 @@ With streams on, a closed reader doesn't stop the run. When a client disconnects
 
 Stop a run explicitly with one of these:
 
-- `observe(runId)` returns an `abort()` function that stops the run wherever it executes.
+- `observe(runId)` returns an `abort()` function that stops a running run wherever it executes. A run parked on an approval no longer listens for it, so stop a parked run with `agent.abortRunStream(runId)` in the process that holds it, or with `POST /agents/:agentId/threads/abort` for a run in a memory thread.
 - `agent.abortRunStream(runId)` stops a run in this process, and asks other processes on the same bus to stop it. It returns `true` only for a run stopped in this process. For a run elsewhere the request is best effort.
 - The server's `POST /agents/:agentId/runs/:runId/abort` route stops a run on any server that shares the PubSub and cache, after checking the caller owns it. It returns `{ aborted: true }` only once the process executing the run confirms it stopped. It returns `{ aborted: false }` for a finished run, for a run parked on an approval (nothing is executing it), and when no process answers in time. Runs in a memory thread can also be stopped with `POST /agents/:agentId/threads/abort`.
 
