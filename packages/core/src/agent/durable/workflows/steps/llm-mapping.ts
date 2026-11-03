@@ -110,6 +110,37 @@ export function createDurableLLMMappingStep() {
       // MastraModelOutput, which reads it for scoringData — keep seeing state
       // updates. A fresh instance here would orphan those references.
       const registryEntry = getRunRegistryEntry(_runId, mastra as Mastra | undefined);
+      const terminalBackgroundParts = new Map<string, { restore: (list: MessageList) => void; taskId: string }>();
+      for (const message of registryEntry?.messageList?.get.all.db() ?? []) {
+        for (const part of message.content.parts) {
+          if (part.type !== 'tool-invocation') continue;
+          const backgroundTask = part.providerMetadata?.mastra?.backgroundTask;
+          if (
+            backgroundTask &&
+            typeof backgroundTask === 'object' &&
+            'taskId' in backgroundTask &&
+            (backgroundTask.status === 'completed' || backgroundTask.status === 'failed') &&
+            toolResults.some(
+              result =>
+                result.toolCallId === part.toolInvocation.toolCallId &&
+                (
+                  result.providerMetadata as
+                    | { mastra?: { backgroundTask?: { taskId?: string; status?: string } } }
+                    | undefined
+                )?.mastra?.backgroundTask?.taskId === backgroundTask.taskId &&
+                (result.providerMetadata as { mastra?: { backgroundTask?: { status?: string } } } | undefined)?.mastra
+                  ?.backgroundTask?.status === 'running',
+            )
+          ) {
+            terminalBackgroundParts.set(part.toolInvocation.toolCallId, {
+              restore: list => {
+                list.updateToolInvocation(part, { mode: 'stream' });
+              },
+              taskId: backgroundTask.taskId as string,
+            });
+          }
+        }
+      }
       const messageList = (
         registryEntry?.messageList ??
         new MessageList({
@@ -117,6 +148,9 @@ export function createDurableLLMMappingStep() {
           resourceId: state.resourceId,
         })
       ).deserialize(await readMessageListState(params, llmOutput));
+      for (const { restore } of terminalBackgroundParts.values()) {
+        restore(messageList);
+      }
 
       if (llmOutput.stepResult.signalPreempted) {
         return {
@@ -181,6 +215,17 @@ export function createDurableLLMMappingStep() {
 
       if (toolResults.length > 0) {
         for (const toolResult of toolResults) {
+          const backgroundTask = (
+            toolResult.providerMetadata as
+              | { mastra?: { backgroundTask?: { taskId?: string; status?: string } } }
+              | undefined
+          )?.mastra?.backgroundTask;
+          if (
+            backgroundTask?.status === 'running' &&
+            terminalBackgroundParts.get(toolResult.toolCallId)?.taskId === backgroundTask.taskId
+          ) {
+            continue;
+          }
           if (toolResult.mappingError) {
             const mappingError = new Error(toolResult.mappingError.message);
             mappingError.name = toolResult.mappingError.name;
