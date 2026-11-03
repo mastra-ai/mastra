@@ -22,7 +22,7 @@ import { createTool } from '@mastra/core/tools';
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
-import { MASTRA_USER_PERMISSIONS_KEY } from '../constants';
+import { MASTRA_AUTH_MODE_KEY, MASTRA_USER_PERMISSIONS_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
@@ -5176,6 +5176,104 @@ describe('plain Agent resumable streams', () => {
       const agent = plainAgent('plain-agent');
       const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
       await expect(observeAs(mastra, 'elsewhere', 'user-a')).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('run access checks use the request context', () => {
+    // A tenancy mapper plus Studio FGA and no server FGA: an unscoped Studio
+    // caller is authorized by the Studio provider, which is resolved from the
+    // request context. Without the context the check sees no provider and denies.
+    function setup() {
+      const agent = plainAgent('plain-agent');
+      const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+      } as any);
+      vi.spyOn(mastra, 'getStudio').mockReturnValue({ fga: { check: vi.fn() } } as any);
+      vi.spyOn(agent, '__getRunOwner').mockReturnValue({ resourceId: 'user-a' });
+      vi.spyOn(agent, '__getPublishedRunOwner').mockReturnValue({ resourceId: 'user-a' });
+      const abort = vi.spyOn(agent, 'abortRunStream').mockReturnValue(true);
+      return { agent, mastra, abort };
+    }
+    const studio = () => new RequestContext([[MASTRA_AUTH_MODE_KEY, 'studio']]);
+
+    it('lets an authorized unscoped Studio caller observe a run', async () => {
+      const { agent, mastra } = setup();
+      const runId = 'studio-observe';
+      await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: AgentStreamEventTypes.FINISH,
+        data: { output: {}, stepResult: { reason: 'stop' } },
+      });
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'plain-agent',
+        runId,
+        requestContext: studio(),
+      } as any)) as ReadableStream<any>;
+      const events: any[] = [];
+      for await (const event of stream as any) events.push(event);
+      expect(events.map(event => event.type)).toEqual(['finish']);
+    });
+
+    it('lets an authorized unscoped Studio caller abort a run', async () => {
+      const { mastra, abort } = setup();
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'plain-agent',
+          runId: 'studio-abort',
+          requestContext: studio(),
+        }),
+      ).resolves.toEqual({ aborted: true });
+      expect(abort).toHaveBeenCalledWith('studio-abort');
+    });
+
+    it.each([
+      ['an unscoped non-Studio caller', () => new RequestContext()],
+      [
+        'a caller of another tenant in Studio mode',
+        () =>
+          new RequestContext([
+            [MASTRA_AUTH_MODE_KEY, 'studio'],
+            [MASTRA_RESOURCE_ID_KEY, 'user-b'],
+          ]),
+      ],
+    ])('still denies %s', async (_name, context) => {
+      const { mastra, abort } = setup();
+      await expect(
+        OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'plain-agent',
+          runId: 'r',
+          requestContext: context(),
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({ mastra, agentId: 'plain-agent', runId: 'r', requestContext: context() }),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(abort).not.toHaveBeenCalled();
+    });
+
+    it('resolves the observed agent with the request context', async () => {
+      const { agent, mastra } = setup();
+      const applyStoredOverrides = vi.fn(async (resolved: Agent) => resolved);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({ agent: { applyStoredOverrides } } as any);
+      const runId = 'context-lookup';
+      await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: AgentStreamEventTypes.FINISH,
+        data: { output: {}, stepResult: { reason: 'stop' } },
+      });
+      const requestContext = studio();
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'plain-agent',
+        runId,
+        requestContext,
+      } as any)) as ReadableStream<any>;
+      for await (const _event of stream as any);
+      expect(applyStoredOverrides).toHaveBeenCalledWith(agent, expect.anything(), requestContext);
     });
   });
 

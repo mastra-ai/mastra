@@ -2533,7 +2533,7 @@ async function authorizeRunObservation({
   const getOwner = (agent as unknown as ResumableStreamsAgent).__getRunOwner;
   const owner = typeof getOwner === 'function' ? getOwner.call(agent, runId) : undefined;
   if (owner) {
-    await validateRunOwnership(owner, getContextResourceId(requestContext), mastra);
+    await validateRunOwnership(owner, getContextResourceId(requestContext), mastra, requestContext);
     if (owner.threadId) {
       const memory = await agent.getMemory({ requestContext });
       const thread = await memory?.getThreadById({ threadId: owner.threadId });
@@ -2584,7 +2584,7 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
         if (!owner) {
           throw new HTTPException(404, { message: 'Run is not executing on this server' });
         }
-        await validateRunOwnership(owner, getContextResourceId(requestContext), mastra);
+        await validateRunOwnership(owner, getContextResourceId(requestContext), mastra, requestContext);
         if (owner.threadId) {
           const memory = await agent.getMemory({ requestContext });
           const thread = await memory?.getThreadById({ threadId: owner.threadId });
@@ -2981,7 +2981,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       // Verify agent exists and get its pubsub for stream subscription.
       // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
       // so we must subscribe to the agent's pubsub to receive the correct stream events.
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
       await authorizeRunObservation({ mastra, agent, runId, requestContext });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
       // Plain agents with resumable streams publish on their own stream bus.
