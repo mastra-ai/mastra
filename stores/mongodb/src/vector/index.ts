@@ -63,6 +63,119 @@ export interface MongoDBQueryVectorParams extends QueryVectorParams<MongoDBVecto
   metadataMode?: 'field' | 'document';
 }
 
+/** Flat options for {@link MongoDBVector.hybridQuery}, sharing one limit across both branches. */
+export interface MongoDBHybridQueryParams {
+  indexName: string;
+  /** Query embedding for the vector branch. Supply this or `queryText`, not both. */
+  queryVector?: number[];
+  /**
+   * Text for MongoDB to embed server-side for the vector branch. autoEmbed indexes only.
+   * Independent of `query`, so the two branches can search for different things.
+   */
+  queryText?: string;
+  /**
+   * Embedding model for the vector branch, overriding the index's. Requires `queryText`
+   * and must be compatible with the index's model.
+   */
+  model?: string;
+  /** Full-text (BM25) term for the text branch. */
+  query: string;
+  paths: string[];
+  topK?: number;
+  filter?: MongoDBVectorFilter;
+  weights?: { vector?: number; text?: number };
+  numCandidates?: number;
+  metadataMode?: 'field' | 'document';
+  /** Override the resolved full-text search index name for this call. */
+  textSearchIndexName?: string;
+}
+
+/**
+ * Per-branch retrieval and optional native reranking options for {@link MongoDBVector.hybridQuery}.
+ *
+ * The result shape follows the collection: managed indexes return the managed `metadata` and
+ * `document` fields; bring-your-own (BYO) indexes return the source document as `metadata`,
+ * without its embedding.
+ */
+export interface MongoDBHybridQueryBranchParams {
+  /** Logical Mastra index, resolving the collection and its registered search indexes. */
+  indexName: string;
+  /** Final result limit, applied after fusion and optional reranking. Integer from 1 to 10000; defaults to 10. */
+  topK?: number;
+  /**
+   * Filter applied to both retrieval branches before fusion. On managed indexes, bare keys
+   * target the managed `metadata` fields; on BYO indexes, they target source document fields.
+   */
+  filter?: MongoDBVectorFilter;
+  /** Non-negative, finite fusion weights. Each omitted weight defaults to 1; at least one must be positive. */
+  weights?: { vector?: number; text?: number };
+  /**
+   * Return each result's stored embedding as `vector`. Defaults to false. Not supported on
+   * autoEmbed indexes, whose generated embeddings are not stored on the documents.
+   */
+  includeVector?: boolean;
+  /** Vector retrieval using either an embedding you generate or text for an autoEmbed index. */
+  vector: (
+    | {
+        /**
+         * Embedding that you generate. Mutually exclusive with query and model. Not supported on
+         * autoEmbed indexes, which only accept query text; passing it there throws a USER error.
+         */
+        queryVector: number[];
+        query?: never;
+        model?: never;
+      }
+    | {
+        /** Non-empty text for MongoDB to embed. Requires an autoEmbed index. */
+        query: string;
+        queryVector?: never;
+        /** Query embedding model override, independent of the reranking model. */
+        model?: string;
+      }
+  ) & {
+    /**
+     * Candidates considered by vector search, from 1 to 10000. Defaults to min(10000, 20 * limit),
+     * following MongoDB's recommendation of at least 20 times the vector limit.
+     * An explicit value is sent to MongoDB unchanged, which rejects one below the vector limit.
+     */
+    numCandidates?: number;
+    /** Vector results contributed to fusion, from 1 to 10000. Defaults to min(10000, max(4 * topK, 20)). */
+    limit?: number;
+    /**
+     * Bring-your-own collections only: search this existing vector index instead of the registered
+     * one. Filters with this option always use the `_id` pre-filter, so the index must declare `_id`
+     * as a filter field. Rejected on managed
+     * indexes, which use their registered indexes.
+     */
+    searchIndexName?: string;
+  };
+  /** Full-text (BM25) retrieval, configured independently of vector retrieval. */
+  text: {
+    /** Non-empty full-text query. */
+    query: string;
+    /** Non-empty array of indexed field paths to search, relative to the document root (e.g. `metadata.text`). */
+    paths: string[];
+    /**
+     * Bring-your-own collections only: search this existing full-text index instead of the
+     * registered one. Rejected on managed indexes, which use their registered indexes.
+     */
+    searchIndexName?: string;
+    /** Text results contributed to fusion, from 1 to 10000. Defaults to min(10000, max(4 * topK, 20)). */
+    limit?: number;
+  };
+  /** Enable native $rerank after fusion. Omit to return fused results without reranking. */
+  rerank?: {
+    /** Non-empty query used to judge relevance, independent of both retrieval queries. */
+    query: string;
+    /** Non-empty array of field paths, relative to the document root. Missing document fields cause a server error. */
+    paths: string[];
+    /** Native reranking model. Defaults to 'rerank-2.5'; never changes the embedding model. */
+    model?: string;
+    /** Maximum fused documents to rerank and return before topK. Required integer from 1 to 1000. */
+    numDocsToRerank: number;
+  };
+}
+
 /**
  * Automated Embedding configuration. MongoDB embeds the text at `path` when documents are
  * written, and embeds a `queryText` string at query time, using the same model.
@@ -118,7 +231,11 @@ export interface MongoDBCreateIndexParams extends Omit<CreateIndexParams, 'dimen
    * supports — are passed directly to `$vectorSearch` instead of pre-filtering
    * candidate `_id`s, avoiding the 16 MB BSON limit on large result sets.
    * Filters that reference an undeclared field, or use an unsupported
-   * operator, automatically fall back to the pre-filter.
+   * operator, automatically fall back to the pre-filter, which fails once it
+   * matches more than 100,000 documents.
+   *
+   * With `collectionName` (bring-your-own), names are declared as root paths
+   * as given (e.g. `lane`), matching `metadataMode: 'document'` filters.
    * @see https://www.mongodb.com/docs/atlas/atlas-vector-search/vector-search-type/
    */
   filterFields?: string[];
@@ -139,6 +256,9 @@ export interface MongoDBCreateIndexParams extends Omit<CreateIndexParams, 'dimen
    * a BYO index is **read-only** — the store never mutates the caller's
    * operational documents unless explicitly allowed. Ignored for managed
    * collections (which the store owns and can always write to).
+   *
+   * @deprecated Keep bring-your-own collections read-only: write embeddings from your
+   * application or use `autoEmbed`. To be removed in the next major version.
    */
   allowWrites?: boolean;
 }
@@ -199,7 +319,19 @@ interface IndexTarget {
   textSearchIndexName?: string;
   /** Automated Embedding config for this index, with `path` resolved to a concrete field. */
   autoEmbed?: MongoDBAutoEmbedConfig & { path: string };
+  /**
+   * Ownership of the physical resources, recorded only when this store created them.
+   * deleteIndex drops only what is owned. A missing flag (entries written before ownership
+   * was recorded) means unknown, and unknown search indexes are kept. A managed entry
+   * without `ownsCollection` keeps the legacy behavior of dropping its collection.
+   */
+  ownsVectorIndex?: boolean;
+  ownsTextIndex?: boolean;
+  ownsCollection?: boolean;
 }
+
+/** The driver types listSearchIndexes() rows as `{ name }`; these are the fields this store reads. */
+type SearchIndexInfo = { name: string; status?: string; latestDefinition?: Document };
 
 /** Shape of a registry document persisted in {@link MongoDBVector.REGISTRY_COLLECTION}. */
 interface RegistryDoc extends IndexTarget {
@@ -207,6 +339,8 @@ interface RegistryDoc extends IndexTarget {
   indexName: string;
   dimension?: number;
   metric?: string;
+  /** Random id of the call that last wrote the entry, so a failed call rolls back only its own write. */
+  claimToken?: string;
 }
 
 /** Name an index's embedding mode for a conflict message. */
@@ -281,6 +415,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * for long.
    */
   private static readonly INITIAL_SYNC_RETRY_DELAYS_MS = [250, 500, 1000, 2000, 2000];
+  /**
+   * Most `_id`s the pre-filter fallback loads for one query. The ids go into a single
+   * `$vectorSearch` command, which must stay under 16 MB; 100,000 ids leaves room for long
+   * string ids. Past this the query fails rather than silently dropping candidates.
+   */
+  private static readonly MAX_PREFILTER_CANDIDATES = 100_000;
   /**
    * MongoDB query operators supported inside `$vectorSearch.filter`. Intentionally
    * conservative: filters using any operator outside this set fall back to the
@@ -364,6 +504,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         allowWrites: isByo ? (persisted.allowWrites ?? false) : true,
         textSearchIndexName: persisted.textSearchIndexName,
         autoEmbed: persisted.autoEmbed,
+        ownsVectorIndex: persisted.ownsVectorIndex,
+        ownsTextIndex: persisted.ownsTextIndex,
+        ownsCollection: persisted.ownsCollection,
       };
       this.indexTargets.set(indexName, target);
       return { ...target, registered: true };
@@ -491,9 +634,51 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * the duplicate `_id` surfaces as a duplicate-key error (code 11000) instead of overwriting
    * the entry someone else registered. Callers that only refresh part of an entry omit it.
    */
-  private async writeRegistryEntry(indexName: string, entry: Partial<RegistryDoc>, claim?: Document): Promise<void> {
+  private async writeRegistryEntry(
+    indexName: string,
+    entry: Partial<RegistryDoc>,
+    claim?: Document,
+    upsert = true,
+  ): Promise<void> {
     const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
-    await registry.updateOne({ _id: indexName, ...claim }, { $set: { indexName, ...entry } }, { upsert: true });
+    await registry.updateOne({ _id: indexName, ...claim }, { $set: { indexName, ...entry } }, { upsert });
+  }
+
+  /**
+   * Record that this store created a search index. `claim` pins the entry to this call's
+   * `claimToken` and the index name, so the flag never lands on an entry another process
+   * rewrote or re-registered in the meantime. No upsert, so a deleted entry stays deleted.
+   */
+  private async markOwned(
+    indexName: string,
+    owned: Pick<IndexTarget, 'ownsVectorIndex'> | Pick<IndexTarget, 'ownsTextIndex'>,
+    claim: Document,
+  ): Promise<void> {
+    await this.writeRegistryEntry(indexName, owned, claim, false);
+  }
+
+  /**
+   * Undo a registry write after provisioning failed: remove the entry this call inserted, or
+   * restore the one it overwrote. Matching on `claimToken` leaves alone an entry another
+   * process rewrote since. Best effort, so the caller still sees the provisioning error.
+   * Returns true when the inserted entry was removed.
+   */
+  private async rollbackRegistryEntry(
+    indexName: string,
+    previous: RegistryDoc | null,
+    claimToken: string,
+  ): Promise<boolean> {
+    this.indexTargets.delete(indexName);
+    this.declaredFilterPaths.delete(indexName);
+    try {
+      const registry = this.db.collection<RegistryDoc>(MongoDBVector.REGISTRY_COLLECTION);
+      if (!previous) return (await registry.deleteOne({ _id: indexName, claimToken })).deletedCount === 1;
+      await registry.replaceOne({ _id: indexName, claimToken }, previous);
+    } catch {
+      // The entry stays as written. Ownership is never claimed for a failed call, so a later
+      // deleteIndex still keeps whatever it cannot prove this store created.
+    }
+    return false;
   }
 
   /** Remove a logical-index target from the durable registry (called by deleteIndex). */
@@ -503,11 +688,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   }
 
   /**
-   * $rankFusion is available in MongoDB >= 8.0. It is generally available from 8.1; on 8.0.x it
-   * may require a MongoDB support case to enable (see the $rankFusion docs), but where enabled —
-   * e.g. Atlas 8.0.x clusters — it runs. We therefore gate at >= 8.0 (rejecting only clearly
-   * unsupported older servers) and let the server be the final authority: if $rankFusion is not
-   * actually enabled on an 8.0.x deployment, the query itself surfaces the server error.
+   * $rankFusion is available in MongoDB >= 8.0, so the gate rejects only older servers and lets the
+   * server be the final authority on anything else.
    */
   private async assertRankFusionSupported(): Promise<void> {
     // Probe the server version once and memoize: the support result cannot change for a live
@@ -524,7 +706,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'UNSUPPORTED'),
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        text: `hybridQuery uses $rankFusion, which requires MongoDB >= 8.0 (found ${this.rankFusionSupport.version}). On 8.0.x it may need a MongoDB support case to enable; upgrade to >= 8.1, or run query() and textQuery() separately and fuse client-side.`,
+        text: `hybridQuery uses $rankFusion, which requires MongoDB >= 8.0 (found ${this.rankFusionSupport.version}). Upgrade to 8.0 or later, or run query() and textQuery() separately and fuse client-side.`,
       });
     }
   }
@@ -737,6 +919,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // classification is sticky and the write policy is preserved on refresh.)
 
     let collection;
+    let collectionCreated = false;
     try {
       // Check if collection exists
       const collectionExists = await this.db.listCollections({ name: targetCollection }).hasNext();
@@ -750,6 +933,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           });
         }
         await this.db.createCollection(targetCollection);
+        collectionCreated = true;
       }
       collection = await this.getCollection(targetCollection);
 
@@ -780,6 +964,11 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // The write policy is likewise preserved on refresh unless explicitly re-specified.
       const effectiveIsByo = existingEntry ? (existingEntry.isByo ?? false) : isByo;
       const effectiveWritable = effectiveIsByo ? (allowWrites ?? existingEntry?.allowWrites ?? false) : true;
+      if (effectiveIsByo && allowWrites === true) {
+        this.logger.warn(
+          `createIndex({ allowWrites: true }) is deprecated and will be removed in the next major version. Keep bring-your-own index "${indexName}" read-only: write embeddings from your application or use autoEmbed.`,
+        );
+      }
 
       // Vector/text index names must not collide: if the vector index were created under
       // the companion text-index name, the later text-index creation would hit
@@ -850,6 +1039,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           ? { 'autoEmbed.path': resolvedAutoEmbed.path, 'autoEmbed.model': resolvedAutoEmbed.model }
           : { autoEmbed: null }),
       };
+      const claimToken = uuidv4();
+      // A managed index adopts an existing collection when one already has its name; record
+      // whether this call created it so deleteIndex never drops a collection it found.
+      const ownsCollection = existingEntry ? existingEntry.ownsCollection : collectionCreated;
+      // Ownership belongs to the index name it was recorded for; a new name starts out not owned.
+      const sameVectorIndex = existingEntry?.searchIndexName === targetSearchIndex;
       try {
         await this.writeRegistryEntry(
           indexName,
@@ -858,11 +1053,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             searchIndexName: targetSearchIndex,
             isByo: effectiveIsByo,
             allowWrites: effectiveWritable,
-            textSearchIndexName,
+            // An existing text index name is left as is: rewriting it from this call's earlier
+            // read could undo a concurrent createSearchIndex.
+            ...(textSearchIndexName && !existingEntry?.textSearchIndexName ? { textSearchIndexName } : {}),
             dimension,
             // An autoEmbed index has no client-side metric; its similarity lives in autoEmbed.
             ...(resolvedAutoEmbed ? {} : { metric }),
             autoEmbed: resolvedAutoEmbed,
+            ...(existingEntry ? {} : { ownsCollection }),
+            ...(existingEntry && !sameVectorIndex ? { ownsVectorIndex: false } : {}),
+            claimToken,
           },
           registryClaim,
         );
@@ -904,7 +1104,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // they intend to filter on via `filterFields`; those are registered as
       // `metadata.<field>` filter fields so filtered queries skip the $match /
       // $in pre-filter. See https://github.com/mastra-ai/mastra/issues/18587.
-      const declaredMetadataPaths = this.buildDeclaredMetadataPaths(filterFields);
+      const declaredMetadataPaths = this.buildDeclaredMetadataPaths(filterFields, effectiveIsByo);
       // An index declares either a `vector` field or an `autoEmbed` one, never both.
       const autoEmbedPath = resolvedAutoEmbed?.path;
       let searchField: Document;
@@ -944,11 +1144,25 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // shared catch would let an existing vector index skip creation of the
       // companion full-text index entirely (e.g. after a previously
       // interrupted createIndex), leaving the pair in a partial state.
-      const vectorIndexCreated = await this.createSearchIndexIgnoringExisting(collection, {
-        definition: { fields },
-        name: indexNameInternal,
-        type: 'vectorSearch',
-      });
+      let vectorIndexCreated: boolean;
+      try {
+        vectorIndexCreated = await this.createSearchIndexIgnoringExisting(collection, {
+          definition: { fields },
+          name: indexNameInternal,
+          type: 'vectorSearch',
+        });
+      } catch (error) {
+        // Nothing usable was provisioned, so the target must not keep resolving. Drop the
+        // collection only if this call created it and no other process claimed the entry since.
+        if ((await this.rollbackRegistryEntry(indexName, existingEntry, claimToken)) && collectionCreated) {
+          this.collections.delete(targetCollection);
+          await collection.drop().catch(() => {});
+        }
+        throw error;
+      }
+      if (vectorIndexCreated) {
+        await this.markOwned(indexName, { ownsVectorIndex: true }, { claimToken, searchIndexName: indexNameInternal });
+      }
 
       // Cache the declared filter paths only when this call actually created
       // the index. An index that already existed may carry a different
@@ -967,7 +1181,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // createSearchIndex. The registry entry above records its name (managed only), so BYO
       // safety does not depend on this succeeding.
       if (!effectiveIsByo) {
-        await this.createSearchIndexIgnoringExisting(collection, {
+        const textIndexCreated = await this.createSearchIndexIgnoringExisting(collection, {
           definition: {
             mappings: {
               dynamic: true,
@@ -978,6 +1192,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           name: textSearchIndexName ?? defaultTextSearchIndex,
           type: 'search',
         });
+        if (textIndexCreated) {
+          await this.markOwned(
+            indexName,
+            { ownsTextIndex: true },
+            { claimToken, textSearchIndexName: textSearchIndexName ?? defaultTextSearchIndex },
+          );
+        }
       }
     } catch (error: any) {
       // Preserve already-classified errors (e.g. the USER-category CONFLICT retarget guard and
@@ -1004,6 +1225,10 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     collection: Collection<MongoDBDocument>,
     description: { definition: Document; name: string; type: 'vectorSearch' | 'search' },
   ): Promise<boolean> {
+    // The server answers a create matching an existing index's definition with success, so
+    // success alone does not prove this call created it.
+    const existing = (await collection.listSearchIndexes(description.name).toArray()) as SearchIndexInfo[];
+    if (existing.some(idx => idx.status !== 'DELETING' && idx.status !== 'DOES_NOT_EXIST')) return false;
     try {
       await collection.createSearchIndex(description);
       return true;
@@ -1039,6 +1264,19 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
+  /** Atlas Search reads a dotted mapping key as a literal field name, so nested paths need `document` mappings. */
+  private toSearchFieldMappings(paths: string[][]): Document {
+    return Object.fromEntries(
+      [...new Set(paths.map(p => p[0]!))].map(head => {
+        const nested = paths.filter(p => p[0] === head && p.length > 1).map(p => p.slice(1));
+        return [
+          head,
+          nested.length ? { type: 'document', fields: this.toSearchFieldMappings(nested) } : [{ type: 'string' }],
+        ];
+      }),
+    );
+  }
+
   /**
    * Provision an Atlas Search (BM25/full-text) index on the index's collection and record
    * it as the text-search index that `textQuery`/`hybridQuery` will target.
@@ -1070,6 +1308,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     // Resolve the FULL current target first (FIX 1): we must never persist a partial
     // {indexName, textSearchIndexName}-only registry doc, which would make a later
     // resolveIndexTarget see a truthy entry with undefined collectionName/searchIndexName.
+    // Read the registry rather than the in-process cache, which another process can make stale.
+    this.indexTargets.delete(indexName);
     const target = await this.resolveIndexTarget(indexName);
     const { collectionName } = target;
     // A field-mapped index must not collide with the auto-created dynamic index (which would
@@ -1090,43 +1330,66 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         text: `searchIndexName "${name}" collides with the vectorSearch index name for index "${indexName}". Choose a different full-text searchIndexName.`,
       });
     }
+    // Only a text index this registration created may be updated; a different name starts out not owned.
+    const sameName = name === target.textSearchIndexName;
+    const previous = await this.readRegistryEntry(indexName);
+    const claimToken = uuidv4();
+    let provisioned = false;
     try {
       const collection = await this.getCollection(collectionName);
       const definition = fields?.length
-        ? {
-            mappings: {
-              dynamic: false,
-              fields: Object.fromEntries(fields.map(f => [f, [{ type: 'string' }]])),
-            },
-          }
+        ? { mappings: { dynamic: false, fields: this.toSearchFieldMappings(fields.map(f => f.split('.'))) } }
         : { mappings: { dynamic: true } };
       // Persist a COMPLETE target (FIX 1) BEFORE provisioning, mirroring createIndex's
       // persist-before-provision ordering: if the process crashes between provisioning and
       // persisting, the created text index would be unregistered — deleteIndex would then
       // drop only the vector index and leak the text index onto a caller-owned collection.
-      // If instead provisioning fails after the write, the registry references a not-yet-
-      // existing text index; textQuery surfaces the server's index-not-found, deleteIndex's
-      // drop is ignore-missing, and a successful retry of createSearchIndex converges.
-      await this.writeRegistryEntry(indexName, {
-        collectionName: target.collectionName,
-        searchIndexName: target.searchIndexName,
-        isByo: target.isByo,
-        allowWrites: target.allowWrites,
-        textSearchIndexName: name,
-      });
+      // If provisioning fails, the write is rolled back below.
+      // An existing entry gets only the text-index fields and no upsert, so this call never
+      // overwrites another process's policy or brings back an entry deleted in the meantime.
+      const textFields = { textSearchIndexName: name, ...(sameName ? {} : { ownsTextIndex: false }), claimToken };
+      await this.writeRegistryEntry(
+        indexName,
+        previous
+          ? textFields
+          : {
+              collectionName: target.collectionName,
+              searchIndexName: target.searchIndexName,
+              isByo: target.isByo,
+              allowWrites: target.allowWrites,
+              ...textFields,
+            },
+        undefined,
+        !previous,
+      );
       this.indexTargets.set(indexName, { ...target, textSearchIndexName: name });
       const created = await this.createSearchIndexIgnoringExisting(collection, { definition, name, type: 'search' });
-      // If the index already existed, its definition is NOT updated by createSearchIndex
-      // (IndexAlreadyExists is a no-op). Recreating the same logical index with a different
-      // `fields` mapping must actually change the mapping, so update it in place. (Idempotent:
-      // updating to the identical definition is a cheap no-op server-side.)
-      if (!created) {
+      if (created) {
+        await this.markOwned(indexName, { ownsTextIndex: true }, { claimToken, textSearchIndexName: name });
+      } else if (sameName && target.ownsTextIndex) {
+        // Recreating our own index with a different `fields` mapping must change the mapping.
         await collection.updateSearchIndex(name, definition);
+      } else {
+        // Someone else's index: attach to it as-is, and refuse if it maps different fields.
+        const [existing] = (await collection.listSearchIndexes(name).toArray()) as SearchIndexInfo[];
+        const mapping = (m?: Document) => JSON.stringify([m?.dynamic ?? false, Object.keys(m?.fields ?? {}).sort()]);
+        if (mapping(existing?.latestDefinition?.mappings) !== mapping(definition.mappings)) {
+          throw new MastraError({
+            id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'CONFLICT'),
+            domain: ErrorDomain.STORAGE,
+            category: ErrorCategory.USER,
+            details: { indexName, collectionName },
+            text: `Full-text search index "${name}" already exists on collection "${collectionName}" with a different mapping, and Mastra did not create it, so it will not be modified. Pass a different searchIndexName, or update or drop the existing index yourself.`,
+          });
+        }
       }
+      provisioned = true;
       if (waitUntilReady) {
         await this.waitForSearchIndexReady({ indexName });
       }
     } catch (error: any) {
+      if (!provisioned) await this.rollbackRegistryEntry(indexName, previous, claimToken);
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createVectorErrorId('MONGODB', 'CREATE_SEARCH_INDEX', 'FAILED'),
@@ -1194,34 +1457,23 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
   /**
    * Run a hybrid search that fuses vector similarity and full-text (BM25) results
    * using MongoDB's server-side $rankFusion aggregation stage. Requires MongoDB >= 8.0
-   * (see {@link assertRankFusionSupported}: generally available from 8.1; on 8.0.x it may
-   * need a MongoDB support case to enable, and runs where enabled, e.g. Atlas 8.0.x).
+   * (see {@link assertRankFusionSupported}).
    */
-  async hybridQuery(params: {
-    indexName: string;
-    /** Query embedding for the vector branch. Supply this or `queryText`, not both. */
-    queryVector?: number[];
-    /**
-     * Text for MongoDB to embed server-side for the vector branch. autoEmbed indexes only.
-     * Independent of `query`, so the two branches can search for different things.
-     */
-    queryText?: string;
-    /**
-     * Embedding model for the vector branch, overriding the index's. Requires `queryText`
-     * and must be compatible with the index's model.
-     */
-    model?: string;
-    /** Full-text (BM25) term for the text branch. */
-    query: string;
-    paths: string[];
-    topK?: number;
-    filter?: MongoDBVectorFilter;
-    weights?: { vector?: number; text?: number };
-    numCandidates?: number;
-    metadataMode?: 'field' | 'document';
-    /** Override the resolved full-text search index name for this call. */
-    textSearchIndexName?: string;
-  }): Promise<QueryResult[]> {
+  hybridQuery(params: MongoDBHybridQueryParams): Promise<QueryResult[]>;
+  /**
+   * Fuse vector and full-text results with independent retrieval limits and optional native
+   * reranking. Returns QueryResult[] with the final fusion or reranking score.
+   *
+   * @see https://mastra.ai/reference/vectors/mongodb#per-branch-options-and-native-reranking
+   * @see https://www.mongodb.com/docs/vector-search/query/aggregation-stages/rerank/
+   * @throws {MastraError} Invalid inputs, incompatible indexes, or server failures. Server
+   * errors retain their causes; reranking is never silently skipped or substituted.
+   */
+  hybridQuery(params: MongoDBHybridQueryBranchParams): Promise<QueryResult[]>;
+  async hybridQuery(params: MongoDBHybridQueryParams | MongoDBHybridQueryBranchParams): Promise<QueryResult[]> {
+    if ('vector' in params || 'text' in params) {
+      return this.hybridQueryBranches(params as MongoDBHybridQueryBranchParams);
+    }
     const {
       indexName,
       queryVector,
@@ -1276,9 +1528,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
     const textIndex = textSearchIndexName ?? (await this.resolveTextSearchIndexName(indexName));
     try {
-      const collection = await this.getCollection(collectionName, true);
-      const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter), metadataMode);
-      const hasMetadataFilter = Object.keys(metadataFilter).length > 0;
       // The branch limit is also capped at 10000: $vectorSearch requires numCandidates >= limit,
       // and numCandidates is itself capped at 10000, so perBranch must not exceed it or a large
       // topK (> 2500, where topK*4 > 10000) would make numCandidates < limit and error.
@@ -1286,69 +1535,25 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       // numCandidates must be >= the branch limit (perBranch), or $vectorSearch errors
       // server-side. Floor at perBranch (not topK), keep the 10000 cap. (FIX 3)
       const candidates = Math.min(10000, Math.max(perBranch, numCandidates ?? topK * 20));
-
-      const vectorSearch: Document = {
-        index: searchIndexName,
-        path: autoEmbed ? autoEmbed.path : this.embeddingFieldName,
-        ...(queryText ? { query: { text: queryText } } : { queryVector }),
-        ...(model ? { model } : {}),
-        numCandidates: candidates,
-        limit: perBranch,
-      };
-
-      // Apply the metadata filter to the vector branch using the same pushdown-vs-fallback
-      // logic as query(): pass the filter straight to $vectorSearch only when every field is
-      // a declared filter field and every operator is supported; otherwise materialise
-      // matching _ids via $match and filter by _id. This avoids a hard $vectorSearch error
-      // on BYO collections whose metadata fields are typically not declared as filter fields.
-      if (hasMetadataFilter) {
-        let declaredPaths: Set<string>;
-        try {
-          declaredPaths = await this.getDeclaredFilterPaths(indexName);
-        } catch {
-          declaredPaths = new Set();
-        }
-        if (this.canPushDownFilter(metadataFilter, declaredPaths)) {
-          vectorSearch.filter = metadataFilter;
-        } else {
-          const candidateIds = await collection
-            .aggregate([{ $match: metadataFilter }, { $project: { _id: 1 } }])
-            .map(doc => doc._id)
-            .toArray();
-          if (candidateIds.length === 0) return [];
-          vectorSearch.filter = { _id: { $in: candidateIds } };
-        }
-      }
-
-      const textPipeline: Document[] = [
-        { $search: { index: textIndex, text: { query, path: paths } } },
-        ...(hasMetadataFilter ? [{ $match: metadataFilter }] : []),
-        { $limit: perBranch },
-      ];
-
-      const combination = weights ? { weights: { vector: weights.vector ?? 1, text: weights.text ?? 1 } } : undefined;
-      const pipeline: Document[] = [
-        {
-          $rankFusion: {
-            input: { pipelines: { vector: [{ $vectorSearch: vectorSearch }], text: textPipeline } },
-            ...(combination ? { combination } : {}),
-          },
+      return await this.runHybridPipeline({
+        indexName,
+        collectionName,
+        searchIndexName,
+        autoEmbed,
+        metadataMode,
+        filter,
+        weights,
+        topK,
+        vector: {
+          ...(queryText ? { query: queryText } : { queryVector }),
+          ...(model ? { model } : {}),
+          numCandidates: candidates,
+          limit: perBranch,
         },
-        { $limit: Math.min(10000, topK) },
-        // $rankFusion places its Reciprocal Rank Fusion score in the `score` metadata field
-        // (NOT `searchScore`, which is the text-branch score and is absent on vector-only hits).
-        // Score is projected via $meta inside buildProjection (not a preceding $set) so it
-        // never pollutes `metadata: '$$ROOT'` in document mode.
-        ...this.buildProjection(metadataMode, false, 'score', autoEmbed?.path),
-      ];
-      const rows = await collection.aggregate(pipeline).toArray();
-      return rows.map((r: any) => ({
-        id: this.idToString(r._id),
-        score: typeof r.score === 'number' ? r.score : 0,
-        metadata: r.metadata,
-        document: r.document,
-      }));
+        text: { query, paths, searchIndexName: textIndex, limit: perBranch },
+      });
     } catch (error: any) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'FAILED'),
@@ -1357,6 +1562,269 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         },
         error,
       );
+    }
+  }
+
+  private async hybridQueryBranches(params: MongoDBHybridQueryBranchParams): Promise<QueryResult[]> {
+    this.validateHybridQueryBranchParams(params);
+    const { indexName, vector, text, rerank, topK = 10, filter, weights, includeVector = false } = params;
+    const defaultLimit = Math.min(10000, Math.max(topK * 4, 20));
+    const vectorLimit = vector.limit ?? defaultLimit;
+    const textLimit = text.limit ?? defaultLimit;
+    // MongoDB recommends numCandidates of at least 20x the limit. An explicit value is sent as-is,
+    // so MongoDB reports an invalid one (for example, below the vector limit) instead of it being rewritten.
+    const candidates = vector.numCandidates ?? Math.min(10000, vectorLimit * 20);
+
+    try {
+      await this.assertRankFusionSupported();
+      const { collectionName, searchIndexName, autoEmbed, isByo } = await this.resolveIndexTarget(indexName);
+      if (!isByo && (vector.searchIndexName !== undefined || text.searchIndexName !== undefined)) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'INVALID_ARGS'),
+          text: `vector.searchIndexName and text.searchIndexName are only supported for bring-your-own collections. Managed index "${indexName}" uses its registered search indexes.`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        });
+      }
+      if (vector.query !== undefined && !autoEmbed) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'NOT_AUTO_EMBED'),
+          text: `Index "${indexName}" was not created with autoEmbed. Supply vector.queryVector instead of vector.query.`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        });
+      }
+      if (vector.queryVector !== undefined && autoEmbed) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'INVALID_ARGS'),
+          text: `Index "${indexName}" was created with autoEmbed, so MongoDB only accepts query text for it. Supply vector.query instead of vector.queryVector.`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        });
+      }
+      if (includeVector && autoEmbed) {
+        throw new MastraError({
+          id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'INVALID_ARGS'),
+          text: `includeVector is not supported on autoEmbed index "${indexName}": MongoDB keeps the generated embeddings in its own internal database, so they are not on the returned documents.`,
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+          details: { indexName },
+        });
+      }
+      const textIndex = text.searchIndexName ?? (await this.resolveTextSearchIndexName(indexName));
+      const { searchIndexName: vectorIndexOverride, ...vectorInput } = vector;
+      return await this.runHybridPipeline({
+        indexName,
+        collectionName,
+        searchIndexName: vectorIndexOverride ?? searchIndexName,
+        pushDownFilter: vectorIndexOverride === undefined,
+        autoEmbed,
+        includeVector,
+        metadataMode: isByo ? 'document' : 'field',
+        filter,
+        weights,
+        topK,
+        vector: { ...vectorInput, numCandidates: candidates, limit: vectorLimit },
+        text: { query: text.query, paths: text.paths, searchIndexName: textIndex, limit: textLimit },
+        rerank,
+      });
+    } catch (error) {
+      if (error instanceof MastraError && error.category === ErrorCategory.USER) throw error;
+      throw new MastraError(
+        {
+          id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'FAILED'),
+          text: rerank
+            ? 'hybridQuery with native $rerank failed. Check Atlas Native Reranking support, model availability, and that rerank.paths exist in every candidate document.'
+            : 'hybridQuery failed. Check the collection, search indexes, and $rankFusion support.',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName },
+        },
+        error,
+      );
+    }
+  }
+
+  /** Builds and runs the $rankFusion pipeline shared by both hybridQuery shapes. */
+  private async runHybridPipeline({
+    indexName,
+    collectionName,
+    searchIndexName,
+    pushDownFilter = true,
+    autoEmbed,
+    includeVector = false,
+    metadataMode,
+    filter,
+    weights,
+    topK,
+    vector,
+    text,
+    rerank,
+  }: {
+    indexName: string;
+    collectionName: string;
+    searchIndexName: string;
+    /** False when the vector index is overridden, since declared filter fields belong to the registered index. */
+    pushDownFilter?: boolean;
+    autoEmbed?: IndexTarget['autoEmbed'];
+    includeVector?: boolean;
+    metadataMode: 'field' | 'document';
+    filter?: MongoDBVectorFilter;
+    weights?: { vector?: number; text?: number };
+    topK: number;
+    vector: { queryVector?: number[]; query?: string; model?: string; numCandidates: number; limit: number };
+    text: { query: string; paths: string[]; searchIndexName: string; limit: number };
+    rerank?: MongoDBHybridQueryBranchParams['rerank'];
+  }): Promise<QueryResult[]> {
+    const collection = await this.getCollection(collectionName, true);
+    const metadataFilter = this.transformMetadataFilter(this.transformFilter(filter), metadataMode);
+    const hasMetadataFilter = Object.keys(metadataFilter).length > 0;
+    const vectorSearch: Document = {
+      index: searchIndexName,
+      path: autoEmbed ? autoEmbed.path : this.embeddingFieldName,
+      ...(vector.query !== undefined ? { query: { text: vector.query } } : { queryVector: vector.queryVector }),
+      ...(vector.model !== undefined ? { model: vector.model } : {}),
+      numCandidates: vector.numCandidates,
+      limit: vector.limit,
+    };
+
+    // Apply the metadata filter to the vector branch using the same pushdown-vs-fallback
+    // logic as query(): pass the filter straight to $vectorSearch only when every field is
+    // a declared filter field and every operator is supported; otherwise materialise
+    // matching _ids via $match and filter by _id. This avoids a hard $vectorSearch error
+    // on BYO collections whose metadata fields are typically not declared as filter fields.
+    if (hasMetadataFilter) {
+      let declaredPaths = new Set<string>();
+      if (pushDownFilter) {
+        try {
+          declaredPaths = await this.getDeclaredFilterPaths(indexName);
+        } catch {
+          declaredPaths = new Set();
+        }
+      }
+      if (this.canPushDownFilter(metadataFilter, declaredPaths)) {
+        vectorSearch.filter = metadataFilter;
+      } else {
+        const candidateIds = await this.collectCandidateIds(collection, metadataFilter, indexName, 'HYBRID_QUERY');
+        if (candidateIds.length === 0) return [];
+        vectorSearch.filter = { _id: { $in: candidateIds } };
+      }
+    }
+
+    const pipeline: Document[] = [
+      {
+        $rankFusion: {
+          input: {
+            pipelines: {
+              vector: [{ $vectorSearch: vectorSearch }],
+              text: [
+                { $search: { index: text.searchIndexName, text: { query: text.query, path: text.paths } } },
+                ...(hasMetadataFilter ? [{ $match: metadataFilter }] : []),
+                { $limit: text.limit },
+              ],
+            },
+          },
+          ...(weights ? { combination: { weights: { vector: weights.vector ?? 1, text: weights.text ?? 1 } } } : {}),
+        },
+      },
+      ...(rerank
+        ? [
+            {
+              $rerank: {
+                query: { text: rerank.query },
+                path: rerank.paths,
+                model: rerank.model ?? 'rerank-2.5',
+                numDocsToRerank: rerank.numDocsToRerank,
+              },
+            },
+          ]
+        : []),
+      { $limit: Math.min(10000, topK) },
+      // $rankFusion and $rerank both publish their score as `$meta: 'score'` (NOT `searchScore`,
+      // which is the text-branch score and is absent on vector-only hits). Score is projected via
+      // $meta inside buildProjection (not a preceding $set) so it never pollutes
+      // `metadata: '$$ROOT'` in document mode, and only after reranking so $rerank sees source fields.
+      ...this.buildProjection(metadataMode, includeVector, 'score', autoEmbed?.path),
+    ];
+    const rows = await collection.aggregate(pipeline).toArray();
+    return rows.map((row: Document) => ({
+      id: this.idToString(row._id),
+      score: typeof row.score === 'number' ? row.score : 0,
+      metadata: row.metadata,
+      document: row.document,
+      ...(includeVector ? { vector: row.vector } : {}),
+    }));
+  }
+
+  private validateHybridQueryBranchParams(params: MongoDBHybridQueryBranchParams): void {
+    const fail = (text: string): never => {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'HYBRID_QUERY', 'INVALID_ARGS'),
+        text,
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+      });
+    };
+    const nonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0;
+    const integer = (value: unknown, name: string, max = 10000) => {
+      if (typeof value !== 'number' || !Number.isInteger(value) || value < 1 || value > max) {
+        fail(`${name} must be an integer from 1 to ${max}.`);
+      }
+    };
+    const paths = (value: unknown, name: string) => {
+      if (!Array.isArray(value) || value.length === 0 || !value.every(nonEmptyString)) {
+        fail(`${name} must be a non-empty array of non-empty field paths.`);
+      }
+    };
+    if (!params || !nonEmptyString(params.indexName)) fail('indexName must be a non-empty string.');
+    const { vector, text, rerank, weights } = params;
+    if (!vector || typeof vector !== 'object') fail('vector retrieval configuration is required.');
+    if ((vector.queryVector !== undefined) === (vector.query !== undefined)) {
+      fail('Supply exactly one of vector.queryVector or vector.query.');
+    }
+    if (vector.queryVector !== undefined) {
+      if (
+        !Array.isArray(vector.queryVector) ||
+        vector.queryVector.length === 0 ||
+        !vector.queryVector.every(value => typeof value === 'number' && Number.isFinite(value))
+      ) {
+        fail('vector.queryVector must be a non-empty array of finite numbers.');
+      }
+    } else if (!nonEmptyString(vector.query)) fail('vector.query must be a non-empty string.');
+    if (vector.model !== undefined && (vector.query === undefined || !nonEmptyString(vector.model))) {
+      fail('vector.model must be a non-empty string and requires vector.query.');
+    }
+    if (!text || !nonEmptyString(text.query)) fail('text.query must be a non-empty string.');
+    paths(text.paths, 'text.paths');
+    if (text.searchIndexName !== undefined && !nonEmptyString(text.searchIndexName)) {
+      fail('text.searchIndexName must be a non-empty string.');
+    }
+    if (vector.searchIndexName !== undefined && !nonEmptyString(vector.searchIndexName)) {
+      fail('vector.searchIndexName must be a non-empty string.');
+    }
+    if (params.topK !== undefined) integer(params.topK, 'topK');
+    if (vector.limit !== undefined) integer(vector.limit, 'vector.limit');
+    if (text.limit !== undefined) integer(text.limit, 'text.limit');
+    if (vector.numCandidates !== undefined) integer(vector.numCandidates, 'vector.numCandidates');
+    if (params.includeVector !== undefined && typeof params.includeVector !== 'boolean') {
+      fail('includeVector must be a boolean.');
+    }
+    if (weights !== undefined) {
+      if (!weights || typeof weights !== 'object') fail('weights must be an object.');
+      const values = [weights.vector ?? 1, weights.text ?? 1];
+      if (values.some(value => typeof value !== 'number' || !Number.isFinite(value) || value < 0)) {
+        fail('weights.vector and weights.text must be finite, non-negative numbers.');
+      }
+      if (values.every(value => value === 0)) fail('At least one fusion weight must be positive.');
+    }
+    if (rerank !== undefined) {
+      if (!rerank || !nonEmptyString(rerank.query)) fail('rerank.query must be a non-empty string.');
+      paths(rerank.paths, 'rerank.paths');
+      integer(rerank.numDocsToRerank, 'rerank.numDocsToRerank', 1000);
+      if (rerank.model !== undefined && !nonEmptyString(rerank.model)) fail('rerank.model must be a non-empty string.');
     }
   }
 
@@ -1379,8 +1847,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     const startTime = Date.now();
     while (Date.now() - startTime < timeoutMs) {
-      const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
-      const indexData = indexInfo.find((idx: any) => idx.name === indexNameInternal);
+      const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexInfo[];
+      const indexData = indexInfo.find(idx => idx.name === indexNameInternal);
       const status = indexData?.status;
       if (status === 'READY') {
         return;
@@ -1420,8 +1888,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
 
     const startTime = Date.now();
     while (Date.now() - startTime < timeoutMs) {
-      const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
-      const indexData = indexInfo.find((idx: any) => idx.name === textIndex);
+      const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexInfo[];
+      const indexData = indexInfo.find(idx => idx.name === textIndex);
       if (indexData?.status === 'READY') {
         return;
       }
@@ -1467,11 +1935,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       const collection = await this.getCollection(collectionName);
 
       if (!autoEmbed) {
-        // Get index stats to check dimension
-        const stats = await this.describeIndex({ indexName });
-
-        // Validate vector dimensions
-        await this.validateVectorDimensions(vectors!, stats.dimension);
+        // Validate vector dimensions against the index definition (no document count)
+        const { dimension } = await this.readVectorIndexDefinition(indexName);
+        await this.validateVectorDimensions(vectors!, dimension);
       }
 
       // One operation per input: vectors when the caller embeds, documents when MongoDB does.
@@ -1486,11 +1952,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         const meta = metadata?.[idx] || {};
         const doc = documents?.[idx];
 
-        // Normalize metadata - convert Date objects to ISO strings
-        const normalizedMeta = Object.keys(meta).reduce<Record<string, any>>((acc, key) => {
-          acc[key] = meta[key] instanceof Date ? meta[key].toISOString() : meta[key];
-          return acc;
-        }, {});
+        const normalizedMeta = this.normalizeMetadata(meta);
 
         // MongoDB stores the generated vectors itself, so the document carries text only.
         const updateDoc: Partial<MongoDBDocument> = {
@@ -1681,13 +2143,12 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
             ...(hasMetadataFilter && !pushMetadata ? [metadataFilter] : []),
             ...(documentFilterExpr && !pushDocument ? [documentFilterExpr] : []),
           ];
-          const candidateIds = await collection
-            .aggregate([
-              { $match: preFilter.length > 1 ? { $and: preFilter } : preFilter[0]! },
-              { $project: { _id: 1 } },
-            ])
-            .map(doc => doc._id)
-            .toArray();
+          const candidateIds = await this.collectCandidateIds(
+            collection,
+            preFilter.length > 1 ? { $and: preFilter } : preFilter[0]!,
+            indexName,
+            'QUERY',
+          );
 
           if (candidateIds.length === 0) return [];
           pushed.unshift({ _id: { $in: candidateIds } });
@@ -1715,6 +2176,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         document: result.document,
       }));
     } catch (error) {
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createVectorErrorId('MONGODB', 'QUERY', 'FAILED'),
@@ -1727,6 +2189,34 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         error,
       );
     }
+  }
+
+  /**
+   * Runs a filter that `$vectorSearch` cannot apply itself and returns the matching `_id`s.
+   * Reads one id past {@link MongoDBVector.MAX_PREFILTER_CANDIDATES} so an oversized set fails
+   * with a USER error instead of exhausting memory or the 16 MB command limit.
+   */
+  private async collectCandidateIds(
+    collection: Collection<MongoDBDocument>,
+    match: Document,
+    indexName: string,
+    operation: 'QUERY' | 'HYBRID_QUERY',
+  ): Promise<unknown[]> {
+    const max = MongoDBVector.MAX_PREFILTER_CANDIDATES;
+    const ids = await collection
+      .aggregate([{ $match: match }, { $project: { _id: 1 } }, { $limit: max + 1 }])
+      .map(doc => doc._id)
+      .toArray();
+    if (ids.length > max) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', operation, 'TOO_MANY_CANDIDATES'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, maxCandidates: max },
+        text: `The filter for index "${indexName}" cannot run inside $vectorSearch and matches more than ${max} documents, so it would load every matching _id into memory. Declare the filtered fields with createIndex({ filterFields }) so the filter runs inside $vectorSearch, or narrow the filter.`,
+      });
+    }
+    return ids;
   }
 
   /**
@@ -1790,8 +2280,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         if (name === MongoDBVector.REGISTRY_COLLECTION) continue;
         if (names.has(name) || registeredCollections.has(name)) continue;
         try {
-          const searchIndexes: any[] = await (this.db.collection(name) as any).listSearchIndexes().toArray();
-          if (searchIndexes.some((idx: any) => idx.name === `${name}_vector_index`)) {
+          const searchIndexes = await this.db.collection(name).listSearchIndexes().toArray();
+          if (searchIndexes.some(idx => idx.name === `${name}_vector_index`)) {
             names.add(name);
           }
         } catch {
@@ -1820,8 +2310,9 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    */
   async describeIndex({ indexName }: DescribeIndexParams): Promise<IndexStats> {
     try {
-      const { collectionName, searchIndexName, autoEmbed } = await this.resolveIndexTarget(indexName);
+      const { collectionName, autoEmbed } = await this.resolveIndexTarget(indexName);
       const collection = await this.getCollection(collectionName, true);
+      const { dimension, metric } = await this.readVectorIndexDefinition(indexName);
 
       // Count only documents that actually carry the embedding field (respecting a dot-path
       // embeddingFieldName). On a BYO operational collection this excludes documents that have
@@ -1833,49 +2324,6 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         [embeddedFieldName]: { $exists: true },
         _id: { $ne: '__index_metadata__' as any },
       });
-
-      const indexNameInternal = searchIndexName;
-      const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
-      const indexData = indexInfo.find((idx: any) => idx.name === indexNameInternal);
-
-      if (!indexData) {
-        throw new MastraError({
-          id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'NOT_FOUND'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { indexName },
-          text: `Atlas Search index "${indexNameInternal}" does not exist on collection "${indexName}". The collection may predate Mastra or the index may have been dropped externally.`,
-        });
-      }
-
-      const vectorField = indexData.latestDefinition?.fields?.find(
-        (f: any) => f.type === 'vector' || f.type === 'autoEmbed',
-      );
-      if (!vectorField) {
-        throw new MastraError({
-          id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'INVALID'),
-          domain: ErrorDomain.STORAGE,
-          category: ErrorCategory.USER,
-          details: { indexName },
-          text: `Atlas Search index "${indexNameInternal}" exists but has no vector field. The index may have been created outside of Mastra or without vector configuration.`,
-        });
-      }
-      // autoEmbed's numDimensions is optional; MongoDB defaults it to 1024.
-      const dimension =
-        vectorField.type === 'autoEmbed' ? (vectorField.numDimensions ?? 1024) : vectorField.numDimensions;
-      const reverseMetricMap: Record<string, 'cosine' | 'euclidean' | 'dotproduct'> = {
-        cosine: 'cosine',
-        euclidean: 'euclidean',
-        dotProduct: 'dotproduct',
-      };
-      // `similarity` is optional on an autoEmbed field, and Atlas reports nothing for it when
-      // the index did not set one, so the function the server applies is not knowable from
-      // here. Report a metric only where the index declares one. `similarity` is required on a
-      // plain vector field, so that path always has a value.
-      const metric =
-        vectorField.type === 'autoEmbed' && vectorField.similarity === undefined
-          ? undefined
-          : (reverseMetricMap[vectorField.similarity] ?? 'cosine');
 
       return { dimension, count, metric };
     } catch (error) {
@@ -1892,17 +2340,81 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     }
   }
 
+  /**
+   * Reads dimension and metric from the Atlas vectorSearch index definition. Unlike
+   * {@link describeIndex} it never counts documents, so writes can validate dimensions
+   * without scanning the collection.
+   */
+  private async readVectorIndexDefinition(indexName: string): Promise<Omit<IndexStats, 'count'>> {
+    const { collectionName, searchIndexName } = await this.resolveIndexTarget(indexName);
+    const collection = await this.getCollection(collectionName, true);
+    const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexInfo[];
+    const indexData = indexInfo.find(idx => idx.name === searchIndexName);
+
+    if (!indexData) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'NOT_FOUND'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, collectionName },
+        text: `Atlas Search index "${searchIndexName}" does not exist on collection "${collectionName}". The collection may predate Mastra or the index may have been dropped externally.`,
+      });
+    }
+
+    const vectorField = indexData.latestDefinition?.fields?.find(
+      (f: any) => f.type === 'vector' || f.type === 'autoEmbed',
+    );
+    if (!vectorField) {
+      throw new MastraError({
+        id: createVectorErrorId('MONGODB', 'DESCRIBE_INDEX', 'INVALID'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+        text: `Atlas Search index "${searchIndexName}" exists but has no vector field. The index may have been created outside of Mastra or without vector configuration.`,
+      });
+    }
+    // autoEmbed's numDimensions is optional; MongoDB defaults it to 1024.
+    const dimension =
+      vectorField.type === 'autoEmbed' ? (vectorField.numDimensions ?? 1024) : vectorField.numDimensions;
+    const reverseMetricMap: Record<string, 'cosine' | 'euclidean' | 'dotproduct'> = {
+      cosine: 'cosine',
+      euclidean: 'euclidean',
+      dotProduct: 'dotproduct',
+    };
+    // `similarity` is optional on an autoEmbed field, and Atlas reports nothing for it when
+    // the index did not set one, so the function the server applies is not knowable from
+    // here. Report a metric only where the index declares one. `similarity` is required on a
+    // plain vector field, so that path always has a value.
+    const metric =
+      vectorField.type === 'autoEmbed' && vectorField.similarity === undefined
+        ? undefined
+        : (reverseMetricMap[vectorField.similarity] ?? 'cosine');
+
+    return { dimension, metric };
+  }
+
   async deleteIndex({ indexName }: DeleteIndexParams): Promise<void> {
     // `isByo` is read from the registry (captured at createIndex time), NOT inferred from
     // names: a BYO index may reuse its indexName as the collectionName, so name equality
     // cannot distinguish managed from BYO. Managed indexes drop the collection; BYO indexes
     // drop only the search index so the caller's operational collection/data is preserved.
-    const { collectionName, searchIndexName, isByo, textSearchIndexName, registered } =
-      await this.resolveIndexTarget(indexName);
+    // Decide from the registry, not the in-process cache, which another process can make stale.
+    this.indexTargets.delete(indexName);
+    const {
+      collectionName,
+      searchIndexName,
+      isByo,
+      textSearchIndexName,
+      registered,
+      ownsVectorIndex,
+      ownsTextIndex,
+      ownsCollection,
+    } = await this.resolveIndexTarget(indexName);
     const collection = await this.getCollection(collectionName, false);
     try {
       if (collection) {
-        if (isByo) {
+        // A managed index that adopted an existing collection is handled like BYO: the collection stays.
+        if (isByo || ownsCollection === false) {
           // BYO: drop the vector search index, and the companion full-text index if one was
           // provisioned (via createSearchIndex — it is not auto-created for BYO). Dropping only
           // the vector index would leak the persisted text index onto the caller's operational
@@ -1911,36 +2423,27 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
           // and then failed before clearing the registry, a retry must still clear the entry.
           // A physical index still referenced by ANOTHER logical index on this collection
           // (e.g. a shared default dynamic text index) is preserved for the sibling.
-          if (!(await this.isIndexNameReferencedElsewhere(indexName, collectionName, searchIndexName))) {
+          // Only indexes this store created are dropped; unknown ownership means keep.
+          if (
+            ownsVectorIndex &&
+            !(await this.isIndexNameReferencedElsewhere(indexName, collectionName, searchIndexName))
+          ) {
             await this.dropSearchIndexIgnoringMissing(collection, searchIndexName);
           }
           if (
             textSearchIndexName &&
+            ownsTextIndex &&
             !(await this.isIndexNameReferencedElsewhere(indexName, collectionName, textSearchIndexName))
           ) {
             await this.dropSearchIndexIgnoringMissing(collection, textSearchIndexName);
           }
         } else {
-          // FAIL CLOSED for unregistered names: with no registry entry, `collectionName` is
-          // just `indexName` by fallback. Only drop the collection if it verifiably is a
-          // legacy (pre-registry) managed index — i.e. it carries the managed
-          // `${indexName}_vector_index` search index. Without this check, deleteIndex on an
-          // arbitrary name (or a second delete racing a completed BYO delete, whose registry
-          // entry is already gone) would drop a collection the store never created.
+          // Fail closed: nothing records that this store created an unregistered collection, and an
+          // `${indexName}_vector_index` on it may be a caller's index left behind by a BYO delete.
           if (!registered) {
-            let hasManagedVectorIndex = false;
-            try {
-              const searchIndexes: any[] = await (collection as any).listSearchIndexes().toArray();
-              hasManagedVectorIndex = searchIndexes.some((idx: any) => idx.name === `${indexName}_vector_index`);
-            } catch {
-              // listSearchIndexes fails for a missing collection — treat as not managed.
-            }
-            if (!hasManagedVectorIndex) {
-              throw new Error(
-                `Index "${indexName}" is not registered and collection "${collectionName}" carries no ` +
-                  `"${indexName}_vector_index" search index — refusing to drop a collection this store cannot verify it manages.`,
-              );
-            }
+            throw new Error(
+              `Index "${indexName}" is not registered, so this store cannot verify that it created collection "${collectionName}". Nothing was dropped; drop the collection directly if it is no longer needed.`,
+            );
           }
           // Retry-safe (FIX 4): a managed collection already dropped by a prior (partially
           // failed) deleteIndex must not block the retry from clearing the registry entry.
@@ -2034,20 +2537,13 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       }
 
       if (update.vector) {
-        const stats = await this.describeIndex({ indexName });
-        await this.validateVectorDimensions([update.vector], stats.dimension);
+        const { dimension } = await this.readVectorIndexDefinition(indexName);
+        await this.validateVectorDimensions([update.vector], dimension);
         updateDoc[this.embeddingFieldName] = update.vector;
       }
 
       if (update.metadata) {
-        // Normalize metadata in updates too
-        const normalizedMeta = Object.keys(update.metadata).reduce<Record<string, any>>((acc, key) => {
-          acc[key] =
-            update.metadata![key] instanceof Date ? update.metadata![key].toISOString() : update.metadata![key];
-          return acc;
-        }, {});
-
-        updateDoc[this.metadataFieldName] = normalizedMeta;
+        updateDoc[this.metadataFieldName] = this.normalizeMetadata(update.metadata);
       }
 
       // Type narrowing: check if updating by id or by filter
@@ -2310,13 +2806,21 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
    * qualified filter paths stored in the index, e.g. `category` → `metadata.category`.
    * Blank entries are dropped and duplicates collapsed. A name already carrying the
    * `metadata.` prefix is left untouched so callers can pass either form.
+   *
+   * A bring-your-own collection keeps its fields at the document root, where document-mode
+   * filters address them, so its names are declared as given. `_id` and `document` are
+   * skipped there because createIndex always declares them.
    */
-  private buildDeclaredMetadataPaths(filterFields?: string[]): string[] {
+  private buildDeclaredMetadataPaths(filterFields?: string[], isByo = false): string[] {
     if (!filterFields?.length) return [];
     const paths = new Set<string>();
     for (const field of filterFields) {
       const trimmed = field?.trim();
       if (!trimmed) continue;
+      if (isByo) {
+        if (trimmed !== '_id' && trimmed !== this.documentFieldName) paths.add(trimmed);
+        continue;
+      }
       paths.add(trimmed.startsWith(`${this.metadataFieldName}.`) ? trimmed : `${this.metadataFieldName}.${trimmed}`);
     }
     return [...paths];
@@ -2335,8 +2839,8 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     const { collectionName, searchIndexName } = await this.resolveIndexTarget(indexName);
     const collection = await this.getCollection(collectionName, true);
     const indexNameInternal = searchIndexName;
-    const indexInfo: any[] = await (collection as any).listSearchIndexes().toArray();
-    const indexData = indexInfo.find((idx: any) => idx.name === indexNameInternal);
+    const indexInfo = (await collection.listSearchIndexes().toArray()) as SearchIndexInfo[];
+    const indexData = indexInfo.find(idx => idx.name === indexNameInternal);
 
     const paths = new Set<string>();
 
@@ -2413,6 +2917,16 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
     return id;
   }
 
+  /**
+   * Convert Date values to ISO strings. Object.fromEntries keeps a `__proto__` key as data
+   * instead of replacing the prototype and losing it.
+   */
+  private normalizeMetadata(meta: Record<string, any>): Record<string, any> {
+    return Object.fromEntries(
+      Object.entries(meta).map(([key, value]) => [key, value instanceof Date ? value.toISOString() : value]),
+    );
+  }
+
   private transformFilter(filter?: MongoDBVectorFilter) {
     const translator = new MongoDBFilterTranslator();
     if (!filter) return {};
@@ -2435,59 +2949,26 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
       return filter.map(item => this.transformMetadataFilter(item, metadataMode));
     }
 
-    // Document mode (BYO): the source document's operational fields live at the ROOT (e.g.
-    // `amount`, `lane`), not under a managed `metadata` subdocument, so bare fields must NOT be
-    // rewritten to `metadata.<field>` — that would never match. An explicit `metadata.` prefix
-    // from the caller is still respected. Only field (managed) mode does the prefixing. (FIX 7)
-    if (metadataMode === 'document') {
-      const transformed: any = {};
-      for (const [key, value] of Object.entries(filter)) {
+    // Object.fromEntries defines own properties, so a `__proto__` key stays a filter field
+    // instead of replacing the prototype and silently dropping out of the filter.
+    return Object.fromEntries(
+      Object.entries(filter).map(([key, value]) => {
+        // Logical operators like $and/$or: recursively transform their contents
         if (key.startsWith('$')) {
-          if (Array.isArray(value)) {
-            transformed[key] = value.map(item => this.transformMetadataFilter(item, metadataMode));
-          } else if (typeof value === 'object' && value !== null) {
-            transformed[key] = this.transformMetadataFilter(value, metadataMode);
-          } else {
-            transformed[key] = value;
-          }
-        } else {
-          transformed[key] = value;
+          if (Array.isArray(value)) return [key, value.map(item => this.transformMetadataFilter(item, metadataMode))];
+          if (typeof value === 'object' && value !== null)
+            return [key, this.transformMetadataFilter(value, metadataMode)];
+          return [key, value];
         }
-      }
-      return transformed;
-    }
-
-    const transformed: any = {};
-
-    for (const [key, value] of Object.entries(filter)) {
-      // Check if this is a MongoDB operator (starts with $)
-      if (key.startsWith('$')) {
-        // For logical operators like $and, $or, recursively transform their contents
-        if (Array.isArray(value)) {
-          transformed[key] = value.map(item => this.transformMetadataFilter(item, metadataMode));
-        } else if (typeof value === 'object' && value !== null) {
-          transformed[key] = this.transformMetadataFilter(value, metadataMode);
-        } else {
-          transformed[key] = value;
+        // Document mode (BYO): the source document's operational fields live at the ROOT (e.g.
+        // `amount`, `lane`), not under a managed `metadata` subdocument, so bare fields must NOT
+        // be rewritten to `metadata.<field>`. Only field (managed) mode prefixes. (FIX 7)
+        if (metadataMode === 'field' && !key.startsWith('metadata.') && this.isMetadataField(key)) {
+          return [`metadata.${key}`, value];
         }
-      }
-      // Check if the key already has 'metadata.' prefix
-      else if (key.startsWith('metadata.')) {
-        // Already prefixed — keep as-is.
-        transformed[key] = value;
-      }
-      // Check if this is a known metadata field that needs prefixing
-      else if (this.isMetadataField(key)) {
-        // Add metadata. prefix for fields stored in metadata subdocument
-        // If the value is an object with operators, keep the operators as-is
-        transformed[`metadata.${key}`] = value;
-      } else {
-        // Keep other fields as is
-        transformed[key] = value;
-      }
-    }
-
-    return transformed;
+        return [key, value];
+      }),
+    );
   }
 
   /**
