@@ -9,6 +9,7 @@ import { useMcpApp } from '../../runtime/mcp-app-context';
 import { drilldownContext, drilldownMessage, drilldownPrompt } from './drilldown';
 import { dashboardRendererInputSchema } from './input';
 import type { DashboardRendererInput } from './input';
+import './dashboard.css';
 
 function Dashboard({ input }: { input: DashboardRendererInput }) {
   const app = useMcpApp();

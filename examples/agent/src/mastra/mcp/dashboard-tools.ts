@@ -166,16 +166,16 @@ function withChart(widget: DashboardWidget, chart: TimeseriesOptions['chart']): 
   return { ...widget, views: widget.views.map(view => ({ ...view, options: { ...view.options, chart } })) };
 }
 
-// Half-width widgets pair up on a row; full-width ones get their own.
+// Half-width widgets pair up on a row; a widget left alone on its row takes the full width.
 function layout(widgets: DashboardWidget[]): DashboardRow[] {
-  const rows: DashboardRow[] = [];
+  const rows: DashboardWidget[][] = [];
   for (const widget of widgets) {
     const last = rows.at(-1);
-    const lastSpan = last?.widgets.reduce((total, w) => total + w.span, 0) ?? 12;
-    if (last && lastSpan + widget.span <= 12) last.widgets.push(widget);
-    else rows.push({ widgets: [widget] });
+    const lastSpan = last?.reduce((total, w) => total + w.span, 0) ?? 12;
+    if (last && lastSpan + widget.span <= 12) last.push(widget);
+    else rows.push([widget]);
   }
-  return rows;
+  return rows.map(row => ({ widgets: row.length === 1 ? [{ ...row[0]!, span: 12 }] : row }));
 }
 
 export const showObservabilityDashboard = createTool({
