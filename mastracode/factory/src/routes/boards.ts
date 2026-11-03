@@ -2,9 +2,9 @@
  * Mastra `apiRoutes` for managing a project's stored boards.
  *
  * Reads need project membership; writes need an organization admin in tenant mode. The built-in
- * Work board and app boards are edited under their own key: a project's first edit stores its
- * copy, and reads never write. Their code behaviour stays attached, so an edit it can't honour is
- * refused (`code_behaviour`), and reset deletes the copy so the code definition serves again. They can't be created over or
+ * Work board and app boards are copied into each project on the first read here and edited under
+ * their own key; their code behaviour stays attached, so an edit it can't honour is refused
+ * (`code_behaviour`), and reset restores the code definition. They can't be created over or
  * deleted. The legacy Review board stays read-only. Every write is checked against the rules
  * `defineBoard()` enforces and the cards sitting on the board, then invalidates the project's
  * board cache.
@@ -49,7 +49,7 @@ export interface BoardRoutesDeps extends RouteDependencies {
   /** Read to refuse edits that would strand cards. */
   workItems: Pick<WorkItemsStorage, 'list'>;
   storage: StoredBoardsStorage;
-  /** The per-project boards: the code boards, their definitions to copy on a first edit, skills, and the cache to invalidate. */
+  /** The per-project boards: the code boards and their seeds, skills, and the cache to invalidate. */
   boards: Pick<ProjectBoardCache, 'describe' | 'invalidate' | 'codeRegistry' | 'codeSkills' | 'seedFor'>;
 }
 
@@ -178,15 +178,11 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
   }
 
   /** Refuses a change that removes, or changes the kind of, a phase cards sit in. */
-  async #checkPhasesFree(
-    scope: Resolved,
-    board: Pick<StoredBoardInput, 'key' | 'phases'>,
-    next: readonly StoredPhaseInput[],
-  ): Promise<void> {
+  async #checkPhasesFree(scope: Resolved, row: StoredBoardRecord, next: readonly StoredPhaseInput[]): Promise<void> {
     const kinds = new Map(next.map(phase => [phase.key, phase.kind]));
-    const changed = board.phases.filter(phase => kinds.get(phase.key) !== phase.kind).map(phase => phase.key);
+    const changed = row.phases.filter(phase => kinds.get(phase.key) !== phase.kind).map(phase => phase.key);
     if (changed.length === 0) return;
-    const occupancy = (await this.#occupancy(scope, board.key)).phases;
+    const occupancy = (await this.#occupancy(scope, row.key)).phases;
     const inUse = Object.fromEntries(changed.flatMap(key => (occupancy.get(key) ? [[key, occupancy.get(key)!]] : [])));
     if (Object.keys(inUse).length === 0) return;
     throw new Refusal(409, {
@@ -226,33 +222,12 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
       );
     }
     const row = await this.deps.storage.get(scope, key);
-    if (!row && code && seed) {
-      // An unedited code board has no stored copy; it serves its code definition at revision 0.
-      return c.json(
-        {
-          board: {
-            ...seed.definition,
-            description: seed.definition.description ?? null,
-            revision: 0,
-            source: details?.source ?? 'app',
-            editable: true,
-            customized: false,
-            defaultChanged: false,
-            codeBehaviour: codeBehaviourOf(code),
-            problems: details?.problems ?? [],
-          },
-          canEdit,
-        },
-        status,
-      );
-    }
     if (!row) return c.json({ error: 'board_not_found', message: `Board "${key}" does not exist.` }, 404);
     // A board that failed to load, or a stored row its code board hides, is a project problem.
     const rowProblems = project.problems.filter(
       problem =>
         problem.startsWith(`Board '${key}' could not be loaded:`) || problem.startsWith(`Stored board "${key}" `),
     );
-    const customized = seed ? row.seedHash !== null : false;
     return c.json(
       {
         board: {
@@ -263,8 +238,8 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
           revision: row.revision,
           source: seed ? (details?.source ?? 'app') : 'stored',
           editable: true,
-          customized,
-          defaultChanged: customized && row.seedHash !== seed!.hash,
+          customized: details?.customized ?? false,
+          defaultChanged: details?.defaultChanged ?? false,
           codeBehaviour: code ? codeBehaviourOf(code) : null,
           problems: [...(details?.problems ?? []), ...rowProblems.filter(p => !details?.problems.includes(p))],
         },
@@ -321,7 +296,8 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
     return [
       this.#route(contracts.boardGet, async c => {
         const scope = await this.#resolve(c);
-        return this.#respond(c, scope, this.#boardKey(c));
+        const key = this.#boardKey(c);
+        return this.#respond(c, scope, key);
       }),
 
       this.#route(contracts.boardCreate, async c => {
@@ -348,26 +324,12 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
         }
         const { expectedRevision, ...definition } = parsed.data;
         const seed = boards.seedFor(key);
-        const row = seed ? await storage.get(scope, key) : await this.#existing(scope, key);
+        // The project's first load stores its code boards' copies.
+        if (seed) await boards.describe(scope);
+        const row = await this.#existing(scope, key);
         const input = this.#validate({ key, ...definition });
-        if (!row) {
-          // The project's first edit of a code board stores its copy, from revision 0.
-          if (expectedRevision !== 0) {
-            throw new Refusal(409, {
-              error: 'revision_mismatch',
-              message: `Board "${key}" is at revision 0, not ${expectedRevision}; reload it and try again.`,
-            });
-          }
-          // Saving it unchanged writes nothing, so it keeps following its code default.
-          if (sameBoardDefinition(seed!.definition, input)) return this.#respond(c, scope, key);
-          await this.#checkPhasesFree(scope, seed!.definition, input.phases);
-          await storage.create(scope, input, scope.userId, { seedHash: seed!.hash });
-          boards.invalidate(scope);
-          await this.#audit(c, scope, 'updated', input);
-          return this.#respond(c, scope, key);
-        }
-        // Saving a board unchanged writes nothing. A row that would change hands (a legacy row
-        // adopted, an orphaned copy forgotten) still writes.
+        // Saving a board unchanged writes nothing, so an unedited copy stays unedited and keeps its default.
+        // A row that would change hands (a legacy row adopted, an orphaned copy forgotten) still writes.
         const keepsSeed = seed ? row.seedHash !== null : row.seedHash === null;
         if (row.revision === expectedRevision && keepsSeed && sameBoardDefinition(row, input)) {
           return this.#respond(c, scope, key);
@@ -428,18 +390,13 @@ export class BoardRoutes extends Route<BoardRoutesDeps> {
             message: `Board "${key}" was created in this project and has no code default to reset to.`,
           });
         }
-        const { expectedRevision } = parsed.data;
-        const row = await storage.get(scope, key);
-        // Resetting removes the project's copy, so the board serves its code definition again.
-        if (!row) {
-          if (expectedRevision === 0) return this.#respond(c, scope, key);
-          throw new Refusal(409, {
-            error: 'revision_mismatch',
-            message: `Board "${key}" is at revision 0, not ${expectedRevision}; reload it and try again.`,
-          });
-        }
+        await boards.describe(scope);
+        const row = await this.#existing(scope, key);
         await this.#checkPhasesFree(scope, row, seed.definition.phases);
-        await storage.delete(scope, key, { expectedRevision });
+        await storage.resetToSeed(scope, key, seed, {
+          expectedRevision: parsed.data.expectedRevision,
+          actor: scope.userId,
+        });
         boards.invalidate(scope);
         await this.#audit(c, scope, 'reset', row);
         return this.#respond(c, scope, key);

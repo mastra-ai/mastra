@@ -663,6 +663,50 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         expect(runsOf(requests, 'factory-review', 'Add rate limiting')).not.toEqual([]);
       }, 120_000);
 
+      it("runs a project's unedited Work board from its row", async () => {
+        const requests = stubModel();
+        const orgId = `org-${randomUUID()}`;
+        const replica = await boot(database(), orgId);
+        const projectId = await runnableProject(replica, orgId);
+        const scope = { orgId, factoryProjectId: projectId };
+
+        // Creating the project stored its Work board. Change Triage in the database itself, the
+        // way an operator or a migration would, so the copy stays unedited.
+        const triage = (await replica.boards.get(scope, 'work'))!.phases.find(phase => phase.key === 'triage')!;
+        const where = { org_id: orgId, factory_project_id: projectId };
+        await replica.storage.ops.updateMany(
+          'factory_board_phases',
+          { ...where, board_key: 'work', phase_key: 'triage' },
+          { auto_start: true, runner: { ...triage.runner, instructions: TRIAGE_NOTE } },
+        );
+        await replica.storage.ops.updateMany('factory_board_definition_versions', where, { version: randomUUID() });
+        const route = await replica.send('POST', `/web/factory/projects/${projectId}/intake-routes`, {
+          name: 'Trusted issues go to Triage',
+          when: { operator: 'AND', conditions: [{ field: 'author.trusted', operator: 'equals', value: true }] },
+          target: { boardKey: 'work', phaseKey: 'triage' },
+        });
+        expect(route.status, JSON.stringify(route.json)).toBe(201);
+
+        const workOn = async () =>
+          (await catalog(replica, projectId)).find(board => board.id === 'work') as {
+            customized?: boolean;
+            phases: { id: string; autoStart?: boolean }[];
+          };
+        await vi.waitFor(
+          async () =>
+            expect((await workOn()).phases.find(phase => phase.id === 'triage')).toMatchObject({ autoStart: true }),
+          { timeout: 5_000 },
+        );
+        expect(await workOn()).toMatchObject({ customized: false });
+
+        const card = await githubIssue(replica, projectId, 'Straight from the row', { trusted: true, labels: [] });
+        expect(card.stages).toEqual(['triage']);
+        await vi.waitFor(() => expect(runsOf(requests, 'factory-triage', card.title)).not.toEqual([]), {
+          timeout: 20_000,
+        });
+        expect(runsOf(requests, 'factory-triage', card.title)[0]).toContain(TRIAGE_NOTE);
+      }, 60_000);
+
       it('applies an edit made on one replica to the runs another replica starts, until the board is reset', async () => {
         const requests = stubModel();
         const orgId = `org-${randomUUID()}`;

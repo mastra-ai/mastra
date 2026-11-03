@@ -7,6 +7,7 @@ import { describeFactorySandbox, normalizeFactorySandboxSettings } from '@mastra
 import type { FactorySandbox, FactorySandboxDescription } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 
+import type { ProjectBoardCache } from '../boards/project-boards.js';
 import type { EnvironmentBuildRunner } from '../environment/build-runner.js';
 import { ensureSchedule, invalidCronMessage, readSchedule, scheduleIdFor } from '../environment/build-schedule.js';
 import { redactCredentials } from '../environment/build.js';
@@ -201,6 +202,8 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   environmentBuilds?: EnvironmentBuildRunner;
   /** Intake bindings, released when their Factory project is deleted. */
   intake?: Pick<IntakeStorage, 'ensureReady' | 'clearProjectBindings'>;
+  /** The per-project boards; loading a new project stores its copies of the code boards. */
+  boards?: Pick<ProjectBoardCache, 'describe'>;
 }
 
 /** Provider output is shown to the user; strip any clone credential from it first. */
@@ -552,6 +555,10 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
+          // The project's first board load retries anything this misses.
+          await this.deps.boards?.describe({ orgId: tenant.orgId, factoryProjectId: project.id }).catch(error => {
+            console.warn('[factory] could not store the boards of a new project:', error);
+          });
           return context.json({ project }, 201);
         },
       }),

@@ -1137,6 +1137,7 @@ export class MastraFactory {
     const environmentBuilds = this.#environmentBuilds;
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
+      ...(this.#projectBoards ? { boards: this.#projectBoards } : {}),
       sandbox: this.#sandbox,
       ...(environmentBuilds ? { environmentBuilds } : {}),
       projects: factoryProjectsStorage,
