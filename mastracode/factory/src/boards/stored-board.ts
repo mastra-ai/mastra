@@ -233,6 +233,13 @@ export function codeBoardHash(board: InstalledBoard): string {
     .digest('hex');
 }
 
+/** Whether two storable definitions describe the same board once unset fields and defaults are resolved. */
+export function sameBoardDefinition(a: StoredBoardInput, b: StoredBoardInput): boolean {
+  return (
+    canonicalJson(boardDefinitionOf(compileStoredBoard(a))) === canonicalJson(boardDefinitionOf(compileStoredBoard(b)))
+  );
+}
+
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
   if (value !== null && typeof value === 'object') {

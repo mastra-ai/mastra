@@ -394,6 +394,27 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect((await a.boards.get(scope, 'work'))!.customized).toBe(true);
   });
 
+  it('writes nothing when the Work board is saved unchanged, so it keeps following its code default', async () => {
+    const { a, orgId, scope, base, replicaA } = await setup();
+    const work = await getBoard(replicaA.send, base, 'work');
+    const version = await a.boards.readVersion(scope);
+    // The editor sends a switched-off auto-approval back as `autoApprove: false`; that is still no change.
+    const body = editPhase({ ...work, revision: 1 }, 'planning', phase => ({
+      ...phase,
+      exitTool: { ...phase.exitTool, autoApprove: false },
+    }));
+
+    const saved = await replicaA.send('PATCH', `${base}/work`, body);
+    expect(saved.status).toBe(200);
+    expect(saved.body.board).toMatchObject({ revision: 1, customized: false, defaultChanged: false });
+    expect(await a.boards.get(scope, 'work')).toMatchObject({ revision: 1, customized: false });
+    expect(await a.boards.readVersion(scope)).toBe(version);
+    expect((await a.audit.list({ orgId, actions: ['factory.board.updated'] })).events).toEqual([]);
+
+    const stale = await replicaA.send('PATCH', `${base}/work`, { ...body, expectedRevision: 2 });
+    expect(stale).toMatchObject({ status: 409, body: { error: 'revision_mismatch' } });
+  });
+
   it('refuses a Work board edit its code behaviour cannot honour, listing every conflict, and stores nothing', async () => {
     const { a, scope, base, replicaA } = await setup();
     const work = await getBoard(replicaA.send, base, 'work');
