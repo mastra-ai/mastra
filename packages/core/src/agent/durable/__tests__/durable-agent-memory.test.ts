@@ -416,7 +416,14 @@ describe('DurableAgent memory configuration', () => {
       for await (const _chunk of result.fullStream as AsyncIterable<any>) {
       }
 
-      const { messages } = await mockMemory.recall({ threadId, resourceId });
+      // The tripwire chunk closes the stream before the run reaches its finish step, which
+      // persists the turn. Wait for it so the check below sees saved messages, and so the
+      // run's late writes can't land on the next test's run (test runIds repeat per test).
+      const messages = await vi.waitFor(async () => {
+        const recalled = await mockMemory.recall({ threadId, resourceId });
+        expect(recalled.messages.length).toBeGreaterThan(0);
+        return recalled.messages;
+      });
       expect(messages.flatMap(message => message.content.parts ?? []).some(part => part.type === 'error')).toBe(false);
       result.cleanup();
     });

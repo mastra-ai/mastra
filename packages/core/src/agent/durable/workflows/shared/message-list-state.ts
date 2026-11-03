@@ -24,7 +24,7 @@ type RunParams = {
 };
 
 /** The parts of a durable step's (or the loop predicate's) params these helpers use. */
-type TranscriptParams = RunParams & { getState(): Promise<unknown> };
+type TranscriptParams = RunParams & { getState(keys?: readonly string[]): Promise<unknown> };
 
 type WritableTranscriptParams = TranscriptParams & { setState(state: unknown): Promise<void> };
 
@@ -50,7 +50,7 @@ export async function readMessageListState(
   // workflow state wins.
   // A payload read back from a persisted snapshot can hold refs too.
   const stored =
-    ((await params.getState()) as StoredMessageListStateCarrier | undefined)?.messageListState ??
+    ((await params.getState(['messageListState'])) as StoredMessageListStateCarrier | undefined)?.messageListState ??
     (stepPayload as StoredMessageListStateCarrier | undefined)?.messageListState;
   if (!stored?.messages?.some(isMemoryMessageRef)) return stored as SerializedMessageListState;
   return hydrateMidRun(runTranscriptRefs(params), stored, params.abortSignal);
@@ -65,24 +65,12 @@ export async function storeMessageListState(
   params: WritableTranscriptParams,
   messageListState: SerializedMessageListState,
 ): Promise<MessageListStateCarrier> {
-  const workflowState = (await params.getState()) as StoredMessageListStateCarrier | undefined;
-  if (workflowState?.messageListState === undefined) {
+  const stored = (await params.getState(['messageListState'])) as StoredMessageListStateCarrier | undefined;
+  if (stored?.messageListState === undefined) {
     return { messageListState };
   }
-  // The default engine replaces state wholesale on setState.
-  await params.setState({ ...workflowState, messageListState: await dehydrate(params, messageListState) });
+  await params.setState({ messageListState: await dehydrateMessageListState(params, messageListState) });
   return {};
-}
-
-/** Moves the run's initial transcript into workflow state. */
-export async function seedMessageListState(
-  params: WritableTranscriptParams,
-  messageListState: SerializedMessageListState,
-): Promise<void> {
-  await params.setState({
-    ...((await params.getState()) as object),
-    messageListState: await dehydrate(params, messageListState),
-  });
 }
 
 /**
@@ -94,6 +82,8 @@ export async function openMessageListState(
   params: TranscriptParams,
   stepPayload: MessageListStateCarrier,
 ): Promise<{ read(): SerializedMessageListState; write(next: SerializedMessageListState): void }> {
+  // The predicate can't call setState, so `write` edits the state object itself:
+  // only the whole state is that object, a picked key would be a copy.
   const workflowState = (await params.getState()) as StoredMessageListStateCarrier | undefined;
   if (workflowState?.messageListState === undefined) {
     stepPayload.messageListState = await readMessageListState(params, stepPayload);
@@ -160,7 +150,8 @@ async function hydrateMidRun(
   }
 }
 
-async function dehydrate(params: RunParams, messageListState: SerializedMessageListState) {
+/** The transcript as workflow state stores it. */
+export async function dehydrateMessageListState(params: RunParams, messageListState: SerializedMessageListState) {
   // Function or inherited memory can resolve to another store on resume, where refs would not
   // resolve, so only fixed memory gets refs.
   const { state } = (params.getInitData() ?? {}) as RunIdentity;

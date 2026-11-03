@@ -64,7 +64,7 @@ import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
-import { readAccumulatedSteps } from '../shared/accumulated-steps';
+import { loadAccumulatedSteps } from '../shared/accumulated-steps';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 import { durableOptionsSchema } from '../shared/schemas';
 
@@ -528,7 +528,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // Processor retries are read from the step history: each rejected step is recorded with
       // finishReason 'retry' and the tripwire that rejected it. Only consecutive retries count.
       // API-error retries happen inside this step and add to the same count, as in Agent.
-      const previousSteps = readAccumulatedSteps(await params.getState(), inputData);
+      const previousSteps = await loadAccumulatedSteps(params, inputData);
       let processorRetryCount = 0;
       for (let i = previousSteps.length - 1; i >= 0 && previousSteps[i]?.finishReason === 'retry'; i--) {
         processorRetryCount++;

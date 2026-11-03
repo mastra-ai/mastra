@@ -46,10 +46,10 @@ import {
   openMessageListState,
   readMessageListState,
   releaseMessageListState,
-  seedMessageListState,
+  dehydrateMessageListState,
   storeMessageListState,
   buildDeferredStepFinishChunk,
-  readAccumulatedSteps,
+  loadAccumulatedSteps,
   storeAccumulatedSteps,
 } from './shared';
 import {
@@ -430,7 +430,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
     const isTaskCompleteStep = withExecutionFence(this.isTaskCompleteStep());
     const goalStep = withExecutionFence(this.goalStep());
     const executeLLM = llmExecutionStep.execute;
-    llmExecutionStep.execute = async params => {
+    llmExecutionStep.execute = async stepParams => {
+      // On abort this step stores both the transcript and the step records. On
+      // storage v1 the default engine keeps only a step's last setState, so each
+      // write carries the ones before it.
+      let written: Record<string, unknown> = {};
+      const params = withParams(stepParams, {
+        setState: async (update: Record<string, unknown>) => {
+          written = { ...written, ...update };
+          await stepParams.setState(written);
+        },
+      });
       const llmOutput = await executeLLM(params);
       if (llmOutput && llmOutput.stepResult.reason === 'abort') {
         const initData = params.getInitData() as IterationState;
@@ -453,7 +463,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         );
         if (!executionOutput) return executionOutput;
         const { accumulatedSteps, ...update } = createBaseIterationStateUpdate({
-          currentState: { ...initData, accumulatedSteps: readAccumulatedSteps(await params.getState(), initData) },
+          currentState: { ...initData, accumulatedSteps: await loadAccumulatedSteps(params, initData) },
           executionOutput,
         });
         return params.bail<IterationState>({
@@ -614,7 +624,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
             // Use shared function for base state update
             const { accumulatedSteps, ...baseUpdate } = createBaseIterationStateUpdate({
-              currentState: { ...initData, accumulatedSteps: readAccumulatedSteps(await params.getState(), initData) },
+              currentState: { ...initData, accumulatedSteps: await loadAccumulatedSteps(params, initData) },
               executionOutput,
             });
 
@@ -651,7 +661,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   protected override buildContinuationPredicate(): LoopContinuationPredicate {
     return async (params: any) => {
       const state = params.inputData as IterationState;
-      const steps = readAccumulatedSteps(await params.getState(), state);
+      const steps = await loadAccumulatedSteps(params, state);
       const initData = params.getInitData() as DurableAgenticWorkflowInput;
       const rt = this.resolveRuntime(params);
 
@@ -969,9 +979,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             // The transcript and the step records ride in workflow state from
             // here on: each persisted snapshot then holds one copy (in `value`)
             // rather than one per step payload. Steps read and update them
-            // there. The seed builds on the first write: `getState` includes it.
-            await params.setState({ ...((await params.getState()) as object), accumulatedSteps: [] });
-            await seedMessageListState(params, messageListState);
+            // there. One write: on storage v1 the default engine keeps only a
+            // step's last setState.
+            await params.setState({
+              accumulatedSteps: [],
+              messageListState: await dehydrateMessageListState(params, messageListState),
+            });
             const iterationState: IterationState = {
               ...input,
               initialUntaggedSystemMessages: initialMessageList.getSystemMessages(),
@@ -1001,7 +1014,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             const logger = mastra?.getLogger?.();
 
             // Extract final text from last step
-            const steps = readAccumulatedSteps(await params.getState(), state);
+            const steps = await loadAccumulatedSteps(params, state);
             const lastStep = steps[steps.length - 1];
             let finalText = lastStep?.text;
 
