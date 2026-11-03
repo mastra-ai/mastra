@@ -1009,7 +1009,7 @@ function KnowledgePageGraphInner({
   // The focused page sits at the centre with its parent and children around it as full circles; pages
   // farther out are dots on outer rings, inside their branch's slice. A last overlap pass is the only force.
   const laidOut = useMemo(() => {
-    const shape = graphShape(graphPages, selectedPageId ?? centerId ?? null);
+    const shape = graphShape(graphPages, selectedPageId ?? centerId ?? null, nearIds);
     const colors = branchColors(graphPages, shape);
     const flow = toPageFlow(graphPages, allEdges);
     for (const node of flow.nodes) {

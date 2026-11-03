@@ -147,6 +147,20 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     expect(edges.some(id => id.includes('note-source') && id.includes('ward'))).toBe(true);
   });
 
+  it('draws each link end as a named circle, not a bare dot', () => {
+    const { container } = render({
+      notes: [note('n1', 'ward', ['note-target'])],
+      mentionedBy: [note('m1', 'note-source', ['ward'])],
+      reachable,
+    });
+    for (const id of ['far-out', 'other-out', 'note-target', 'note-source']) {
+      const circle = container.querySelector(`[data-testid="knowledge-page-node"][data-page-id="${id}"]`);
+      expect(circle, id).not.toBeNull();
+      expect(circle?.querySelector('[data-testid="knowledge-circle-name"]')?.textContent).toBeTruthy();
+    }
+    expect(container.querySelector('[data-testid="knowledge-page-dot"][data-page-id="far-out"]')).toBeNull();
+  });
+
   it('says nothing is left out when every link end is drawn', () => {
     renderWithProviders(<div />);
     const { container } = render({ reachable });

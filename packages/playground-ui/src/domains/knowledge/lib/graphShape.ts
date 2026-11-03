@@ -99,7 +99,11 @@ function liveOnly(pages: readonly KnowledgePagePayload[]) {
  * every other page, every page the walk never reaches, and every placeholder is a dot. With no focus the
  * first root becomes the centre and the other roots sit one link from it. A root is any page whose parent is not loaded, so a page cut off from its parent by a bounded graph is a root too.
  */
-export function graphShape(pages: readonly KnowledgePagePayload[], focusId: string | null): GraphShape {
+export function graphShape(
+  pages: readonly KnowledgePagePayload[],
+  focusId: string | null,
+  linkEnds: ReadonlySet<string> = noPages,
+): GraphShape {
   const live = liveOnly(pages);
   const byId = new Map(live.map(page => [page.id, page]));
   const children = new Map<string, KnowledgePagePayload[]>();
@@ -162,7 +166,9 @@ export function graphShape(pages: readonly KnowledgePagePayload[], focusId: stri
     const at = depth.get(page.id);
     const near = at !== undefined && (at <= FULL_CIRCLE_DEPTH || rootCircles.has(page.id)) && !isChildPlaceholder(page);
     const higher = at !== undefined && level.has(page.id) && !isChildPlaceholder(page);
-    form.set(page.id, near || (higher && farCircles++ < HIGHER_LEVEL_CAP) ? 'full' : 'dot');
+    // The focus's own link ends are as much its neighbours as its children: they read as named circles too.
+    const linked = at === undefined && linkEnds.has(page.id) && !isChildPlaceholder(page);
+    form.set(page.id, near || linked || (higher && farCircles++ < HIGHER_LEVEL_CAP) ? 'full' : 'dot');
   }
   return { depth, form, branch, via, level, center };
 }
@@ -179,10 +185,59 @@ const FIRST_DOT_RING_GAP = 150;
 const DOT_RING_GAP = 70;
 /** Space a dot needs along its ring before the next one staggers outward. */
 const DOT_SPACING = 28;
-/** The ring close around the focus that its link ends sit on, between the focus and its first ring. */
-const LINK_RING_MIN = 120;
-const LINK_RING_MAX = 175;
+/** Space kept clear between the focus, its link-end circles and the first ring around them. */
+const LINK_GAP = 16;
+/** The ring of link-end circles grows to hold this many before they stack into more rows. */
+const LINK_RING_WIDEST = 260;
 const noPages: ReadonlySet<string> = new Set();
+
+/**
+ * Places the focus's link-end circles on rings around it, inside the first ring. Each circle keeps clear of
+ * the focus, of the line from the focus to every page on the first ring (its parent and children) and of
+ * its neighbours, so the angles those lines run at are skipped and the circles fill the gaps between them;
+ * when the gaps on a ring are full the rest stack onto a ring outside it. `reach` is how far out the
+ * outermost circle's edge sits.
+ */
+function layoutLinkEnds(
+  ends: readonly KnowledgePagePayload[],
+  center: string,
+  positions: ReadonlyMap<string, Point>,
+  firstRing: readonly string[],
+  sizeOf: (page: KnowledgePagePayload) => number,
+): { points: Map<string, Point>; reach: number } {
+  const half = Math.max(...ends.map(page => sizeOf(page))) / 2;
+  const centerHalf = (positions.has(center) ? 0 : 0) + half;
+  const blocked = firstRing.flatMap(id => {
+    const at = positions.get(id);
+    return at ? [Math.atan2(at.y, at.x)] : [];
+  });
+  const points = new Map<string, Point>();
+  let remaining = [...ends];
+  // The first ring starts clear of the focus, which draws a little larger than a circle of its own size.
+  let radius = half * 2.5 + LINK_GAP;
+  let reach = radius + half;
+  for (let rows = 0; remaining.length && rows < 12; rows++) {
+    // Angles on this ring that a line to the first ring passes through are off limits.
+    const margin = Math.asin(Math.min(1, (half + LINK_GAP / 2) / radius));
+    const step = 2 * Math.asin(Math.min(1, (half * 2 + LINK_GAP) / (2 * radius)));
+    const gaps = blocked.length ? [...blocked].sort((a, b) => a - b) : [-Math.PI];
+    const slots: number[] = [];
+    gaps.forEach((from, index) => {
+      const next = gaps[(index + 1) % gaps.length] as number;
+      const start = from + margin;
+      const end = (index + 1 < gaps.length ? next : next + 2 * Math.PI) - margin;
+      for (let angle = start; angle <= end + 1e-9; angle += step) slots.push(angle);
+    });
+    const used = remaining.splice(0, Math.max(1, slots.length));
+    used.forEach((page, index) => {
+      const angle = slots[index] ?? slots[0] ?? 0;
+      points.set(page.id, { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius });
+    });
+    reach = radius + half;
+    radius += half * 2 + LINK_GAP;
+  }
+  return { points, reach };
+}
 
 /**
  * Places the focus at the centre and every other page on the ring for its depth, each page's children in
@@ -247,7 +302,6 @@ export function radialLayout(
   let circleIndex = 0;
 
   const positions = new Map<string, Point>();
-  if (shape.center) positions.set(shape.center, { x: 0, y: 0 });
   const place = (ids: string[], at: number, start: number, span: number) => {
     const total = ids.reduce((sum, id) => sum + (weight.get(id) ?? 1), 0) || 1;
     // Dots that won't fit side by side along the arc stagger outward in rows.
@@ -274,14 +328,35 @@ export function radialLayout(
       2 *
       Math.PI
     : 0;
-  place(firstRing, 1, -Math.PI / 2 - firstShare / 2, 2 * Math.PI);
+  const run = () => {
+    positions.clear();
+    circleIndex = 0;
+    if (shape.center) positions.set(shape.center, { x: 0, y: 0 });
+    place(firstRing, 1, -Math.PI / 2 - firstShare / 2, 2 * Math.PI);
+  };
+  run();
 
   const unreached = live.filter(page => !positions.has(page.id)).sort((a, b) => (a.id < b.id ? -1 : 1));
-  const close = unreached.filter(page => near.has(page.id));
-  const closeRing = Math.min(LINK_RING_MAX, Math.max(LINK_RING_MIN, (close.length * DOT_SPACING) / (2 * Math.PI)));
-  close.forEach((page, index) => {
+  const close = unreached.filter(page => near.has(page.id) && shape.form.get(page.id) === 'full');
+  const linkDots = unreached.filter(page => near.has(page.id) && shape.form.get(page.id) !== 'full');
+  if (close.length && shape.center) {
+    const linked = layoutLinkEnds(close, shape.center, positions, firstRing, sizeOf);
+    // The first ring and everything beyond it make room for the circles inside it.
+    const firstSize = Math.max(
+      0,
+      ...firstRing.filter(id => shape.form.get(id) === 'full').map(id => sizeOf(byId.get(id) as KnowledgePagePayload)),
+    );
+    radii.length = 2;
+    radii[1] = Math.max(radii[1] as number, linked.reach + LINK_GAP + firstSize / 2);
+    run();
+    const relinked = layoutLinkEnds(close, shape.center, positions, firstRing, sizeOf);
+    for (const [id, point] of relinked.points) positions.set(id, point);
+  }
+  const closeDots = linkDots;
+  const closeRing = Math.min(175, Math.max(120, (closeDots.length * DOT_SPACING) / (2 * Math.PI)));
+  closeDots.forEach((page, index) => {
     // Half a step off the top, where the focus's parent sits.
-    const angle = Math.PI / 2 + (index / close.length) * 2 * Math.PI;
+    const angle = Math.PI / 2 + (index / closeDots.length) * 2 * Math.PI;
     positions.set(page.id, { x: Math.cos(angle) * closeRing, y: Math.sin(angle) * closeRing });
   });
   const far = unreached.filter(page => !near.has(page.id));

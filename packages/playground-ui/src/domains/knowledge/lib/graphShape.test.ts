@@ -227,23 +227,50 @@ describe('radialLayout', () => {
   });
 
   describe('when the focus links to pages the hierarchy does not reach', () => {
-    const stray = [page('stray-a', 'elsewhere'), page('stray-b', 'elsewhere'), page('stray-c', 'elsewhere')];
-    const all = [...pages, ...stray];
-    const distance = (positions: ReturnType<typeof radialLayout>, id: string) =>
-      Math.hypot(positions.get(id)?.x ?? 0, positions.get(id)?.y ?? 0);
+    const strays = Array.from({ length: 9 }, (_, index) => page(`stray-${index}`, 'elsewhere'));
+    const faraway = page('faraway', 'elsewhere');
+    const all = [...pages, ...strays, faraway];
+    const near = new Set(strays.map(stray => stray.id));
+    const shape = graphShape(all, 'blog', near);
+    const sizeOf = (p: KnowledgePagePayload) => (shape.form.get(p.id) === 'full' ? 108 : 20);
+    const positions = radialLayout(all, shape, sizeOf, near);
+    const at = (id: string) => positions.get(id) ?? { x: NaN, y: NaN };
+    const gap = (a: string, b: string) =>
+      Math.hypot(at(a).x - at(b).x, at(a).y - at(b).y) - (sizeOf(byId(a)) + sizeOf(byId(b))) / 2;
+    const byId = (id: string) => all.find(p => p.id === id) as KnowledgePagePayload;
+    const toSegment = (id: string, from: string, to: string) => {
+      const [p, a, b] = [at(id), at(from), at(to)];
+      const length = Math.hypot(b.x - a.x, b.y - a.y) ** 2;
+      const t = Math.max(0, Math.min(1, ((p.x - a.x) * (b.x - a.x) + (p.y - a.y) * (b.y - a.y)) / length));
+      return Math.hypot(p.x - (a.x + t * (b.x - a.x)), p.y - (a.y + t * (b.y - a.y))) - sizeOf(byId(id)) / 2;
+    };
+    const ends = [...near];
 
-    it("draws them on a ring inside the focus's first ring, not past every other dot", () => {
-      const shape = graphShape(all, 'blog');
-      const near = new Set(['stray-a', 'stray-b']);
-      const positions = radialLayout(all, shape, size, near);
-      expect(distance(positions, 'stray-a')).toBeLessThan(distance(positions, 'site'));
-      expect(distance(positions, 'stray-b')).toBeLessThan(distance(positions, 'site'));
-      expect(distance(positions, 'stray-c')).toBeGreaterThan(distance(positions, 'draft'));
+    it('draws each link end as a labelled circle, like the focus children, and leaves far strays as dots', () => {
+      for (const id of ends) expect(shape.form.get(id)).toBe('full');
+      expect(shape.form.get('faraway')).toBe('dot');
+    });
+
+    it('keeps every circle clear of the focus, its parent, its children and each other', () => {
+      for (const id of ends) {
+        for (const other of ['blog', 'site', 'post-1', 'post-2', 'docs', ...ends.filter(end => end !== id)]) {
+          expect(gap(id, other), `${id} vs ${other}`).toBeGreaterThanOrEqual(0);
+        }
+      }
+    });
+
+    it('keeps them off the line from the focus to its parent and to each child', () => {
+      for (const id of ends) {
+        for (const to of ['site', 'post-1', 'post-2']) {
+          expect(toSegment(id, 'blog', to), `${id} on blog->${to}`).toBeGreaterThanOrEqual(0);
+        }
+      }
     });
 
     it('leaves them on the outer ring when they are not links of the focus', () => {
-      const positions = radialLayout(all, graphShape(all, 'blog'), size);
-      expect(distance(positions, 'stray-a')).toBeGreaterThan(distance(positions, 'draft'));
+      const plain = radialLayout(all, graphShape(all, 'blog'), size);
+      const far = (id: string) => Math.hypot(plain.get(id)?.x ?? 0, plain.get(id)?.y ?? 0);
+      expect(far('stray-0')).toBeGreaterThan(far('draft'));
     });
   });
 
