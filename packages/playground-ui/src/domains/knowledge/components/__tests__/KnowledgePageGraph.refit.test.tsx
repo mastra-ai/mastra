@@ -137,3 +137,66 @@ describe('KnowledgePageGraph labels', () => {
     }
   });
 });
+
+describe("KnowledgePageGraph refit when a focus's linked pages arrive", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['requestAnimationFrame', 'cancelAnimationFrame'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const base = [page('org', null), page('focus', 'org'), ...['a', 'b', 'c', 'd'].map(id => page(id, 'focus'))];
+  const away = [
+    page('elsewhere', null),
+    ...['x1', 'x2', 'x3', 'x4', 'x5', 'x6'].map(id => ({ ...page(id, 'elsewhere'), scopeId: 'elsewhere' })),
+  ];
+  const ends = new Set(away.slice(1).map(p => p.id));
+  const zoom = () => (setViewport.mock.calls as unknown as Array<[{ zoom: number }]>).at(-1)?.[0].zoom ?? Number.NaN;
+
+  async function focusedGraph() {
+    const view = renderWithProviders(
+      <KnowledgePageGraph pages={base} edges={[]} selectedPageId="focus" nearIds={new Set()} onSelect={() => {}} />,
+    );
+    const container = await screen.findByTestId('knowledge-page-graph');
+    act(() => {
+      resize(container, 1280, 700);
+      flushFrames();
+    });
+    return view;
+  }
+
+  it('fits again, further out, once the linked pages are loaded', async () => {
+    const view = await focusedGraph();
+    const before = zoom();
+    setViewport.mockClear();
+    view.rerender(
+      <KnowledgePageGraph
+        pages={[...base, ...away]}
+        edges={[]}
+        selectedPageId="focus"
+        nearIds={ends}
+        onSelect={() => {}}
+      />,
+    );
+    act(() => flushFrames());
+    expect(setViewport).toHaveBeenCalledTimes(1);
+    expect(zoom()).toBeLessThan(before);
+  });
+
+  it('leaves the view alone when nothing new is linked', async () => {
+    const view = await focusedGraph();
+    setViewport.mockClear();
+    view.rerender(
+      <KnowledgePageGraph
+        pages={[...base, page('e', 'focus')]}
+        edges={[]}
+        selectedPageId="focus"
+        nearIds={new Set()}
+        onSelect={() => {}}
+      />,
+    );
+    act(() => flushFrames());
+    expect(setViewport).not.toHaveBeenCalled();
+  });
+});
