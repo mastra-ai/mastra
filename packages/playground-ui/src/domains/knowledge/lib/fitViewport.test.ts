@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { fitViewport } from './fitViewport';
+import { fitDuration, fitViewport } from './fitViewport';
 import { READABLE_MIN_ZOOM } from './graphShape';
+import { KNOWLEDGE_GRAPH_TRANSITION_MS } from './useLeavingNodes';
 
 const box = (x: number, y: number, size = 100) => ({ position: { x, y }, width: size, height: size });
 const anchor = box(-50, -50);
@@ -33,5 +34,12 @@ describe('fitViewport', () => {
     const without = fitViewport({ bounds: near, width: WIDTH, height: HEIGHT, focus: true, ring: false, anchor });
     expect(withRing.zoom).toBeGreaterThanOrEqual(READABLE_MIN_ZOOM);
     expect(withRing.zoom).toBeCloseTo(without.zoom, 2);
+  });
+});
+
+describe('fitDuration', () => {
+  it('animates over the layout transition, and not at all under reduced motion', () => {
+    expect(fitDuration(true)).toBe(KNOWLEDGE_GRAPH_TRANSITION_MS);
+    expect(fitDuration(false)).toBe(0);
   });
 });

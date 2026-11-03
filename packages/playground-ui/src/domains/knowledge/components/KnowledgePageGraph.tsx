@@ -23,7 +23,7 @@ import { fitWords } from '../lib/circleText';
 import { edgeOffsets, rimToRim } from '../lib/edgeOffsets';
 import type { Circle, EdgeOffset } from '../lib/edgeOffsets';
 import { fitTargets } from '../lib/fitTargets';
-import { fitViewport } from '../lib/fitViewport';
+import { fitDuration, fitViewport } from '../lib/fitViewport';
 import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
   KNOWLEDGE_DOT_HIT_MARGIN,
@@ -45,7 +45,7 @@ import { KNOWLEDGE_PAGE_SIZE, grantGraph, pageGraphEdges, pageNeighbourIds, toPa
 import { childCountLabel } from '../lib/pageTree';
 import { chooseTooltipSide } from '../lib/tooltipSide';
 import type { Box, TooltipPlacementInput, TooltipSide } from '../lib/tooltipSide';
-import { KNOWLEDGE_GRAPH_TRANSITION_MS, prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
+import { prefersMotion, useLeavingNodes } from '../lib/useLeavingNodes';
 import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayload } from '../pageTypes';
 
 import { Txt } from '@/ds/components/Txt';
@@ -1338,7 +1338,7 @@ function KnowledgePageGraphInner({
     const fromGraph = selectedHere.current === selectedPageId;
     selectedHere.current = null;
     if (fromGraph) return;
-    fit(true, prefersMotion() ? KNOWLEDGE_GRAPH_TRANSITION_MS : 0);
+    fit(true, fitDuration(prefersMotion()));
   }, [selectedPageId, selectedIsLoaded, fit]);
 
   // First click selects; a click on the page that is already selected opens it. A double-click is the two.
@@ -1437,7 +1437,11 @@ function KnowledgePageGraphInner({
       >
         <Background variant={BackgroundVariant.Dots} gap={26} size={1.4} color="var(--border-strong)" />
         <Controls showInteractive={false} showFitView={false}>
-          <ControlButton onClick={() => fit(false, 300)} title="Fit view" aria-label="Fit view">
+          <ControlButton
+            onClick={() => fit(false, fitDuration(prefersMotion()))}
+            title="Fit view"
+            aria-label="Fit view"
+          >
             <Maximize aria-hidden />
           </ControlButton>
         </Controls>

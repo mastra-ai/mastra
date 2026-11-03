@@ -2,6 +2,7 @@ import { getViewportForBounds } from '@xyflow/react';
 import type { Viewport } from '@xyflow/react';
 
 import { READABLE_MIN_ZOOM } from './graphShape';
+import { KNOWLEDGE_GRAPH_TRANSITION_MS } from './useLeavingNodes';
 
 /** How far a refocus may zoom out to fit a ring of linked pages, which the readable floor would crop. */
 export const RING_MIN_ZOOM = 0.15;
@@ -32,3 +33,6 @@ export function fitViewport({ bounds, width, height, focus, ring, anchor }: FitI
   }
   return viewport;
 }
+
+/** How long a view change animates: the same as the layout's own transition, and none under reduced motion. */
+export const fitDuration = (motion: boolean) => (motion ? KNOWLEDGE_GRAPH_TRANSITION_MS : 0);
