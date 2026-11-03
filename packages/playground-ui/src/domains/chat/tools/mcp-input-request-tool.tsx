@@ -119,23 +119,27 @@ export function McpInputRequestTool({
   readOnly,
   notice,
 }: McpInputRequestToolProps) {
-  const [answers, setAnswers] = useState<Record<string, McpInputResponse>>({});
+  // A Map, not an object: request keys come from the server, and one named `constructor` or
+  // `__proto__` must not read `Object.prototype` and look answered.
+  const [answers, setAnswers] = useState<ReadonlyMap<string, McpInputResponse>>(() => new Map());
   const keys = Object.keys(payload.requests);
   const tooLarge = useMemo(() => inputRequestTooLarge(payload), [payload]);
 
-  const send = (inputResponses: Record<string, McpInputResponse>) => {
-    void Promise.resolve(onSubmit({ inputResponses })).catch(() => setAnswers({}));
+  const send = (next: ReadonlyMap<string, McpInputResponse>) => {
+    // `Object.fromEntries` defines own properties, so a `__proto__` key is sent as data.
+    const inputResponses = Object.fromEntries(next);
+    void Promise.resolve(onSubmit({ inputResponses })).catch(() => setAnswers(new Map()));
   };
 
   const answer = (key: string, response: McpInputResponse) => {
-    const next = { ...answers, [key]: response };
+    const next = new Map(answers).set(key, response);
     setAnswers(next);
-    if (!keys.every(requestKey => next[requestKey])) return;
+    if (!keys.every(requestKey => next.has(requestKey))) return;
     send(next);
   };
 
   const cancelAll = () => {
-    const next = Object.fromEntries(keys.map(key => [key, { action: 'cancel' as const }]));
+    const next = new Map(keys.map(key => [key, { action: 'cancel' as const }]));
     setAnswers(next);
     send(next);
   };
@@ -152,12 +156,7 @@ export function McpInputRequestTool({
             <Txt tone="muted">{payload.serverName} sent more than Studio can show here.</Txt>
             {!readOnly && (
               <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={isSubmitting || Object.keys(answers).length > 0}
-                  onClick={cancelAll}
-                >
+                <Button type="button" variant="ghost" disabled={isSubmitting || answers.size > 0} onClick={cancelAll}>
                   Cancel
                 </Button>
               </div>
@@ -169,8 +168,8 @@ export function McpInputRequestTool({
               key={key}
               requestKey={key}
               request={request}
-              answered={answers[key]?.action}
-              disabled={readOnly || isSubmitting || answers[key] !== undefined}
+              answered={answers.get(key)?.action}
+              disabled={readOnly || isSubmitting || answers.has(key)}
               readOnly={readOnly}
               onAnswer={response => answer(key, response)}
             />
