@@ -6103,23 +6103,32 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(cards.find(card => card.id === issue.id)).toMatchObject({ stages: ['done'] });
     });
 
-    it("tells the builder of an issue in progress about a pull request that fixes it, and leaves its phase alone", async () => {
+    it("files a maintainer's pull request on an issue still being planned, and leaves its phase alone", async () => {
+      const h = await harness('write');
+      const issue = await h.issueCard(42, 'planning');
+
+      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['planning'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect((await h.decisions()).filter(entry => entry.decision.type === 'sendMessage')).toEqual([]);
+      expect(await reviewsStarted(h, issue.id)).toEqual([]);
+      // Someone else's pull request: recording it as the card's own would switch off the
+      // builder's self-review and its own pull request once building starts.
+      expect(cards[0]!.metadata.openPullRequestNumber ?? null).toBeNull();
+    });
+
+    it("gives someone else's pull request its own card when the issue has been in Building, even with no session left", async () => {
       const h = await harness('write');
       const issue = await h.issueCard(42, 'execute');
 
       await h.ingest(openedPullRequest(17, 'Fixes #42'));
 
       const cards = await h.cards();
-      expect(cards).toHaveLength(1);
-      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['execute'] });
-      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
-      expect((await h.decisions()).map(entry => entry.decision)).toContainEqual(
-        expect.objectContaining({ type: 'sendMessage', role: 'work' }),
-      );
-      expect(await reviewsStarted(h, issue.id)).toEqual([]);
-      // Someone else's pull request: recording it as the card's own would switch off the
-      // builder's self-review and its own pull request.
-      expect(cards[0]!.metadata.openPullRequestNumber ?? null).toBeNull();
+      expect(cards).toHaveLength(2);
+      expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
     });
 
     it('files a pull request that fixes two issues on the first one named only', async () => {

@@ -19,6 +19,7 @@ export {
   boardEventHandlers,
   boardForWorkItem,
   eventBoardId,
+  cardOwnsBranch,
   hasBuilderSession,
   hasPullRequest,
   isPullRequestCard,
