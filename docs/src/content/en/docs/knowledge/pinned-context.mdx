@@ -79,7 +79,7 @@ Each entry is a page path. Its placeholders take their values from the scope the
 | `org:acme`, `role:acme:sales` | No, but it can read the page with the tools |
 | `org:globex`, `role:globex:support` | No, it gets `policy:globex#refund-policy` instead |
 
-Knowledge looks up the path on every run. Point it at a template page declared in the target scope's `pages`, as in the example. Because tools can't move template pages, the pin keeps working. A pin whose page doesn't exist yet, or has no body, delivers nothing and reports no error.
+Knowledge looks up the path on every run. Point it at a template page declared in the target scope's `pages`, as in the example. Because tools can't move template pages, the pin keeps working. A pin whose page doesn't exist yet, or has no body, delivers nothing and reports no error. Support runs here are only viewers, so write the policy's body from your server with [`upsertPage()`](/docs/knowledge/load-your-content).
 
 Pages pinned in config are always delivered, even over budget. An agent can't unpin them. To remove one, change the declaration.
 
