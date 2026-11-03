@@ -602,30 +602,36 @@ describe('KnowledgeSemanticIndex bounds', () => {
     expect(looked).toBe(1_000);
   });
 
-  it("embeds a long page's chunks a few at a time, not one by one", async () => {
-    let inFlight = 0;
-    let most = 0;
-    const embedder = {
-      specificationVersion: 'v2',
-      provider: 'test',
-      modelId: 'slow',
-      maxEmbeddingsPerCall: 1,
-      supportsParallelCalls: true,
-      doEmbed: async ({ values }: { values: string[] }) => {
-        most = Math.max(most, ++inFlight);
-        await new Promise(resolve => setTimeout(resolve, 5));
-        inFlight--;
-        return { embeddings: values.map(() => [1, 0, 0, 0]) };
-      },
-    } as unknown as MastraEmbeddingModel<string>;
-    const index = new KnowledgeSemanticIndex(new MemoryVector(), embedder);
-    const body = Array.from(
-      { length: 12 },
-      (_, i) => `## Part ${i}\n\n${'Lorem ipsum dolor sit amet. '.repeat(200)}`,
-    ).join('\n\n');
-    await index.indexPage({ id: 'p1', name: 'Long', body, isScope: false } as never);
+  it.each([
+    { parallel: true, atLeast: 2, atMost: 4 },
+    { parallel: false, atLeast: 1, atMost: 1 },
+  ])(
+    "embeds a long page's chunks a few at a time, one at a time when parallel calls is $parallel",
+    async ({ parallel, atLeast, atMost }) => {
+      let inFlight = 0;
+      let most = 0;
+      const embedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'slow',
+        maxEmbeddingsPerCall: 1,
+        supportsParallelCalls: parallel,
+        doEmbed: async ({ values }: { values: string[] }) => {
+          most = Math.max(most, ++inFlight);
+          await new Promise(resolve => setTimeout(resolve, 5));
+          inFlight--;
+          return { embeddings: values.map(() => [1, 0, 0, 0]) };
+        },
+      } as unknown as MastraEmbeddingModel<string>;
+      const index = new KnowledgeSemanticIndex(new MemoryVector(), embedder);
+      const body = Array.from(
+        { length: 12 },
+        (_, i) => `## Part ${i}\n\n${'Lorem ipsum dolor sit amet. '.repeat(200)}`,
+      ).join('\n\n');
+      await index.indexPage({ id: 'p1', name: 'Long', body, isScope: false } as never);
 
-    expect(most).toBeGreaterThan(1);
-    expect(most).toBeLessThanOrEqual(4);
-  });
+      expect(most).toBeGreaterThanOrEqual(atLeast);
+      expect(most).toBeLessThanOrEqual(atMost);
+    },
+  );
 });

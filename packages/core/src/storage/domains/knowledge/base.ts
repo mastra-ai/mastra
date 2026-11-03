@@ -12,6 +12,11 @@ export interface KnowledgeStorageCapabilities {
   schemaVersion: 1 | typeof KNOWLEDGE_STORAGE_SCHEMA_VERSION;
   supportsSchemaInspection: boolean;
   supportsExplicitReset: boolean;
+  /**
+   * The adapter stores a pin `kind` (`page` or `list`) with a list pin's `depth`. Adapters from before
+   * pin kinds don't report it, and core refuses listing pins on them rather than store a page pin.
+   */
+  supportsPinKinds?: boolean;
 }
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */

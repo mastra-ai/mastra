@@ -68,6 +68,11 @@ describe('knowledgeBodySections', () => {
     expect(knowledgeBodySections(body).map(section => section.title)).toEqual(['Outside']);
   });
 
+  it('a fence indented four spaces is indented code, not a fence', () => {
+    const body = ['Example:', '', '    ```', '# Overview', '', '   ```', '## inside', '   ```', '## After'].join('\n');
+    expect(knowledgeBodySections(body).map(section => section.title)).toEqual(['Overview', 'After']);
+  });
+
   it('keeps a trailing # that is part of the title, and drops a closing run after a space', () => {
     expect(knowledgeBodySections('## Use C#\n\n### Notes ##').map(section => section.title)).toEqual([
       'Use C#',

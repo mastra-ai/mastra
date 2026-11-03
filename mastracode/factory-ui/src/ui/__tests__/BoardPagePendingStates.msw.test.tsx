@@ -14,6 +14,7 @@ import type { LinearIssue } from '../domains/factory/services/linear';
 import { useStartFactoryRun } from '../../hooks/useStartFactoryRun';
 import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
+import { providerFactsCard } from './fixtures/providerFactsCard';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -586,6 +587,52 @@ describe('Board card pending states', () => {
     // A bound session with nothing to report runs no marker: the way in is the mark.
     expect(within(started).getByRole('link', { name: 'Open session' })).toBeInTheDocument();
     expect(within(unstarted).queryByRole('link', { name: 'Open session' })).toBeNull();
+  });
+
+  it('starts a normalized Linear card session on its provider branch rather than an item-id fallback', async () => {
+    stubBoardEndpoints();
+    const item = {
+      ...providerFactsCard,
+      id: ITEM_ID,
+      title: 'ENG-42: Repair source facts',
+      stages: ['done'],
+      sessions: {},
+      externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' },
+      metadata: { repository: 'acme/app', authorTrusted: true },
+      workItem: {
+        ...providerFactsCard.workItem,
+        provider: 'linear',
+        key: 'ENG-42',
+        title: 'ENG-42: Repair source facts',
+        metadata: {},
+      },
+    };
+    const requests: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [item] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'factory/linear-eng-42' } });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
+        HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+    await user.click(await screen.findByRole('button', { name: `Details for ${item.title}` }));
+    const dialog = await screen.findByRole('dialog', { name: item.title });
+    await user.click(within(dialog).getByRole('button', { name: 'Start session' }));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({ branch: 'factory/linear-eng-42' });
+    await waitForMutationsIdle(client);
   });
 
   it('acknowledges a session start from the card details while it is still resolving the session', async () => {

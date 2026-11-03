@@ -1,6 +1,11 @@
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestMerges';
-import { changeRequestNumberForItem, externalLinkLabel, pullRequestStatusForItem } from '../../factory/boardItems';
+import {
+  changeRequestNumberForItem,
+  externalLinkLabel,
+  pullRequestStatusForItem,
+  sourceMetadata,
+} from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
@@ -151,7 +156,7 @@ function sessionPullRequest(pullRequest: WorkItem | undefined): SessionPullReque
   return {
     number: changeRequestNumberForItem(pullRequest),
     provider: pullRequest.source === 'gitlab-pr' ? 'gitlab' : 'github',
-    knownMerged: pullRequest.metadata.merged === true,
+    knownMerged: sourceMetadata(pullRequest).merged === true || sourceMetadata(pullRequest).state === 'merged',
   };
 }
 

@@ -6,7 +6,7 @@ import { knowledgeBodyChunks, KNOWLEDGE_EMBED_CHUNK_TOKENS } from './page-body';
 
 /** How many distinct pages and notes one semantic search looks at before it stops refilling. */
 const MAX_CANDIDATES = 1000;
-/** Chunk embeddings one page requests at once. */
+/** Chunk embeddings one page requests at once, when the embedder supports parallel calls. */
 const EMBED_CONCURRENCY = 4;
 /** Largest vector query one search sends (Pinecone's topK ceiling); chunks share it with whole pages. */
 const MAX_TOP_K = 10_000;
@@ -80,12 +80,11 @@ export class KnowledgeSemanticIndex {
     const chunks = page.body ? knowledgeBodyChunks(page.body, room).slice(0, KNOWLEDGE_MAX_PAGE_CHUNKS) : [''];
     const ids = pageChunkIds(page.id, 0, chunks.length);
     const pMap = (await import('p-map')).default;
+    const parallel = 'supportsParallelCalls' in this.embedder ? await this.embedder.supportsParallelCalls : true;
     const embeddings = await pMap(
       chunks,
       chunk => this.#retry(() => this.#embed([head, chunk].filter(Boolean).join('\n'))),
-      {
-        concurrency: EMBED_CONCURRENCY,
-      },
+      { concurrency: parallel ? EMBED_CONCURRENCY : 1 },
     );
     await this.#retry(() =>
       this.#store(

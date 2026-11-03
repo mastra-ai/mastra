@@ -56,13 +56,6 @@
         "type": "toggle"
       }
     ],
-    "anthropic/claude-opus-4.6": [
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 127999
-      }
-    ],
     "anthropic/claude-opus-4.8": [
       {
         "type": "effort",
@@ -80,6 +73,13 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 63999
+      }
+    ],
+    "anthropic/claude-opus-4.6": [
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 127999
       }
     ],
     "zai-org/GLM-5.2-FP8": [
