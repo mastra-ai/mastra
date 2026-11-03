@@ -541,7 +541,7 @@ function requestsConsent(
 // The Factory reviewing code it wrote is part of the same work, not new work to
 // consent to: a push to a Factory-authored PR re-reviews without a person's click.
 function reviewsFactoryAuthoredCode(
-  item: Pick<WorkItemRow, 'metadata' | 'externalSource'>,
+  item: Pick<Card, 'metadata' | 'externalSource'>,
   decision: FactoryCommitDecision,
 ): boolean {
   if (item.metadata?.factoryAuthored !== true) return false;
