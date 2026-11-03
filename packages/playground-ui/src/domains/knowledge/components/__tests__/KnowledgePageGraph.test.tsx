@@ -445,6 +445,30 @@ describe('KnowledgePageGraph', () => {
       expect(rows.every(row => row.textContent === 'Under parent page')).toBe(true);
     });
 
+    it('names each parent when the dots hang under several, so the colours can be told apart', () => {
+      const chain = (parent: string, name: string) => [
+        page(parent, 'org', { name, key: parent }),
+        page(`${parent}-a`, parent, { name: 'A', key: 'a' }),
+        page(`${parent}-b`, `${parent}-a`, { name: 'B', key: 'b' }),
+        page(`${parent}-c`, `${parent}-b`, { name: 'C', key: 'c' }),
+        page(`${parent}-d`, `${parent}-c`, { name: 'D', key: 'd' }),
+      ];
+      renderGraph({
+        pages: [
+          page('org', null, { name: 'Acme', address: 'org:acme' }),
+          ...chain('deployment', 'Deployment'),
+          ...chain('agents', 'Agents'),
+        ],
+      });
+      const rows = within(screen.getByRole('list', { name: 'Legend' })).getAllByTestId('knowledge-legend-branch');
+      expect(rows.length).toBeGreaterThan(1);
+      const labels = rows.map(row => row.textContent);
+      expect(new Set(labels).size).toBe(labels.length);
+      expect(labels.every(label => label?.startsWith('Under '))).toBe(true);
+      expect(labels).not.toContain('Under parent page');
+      expect(labels).not.toContain('Under parent scope');
+    });
+
     it('leaves colours out of the legend when there are no dots', () => {
       renderGraph();
       expect(screen.queryAllByTestId('knowledge-legend-branch')).toHaveLength(0);

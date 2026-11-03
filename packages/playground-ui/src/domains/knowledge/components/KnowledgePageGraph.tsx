@@ -680,6 +680,7 @@ function GraphLegend({
           </Txt>
         </li>
       ) : null}
+      {/* One parent group reads generically; several would look identical, so each row names its parent. */}
       {branches.slice(0, LEGEND_BRANCH_CAP).map(branch => (
         <li key={branch.id} className="flex items-center gap-2 pl-0.5" data-testid="knowledge-legend-branch">
           <span
@@ -688,7 +689,7 @@ function GraphLegend({
             aria-hidden
           />
           <Txt as="span" variant="meta" tone="muted" className="max-w-40 truncate" title={branch.name}>
-            {branch.scope ? 'Under parent scope' : 'Under parent page'}
+            {branches.length > 1 ? `Under ${branch.name}` : branch.scope ? 'Under parent scope' : 'Under parent page'}
           </Txt>
         </li>
       ))}
