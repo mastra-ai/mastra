@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { it, describe, expect, beforeAll, afterAll, inject } from 'vitest';
 import { join, relative } from 'path';
 import { setupMonorepo } from './prepare';
-import { mkdtemp, mkdir, readdir, readFile, readlink, rm, writeFile } from 'fs/promises';
+import { mkdtemp, mkdir, readdir, readFile, readlink, realpath, rm, writeFile } from 'fs/promises';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import getPort from 'get-port';
@@ -749,6 +749,45 @@ export const environmentRoute = registerApiRoute('/environment', {
     );
   });
 
+  describe.sequential('dev --root', () => {
+    it(
+      'writes dev pre-bundle output under <root>/.mastra/.build instead of the cwd (#29140)',
+      async () => {
+        const appDir = join(fixturePath, 'apps', 'custom');
+        const altRoot = join(appDir, '.mastra-alt');
+        // A clean checkout has no `<cwd>/.mastra`; the watcher used to write there and fail with ENOENT.
+        await rm(join(appDir, '.mastra'), { recursive: true, force: true });
+        await rm(altRoot, { recursive: true, force: true });
+
+        const devPort = await getPort();
+        const devController = new AbortController();
+        const cli = execa('mastra', ['dev', '--root', altRoot], {
+          cwd: appDir,
+          preferLocal: true,
+          reject: false,
+          cancelSignal: devController.signal,
+          gracefulCancel: true,
+          env: { OPENAI_API_KEY: process.env.OPENAI_API_KEY, MASTRA_PORT: devPort.toString() },
+        });
+        activeProcesses.push({ controller: devController, proc: cli });
+
+        try {
+          await waitForServer(devPort);
+
+          const altBuildFiles = await readdir(join(altRoot, '.mastra', '.build'));
+          expect(altBuildFiles).toContain('entry-0.mjs');
+          await expect(readdir(join(appDir, '.mastra', '.build'))).rejects.toMatchObject({ code: 'ENOENT' });
+        } finally {
+          devController.abort();
+          await Promise.race([cli.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
+          await killOrphanedDevServer(altRoot);
+          await rm(altRoot, { recursive: true, force: true });
+        }
+      },
+      timeout,
+    );
+  });
+
   describe.sequential('build', async () => {
     let port = await getPort();
     let proc: ReturnType<typeof execa> | undefined;
@@ -1045,6 +1084,8 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
 
       // An ordinary workspace package still gets bundled and remains usable by the built server.
       expect(output).not.toMatch(/from ["']@inner\/hello-world(?:\/|["'])/);
+      // Bundled workspace packages must not also be packed and installed with their dependencies (#28303).
+      expect(await readdir(join(outputDir, 'workspace-module'))).toEqual(['inner-subpath-only-1.0.0.tgz']);
       const agentResponse = await fetch(`http://localhost:${port}/api/agents/my-agent`);
       expect(agentResponse.status).toBe(200);
       expect((await agentResponse.json()).name).toBe('My Agent');
@@ -2336,7 +2377,7 @@ assert.equal(subpathOnlyValue, 'c');`,
 
   describe.sequential('pnpm patched dependencies', () => {
     it(
-      'keeps source workspace patches applied in the built output',
+      'keeps source workspace patches and overrides applied in the built output',
       async () => {
         const isolatedFixturePath = await mkdtemp(join(tmpdir(), `mastra-monorepo-patch-test-${pkgManager}-`));
         try {
@@ -2361,9 +2402,10 @@ assert.equal(subpathOnlyValue, 'c');`,
           const workspace = await readFile(workspacePath, 'utf8');
           await writeFile(
             workspacePath,
-            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n`,
+            // read-excel-file asks for fflate ^0.8.3, so only the override can install 0.8.2 (#29192).
+            `${workspace}\npatchedDependencies:\n  unicorn-magic@0.4.0: patches/unicorn-magic.patch\n\noverrides:\n  fflate: 0.8.2\n`,
           );
-          // The new patch entry changes the lockfile config, which CI's default frozen install rejects.
+          // The new patch and override entries change the lockfile config, which CI's default frozen install rejects.
           await execa(pkgManager, ['install', '--no-frozen-lockfile', '--config.minimum-release-age=0'], {
             cwd: isolatedFixturePath,
             env: process.env,
@@ -2386,6 +2428,10 @@ assert.equal(subpathOnlyValue, 'c');`,
           expect(
             await readFile(join(outputDir, 'node_modules', 'unicorn-magic', 'mastra-patch-marker.txt'), 'utf8'),
           ).toContain('patched-by-mastra-e2e');
+
+          const readExcelFileDir = await realpath(join(outputDir, 'node_modules', 'read-excel-file'));
+          const fflate = JSON.parse(await readFile(join(readExcelFileDir, '..', 'fflate', 'package.json'), 'utf8'));
+          expect(fflate.version).toBe('0.8.2');
         } finally {
           await rm(isolatedFixturePath, { recursive: true, force: true });
         }

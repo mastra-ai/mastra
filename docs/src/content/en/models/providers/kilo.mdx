@@ -7,7 +7,7 @@ description: "Browse Kilo Gateway model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/kilo.svg" alt="Kilo Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Kilo Gateway
 
-Access 380 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
+Access 381 Kilo Gateway models through Mastra's model router. Authentication is handled automatically using the `KILO_API_KEY` environment variable.
 
 Learn more in the [Kilo Gateway documentation](https://kilo.ai).
 
@@ -103,7 +103,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 1048576,
     "maxOutput": 943718,
     "inputCost": 0.035,
-    "outputCost": 0.5
+    "outputCost": 0.315
   },
   {
     "model": "kilo/~deepseek/deepseek-pro-latest",
@@ -162,8 +162,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 943718,
-    "inputCost": 0.1495,
-    "outputCost": 7.15
+    "inputCost": 0.1824,
+    "outputCost": 9.3388
   },
   {
     "model": "kilo/~openai/gpt-astra-latest",
@@ -258,8 +258,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.0285,
-    "outputCost": 0.0923
+    "inputCost": 0.0313,
+    "outputCost": 0.0846
   },
   {
     "model": "kilo/~z-ai/glm-latest",
@@ -1206,8 +1206,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 32768,
-    "inputCost": 0.024,
-    "outputCost": 0.1
+    "inputCost": 0.04,
+    "outputCost": 0.15
   },
   {
     "model": "kilo/google/gemma-4-31b-it",
@@ -1220,6 +1220,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 0.1,
     "outputCost": 0.34
+  },
+  {
+    "model": "kilo/google/gemma-4-31b-it:free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 32768,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "kilo/google/lyria-3-clip-preview",
@@ -1340,18 +1352,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 0.3,
     "outputCost": 0.9
-  },
-  {
-    "model": "kilo/inclusionai/ling-3.1-flash-1019-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 262144,
-    "inputCost": null,
-    "outputCost": null
   },
   {
     "model": "kilo/inference-net/schematron-v2-small",
@@ -1505,9 +1505,9 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 0.4,
-    "outputCost": 0.4
+    "maxOutput": 8192,
+    "inputCost": 0.32,
+    "outputCost": 0.32
   },
   {
     "model": "kilo/meta-llama/llama-3.1-8b-instruct",
@@ -1553,7 +1553,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 131072,
-    "maxOutput": 16384,
+    "maxOutput": 128000,
     "inputCost": 0.1,
     "outputCost": 0.32
   },
@@ -3006,8 +3006,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 117964,
-    "inputCost": 0.016,
-    "outputCost": 0.066
+    "inputCost": 0.012,
+    "outputCost": 0.05
   },
   {
     "model": "kilo/openai/gpt-oss-safeguard-20b",
@@ -3366,8 +3366,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 262144,
     "maxOutput": 235929,
-    "inputCost": 0.07,
-    "outputCost": 0.28
+    "inputCost": 0.15,
+    "outputCost": 0.6
   },
   {
     "model": "kilo/qwen/qwen3-coder-flash",
@@ -3401,8 +3401,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 262144,
-    "maxOutput": 16384,
-    "inputCost": 0.09,
+    "maxOutput": 235929,
+    "inputCost": 0.1,
     "outputCost": 1.1
   },
   {
@@ -4066,6 +4066,30 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "kilo/thinkingmachines/inkling-small:free",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "kilo/thinkingmachines/inkling:free",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "kilo/unbiased/pareto-26.10",
     "imageInput": true,
     "audioInput": false,
@@ -4242,7 +4266,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.43,
+    "inputCost": 0.435,
     "outputCost": 0.87
   },
   {
@@ -4427,6 +4451,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "kilo/z-ai/glm-5.3-flashx",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.37,
+    "outputCost": 1.25
+  },
+  {
+    "model": "kilo/z-ai/glm-5.3-flashx-legal",
     "imageInput": true,
     "audioInput": false,
     "videoInput": true,

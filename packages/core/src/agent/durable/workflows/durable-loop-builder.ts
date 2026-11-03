@@ -22,7 +22,12 @@ import type { ShouldPersistSnapshotFn } from '../../../workflows/types';
 import { createStep } from '../../../workflows/workflow';
 import { normalizeToolOutput } from '../../message-list/utils/unwrap-legacy-tool-output';
 import { DURABLE_STOP_WHEN_ERROR_ID, DurableStepIds, DurableAgentDefaults } from '../constants';
-import { isExecutionFenceError, isForeignExecutionContext, withExecutionFence } from '../execution-fence';
+import {
+  isExecutionFenceError,
+  isForeignExecutionContext,
+  watchExecutionLoss,
+  withExecutionFence,
+} from '../execution-fence';
 import { getRunRegistryEntry, globalRunRegistry, takeRunScorerInstances } from '../run-registry';
 import { emitChunkEvent, emitFinishEvent, emitIterationCompleteEvent } from '../stream-adapter';
 import type {
@@ -242,7 +247,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
   /**
    * Engine-aware snapshot pruning. The `running`-only history strip (#20747)
    * keeps what a crash-restart reads back, including `stepResultReads`: steps
-   * that read an earlier step's result via `getStepResult` (reader → sources).
+   * that read an earlier step's result via `getStepResultAsync` (reader → sources).
    * The evented engine also reads persisted step results during normal
    * execution, but the only such reads are the declared ones below, so the
    * strip keeps exactly what it reads. Retaining *all* terminal history instead
@@ -483,6 +488,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // (the evented engine otherwise merges, marks failed, or deletes it).
           isOwnershipLostError: isExecutionFenceError,
           isForeignExecution: isForeignExecutionContext,
+          watchExecutionLoss,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads. The declared reads below cover every
           // same-iteration step-result read (see pruneSnapshotHook).
@@ -584,11 +590,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         })
         // Step 4: Collect tool results and bundle with LLM output for mapping step
         .map(
-          async ({ inputData, getStepResult, getInitData }) => {
+          async ({ inputData, getStepResultAsync, getInitData }) => {
             const toolResults = inputData as DurableToolCallOutput[];
             // Direct read of an earlier step: declared to pruneSnapshotHook above
             // so snapshot pruning keeps it for a crash-restart.
-            const llmOutput = getStepResult(llmExecutionStep.id) as DurableLLMStepOutput;
+            const llmOutput = (await getStepResultAsync(llmExecutionStep.id)) as DurableLLMStepOutput;
             const initData = getInitData() as IterationState;
 
             return {
@@ -958,6 +964,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           persistResumeClaim: true,
           isOwnershipLostError: isExecutionFenceError,
           isForeignExecution: isForeignExecutionContext,
+          watchExecutionLoss,
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads. This loop reads iteration state from workflow
           // `value`, so it has no declared step-result reads (see pruneSnapshotHook).

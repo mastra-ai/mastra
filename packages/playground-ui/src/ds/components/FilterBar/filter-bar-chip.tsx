@@ -473,7 +473,7 @@ function FieldEditor() {
       onQueryChange={setQuery}
       onSelect={onSelect}
     >
-      <SegmentSearchInput placeholder="Change field…" />
+      <SegmentSearchInput placeholder="Change field" />
       <FilterBarOptionList<FilterBarField>
         aria-label="Fields"
         getKey={f => f.id}
@@ -515,7 +515,7 @@ function OperatorEditor() {
       onQueryChange={setQuery}
       onSelect={onSelect}
     >
-      <SegmentSearchInput placeholder="Change operator…" />
+      <SegmentSearchInput placeholder="Change operator" />
       <FilterBarOptionList<FilterBarOperator>
         aria-label="Operators"
         getKey={o => o.id}

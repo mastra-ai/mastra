@@ -65,8 +65,15 @@ export function getTraceAggregateDimensionRule(path: string): TraceAggregateDime
   return undefined;
 }
 
-export type TraceAggregateMeasureKind = 'count' | 'duration' | 'error' | 'tokens' | 'cost';
-export type TraceAggregateMeasureStatistic = 'avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'sum';
+export type TraceAggregateMeasureKind =
+  | 'count'
+  | 'duration'
+  | 'error'
+  | 'tokens'
+  | 'cost'
+  | 'timeToFirstToken'
+  | 'timeToFirstChunk';
+export type TraceAggregateMeasureStatistic = 'avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'sum' | 'count';
 export type TraceAggregateMeasureUnit = 'count' | 'milliseconds' | 'ratio' | 'tokens' | 'currency';
 
 export interface TraceAggregateMeasureRule {
@@ -81,7 +88,14 @@ export interface TraceAggregateMeasureRule {
    * `estimatedCost`. Absent for measures computed from the trace root.
    */
   metricNames?: readonly TokenMetrics[];
+  /**
+   * Nullable span column the measure reads, for `timeToFirstToken.*` and `timeToFirstChunk.*`.
+   * Rows without a value are skipped, never read as 0; `.count` counts the rows that have one.
+   */
+  field?: TraceAggregateTimeToFirstField;
 }
+
+export type TraceAggregateTimeToFirstField = 'timeToFirstTokenMs' | 'timeToFirstChunkMs';
 
 /**
  * Token metric rows that carry the per-call cost. Each total row already holds the sum of its
@@ -124,11 +138,24 @@ const costMeasure = (statistic: 'sum' | 'avg'): TraceAggregateMeasureRule => ({
   metricNames: TRACE_AGGREGATE_COST_METRIC_NAMES,
 });
 
+const timeToFirstMeasure = (
+  kind: 'timeToFirstToken' | 'timeToFirstChunk',
+  statistic: 'avg' | 'min' | 'max' | 'p50' | 'p90' | 'p95' | 'p99' | 'count',
+): TraceAggregateMeasureRule => ({
+  kind,
+  statistic,
+  unit: statistic === 'count' ? 'count' : 'milliseconds',
+  approximate: statistic.startsWith('p'),
+  field: kind === 'timeToFirstToken' ? 'timeToFirstTokenMs' : 'timeToFirstChunkMs',
+});
+
 const TOTAL_TOKEN_METRIC_NAMES = [TokenMetrics.TOTAL_INPUT, TokenMetrics.TOTAL_OUTPUT] as const;
 
 /**
  * Measures for `aggregateTraces()`: the measures computed from the trace root, followed by the
- * token and cost measures.
+ * token and cost measures, then time to first token/chunk. Time-to-first measures read the root
+ * span's value in `aggregateTraces()` (the value `queryTraces()` returns) and each span's own value
+ * in `aggregateSpans()`; they need the `aggregate-time-to-first-measures` store feature.
  * `countDistinct.<field>` is a family keyed by field and is handled by
  * `parseTraceAggregateMeasure` rather than listed here.
  */
@@ -155,6 +182,22 @@ export const TRACE_AGGREGATE_MEASURE_REGISTRY = {
   'tokens.cached.avg': tokensMeasure('avg', [TokenMetrics.INPUT_CACHE_READ]),
   'cost.sum': costMeasure('sum'),
   'cost.avg': costMeasure('avg'),
+  'timeToFirstToken.avg': timeToFirstMeasure('timeToFirstToken', 'avg'),
+  'timeToFirstToken.min': timeToFirstMeasure('timeToFirstToken', 'min'),
+  'timeToFirstToken.max': timeToFirstMeasure('timeToFirstToken', 'max'),
+  'timeToFirstToken.p50': timeToFirstMeasure('timeToFirstToken', 'p50'),
+  'timeToFirstToken.p90': timeToFirstMeasure('timeToFirstToken', 'p90'),
+  'timeToFirstToken.p95': timeToFirstMeasure('timeToFirstToken', 'p95'),
+  'timeToFirstToken.p99': timeToFirstMeasure('timeToFirstToken', 'p99'),
+  'timeToFirstToken.count': timeToFirstMeasure('timeToFirstToken', 'count'),
+  'timeToFirstChunk.avg': timeToFirstMeasure('timeToFirstChunk', 'avg'),
+  'timeToFirstChunk.min': timeToFirstMeasure('timeToFirstChunk', 'min'),
+  'timeToFirstChunk.max': timeToFirstMeasure('timeToFirstChunk', 'max'),
+  'timeToFirstChunk.p50': timeToFirstMeasure('timeToFirstChunk', 'p50'),
+  'timeToFirstChunk.p90': timeToFirstMeasure('timeToFirstChunk', 'p90'),
+  'timeToFirstChunk.p95': timeToFirstMeasure('timeToFirstChunk', 'p95'),
+  'timeToFirstChunk.p99': timeToFirstMeasure('timeToFirstChunk', 'p99'),
+  'timeToFirstChunk.count': timeToFirstMeasure('timeToFirstChunk', 'count'),
 } as const satisfies Record<string, TraceAggregateMeasureRule>;
 
 export type TraceAggregateCanonicalMeasure = keyof typeof TRACE_AGGREGATE_MEASURE_REGISTRY;
