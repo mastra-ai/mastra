@@ -99,7 +99,10 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
     text: executionOutput.output.text,
     content: executionOutput.output.content,
     toolCalls: executionOutput.output.toolCalls,
-    toolResults: executionOutput.toolResults?.map(({ stepSpanData: _stepSpanData, ...result }) => result),
+    // Tracing facts stay off the step records, which `stream.steps` and the finish payload expose.
+    toolResults: executionOutput.toolResults?.map(
+      ({ stepSpanData: _stepSpanData, tracingDelegationFailure: _tracingDelegationFailure, ...result }) => result,
+    ),
     usage: executionOutput.output.usage,
     finishReason: executionOutput.stepResult.reason,
     tripwire: executionOutput.stepResult.tripwire,
