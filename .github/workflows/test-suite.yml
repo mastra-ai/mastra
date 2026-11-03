@@ -21,6 +21,10 @@ on:
         required: false
         type: string
         default: 'true'
+      durable_streams_changed:
+        required: false
+        type: string
+        default: 'false'
     secrets:
       TURBO_TOKEN:
         required: false
@@ -233,10 +237,25 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
+  # Durable takeover runs against real Redis and Postgres. It lives here, not beside
+  # test-suite in prebuild.yml, because merge-reports is the check the ruleset requires:
+  # a job that only reports red on the PR does not stop a merge.
+  durable-streams:
+    name: Durable Stream Tests
+    if: inputs.has_code == 'true' && inputs.durable_streams_changed == 'true'
+    uses: ./.github/workflows/test-durable-streams.yml
+    permissions:
+      contents: read
+    with:
+      head_sha: ${{ inputs.head_sha }}
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
+
   merge-reports:
     name: Merge Test Reports
     runs-on: starsling-ubuntu-26.04
-    needs: [unit-test, affected-unit-test, e2e-test]
+    needs: [unit-test, affected-unit-test, e2e-test, durable-streams]
     if: always()
     permissions:
       actions: read
@@ -280,9 +299,10 @@ jobs:
           UNIT: ${{ needs.unit-test.result }}
           AFFECTED_UNIT: ${{ needs.affected-unit-test.result }}
           E2E: ${{ needs.e2e-test.result }}
+          DURABLE: ${{ needs.durable-streams.result }}
         run: |
           status=0
-          for job in UNIT AFFECTED_UNIT E2E; do
+          for job in UNIT AFFECTED_UNIT E2E DURABLE; do
             result="${!job}"
             echo "$job: $result"
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then

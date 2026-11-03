@@ -387,6 +387,7 @@ jobs:
       has_unit_tests: ${{ needs.affected-tests.outputs.has_unit_tests }}
       e2e_test_files: ${{ needs.affected-tests.outputs.e2e_test_files }}
       run_full: ${{ needs.affected-tests.outputs.run_full }}
+      durable_streams_changed: ${{ needs.affected-tests.outputs.durable_streams_changed }}
     secrets:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -523,19 +524,6 @@ jobs:
           NODE_OPTIONS: '--max_old_space_size=8192'
           DB_URL: 'postgresql://postgres:postgres@localhost:5432/mastra'
 
-  durable-streams-test:
-    name: Durable Stream Tests
-    needs: [changes, affected-tests, prebuild]
-    if: always() && github.repository == 'mastra-ai/mastra' && needs.affected-tests.outputs.durable_streams_changed == 'true' && needs.prebuild.result == 'success'
-    uses: ./.github/workflows/test-durable-streams.yml
-    permissions:
-      contents: read
-    with:
-      head_sha: ${{ needs.changes.outputs.head_sha }}
-    secrets:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
-
   # The Changesets release PR gates every release, so a red suite there should not wait for
   # someone to open the PR. It alerts once when the suite goes red and once when it is green
   # again, not on every push in between. Calls (e.g. the alpha cron) send their own alert.
@@ -552,7 +540,6 @@ jobs:
         combined-stores-tests,
         workspace-tests,
         memory-test,
-        durable-streams-test,
       ]
     if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')
     runs-on: starsling-ubuntu-26.04
