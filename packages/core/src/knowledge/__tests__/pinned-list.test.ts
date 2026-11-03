@@ -180,6 +180,24 @@ describe('Knowledge pinned listings', () => {
     expect(whole!.text).not.toContain('knowledge_list from');
   });
 
+  it('lists more than one store page of children at every level when the budget has room', async () => {
+    const { knowledge, storage, docs, context } = await seed([{ list: 'docs:$orgId#hub', depth: 2 }], 8_000);
+    const hub = await storage.createPage({ parentId: docs.id, key: 'hub', name: 'Hub', provenance: host });
+    const children = [];
+    for (let i = 0; i < 121; i++) {
+      children.push(await storage.createPage({ parentId: hub.id, key: `c${i}`, name: `C${i}`, provenance: host }));
+    }
+    const wide = children[0]!;
+    for (let j = 0; j < 121; j++) {
+      await storage.createPage({ parentId: wide.id, key: `g${j}`, name: `G${j}`, provenance: host });
+    }
+    const [listing] = await knowledge.__deliveredPins(context(['org:acme']));
+    const lines = listing!.text.split('\n');
+    expect(lines.filter(line => line.startsWith('- '))).toHaveLength(121);
+    expect(lines.filter(line => line.startsWith('  - '))).toHaveLength(121);
+    expect(listing!.text).not.toContain('knowledge_list from');
+  });
+
   it('shares the budget with pinned pages: both always delivered, an equal share each when they overflow', async () => {
     const { knowledge, context } = await seed([{ list: 'docs:$orgId#guides', depth: 2 }, 'docs:$orgId#guides/agents']);
     const pins = await knowledge.__deliveredPins(context(['org:acme']));
