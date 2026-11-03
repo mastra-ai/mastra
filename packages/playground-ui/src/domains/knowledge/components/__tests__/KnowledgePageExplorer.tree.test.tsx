@@ -414,12 +414,14 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(graphNode('first').textContent).toContain('First article');
     });
 
-    it('counts the children it still does not draw', () => {
-      renderWithProviders(<Host requested={[]} siteChildCount={5} />);
+    it('counts the children it still does not draw on the "+N more" circle, not in a line that shifts the layout', () => {
+      const { container } = renderWithProviders(<Host requested={[]} siteChildCount={5} />);
       fireEvent.click(row('site:mastra'));
-      expect(screen.getByTestId('knowledge-graph-more-children').textContent).toBe(
-        '+3 more pages under site:mastra not drawn. Open the tree to see them all.',
+      expect(document.querySelector('.react-flow__node [data-page-id="rest:site"]')?.getAttribute('title')).toBe(
+        'Show 3 more of 3',
       );
+      expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
+      expect(container.textContent ?? '').not.toMatch(/pages under .* not drawn/);
     });
 
     describe('when the "+N more" circle is clicked', () => {
@@ -445,12 +447,6 @@ describe('KnowledgePageExplorer tree with child counts', () => {
         clickRest();
         expect(restNode()).toBeNull();
       });
-    });
-
-    it('says nothing more when every child is drawn', () => {
-      renderWithProviders(<Host requested={[]} />);
-      fireEvent.click(row('site:mastra'));
-      expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
     });
   });
 
@@ -505,12 +501,11 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(within(row('site:mastra')).getByTestId('knowledge-tree-count').textContent).toBe('1000+');
     });
 
-    it('says so in the graph instead of a short count of what is left', () => {
-      renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
+    it('adds no line above the graph, so refocusing never moves it', () => {
+      const { container } = renderWithProviders(<Host requested={[]} siteChildCount={1000} siteCapped />);
       fireEvent.click(row('site:mastra'));
-      expect(screen.getByTestId('knowledge-graph-more-children').textContent).toBe(
-        '1000+ pages under site:mastra, 2 drawn. Open the tree to see them all.',
-      );
+      expect(screen.queryByTestId('knowledge-graph-more-children')).toBeNull();
+      expect(container.textContent ?? '').not.toMatch(/pages under .* drawn/);
     });
   });
 });

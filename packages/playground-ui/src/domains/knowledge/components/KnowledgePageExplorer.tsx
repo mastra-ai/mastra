@@ -999,14 +999,6 @@ export function KnowledgePageExplorer({
           The graph shows the first {graph.pages.length} pages. Open the tree or search to reach the rest.
         </p>
       ) : null}
-      {focusedInGraph && children && (children.hidden > 0 || focusedInGraph.childCountCapped) ? (
-        <p className="text-ui-sm text-muted-foreground" data-testid="knowledge-graph-more-children">
-          {focusedInGraph.childCountCapped
-            ? `${childCountLabel(focusedInGraph)} pages under ${focusedInGraph.name}, ${children.drawn} drawn.`
-            : `+${children.hidden} more ${children.hidden === 1 ? 'page' : 'pages'} under ${focusedInGraph.name} not drawn.`}{' '}
-          Open the tree to see them all.
-        </p>
-      ) : null}
       {selectedPageId && !showPage && isNotFound(selected.error) ? (
         <p role="alert" className="text-ui-sm text-destructive-foreground">
           Page not found. The linked page may have been deleted or merged.
