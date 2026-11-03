@@ -2,9 +2,11 @@ import type { InstalledPhaseInfo } from '../../../api/types';
 import type { SessionRowStatus } from '../workspaces/services/sessionStatus';
 import type { FactoryDecisionSummary } from './services/decisions';
 
+/** A card has one status row, so every announcement it could make resolves to one of these. */
 export type BoardCardStatus =
   | { kind: 'idle' }
   | { kind: 'waiting'; label: string; decisionId: string }
+  /** Triage classed the card as non-bug work, so it waits on a maintainer's call. */
   | { kind: 'held'; label: string }
   | { kind: 'busy'; label: string }
   | { kind: 'error'; label: string; detail?: string; retryDecisionId?: string };
@@ -22,18 +24,31 @@ export interface BoardCardState {
 }
 
 export interface BoardCardStateInput {
+  /** Run a rule parked on this card, held until someone releases it. */
   proposal?: { label: string; decisionId: string };
+  /** Destination of an in-flight stage move. */
   moving?: { stage: string; label: string };
+  /** Status text for the window between the click and the session mutation. */
   preparing?: string;
   retryRequested?: boolean;
+  /** Rule effect the server is still working through, or gave up on. */
   decision?: FactoryDecisionSummary;
+  /** Why the server refused the last move. */
   transitionReason?: string;
+  /** What the run registry and workspace records say about the card's bound sessions. */
   sessionStatus?: SessionRowStatus;
+  /** Triage left the card in Intake for a person to decide on. */
   held?: boolean;
 }
 
 const FREE: BoardCardOwner = { kind: 'free' };
 
+/**
+ * One pass over the card's inputs, freshest intent first: your own in-flight
+ * click outranks a refused move, which outranks what the server is doing on its
+ * own, which outranks a person's pending call. A live or parked session holds
+ * the card over any queued effect.
+ */
 export function boardCardState(input: BoardCardStateInput): BoardCardState {
   const { decision, sessionStatus, transitionReason } = input;
   const request = yourRequest(input);
@@ -106,7 +121,7 @@ function automationOnCard(
       owner: FREE,
     };
   }
-
+  // The server retries a failure on its own, so it offers no button.
   if (retriesAfterFailure(decision)) {
     return {
       status: { kind: 'error', label: `${copy.failed}. Retrying…`, detail },
@@ -120,7 +135,8 @@ function automationOnCard(
 
 function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus {
   if (sessionIsLive(input.sessionStatus)) return { kind: 'idle' };
-
+  // A held card's live question is the maintainer's decision, even when a run
+  // has been suggested for it: the card cannot start that run until it is accepted.
   if (input.held) {
     return { kind: 'held', label: 'Triaged and waiting for you' };
   }
@@ -130,6 +146,12 @@ function statusWhenNothingInFlight(input: BoardCardStateInput): BoardCardStatus 
   return { kind: 'idle' };
 }
 
+/**
+ * The sidebar's reading of a card's `waiting` and `error` kinds: a run parked
+ * for approval, or an effect that failed for good. A retry the server still
+ * owns is not a person's turn, and neither is a proposal that an effect in
+ * flight already outranks on the card.
+ */
 export function itemAwaitsPerson(
   proposal: FactoryDecisionSummary | undefined,
   effect: FactoryDecisionSummary | undefined,
@@ -138,6 +160,7 @@ export function itemAwaitsPerson(
   return proposal !== undefined;
 }
 
+/** The system a linked card is synced with, named the way that system names the thing. */
 function linkedSourceName(source: FactoryDecisionSummary['source']): string {
   switch (source) {
     case 'github-issue':
@@ -151,6 +174,7 @@ function linkedSourceName(source: FactoryDecisionSummary['source']): string {
     case 'linear-issue':
       return 'Linear issue';
     default:
+      // Every linked-card decision carries its source; only a manual card would land here.
       return 'card';
   }
 }
@@ -185,7 +209,10 @@ function automationCopy(decision: Pick<FactoryDecisionSummary, 'type' | 'source'
   }
 }
 
-// Dispatcher leases can outlive the run.
+/**
+ * The lease outlives kickoff until the dispatcher sees the run end: shown as a row it would double
+ * the wick for the whole run and linger on a card the agent already moved to Done.
+ */
 function runAnnouncedByWick(
   decision: Pick<FactoryDecisionSummary, 'type' | 'status'>,
   sessionStatus: SessionRowStatus | undefined,
@@ -193,7 +220,13 @@ function runAnnouncedByWick(
   return decision.type === 'invokeSkill' && decision.status === 'leased' && sessionIsLive(sessionStatus);
 }
 
-// Rematerialized decisions reuse retry without a failed attempt.
+/**
+ * `retry` alone does not mean anything went wrong: a linked-card decision that
+ * already succeeded is deliberately reset to `retry` when its card is
+ * rematerialized, so the card gets re-filed. That replay has no attempt behind
+ * it and no error, and calling it a failure makes the board cry wolf. A real
+ * failure has been tried at least once, or left an error to show.
+ */
 function retriesAfterFailure(decision: Pick<FactoryDecisionSummary, 'status' | 'attempts' | 'lastError'>): boolean {
   return decision.status === 'retry' && (decision.attempts > 0 || Boolean(decision.lastError));
 }

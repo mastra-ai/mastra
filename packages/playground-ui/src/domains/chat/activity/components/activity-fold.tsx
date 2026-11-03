@@ -33,6 +33,7 @@ export interface ActivityFoldProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   foldable: boolean;
+  /** Reads at answer size. */
   prominent?: boolean;
   slot?: string;
   children: ReactNode;
@@ -64,6 +65,7 @@ function foldStatus(live: boolean, failed: boolean): ActivityStatus {
   return failed ? 'error' : 'idle';
 }
 
+/** A line that says what its calls are doing, or did, and folds what it summarises. */
 export function ActivityFold({
   calls,
   indicator = false,

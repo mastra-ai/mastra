@@ -17,6 +17,11 @@ function projectNote(bindings: IntakeSourceBinding[]): string | undefined {
   return undefined;
 }
 
+/**
+ * Selected Jira projects with their routing. Unlike other providers, one Jira
+ * project can feed several factories: each takes either all issues or only the
+ * issues carrying its labels.
+ */
 export function JiraRoutedSourcePicker({ factories, ...picker }: SourcePickerProps & { factories: Factory[] }) {
   const bindingsQuery = useIntakeBindingsQuery();
   const bindings = bindingsQuery.data;

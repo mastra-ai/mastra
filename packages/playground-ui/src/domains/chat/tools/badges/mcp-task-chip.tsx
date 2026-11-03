@@ -17,6 +17,7 @@ const STATUS: Record<McpTaskStatus, { label: string; variant: BadgeVariant; indi
   cancelled: { label: 'cancelled', variant: 'neutral' },
 };
 
+/** Now, every second, until `endedAt` is known. */
 function useClock(endedAt: number | undefined) {
   const [now, setNow] = useState(Date.now);
   useEffect(() => {
@@ -34,6 +35,7 @@ const formatElapsed = (ms: number) => {
   return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 };
 
+/** `task · working · 0:42` for a tool call that continued as an MCP task, with its task id to copy. */
 export function McpTaskChip({ task }: { task: McpTaskView }) {
   const { label, variant, indicator } = STATUS[task.status];
   const terminal = isTerminalMcpTaskStatus(task.status);
@@ -60,6 +62,7 @@ export function McpTaskChip({ task }: { task: McpTaskView }) {
 
 const BACKGROUND_POLL_MS = 2_000;
 
+/** How the Mastra background task ended, as the MCP task's status; undefined while it runs. */
 const BACKGROUND_END: Record<string, McpTaskStatus | undefined> = {
   completed: 'completed',
   failed: 'failed',
@@ -67,6 +70,11 @@ const BACKGROUND_END: Record<string, McpTaskStatus | undefined> = {
   cancelled: 'cancelled',
 };
 
+/**
+ * The chip for a call deferred to a Mastra background task. The chat stream ends with the turn, so
+ * the task's later progress and its end never reach this card; until the progress shows the task
+ * ended, the background task is polled for how it ended.
+ */
 export function BackgroundMcpTaskChip({ task, backgroundTaskId }: { task: McpTaskView; backgroundTaskId: string }) {
   const client = useMastraClient();
   const ended = isTerminalMcpTaskStatus(task.status);
@@ -78,6 +86,8 @@ export function BackgroundMcpTaskChip({ task, backgroundTaskId }: { task: McpTas
   });
   const backgroundEnd = ended ? undefined : BACKGROUND_END[data?.status ?? ''];
   const completedAt = data?.completedAt ? new Date(data.completedAt).getTime() : undefined;
+  // The call's progress stops reaching the chat with the turn, so a question answered later still
+  // reads `input_required` there; the background task says whether it is waiting or working.
   const waiting =
     data?.status === 'suspended' ? 'input_required' : data?.status === 'running' ? 'working' : task.status;
 

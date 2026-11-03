@@ -144,6 +144,7 @@ describe('Review card action lifecycle', () => {
 
     transitionGate.resolve();
     await waitFor(() => expect(data.decisionRefreshStarted).toBe(true));
+    // The transition has committed, but its decisions query is still in flight.
     expect(within(reviewing).getByRole('button', { name: 'Moving…' })).toBeDisabled();
     decisionsGate.resolve();
     await waitForMutationsIdle(client);

@@ -4,6 +4,7 @@ import { orderedSignals, signalDescription, signalLabel } from './signal-formatt
 import { InfoTooltip } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt';
 
+/** Info tooltip for first-time viewers: signals → themes → snapshots. */
 export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: readonly SignalCatalogEntry[] }) {
   const enabledSignals = orderedSignals(
     signalCatalog,

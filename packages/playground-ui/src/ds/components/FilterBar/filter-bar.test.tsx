@@ -367,6 +367,7 @@ describe('FilterBar', () => {
         await screen.findByRole('option', { name: 'Running' });
         const draftNode = document.querySelector('[data-slot="filter-bar-chip"][data-draft]');
         expect(draftNode).not.toBeNull();
+        // The draft is chrome only: the consumer's value is untouched until the value is picked.
         expect(onChange).not.toHaveBeenCalled();
 
         key('Enter');
@@ -399,6 +400,8 @@ describe('FilterBar', () => {
         expect(committed.hasAttribute('data-shine')).toBe(false);
       });
 
+      // Chips already there when the bar mounts (a page opening with its filters) must sit still:
+      // growing them from zero width would slide every control after them across the toolbar.
       it('skips the entrance animation for chips present when the bar mounts', async () => {
         render(<Harness initial={[{ id: 'a', fieldId: 'status', operatorId: 'is', value: 'Failed' }]} />);
         const preexisting = screen.getByRole('group', { name: 'Status is Failed' });
@@ -417,6 +420,8 @@ describe('FilterBar', () => {
       });
 
       it('keeps the draft chip element when the consumer derives item ids itself', async () => {
+        // Consumers that round-trip filters through a URL rebuild items on every change, so the
+        // id they hand back is theirs, not ours. `createItemId` lets the draft carry that id up front.
         function DerivedIds() {
           const [fieldIds, setFieldIds] = useState<string[]>([]);
           const items = fieldIds.map(fieldId => ({ id: fieldId, fieldId, operatorId: 'is', value: 'Running' }));
@@ -450,6 +455,8 @@ describe('FilterBar', () => {
       });
 
       it('keeps showing the committed chip while the consumer has not reflected it in value yet', async () => {
+        // URL-backed consumers update `value` a tick later (router round trip). The chip must not
+        // disappear in between, and must still be the same element once value catches up.
         let flush: (() => void) | undefined;
         function Deferred() {
           const [items, setItems] = useState<FilterBarItem[]>([]);
@@ -537,9 +544,9 @@ describe('FilterBar', () => {
       type('tags');
       key('Enter');
       await screen.findByRole('option', { name: 'prod' });
-      key('Enter');
+      key('Enter'); // toggle prod
       key('ArrowDown');
-      key('Enter');
+      key('Enter'); // toggle staging
       expect(onChange).not.toHaveBeenCalled();
       key('Enter', { ctrlKey: true });
       expect(argAt(onChange, 0, 0)[0]).toMatchObject({
@@ -574,6 +581,7 @@ describe('FilterBar', () => {
         expect(onChange).not.toHaveBeenCalled();
         expect(screen.getByRole('option', { name: 'thread-b' })).toBeTruthy();
 
+        // A value still in the input is kept by Done rather than dropped.
         type('thread-c');
         fireEvent.click(screen.getByRole('button', { name: /^Done/ }));
         expect(argAt(onChange, 0, 0)[0]).toMatchObject({
@@ -750,6 +758,7 @@ describe('FilterBar', () => {
       await screen.findByText('No matching value.');
       key('Enter');
       expect(onChange).not.toHaveBeenCalled();
+      // The rejected value must not close or reset the draft.
       const input = getInput();
       expect(input.dataset.step).toBe('value');
       expect(input.getAttribute('aria-expanded')).toBe('true');
@@ -926,6 +935,7 @@ describe('FilterBar', () => {
       expect(document.activeElement).toBe(within(secondChip).getByRole('combobox', { name: 'Operator: is' }));
       pressActive({ key: 'ArrowLeft' });
       expect(document.activeElement).toBe(screen.getByRole('combobox', { name: 'Field: Trace ID' }));
+      // Across chips
       pressActive({ key: 'ArrowLeft' });
       expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Remove Status filter' }));
 
@@ -1111,6 +1121,7 @@ describe('FilterBar', () => {
       { id: 'b', fieldId: 'traceId', operatorId: 'is', value: 'x' },
     ];
 
+    // jsdom has no Web Animations; emulate one animation whose `finished` we control.
     const mockAnimations = () => {
       let finish!: () => void;
       const finished = new Promise<void>(resolve => {
@@ -1134,6 +1145,7 @@ describe('FilterBar', () => {
         expect(leavingChip?.dataset.leaving).toBe('true');
         expect(leavingChip?.getAttribute('aria-hidden')).toBe('true');
         expect(leavingChip?.querySelector('[role="combobox"], button')).toBeNull();
+        // Still first in DOM order; live chip untouched.
         expect(liveChip?.dataset.leaving).toBeUndefined();
 
         finish();
@@ -1200,6 +1212,7 @@ describe('FilterBar', () => {
       expect(resolver).not.toHaveBeenCalled();
       key('Enter');
 
+      // Base UI's Status live region appends an invisible marker to its text on mount.
       await screen.findByText(/Loading…/);
       await screen.findByRole('option', { name: 'alpha' });
       expect(resolver).toHaveBeenCalledTimes(1);
@@ -1298,7 +1311,7 @@ describe('FilterBar', () => {
             operators: ['is'],
             suggestions: async ({ query }) => {
               calls.push(query);
-              rerender(n => n + 1);
+              rerender(n => n + 1); // like a story/consumer logging calls into state
               return [{ value: 'alpha' }];
             },
           },
@@ -1404,6 +1417,7 @@ describe('FilterBar', () => {
         render(<ExpressionHarness initial={EXPRESSION} />);
         expect(getAdvancedChips()).toHaveLength(1);
         expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
+        // Sub-chips live in the (closed) popover, not in the bar.
         expect(screen.queryByRole('group', { name: 'Tags prod' })).toBeNull();
         expect(getLogicToggles()).toHaveLength(0);
       });
@@ -1437,6 +1451,7 @@ describe('FilterBar', () => {
         expect(input.dataset.target).toBe('g');
         expect(input.placeholder).toBe('Add condition');
         expect(editor.contains(input)).toBe(true);
+        // No nested "Advanced filter…" option inside the popover.
         input.focus();
         await screen.findByRole('option', { name: 'Trace ID' });
         expect(screen.queryByRole('option', { name: 'Advanced filter…' })).toBeNull();
@@ -1482,6 +1497,7 @@ describe('FilterBar', () => {
         render(<ExpressionHarness initial={EXPRESSION} onChange={onChange} />);
         const editor = await openPopover();
         fireEvent.click(within(editor).getByRole('button', { name: 'Group' }));
+        // The new group's input opens its typeahead, which aria-hides the rest of the popover.
         key('Escape');
         const card = editor.querySelector('[data-slot="filter-bar-editor-nested"]') as HTMLElement;
         await waitFor(() => expect(within(card).getByText('0 conditions')).toBeTruthy());
@@ -1506,9 +1522,11 @@ describe('FilterBar', () => {
         const editor = await openPopover();
         fireEvent.click(within(editor).getAllByRole('button', { name: 'Remove Tags filter' })[0]);
         fireEvent.click(within(editor).getByRole('button', { name: 'Remove Tags filter' }));
+        // Empty group persists while editing…
         expect(argAt(onChange, 1, 0).nodes[1]).toMatchObject({ id: 'g', nodes: [] });
         expect(getAdvancedChips()).toHaveLength(1);
 
+        // …and disappears on close.
         fireEvent.keyDown(editor, { key: 'Escape' });
         await waitFor(() => expect(argAt(onChange, 2, 0).nodes.map((n: { id: string }) => n.id)).toEqual(['a', 'd']));
         await waitFor(() => expect(getAdvancedChips()).toHaveLength(0));
@@ -1547,6 +1565,7 @@ describe('FilterBar', () => {
         expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('field');
         pressActive({ key: 'ArrowLeft' });
         expect(screen.getByRole('group', { name: 'Status is Error' }).contains(document.activeElement)).toBe(true);
+        // Back the other way: from the Status remove button onto the advanced chip, then past it.
         pressActive({ key: 'ArrowRight' });
         expect(advanced.contains(document.activeElement)).toBe(true);
         expect((document.activeElement as HTMLElement).dataset.filterBarSegment).toBe('field');
@@ -1580,6 +1599,9 @@ describe('FilterBar', () => {
   });
 
   describe('when the consumer keeps one filter per field', () => {
+    // URL-backed pages store one filter per field and rebuild items with `id: fieldId`, so a
+    // second chip on the same field could never be represented: picking that field again
+    // must update its chip instead.
     function FieldKeyed({ initial = [] }: { initial?: FilterBarItem[] }) {
       const [byField, setByField] = useState(() => new Map(initial.map(item => [item.fieldId, item])));
       const items = [...byField.values()].map(item => ({ ...item, id: item.fieldId }));
@@ -1625,9 +1647,9 @@ describe('FilterBar', () => {
       type('tags');
       key('Enter');
       await screen.findByRole('option', { name: 'prod' });
-      key('Enter');
+      key('Enter'); // toggle prod, already on the chip
       key('ArrowDown');
-      key('Enter');
+      key('Enter'); // toggle staging
       key('Enter', { ctrlKey: true });
 
       expect(chipLabels()).toEqual(['Tags prod, staging']);

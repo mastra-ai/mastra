@@ -114,6 +114,8 @@ function navInteractiveRow({
   isActive?: boolean;
   className: string;
 }) {
+  // The current row is announced, not merely tinted: its fill is the only thing that says
+  // "you are here", and a fill says nothing to a screen reader.
   const current = isActive ? ('page' as const) : undefined;
   const caret =
     link?.opensView && state !== 'collapsed' ? <ChevronRightIcon aria-hidden="true" className="!size-3.5" /> : null;

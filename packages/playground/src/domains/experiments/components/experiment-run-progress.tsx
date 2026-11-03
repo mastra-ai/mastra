@@ -11,6 +11,7 @@ export interface ExperimentRunProgressProps {
   experiment: DatasetExperiment;
 }
 
+/** Stands in for the KPIs and results while a run is queued or in progress, which would only show partial data. */
 export function ExperimentRunProgress({ experiment }: ExperimentRunProgressProps) {
   const { status, totalItems, succeededCount, failedCount, startedAt } = experiment;
   const now = useNow();
@@ -18,6 +19,7 @@ export function ExperimentRunProgress({ experiment }: ExperimentRunProgressProps
   const noun = totalItems === 1 ? 'item' : 'items';
   const isQueued = status === 'pending';
 
+  // Whole seconds keep the counter steady; a negative value means clock skew, so it is dropped.
   const elapsedMs = startedAt ? Math.floor((now - new Date(startedAt).getTime()) / 1000) * 1000 : undefined;
   const elapsed = !isQueued && elapsedMs !== undefined ? formatDuration(elapsedMs) : undefined;
 

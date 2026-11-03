@@ -185,6 +185,8 @@ export function SignInPage() {
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
   const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
+  // A cached signed-in result may predate the redirect here. Check the cookie
+  // again before sending the user back into the protected app.
   if (auth.isPending || !auth.isFetchedAfterMount) return <AuthPendingSkeleton />;
 
   const canReturnToApp = auth.data && (!auth.data.authEnabled || auth.data.authenticated);

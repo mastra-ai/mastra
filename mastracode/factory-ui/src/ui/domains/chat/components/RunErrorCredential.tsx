@@ -8,6 +8,10 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import { useModelCredential } from '../hooks/useModelCredential';
 import { HolderBadge } from './StatusLine/ModelCredential';
 
+/**
+ * Only the latest failure, while the session is still on the failed model: older cards may predate a
+ * credential change. A failure names its model without the provider, so a name two providers share stays unattributed.
+ */
 export function RunErrorCredential({ entryId, modelId }: { entryId: string; modelId: string }) {
   const transcript = useChatTranscript();
   const { activeModelId } = useChatModels();

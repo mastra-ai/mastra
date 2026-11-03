@@ -195,6 +195,9 @@ jobs:
       - name: Run lint and format checks
         run: pnpm lint
 
+      - name: Check UI copy
+        run: pnpm lint:ui-copy
+
   check-bundle:
     name: Validate build outputs
     needs: changes

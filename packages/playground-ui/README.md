@@ -536,12 +536,13 @@ See DataDisplay/Meter in Storybook for the billing states. Feedback/Dialog’s R
 The package ships its design-system lint rules as an [oxlint](https://oxc.rs/docs/guide/usage/linter) JS plugin that apps on the design system can enable. Load the plugin and spread the recommended rules into your `oxlint.config.ts`:
 
 ```ts
-import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { copyRuleExclusions, recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
 import { defineConfig } from 'oxlint';
 
 export default defineConfig({
   jsPlugins: ['@mastra/playground-ui/oxlint'],
   rules: { ...playgroundUiRules },
+  overrides: [copyRuleExclusions],
 });
 ```
 
@@ -566,6 +567,10 @@ The copy rules inspect JSX text, copy props, copy-named fields and helpers such 
 Code, preformatted content, Markdown sources, agent prompts, tool descriptions, and technical style or schema fields are excluded. JSX source indentation is normalized before checking whitespace. The rules report without automatic fixes because a metadata row and a sentence need different replacements.
 
 In this workspace, the copy rules apply only to the `src` trees in Playground, Playground UI, and Factory UI. Tests, stories, fixtures, and generated source are excluded.
+
+Both rules are part of `recommended`. Consumers that need only these rules can use `copyRules`. Put `copyRuleExclusions` after the rule-enabling override to keep authored UI copy separate from test and story content.
+
+Run `pnpm lint:ui-copy` from the repository root to check all three UI source trees with only the copy rules. CI runs the same check. Documentation prose keeps its existing Vale and Remark checks.
 
 ## Documentation
 

@@ -12,22 +12,28 @@ import type { BoardStageId } from './stages';
 
 export type IntakeSource = 'github' | 'github-prs' | 'gitlab-prs' | 'gitlab' | 'linear' | 'jira' | 'incidentio';
 
+/** What a candidate feed exposes to the column rendering it. */
 export interface IntakeFeed {
   error: Error | null;
+  /** Set when the failure came from paging, not from the stored pages. */
   isFetchNextPageError?: boolean;
   hasNextPage?: boolean;
   isFetchingNextPage?: boolean;
   fetchNextPage: () => unknown;
   refetch: () => unknown;
+  /** Retries only the failed provider in a combined feed. */
   retryFailed?: () => unknown;
 }
 
+/** A live GitHub/Linear issue or PR that has not been materialized as a work item. */
 export interface BoardCandidate {
   sourceKey: string;
   source: WorkItemSource;
   title: string;
   url: string;
+  /** Meta fields under the title, e.g. `#12`, `alice`, and `opened 3 days ago`. */
   meta: readonly string[];
+  /** Column the candidate is offered in: everything starts in Intake (auto-triaged issues in Triage). */
   column: BoardStageId;
   metadata: Record<string, unknown>;
 }

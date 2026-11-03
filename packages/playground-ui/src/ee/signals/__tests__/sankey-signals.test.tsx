@@ -81,6 +81,8 @@ function ControlledSankeySignals({
     dateTo,
   );
   const snapshots = [...(snapshotsQuery.data?.snapshots ?? [])].sort((left, right) => left.ordinal - right.ordinal);
+  // Mirror the real parent: derive the frame without membership filtering and
+  // only mount SankeySignals once a real snapshot id exists.
   const frameId = selectedFrameId ?? snapshots[0]?.snapshotId;
   if (snapshotsQuery.isPending) return <SignalsLoadingSkeleton />;
   if (snapshotsQuery.isError) {
@@ -351,6 +353,7 @@ describe('SankeySignals', () => {
         ),
         http.get(`${BASE_URL}/api/learning/entities/support-agent/theme-flow`, async ({ request }) => {
           const snapshotId = new URL(request.url).searchParams.get('snapshotId');
+          // The selected snapshot resolves; its prefetched neighbor never does.
           if (snapshotId === 'snapshot-1') await new Promise(() => {});
           return HttpResponse.json(fourStageThemeFlowResponse);
         }),
@@ -407,7 +410,10 @@ describe('SankeySignals', () => {
           .getAllByText(label)
           .find(element => element.tagName === 'text')
           ?.getAttribute('text-anchor');
+      // Outcome is now the leftmost column: its labels must use first-column
+      // anchoring so they don't extend past the chart's left edge.
       expect(labelAnchor('Request resolved')).toBe('start');
+      // Sentiment is the last column: labels anchor to the right edge.
       expect(labelAnchor('Frustrated user')).toBe('end');
     });
 
@@ -633,6 +639,7 @@ describe('SankeySignals', () => {
       for (const label of ['Goal', 'Outcome', 'Behavior', 'Sentiment']) {
         expect(within(headerRow).getByLabelText(`Reorder ${label}`)).not.toBeNull();
       }
+      // The header row replaces the SVG column labels, so headings never double up.
       expect(within(chart).getAllByText('GOAL')).toHaveLength(1);
       expect(within(chart).queryByText('RIBBON WIDTH = TRACE COUNT')).toBeNull();
       expect(within(chart).queryByText('CLICK TO ISOLATE THEME')).toBeNull();
@@ -868,6 +875,7 @@ describe('SankeySignals', () => {
 
       expect(await screen.findByText('Reloading snapshots for new trace signal perspective…')).not.toBeNull();
       expect(screen.queryByTestId('signals-loading-skeleton')).toBeNull();
+      // The headers stay where they were dropped while the current chart remains visible during the request.
       expect(columnHeaderLabels()).toEqual(['GOAL', 'BEHAVIOR', 'OUTCOME', 'SENTIMENT']);
       expect(screen.getByTestId('sankey-order-transition').getAttribute('aria-busy')).toBe('true');
 
@@ -1248,6 +1256,8 @@ describe('SankeySignals', () => {
       const ticks = within(track).getAllByRole('button');
       const positions = ticks.map(tick => Number.parseFloat(tick.style.left));
 
+      // Range spans Jul 1 04:00 → Jul 8 00:00. Landmark 4 (Jul 7 18:00) sits in
+      // the final burst, so it must land near the end rather than at 75%.
       expect(positions[0]).toBe(0);
       expect(positions[positions.length - 1]).toBe(100);
       expect(positions[3]).toBeGreaterThan(90);

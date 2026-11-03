@@ -88,7 +88,7 @@ function Dropzone({ onFileSelect, disabled }: { onFileSelect: (file: File) => vo
       if (selected) {
         onFileSelect(selected);
       }
-      // Same-file picks need an input reset.
+      // Reset input so the same file can be selected again
       e.target.value = '';
     },
     [onFileSelect],

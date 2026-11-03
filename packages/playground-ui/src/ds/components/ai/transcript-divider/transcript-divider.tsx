@@ -4,13 +4,17 @@ import { Txt } from '@/ds/components/Txt';
 export interface TranscriptDividerProps {
   label: string;
   title?: string;
+  /** Trailing content (e.g. tabs or actions), shown after the label behind a `·` separator. */
   children?: ReactNode;
+  /** Hides the visible label (and its separator); it stays the accessible name. */
   hideLabel?: boolean;
 }
 
 export function TranscriptDivider({ label, title, children, hideLabel = false }: TranscriptDividerProps) {
   if (!label) return null;
 
+  // A `separator`'s children are presentational, which would hide interactive children from
+  // assistive tech; with children the divider is a labelled group instead.
   return (
     <div
       className="flex items-center gap-3 py-3"

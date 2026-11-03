@@ -10,6 +10,11 @@ import type { DisconnectedLinearWorkspace } from './intakeSourceGroups';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { settingsRowLayout } from './common/settings-row-layout';
 
+/**
+ * Saved Linear sources from workspaces that are no longer connected. Their
+ * names can't be fetched, so each workspace collapses to one row; the saved
+ * sources and their routing stay put so reconnecting resumes intake.
+ */
 export function DisconnectedLinearWorkspaces({
   workspaces,
   pending,

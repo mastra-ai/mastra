@@ -33,7 +33,7 @@ function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: Cl
 }
 
 export interface ScoreDataPanelProps {
-  // Keep mounted for the drawer exit animation.
+  /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
   score?: ClientScoreRowData;
   onClose: () => void;
   onPrevious?: () => void;

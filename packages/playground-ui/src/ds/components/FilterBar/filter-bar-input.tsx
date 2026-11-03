@@ -31,6 +31,7 @@ type Item = FilterBarField | FilterBarOperator | FilterBarOption;
 const getItemLabel = (item: Item) => ('label' in item && item.label ? item.label : 'value' in item ? item.value : '');
 
 const EMPTY_ITEMS: readonly Item[] = [];
+/** Pinned last entry of the field list that spawns an advanced filter (an `or` group) instead of a filter. */
 const ADVANCED_FIELD_ID = '__filter-bar-advanced__';
 const ADVANCED_FIELD: FilterBarField = {
   id: ADVANCED_FIELD_ID,
@@ -43,10 +44,19 @@ export type FilterBarInputProps = {
   placeholder?: string;
   className?: string;
   'aria-label'?: string;
+  /**
+   * Group this instance commits into; omit for the bar's own input. Only the instance whose
+   * `groupId` matches the provider's `inputTarget` renders, so a single input is ever mounted.
+   */
   groupId?: string;
+  /** Called when Escape is pressed on an empty query inside a group, after the input hands back to the bar. */
   onLeave?: () => void;
 };
 
+/**
+ * Typeahead entry point: type to pick a field, then an operator, then a value.
+ * Focus never leaves the input; the popup is driven with the arrow keys.
+ */
 export function FilterBarInput(props: FilterBarInputProps) {
   const ctx = useFilterBarContext();
   if (ctx.inputTarget !== props.groupId) return null;
@@ -70,6 +80,7 @@ function FilterBarInputImpl({
   const [emptyForStepChange, setEmptyForStepChange] = useState(false);
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
 
+  // The draft lives in the provider so the chip list can render it; the step follows from it.
   const { draft, setDraft: setDraftState, commitDraft } = ctx;
   const step: Step = !draft ? 'field' : !draft.operatorId ? 'operator' : 'value';
   const field = draft ? ctx.getField(draft.fieldId) : undefined;
@@ -77,6 +88,7 @@ function FilterBarInputImpl({
   const operator = draft?.operatorId
     ? (fieldOperators.find(o => o.id === draft.operatorId) ?? ctx.getOperator(draft.operatorId))
     : undefined;
+  // The advanced option lives in the bar only; inside a popover, nesting is the editor's `+ Group`.
   const offerAdvanced = ctx.groupsEnabled && groupId === undefined;
   const visibleFields = useMemo(() => {
     const fields = ctx.fields.filter(f => !f.hidden);
@@ -84,11 +96,14 @@ function FilterBarInputImpl({
   }, [ctx.fields, offerAdvanced]);
   const targetGroup = groupId ? findGroup(ctx.expression, groupId) : undefined;
 
+  // A group's input mounts on demand (see `openGroupInput`) and takes focus itself.
   useEffect(() => {
     if (groupId) inputRef.current?.focus();
   }, [groupId]);
 
-  // Clear Base UI highlighting before changing steps.
+  // Base UI owns the highlight index and keeps it when the list content changes, so a row
+  // reached with ArrowDown would carry over into the step that follows. An empty list committed
+  // first drops that index, and `autoHighlight` re-anchors on the first row of the new step.
   const withHighlightReset = useCallback((change: () => void) => {
     flushSync(() => setEmptyForStepChange(true));
     change();
@@ -134,6 +149,7 @@ function FilterBarInputImpl({
   const selectField = useCallback(
     (next: FilterBarField) => {
       if (next.id === ADVANCED_FIELD_ID) {
+        // `or` is the useful default: an `and` group is indistinguishable from the root.
         const id = ctx.addGroup(undefined, 'or');
         ctx.setOpenGroup(id);
         ctx.openGroupInput(id);
@@ -142,10 +158,13 @@ function FilterBarInputImpl({
         return;
       }
       const [only, ...rest] = ctx.getFieldOperators(next);
+      // Free-text entry with text already typed: that text is the value, so neither the
+      // operator nor the value step has anything left to ask.
       if (next.search && only && query.trim() !== '') {
         commit(next.id, only.id, parseFieldValue(next.type, query));
         return;
       }
+      // A single allowed operator is implied: skip straight to the value step.
       if (only && rest.length === 0) {
         selectOperator(next.id, only);
         return;
@@ -167,6 +186,8 @@ function FilterBarInputImpl({
     },
   });
 
+  // Leaving a group's input hands the target back to the bar; empty groups are pruned when the
+  // popover closes, never here.
   const leaveGroup = useCallback(() => {
     if (!groupId) return false;
     ctx.openGroupInput(undefined);
@@ -176,6 +197,7 @@ function FilterBarInputImpl({
 
   const stepBack = useCallback(() => {
     if (step === 'value' && draft) {
+      // Back to the field step when the operator was implied (single operator).
       const skipOperator = field ? fieldOperators.length === 1 : false;
       setDraft(skipOperator ? null : { fieldId: draft.fieldId });
     } else if (step === 'operator') setDraft(null);
@@ -183,15 +205,18 @@ function FilterBarInputImpl({
     setQuery('');
   }, [step, draft, field, fieldOperators, setDraft, leaveGroup]);
 
+  // Selection is routed per step and never kept by Base UI (`value` stays null).
   const handleSelect = (item: Item) => {
     if (step === 'field') selectField(item as FilterBarField);
     else if (step === 'operator' && draft) selectOperator(draft.fieldId, item as FilterBarOperator);
     else valueStep.handleSelect(item as FilterBarOption);
   };
 
+  // App-level keys run before Base UI's own input handling.
   const handleKeyDown = (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>) => {
     if (event.key === 'Escape') {
       event.preventDefault();
+      // Consumed here: an enclosing popover (advanced filter) must not close on it.
       event.stopPropagation();
       event.preventBaseUIHandler();
       stepBack();
@@ -209,10 +234,12 @@ function FilterBarInputImpl({
         event.preventBaseUIHandler();
         if (step !== 'field') stepBack();
         else if (targetGroup) {
+          // Inside a group: eat its last chip, or drop the group once it is empty.
           const last = targetGroup.nodes.findLast(node => !ctx.leaving.has(node.id));
           if (last) ctx.removeItem(last.id);
           else leaveGroup();
         } else {
+          // Chips still animating out are already gone from the value: skip them.
           const last = ctx.items.findLast(item => !ctx.leaving.has(item.id));
           if (last) ctx.removeItem(last.id);
         }
@@ -234,7 +261,7 @@ function FilterBarInputImpl({
     if (step === 'value') {
       const highlightedOption = valueStep.hasSuggestions ? (highlighted as FilterBarOption | null) : null;
       const handled = valueStep.handleKeyDown(event, highlightedOption);
-      // Base UI submits on Enter without a highlight.
+      // Base UI closes on Enter when nothing is highlighted (form submission); the draft must stay open.
       if (handled || (event.key === 'Enter' && highlightedOption === null)) event.preventBaseUIHandler();
     }
   };
@@ -246,6 +273,8 @@ function FilterBarInputImpl({
   };
   const items: readonly Item[] = emptyForStepChange ? EMPTY_ITEMS : optionsForStep[step];
 
+  // A search field is the way out for text that names no field, so it survives the field
+  // step's own filtering whatever was typed; every other item matches on its label.
   const filterItem = useCallback(
     (item: Item, text: string, itemToString?: (item: Item) => string) =>
       ('search' in item && item.search === true) || matchesQueryFilter(item, text, itemToString),
@@ -268,9 +297,11 @@ function FilterBarInputImpl({
       <ComboboxPrimitive.Root<Item>
         items={items}
         itemToStringLabel={getItemLabel}
+        // The value step is already filtered (locally or server-side) by useValueSuggestions.
         filter={step === 'value' ? null : filterItem}
         value={null}
         onValueChange={(item, details) => {
+          // Never let Base UI keep the selection, fill the input or close: each step routes it.
           details.cancel();
           if (item) handleSelect(item);
         }}
@@ -283,7 +314,9 @@ function FilterBarInputImpl({
         onItemHighlighted={item => setHighlighted(item ?? null)}
         open={open}
         onOpenChange={(next, details) => {
+          // Escape is handled by the input (it steps back rather than closing).
           if (!next && details.reason === 'escape-key') return;
+          // The input is the anchor, not a trigger: clicking it must keep the draft open.
           if (
             !next &&
             details.reason === 'outside-press' &&
@@ -302,6 +335,9 @@ function FilterBarInputImpl({
           ref={anchorRef}
           data-slot="filter-bar-input-trigger"
           className={cn(
+            // Same trigger recipe as every other DS Combobox (fill, radius, `[&>svg]` icon sizing
+            // and the Button icon offset); the bar itself has no chrome. Focus lives on the
+            // nested input, so the recipe's `focus-visible` border becomes `focus-within`.
             comboboxTriggerClass({ variant: 'default', size: FILTER_BAR_CONTROL_SIZE }),
             'w-auto cursor-text',
             'focus-within:bg-fill-hover',
@@ -342,7 +378,7 @@ function FilterBarInputImpl({
             positionMethod={FLOATING_POSITION_METHOD}
             className={comboboxStyles.positioner}
           >
-            <ComboboxPrimitive.Popup
+            <ComboboxPrimitive.Popup // Match the pill, with the DS Combobox's 11rem floor (replaces the menu's anchor-width minimum).
               className={cn(comboboxStyles.popup, 'w-(--anchor-width) min-w-44')}
               data-slot="filter-bar-editor"
             >

@@ -101,6 +101,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
     setPastedText('');
   }, []);
 
+  // Reset after the close animation. Never schedule or keep the timer once unmounted, or it fires into a torn-down tree.
   const scheduleReset = useCallback(() => {
     clearTimeout(resetTimerRef.current);
     if (!mountedRef.current) return;

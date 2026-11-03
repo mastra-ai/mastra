@@ -25,6 +25,7 @@ export interface SessionSearchResult {
   updatedAt: string;
 }
 
+/** A board entry nobody has started yet. */
 export interface WorkItemSearchResult {
   id: string;
   title: string;
@@ -75,7 +76,7 @@ function createFactorySessionResult(
   const title = item?.title ?? session.branch;
   const context = [`${factoryKind === 'review' ? 'Review' : 'Work'} session`, session.branch];
   const threadId = association?.ref.threadId ?? session.sessionId;
-
+  // Work items carry the issue/PR number; when they fail to load the review branch is the only place it survives.
   const identifier = (item ? workItemIdentifier(item) : undefined) ?? getReviewBranchIdentifier(session.branch);
 
   return {
@@ -187,6 +188,7 @@ function createCandidateResult(factoryId: string, candidate: BoardCandidate, upd
   };
 }
 
+/** Board entries with no session to open: unstarted cards, plus live candidates not yet filed as one. */
 export function createWorkItemSearchResults(input: {
   factoryId: string;
   workItems: WorkItem[];

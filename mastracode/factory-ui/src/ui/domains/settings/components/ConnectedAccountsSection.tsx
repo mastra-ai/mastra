@@ -13,6 +13,7 @@ import { IntegrationLabel } from './IntegrationLabel';
 
 const slackLabel = <IntegrationLabel provider="slack" name="Slack" />;
 
+// Env vars alone do not prove the deployment registers SlackIntegration.
 export function SlackNotConfigured() {
   return (
     <SettingsContainer>

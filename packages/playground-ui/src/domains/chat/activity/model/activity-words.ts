@@ -10,6 +10,7 @@ export interface ActivityWords {
   icon: LucideIcon;
   label: string;
   detail?: string;
+  /** How long settled calls took, to the second: "1m 12s". A lone thought says it in its label. */
   duration?: string;
 }
 
@@ -27,6 +28,7 @@ function secondsDuration(elapsedMs: number | undefined): string | undefined {
   return formatDuration(Math.round(elapsedMs / 1_000) * 1_000);
 }
 
+/** "Read files, ran a command": each kind once, in order of first use. */
 function summarize(calls: readonly WordedCall[]): string {
   const counts = new Map<string, number>();
   for (const { toolName, args } of calls) {
@@ -53,6 +55,7 @@ export function stretchPose(calls: readonly WordedCall[], live: boolean): AgentI
   return running ? callPose(running.toolName) : 'thinking';
 }
 
+/** What the stretch is doing now: the latest running call, or thinking between calls. */
 export function liveWords(calls: readonly WordedCall[]): ActivityWords {
   const running = calls.findLast(call => call.status === 'running');
   if (!running) return { icon: agentGlyph('thinking'), label: 'Thinking' };
@@ -61,6 +64,7 @@ export function liveWords(calls: readonly WordedCall[]): ActivityWords {
   return { icon, label: toolPhrases(label).live, detail };
 }
 
+/** What the stretch did: a lone call in the past tense, several as one sentence of kinds. */
 export function settledWords(calls: readonly WordedCall[], elapsedMs?: number): ActivityWords {
   const duration = secondsDuration(elapsedMs);
   const [first] = calls;
@@ -71,6 +75,7 @@ export function settledWords(calls: readonly WordedCall[], elapsedMs?: number): 
   return { icon: oneKind ? icon : agentGlyph('tool'), label: summarize(calls), duration };
 }
 
+/** The line's accessible name: what it says, as one phrase. */
 export function wordsName({ label, detail, duration }: ActivityWords): string {
   const said = detail ? `${label} ${detail}` : label;
   return duration ? `${said}, ${duration}` : said;
@@ -83,6 +88,7 @@ export function callsOutcome(calls: readonly WordedCall[]): CallsOutcome {
   };
 }
 
+/** "1 failed · 2 incomplete" for several calls; a lone call only says it never finished. */
 export function outcomeText({ failed, incomplete }: CallsOutcome, callCount: number): string {
   if (callCount <= 1) return incomplete > 0 ? 'incomplete' : '';
   const counts = [

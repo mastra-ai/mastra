@@ -20,6 +20,7 @@ export interface ExperimentKpisProps {
   };
 }
 
+/** Headline numbers for a run, shown above its results like the Metrics page KPIs. */
 export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
   const { data: scoresByItemId } = useScoresByExperimentId({
     experimentId: experiment.id,
@@ -34,8 +35,10 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
     experiments: experimentRefs,
     supportsMetrics: metrics?.isEnabled ?? false,
   });
+  // Usage is only fetched once the run finishes, so an in-progress run reads as loading rather than empty.
   const isUsageLoading = experiment.status === 'running' || experiment.status === 'pending' || isUsageQueryLoading;
 
+  // Averages every score of the run, across all scorers.
   const avgScore = useMemo(() => {
     if (!scoresByItemId) return undefined;
     const scores = Object.values(scoresByItemId).flat();
@@ -50,6 +53,7 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
     return formatDuration(ms) ?? '—';
   })();
 
+  // Same per-item breakdown as the results rows (shared query), so the totals match the rows and split input/output.
   const usage = usageById[experiment.id]?.summary;
   const tokens = totalTokens(usage);
   const tokensDetail =

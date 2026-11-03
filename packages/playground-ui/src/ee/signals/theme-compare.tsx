@@ -11,6 +11,13 @@ import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
 import { Txt } from '@/ds/components/Txt';
 
+/**
+ * Compare mode: two interchangeable points on the shared time axis show how
+ * each signal's theme mix moved between them (always read earlier → later),
+ * with per-theme sparklines across every landmark in range. Clicking an
+ * unmarked landmark moves the nearest point; clicking a marked landmark grabs
+ * that point so the next click moves it specifically.
+ */
 export function ThemeCompare({
   entityId,
   entityType,
@@ -33,6 +40,7 @@ export function ThemeCompare({
     Math.min(pointIndexes?.[0] ?? 0, lastIndex),
     Math.min(pointIndexes?.[1] ?? lastIndex, lastIndex),
   ];
+  // Compare always reads earlier → later regardless of which point moved last.
   const fromIndex = Math.min(points[0], points[1]);
   const toIndex = Math.max(points[0], points[1]);
   const flowQueries = useThemeFlows(
@@ -50,6 +58,9 @@ export function ThemeCompare({
 
   if (!fromSnapshot || !toSnapshot) return null;
 
+  // The two points are interchangeable: an unmarked tick moves whichever
+  // point is nearest on the track; a marked tick grabs that point so the next
+  // click moves it specifically (covers moving a point past the other).
   const handleTickSelect = (index: number) => {
     if (grabbedPoint !== undefined) {
       setPointIndexes(grabbedPoint === 0 ? [index, points[1]] : [points[0], index]);

@@ -35,6 +35,10 @@ export interface ItemDetailDialogProps {
   dialogLevel?: SideDialogRootProps['level'];
 }
 
+/**
+ * Side dialog showing full details of a single dataset item.
+ * Includes navigation to next/previous items and sections for Input, Ground Truth, and Metadata.
+ */
 export function ItemDetailDialog({
   datasetId,
   item,
@@ -46,6 +50,7 @@ export function ItemDetailDialog({
 }: ItemDetailDialogProps) {
   const { updateItem, deleteItem, purgeItem } = useDatasetMutations();
 
+  // Edit mode state
   const [isEditing, setIsEditing] = useState(false);
   const [inputValue, setInputValue] = useState('');
   const [groundTruthValue, setGroundTruthValue] = useState('');
@@ -53,9 +58,11 @@ export function ItemDetailDialog({
   const [trajectoryValue, setTrajectoryValue] = useState('');
   const [requestContextValue, setRequestContextValue] = useState('');
 
+  // Destructive action confirmation state
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [showPurgeConfirm, setShowPurgeConfirm] = useState(false);
 
+  // Reset form state when item changes (navigation or prop update)
   useEffect(() => {
     if (item) {
       setInputValue(JSON.stringify(item.input, null, 2));
@@ -63,8 +70,8 @@ export function ItemDetailDialog({
       setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
       setTrajectoryValue(item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : '');
       setRequestContextValue(item.requestContext ? JSON.stringify(item.requestContext, null, 2) : '');
-      setIsEditing(false);
-      setShowDeleteConfirm(false);
+      setIsEditing(false); // Exit edit mode on item change
+      setShowDeleteConfirm(false); // Reset destructive action state on item change
       setShowPurgeConfirm(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -72,6 +79,7 @@ export function ItemDetailDialog({
 
   if (!item) return null;
 
+  // Navigation handlers - return function or undefined to enable/disable buttons
   const toNextItem = (): (() => void) | undefined => {
     const currentIndex = items.findIndex(i => i.id === item.id);
     if (currentIndex >= 0 && currentIndex < items.length - 1) {
@@ -88,7 +96,9 @@ export function ItemDetailDialog({
     return undefined;
   };
 
+  // Form handlers
   const handleSave = async () => {
+    // Validate input JSON
     let parsedInput: unknown;
     try {
       parsedInput = JSON.parse(inputValue);
@@ -97,6 +107,7 @@ export function ItemDetailDialog({
       return;
     }
 
+    // Parse groundTruth if provided
     let parsedGroundTruth: unknown | undefined;
     if (groundTruthValue.trim()) {
       try {
@@ -107,6 +118,7 @@ export function ItemDetailDialog({
       }
     }
 
+    // Parse metadata if provided
     let parsedMetadata: Record<string, unknown> | undefined;
     if (metadataValue.trim()) {
       try {
@@ -117,7 +129,7 @@ export function ItemDetailDialog({
       }
     }
 
-    // Empty text clears expectedTrajectory; absence preserves it.
+    // Parse expectedTrajectory: empty string means explicitly clear (null), omitted means keep existing
     let parsedTrajectory: UpdateDatasetItemParams['expectedTrajectory'] = null;
     if (trajectoryValue.trim()) {
       try {
@@ -128,6 +140,7 @@ export function ItemDetailDialog({
       }
     }
 
+    // Parse requestContext if provided
     let parsedRequestContext: Record<string, unknown> | undefined;
     if (requestContextValue.trim()) {
       try {
@@ -157,6 +170,7 @@ export function ItemDetailDialog({
   };
 
   const handleCancel = () => {
+    // Reset to original values
     setInputValue(JSON.stringify(item.input, null, 2));
     setGroundTruthValue(item.groundTruth ? JSON.stringify(item.groundTruth, null, 2) : '');
     setMetadataValue(item.metadata ? JSON.stringify(item.metadata, null, 2) : '');
@@ -178,7 +192,7 @@ export function ItemDetailDialog({
       await deleteItem.mutateAsync({ datasetId, itemId: item.id });
       toast.success('Item deleted successfully');
       setShowDeleteConfirm(false);
-      onClose();
+      onClose(); // Close the SideDialog after successful deletion
     } catch (error) {
       toast.error(`Failed to delete item: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
@@ -273,7 +287,10 @@ export function ItemDetailDialog({
           </AlertDialog.Header>
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-            {/* AlertDialog.Action closes before async purge errors can render. */}
+            {/* Deliberately a Button rather than AlertDialog.Action: Action is a
+                Close that dismisses the dialog on click regardless of
+                preventDefault, which would hide the pending state and a failed
+                purge behind a toast. */}
             <Button
               icon={<Trash2 />}
               variant="primary"
@@ -290,6 +307,9 @@ export function ItemDetailDialog({
   );
 }
 
+/**
+ * Read-only view of the dataset item details
+ */
 function ReadOnlyContent({ item }: { item: DatasetItem }) {
   const metadataDisplay = item.metadata ? JSON.stringify(item.metadata, null, 2) : null;
   const trajectoryDisplay = item.expectedTrajectory ? JSON.stringify(item.expectedTrajectory, null, 2) : null;
@@ -350,6 +370,9 @@ function ReadOnlyContent({ item }: { item: DatasetItem }) {
   );
 }
 
+/**
+ * Editable form view for updating dataset item
+ */
 interface EditModeContentProps {
   inputValue: string;
   setInputValue: (value: string) => void;

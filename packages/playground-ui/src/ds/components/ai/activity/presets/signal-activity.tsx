@@ -23,6 +23,7 @@ export interface SignalActivityProps {
   detail?: string;
   mode?: string;
   defaultOpen?: boolean;
+  /** `inline` reads like the agent's own lines: their glyph, type and weight, the message as prose. */
   appearance?: ActivityAppearance;
 }
 

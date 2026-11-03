@@ -44,6 +44,7 @@ function repositoryHost(repository: SourceControlRepository) {
   return isGitLabRepository(repository) ? 'gitlab' : 'github';
 }
 
+/** A draft can outlive its connection; a pin to a disconnected provider would wait on a disabled query forever. */
 function sourceControlView({
   pinned,
   githubConnected,
@@ -78,6 +79,7 @@ export function VcsFactoryStep({
   onSelectRepository,
   onPreviewRepository,
 }: VcsFactoryStepProps) {
+  // Undefined follows the connection status, so an OAuth return lands on the connected host.
   const [providerChoice, setProviderChoice] = useState<SourceControlView | undefined>(
     initialRepository && repositoryHost(initialRepository),
   );

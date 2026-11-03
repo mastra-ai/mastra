@@ -35,6 +35,7 @@ function renderGraph(props: Partial<Parameters<typeof KnowledgePageGraph>[0]> = 
   );
 }
 
+// jsdom has no ResizeObserver, which React Flow uses to measure its viewport.
 beforeAll(() => {
   window.ResizeObserver ??= class {
     observe() {}
@@ -185,6 +186,7 @@ describe('KnowledgePageGraph', () => {
       const badge = within(node).getByTestId('knowledge-pin-badge');
       const badgeSize = Number.parseFloat(badge.style.width);
       expect(badgeSize).toBeLessThanOrEqual(Math.max(10, size * 0.22) + 0.5);
+      // Its centre is the circle's top-right point at 45°: inset from the box corner by r(1 - 1/√2).
       const inset = (size / 2) * (1 - Math.SQRT1_2);
       expect(Number.parseFloat(badge.style.top)).toBeCloseTo(inset, 1);
       expect(Number.parseFloat(badge.style.right)).toBeCloseTo(inset, 1);
@@ -406,6 +408,7 @@ describe('KnowledgePageGraph', () => {
   });
 
   describe('dots', () => {
+    // Acme at the centre, Support one ring out, and Support's thread scopes collapsed into one dot further on.
     const deep = [
       page('org', null, { name: 'Acme' }),
       page('support', 'org', { name: 'Support', isScope: true }),
@@ -635,10 +638,12 @@ describe('KnowledgePageGraph', () => {
           ).map(Number);
         const [x1 = 0, y1 = 0, x2 = 0, y2 = 0] = coords(out);
         const [bx = 0, by = 0, ex = 0, ey = 0] = coords(into);
+        // Both lines run between the same two points, one way each: no sideways offset.
         const apart = Math.abs((x2 - x1) * (y1 - by) - (x1 - bx) * (y2 - y1)) / Math.hypot(x2 - x1, y2 - y1);
         expect(apart).toBeCloseTo(0, 5);
         expect(Math.hypot(bx - x2, by - y2)).toBeCloseTo(0, 5);
         expect(Math.hypot(ex - x1, ey - y1)).toBeCloseTo(0, 5);
+        // The way in is the dashed one, and it sits above the way out.
         expect(into?.querySelector<SVGElement>('.react-flow__edge-path')?.style.strokeDasharray).toBeTruthy();
         expect(out?.querySelector<SVGElement>('.react-flow__edge-path')?.style.strokeDasharray).toBeFalsy();
         const layer = (el: SVGElement | null) => Number(el?.style.zIndex || el?.parentElement?.style.zIndex || 0);
@@ -651,6 +656,7 @@ describe('KnowledgePageGraph', () => {
         expect(legend.queryByTestId('knowledge-legend-link')).toBeNull();
         expect(legend.queryByTestId('knowledge-legend-mention')).toBeNull();
         expect(legend.getByTestId('knowledge-legend-dot-parent')).toBeTruthy();
+        // Lines touching the hovered page read by direction, so they get the in/out rows, not the plain ones.
         fireEvent.mouseEnter(dot('ticket'));
         expect(legend.getByTestId('knowledge-legend-out')).toBeTruthy();
         expect(legend.getByTestId('knowledge-legend-in')).toBeTruthy();
@@ -731,6 +737,7 @@ describe('KnowledgePageGraph', () => {
         fireEvent.mouseEnter(dot('ticket'));
         observer.takeRecords().forEach(record => touched.add(record.target as Element));
         observer.disconnect();
+        // Fading is the container's attribute plus a mark on the few neighbours; the other nodes are untouched.
         const untouched = nodes.filter(
           node => !node.classList.contains('knowledge-neighbour') && ![...touched].some(el => node.contains(el)),
         );

@@ -54,8 +54,10 @@ export interface SourcePickerProps {
   onRetry?: () => void;
   onToggleItem: (id: string) => Promise<void>;
   itemDescription?: (id: string) => string | undefined;
+  /** Label for a saved source that is no longer listed; defaults to its ID. */
   fallbackLabel?: (id: string) => string;
   itemActions?: (item: SourcePickerItem) => ReactNode;
+  /** Full-width content under a selected item's row, for routing that doesn't fit beside it. */
   itemDetails?: (item: SourcePickerItem) => ReactNode;
   addControl?: (item: SourcePickerItem, focusSearch: () => void) => ReactNode;
 }

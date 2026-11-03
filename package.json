@@ -98,6 +98,7 @@
     "lint-staged": "lint-staged",
     "lint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./explorations/**/*\" --filter \"!@internal/playground\" lint lint:format",
     "lint:oxlint": "pnpm turbo --filter \"!./examples/**/*\" --filter \"!./docs/**/*\" --filter \"!./explorations/**/*\" --filter \"!@internal/playground\" lint",
+    "lint:ui-copy": "oxlint --config packages/playground-ui/oxlint/copy.config.ts packages/playground/src packages/playground-ui/src mastracode/factory-ui/src",
     "lint:format": "oxfmt --check . '!docs/**/*' '!examples/**/*' '!explorations/**/*' '!observability/_examples/**/*'",
     "preinstall": "npx only-allow pnpm",
     "prepare": "husky",

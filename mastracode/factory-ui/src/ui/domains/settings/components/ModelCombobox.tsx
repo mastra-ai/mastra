@@ -9,6 +9,7 @@ import { DEFAULT_SOURCE_LABELS } from '../../chat/services/thinkingLevels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 
+/** Value the picker reports when the caller's `auto` choice is picked. */
 const AUTO_VALUE = 'auto';
 
 function modelProvider(id: string): string {
@@ -21,7 +22,7 @@ function modelOption(id: string, provider: string): ComboboxOption {
   return {
     value: id,
     label: name,
-
+    // The full id tells apart models that share a name across providers (e.g. OpenAI and OpenAI Codex).
     description: id,
     start: <ProviderBrandIcon provider={provider} fallback={<Box className="text-muted-foreground size-4" />} />,
     keywords: provider ? [id, providerDisplayName(provider)] : [id],
@@ -44,6 +45,18 @@ function autoOption(effectiveModelId: string | null | undefined): ComboboxOption
   };
 }
 
+/**
+ * Searchable model picker shared by the settings model surfaces. The catalog
+ * is large (every provider's models), so a filterable combobox replaces the
+ * native `<select>`. Options read as model names with their provider's logo;
+ * search also matches the raw `provider/model` id and the provider name.
+ *
+ * A persisted value that is no longer in the catalog (key removed, model
+ * retired) is kept selectable so the control always displays the stored state.
+ *
+ * Pass `auto` to offer an "Auto" choice first: picking it reports `'auto'`,
+ * and the trigger shows the model Auto currently resolves to.
+ */
 export function ModelCombobox({
   models,
   value,

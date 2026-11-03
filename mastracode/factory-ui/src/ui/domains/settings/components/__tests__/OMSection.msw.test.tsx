@@ -85,6 +85,7 @@ describe('OMSection', () => {
     expect(await screen.findByText('Model credentials required')).toBeInTheDocument();
     expect(screen.getByText(/model calls may fail until credentials are configured/)).toBeInTheDocument();
     expect(screen.queryByText('Enabled')).not.toBeInTheDocument();
+    // A configured model that is no longer in the catalog still shows, by name.
     expect(screen.getByRole('combobox', { name: 'Observer model' })).toHaveValue('Observer X');
     expect(screen.getByRole('combobox', { name: 'Reflector model' })).toHaveValue('Gemini 3.5 Flash');
   });
@@ -150,9 +151,11 @@ describe('OMSection', () => {
       />,
     );
 
+    // The field itself is the search box: it holds the selected model's name until cleared.
     const search = await screen.findByRole('combobox', { name: 'Observer model' });
     await user.clear(search);
     await user.type(search, 'anthropic');
+    // The custom-value row stays first; the only catalog match is the Anthropic model.
     await waitFor(() =>
       expect(screen.getAllByRole('option').map(option => option.textContent)).toEqual([
         'Use “anthropic”',
@@ -255,8 +258,10 @@ describe('OMSection', () => {
     await user.tab();
     await waitFor(() => expect(requests).toEqual([{ observationThreshold: 2000 }]));
 
+    // Back in the field before the first save has answered.
     await user.clear(input);
     await user.type(input, '3000');
+    // The model pickers lock while any save is pending, so their unlocking marks the first save landing.
     expect(screen.getByRole('combobox', { name: 'Observer model' })).toBeDisabled();
     releaseFirstSave();
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Observer model' })).toBeEnabled());

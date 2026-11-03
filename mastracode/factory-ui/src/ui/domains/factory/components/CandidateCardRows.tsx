@@ -10,6 +10,7 @@ import { CardStatus, MetadataLabels, REVEAL_ON_CARD_HOVER, SourceTitle } from '.
 import { SourceIcon } from './BoardIcons';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
+// The card and its open copy draw these same rows, so opening moves nothing.
 export function CandidateCardRows({
   candidate,
   status,
@@ -20,7 +21,9 @@ export function CandidateCardRows({
   candidate: BoardCandidate;
   status: BoardCardStatus;
   titleId?: string;
+  /** Absolute in the corner: inline, its height would push every row down. */
   controls: ReactNode;
+  /** The copy's own row under the card's. */
   actions?: ReactNode;
 }) {
   return (

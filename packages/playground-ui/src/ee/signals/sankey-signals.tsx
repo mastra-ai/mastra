@@ -50,13 +50,16 @@ export interface SankeySignalsProps {
   height?: number;
   selectedThemeId: string | undefined;
   onSelectedThemeIdChange: (themeId: string | undefined) => void;
+  /** Snapshot id of the timeline frame currently displayed. The parent owns this state. */
   selectedFrameId: string;
   onFrameIdChange: (frameId: string) => void;
+  /** Date range control rendered in line with the view mode tabs. */
   dateRangePicker?: React.ReactNode;
 }
 
 const DRILL_IN_TRACE_LIMIT = 2000;
 
+/** One-line answer to "what am I looking at?" for each view, shown under the tabs. */
 const VIEW_DESCRIPTIONS: Omit<Record<SignalsViewMode, string>, 'flow'> = {
   compare: 'Which themes grew, shrank, appeared, or disappeared between two points in time.',
   lifelines: "Each theme's share of traces across the whole selected range.",
@@ -97,6 +100,8 @@ export function SankeySignals({
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
   const [drillStack, setDrillStack] = useState<ThemeSelection[]>([]);
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
+  // Pure derivation: the parent owns the frame. The index-0 fallback only covers
+  // the transient render where a perspective change swapped the snapshot list.
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.snapshotId === selectedFrameId);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : 0;
   const snapshot = snapshots[selectedSnapshotIndex];
@@ -110,12 +115,15 @@ export function SankeySignals({
     setViewMode(nextViewMode);
   };
   const handlePlayingChange = (nextIsPlaying: boolean) => {
+    // Restart from the first landmark when play is pressed at the end.
     if (nextIsPlaying && selectedSnapshotIndex === snapshots.length - 1) selectSnapshot(0);
     setIsPlaying(nextIsPlaying);
   };
   const setThemeDetails = (selection: SelectedTheme | undefined) => {
     onSelectedThemeIdChange(selection?.themeId);
   };
+  // Compare cards and lifeline points open details for the theme at the
+  // landmark they were clicked on, so the panel's snapshot follows the click.
   const openThemeDetailsAt = (selection: ThemeSelection, snapshotIndex: number) => {
     if (selection.kind !== 'theme') return;
     selectSnapshot(snapshotIndex);
@@ -123,12 +131,17 @@ export function SankeySignals({
     setThemeDetails(selection);
   };
 
+  // Undefined at the last landmark so playback stops instead of looping.
   const nextSnapshotId = snapshots[selectedSnapshotIndex + 1]?.snapshotId;
   const flowSnapshotIds = selectFlowSnapshotIds(snapshots, selectedSnapshotIndex);
   const flowQueries = useThemeFlows(entityId, entityType, signalNames, flowSnapshotIds);
   const flowQuery = flowQueries[flowSnapshotIds.indexOf(snapshot?.snapshotId ?? '')];
   const currentFlow = flowQuery?.data;
+  // The loading skeleton tracks only the selected snapshot's flow; prefetched
+  // neighbors warm the cache in the background without blocking the chart.
   const isFlowPending = flowQuery?.isPending ?? false;
+  // Errors stay window-wide: a failed preload surfaces the retry state instead
+  // of letting playback advance into a broken frame.
   const hasFlowError = flowQueries.some(query => query.isError);
   const isFlowWindowBusy = flowQueries.some(query => query.isPending) || hasFlowError;
   const windowFlows = useMemo(() => flowQueries.flatMap(query => (query.data ? [query.data] : [])), [flowQueries]);
@@ -225,6 +238,7 @@ export function SankeySignals({
     onSuccess: ({ nextSignalNames, nextFrameId }) => {
       setSignalNames(nextSignalNames);
       setPendingSignalNames(undefined);
+      // Keep the parent-owned frame pointing at a snapshot that exists in the new perspective.
       if (nextFrameId && nextFrameId !== selectedFrameId) onFrameIdChange(nextFrameId);
     },
     onError: () => setPendingSignalNames(undefined),

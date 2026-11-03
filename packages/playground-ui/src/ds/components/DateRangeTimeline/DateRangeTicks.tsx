@@ -22,6 +22,8 @@ export function DateRangeTicks({ ticks, min, max }: DateRangeTicksProps) {
 
   if (firstTick.date === lastTick.date) {
     const date = formatBoundaryDate(firstTick.date);
+    // Only claim "Created today" when the whole available domain is a single
+    // day; a zoomed viewport can hold one tick for any date, so stay neutral.
     const singleLabel =
       firstTick.date === min && firstTick.date === max
         ? `Created today (${date})`

@@ -34,6 +34,7 @@ export interface ThinkingLevelUnavailableProps<T extends string> {
   options: readonly ThinkingLevelOption<T>[];
   label: string;
   reason: string;
+  /** The level still in effect, when the control is locked rather than unsupported. */
   value?: T;
 }
 
@@ -73,6 +74,7 @@ export interface ThinkingLevelPickerProps<T extends string> {
   options: readonly ThinkingLevelOption<T>[];
   value: T;
   label: string;
+  /** Disables the trigger and explains why in its tooltip, e.g. when the model cannot think. */
   unavailableReason?: string;
   description?: ReactNode;
   origin?: string;

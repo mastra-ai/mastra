@@ -303,6 +303,7 @@ describe('SankeySignals lifelines mode', () => {
 
       expect(goalToggle.getAttribute('aria-expanded')).toBe('false');
       expect(within(goalSection).queryAllByRole('listitem')).toHaveLength(0);
+      // Other sections stay open.
       const outcomeSection = within(lifelines).getByRole('region', { name: 'Outcome lifelines' });
       expect(within(outcomeSection).getAllByRole('listitem').length).toBeGreaterThan(0);
 
@@ -382,7 +383,9 @@ describe('SankeySignals lifelines mode', () => {
       const persistentRow = await within(goalSection).findByRole('listitem', {
         name: 'Resolve support request: present in 5 of 5 landmarks',
       });
+      // 5 consecutive presence points → one continuous filled area.
       expect(persistentRow.querySelectorAll('polygon')).toHaveLength(1);
+      // Present at consecutive landmarks 1–2 → one short filled area.
       const legacyRow = within(goalSection).getByRole('listitem', {
         name: 'Legacy support request: present in 2 of 5 landmarks',
       });
@@ -406,6 +409,7 @@ describe('SankeySignals lifelines mode', () => {
 
       fireEvent.mouseEnter(point);
 
+      // Real timers, no advancement: the tooltip must appear without a hover delay.
       const tooltip = await screen.findByRole('tooltip');
       expect(tooltip.textContent).toContain('Resolve support request');
       expect(tooltip.textContent).toContain('traces');

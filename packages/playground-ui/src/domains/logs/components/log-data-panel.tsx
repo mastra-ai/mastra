@@ -10,7 +10,7 @@ import { Txt } from '@/ds/components/Txt';
 import { formatTimestampPrecise } from '@/utils/date-format';
 
 export interface LogDataPanelProps {
-  // Keep mounted for the drawer exit animation.
+  /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
   log?: LogRecord;
   onClose: () => void;
   onTraceClick?: (traceId: string) => void;

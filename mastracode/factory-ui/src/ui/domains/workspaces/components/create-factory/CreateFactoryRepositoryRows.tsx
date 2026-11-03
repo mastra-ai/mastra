@@ -116,7 +116,9 @@ export function CreateFactoryRepositoryRows({
         />
       ) : (
         (() => {
-          // Personal GitLab status can be enabled while connect-session still rejects organization_required.
+          // Personal GitLab accounts see `enabled: true` from the status endpoint but the
+          // connect-session request answers 403 with `organization_required`, so gate the
+          // button here to keep it from starting a doomed Nango session.
           const gitlabUnavailable = !gitlabStatus.data?.enabled || gitlabStatus.data.reason === 'organization_required';
           const gitlabSubtitle = !gitlabStatus.data?.enabled
             ? 'GitLab is not available for this deployment.'

@@ -85,6 +85,7 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
     isFetchingNextPage,
     hasNextPage,
   } = useWorkflowRuns({ workflowId: workflowId, summary: true });
+  // The list only carries summary snapshots; the active run's input comes from the full run.
   const { data: activeRun } = useWorkflowRun({
     workflowId: workflowId,
     runId: runId ?? '',

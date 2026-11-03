@@ -26,6 +26,7 @@ export function ChannelOriginBadge({ origin }: { origin: ChannelOrigin }) {
   );
 }
 
+/** The bubble beside a message someone else sent; hover or focus it for their name. */
 export function SenderAvatar({ author }: { author: MessageAuthor }) {
   return (
     <Tooltip>

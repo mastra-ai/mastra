@@ -6,6 +6,7 @@ import { formatDuration } from '@/utils/duration';
 export type TokenUsageRow = {
   label: 'Input' | 'Output';
   total: number;
+  /** Non-zero breakdown, e.g. `5,632 cached · 974 text`. */
   breakdown: string | undefined;
 };
 
@@ -27,6 +28,7 @@ function formatBreakdown(details: object | undefined): string | undefined {
   return parts.length > 0 ? parts.join(', ') : undefined;
 }
 
+/** One row per direction that reports a token count; null when neither does. */
 export function getTokenUsageRows(usage: UsageStats | undefined | null): TokenUsageRow[] | null {
   if (!usage) return null;
   const rows: TokenUsageRow[] = [];
@@ -62,6 +64,10 @@ const MODEL_SPAN_TYPES: ReadonlySet<string> = new Set([
 
 const asString = (value: unknown) => (typeof value === 'string' && value !== '' ? value : undefined);
 
+/**
+ * Model, finish reason, time to first token and output speed of a model span.
+ * Other spans get none; each fact is left out when the span doesn't record what it needs.
+ */
 export function getModelFacts(span: ModelSpan): ModelFacts {
   if (!span.spanType || !MODEL_SPAN_TYPES.has(span.spanType)) return {};
   const attributes = span.attributes ?? {};

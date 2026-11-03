@@ -27,6 +27,12 @@ interface FilterableListProps {
   testIdPrefix: string;
 }
 
+/**
+ * Left-pane filter list shared by the Models and Tools sections. Renders a
+ * searchable, checkable list of entities (model providers / tool toolkits)
+ * with Select all / Clear all bulk controls. Checked rows use the agent
+ * accent color, matching the rest of the agent-builder picker UI.
+ */
 export const FilterableList = ({
   title,
   items,

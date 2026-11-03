@@ -142,6 +142,7 @@ function createDataTransfer() {
   };
 }
 
+/** Stubs the Work board's data endpoints with one triage item and a gated transition. */
 function stubBoardEndpoints() {
   const transitionGate = deferred();
   const transitionRequests: string[] = [];
@@ -418,9 +419,11 @@ describe('Board card pending states', () => {
     await user.click(screen.getByRole('button', { name: 'Actions for Fix login bug' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Move to Planning' }));
 
+    // In flight: the card narrates the destination via a live status row.
     const status = await screen.findByText('Moving to Planning…');
     expect(status.closest('[role="status"]')).not.toBeNull();
 
+    // Server answered: the status row disappears.
     transitionGate.resolve();
     await waitFor(() => expect(screen.queryByText('Moving to Planning…')).not.toBeInTheDocument());
   });
@@ -459,6 +462,8 @@ describe('Board card pending states', () => {
     const user = userEvent.setup();
     const { client } = renderWorkBoard();
 
+    // A terminal rule effect is only recoverable from the card, so the failure
+    // row has to carry the action out of it.
     await user.click(await screen.findByRole('button', { name: 'Retry' }));
 
     await waitFor(() => expect(retried).toEqual(['decision-1']));
@@ -581,6 +586,7 @@ describe('Board card pending states', () => {
     );
     if (!started || !unstarted) throw new Error('Expected both work item cards');
 
+    // A bound session with nothing to report runs no marker: the way in is the mark.
     expect(within(started).getByRole('link', { name: 'Open session' })).toBeInTheDocument();
     expect(within(unstarted).queryByRole('link', { name: 'Open session' })).toBeNull();
   });
@@ -638,6 +644,8 @@ describe('Board card pending states', () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, async () => {
         workItemRequests += 1;
+        // The start refetches before it can decide to open or create; hold that
+        // refetch open so the pre-mutation window is observable.
         if (workItemRequests > 1) await refreshGate.promise;
         return HttpResponse.json({ workItems: [{ ...workItem, sessions: {} }] });
       }),
@@ -663,6 +671,7 @@ describe('Board card pending states', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
     await user.click(within(dialog).getByRole('button', { name: 'Start session' }));
 
+    // No run mutation exists yet, so this row is the only feedback the click can produce.
     const status = await screen.findByText('Preparing session…');
     expect(status.closest('[role="status"]')).not.toBeNull();
     expect(await screen.findByTestId('work-item-card')).toHaveAttribute('aria-busy', 'true');
@@ -800,6 +809,7 @@ describe('Board card pending states', () => {
         });
       }),
     );
+    // pointerEventsCheck off so clicks reach disabled controls: the attribute alone wouldn't stop a re-dispatch.
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const { client } = renderWorkBoard();
 
@@ -809,6 +819,7 @@ describe('Board card pending states', () => {
 
     await screen.findByText('Preparing session…');
 
+    // Reopening mid-flight must present the run as already happening, not offer a second one.
     await user.click(await screen.findByRole('button', { name: 'Details for Fix login bug' }));
     dialog = await screen.findByRole('dialog', { name: 'Fix login bug' });
     expect(within(dialog).getByRole('button', { name: 'Starting…' })).toBeDisabled();
@@ -817,6 +828,7 @@ describe('Board card pending states', () => {
     await waitFor(() => expect(screen.queryByText('Preparing session…')).not.toBeInTheDocument());
     await waitFor(() => expect(runStarts).toHaveLength(1));
 
+    // Both activations unblock on the same gate release, so a duplicate start would already be in flight here.
     await waitForMutationsIdle(client);
     expect(runStarts).toHaveLength(1);
   });
@@ -1032,6 +1044,8 @@ describe('Board card pending states', () => {
   });
 
   it('keeps an auto-materialized Jira card visible with the full work-item menu', async () => {
+    // Auto-ingestion files the issue server-side; the board must show the filed
+    // card (not drop both the candidate and the card) with Linear-equivalent actions.
     const materializedJiraItem = {
       ...manualWorkItem,
       id: 'jira-materialized-1',
@@ -1065,10 +1079,12 @@ describe('Board card pending states', () => {
     const { client } = renderWorkBoard();
     await waitForMutationsIdle(client);
 
+    // Exactly one card: the filed work item; the live candidate is deduped, not the card.
     const actions = await screen.findAllByRole('button', { name: 'Actions for Fix Jira intake sync' });
     expect(actions).toHaveLength(1);
     await user.click(actions[0]);
 
+    // The filed Jira card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Jira' })).toHaveAttribute('href', jiraIssue.url);
@@ -1180,6 +1196,8 @@ describe('Board card pending states', () => {
   });
 
   it('keeps an auto-materialized incident.io card visible with the full work-item menu', async () => {
+    // Auto-ingestion files the follow-up server-side; the board must show the
+    // filed card (not drop both the candidate and the card) with the same menu.
     const materializedIncidentioItem = {
       ...manualWorkItem,
       id: 'incidentio-materialized-1',
@@ -1213,10 +1231,12 @@ describe('Board card pending states', () => {
     const { client } = renderWorkBoard();
     await waitForMutationsIdle(client);
 
+    // Exactly one card: the filed work item; the live candidate is deduped, not the card.
     const actions = await screen.findAllByRole('button', { name: 'Actions for Add retry to incident pager' });
     expect(actions).toHaveLength(1);
     await user.click(actions[0]);
 
+    // The filed incident.io card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in incident.io' })).toHaveAttribute('href', incidentioIssue.url);

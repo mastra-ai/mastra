@@ -61,7 +61,7 @@ export function groupLinearSourcesByTeam(
   const ensureGroup = (teamId: string, teamName: string): SourcePickerGroup => {
     const existing = byTeam.get(teamId);
     if (existing) return existing;
-
+    // Project metadata lacks the backend's opaque team source ID.
     const team = teamById.get(teamId);
     const group: SourcePickerGroup = {
       id: teamId,
@@ -108,6 +108,12 @@ export interface DisconnectedLinearWorkspace {
   sourceIds: string[];
 }
 
+/**
+ * Split saved Linear sources into ones the picker can show and ones from a
+ * workspace that is no longer connected. Connected workspaces are read off the
+ * live project and team IDs; a saved ID from any other workspace has no name
+ * to show, so it is collapsed into one row per workspace instead.
+ */
 export function partitionLinearSources(
   selectedIds: string[] | null,
   groups: SourcePickerGroup[],

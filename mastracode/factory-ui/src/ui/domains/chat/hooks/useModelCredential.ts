@@ -65,6 +65,7 @@ function teammateWarning(holder: CredentialHolder, credential: string): string |
   return `Your messages use ${holder.name ? `${holder.name}’s` : 'the session owner’s'} ${credential}`;
 }
 
+/** The credential this session's requests to `modelId` run on right now, and who holds it. */
 export function useModelCredential(modelId: string | undefined): ModelCredential | undefined {
   const authQuery = useFactoryAuth();
   const { owner, draftSessionId } = useChatSessionContext();

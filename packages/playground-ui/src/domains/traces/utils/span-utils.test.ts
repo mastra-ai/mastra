@@ -68,7 +68,9 @@ describe('getInputPreview', () => {
         content: [
           'a bare string part',
           { type: 'text', text: 'a text part' },
+          // A non-text part is skipped even when it carries its own `text`.
           { type: 'image', image: 'https://example.com/a.png', text: 'alt caption' },
+          // A text part is skipped when its `text` is not a string.
           { type: 'text', text: 42 },
           null,
           { type: 'text', text: '' },
@@ -114,6 +116,7 @@ describe('getInputPreview', () => {
     expect(getInputPreview({ query: 'z'.repeat(200) })).toBe(
       `${JSON.stringify({ query: 'z'.repeat(200) }).slice(0, 100)}…`,
     );
+    // `{"q":"..."}` is exactly 100 characters, so it is left whole.
     const exactly100 = JSON.stringify({ q: 'z'.repeat(92) });
     expect(exactly100).toHaveLength(100);
     expect(getInputPreview({ q: 'z'.repeat(92) })).toBe(exactly100);
@@ -128,6 +131,7 @@ describe('isTokenLimitExceeded', () => {
     expect(isTokenLimitExceeded(spanWith({ finishReason: 'stop' }))).toBe(false);
     expect(isTokenLimitExceeded(spanWith({}))).toBe(false);
     expect(isTokenLimitExceeded(undefined)).toBeFalsy();
+    // A span may arrive with no attributes at all.
     expect(isTokenLimitExceeded({} as SpanRecord)).toBeFalsy();
   });
 });

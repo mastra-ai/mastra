@@ -53,12 +53,14 @@ import { Txt } from '@/ds/components/Txt';
 
 import './knowledge.css';
 
+// knowledge.css draws the border and the selection ring from this colour.
 type CircleStyle = CSSProperties & { '--knowledge-color': string };
 const SCOPE_STYLE: CircleStyle = {
   '--knowledge-color': 'var(--chart-blue)',
   background: 'color-mix(in oklab, var(--chart-blue) 16%, var(--card))',
 };
 const PAGE_STYLE: CircleStyle = { '--knowledge-color': 'var(--border-strong)' };
+/** A farther page drawn as a named circle: the legend's "Page in another branch" dot grown, same solid grey fill, name in the page background colour to read on it. */
 const FAR_FILL = 'var(--muted-foreground)';
 const FAR_STYLE: CircleStyle = { '--knowledge-color': FAR_FILL, background: FAR_FILL };
 
@@ -68,18 +70,26 @@ const PARENT_EDGE_STYLE = {
   strokeDasharray: '4 4',
   strokeWidth: 1.25,
 };
+// The line from the focused page's parent: solid cyan with a closed head, apart from every child's dashed grey one.
 const UP_EDGE_COLOR = 'var(--chart-cyan)';
 const UP_EDGE_STYLE = { stroke: UP_EDGE_COLOR, strokeWidth: 2.25 };
 const UP_ARROW = { type: MarkerType.ArrowClosed, color: UP_EDGE_COLOR, width: 14, height: 14 };
 const MENTION_EDGE_COLOR = 'var(--chart-blue)';
+// An open chevron in the dashed line's muted tone, at the child end: distinct from a mention's filled blue head.
 const PARENT_ARROW_COLOR = 'var(--muted-foreground)';
 const PARENT_ARROW = { type: MarkerType.Arrow, color: PARENT_ARROW_COLOR, width: 12, height: 12, strokeWidth: 1.5 };
+// Grants: purple dash-dot from the principal scope to the scope it reaches, so neither colour nor pattern
+// alone tells it apart from a parent or mention line.
 const GRANT_EDGE_COLOR = 'var(--chart-purple)';
 const GRANT_EDGE_STYLE = { stroke: GRANT_EDGE_COLOR, strokeWidth: 1.75, strokeDasharray: '8 3 2 3' };
 const GRANT_ARROW = { type: MarkerType.ArrowClosed, color: GRANT_EDGE_COLOR, width: 13, height: 13 };
+// A declared principal with no scope page yet: same size as a scope, dashed outline, nothing to open.
+// Body links: a thin green line with a filled head, so a link written in a page reads apart from a note's
+// mention (blue, weighted by count) and from the dashed parent line.
 const LINK_EDGE_COLOR = 'var(--chart-green)';
 const LINK_EDGE_STYLE = { stroke: LINK_EDGE_COLOR, strokeWidth: 1.25 };
 const LINK_ARROW = { type: MarkerType.ArrowClosed, color: LINK_EDGE_COLOR, width: 12, height: 12 };
+// Links of the selected page, by direction: green out of it, orange and dashed into it.
 const DIRECTION_EDGE_STYLE = {
   out: { stroke: LINK_EDGE_COLOR },
   in: { stroke: 'var(--chart-orange)', strokeDasharray: '6 3' },
@@ -88,6 +98,7 @@ const DIRECTION_ARROW = {
   out: LINK_ARROW,
   in: { type: MarkerType.ArrowClosed, color: 'var(--chart-orange)', width: 12, height: 12 },
 };
+// A parent line out to a dot: thin and faint, with no head, so rings of dots don't turn into a thicket.
 const DOT_PARENT_EDGE_STYLE = { stroke: 'var(--foreground)', strokeOpacity: 0.2, strokeWidth: 1 };
 const PLACEHOLDER_STYLE = {
   background: 'var(--card)',
@@ -95,6 +106,9 @@ const PLACEHOLDER_STYLE = {
   borderStyle: 'dashed',
 };
 
+/**
+ * The pin badge sits on the circle's rim at its top-right (45°).
+ */
 function pinBadgeStyle(size: number) {
   const badge = 20;
   const offset = (size / 2) * (1 - Math.SQRT1_2);
@@ -107,29 +121,45 @@ function pinBadgeStyle(size: number) {
 type PageNodeData = PageFlowNode['data'] & {
   pinned: boolean;
   form: GraphNodeForm;
+  /** A dot's colour: its branch around the focus. */
   color?: string;
+  /** Child count on a page whose children aren't drawn yet, e.g. `281` or `1000+`. */
   badge?: string;
+  /** Where the page sits, from its root scope down, for a dot's tooltip. */
   path: string;
+  /** Links into and out of the page that aren't drawn. */
   hiddenLinks?: { in: number; out: number };
+  /** Where a page is addressed, e.g. `org:acme#policies/refunds`, for a dot's tooltip. */
   ref?: string;
+  /** All links into and out of the page, drawn or not, for a dot's tooltip. */
   links?: { in: number; out: number };
+  /** Of `links`, how many go to pages the graph doesn't draw; only on the page under the pointer. */
   notShown?: number;
+  /** Write the dot's links in and out inside it. */
   showCount?: boolean;
+  /** A scope or an ancestor of the focus: a circle that says it sits above other pages. */
   level?: GraphLevel;
+  /** The focused page's parent: its circle says so. */
   isParent?: boolean;
+  /** A page the focus links to or from rather than one of its neighbours in the hierarchy: drawn faded. */
   far?: boolean;
 };
 
+/** How long a focus change loads before the graph says so. */
 const LOADING_HINT_DELAY_MS = 150;
+/** How long it holds the old layout for pages that never arrive before drawing what it has. */
 const LOADING_RELEASE_MS = 4000;
 
+/** Most a tooltip is enlarged to offset a zoomed-out graph. */
 const TOOLTIP_MAX_SCALE = 3;
 
+/** Screen-space box of an element. */
 function boxOf(el: Element): Box {
   const { left, top, right, bottom } = el.getBoundingClientRect();
   return { left, top, right, bottom };
 }
 
+/** The highlighted lines of the graph as screen-space segments, where the browser can measure them. */
 function drawnLines(root: Element): TooltipPlacementInput['lines'] {
   const lines: Array<{ from: { x: number; y: number }; to: { x: number; y: number } }> = [];
   for (const path of root.querySelectorAll<SVGPathElement>('.react-flow__edge-path')) {
@@ -150,6 +180,7 @@ function drawnLines(root: Element): TooltipPlacementInput['lines'] {
   return lines;
 }
 
+/** Where a tooltip sits against its dot, and which way it grows from it. */
 const TOOLTIP_PLACEMENT: Record<TooltipSide, { tip: string; transform: string; origin: string; tail: string }> = {
   top: {
     tip: 'bottom-full left-1/2 mb-2',
@@ -177,6 +208,7 @@ const TOOLTIP_PLACEMENT: Record<TooltipSide, { tip: string; transform: string; o
   },
 };
 
+/** The mark on a circle for a page that sits above others: layers for a scope, an up arrow for an ancestor page. */
 function LevelIcon({ level }: { level: GraphLevel }) {
   const Icon = level === 'scope' ? Layers : ArrowUpToLine;
   return (
@@ -188,22 +220,26 @@ function LevelIcon({ level }: { level: GraphLevel }) {
   );
 }
 
+/** A page far from the focus: a small coloured dot that names itself on hover. */
 function DotNode({ data }: { data: PageNodeData }) {
   const { page, size, color, path, ref, links, notShown } = data;
   const [hover, setHover] = useState(false);
   const dotRef = useRef<HTMLDivElement>(null);
   const tipRef = useRef<HTMLDivElement>(null);
   const [side, setSide] = useState<TooltipSide>('top');
+  // The graph is often zoomed far out; the tooltip is scaled back up so it stays as readable as the page.
   const zoom = useStore(state => state.transform[2]);
   const tipScale = Math.min(Math.max(1 / zoom, 1), TOOLTIP_MAX_SCALE);
   const standIn = isChildPlaceholder(page);
   const group = isScopeGroup(page);
+  // A group's count is already in its name; what it needs to say is how to see its members.
   const hint = standIn ? 'Hover or click to load them' : group ? 'Click to show them' : null;
   const children =
     !hint && page.childCount ? `${childCountLabel(page)} ${page.childCount === 1 ? 'child' : 'children'}` : null;
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
   const linkText = links && (links.in > 0 || links.out > 0) ? linkCountsText(links, notShown) : null;
   const label = [page.name, hint ?? path, children, linkText].filter(Boolean).join(', ');
+  // Pick the side that covers the least: not another page or dot, not the highlighted lines, not the legend or Back.
   useLayoutEffect(() => {
     const dot = dotRef.current;
     const tip = tipRef.current;
@@ -322,9 +358,12 @@ function DotNode({ data }: { data: PageNodeData }) {
   );
 }
 
+/** Below this a circle uses the small type and two lines of name. */
 const COMPACT_CIRCLE_SIZE = 96;
+/** The share of a circle's width its text may use; a circle is narrower toward the top and bottom. */
 const CIRCLE_TEXT_SHARE = 0.74;
 
+/** A scope or page: its kind on top, its name below, both inside the circle; far pages draw as dots. */
 function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeData }>) {
   if (data.form === 'dot') return <DotNode data={data} />;
   const { page, size, selected, pinned, badge } = data;
@@ -332,6 +371,7 @@ function PageNodeComponent({ data }: NodeProps<PageFlowNode & { data: PageNodeDa
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
   const placeholder = isPlaceholder(page);
   const rest = isRestCircle(page);
+  // A smaller circle gets smaller type and fewer lines, and the text keeps to the width of the circle's middle.
   const compact = size < COMPACT_CIRCLE_SIZE;
   const fit = Math.max(4, Math.floor((size * CIRCLE_TEXT_SHARE) / (compact ? 6.5 : 7.5)));
   return (
@@ -433,6 +473,7 @@ function isPlaceholder(page: KnowledgePagePayload): boolean {
   return page.id.startsWith('unplaced:');
 }
 
+/** Lets a scope address like `role:acme:admin` wrap after a colon instead of mid-word. */
 function BreakAtColons({ text }: { text: string }) {
   const parts = text.split(':');
   return (
@@ -465,6 +506,7 @@ function PinBadge({ size }: { size: number }) {
   );
 }
 
+/** A colour the legend explains: the circle the dots of that colour hang under. */
 interface LegendBranch {
   id: string;
   name: string;
@@ -479,6 +521,7 @@ interface Circle {
   r: number;
 }
 
+/** A straight line from one circle's rim to the other's, so lines never loop or hide behind circles. */
 function rimToRim(from: Circle, to: Circle, gap = 3) {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
@@ -502,6 +545,7 @@ function RimEdgeComponent({ id, data, style, markerEnd }: EdgeProps<Edge<RimEdge
     <>
       <BaseEdge id={id} path={path} style={style} markerEnd={markerEnd} interactionWidth={mention ? 20 : 0} />
       {data.kind === 'grant' && data.role ? (
+        // A wide invisible path over the line, so hovering it names the access level.
         <path
           d={path}
           fill="none"
@@ -522,6 +566,7 @@ const edgeTypes = { rim: memo(RimEdgeComponent) };
 
 const nodeTypes = { page: memo(PageNodeComponent) };
 
+/** The box around laid-out circles, in graph coordinates; `null` when there are none. */
 function graphBounds(nodes: Array<{ position: { x: number; y: number }; width?: number; height?: number }>) {
   if (nodes.length === 0) return null;
   let minX = Infinity;
@@ -539,8 +584,10 @@ function graphBounds(nodes: Array<{ position: { x: number; y: number }; width?: 
 
 const LEGEND_SWATCH = 'knowledge-circle inline-block size-3 shrink-0 rounded-full border-2';
 
+/** The line styles the graph draws, which its legend names. */
 type EdgeStyleKey = 'out' | 'in' | 'mention' | 'link' | 'grant' | 'dot-parent' | 'parent' | 'up';
 
+/** What the circles, lines and badge mean. */
 function GraphLegend({
   drawn,
   counts,
@@ -550,12 +597,18 @@ function GraphLegend({
   levels,
   branches,
 }: {
+  /** The line styles on screen right now; the legend explains those and only those. */
   drawn: ReadonlySet<EdgeStyleKey>;
+  /** Some circle carries an in/out link badge. */
   counts: boolean;
   dots: boolean;
+  /** Link ends drawn as circles in the farther-page grey. */
   linkEnds: boolean;
+  /** A page is focused, drawn larger and ringed at the centre. */
   focused: boolean;
+  /** Which kinds of higher-level circle are drawn, to explain their icons. */
   levels: GraphLevel[];
+  /** The branches dots are coloured by, each named for the circle it hangs under. */
   branches: LegendBranch[];
 }) {
   return (
@@ -764,9 +817,15 @@ function GraphLegend({
   );
 }
 
+/** How far the pointer may move between press and release and still count as a click, not a pan. */
 const CLICK_SLOP_PX = 4;
+/** Marks the nodes and lines that stay lit while the rest of the graph fades (see knowledge.css). */
 const NEIGHBOUR_CLASS = 'knowledge-neighbour';
 
+/**
+ * The same edge objects while their content is unchanged. Pointing at a page changes the style of the
+ * few lines touching it; handing React Flow fresh objects for every line would redraw them all.
+ */
 function useStableEdges<E extends Edge>(edges: E[]): E[] {
   const seen = useRef(new Map<string, { sig: string; edge: E }>());
   return useMemo(() => {
@@ -783,41 +842,70 @@ function useStableEdges<E extends Edge>(edges: E[]): E[] {
   }, [edges]);
 }
 
+/** The focused page's circle is this much larger than its neighbours'. */
 const FOCUSED_SCALE = 1.2;
+/** Pages in other branches that the focus links to draw a little smaller than its own neighbours. */
 const LINK_END_SCALE = 0.8;
+/** Most branch colours the legend names; the rest are counted. */
 const LEGEND_BRANCH_CAP = 4;
+/** Most links a hovered page draws that aren't drawn already. */
 const HOVER_LINK_CAP = 40;
 
 export interface KnowledgePageGraphProps {
   pages: KnowledgePagePayload[];
+  /** Mention and body-link edges between pages; parent edges are derived from `pages`. */
   edges: KnowledgePageEdge[];
   pinnedIds?: readonly string[];
+  /** Access grants between scopes, drawn from each principal scope to the scope it reaches. */
   grants?: readonly KnowledgeScopeGrantPayload[];
   selectedPageId?: string | null;
+  /** The page the layout centres on when none is selected, drawn like a focused page without the ring. */
   centerId?: string | null;
+  /** Per page, links into and out of it that the graph doesn't draw; shown as `→in out→` on full circles. */
   hiddenLinks?: ReadonlyMap<string, { in: number; out: number }>;
+  /** Every link between pages, drawn or not: hovering a page draws its own, and tooltips count them. */
   knownLinks?: readonly KnowledgePageEdge[];
+  /** Pages the focus links to or from that the hierarchy doesn't reach: drawn close around the focus. */
   nearIds?: ReadonlySet<string>;
+  /** False while the pages the selected page needs are loading: the graph keeps its last layout until they are in. */
   settled?: boolean;
+  /** Exact links into and out of pages, from the store; they replace the counts taken from `knownLinks`. */
   exactLinkCounts?: ReadonlyMap<string, { in: number; out: number }>;
+  /** Links fetched for the page under the pointer: drawn on hover, never counted or laid out. */
   fetchedLinks?: readonly KnowledgePageEdge[];
+  /** The page under the pointer, or null: a host can fetch that page's links. */
   onHover?: (pageId: string | null) => void;
+  /** Write each dot's total of links in and out inside it. */
   showCounts?: boolean;
+  /** The pointer rests on a dot or stand-in: a host can load what it stands for. */
   onPreview?: (page: KnowledgePagePayload) => void;
+  /** A page that wasn't selected was clicked, tapped, or activated with Enter or Space: select it. */
   onSelect: (page: KnowledgePagePayload) => void;
+  /** The already-selected page was clicked, tapped, or activated again: open it. Without it, that only reselects. */
   onOpen?: (page: KnowledgePagePayload) => void;
+  /** Empty canvas was clicked without moving the pointer (a pan doesn't count): clear the selection. */
   onClearSelection?: () => void;
+  /** A mention line was clicked: notes on `source` mention `target`. `point` is where, in the graph's own box. */
   onMentionSelect?: (mention: {
     source: KnowledgePagePayload;
     target: KnowledgePagePayload;
     point: { x: number; y: number };
+    /** The graph's own size, so a popup can open on whichever side of `point` has room. */
     pane: { width: number; height: number };
   }) => void;
 }
 
+/**
+ * The schema-4 Knowledge page graph: scopes and pages as circles sized by how often they are mentioned,
+ * parent links as faint edges and mentions as solid ones. The first layout is deterministic for the same pages; later updates start from where pages already sit.
+ */
 export function KnowledgePageGraph(props: KnowledgePageGraphProps) {
   const { settled = true } = props;
+  // While the pages a new focus needs are still loading, the graph keeps showing what it had: laying out
+  // the new focus on old data would animate to the wrong place and then jump when the data landed. The
+  // views change once, from the old layout to the new, when the data is in.
   const held = useRef(props);
+  // A request that never answers must not pin the graph to the old view: past a deadline it draws what it has.
   const [released, setReleased] = useState(false);
   const holding = !settled && !released;
   if (!holding) held.current = props;
@@ -885,12 +973,15 @@ function KnowledgePageGraphInner({
   onClearSelection,
   onMentionSelect,
 }: KnowledgePageGraphProps) {
+  // Grants add placeholder circles for declared principals with no scope page yet, and their own lines.
   const { graphPages, allEdges } = useMemo(() => {
     const granted = grantGraph(pages, grants);
     const withPlaceholders = granted.placeholders.length ? [...pages, ...granted.placeholders] : pages;
     return { graphPages: withPlaceholders, allEdges: [...pageGraphEdges(pages, edges), ...granted.edges] };
   }, [pages, edges, grants]);
   const linkSource = knownLinks ?? edges;
+  // Counts size the dots, so they feed the layout: they come from what is loaded and the store's counts,
+  // never from links fetched for a hover, or every hover would lay the whole graph out again.
   const linkCounts = useMemo(() => {
     const counts = new Map<string, { in: number; out: number }>();
     const pairs = new Set<string>();
@@ -905,9 +996,11 @@ function KnowledgePageGraphInner({
       into.in++;
       counts.set(edge.target, into);
     }
+    // Counts from the store cover pages whose links go to pages that were never loaded.
     for (const [id, exact] of exactLinkCounts ?? []) counts.set(id, exact);
     return counts;
   }, [linkSource, exactLinkCounts]);
+  // Page id -> its links, built once when links load; a hover is a lookup, not a scan of every link.
   const hoverLinks = useMemo(() => {
     const touching = new Map<string, KnowledgePageEdge[]>();
     const add = (id: string, edge: KnowledgePageEdge) => {
@@ -922,11 +1015,14 @@ function KnowledgePageGraphInner({
     }
     return touching;
   }, [linkSource, fetchedLinks]);
+  // The focused page sits at the centre with its parent and children around it as full circles; pages
+  // farther out are dots on outer rings, inside their branch's slice. A last overlap pass is the only force.
   const laidOut = useMemo(() => {
     const shape = graphShape(graphPages, selectedPageId ?? centerId ?? null, nearIds);
     const colors = branchColors(graphPages, shape);
     const flow = toPageFlow(graphPages, allEdges);
     for (const node of flow.nodes) {
+      // With counts on, only a dot that has a count grows to fit it; the rest stay small, so linked pages stand out.
       if (shape.form.get(node.id) === 'dot') {
         const links = linkCounts.get(node.id);
         const counted = showCounts && !isChildPlaceholder(node.data.page) && !!links && links.in + links.out > 0;
@@ -935,6 +1031,7 @@ function KnowledgePageGraphInner({
       // Circles at one level share a size, scopes included, so the ring reads evenly.
       else node.data.size = Math.round(KNOWLEDGE_PAGE_SIZE * (shape.linked.has(node.id) ? LINK_END_SCALE : 1));
     }
+    // A page with dozens of children draws them smaller, so the ring stays a size that can be read and fitted.
     const ring = flow.nodes.filter(node => shape.depth.get(node.id) === 1 && shape.form.get(node.id) === 'full');
     const crowd = crowdScale(ring.length);
     if (crowd < 1) for (const node of ring) node.data.size = Math.round(node.data.size * crowd);
@@ -953,6 +1050,7 @@ function KnowledgePageGraphInner({
     return { nodes: flow.nodes, edges: flow.edges, positions, shape, colors };
   }, [graphPages, allEdges, selectedPageId, centerId, linkCounts, showCounts, nearIds]);
   const pageById = useMemo(() => new Map(graphPages.map(page => [page.id, page])), [graphPages]);
+  // The page above whatever the graph is centred on, if it is drawn.
   const focusParentId = useMemo(() => {
     const parentId = laidOut.shape.center ? pageById.get(laidOut.shape.center)?.parentId : undefined;
     return parentId && laidOut.positions.has(parentId) ? parentId : null;
@@ -962,6 +1060,7 @@ function KnowledgePageGraphInner({
     for (const [id, level] of laidOut.shape.level) if (laidOut.shape.form.get(id) === 'full') kinds.add(level);
     return [...kinds];
   }, [laidOut]);
+  // Each dot takes its branch's colour; the legend says which circle each colour hangs under.
   const dotBranches = useMemo(() => {
     const seen = new Map<string, LegendBranch>();
     for (const node of laidOut.nodes) {
@@ -976,6 +1075,9 @@ function KnowledgePageGraphInner({
   }, [laidOut, pageById]);
 
   const pinned = useMemo(() => new Set(pinnedIds), [pinnedIds]);
+  // Pages with children none of which is drawn yet (stand-ins don't count) carry their child count.
+  // A circle counts its children whenever some of them are not drawn, as the tree does, so a parent
+  // with 281 pages says so even with its first few laid around it.
   const childrenUndrawn = useMemo(() => {
     const drawn = new Map<string, number>();
     for (const page of graphPages) {
@@ -993,8 +1095,10 @@ function KnowledgePageGraphInner({
         .map(page => page.id),
     );
   }, [graphPages]);
+  // The page under the pointer, if any: its own lines show and the rest of the graph fades.
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   useEffect(() => onHover?.(hoveredId), [hoveredId, onHover]);
+  // A hovered page's links to pages that are drawn but whose lines aren't, up to a cap.
   const hoverExtra = useMemo(() => {
     if (!hoveredId) return [];
     const drawnIds = new Set(laidOut.nodes.map(node => node.id));
@@ -1009,6 +1113,7 @@ function KnowledgePageGraphInner({
     }
     return extra;
   }, [hoveredId, hoverLinks, laidOut]);
+  // Of the hovered page's links, those with no line drawn: the other end is off screen, or past the cap.
   const hoveredNotShown = useMemo(() => {
     const total = hoveredId ? linkCounts.get(hoveredId) : undefined;
     if (!hoveredId || !total) return 0;
@@ -1021,6 +1126,7 @@ function KnowledgePageGraphInner({
     return Math.max(0, total.in + total.out - pairs.size);
   }, [hoveredId, linkCounts, laidOut, hoverExtra]);
   const emphasisId = hoveredId && laidOut.positions.has(hoveredId) ? hoveredId : (selectedPageId ?? null);
+  // With a page selected or hovered, everything more than one line away fades so its neighbourhood reads at a glance.
   const neighbours = useMemo(
     () =>
       emphasisId && laidOut.positions.has(emphasisId)
@@ -1031,6 +1137,9 @@ function KnowledgePageGraphInner({
         : null,
     [emphasisId, laidOut, allEdges, hoverExtra],
   );
+  // Each circle's size is known from the layout, so hand it to React Flow as the node's fixed size. Left to
+  // React Flow's own DOM measurement, a production Studio sometimes never got one and every node stayed
+  // `visibility: hidden`.
   const nodes = useMemo(
     () =>
       laidOut.nodes.map(node => {
@@ -1039,6 +1148,8 @@ function KnowledgePageGraphInner({
           ...node,
           width: node.data.size,
           height: node.data.size,
+          // Declared handles (where the hidden ones sit in PageNodeComponent) let lines draw without React
+          // Flow measuring the node in the DOM, for the same reason as the fixed size above.
           handles: [
             { type: 'target' as const, position: Position.Top, x: node.data.size / 2, y: 0, width: 1, height: 1 },
             {
@@ -1083,6 +1194,7 @@ function KnowledgePageGraphInner({
       const grant = edge.data?.kind === 'grant';
       const link = edge.data?.kind === 'link';
       const toDot = laidOut.shape.form.get(edge.target) === 'dot';
+      // A link touching the selected page reads by direction: out of it or into it.
       const direction =
         (mention || link) && emphasisId
           ? edge.source === emphasisId
@@ -1106,6 +1218,7 @@ function KnowledgePageGraphInner({
           from: circle(edge.source),
           to: circle(edge.target),
         },
+        // Into the focus is dashed: drawn over the solid way out, so the green shows between the dashes.
         ...(direction === 'in' ? { zIndex: 1 } : {}),
         ...(mention && onMentionSelect ? { className: 'cursor-pointer' } : {}),
         style: direction
@@ -1139,6 +1252,8 @@ function KnowledgePageGraphInner({
     return { flowEdges, drawnEdgeStyles: drawn };
   }, [laidOut, hoverExtra, onMentionSelect, emphasisId, focusParentId]);
   const flowEdges = useStableEdges(builtEdges);
+  // Dimming is CSS: the container says something is emphasised, and only the page's neighbourhood is
+  // marked. Pointing at a page then changes a few nodes and lines, not all of them.
   const emphasisedNodes = useMemo(
     () =>
       nodes.map(node => {
@@ -1169,11 +1284,18 @@ function KnowledgePageGraphInner({
   const containerRef = useRef<HTMLDivElement>(null);
   const hasNodes = nodes.length > 0;
 
+  // The view frames the selected page and its neighbours, or every page when nothing is selected. It is
+  // computed from the layout's own positions and sizes rather than React Flow's `fitView`, which only
+  // counts nodes it has measured in the DOM: in a production Studio it measured none, so the view never
+  // moved. State is read through a ref so a refetch with the same selection never moves the view.
+  // Pages that just left the view stay a moment, fading, so a refocus reads as a change and not a cut.
   const drawnNodes = useLeavingNodes(emphasisedNodes, prefersMotion());
   const linkedIds = laidOut.shape.linked;
   const fitState = useRef({ nodes, selectedPageId, centerId, reactFlow, linkedIds });
   fitState.current = { nodes, selectedPageId, centerId, reactFlow, linkedIds };
+  // Set when a fit found the pane 0×0, so the next non-zero size fits even if it matches the last one seen.
   const fitPending = useRef(false);
+  // The pane and what is drawn, or null while the pane has no size (the next non-zero size fits).
   const paneAndNodes = () => {
     const container = containerRef.current;
     const width = container?.clientWidth ?? 0;
@@ -1187,6 +1309,7 @@ function KnowledgePageGraphInner({
     const bounds = graphBounds(current);
     return bounds ? { container, width, height, current, flow, bounds } : null;
   };
+  // Fit view: every drawn node; with an outer ring of linked pages, below the readable floor so it all shows.
   const fit = useCallback((duration?: number) => {
     const view = paneAndNodes();
     if (!view) return;
@@ -1196,6 +1319,7 @@ function KnowledgePageGraphInner({
     const viewport = fitViewport({ bounds: view.bounds, width: view.width, height: view.height, ring, anchor });
     void view.flow.setViewport(viewport, duration ? { duration } : undefined);
   }, []);
+  // The first view, once the graph has a size: everything drawn, with a margin, clear of the legend.
   const fitInitial = useCallback(() => {
     const view = paneAndNodes();
     if (!view) return;
@@ -1216,6 +1340,10 @@ function KnowledgePageGraphInner({
     void view.flow.setViewport(viewport);
   }, []);
 
+  // A refocus leaves the view exactly where the user put it, pan and zoom. Only when the newly focused page
+  // would land outside the pane (or too close to its edge) does the view move, and then by just enough to
+  // bring the page back in. A pane that merely changes size does the same. Fit view is the one control that
+  // changes zoom.
   const nudgeToSelection = useCallback((duration?: number) => {
     const container = containerRef.current;
     const width = container?.clientWidth ?? 0;
@@ -1230,11 +1358,17 @@ function KnowledgePageGraphInner({
     void flow.setViewport({ zoom: view.zoom, x: view.x + dx, y: view.y + dy }, duration ? { duration } : undefined);
   }, []);
 
+  // A host that hides the graph behind a Tree/Graph toggle gives it zero size at first, so fit when the
+  // container first gets a non-zero size. Once it has been laid out, a new size (the window resized, a
+  // banner appeared above it) keeps the zoom and re-centres, so it never undoes the user's zoom. At most
+  // once a frame.
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === 'undefined') return;
     let last = { width: container.clientWidth, height: container.clientHeight };
     let frame: number | undefined;
+    // Set while the pane has been hidden, until a fit has run. A second resize can cancel the frame that
+    // would have fitted, so this has to outlive the callback.
     let needsFit = false;
     const observer = new ResizeObserver(([entry]) => {
       if (!entry) return;
@@ -1259,11 +1393,16 @@ function KnowledgePageGraphInner({
     };
   }, [hasNodes, fitInitial, nudgeToSelection]);
 
+  // A selection made outside the graph (tree, search, a link) pans to that page at the current zoom. A
+  // click on the graph itself leaves the view where the user put it.
   const selectedHere = useRef<string | null>(null);
   const selectedIsLoaded = !!selectedPageId && pagesById.has(selectedPageId);
   const initialized = useRef(false);
+  // The first view is refitted while the graph is still filling in (ring pages, children, links arrive over the
+  // first moments), until the user does anything or the window closes. After that the view is theirs.
   const settleUntil = useRef(0);
   const settledOn = useRef<string | null>(null);
+  // What the last first-view fit was of, so a refetch that draws the same thing doesn't fit again.
   const fittedLayout = useRef('');
   const stopSettling = useCallback(() => {
     settleUntil.current = 0;
@@ -1285,14 +1424,18 @@ function KnowledgePageGraphInner({
     nudgeToSelection(fitDuration(prefersMotion()));
   }, [selectedPageId, selectedIsLoaded, nudgeToSelection]);
 
+  // First click selects; a click on the page that is already selected opens it. A double-click is the two.
   const activate = (page: KnowledgePagePayload) => {
+    // A stand-in or a scope group isn't a page: the host loads or opens what it stands for.
     if (isChildPlaceholder(page) || isScopeGroup(page) || isRestCircle(page)) return onSelect(page);
     if (page.id === selectedPageId && onOpen) return onOpen(page);
     selectedHere.current = page.id;
     onSelect(page);
   };
+  // Where the pointer went down, so a click that ends a pan isn't taken for a click on empty canvas.
   const pressedAt = useRef<{ x: number; y: number } | null>(null);
 
+  // React Flow focuses nodes but only toggles its own selection on Enter or Space; route them like a click.
   const onKeyDown = (event: React.KeyboardEvent) => {
     if (event.key !== 'Enter' && event.key !== ' ') return;
     const id = (event.target as HTMLElement).closest<HTMLElement>('.react-flow__node')?.dataset.id;
@@ -1301,6 +1444,9 @@ function KnowledgePageGraphInner({
     event.preventDefault();
     activate(page);
   };
+  // React Flow hands these to every node and line, and re-renders them all when one changes. They read the
+  // latest props through a ref so their identity never changes, and pointing at a page re-renders only the
+  // pages whose own props changed.
   const latest = useRef({ activate, onPreview, onMentionSelect, onClearSelection, laidOut, pagesById });
   latest.current = { activate, onPreview, onMentionSelect, onClearSelection, laidOut, pagesById };
   const onNodeMouseEnter = useCallback((_: unknown, node: PageFlowNode) => {

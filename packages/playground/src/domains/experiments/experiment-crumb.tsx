@@ -6,7 +6,7 @@ import { ExperimentStatusIcon } from '@/domains/experiments/components/experimen
 
 const useCurrentExperiment = () => {
   const { experimentId } = useParams<{ experimentId: string }>();
-  // Retrying an errored lookup on mount loops with the page's not-found shell.
+  // The page owns the fetch; re-fetching an errored lookup on mount would loop with the page's not-found shell.
   const { data } = useExperiment({
     experimentId: experimentId ?? '',
     queryOptions: { enabled: Boolean(experimentId), retryOnMount: false },
@@ -14,10 +14,11 @@ const useCurrentExperiment = () => {
   return { experimentId, experiment: data };
 };
 
+/** Current experiment, kept fresh while it runs. */
 const useLiveExperiment = () => {
   const { experimentId, experiment } = useCurrentExperiment();
   const datasetId = experiment?.datasetId ?? '';
-  // Only the dataset-scoped query polls active runs.
+  // `useExperiment` doesn't poll; the dataset-scoped query does while the run is active, so the crumb follows it.
   const { data: datasetExperiment } = useDatasetExperiment({
     datasetId,
     experimentId: experimentId ?? '',
@@ -26,6 +27,10 @@ const useLiveExperiment = () => {
   return datasetExperiment ?? experiment;
 };
 
+/**
+ * Experiment breadcrumb label: the experiment name, falling back to the
+ * truncated id while loading or when the experiment was created without one.
+ */
 export function ExperimentCrumb() {
   const { experimentId, experiment } = useCurrentExperiment();
   if (!experimentId) return null;
@@ -34,11 +39,13 @@ export function ExperimentCrumb() {
   return experiment?.name || shortId;
 }
 
+/** Run status icon rendered through the crumb `icon` slot. */
 export function ExperimentCrumbStatusIcon() {
   const experiment = useLiveExperiment();
   return experiment?.status ? <ExperimentStatusIcon status={experiment.status} /> : null;
 }
 
+/** Item count rendered next to the experiment name once the run settles; the page body shows an active run's progress. */
 export function ExperimentCrumbItemCount() {
   const experiment = useLiveExperiment();
   if (!experiment || experiment.status === 'running' || experiment.status === 'pending') return null;

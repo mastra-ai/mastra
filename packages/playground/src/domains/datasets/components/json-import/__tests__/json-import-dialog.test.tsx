@@ -10,7 +10,7 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test
 
 type BatchInsertResponse = RouteResponse<'POST /datasets/:datasetId/items/batch'>;
 
-// CodeMirror needs a browser; use a textarea in jsdom.
+// CodeMirror doesn't render in jsdom; stub it so we can assert on the props it receives.
 vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
   CodeEditor: ({ value, language, onChange, editable = true, 'aria-label': label }: CodeEditorProps) =>
     onChange ? (
@@ -261,6 +261,7 @@ describe('JSONImportDialog', () => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
       expect(resetTimers).toHaveLength(1);
 
+      // If the timer survives unmount it fires into a torn-down tree ("window is not defined" after jsdom teardown).
       unmount();
       expect(clearSpy).toHaveBeenCalledWith(resetTimers[0]);
     });

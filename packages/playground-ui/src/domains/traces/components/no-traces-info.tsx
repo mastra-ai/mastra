@@ -11,6 +11,7 @@ const PRESET_LABELS: Record<Exclude<TraceDatePreset, 'all' | 'custom'>, string> 
 };
 
 export interface NoTracesInfoProps {
+  /** What the empty list holds. Defaults to `traces`. */
   resource?: 'traces' | 'spans' | 'threads';
   datePreset?: TraceDatePreset;
   dateFrom?: Date;

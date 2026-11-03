@@ -9,6 +9,7 @@ interface LineRange {
   end: Position;
 }
 
+/** What part of a page a Knowledge call read or wrote: a short tag for the collapsed row, a sentence for the body. */
 export interface BodyExtent {
   row: string | undefined;
   summary: string;
@@ -20,6 +21,7 @@ const isRange = (value: unknown): value is LineRange =>
 
 const at = ({ line, col }: Position) => (col === undefined ? `${line}` : `${line}:${col}`);
 
+/** `lines 12–14`, `line 12`, or with columns `line 2:5–9`, `lines 5:200–9:40`. */
 function linesText(range: LineRange): string {
   const { start, end } = range;
   const plural = start.line === end.line ? 'line' : 'lines';
@@ -32,6 +34,10 @@ function linesText(range: LineRange): string {
 
 const quoted = (terms: string[]) => terms.map(term => `"${term}"`).join(', ');
 
+/**
+ * Which part of the body a `knowledge_read` result holds, from the call's arguments and its page. A whole
+ * body has no row tag; undefined when the result is not a body read at all (a notes-only read, a scope listing).
+ */
 export function readExtent(output: Record<string, unknown>, args: Record<string, unknown>): BodyExtent | undefined {
   const page = output.page;
   if (!isRecord(page)) return undefined;
@@ -79,6 +85,7 @@ export function readExtent(output: Record<string, unknown>, args: Record<string,
   return { row: undefined, summary: 'Whole page' };
 }
 
+/** Which lines a `knowledge_page` write replaced, from its `range` argument; undefined for a whole-body write. */
 export function writeExtent(args: Record<string, unknown>): BodyExtent | undefined {
   if (!isRange(args.range)) return undefined;
   const text = linesText(args.range);

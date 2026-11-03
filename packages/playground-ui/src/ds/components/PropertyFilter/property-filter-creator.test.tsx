@@ -106,6 +106,8 @@ const PICK_MULTI_FIELDS: PropertyFilterField[] = [
 ];
 
 const openMenu = () => fireEvent.click(screen.getByRole('button', { name: /Add filter/i }));
+// The popover's own "Add filter" button, which shares its name with the trigger. `hidden`: a multi-select keeps
+// its list open after a pick, hiding the rest from assistive tech meanwhile; a pointer click still lands.
 const commitFilter = () =>
   fireEvent.click(
     within(screen.getByRole('dialog', { hidden: true })).getByRole('button', { name: 'Add filter', hidden: true }),
@@ -245,6 +247,7 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
 
     openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    // The multi-select is a chips field: the invitation is its placeholder, and it searches in itself.
     expect(screen.getByRole('combobox').getAttribute('placeholder')).toBe('Choose Tags');
 
     fireEvent.mouseDown(screen.getByRole('combobox'));
@@ -306,6 +309,7 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
 
     openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: /Tags/i }));
+    // A field opens on mousedown (a real press), which fireEvent.click doesn't send.
     fireEvent.mouseDown(screen.getByRole('combobox'));
     fireEvent.click(await screen.findByRole('option', { name: 'Prod' }));
     commitFilter();
@@ -322,6 +326,7 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
     commitFilter();
     expect(screen.getByText('Choose at least one tags value.')).toBeTruthy();
 
+    // A field opens on mousedown (a real press), which fireEvent.click doesn't send.
     fireEvent.mouseDown(screen.getByRole('combobox'));
     fireEvent.click(await screen.findByRole('option', { name: 'Prod' }));
 
@@ -380,6 +385,7 @@ describe('PropertyFilterCreator — choosing a multi-select value', () => {
 
     openMenu();
 
+    // Back at the property list, with last time's complaint forgotten.
     expect(screen.getByRole('menuitem', { name: /Tags/i })).toBeTruthy();
     expect(screen.queryByText('Choose at least one tags value.')).toBeNull();
   });
@@ -407,6 +413,7 @@ describe('PropertyFilterCreator — a pick-multi property', () => {
     openMenu();
 
     const item = screen.getByRole('menuitem', { name: /Primitive Type/i });
+    // Closed, the chevron trails the label as an invitation to open it.
     expect(item.lastElementChild?.querySelector('svg')).toBeTruthy();
     expect(item.firstElementChild?.tagName).toBe('SPAN');
 
@@ -485,6 +492,7 @@ describe('PropertyFilterCreator — a pick-multi property', () => {
     openPanel();
     await screen.findByRole('radio', { name: /Agent/i });
 
+    // Closing the property list takes its side panel with it.
     openMenu();
     await waitFor(() => expect(screen.queryByRole('menuitem', { name: /Primitive Type/i })).toBeNull());
 
@@ -505,6 +513,7 @@ describe('PropertyFilterCreator — a pick-multi property', () => {
     fireEvent.click(await screen.findByRole('checkbox', { name: /Alpha/i }));
     fireEvent.click(screen.getByRole('checkbox', { name: /Beta/i }));
 
+    // The second tick keeps the first rather than replacing it.
     expect(screen.getByRole('checkbox', { name: /Alpha/i }).getAttribute('aria-checked')).toBe('true');
     expect(screen.getByRole('checkbox', { name: /Beta/i }).getAttribute('aria-checked')).toBe('true');
   });
@@ -566,6 +575,7 @@ describe('PropertyFilterCreator — a pick-multi property', () => {
 });
 
 describe('PropertyFilterCreator — moving through the property list', () => {
+  /** The row the keyboard is on. Reading `document.body` would match anything. */
   const focusedRow = () => {
     const active = document.activeElement;
     if (!(active instanceof HTMLElement) || active.getAttribute('role') !== 'menuitem') {
@@ -689,6 +699,7 @@ describe('PropertyFilterCreator — moving through the property list', () => {
     openMenu();
     const before = document.activeElement;
 
+    // Nothing to move to, so the key is left to the browser.
     expect(fireEvent.keyDown(screen.getByRole('menu'), { key: 'ArrowDown' })).toBe(true);
     expect(document.activeElement).toBe(before);
   });

@@ -11,6 +11,7 @@ import { Txt } from '@/ds/components/Txt';
 import { FileIcon, Icon, SearchIcon, SkillIcon } from '@/ds/icons';
 import { cn } from '@/lib/utils';
 
+/** Icon button that swaps the tree for the search panel, like VS Code's search view. */
 export function WorkspaceSearchToggle() {
   const { isSearching, setSearching, searchFiles, searchSkills } = useWorkspaceContext();
   if (!searchFiles && !searchSkills) return null;
@@ -28,6 +29,7 @@ export function WorkspaceSearchToggle() {
   );
 }
 
+/** The search input while searching, the aside title otherwise. */
 export function WorkspaceSearch() {
   const { isSearching } = useWorkspaceContext();
   return isSearching ? <SearchInput /> : <AsideTitle />;
@@ -45,6 +47,7 @@ function AsideTitle() {
   );
 }
 
+// Mounted only while searching, so reopening the search starts from an empty input.
 function SearchInput() {
   const { setSearching, setQuery } = useWorkspaceContext();
   const [value, setValue] = useState('');

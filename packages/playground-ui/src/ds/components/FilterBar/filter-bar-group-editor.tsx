@@ -21,6 +21,7 @@ export type FilterBarLogicToggleProps = {
   className?: string;
 };
 
+/** `and` / `or` connector in front of a row; every connector of a group shares its logic. */
 export function FilterBarLogicToggle({ groupId, logic, className }: FilterBarLogicToggleProps) {
   const ctx = useFilterBarContext();
   const next: FilterBarLogic = logic === 'and' ? 'or' : 'and';
@@ -44,6 +45,7 @@ export function FilterBarLogicToggle({ groupId, logic, className }: FilterBarLog
   );
 }
 
+/** Segmented `and | or` control shown in a nested group's header. */
 function FilterBarLogicSwitch({ groupId, logic }: { groupId: string; logic: FilterBarLogic }) {
   const ctx = useFilterBarContext();
   return (
@@ -75,12 +77,21 @@ function FilterBarLogicSwitch({ groupId, logic }: { groupId: string; logic: Filt
 
 export type FilterBarGroupEditorProps = {
   group: FilterBarGroup;
+  /** Nesting level of `group` (root-level group = 1). */
   depth: number;
+  /** Drops this group; rendered as a trailing `Clear all` in the footer. */
   onRemove?: () => void;
   removeLabel?: string;
   className?: string;
 };
 
+/**
+ * Recursive rule builder shown in an advanced-filter popover. Rows are laid out as
+ * `connector | condition`: the first row reads `where`, the following ones carry the
+ * group's `and` / `or` toggle. Nested groups render as bordered cards with their own
+ * header (logic switch + remove) and footer. The shared typeahead input renders as the
+ * last row of the group it is pointed at.
+ */
 export function FilterBarGroupEditor({
   group,
   depth,
@@ -94,6 +105,7 @@ export function FilterBarGroupEditor({
   const targeted = ctx.inputTarget === group.id;
   const canNest = depth < ctx.maxDepth;
 
+  // `+ Condition` is hidden while the input is open; focus it once it remounts.
   useEffect(() => {
     if (targeted || !focusAddFilter.current) return;
     focusAddFilter.current = false;

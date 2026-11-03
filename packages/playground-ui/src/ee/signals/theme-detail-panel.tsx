@@ -222,6 +222,8 @@ export function ThemeDetailPanel({
                       {oldestHistoryPoint !== undefined && (
                         <>
                           <Txt tone="ink" className="mt-3">
+                            {/* A nextCursor means older points exist beyond the fetched window,
+                                so the oldest loaded point is a lower bound, not the true origin. */}
                             <Metadata>
                               <Metadata.Item>
                                 {historyQuery.data?.nextCursor

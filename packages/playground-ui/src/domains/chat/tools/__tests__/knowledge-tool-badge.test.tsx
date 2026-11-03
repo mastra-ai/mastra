@@ -45,6 +45,7 @@ const props = (over: Partial<ToolCardProps>): ToolCardProps => ({
 
 const renderCard = (over: Partial<ToolCardProps>) => render(<ToolCard {...props(over)} />, { wrapper: Providers });
 
+/** Opens the collapsed card and returns its body. */
 function open(): HTMLElement {
   const badge = screen.getByTestId('knowledge-tool-badge');
   const [toggle] = within(badge).getAllByRole('button');

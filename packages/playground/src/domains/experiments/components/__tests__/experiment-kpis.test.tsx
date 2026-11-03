@@ -10,8 +10,10 @@ import { experiments } from './fixtures/experiments';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test/render';
 
+// Completed run: 10:00 → 10:05, 10 items.
 const completedExperiment: DatasetExperiment = experiments[0];
 
+// Cost and tokens come from the per-item usage breakdown; the KPIs only read the average duration here.
 const fullMetrics: ExperimentMetrics = {
   totalTokens: null,
   estimatedCost: null,
@@ -31,6 +33,7 @@ describe('ExperimentKpis', () => {
 
   beforeEach(() => {
     server.use(
+      // avg of 0.5, 1 and 1 across both scorers is 0.833.
       http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
         scoresResponse([
           { entityId: 'item-1', scorerId: 'answer-relevancy', score: 0.5 },

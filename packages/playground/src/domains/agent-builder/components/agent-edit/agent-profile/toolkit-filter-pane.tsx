@@ -18,6 +18,7 @@ const TEST_ID_PREFIX = 'tools-toolkit';
 interface ToolkitRow {
   id: string;
   label: string;
+  /** Backend-provided toolkit icon (typically a URL/data-URI). Absent for Built-in. */
   icon?: string;
 }
 
@@ -26,6 +27,7 @@ interface ToolkitFilterRowProps {
   checked: boolean;
   disabled: boolean;
   onToggle: (id: string) => void;
+  /** Set for provider toolkit rows; absent for the Built-in group. */
   providerId?: string;
   multipleAllowed?: boolean;
 }
@@ -98,6 +100,14 @@ interface ProviderToolkitSectionProps {
   multipleAllowed: boolean;
 }
 
+/**
+ * Renders a single provider's toolkit checkboxes. Owns its own toolkit fetch
+ * (`useToolkits`) so the pane never has to coordinate N async loads: while this
+ * provider's toolkits load it shows a skeleton, and only renders real rows once
+ * they resolve. Toolkit display names therefore appear correctly cased on first
+ * paint — there's no slug→name swap. Search is a plain synchronous filter over
+ * the resolved rows, so it simply has nothing to act on until the data is in.
+ */
 const ProviderToolkitSection = ({
   provider,
   term,
@@ -174,9 +184,18 @@ interface ToolkitFilterPaneProps {
   onSelectAll: () => void;
   onClearAll: () => void;
   disabled?: boolean;
+  /** Per-provider capability: whether a toolkit may hold multiple connections. */
   multipleAllowedByProvider: Map<string, boolean>;
 }
 
+/**
+ * Left-pane toolkit filter, grouped by provider. A synthetic "Built-in" group
+ * (for native tools/agents/workflows) renders immediately; each provider is its
+ * own {@link ProviderToolkitSection} that fetches and renders independently. A
+ * single search box and global Select all / Clear all act across every group.
+ * Selection semantics are a flat `Set<toolkit>` owned by the parent — provider
+ * grouping is presentational only.
+ */
 export const ToolkitFilterPane = ({
   builtIn,
   providers,

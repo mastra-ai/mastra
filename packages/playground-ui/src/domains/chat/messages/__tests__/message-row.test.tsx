@@ -125,6 +125,8 @@ describe('MessageRow', () => {
     expect(container.textContent).toMatch(/partial answer[\s\S]*APICallError[\s\S]*The model request failed\./);
   });
 
+  // The reveal only paces if the factory keeps the text part mounted as the
+  // reply grows; a remount would show every chunk whole again.
   describe('when a streaming reply grows', () => {
     it('reveals it gradually', () => {
       vi.useFakeTimers();
@@ -293,6 +295,9 @@ describe('MessageRow', () => {
     expect(screen.getByText('cart')).toBeTruthy();
   });
 
+  // Regression: a persisted reactive (non-user) `signal` row must render a
+  // SignalBadge on read-back. This conversion existed at 1.41.0 and was lost
+  // when the chat renderer was rewritten (PR #17774); the row was dropped.
   it('renders a persisted reactive signal row as a signal badge on read-back', () => {
     const { container } = renderRow(
       baseMessage({
@@ -310,6 +315,8 @@ describe('MessageRow', () => {
     expect(container.textContent).toContain('reactive signal body');
   });
 
+  // A non-user signal whose payload is not a renderable signal shape must be
+  // dropped, not rendered as an empty assistant bubble.
   it('drops a non-user signal whose payload is not a renderable signal shape', () => {
     const { container } = renderRow(
       baseMessage({
@@ -609,6 +616,8 @@ describe('MessageRow', () => {
       expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeTruthy();
     });
 
+    // A thread read back without its suspend payload draws the question as a plain badge. It is still
+    // a question, so it breaks the run rather than folding away with the calls around it.
     it('keeps a question out of the fold even where nothing is left to answer', () => {
       const { container } = render(
         <MessageRow

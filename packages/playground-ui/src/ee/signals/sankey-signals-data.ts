@@ -31,6 +31,10 @@ export function themeFlowToSankeyData(flow: ThemeFlowResponse): {
     for (const node of stage.nodes) nodes.set(node.nodeId, { signalName: stage.signalName, node });
   }
 
+  // Only stages that participate in links become chart columns. A stage with
+  // themes but no links (possible in real flows) would otherwise leave a
+  // phantom first column: the chart lays out linked columns across the full
+  // width but keeps anchoring labels as if the unlinked column still led.
   const linkedSignalNames = new Set(
     flow.links.flatMap(link => {
       const source = nodes.get(link.sourceNodeId);
@@ -75,6 +79,10 @@ export function buildSignalGraphSummary(flow: ThemeFlowResponse): {
   return themeFlowToSankeyData(flow);
 }
 
+/**
+ * Snapshot ids whose flows the timeline needs right now: the selected landmark
+ * plus its previous and next playback neighbors (playback wraps around).
+ */
 export function selectFlowSnapshotIds(snapshots: Array<{ snapshotId: string }>, selectedIndex: number): string[] {
   if (snapshots.length === 0) return [];
   const neighborIndexes = new Set([
@@ -90,6 +98,13 @@ export function selectFlowSnapshotIds(snapshots: Array<{ snapshotId: string }>, 
     });
 }
 
+/**
+ * Keeps node ordering and ribbon layout widths consistent across the playback
+ * window without inventing content: only nodes and links present in the
+ * current snapshot render (no zero-count ghosts from neighboring flows), but
+ * their order and layout weight come from the whole window so shared themes
+ * hold their position while scrubbing.
+ */
 export function stabilizeThemeFlow(flow: ThemeFlowResponse, windowFlows: ThemeFlowResponse[]): StableThemeFlowResponse {
   const stages = flow.stages.map(stage => {
     const orderedNodeIds = new Map<string, number>();
@@ -147,6 +162,11 @@ function formatSignalName(signalName: TraceSignalName) {
   return `${signalName.slice(0, 1).toUpperCase()}${signalName.slice(1)}`;
 }
 
+/**
+ * Date, trace-count, and theme-count fields rendered under the timeline in every view
+ * mode. Counts come from the charted flow (cohort stage totals), so a drilled
+ * flow reports the drilled subset; date-only while the flow is loading.
+ */
 export function snapshotSummaryParts(snapshot: ThemeSnapshot, flow: ThemeFlowResponse | undefined): readonly string[] {
   const date = snapshot.cutoffAt
     ? formatSnapshotCutoff(snapshot.cutoffAt)

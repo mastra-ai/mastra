@@ -148,7 +148,8 @@ beforeEach(() => {
 
 afterEach(async () => {
   cleanup();
-  // @hello-pangea/dnd defers announcer cleanup by one tick.
+  // @hello-pangea/dnd removes its accessibility announcer in a zero-delay timer.
+  // Let that cleanup run before Vitest tears down this file's jsdom document.
   await new Promise(resolve => setTimeout(resolve, 0));
   vi.restoreAllMocks();
 });
@@ -450,6 +451,8 @@ describe('SankeySignals drill-in', () => {
       expect(screen.queryByText('Drill-in: Goal = "Add transcript"')).toBeNull();
       await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('2 traces')).not.toBeNull());
       expect(within(screen.getByTestId('snapshot-summary')).getByText('Filtered')).not.toBeNull();
+      // Themes outside the drilled paths disappear instead of lingering as
+      // zero-count ghosts.
       expect(screen.queryByLabelText(/^Other/)).toBeNull();
       expect(pathsRequestCount).toBe(2);
 

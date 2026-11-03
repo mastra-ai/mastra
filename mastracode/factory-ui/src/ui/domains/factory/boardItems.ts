@@ -23,6 +23,7 @@ export function hasLabel(labels: readonly string[], label: string): boolean {
   return labels.some(item => item.toLowerCase() === label);
 }
 
+/** Native cards and unfiled candidates keep their facts in placement metadata. */
 export function sourceMetadata(item: Pick<WorkItem, 'metadata' | 'workItem'>): Record<string, unknown> {
   if (!item.workItem || item.workItem.provider === 'factory') return item.metadata;
   return {
@@ -60,6 +61,7 @@ export function githubNumberForItem(item: Pick<WorkItem, 'source' | 'workItem' |
   return itemNumber;
 }
 
+/** The change-request number a review card carries: a GitHub PR number or a GitLab MR iid. */
 export function changeRequestNumberForItem(
   item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>,
 ): number | undefined {
@@ -78,12 +80,13 @@ export function gitlabIdentifierForItem(item: Pick<WorkItem, 'source' | 'workIte
   return typeof iid === 'number' && Number.isSafeInteger(iid) && iid > 0 ? `!${iid}` : undefined;
 }
 
+/** The human issue key a Linear card carries (`ENG-123`), when it has one. */
 export function linearIdentifierForItem(item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>): string | undefined {
   const metadata = sourceMetadata(item);
   if (item.source !== 'linear-issue' || typeof metadata.identifier !== 'string') return;
   return metadata.identifier;
 }
-
+/** The opaque Linear issue id a card carries, when it has one. */
 export function linearIssueIdForItem(item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>): string | undefined {
   const metadata = sourceMetadata(item);
   if (item.source !== 'linear-issue' || typeof metadata.linearIssueId !== 'string') return;
@@ -102,6 +105,7 @@ export function jiraIssueRefForItem(item: Pick<WorkItem, 'source' | 'workItem' |
   return nonEmptyString(metadata.issueRef) ?? nonEmptyString(metadata.issueReference);
 }
 
+/** The human reference an incident.io follow-up card carries (`INC-42` or the item id), when it has one. */
 export function incidentioIdentifierForItem(
   item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>,
 ): string | undefined {
@@ -110,6 +114,7 @@ export function incidentioIdentifierForItem(
   return metadata.identifier;
 }
 
+/** The prefixed incident.io item reference a card carries, when it has one. */
 export function incidentioIssueRefForItem(
   item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>,
 ): string | undefined {
@@ -118,7 +123,7 @@ export function incidentioIssueRefForItem(
   return nonEmptyString(metadata.issueRef) ?? nonEmptyString(metadata.issueReference);
 }
 
-// Legacy rows may carry an empty issueRef beside a populated issueReference.
+/** Legacy metadata may hold `issueRef: ''` beside a populated `issueReference`; skip empty values. */
 function nonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value ? value : undefined;
 }
@@ -142,11 +147,21 @@ export function pullRequestStatusForItem(item: Pick<WorkItem, 'workItem' | 'meta
   return metadata.draft === true ? 'draft' : 'open';
 }
 
+/**
+ * Source key for a GitHub issue or pull request. Numbers repeat across a
+ * project's repositories, so the key is repository-scoped whenever the
+ * repository is known; the bare-number form remains for legacy callers.
+ */
 export function githubSourceKey(kind: 'issue' | 'pull-request', itemNumber: number, repositoryId?: number): string {
   if (repositoryId !== undefined) return `github:${repositoryId}:${kind}:${itemNumber}`;
   return kind === 'issue' ? `github-issue:${itemNumber}` : `github-pr:${itemNumber}`;
 }
 
+/**
+ * The candidate source key a card stands for. Cards stamped with their
+ * repository match only that repository's candidate, even when the card
+ * itself still carries a bare-number key from before keys were scoped.
+ */
 export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
   const metadata = sourceMetadata(item);
   const itemNumber = githubNumberForItem(item);
@@ -157,6 +172,7 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
   return undefined;
 }
 
+/** Aria label for the icon-only external link next to a card title. */
 export function externalLinkLabel(source: WorkItemSource): string {
   if (source === 'gitlab-issue' || source === 'gitlab-pr') return 'Open in GitLab';
   if (source === 'linear-issue') return 'Open in Linear';
@@ -167,6 +183,7 @@ export function externalLinkLabel(source: WorkItemSource): string {
   return 'Open in GitHub';
 }
 
+/** When the issue/PR was opened upstream; `createdAt` is only when the factory first saw it, "just now" for every backfilled card. */
 export function sourceCreatedAt(metadata: Record<string, unknown>): string | undefined {
   const value = metadata.sourceCreatedAt;
   return typeof value === 'string' && isValid(new Date(value)) ? value : undefined;
@@ -178,6 +195,7 @@ export function doneAt(item: Pick<WorkItem, 'stages' | 'stageHistory'>): number 
   return entry && Date.parse(entry.enteredAt);
 }
 
+/** The upstream key a card is known by: `#123` on GitHub, `ENG-42` on Linear. */
 export function workItemKey(item: Pick<WorkItem, 'source' | 'workItem' | 'metadata'>): string | undefined {
   if (item.workItem?.provider !== 'factory' && item.workItem?.key) return item.workItem.key;
   const githubNumber = githubNumberForItem(item);
@@ -201,6 +219,7 @@ export function workItemMeta(item: WorkItem): readonly string[] {
   return [key, ...(owner ? [owner] : []), age];
 }
 
+/** Free-text card match over what names it on the board: its title and its issue key. */
 export function cardMatchesSearch(
   card: Pick<WorkItem, 'source' | 'workItem' | 'metadata' | 'title'>,
   query: string,
@@ -210,18 +229,30 @@ export function cardMatchesSearch(
   return [card.title, workItemKey(card) ?? ''].some(text => text.toLowerCase().includes(needle));
 }
 
+/**
+ * Branch + thread title for a card's session, shared with the server's runs
+ * (`workItemBranch`), so the title click and a later run converge on one
+ * worktree.
+ */
 export function itemSessionSpec(item: WorkItem): { branch: string; threadTitle: string } {
   const input = { ...item, metadata: { ...item.metadata, ...sourceMetadata(item) } };
   return { branch: workItemBranch(input), threadTitle: workItemThreadTitle(input) };
 }
 
-// Legacy rows may reference multiple sessions; prefer the earliest lifecycle role.
+/**
+ * The card's single conversation. A work item keeps one threadId for its whole
+ * lifecycle — every run reuses the worktree's thread — so the card title links
+ * to exactly one thread. Items filed while session scoping was broken may
+ * still carry divergent role refs; prefer the earliest lifecycle role because
+ * JSON object key order is not a stable record of which ref was filed first.
+ */
 export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>): WorkItemSessionRef | undefined {
   return (
     sessions.triage ?? sessions.plan ?? sessions.work ?? sessions.review ?? sessions.chat ?? Object.values(sessions)[0]
   );
 }
 
+/** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */
 export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<string> {
   const keys = new Set<string>();
   for (const item of items) {
@@ -234,6 +265,7 @@ export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<str
   return keys;
 }
 
+/** Whether a live candidate is already one of the given persisted cards. */
 export function isPersistedCandidate(
   keys: ReadonlySet<string>,
   candidate: { sourceKey: string; url: string },

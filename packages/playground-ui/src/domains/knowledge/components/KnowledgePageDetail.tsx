@@ -52,6 +52,7 @@ const RELATIVE_STEPS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ['year', Infinity],
 ];
 
+/** "3 minutes ago", with the exact time left to a tooltip. */
 function formatAgo(iso: string, now = Date.now()): string {
   const time = new Date(iso).getTime();
   if (Number.isNaN(time)) return iso;
@@ -72,6 +73,7 @@ function When({ iso }: { iso: string }) {
   );
 }
 
+/** A small round mark with the author's initial, tinted per author so a page's writers tell apart. */
 function AuthorMark({ author }: { author: string }) {
   const name = author.includes(':') ? author.slice(author.indexOf(':') + 1) : author;
   let hash = 0;
@@ -91,6 +93,10 @@ function AuthorMark({ author }: { author: string }) {
   );
 }
 
+/**
+ * The page's address: its home scope, then the keys from that scope down to it
+ * (`org:acme#policies/refund`). Null when a page on the way has no key.
+ */
 function knowledgePagePath(page: KnowledgePagePayload, ancestors: KnowledgePagePayload[]): string | null {
   if (page.isScope) return page.address ?? null;
   const scope = ancestors.find(candidate => candidate.id === page.scopeId);
@@ -106,6 +112,10 @@ const BodyLinks = createContext<{
   onPageClick: (page: KnowledgePagePayload) => void;
 } | null>(null);
 
+/**
+ * A `[[ref]]` from a page body: the page's name as a link when a loaded page answers to the ref, the ref
+ * itself in a quiet style when none does. Every other `<span>` the markdown makes passes through.
+ */
 function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
   const links = useContext(BodyLinks);
   const ref = node?.properties[KNOWLEDGE_REF_PROPERTY];
@@ -173,12 +183,14 @@ function PageLink({
 
 const refIndexes = new WeakMap<ReadonlyMap<string, KnowledgePagePayload>, KnowledgePageRefIndex>();
 
+/** One ref index per loaded-pages map, shared by every note drawn from it. */
 function loadedRefIndex(pagesById: ReadonlyMap<string, KnowledgePagePayload>): KnowledgePageRefIndex {
   let index = refIndexes.get(pagesById);
   if (!index) refIndexes.set(pagesById, (index = knowledgePageRefIndex(pagesById.values())));
   return index;
 }
 
+/** One note: who wrote it and when, its text with `[[mentions]]` linked when the page is known, and the scopes it is stamped to. */
 export function KnowledgeNoteItem({
   note,
   pagesById,
@@ -193,10 +205,13 @@ export function KnowledgeNoteItem({
   onPageClick: (page: KnowledgePagePayload) => void;
   highlighted?: boolean;
   itemRef?: (element: HTMLLIElement | null) => void;
+  /** Name the page the note sits on, for notes listed away from it. */
   showPage?: boolean;
+  /** A tighter layout for popups. */
   compact?: boolean;
 }) {
   const refIndex = loadedRefIndex(pagesById);
+  // Only a page the server resolved the mention to is linked, however the ref is written.
   const mentionTarget = (ref: string) => {
     const target = refIndex.resolve(ref);
     return target && note.mentions.includes(target.id) ? target : undefined;
@@ -262,6 +277,15 @@ export function KnowledgeNoteItem({
   );
 }
 
+/**
+ * The selected page as a page: where it sits, its body as markdown, its child
+ * pages, its notes (each with the scopes it is stamped to and who wrote it),
+ * the notes elsewhere that mention it, and its recent activity. Bodies are
+ * agent-written, so they render through {@link MarkdownRenderer}, which escapes
+ * raw HTML and drops unsafe link schemes.
+ *
+ * Paged lists take a `…More` slot the host fills with the next page's loader.
+ */
 export function KnowledgePageDetail({
   page,
   notes,
@@ -278,12 +302,18 @@ export function KnowledgePageDetail({
   page: KnowledgePagePayload;
   notes: KnowledgeNotePayload[];
   pin?: KnowledgePinPayload;
+  /** Loaded pages, for scope names and mention links. */
   pagesById: ReadonlyMap<string, KnowledgePagePayload>;
   onPageClick: (page: KnowledgePagePayload) => void;
+  /** Marks the notes that mention this page, e.g. after a mention line in the graph was clicked. */
   highlightMentionOf?: string;
+  /** Readable ancestors, root first: a breadcrumb and the page's path. */
   ancestors?: KnowledgePagePayload[];
+  /** Notes on other pages that mention this one. */
   mentionedBy?: KnowledgeNotePayload[];
+  /** Rendered after the notes: the host's loader for the next page of notes. */
   notesMore?: ReactNode;
+  /** The page's children, when the host can list them. */
   childPages?: ReactNode;
   activity?: KnowledgePageActivityPayload[];
 }) {

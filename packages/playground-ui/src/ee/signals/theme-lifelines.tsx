@@ -10,6 +10,11 @@ import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
 import { Txt } from '@/ds/components/Txt';
 
+/**
+ * Lifelines mode: every theme holds a fixed row while landmarks run left to
+ * right on the shared time axis, so persistent themes read as spines and
+ * transient ones as short-lived segments — change over time without replay.
+ */
 export function ThemeLifelines({
   entityId,
   entityType,
@@ -58,6 +63,7 @@ export function ThemeLifelines({
 
   return (
     <section aria-label="Theme lifelines" className="space-y-5">
+      {/* Spacers mirror each row's label and count columns so the shared track aligns with the rows. */}
       <div className="flex items-center gap-3">
         <span aria-hidden="true" className="w-52 shrink-0" />
         <TimelineTrack

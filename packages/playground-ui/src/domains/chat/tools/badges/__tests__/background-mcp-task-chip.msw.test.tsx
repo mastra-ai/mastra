@@ -46,6 +46,7 @@ const serveBackgroundTask = (task: BackgroundTaskResponse) => {
   return requests;
 };
 
+/** A deferred call after its turn ended: the card still holds only the first progress write. */
 const renderDeferredCall = (result: unknown = [working]) =>
   renderWithProviders(
     <TooltipProvider>

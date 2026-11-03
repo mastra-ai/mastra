@@ -26,6 +26,7 @@ import { Metadata } from '@/ds/components/Metadata';
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/** Strips the indentation shared by every line so indented prompts are not rendered as code blocks. */
 function dedent(text: string): string {
   const lines = text.split('\n');
   const indent = Math.min(...lines.filter(line => line.trim()).map(line => line.length - line.trimStart().length));
@@ -45,6 +46,7 @@ function SkillList({ skills }: { skills: AvailableSkill[] }) {
   );
 }
 
+/** The skills catalog when it is all a message says, so the message label can name it. */
 function catalogOnly(parts: unknown[]): AvailableSkill[] | undefined {
   if (parts.length !== 1) return undefined;
   const [part] = parts;
@@ -70,6 +72,10 @@ function MessageText({ text }: { text: string }) {
   );
 }
 
+/**
+ * Reasoning as the model sends it (`text`) or as memory stores it (`reasoning`, with `details`
+ * that can be redacted by the provider). An empty one (e.g. only encrypted content) shows nothing.
+ */
 function MessageReasoning({ part }: { part: Record<string, unknown> }) {
   const details = Array.isArray(part.details) ? part.details.filter(isRecord) : [];
   const text =
@@ -93,6 +99,7 @@ function MessagePart({ part }: { part: unknown }) {
       return typeof part.text === 'string' ? <MessageText text={part.text} /> : <SpanPayloadJson value={part} />;
     case 'reasoning':
       return <MessageReasoning part={part} />;
+    // Marks where a new model step starts in a stored message; it carries nothing to read.
     case 'step-start':
       return null;
     case 'tool-call':
@@ -113,6 +120,7 @@ function messageParts(message: Record<string, unknown>): unknown[] {
   if (Array.isArray(message.content)) return message.content;
   if (typeof message.content === 'string') return [message.content];
   if (isRecord(message.content)) {
+    // MastraDBMessage: content is { format, parts, content? }
     if (Array.isArray(message.content.parts)) return message.content.parts;
     if (typeof message.content.content === 'string') return [message.content.content];
   }
@@ -136,10 +144,16 @@ function skillOf(parts: unknown[]) {
   return typeof text === 'string' ? parseSkillMarkup(text) : undefined;
 }
 
+/** A `role: 'signal'` message as memory stores it, which processor and memory spans record as is. */
 function isSignalMessage(message: Record<string, unknown>): message is Record<string, unknown> & MastraDBMessage {
   return message.role === 'signal' && isRecord(message.content) && Array.isArray(message.content.parts);
 }
 
+/**
+ * A signal, drawn the same wherever a span recorded it: a user signal reads as the user message
+ * it is, any other signal (a skill, a system reminder, a notification…) as the signal row the
+ * chat draws for it. Its metadata follows.
+ */
 export function SpanSignal({ signal }: { signal: SignalData }) {
   const isUser = isUserSignalType(signal.type);
   const details = <SignalDetails signal={signal} isUser={isUser} />;
@@ -157,6 +171,9 @@ export function SpanSignal({ signal }: { signal: SignalData }) {
   );
 }
 
+// `unknown` on purpose: SpanInputMessage is a wide union of SDK message shapes, and the
+// renderer only needs `isRecord` narrowing to read `role` / `content` / `parts` defensively.
+/** One message of a span; `footer` sits right under it (e.g. the metadata of the signal it came from). */
 function SpanMessage({ message, footer }: { message: unknown; footer?: ReactNode }) {
   if (typeof message === 'string') {
     return (
@@ -175,6 +192,7 @@ function SpanMessage({ message, footer }: { message: unknown; footer?: ReactNode
   const parts = messageParts(message);
   const body = parts.length > 0 ? <MessageBody parts={parts} /> : <SpanPayloadJson value={message} />;
 
+  // A skill reaches the model as `<skill name="…">` markup in a user message: show it as the skill.
   const skill = role === 'user' ? skillOf(parts) : undefined;
   if (skill) {
     return (
@@ -226,6 +244,7 @@ export interface SpanPayloadMessagesProps {
   value: SpanInputMessage[];
 }
 
+/** Renders a span's message list; rich (parts/content arrays) and shallow (`{ role, content: string }`) alike. */
 export function SpanPayloadMessages({ value }: SpanPayloadMessagesProps) {
   return (
     <div data-slot="span-payload-messages" className="flex flex-col gap-3">
