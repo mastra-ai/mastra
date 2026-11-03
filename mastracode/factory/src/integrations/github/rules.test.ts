@@ -14,6 +14,7 @@ import {
   GithubRules,
   polledPullRequestEvent,
   reconciledClosedEvent,
+  reconciledIssueRelabeledEvent,
 } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
@@ -69,6 +70,7 @@ async function setup(permission: string | undefined, rules?: GithubRuleOverrides
     workItems,
     projects: seeded.projects,
     intake: seeded.intake,
+    boards: seeded.boards,
     project,
     projectRepository,
     github,
@@ -3626,6 +3628,257 @@ describe('GithubRules label routes', () => {
     (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
     await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
   });
+});
+
+describe('GithubRules with intake routes', () => {
+  const TRUSTED = {
+    operator: 'AND',
+    conditions: [{ field: 'author.trusted', operator: 'equals', value: true }],
+  } as const;
+
+  /**
+   * GitHub rules, a real dispatcher and transition service, the old label routes and the new intake
+   * routes. The project's default route is removed unless a test asks for it.
+   */
+  async function setupIntake(permission: string, { withDefaultRoute = false } = {}) {
+    const base = await setup(permission);
+    const boards = createBoardRegistry({ boards: [createTestBoard()] });
+    const configVersion = 'intake-routes';
+    await base.intake.setLabelRoute({
+      orgId: 'org-1',
+      factoryProjectId: base.project.id,
+      integrationId: 'github',
+      label: 'release',
+      board: 'release',
+      userId: 'user-1',
+    });
+    const service = new GithubRules({
+      github: base.github,
+      sourceControl: base.sourceControl,
+      integrationStorage: base.integrationStorage,
+      projects: base.projects,
+      storage: base.workItems,
+      boards,
+      configVersion,
+      intake: base.intake,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      transitionService: new FactoryTransitionService({ storage: base.workItems, configVersion, boards }),
+      storage: base.workItems,
+      boards,
+      intakeRoutes: base.boards,
+      isAutoRunEnabled: async () => false,
+      ownerId: 'worker-intake-routes',
+    });
+    const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
+    if (!withDefaultRoute) {
+      const [defaultRoute] = await base.boards.listIntakeRoutes(scope);
+      await base.boards.deleteIntakeRoute(scope, defaultRoute!.id, { expectedRevision: defaultRoute!.revision });
+    }
+    await base.boards.createIntakeRoute(
+      scope,
+      { name: 'Trusted to triage', when: TRUSTED, target: { boardKey: 'work', phaseKey: 'triage' } },
+      'admin',
+    );
+    const open = async (deliveryId: string, labels: string[] = []) => {
+      const ingress = issueOpened(deliveryId);
+      (ingress.payload.issue as Record<string, unknown>).labels = labels.map(name => ({ name }));
+      await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      const [item] = await base.workItems.list(scope);
+      return item;
+    };
+    /** GitHub reports a label change on issue 42: not a rule event, the label route re-files the card. */
+    const relabel = async (deliveryId: string, labels: string[]) => {
+      const ingress = issueOpened(deliveryId);
+      ingress.payload.action = 'labeled';
+      (ingress.payload.issue as Record<string, unknown>).labels = labels.map(name => ({ name }));
+      await service.ingest(ingress);
+      const [item] = await base.workItems.list(scope);
+      return item;
+    };
+    /** The reconcile sweep saw issue 42's labels drift and replays it as "opened". */
+    const replayLabels = async (labels: string[]) => {
+      const repository = { id: 10, fullName: 'acme/repo', installationId: 7 };
+      const state = { title: 'Issue 42', url: 'https://github.com/acme/repo/issues/42', state: 'open' as const, labels };
+      await expect(service.ingest(reconciledIssueRelabeledEvent(repository, 42, state))).resolves.toEqual({
+        status: 'committed',
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      const [item] = await base.workItems.list(scope);
+      return item;
+    };
+    return { ...base, scope, open, relabel, replayLabels };
+  }
+
+  it("files a trusted maintainer's issue in Work › Triage, through Intake", async () => {
+    const { open } = await setupIntake('write');
+    const item = await open('trusted-routed');
+    expect(item).toMatchObject({ board: 'work', stages: ['triage'], metadata: { authorTrusted: true } });
+    expect(item?.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'triage']);
+  });
+
+  it("leaves an outside author's issue in Work › Intake", async () => {
+    const { open } = await setupIntake('read');
+    expect(await open('untrusted-unrouted')).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      metadata: { authorTrusted: false },
+    });
+  });
+
+  it('still files on the label route board when no intake route matches', async () => {
+    const { open } = await setupIntake('read');
+    expect(await open('label-routed', ['release'])).toMatchObject({ board: 'release', stages: ['queued'] });
+  });
+
+  it("keeps a routed card on the route's board when GitHub reports a label change", async () => {
+    const { open, relabel } = await setupIntake('write');
+    await open('routed-then-labeled');
+    expect(await relabel('labeled-release', ['release'])).toMatchObject({
+      board: 'work',
+      stages: ['triage'],
+      metadata: { labels: ['release'] },
+    });
+  });
+
+  it('still moves a card no intake route placed when GitHub reports a label change', async () => {
+    const { open, relabel } = await setupIntake('read');
+    await open('unrouted-then-labeled');
+    expect(await relabel('labeled-release', ['release'])).toMatchObject({ board: 'release', stages: ['queued'] });
+  });
+
+  it("keeps a routed card on the route's board when the reconcile sweep replays its labels", async () => {
+    const { open, replayLabels, workItems, scope } = await setupIntake('write');
+    await open('routed-then-replayed');
+    expect(await replayLabels(['release'])).toMatchObject({ board: 'work', stages: ['triage'] });
+    const decisions = await workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId);
+    const upserts = decisions.filter(decision => decision.decision.type === 'upsertLinkedWorkItem');
+    expect(upserts.map(decision => [decision.status, decision.lastError])).toEqual([
+      ['succeeded', null],
+      ['succeeded', null],
+    ]);
+  });
+
+  it('lets a matching intake route win over the label route', async () => {
+    const { open } = await setupIntake('write');
+    expect(await open('intake-over-label', ['release'])).toMatchObject({ board: 'work', stages: ['triage'] });
+  });
+
+  it("keeps an outside author's labelled issue in Work › Intake by the default route, through later label changes", async () => {
+    const { open, relabel } = await setupIntake('read', { withDefaultRoute: true });
+    expect(await open('outsider-labelled', ['release'])).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      metadata: { authorTrusted: false, intakeRouteId: expect.any(String) },
+    });
+    expect(await relabel('outsider-relabelled', ['release', 'bug'])).toMatchObject({ board: 'work', stages: ['intake'] });
+  });
+});
+
+describe('GithubRules with outside work in Intake', () => {
+  const AUTHORS = [
+    ['an outsider', { authorTrusted: false }],
+    ['an unstamped author', {}],
+    ['a maintainer', { authorTrusted: true }],
+  ] as const;
+
+  /** A card already on the board, real GitHub rules, and a dispatcher with auto-run on. */
+  async function setupCard(input: {
+    permission: string;
+    source: 'issue' | 'pull-request';
+    stage: string;
+    metadata: Record<string, unknown>;
+  }) {
+    const base = await setup(input.permission);
+    const configVersion = 'outside-work';
+    const boards = createBoardRegistry();
+    const number = input.source === 'issue' ? 42 : 17;
+    const card = (
+      await base.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: base.project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: input.source,
+            externalId: input.source === 'issue' ? `github-issue:${number}` : `github-pr:${number}`,
+            url: `https://github.com/acme/repo/${input.source === 'issue' ? 'issues' : 'pull'}/${number}`,
+          },
+          title: input.source === 'issue' ? 'Issue 42' : 'PR 17',
+          stages: [input.stage],
+          sessions: {},
+          metadata: input.metadata,
+        },
+      })
+    ).item;
+    const service = new GithubRules({
+      github: base.github,
+      sourceControl: base.sourceControl,
+      integrationStorage: base.integrationStorage,
+      projects: base.projects,
+      storage: base.workItems,
+      boards,
+      configVersion,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: base.workItems, configVersion, boards }),
+      storage: base.workItems,
+      boards,
+      intakeRoutes: base.boards,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-outside',
+    });
+    const deliver = async (ingress: Parameters<GithubRules['ingest']>[0]) => {
+      await service.ingest(ingress);
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      return {
+        decisions: await base.workItems.listDeferredDecisions('org-1', base.project.id),
+        item: await base.workItems.get({ orgId: 'org-1', id: card.id }),
+      };
+    };
+    return { deliver };
+  }
+
+  for (const [author, metadata] of AUTHORS) {
+    it(`starts nothing when a maintainer pushes to ${author}'s pull request resting in Intake`, async () => {
+      const { deliver } = await setupCard({ permission: 'write', source: 'pull-request', stage: 'intake', metadata });
+      const { decisions, item } = await deliver(pullRequest('synchronize', 'delivery-push'));
+      expect(decisions).toEqual([]);
+      expect(item?.stages).toEqual(['intake']);
+    });
+
+    it(`starts nothing when someone comments on ${author}'s issue resting in Intake`, async () => {
+      const { deliver } = await setupCard({ permission: 'read', source: 'issue', stage: 'intake', metadata });
+      const { decisions, item } = await deliver(issueComment('created', 'delivery-comment', { body: 'Any update?' }));
+      expect(decisions).toEqual([]);
+      expect(item?.stages).toEqual(['intake']);
+    });
+
+    // Accepted change: trust decides only where a card arrives. Once a person has moved a card out of
+    // Intake, later input on it runs as on any card, whoever wrote it.
+    it(`re-reviews ${author}'s pull request a person finished when a maintainer pushes`, async () => {
+      const { deliver } = await setupCard({ permission: 'write', source: 'pull-request', stage: 'done', metadata });
+      const { decisions, item } = await deliver(pullRequest('synchronize', 'delivery-push'));
+      const [transition] = decisions.filter(entry => entry.decision.type === 'transition');
+      expect(transition).toMatchObject({ status: 'succeeded', decision: { board: 'review', stage: 'review' } });
+      expect(item?.stages).toEqual(['review']);
+    });
+
+    it(`re-triages ${author}'s issue a person moved to Triage when someone comments`, async () => {
+      const { deliver } = await setupCard({ permission: 'read', source: 'issue', stage: 'triage', metadata });
+      const { decisions } = await deliver(issueComment('created', 'delivery-comment', { body: 'Any update?' }));
+      expect(decisions).toHaveLength(1);
+      expect(decisions[0]).toMatchObject({
+        decision: { type: 'invokeSkill', skillName: 'factory-triage' },
+        // Not parked for a person: the dispatcher tries to start it (and retries, as this harness has no sessions).
+        status: 'retry',
+      });
+    });
+  }
 });
 
 describe('polledPullRequestEvent', () => {
