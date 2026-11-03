@@ -1598,7 +1598,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(card!.workItem.sources[2]).toMatchObject({ state: 'merged' });
     });
 
-    it("leaves the builder's own merge request to the builder when someone else's closes the issue", async () => {
+    const builderSession = {
+      work: { sessionId: 'sess-work', threadId: 'thread-work', branch: 'factory/gitlab-issue-42', startedBy: 'user-1' },
+    };
+
+    it("gives someone else's \"Closes #42\" merge request its own card once the issue's builder has started", async () => {
       const h = await harness();
       const issue = await h.issueCard('execute');
       await h.seeded.workItems.update({
@@ -1606,22 +1610,49 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         factoryProjectId: h.project.id,
         userId: 'user-1',
         id: issue.id,
-        patch: {
-          sessions: {
-            work: { sessionId: 'sess-work', threadId: 'thread-work', branch: 'factory/gitlab-issue-42', startedBy: 'user-1' },
-          },
-        },
+        patch: { sessions: builderSession },
       });
 
       await h.ingest(mergeRequest(17, 'Closes #42'));
-      let [card] = await h.cards();
-      expect(sourceTypes(card!)).toEqual(['issue', 'pull-request']);
-      // Recording it as the card's own would switch off the builder's self-review and merge request.
-      expect(card!.metadata.openPullRequestNumber ?? null).toBeNull();
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      const issueAfter = cards.find(card => card.id === issue.id)!;
+      expect(sourceTypes(issueAfter)).toEqual(['issue']);
+      expect(issueAfter.metadata.openPullRequestNumber ?? null).toBeNull();
 
       await h.ingest(mergeRequest(18, 'Implements the fix.', { sourceBranch: 'factory/gitlab-issue-42' }));
-      [card] = await h.cards();
-      expect(card!.metadata).toMatchObject({ openPullRequestNumber: 18 });
+      const card = (await h.cards()).find(item => item.id === issue.id)!;
+      expect(sourceTypes(card)).toEqual(['issue', 'pull-request']);
+      expect(card.metadata).toMatchObject({ openPullRequestNumber: 18 });
+    });
+
+    it("never tracks someone else's merge request when the builder's own closes", async () => {
+      const h = await harness();
+      const issue = await h.issueCard('intake');
+      // Filed before anyone started building, so it joins the card.
+      await h.ingest(mergeRequest(17, 'Closes #42'));
+      await h.seeded.workItems.update({
+        orgId: 'org-1',
+        factoryProjectId: h.project.id,
+        userId: 'user-1',
+        id: issue.id,
+        patch: { stages: ['execute'], sessions: builderSession },
+      });
+      await h.ingest(mergeRequest(18, 'Implements the fix.', { sourceBranch: 'factory/gitlab-issue-42' }));
+      expect((await h.cards())[0]!.metadata).toMatchObject({ openPullRequestNumber: 18 });
+
+      await h.ingest(
+        mergeRequest(18, 'Implements the fix.', {
+          deliveryId: 'd-close-18',
+          action: 'close',
+          sourceBranch: 'factory/gitlab-issue-42',
+        }),
+      );
+
+      const [card] = await h.cards();
+      expect(card!.id).toBe(issue.id);
+      expect(card!.workItem.sources.slice(1).map(source => source.state)).toEqual(['open', 'closed']);
+      expect(card!.metadata.openPullRequestNumber ?? null).toBeNull();
     });
 
     it('opens an attached merge request again when it is reopened', async () => {

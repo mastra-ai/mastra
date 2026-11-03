@@ -7,7 +7,8 @@ import {
   boardForWorkItem,
   eventBoardId,
   isTerminalWorkItem,
-  newestOpenPullRequestNumber,
+  hasBuilderSession,
+  newestOwnedOpenPullRequestNumber,
   pullRequestSources,
   rulePhaseField,
   withBoardClosure,
@@ -1233,9 +1234,10 @@ export class GithubRules {
             ...(ownsCard && event === 'pullRequestMerged' && typeof card.metadata?.reviewVerdict === 'string'
               ? { reviewVerdict: null }
               : {}),
-            // With several pull requests on the card, the newest one still open is the one out next.
+            // With several pull requests on the card, the newest one its sessions opened is out next;
+            // someone else's pull request never becomes the card's own.
             ...(recorded === pullRequestNumber
-              ? { openPullRequestNumber: newestOpenPullRequestNumber(card, pullRequestNumber) }
+              ? { openPullRequestNumber: newestOwnedOpenPullRequestNumber(card, pullRequestNumber) }
               : {}),
           };
           if (Object.keys(settled).length > 0) {
@@ -1363,7 +1365,8 @@ export class GithubRules {
         item =>
           (item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber) ||
             item.externalSource?.externalId === legacySourceKey(input.repositoryId, 'issue', issueNumber)) &&
-          eligible(item),
+          eligible(item) &&
+          !hasBuilderSession(item),
       );
       if (card) return { card, reason: 'closes' };
     }

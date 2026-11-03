@@ -94,6 +94,36 @@ export function newestOpenPullRequestNumber(item: SourcedItem, except?: number):
   return (open.length ? pullRequestSourceNumber(open.at(-1)!) : undefined) ?? null;
 }
 
+interface SessionedItem {
+  readonly sessions: Readonly<Record<string, { readonly branch?: string | null } | undefined>>;
+}
+
+/**
+ * Whether the card's builder has started: a `work` session is bound. From then on, a pull
+ * request someone else opens for the card's issue gets a card of its own instead of joining
+ * this one, so the builder's card only ever carries the builder's own pull requests.
+ */
+export function hasBuilderSession(item: SessionedItem): boolean {
+  return item.sessions.work !== undefined;
+}
+
+/** The newest open pull request a session on this card opened (its head is a session branch), other than `except`. */
+export function newestOwnedOpenPullRequestNumber(item: SourcedItem & SessionedItem, except?: number): number | null {
+  const branches = new Set(
+    Object.values(item.sessions)
+      .map(session => session?.branch)
+      .filter((branch): branch is string => typeof branch === 'string' && branch !== ''),
+  );
+  const open = pullRequestSources(item).filter(
+    source =>
+      openSource(source) &&
+      pullRequestSourceNumber(source) !== except &&
+      typeof source.metadata?.headBranch === 'string' &&
+      branches.has(source.metadata.headBranch),
+  );
+  return (open.length ? pullRequestSourceNumber(open.at(-1)!) : undefined) ?? null;
+}
+
 /** The pull or merge request a card's PR review covers, whichever card shape carries it. */
 export interface ReviewedChangeRequest {
   readonly provider: 'github' | 'gitlab';

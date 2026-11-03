@@ -5,7 +5,8 @@ import {
   boardForWorkItem,
   eventBoardId,
   isTerminalWorkItem,
-  newestOpenPullRequestNumber,
+  hasBuilderSession,
+  newestOwnedOpenPullRequestNumber,
   pullRequestSources,
   rulePhaseField,
   withBoardClosure,
@@ -441,7 +442,10 @@ export class GitLabRules {
           const key = encodeIssueReference({ host, projectId: String(projectId), issueIid: iid });
           const card = items.find(
             item =>
-              item.externalSource?.integrationId === 'gitlab' && item.externalSource.externalId === key && eligibleHome(item),
+              item.externalSource?.integrationId === 'gitlab' &&
+              item.externalSource.externalId === key &&
+              eligibleHome(item) &&
+              !hasBuilderSession(item),
           );
           if (card) {
             home = { card, reason: 'closes' };
@@ -652,8 +656,9 @@ export class GitLabRules {
         }
         patch.openPullRequestNumber = input.mergeRequestIid;
       } else if (settling && recorded === input.mergeRequestIid) {
-        // With several merge requests on the card, the newest one still open is the one out next.
-        patch.openPullRequestNumber = newestOpenPullRequestNumber(item, input.mergeRequestIid);
+        // With several merge requests on the card, the newest one its sessions opened is out next;
+        // someone else's merge request never becomes the card's own.
+        patch.openPullRequestNumber = newestOwnedOpenPullRequestNumber(item, input.mergeRequestIid);
         if (input.event === 'mergeRequestMerged' && typeof item.metadata?.reviewVerdict === 'string') {
           patch.reviewVerdict = null;
         }
