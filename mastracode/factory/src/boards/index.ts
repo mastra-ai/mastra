@@ -20,7 +20,7 @@ export {
   boardForWorkItem,
   eventBoardId,
   cardOwnsBranch,
-  hasBuilderSession,
+  workStarted,
   hasPullRequest,
   isPullRequestCard,
   isTerminalWorkItem,

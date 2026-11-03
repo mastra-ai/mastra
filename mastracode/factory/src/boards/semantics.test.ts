@@ -6,7 +6,7 @@ import { createBoardRegistry } from './registry.js';
 import {
   boardForWorkItem,
   cardOwnsBranch,
-  hasBuilderSession,
+  workStarted,
   isTerminalWorkItem,
   resolveBoardClosure,
   resolveBoardToolRule,
@@ -197,10 +197,16 @@ describe('building started and branch ownership', () => {
   };
   const buildBranch = workItemBranch({ id: 'item-0001', source: 'github-issue', metadata: { number: 42 } });
 
+  it('counts any working session or working phase, but not a card that only rested', () => {
+    expect(workStarted({ sessions: { triage: { branch: 'b' } }, stageHistory: [] })).toBe(true);
+    expect(workStarted({ sessions: {}, stageHistory: [{ stage: 'intake' }, { stage: 'planning' }] })).toBe(true);
+    expect(workStarted({ sessions: {}, stageHistory: [{ stage: 'intake' }, { stage: 'canceled' }] })).toBe(false);
+  });
+
   it('counts a card that has been in Building as built, after its session is gone', () => {
-    expect(hasBuilderSession({ sessions: {}, stageHistory: [{ stage: 'intake' }] })).toBe(false);
-    expect(hasBuilderSession({ sessions: {}, stageHistory: [{ stage: 'intake' }, { stage: 'execute' }] })).toBe(true);
-    expect(hasBuilderSession({ sessions: { work: { branch: 'b' } }, stageHistory: [] })).toBe(true);
+    expect(workStarted({ sessions: {}, stageHistory: [{ stage: 'intake' }] })).toBe(false);
+    expect(workStarted({ sessions: {}, stageHistory: [{ stage: 'intake' }, { stage: 'execute' }] })).toBe(true);
+    expect(workStarted({ sessions: { work: { branch: 'b' } }, stageHistory: [] })).toBe(true);
   });
 
   it("owns its build branch with no session, plus any session's branch, and nothing else", () => {

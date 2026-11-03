@@ -8,7 +8,7 @@ import {
   eventBoardId,
   isTerminalWorkItem,
   cardOwnsBranch,
-  hasBuilderSession,
+  workStarted,
   newestOwnedOpenPullRequestNumber,
   pullRequestSources,
   rulePhaseField,
@@ -1300,7 +1300,7 @@ export class GithubRules {
           (item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber) ||
             item.externalSource?.externalId === legacySourceKey(input.repositoryId, 'issue', issueNumber)) &&
           eligible(item) &&
-          !hasBuilderSession(item),
+          !workStarted(item),
       );
       if (card) return { card, reason: 'closes' };
     }

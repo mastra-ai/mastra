@@ -1,3 +1,4 @@
+import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import type { FactoryRuleBoardClosure, FactoryRulePhaseContext } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
@@ -102,15 +103,20 @@ interface SessionedItem {
 
 type BranchedItem = Pick<Card, 'id' | 'externalSource'> & { readonly workItem: Pick<Card['workItem'], 'metadata'> };
 
+const WORKING_STAGES: ReadonlySet<string> = new Set([...Object.values(FACTORY_ROLE_STAGES), PULL_REQUEST_REVIEW_PHASE]);
+
 /**
- * Whether building has started on the card: a builder (`work`) session is bound, or the card
- * has been in Building. From then on, a pull request someone else opens for the card's issue
- * gets a card of its own instead of joining this one, so a card being built only carries the
- * pull requests its own sessions opened. Stage history keeps that true after the session is
- * deleted.
+ * Whether work has started on the card: a session in a working role (triage, plan, work,
+ * review) is bound, or the card has been in a working phase. From then on, a pull request
+ * someone else opens for the card's issue gets a card of its own instead of joining this one,
+ * so a card being worked on only carries the pull requests its own sessions opened. Stage
+ * history keeps that true after the session is deleted.
  */
-export function hasBuilderSession(item: SessionedItem): boolean {
-  return item.sessions.work !== undefined || (item.stageHistory ?? []).some(entry => entry.stage === 'execute');
+export function workStarted(item: SessionedItem): boolean {
+  return (
+    Object.keys(FACTORY_ROLE_STAGES).some(role => item.sessions[role] !== undefined) ||
+    (item.stageHistory ?? []).some(entry => WORKING_STAGES.has(entry.stage))
+  );
 }
 
 /**
