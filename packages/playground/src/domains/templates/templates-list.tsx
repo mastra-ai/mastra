@@ -131,13 +131,6 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                       )}
                     </ul>
                   )}
-                  {hasMetaInfo && template.supportedProviders && (
-                    <small>
-                      <Txt as="span" variant="body">
-                        |
-                      </Txt>
-                    </small>
-                  )}
                   <div className="flex items-center gap-4">
                     {template.supportedProviders.map(provider => (
                       <Txt tone="muted" as="span" variant="body" key={provider}>

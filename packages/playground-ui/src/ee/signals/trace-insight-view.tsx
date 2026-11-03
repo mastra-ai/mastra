@@ -48,13 +48,6 @@ function isObservationSeverity(value: string): value is ObservationSeverity {
   return value === 'info' || value === 'success' || value === 'problem';
 }
 
-/**
- * Trace summaries prefix each observation with a machine-readable
- * `severity=… | kind=… |` header (see the trace-summary prompt). Strip it for
- * display and keep the parts so the UI can render them as visual cues, the
- * same way the observational-memory views parse their emoji markers out of
- * the raw text.
- */
 function parseTraceObservation(observation: string): ParsedObservation {
   const match = observation.match(/^severity=(\w+)\s*\|\s*kind=(\w+)\s*\|\s*/);
   if (!match) return { text: observation };
@@ -78,13 +71,8 @@ function ObservationItem({ observation }: { observation: string }) {
   return (
     <li className={`rounded-md p-3 ${OBSERVATION_SEVERITY_CARD[severity ?? 'info']}`}>
       {kind !== undefined && (
-        <Txt variant="meta" tone="muted" className="uppercase">
-          {severity === 'problem' && (
-            <>
-              <span className="text-destructive-foreground">problem</span>
-              <span aria-hidden="true"> · </span>
-            </>
-          )}
+        <Txt variant="meta" tone="muted" className="flex flex-wrap items-center gap-2 uppercase">
+          {severity === 'problem' && <span className="text-destructive-foreground">problem</span>}
           <span>{kind}</span>
         </Txt>
       )}

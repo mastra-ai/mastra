@@ -43,9 +43,10 @@ function versionOptions(allVersions: DatasetItemVersion[], disabled?: Set<number
       value: String(v.datasetVersion),
       label: (
         <span className="flex w-full items-center gap-2">
-          <span>
-            <b>v. {v.datasetVersion}</b> · {formatDate(date, 'date-time')}
-          </span>
+          <b>v. {v.datasetVersion}</b>
+          <Txt as="span" variant="caption" tone="muted">
+            {formatDate(date, 'date-time')}
+          </Txt>
           {v.isLatest ? (
             <Badge variant="blue" size="xs" className="ml-auto">
               Latest
@@ -80,8 +81,6 @@ function DatasetItemVersionsComparePage() {
     { id: 'dataset-item-versions', label: 'Item Version History' },
   ];
 
-  // Whole view lives in the URL so a link reproduces it:
-  // ?version=3 — left column; ?compare=2 — right column; ?view=diff
   const selectedVersion = parseVersionParam(searchParams.get('version'));
   const compareVersion = parseVersionParam(searchParams.get('compare'));
   const isDiffView = searchParams.get('view') === 'diff';
@@ -96,7 +95,6 @@ function DatasetItemVersionsComparePage() {
     queryOptions: { enabled: Boolean(datasetId) && Boolean(itemId) },
   });
 
-  // URL is the source of truth; fall back to latest when absent or unknown.
   const leftVersion =
     (selectedVersion != null ? allVersions?.find(v => v.datasetVersion === selectedVersion) : undefined) ??
     allVersions?.[0];
@@ -157,7 +155,6 @@ function DatasetItemVersionsComparePage() {
   const showDiff = isDiffView && canDiff;
   const leftItem = leftVersion ? toDatasetItem(leftVersion, datasetId) : null;
   const rightItem = rightVersion ? toDatasetItem(rightVersion, datasetId) : null;
-  // Red/green follows chronology, not column position: the older version shows removals, the newer one additions.
   const leftIsOlder = (leftVersion?.datasetVersion ?? 0) < (rightVersion?.datasetVersion ?? 0);
 
   return (

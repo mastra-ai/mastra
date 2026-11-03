@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 
@@ -127,7 +128,6 @@ export function BoardColumnEmptyState({
   kind: BoardKind;
   hasIntakeSource: boolean;
   filtersExcludeAll?: boolean;
-  /** Feed items withheld because their card sits on another board in this Factory. */
   alreadyMaterialized?: number;
   layout: BoardLayout;
   actionSlot?: ReactNode;
@@ -137,8 +137,14 @@ export function BoardColumnEmptyState({
     return (
       <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
         <Txt as="p" variant="meta" tone="muted" className="m-0">
-          {copy.title}
-          <Txt as="span" variant="meta" tone="faint">{` · ${copy.description}`}</Txt>
+          <Metadata>
+            <Metadata.Item>{copy.title}</Metadata.Item>
+            <Metadata.Item>
+              <Txt as="span" variant="meta" tone="faint">
+                {copy.description}
+              </Txt>
+            </Metadata.Item>
+          </Metadata>
         </Txt>
         {actionSlot && <div className="flex flex-wrap gap-2">{actionSlot}</div>}
       </div>

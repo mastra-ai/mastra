@@ -42,8 +42,8 @@ function CustomDomainAuthError({ hostname }: { hostname: string }) {
       </Txt>
       <Txt as="p" variant="caption" tone="muted" className="mt-2">
         This Factory is served from {hostname}. Mastra Platform authentication only works on Mastra-hosted domains
-        (*.mastra.cloud). To use a custom domain, configure your own auth provider — for example WorkOS (WORKOS_API_KEY
-        + WORKOS_CLIENT_ID) or Better Auth — and redeploy.
+        (*.mastra.cloud). To use a custom domain, configure your own auth provider, such as WorkOS (WORKOS_API_KEY +
+        WORKOS_CLIENT_ID) or Better Auth, and redeploy.
       </Txt>
       <Txt as="p" variant="caption" tone="muted" className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
         <a
@@ -185,8 +185,6 @@ export function SignInPage() {
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
   const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
-  // A cached signed-in result may predate the redirect here. Check the cookie
-  // again before sending the user back into the protected app.
   if (auth.isPending || !auth.isFetchedAfterMount) return <AuthPendingSkeleton />;
 
   const canReturnToApp = auth.data && (!auth.data.authEnabled || auth.data.authenticated);

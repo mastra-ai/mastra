@@ -57,7 +57,7 @@ function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resour
   if (timestamp === undefined && !resourceId) return null;
 
   return (
-    <Txt as="span" variant="meta" tone="muted" className="flex w-full min-w-0 items-center gap-1.5">
+    <Txt as="span" variant="meta" tone="muted" className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
       {timestamp !== undefined && (
         <time className="shrink-0" dateTime={new Date(timestamp).toISOString()}>
           {formatDate(timestamp, 'date-time')}
@@ -65,7 +65,7 @@ function WorkflowRunMeta({ timestamp, resourceId }: { timestamp?: number; resour
       )}
       {resourceId && (
         <span className="min-w-0 truncate" title={`Resource ${resourceId}`}>
-          {timestamp === undefined ? resourceId : `· ${resourceId}`}
+          {resourceId}
         </span>
       )}
     </Txt>
@@ -85,7 +85,6 @@ export const WorkflowRecentRuns = ({ workflowId, runId, canDelete: canDeleteRun 
     isFetchingNextPage,
     hasNextPage,
   } = useWorkflowRuns({ workflowId: workflowId, summary: true });
-  // The list only carries summary snapshots; the active run's input comes from the full run.
   const { data: activeRun } = useWorkflowRun({
     workflowId: workflowId,
     runId: runId ?? '',

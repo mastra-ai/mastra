@@ -10,11 +10,6 @@ import type { DisconnectedLinearWorkspace } from './intakeSourceGroups';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { settingsRowLayout } from './common/settings-row-layout';
 
-/**
- * Saved Linear sources from workspaces that are no longer connected. Their
- * names can't be fetched, so each workspace collapses to one row; the saved
- * sources and their routing stay put so reconnecting resumes intake.
- */
 export function DisconnectedLinearWorkspaces({
   workspaces,
   pending,
@@ -46,8 +41,8 @@ export function DisconnectedLinearWorkspaces({
                   </Badge>
                 </span>
                 <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
-                  {count === 1 ? '1 project or team' : `${count} projects and teams`} paused · reconnect to resume
-                  intake
+                  {count === 1 ? '1 project or team' : `${count} projects and teams`} paused. Reconnect to resume
+                  intake.
                 </Txt>
               </div>
             </div>

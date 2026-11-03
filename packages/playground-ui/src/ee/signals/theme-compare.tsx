@@ -1,9 +1,9 @@
 import { useState } from 'react';
 
 import { useThemeFlows } from './hooks/use-theme-flows';
-import { snapshotSummaryLabel } from './sankey-signals-data';
 import { SignalDeltaColumn } from './signal-delta-column';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
+import { SnapshotSummary } from './snapshot-summary';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
@@ -11,13 +11,6 @@ import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
 import { Txt } from '@/ds/components/Txt';
 
-/**
- * Compare mode: two interchangeable points on the shared time axis show how
- * each signal's theme mix moved between them (always read earlier → later),
- * with per-theme sparklines across every landmark in range. Clicking an
- * unmarked landmark moves the nearest point; clicking a marked landmark grabs
- * that point so the next click moves it specifically.
- */
 export function ThemeCompare({
   entityId,
   entityType,
@@ -40,7 +33,6 @@ export function ThemeCompare({
     Math.min(pointIndexes?.[0] ?? 0, lastIndex),
     Math.min(pointIndexes?.[1] ?? lastIndex, lastIndex),
   ];
-  // Compare always reads earlier → later regardless of which point moved last.
   const fromIndex = Math.min(points[0], points[1]);
   const toIndex = Math.max(points[0], points[1]);
   const flowQueries = useThemeFlows(
@@ -58,9 +50,6 @@ export function ThemeCompare({
 
   if (!fromSnapshot || !toSnapshot) return null;
 
-  // The two points are interchangeable: an unmarked tick moves whichever
-  // point is nearest on the track; a marked tick grabs that point so the next
-  // click moves it specifically (covers moving a point past the other).
   const handleTickSelect = (index: number) => {
     if (grabbedPoint !== undefined) {
       setPointIndexes(grabbedPoint === 0 ? [index, points[1]] : [points[0], index]);
@@ -106,7 +95,7 @@ export function ThemeCompare({
 
           className="rounded-md border border-border px-2 py-1 tabular-nums"
         >
-          {snapshotSummaryLabel(fromSnapshot, flows[fromIndex])}
+          <SnapshotSummary snapshot={fromSnapshot} flow={flows[fromIndex]} label="Earlier snapshot" />
         </Txt>
         <Txt as="span" variant="caption" tone="muted" aria-hidden="true">
           →
@@ -117,12 +106,12 @@ export function ThemeCompare({
 
           className="rounded-md border border-border px-2 py-1 tabular-nums"
         >
-          {snapshotSummaryLabel(toSnapshot, flows[toIndex])}
+          <SnapshotSummary snapshot={toSnapshot} flow={flows[toIndex]} label="Later snapshot" />
         </Txt>
         <Txt variant="caption" tone="muted">
           {grabbedPoint === undefined
-            ? 'Click a landmark to move the nearest point · click a point to grab it.'
-            : 'Point grabbed — click a landmark to place it.'}
+            ? 'Click a landmark to move the nearest point. Click a point to grab it.'
+            : 'Point grabbed. Click a landmark to place it.'}
         </Txt>
       </div>
       {fromIndex === toIndex ? (

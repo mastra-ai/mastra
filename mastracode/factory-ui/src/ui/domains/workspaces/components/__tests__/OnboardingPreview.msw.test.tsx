@@ -31,7 +31,7 @@ describe('contextual onboarding previews', () => {
     expect(personalScene.closest('[data-active]')).toHaveAttribute('data-active', 'true');
     const personal = within(personalScene);
     expect(within(personal.getByLabelText('Factory work model')).getByText('anthropic/claude-fable-5')).toBeVisible();
-    expect(await personal.findByText('Connected · your account')).toBeVisible();
+    expect(await personal.findByText('Your account is connected')).toBeVisible();
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
 
@@ -47,15 +47,15 @@ describe('contextual onboarding previews', () => {
       ),
     );
     const { rerender } = renderWithProviders(<OnboardingPreview step="project-management" source="linear" />);
-    expect(screen.getByText('ENG-124 · Issue')).toBeInTheDocument();
+    expect(screen.getByText('ENG-124', { selector: '[role="listitem"]' })).toBeInTheDocument();
     expect(screen.getByText('Example')).toBeInTheDocument();
     expect(screen.getByText('Choose what to bring in after setup.')).toBeInTheDocument();
 
     rerender(<OnboardingPreview step="project-management" source="incident-io" />);
     expect(await screen.findByText('Connected')).toBeInTheDocument();
-    expect(screen.getByText('INC-124 · Follow-up')).toBeInTheDocument();
+    expect(screen.getByText('INC-124', { selector: '[role="listitem"]' })).toBeInTheDocument();
     expect(screen.getAllByText('Add a health check')).toHaveLength(2);
-    expect(screen.queryByText('ENG-124 · Issue')).not.toBeInTheDocument();
+    expect(screen.queryByText('ENG-124', { selector: '[role="listitem"]' })).not.toBeInTheDocument();
   });
 
   it('keeps the shared model while personal access changes from a proposed connection to a saved credential', async () => {
@@ -92,7 +92,7 @@ describe('contextual onboarding previews', () => {
 
     saved = true;
     await client.invalidateQueries({ queryKey: queryKeys.providers() });
-    expect(await personal.findByText('Connected · your account')).toBeInTheDocument();
+    expect(await personal.findByText('Your account is connected')).toBeInTheDocument();
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
 
     rerender(<OnboardingPreview step="personal-provider" modelScope="hybrid" model="openai/gpt-5.6-sol" />);

@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { ReactNode } from 'react';
@@ -23,7 +24,6 @@ import {
 import { WorkItemActivity } from './WorkItemActivity';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-// The card and its open copy render these same rows, so opening moves none of them.
 export function WorkItemCardRows({
   item,
   columnStage,
@@ -44,12 +44,9 @@ export function WorkItemCardRows({
   activity: WorkItemActivityData;
   actors: Record<string, AuditActorProfile>;
   status: BoardCardStatus;
-  /** Bottom left, the likeliest first. */
   actions: CardAction[];
   beforeStart?: () => void;
-  /** The top-right group: the card's menu, or the copy's link, collapse and menu. */
   controls: ReactNode;
-  /** The copy: its labelled source link and two controls to clear. */
   open: boolean;
 }) {
   const otherStages = item.stages.filter(stage => stage !== columnStage);
@@ -61,7 +58,11 @@ export function WorkItemCardRows({
       <div className="flex min-w-0 flex-col gap-1.5">
         <div className={cn('flex min-w-0 items-center gap-1.5', open ? 'pr-44' : 'pr-16')}>
           <Txt as="span" variant="meta" tone="faint" className="min-w-0 truncate">
-            {workItemMeta(item)}
+            <Metadata>
+              {workItemMeta(item).map((part, index) => (
+                <Metadata.Item key={index}>{part}</Metadata.Item>
+              ))}
+            </Metadata>
           </Txt>
           {relatedLinks}
           <CommentCount count={item.commentCount} />

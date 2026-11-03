@@ -9,6 +9,7 @@ import { getPromptChanges, touchesSystemPrompt } from './span-prompt-impact';
 import { CollapsibleBox, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
 import { DiffStat } from '@/ds/components/DiffStat';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { Metadata } from '@/ds/components/Metadata';
 import { Txt } from '@/ds/components/Txt';
 import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber } from '@/lib/cost';
@@ -17,18 +18,15 @@ import { cn } from '@/lib/utils';
 
 type Change = Exclude<ReturnType<typeof getPromptChanges>[number], null | undefined>;
 
-/** Long content (a skills catalog, workspace instructions) is clipped to this height until expanded. */
 const COLLAPSED_HEIGHT = 160;
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-/** How many messages a change touched: its count, else the message or ids it carries. */
 const countOf = (change: Change) => change.count ?? (change.message !== undefined ? 1 : (change.ids?.length ?? 1));
 
 const isRemoval = (change: Change) => change.type === 'removeByIds' || change.type === 'clear';
 
-/** The text a system or conversation message carries, joined when it comes in parts. */
 function textOf(message: unknown): string {
   if (typeof message === 'string') return message;
   if (!isRecord(message)) return '';
@@ -40,13 +38,20 @@ function textOf(message: unknown): string {
     .join('\n');
 }
 
-/** A one-line name for a message: what it is when we can tell (a skills catalog), else its first line. */
-function describeMessage(message: unknown): { title: string; meta: string } {
+function describeMessage(message: unknown): { title: string; meta: ReactNode } {
   const text = textOf(message);
   const size = `${formatCompactNumber(text.length)} chars`;
   const catalog = parseAvailableSkills(text);
   if (catalog && !catalog.before.trim() && !catalog.after.trim()) {
-    return { title: 'Skills catalog', meta: `${pluralize(catalog.skills.length, 'skill')} · ${size}` };
+    return {
+      title: 'Skills catalog',
+      meta: (
+        <Metadata>
+          <Metadata.Item>{pluralize(catalog.skills.length, 'skill')}</Metadata.Item>
+          <Metadata.Item>{size}</Metadata.Item>
+        </Metadata>
+      ),
+    };
   }
   const firstLine = text
     .split('\n')
@@ -55,7 +60,6 @@ function describeMessage(message: unknown): { title: string; meta: string } {
   return { title: firstLine ?? 'Empty message', meta: size };
 }
 
-/** What a change without content was about, e.g. "2 messages from memory". */
 function describeCountOnly(change: Change): string {
   const what = pluralize(countOf(change), 'message');
   const { type, source } = change;
@@ -71,7 +75,6 @@ function describeCountOnly(change: Change): string {
   return what;
 }
 
-/** Back-to-back changes of the same kind that carry no content read as one change. */
 function mergeCountOnly(changes: readonly Change[]): Change[] {
   const merged: Change[] = [];
   for (const change of changes) {
@@ -90,7 +93,6 @@ const sameKind = (a: Change, b: Change) => a.type === b.type && a.source === b.s
 
 const isMessage = (value: unknown): value is SpanInputMessage => isRecord(value) && typeof value.role === 'string';
 
-/** The system messages the span received and kept: the part of the prompt it built on. */
 function keptSystemMessages(span: SpanRecord, changes: readonly Change[]): SpanInputMessage[] {
   const before =
     isRecord(span.input) && Array.isArray(span.input.systemMessages) ? span.input.systemMessages.filter(isMessage) : [];
@@ -98,19 +100,10 @@ function keptSystemMessages(span: SpanRecord, changes: readonly Change[]): SpanI
   return before.filter(message => !removed.has(JSON.stringify(message)));
 }
 
-/* ------------------------------------------------------------------------------------------------
- * Rows
- * ---------------------------------------------------------------------------------------------- */
-
 type Sign = '+' | '−' | ' ';
 
 const SIGN_LABEL: Record<Sign, string> = { '+': 'Added: ', '−': 'Removed: ', ' ': 'Unchanged: ' };
 
-/**
- * One message in the diff: a +/− gutter, a one-line title and its size. Rows with content open in place
- * (chevron on the right); added and removed rows start open, unchanged ones start closed. Long content
- * is clipped until "Show all".
- */
 function DiffRow({
   sign,
   title,
@@ -120,7 +113,7 @@ function DiffRow({
 }: {
   sign: Sign;
   title: ReactNode;
-  meta?: string;
+  meta?: ReactNode;
   defaultOpen?: boolean;
   children?: ReactNode;
 }) {
@@ -197,7 +190,20 @@ function Clipped({ children }: { children: ReactNode }) {
 function MessageRow({ sign, message, tag }: { sign: Sign; message: SpanInputMessage; tag?: string }) {
   const { title, meta } = describeMessage(message);
   return (
-    <DiffRow sign={sign} title={tag ? `${title} · ${tag}` : title} meta={meta}>
+    <DiffRow
+      sign={sign}
+      title={
+        tag ? (
+          <Metadata>
+            <Metadata.Item>{title}</Metadata.Item>
+            <Metadata.Item>{tag}</Metadata.Item>
+          </Metadata>
+        ) : (
+          title
+        )
+      }
+      meta={meta}
+    >
       <Clipped>
         <SpanPayloadMessages value={[message]} />
       </Clipped>
@@ -222,10 +228,6 @@ function ChangeRow({ change }: { change: Change }) {
 
   return <DiffRow sign={sign} title={describeCountOnly(change)} />;
 }
-
-/* ------------------------------------------------------------------------------------------------
- * Card
- * ---------------------------------------------------------------------------------------------- */
 
 function DiffCard({
   icon,
@@ -281,12 +283,6 @@ function DiffCard({
   );
 }
 
-/**
- * What this span changed in the request, read as a diff: one card for the system prompt and one for the
- * conversation, each with a +/− count in its header. Every message is a row that opens in place: added
- * and removed rows are tinted and start open, the system messages the span kept sit above them closed,
- * so the change shows where it landed in the prompt without the rest of the prompt drowning it.
- */
 export function SpanPromptChanges({ span }: { span: SpanRecord }) {
   const changes = mergeCountOnly(getPromptChanges(span).filter((change): change is Change => isRecord(change)));
   if (changes.length === 0) return null;

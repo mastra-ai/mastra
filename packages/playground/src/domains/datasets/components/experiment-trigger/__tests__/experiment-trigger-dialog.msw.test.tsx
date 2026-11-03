@@ -33,7 +33,6 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-// Newest first, as the API lists them: the dialog opens on the first one.
 const defaultDatasets = [
   buildDataset(),
   buildDataset({
@@ -109,7 +108,6 @@ function renderDialog(props: Partial<ExperimentTriggerDialogProps> = {}) {
   );
   const { rerender } = render(dialog(true));
 
-  /** Closes the dialog like its caller would, waits for it to leave, and opens it again. */
   async function reopen() {
     rerender(dialog(false));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
@@ -129,7 +127,6 @@ const descriptionInput = () => screen.getByLabelText<HTMLTextAreaElement>('Descr
 const chipLabels = () =>
   Array.from(document.querySelectorAll('[data-slot=combobox-chip]'), chip => chip.textContent?.trim());
 
-/** Opens a combobox field's list and picks the option. */
 async function choose(field: HTMLInputElement, option: string) {
   fireEvent.keyDown(field, { key: 'ArrowDown' });
   fireEvent.click(await screen.findByRole('option', { name: option }));
@@ -153,7 +150,8 @@ describe('ExperimentTriggerDialog', () => {
       renderDialog();
 
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
-      expect(await screen.findByText('3 items · latest')).toBeDefined();
+      expect(await screen.findByText('3 items')).toBeDefined();
+      expect(screen.getByText('latest')).toBeDefined();
       expect(runButton().disabled).toBe(true);
 
       await pickAgentOne();
@@ -208,9 +206,9 @@ describe('ExperimentTriggerDialog', () => {
 
       await waitFor(() => expect(targetField().value).toBe('Agent One'));
       expect(datasetField().value).toBe('Dataset 1');
-      expect(await screen.findByText('3 items · v11')).toBeDefined();
+      expect(await screen.findByText('3 items')).toBeDefined();
+      expect(screen.getByText('v11')).toBeDefined();
       await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
-      // The pinned version shows in the dataset hint; Advanced stays closed.
       expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
       expect(screen.queryByText('Dataset version')).toBeNull();
 
@@ -286,10 +284,6 @@ describe('ExperimentTriggerDialog', () => {
     const providerField = () => screen.getByRole('combobox', { name: 'Model provider' });
     const modelField = () => screen.getByRole('combobox', { name: 'Model' });
 
-    /**
-     * The model pickers are buttons, not text inputs, so a click opens them. A provider option's name starts
-     * with its logo and connection status, so options are matched on how their name ends.
-     */
     async function pick(field: HTMLElement, option: string) {
       fireEvent.click(field);
       await pickOpenOption(option);
@@ -299,7 +293,6 @@ describe('ExperimentTriggerDialog', () => {
       fireEvent.click(await screen.findByRole('option', { name: name => name.endsWith(option) }));
     }
 
-    /** Picking a provider opens the model list straight away, as in the composer. */
     async function pickModel(provider: string, model: string) {
       await pick(providerField(), provider);
       await pickOpenOption(model);
@@ -663,7 +656,6 @@ describe('ExperimentTriggerDialog', () => {
 
       await choose(scorersField(), 'Stored judge');
       await waitFor(() => expect(chipLabels()).toEqual(['Stored judge']));
-      // A multi-select stays open for more picks; close it like a user would.
       fireEvent.keyDown(scorersField(), { key: 'Escape' });
 
       await pickAgentOne();

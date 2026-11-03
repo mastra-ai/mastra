@@ -23,13 +23,10 @@ export default defineConfig({
     'react/exhaustive-deps': 'warn',
     'mastra/sentence-case-labels': 'error',
     'typescript/no-non-null-assertion': 'error',
-    // Tailwind (oxlint-tailwindcss; class order is oxfmt's sortTailwindcss)
     'tailwindcss/no-conflicting-classes': [
       'error',
       {
-        // transition-* sets a default duration that duration-*/ease-*/delay-* are meant to override
         allow: [['(^|:)transition(-|$)', '(^|:)(duration|ease|delay)-']],
-        // "x has no effect" (e.g. overflow-hidden next to truncate): real cleanups, but ESLint never reported them
         reportRedundant: false,
       },
     ],
@@ -43,6 +40,16 @@ export default defineConfig({
       rules: playgroundUiRules,
     },
     {
+      files: [
+        'src/**/*.{test,spec,stories,story}.*',
+        'src/**/{test,tests,__tests__,__mocks__,__fixtures__,fixtures,generated}/**',
+      ],
+      rules: {
+        'playground-ui/no-text-separators': 'off',
+        'playground-ui/no-text-layout-spacing': 'off',
+      },
+    },
+    {
       files: ['src/ds/**/*.{ts,tsx}'],
       rules: { 'playground-ui/font-mono': 'off' },
     },
@@ -51,7 +58,6 @@ export default defineConfig({
       rules: { 'playground-ui/text-role': 'off', 'playground-ui/txt-tone': 'off', 'playground-ui/font-mono': 'off' },
     },
     {
-      // Test stubs aren't UI people see.
       files: ['src/**/*.test.*', 'src/**/__tests__/**'],
       rules: { 'mastra/sentence-case-labels': 'off', 'playground-ui/placeholder-text': 'off' },
     },
@@ -63,7 +69,6 @@ export default defineConfig({
         'react/rules-of-hooks': 'off',
       },
     },
-    // eslint-plugin-storybook's flat/recommended
     {
       files: ['**/*.stories.{ts,tsx,js,jsx,mjs,cjs}', '**/*.story.{ts,tsx,js,jsx,mjs,cjs}'],
       rules: {
@@ -85,7 +90,6 @@ export default defineConfig({
       rules: { 'storybook/no-uninstalled-addons': 'error' },
     },
     {
-      // ESLint's Tailwind plugin only ran on .js/.jsx/.ts/.tsx files.
       files: ['**/*.{mjs,cjs}'],
       rules: {
         'tailwindcss/no-conflicting-classes': 'off',

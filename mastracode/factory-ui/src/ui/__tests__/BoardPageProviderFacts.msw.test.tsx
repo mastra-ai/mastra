@@ -83,7 +83,6 @@ it.each(['board', 'list'])(
       http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/permissions`, () =>
         HttpResponse.json({ categories: {}, tools: {} }),
       ),
-      // Routine intake browsing can fail; card facts must not trigger a detail lookup to recover.
       http.get(`${TEST_BASE_URL}/web/github/projects/:id/issues`, () =>
         HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 }),
       ),
@@ -110,7 +109,8 @@ it.each(['board', 'list'])(
 
     await user.click(within(card).getByRole('button', { name: 'Details for Repair source facts' }));
     const details = await screen.findByRole('dialog', { name: 'Repair source facts' });
-    expect(details).toHaveTextContent('acme/app#73 · reporter');
+    expect(details).toHaveTextContent('acme/app#73');
+    expect(details).toHaveTextContent('reporter');
     expect(within(details).getByLabelText('Source state: closed')).toBeVisible();
     expect(within(details).getByText('customer-visible')).toBeVisible();
     expect(within(details).getByRole('link', { name: /^Open in GitHub/ })).toHaveAttribute(

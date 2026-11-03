@@ -27,7 +27,6 @@ import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
-// Plain <button>s navigated with roving focus (not Base UI).
 const FilterMenuButton = forwardRef<HTMLButtonElement, ButtonHTMLAttributes<HTMLButtonElement>>((props, ref) => (
   <button type="button" role="menuitem" data-filter-item="" ref={ref} {...props} />
 ));
@@ -39,30 +38,11 @@ export type PropertyFilterCreatorProps = {
   onTokensChange: (tokens: PropertyFilterToken[]) => void;
   label?: string;
   disabled?: boolean;
-  /** Size passed through to the trigger Button. Defaults to 'md'. */
   size?: ButtonProps['size'];
-  /**
-   * Called when the user picks a text (id-style) field. Consumers are expected
-   * to render a pending applied-filter pill with an active input so the user
-   * can type the value inline instead of in this popover.
-   */
   onStartTextFilter?: (fieldId: string) => void;
-  /**
-   * Field ids hidden from the Add Filter dropdown. Use to prevent users from
-   * recreating a filter that an upstream context already owns (e.g. the agent
-   * id when viewing the agent-scoped traces tab).
-   */
   hiddenFieldIds?: readonly string[];
 };
 
-/**
- * Minimal Linear-style filter creator: a `+ Filter` button whose popover walks
- * the user through property → value → commit. For id-style text fields, the
- * picker closes immediately and the applied-filter pill owns the input. For
- * `pick-multi` fields (e.g. Root Entity Name) hovering the item opens a
- * separate side popover with checkboxes — each check adds its own applied
- * filter and the main popover stays open so users can pick many.
- */
 export function PropertyFilterCreator({
   fields,
   tokens,
@@ -82,14 +62,8 @@ export function PropertyFilterCreator({
   const [fieldId, setFieldId] = useState<string | undefined>();
   const [multiValue, setMultiValue] = useState<string[]>([]);
   const [error, setError] = useState<string | undefined>();
-  // Single source of truth for which pick-multi side panel is open. Opens only
-  // via explicit click/keyboard press on the menu item — no hover/focus
-  // auto-open (was too flicker-prone).
   const [openPickMultiFieldId, setOpenPickMultiFieldId] = useState<string | undefined>();
 
-  // When the user picks a text field we close this popover and hand off focus
-  // to the newly-created pill's input — prevent Radix from returning focus to
-  // the trigger button in that case.
   const skipCloseFocusRef = useRef(false);
 
   const togglePickMulti = useCallback((id: string) => {
@@ -102,8 +76,6 @@ export function PropertyFilterCreator({
   }, [open]);
 
   const selectedField = useMemo(() => visibleFields.find(f => f.id === fieldId), [visibleFields, fieldId]);
-  // Only single-use kinds (text, multi-select) count as "used". `pick-multi`
-  // allows multiple tokens with the same fieldId.
   const singleUseFieldIds = useMemo(() => {
     const ids = new Set<string>();
     for (const token of tokens) {
@@ -123,12 +95,6 @@ export function PropertyFilterCreator({
     if (!open) reset();
   }, [open, reset]);
 
-  /**
-   * Replace whatever token exists for `fieldId` with the given value. Used by
-   * both single-select (radio) and multi-select (checkbox) pick-multi panels.
-   * An empty list means nothing is selected, which removes the token here —
-   * unlike the applied pill, where the filter stays on in a neutral state.
-   */
   const replacePickMultiToken = useCallback(
     (fieldId: string, value: string | string[]) => {
       const existingIndex = tokens.findIndex(t => t.fieldId === fieldId);
@@ -200,7 +166,7 @@ export function PropertyFilterCreator({
                 <ArrowLeftIcon className="size-4" />
               </button>
               <FilterIcon className="size-4 shrink-0 text-muted-foreground" />
-              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} · is`}</Txt>
+              <Txt as="span" variant="caption" tone="muted">{`${selectedField.label} is`}</Txt>
             </div>
           )}
 
@@ -329,13 +295,6 @@ type PickMultiMenuItemProps = {
   onClose: () => void;
 };
 
-/**
- * A property-picker menu item that opens a separate Radix popover (portaled to
- * the side) with a radio group (single-select) or checkbox list (multi-select,
- * `field.multi === true`). Open/close is driven by explicit click / keyboard
- * press; the panel only closes when the user clicks outside, presses Escape,
- * or clicks the row again to toggle it off.
- */
 function PickMultiMenuItem({ field, tokens, onChange, open, onToggle, onClose }: PickMultiMenuItemProps) {
   const contentRef = useRef<HTMLDivElement>(null);
 

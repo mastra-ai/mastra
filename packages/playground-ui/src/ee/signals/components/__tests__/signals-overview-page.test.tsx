@@ -98,7 +98,8 @@ describe('SignalsEmptyState', () => {
       expect(screen.getByText('Analyzing traces for Trace Intelligence.')).not.toBeNull();
       expect(screen.getByText('87')).not.toBeNull();
       expect(screen.getByText('1 of 4')).not.toBeNull();
-      expect(screen.getByText('87 generated · 84 embedded')).not.toBeNull();
+      expect(screen.getAllByText('87 generated')).toHaveLength(2);
+      expect(screen.getByText('84 embedded')).not.toBeNull();
     });
   });
 

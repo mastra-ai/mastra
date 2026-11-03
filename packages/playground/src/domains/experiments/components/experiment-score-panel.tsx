@@ -7,12 +7,10 @@ import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { GaugeIcon, ReceiptText } from 'lucide-react';
 
 export type ExperimentScorePanelProps = {
-  /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
   score?: ClientScoreRowData;
   onNext?: () => void;
   onPrevious?: () => void;
   onClose: () => void;
-  /** When provided, a Trace button appears in the header; hidden when `score.traceId` is absent. */
   onShowTrace?: () => void;
 };
 
@@ -47,7 +45,7 @@ function ExperimentScorePanelBody({
   onShowTrace,
 }: Omit<ExperimentScorePanelProps, 'score'> & { score: ClientScoreRowData }) {
   const isCodeBased = isCodeBasedScorer(score);
-  const naText = isCodeBased ? 'N/A — code-based scorer' : 'N/A — step not configured';
+  const naText = isCodeBased ? 'Not applicable (code-based scorer)' : 'Step not configured';
 
   return (
     <>

@@ -37,40 +37,20 @@ import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
 
-// A filter bar is a dense row: it sits above a list, carries many chips at once, and never
-// competes with the page's own controls. Chip and typeahead pill read this one rung so they
-// stay the same height by construction rather than by two call sites agreeing.
 export const FILTER_BAR_CONTROL_SIZE: ControlSize = 'sm';
 
-// `filter-bar-segment` carries the left-to-right entrance (see filter-bar-chip.css).
-// No `first:`/`last:` rounding here: a segment is not reliably the first or last child.
-// Base UI interleaves a hidden input after every combobox and wraps an open trigger in
-// focus guards, so the rounded end would silently drop the moment a popup opened and the
-// segment's own state fill — the one state a chip has — would paint square corners
-// straight through the chip's pill edge. The chip clips instead (see `chipClass`).
-// Icons inherit the bar's rung from the segment, as they do from a Button, instead of each
-// sizing itself.
+// Base UI inserts children; the chip clips segment corners.
 export const segmentClass = cn(
   'filter-bar-segment flex max-w-48 min-w-0 items-center gap-(--control-gap) overflow-hidden px-2 text-label whitespace-nowrap outline-none',
   iconSizeClasses[FILTER_BAR_CONTROL_SIZE],
   '[&>svg]:shrink-0',
 );
 
-// Typed out of ComboboxRoot but honoured at runtime; keepHighlight stops Base UI re-lighting row 0 when the pointer reaches a row's text.
+// Base UI types omit keepHighlight, but its runtime honors it.
 export const alwaysHighlightProps = { autoHighlight: 'always', keepHighlight: true } as unknown as {
   autoHighlight: boolean;
 };
 
-// A chip is a field whose value is edited in place, so it wears the field material rather than a
-// fill rung: on a light canvas a `bg-fill` chip read as a grey slab beside the white typeahead
-// pill it belongs to. The segments layer their own state over that card, which is why the chip
-// keeps `divide-border` for the internal seams and takes its outer edge from the material's rim.
-// `overflow-hidden` is what gives every segment its end cap: the chip is the only node that
-// knows where the pill ends, and it keeps knowing it while a framework injects children.
-// `p-px` reserves the rim on every side: both colours are translucent, so a divider crossing the
-// rim stacks its alpha and the joint reads brighter, and a trailing × sits centred between its
-// divider and the rim. `--control-border` gives that pixel back to the outer insets (see
-// filter-bar-chip.css), as a bordered Button does, so the label keeps a Button's distance from the edge.
 export const chipClass = cn(
   'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border overflow-hidden rounded-full p-px [--control-border:1px]',
   inputSurfaceAndFocusWithinStyle,
@@ -85,7 +65,6 @@ export const editableSegmentClass = cn(
   'focus-visible:bg-fill-hover focus-visible:text-foreground data-[popup-open]:bg-fill-hover data-[popup-open]:text-foreground',
 );
 
-/** Field label with its optional leading icon — used by chips, the draft chip and field option lists. */
 export function FilterBarFieldLabel({ field, label }: { field: FilterBarField | undefined; label?: string }) {
   const Icon = field?.icon;
   return (
@@ -98,13 +77,11 @@ export function FilterBarFieldLabel({ field, label }: { field: FilterBarField | 
 
 type AccentStyle = CSSProperties & { '--control-icon-rest': string; '--control-icon-hover': string };
 
-/** Inline style carrying a field's accent onto its field segment: text and icon, at rest and on hover. */
 export const fieldSegmentAccentStyle = (field: FilterBarField | undefined): AccentStyle | undefined =>
   field?.color
     ? { color: field.color, '--control-icon-rest': field.color, '--control-icon-hover': field.color }
     : undefined;
 
-/** Segments a chip already showed before its latest step, given how far its draft had got. */
 const settledSegments = (from: DraftStage, operatorImplied: boolean): number => {
   if (from === 'none') return 0;
   if (from === 'field' || operatorImplied) return 1;
@@ -131,11 +108,8 @@ type ChipContext = {
   openSegment: FilterBarSegment | null;
   setOpenSegment: (segment: FilterBarSegment | null) => void;
   readOnly: boolean;
-  /** Filter still being built in the input: segments are inert labels. */
   draft: boolean;
-  /** Filter already removed from the value, playing its exit: segments are inert labels. */
   leaving: boolean;
-  /** The field allows a single operator, so the operator segment is not shown. */
   operatorImplied: boolean;
 };
 
@@ -148,18 +122,10 @@ const useChip = () => {
 
 export type FilterBarChipProps = {
   item: FilterBarItem;
-  /** Locked chip: plain labels, no editors, no remove button. */
   readOnly?: boolean;
-  /** `false` keeps the chip editable but drops the remove button and ignores Backspace/Delete. */
   removable?: boolean;
-  /**
-   * Render the filter being built in the input (see `FilterBarContextValue.draft`): only
-   * the picked segments show, as inert labels. Keyed by the draft id, the same element
-   * carries on as the editable chip once the value is committed.
-   */
   draft?: boolean;
   className?: string;
-  /** Custom segment composition; defaults to Field · Operator · Value · Remove. */
   children?: ReactNode;
 };
 
@@ -189,8 +155,6 @@ export function FilterBarChip({
 
   const { settleRemove } = ctx;
 
-  // A leaving chip is released once its exit animation has finished. With nothing to
-  // animate (no `interpolate-size`, reduced motion, jsdom) it is released straight away.
   useEffect(() => {
     const root = rootRef.current;
     if (!leaving || !root) return;
@@ -220,9 +184,6 @@ export function FilterBarChip({
     .filter(Boolean)
     .join(' ');
 
-  // The provider records where each draft step (and the final commit) started from, so
-  // the entrance stagger resumes after the segments already on screen and the chip
-  // glints once when it lands as a filter (see filter-bar-chip.css).
   const commit = !draft && ctx.lastCommit?.item.id === item.id ? ctx.lastCommit : null;
   const from = draft ? (ctx.draft?.from ?? 'none') : (commit?.from ?? 'none');
   const settled = settledSegments(from, operatorImplied);
@@ -246,7 +207,6 @@ export function FilterBarChip({
         ref={rootRef}
         role="group"
         aria-label={label}
-        // The input already announces the draft's progress through its placeholder.
         aria-hidden={draft || leaving || undefined}
         data-slot="filter-bar-chip"
         data-draft={draft || undefined}
@@ -288,30 +248,24 @@ type SegmentComboboxProps<T> = {
   ariaLabel: string;
   items: readonly T[];
   itemToString: (item: T) => string;
-  /** `null` when `items` are already filtered. */
   filter: null | ((item: T, query: string, itemToString?: (item: T) => string) => boolean);
-  /** Current selection, surfaced through Base UI's `ItemIndicator`. */
   value?: T | null;
   query: string;
   onQueryChange: (query: string) => void;
   onSelect: (item: T) => void;
   onOpen?: () => void;
-  /** Popup content: typically a `SegmentSearchInput` followed by a `FilterBarOptionList`. */
   children: ReactNode;
 };
 
-// Highlighted item of the enclosing SegmentCombobox, for popup inputs that route Enter.
 const SegmentPopupContext = createContext<{ highlighted: unknown }>({ highlighted: null });
 
 type SegmentSearchInputProps<T> = {
   placeholder: string;
-  /** Leading icon. Defaults to a search glass; free-text editing uses a pencil. */
   icon?: LucideIcon;
   inputMode?: ComponentProps<'input'>['inputMode'];
   onKeyDown?: (event: BaseUIEvent<KeyboardEvent<HTMLInputElement>>, highlighted: T | null) => void;
 };
 
-/** The search/free-text input at the top of a segment popup. */
 function SegmentSearchInput<T>({
   placeholder,
   icon: Icon = SearchIcon,
@@ -333,11 +287,6 @@ function SegmentSearchInput<T>({
   );
 }
 
-/**
- * A chip segment: a button trigger that opens an option popup. The editor
- * owning the segment supplies items, filtering, selection routing and the
- * popup content.
- */
 function SegmentCombobox<T>({
   segment,
   label,
@@ -386,7 +335,6 @@ function SegmentCombobox<T>({
       filter={filter}
       value={value}
       onValueChange={(item, details) => {
-        // The editor decides what a pick means (and when to close); Base UI must not keep it.
         details.cancel();
         if (item !== null) onSelect(item);
       }}
@@ -565,7 +513,6 @@ function ValueEditor() {
       query={query}
       onQueryChange={setQuery}
       onSelect={step.handleSelect}
-      // Prefill free-text values only; with suggestions, the current value is shown as checked instead.
       onOpen={() =>
         setQuery(!Array.isArray(chip.item.value) && !chip.field?.suggestions ? String(chip.item.value) : '')
       }
@@ -580,7 +527,6 @@ type ValueInputProps = {
   onCancel: () => void;
 };
 
-/** Suggestion list + multi-select footer, shared by every value input. */
 function ValueOptions({ step, onCancel }: ValueInputProps) {
   const chip = useChip();
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
@@ -595,7 +541,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           isSelected={o => (step.isMany ? step.selected.includes(o.value) : String(chip.item.value) === o.value)}
           isLoading={step.isLoading}
           error={step.error}
-          emptyText={step.allowFreeText ? 'No suggestions — press Enter to use your text.' : 'No matching value.'}
+          emptyText={step.allowFreeText ? 'No suggestions. Press Enter to use your text.' : 'No matching value.'}
         />
       )}
       {step.isMany && (
@@ -619,7 +565,6 @@ function freeTextPlaceholder(step: ValueInputProps['step'], noun: string) {
   return `Search ${noun}s…`;
 }
 
-/** Free-text (optionally suggestion-backed) value input; text and number share it. */
 function FreeTextValueInput({
   step,
   onCancel,
@@ -635,7 +580,7 @@ function FreeTextValueInput({
         onKeyDown={(event, highlighted) => {
           const highlightedOption = step.hasSuggestions ? highlighted : null;
           const handled = step.handleKeyDown(event, highlightedOption);
-          // Base UI closes on Enter when nothing is highlighted; a rejected free-text value must keep the editor open.
+          // Base UI submits on Enter without a highlight.
           if (handled || (event.key === 'Enter' && highlightedOption === null)) event.preventBaseUIHandler();
         }}
       />
@@ -652,7 +597,6 @@ function NumberValueInput(props: ValueInputProps) {
   return <FreeTextValueInput {...props} inputMode="decimal" noun="number" />;
 }
 
-/** Select-like: no search input, just the True/False (or custom) options. */
 function BooleanValueInput(props: ValueInputProps) {
   return <ValueOptions {...props} />;
 }
@@ -680,7 +624,6 @@ export function FilterBarChipValue() {
   return <ValueEditor />;
 }
 
-/** The trailing × segment of a chip: its own cell, so it keeps an even inset instead of the pill's outer one. */
 export const removeSegmentClass = cn(
   editableSegmentClass,
   controlIconOnly,
@@ -692,7 +635,6 @@ export function FilterBarChipRemove() {
   const chip = useChip();
   if (chip.readOnly || chip.draft) return null;
   if (chip.leaving) {
-    // Keep the × on screen so it folds away with the other segments.
     return (
       <span className={removeSegmentClass}>
         <XIcon />

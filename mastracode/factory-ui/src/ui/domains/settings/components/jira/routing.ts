@@ -15,7 +15,6 @@ export function takesAllIssues(binding: IntakeSourceBinding): boolean {
   return (binding.labels ?? null) === null;
 }
 
-/** Labels typed comma-separated, trimmed and without blanks. Jira labels never hold spaces. */
 export function parseLabels(value: string): { labels: string[] } | { error: string } {
   const labels = value
     .split(',')
@@ -26,7 +25,6 @@ export function parseLabels(value: string): { labels: string[] } | { error: stri
   return { labels };
 }
 
-/** `added` minus the labels `existing` already holds, compared case-insensitively. */
 export function newLabels(existing: string[], added: string[]): string[] {
   const held = new Set(existing.map(label => label.toLowerCase()));
   return added.filter(label => !held.has(label.toLowerCase()));
@@ -47,7 +45,6 @@ export function routingErrorMessage(error: unknown, factories: Factory[]): strin
   return error instanceof Error ? error.message : 'Failed to save Jira routing';
 }
 
-/** What a factory's routing still lacks before it picks up the issues it shows. */
 export function routingGap({
   board,
   labelled,
@@ -57,7 +54,7 @@ export function routingGap({
   labelled: boolean;
   labels: string[];
 }): string | undefined {
-  if (board === null) return "Choose a board — this factory won't pick up issues until one is set.";
+  if (board === null) return "Choose a board. This factory won't pick up issues until one is set.";
   if (labelled && labels.length === 0) return 'Still takes all issues until you add a label.';
   return undefined;
 }

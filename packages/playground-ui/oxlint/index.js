@@ -1,21 +1,5 @@
-// Design-system lint rules for apps built on @mastra/playground-ui, as an oxlint JS plugin.
-//
-//   // oxlint.config.ts
-//   import { recommended } from '@mastra/playground-ui/oxlint';
-//   export default defineConfig({
-//     jsPlugins: ['@mastra/playground-ui/oxlint'],
-//     rules: { ...recommended },
-//   });
-//
-// Rules (plugin name `playground-ui`):
-//   playground-ui/icon-button-size   a <Button> holding only an icon uses an `icon-*` size
-//   playground-ui/text-role          typography comes from a DS text role, not Tailwind's text-sm / text-[13px]
-//   playground-ui/txt-tone           ink on <Txt> is its `tone` prop, not a text-* colour class
-//   playground-ui/font-mono          mono comes from <Txt font="mono">, <InlineCode> or <CodeBlock>
-//   playground-ui/no-barrel-imports  import from an exact @mastra/playground-ui subpath, not a broad barrel
-//   playground-ui/placeholder-text   placeholders use sentence case and no trailing ellipsis ("Search agents")
+import { noTextLayoutSpacing, noTextSeparators } from './copy-rules.js';
 
-// Each option is { selector, message }: report every node an esquery selector matches.
 function selectorRule(selectors) {
   return context => {
     const handlers = {};
@@ -30,25 +14,15 @@ function selectorRule(selectors) {
   };
 }
 
-// A class string is a string literal or a static part of a template literal.
 const CLASS_NODES = [
   ['Literal', 'value'],
   ['TemplateElement', 'value.raw'],
 ];
 const classStrings = pattern => CLASS_NODES.map(([node, prop]) => `${node}[${prop}=/${pattern}/]`);
 
-// `>` to the attribute: a descendant match would also flag a coloured child rendered inside a `<Txt>`.
 const txtClassStrings = pattern =>
   classStrings(pattern).map(node => `JSXOpeningElement[name.name='Txt'] > JSXAttribute[name.name='className'] ${node}`);
 
-// --- icon-button-size ----------------------------------------------------------------------------------
-// A text size (`sm`, `md`, `lg`, or none) pads the button for a label, so an icon on its own renders as a
-// pill. `icon-sm|md|lg` is the same height as a square, which the design system rounds into a circle.
-// Only literal sizes are checked: a forwarded `size={size}` is the wrapping component's call to make.
-// Options: { components: ['Button'] }, the component names to check.
-
-// An icon is a component imported from an icon module (lucide-react, an `icons/` folder), one named
-// `*Icon` (`Icon`, `XIcon`, `TraceIcon`), or a spinner. Anything else may render text, like a badge.
 const iconModulePattern = /^lucide-react$|\/icons?(\/|$)/;
 
 function isIconName(name, iconImports) {
@@ -101,7 +75,6 @@ function iconButtonSize(context) {
       if (openingElement.name.type !== 'JSXIdentifier' || !names.has(openingElement.name.name)) return;
       const attributes = new Map();
       for (const attribute of openingElement.attributes) {
-        // A spread may carry the size; leave those to the component that builds the props.
         if (attribute.type === 'JSXSpreadAttribute') return;
         attributes.set(attribute.name.name, attribute.value);
       }
@@ -119,31 +92,18 @@ function iconButtonSize(context) {
   };
 }
 
-// --- text-role -----------------------------------------------------------------------------------------
-// Typography must come from a DS text role (text-title, text-body, text-label…, or <Txt>). Tailwind's own
-// sizes stay defined as a safety net only; the roles live in playground-ui's theme/typography.css.
 const TEXT_ROLE_PATTERN = '(^|\\s|:)text-(xs|sm|base|lg|xl|\\dxl)(\\s|$)|text-\\[\\d[^\\]]*(px|rem)\\]';
 const TEXT_ROLE_MESSAGE = 'Use a DS text role (text-title / text-body / text-label / text-caption…) — see Txt.';
 const textRole = selectorRule(() =>
   classStrings(TEXT_ROLE_PATTERN).map(selector => ({ selector, message: TEXT_ROLE_MESSAGE })),
 );
 
-// --- txt-tone ------------------------------------------------------------------------------------------
-// Ink on a `<Txt>` is the `tone` prop, not a class: three named tones against any colour Tailwind can
-// spell, and omitting tone inherits rather than restating ink. Anchored at class boundaries: a variant or
-// an alpha (`hover:text-foreground`, `text-foreground/70`) is something `tone` cannot express, so it stays
-// a class.
 const TXT_TONE_PATTERN = '(^|\\s)text-(foreground|muted-foreground|placeholder)(?=\\s|$)';
 const TXT_TONE_MESSAGE = 'Set ink on <Txt> with tone="ink" | "muted" | "faint", not a text-* colour class.';
 const txtTone = selectorRule(() =>
   txtClassStrings(TXT_TONE_PATTERN).map(selector => ({ selector, message: TXT_TONE_MESSAGE })),
 );
 
-// --- font-mono -----------------------------------------------------------------------------------------
-// By default only `<Txt className>` is checked: native inputs and compound controls keep their className
-// escape hatch, and only Txt has a `font` prop. Options:
-//   anywhere: true   check every class string instead
-//   allowIn: [...]   with `anywhere`, component names whose className may still set font-mono (e.g. 'Input')
 const FONT_MONO_PATTERN = '(^|\\s|:|!)font-mono(?=!|\\s|$)';
 const FONT_MONO_MESSAGE =
   'Mono comes from the design system: <Txt font="mono"> for identifiers, timestamps, and durations, <InlineCode> or <CodeBlock> for code, tabular-nums for numbers.';
@@ -159,9 +119,6 @@ const fontMono = selectorRule(({ anywhere = false, allowIn = [] }) => {
   });
 });
 
-// --- no-barrel-imports ---------------------------------------------------------------------------------
-// The root and the components / hooks / utils barrels pull in far more than the one export you need.
-// Covers imports, re-exports, and the module argument of vi.mock() / vi.importActual().
 const BARREL_SOURCES = [
   '@mastra/playground-ui',
   '@mastra/playground-ui/components',
@@ -179,14 +136,6 @@ const noBarrelImports = selectorRule(() =>
   ]).map(selector => ({ selector, message: BARREL_MESSAGE })),
 );
 
-// --- placeholder-text ----------------------------------------------------------------------------------
-// Placeholders read like the system search field on macOS and iOS: "Search agents", "Filter by name". No
-// trailing ellipsis (`…` or `...`): the dimmed text already says the field is empty. Placeholders that give
-// an instruction (start with Search, Filter, Select…) also use sentence case. Example values ("My Agent",
-// "e.g. Production alerts") keep their capitals.
-// Checks string `placeholder` / `*Placeholder` values in JSX attributes, object properties, default
-// parameters and variables, including each branch of a ternary. Strings built at runtime are only partly seen.
-// Options: { properNouns?: string[] } words that stay capitalized after the first, added to the defaults.
 const PLACEHOLDER_NAME = /^placeholder$|Placeholder$/;
 const INSTRUCTION_VERBS =
   /^(Search|Filter|Find|Select|Choose|Pick|Enter|Type|Paste|Add|Write|Describe|Leave|Ask|Send|Name)\b/;
@@ -206,7 +155,6 @@ const PLACEHOLDER_PROPER_NOUNS = [
   'Stripe',
 ];
 
-// The string values a placeholder expression can take: literals, static template parts, ternary branches.
 function placeholderStrings(node) {
   if (!node) return [];
   if (node.type === 'JSXExpressionContainer') return placeholderStrings(node.expression);
@@ -224,7 +172,6 @@ function placeholderStrings(node) {
 function placeholderText(context) {
   const nouns = [...PLACEHOLDER_PROPER_NOUNS, ...(context.options[0]?.properNouns ?? [])];
   const properNouns = new RegExp(`\\b(?:${nouns.sort((a, b) => b.length - a.length).join('|')})\\b`, 'g');
-  // The first capitalized word that doesn't start a sentence and isn't (part of) a proper noun.
   const titleCaseWord = text => {
     let sentenceStart = true;
     for (const word of text.replace(properNouns, 'x').trim().split(/\s+/)) {
@@ -235,7 +182,6 @@ function placeholderText(context) {
   };
   const check = value => {
     for (const { node, head, tail } of placeholderStrings(value)) {
-      // A progress state shown in the field ("Loading agents…") keeps its ellipsis.
       if (/(…|\.\.\.)\s*$/.test(tail) && !/^\s*\w+ing\b/.test(head)) {
         context.report({ node, message: 'Drop the trailing ellipsis from this placeholder ("Search agents").' });
       }
@@ -275,11 +221,11 @@ const plugin = {
     'font-mono': { meta: { type: 'suggestion', schema: false }, create: fontMono },
     'no-barrel-imports': { meta: { type: 'suggestion', schema: false }, create: noBarrelImports },
     'placeholder-text': { meta: { type: 'suggestion', schema: false }, create: placeholderText },
+    'no-text-separators': noTextSeparators,
+    'no-text-layout-spacing': noTextLayoutSpacing,
   },
 };
 
-// Every rule at its default options. Spread into `rules`, then turn rules off per glob in `overrides`
-// (tests and stories, for example).
 export const recommended = {
   'playground-ui/icon-button-size': 'error',
   'playground-ui/text-role': 'error',
@@ -287,6 +233,8 @@ export const recommended = {
   'playground-ui/font-mono': 'error',
   'playground-ui/no-barrel-imports': 'error',
   'playground-ui/placeholder-text': 'error',
+  'playground-ui/no-text-separators': 'error',
+  'playground-ui/no-text-layout-spacing': 'error',
 };
 
 export default plugin;

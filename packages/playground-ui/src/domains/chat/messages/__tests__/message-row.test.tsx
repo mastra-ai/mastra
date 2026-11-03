@@ -125,8 +125,6 @@ describe('MessageRow', () => {
     expect(container.textContent).toMatch(/partial answer[\s\S]*APICallError[\s\S]*The model request failed\./);
   });
 
-  // The reveal only paces if the factory keeps the text part mounted as the
-  // reply grows; a remount would show every chunk whole again.
   describe('when a streaming reply grows', () => {
     it('reveals it gradually', () => {
       vi.useFakeTimers();
@@ -295,9 +293,6 @@ describe('MessageRow', () => {
     expect(screen.getByText('cart')).toBeTruthy();
   });
 
-  // Regression: a persisted reactive (non-user) `signal` row must render a
-  // SignalBadge on read-back. This conversion existed at 1.41.0 and was lost
-  // when the chat renderer was rewritten (PR #17774); the row was dropped.
   it('renders a persisted reactive signal row as a signal badge on read-back', () => {
     const { container } = renderRow(
       baseMessage({
@@ -315,8 +310,6 @@ describe('MessageRow', () => {
     expect(container.textContent).toContain('reactive signal body');
   });
 
-  // A non-user signal whose payload is not a renderable signal shape must be
-  // dropped, not rendered as an empty assistant bubble.
   it('drops a non-user signal whose payload is not a renderable signal shape', () => {
     const { container } = renderRow(
       baseMessage({
@@ -474,7 +467,8 @@ describe('MessageRow', () => {
           toolCall('call-3'),
         ]),
       );
-      expect(screen.getByText('2 OK · 1 failed')).toBeTruthy();
+      expect(screen.getByText('2 OK')).toBeTruthy();
+      expect(screen.getByText('1 failed')).toBeTruthy();
     });
 
     it('does not count recorded legacy tool errors as successful results', () => {
@@ -495,7 +489,8 @@ describe('MessageRow', () => {
           toolCall('three'),
         ]),
       );
-      expect(screen.getByText('2 OK · 1 failed')).toBeTruthy();
+      expect(screen.getByText('2 OK')).toBeTruthy();
+      expect(screen.getByText('1 failed')).toBeTruthy();
     });
 
     it('does not count unfinished calls in stopped history as successful', () => {
@@ -506,7 +501,8 @@ describe('MessageRow', () => {
           toolCall('call-3', 'genericTool', 'call'),
         ]),
       );
-      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getByText('1 OK')).toBeTruthy();
+      expect(screen.getByText('2 incomplete')).toBeTruthy();
     });
 
     it('identifies only unfinished calls inside the expanded group', () => {
@@ -549,7 +545,8 @@ describe('MessageRow', () => {
       );
       const stored = messages.get.all.db();
       renderRow(stored[0]);
-      expect(screen.getByText('2 OK · 1 incomplete')).toBeTruthy();
+      expect(screen.getByText('2 OK')).toBeTruthy();
+      expect(screen.getByText('1 incomplete')).toBeTruthy();
     });
 
     it('preserves incomplete counts when a live row stops and is remounted as history', () => {
@@ -573,13 +570,15 @@ describe('MessageRow', () => {
       const pendingCall = within(screen.getAllByRole('group', { name: 'genericTool' })[1]).getByRole('button');
       fireEvent.click(pendingCall);
       rerender(row(false));
-      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getByText('1 OK')).toBeTruthy();
+      expect(screen.getByText('2 incomplete')).toBeTruthy();
       expect(screen.getAllByText('Incomplete')).toHaveLength(2);
       expect(pendingCall.getAttribute('aria-expanded')).toBe('true');
       expect(pendingCall.isConnected).toBe(true);
       unmount();
       renderRow(structuredClone(message));
-      expect(screen.getByText('1 OK · 2 incomplete')).toBeTruthy();
+      expect(screen.getByText('1 OK')).toBeTruthy();
+      expect(screen.getByText('2 incomplete')).toBeTruthy();
       fireEvent.click(within(screen.getByRole('group', { name: 'Tool group: 3 steps' })).getByRole('button'));
       expect(screen.getAllByText('Incomplete')).toHaveLength(2);
     });
@@ -610,8 +609,6 @@ describe('MessageRow', () => {
       expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toBeTruthy();
     });
 
-    // A thread read back without its suspend payload draws the question as a plain badge. It is still
-    // a question, so it breaks the run rather than folding away with the calls around it.
     it('keeps a question out of the fold even where nothing is left to answer', () => {
       const { container } = render(
         <MessageRow

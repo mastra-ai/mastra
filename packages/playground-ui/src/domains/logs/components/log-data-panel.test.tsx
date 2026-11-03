@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import '@/test/english-locale';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { LogRecord } from '../types';
@@ -18,11 +18,14 @@ const log = {
 
 describe('LogDataPanel', () => {
   describe('when a log is open', () => {
-    it('shows the full timestamp at heading size, not as caption', () => {
+    it('shows the Log heading and the precise timestamp as metadata in the same header', () => {
       render(<LogDataPanel log={log} onClose={vi.fn()} />);
 
-      const heading = screen.getByRole('heading', { name: /Sep 24, 2026, 9:40:48\.289 AM/ });
-      expect(heading.querySelector('b')).toBeNull();
+      const panel = within(screen.getByRole('dialog', { name: 'Log Sep 24, 2026, 9:40:48.289 AM' }));
+      const heading = panel.getByRole('heading', { name: 'Log' });
+      const metadata = panel.getByRole('list');
+      expect(within(metadata).getByRole('listitem').textContent).toBe('Sep 24, 2026, 9:40:48.289 AM');
+      expect(metadata.parentElement).toBe(heading.parentElement);
     });
 
     it('renders the message in a "Message" code section', () => {

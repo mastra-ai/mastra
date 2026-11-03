@@ -10,7 +10,6 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const base = experiments[0];
 
-// What a run looks like right after it is triggered: the unscoped lookup never moves past this.
 const triggered: DatasetExperiment = { ...base, status: 'pending', succeededCount: 0, completedAt: null };
 let liveStatus: DatasetExperiment['status'] = 'pending';
 let unscopedCalls = 0;
@@ -43,7 +42,6 @@ const renderIcon = () =>
     { router: { initialEntries: [`/experiments/${base.id}`] } },
   );
 
-/** The icon only names its state through the tooltip, so focus the trigger to read it. */
 const statusLabel = async (label: string) => {
   const trigger = await waitFor(() => {
     const el = document.querySelector('[tabindex="0"]');
@@ -76,7 +74,6 @@ describe('ExperimentCrumbStatusIcon', () => {
     expect(await statusLabel('Run completed')).toBeTruthy();
     expect(screen.queryByRole('status', { name: 'Loading' })).toBeNull();
 
-    // The header reads the polled dataset-scoped query, not repeated unscoped lookups.
     expect(unscopedCalls).toBe(1);
   });
 });
@@ -123,7 +120,8 @@ describe('ExperimentCrumbItemCount', () => {
       stubLiveExperiment({ ...base, status: 'completed', succeededCount: 8, failedCount: 2 });
       renderCount();
 
-      expect(await screen.findByText('10 items · 2 errored')).toBeTruthy();
+      expect(await screen.findByText('10 items')).toBeTruthy();
+      expect(screen.getByText('2 errored')).toBeTruthy();
     });
   });
 

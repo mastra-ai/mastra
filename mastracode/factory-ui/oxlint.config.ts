@@ -4,10 +4,7 @@ import rootConfig from '../../oxlint.config.ts';
 export default defineConfig({
   extends: [rootConfig],
   jsPlugins: ['@mastra/playground-ui/oxlint'],
-  // This package did not previously run lint; adopt assertion checks without an unrelated lint migration.
   rules: {
-    // Only icon-button-size and placeholder-text from playground-ui's preset for now: the typography rules have
-    // existing hits here.
     'playground-ui/icon-button-size': 'error',
     'playground-ui/placeholder-text': 'error',
     'mastra/import-order': 'off',
@@ -19,11 +16,27 @@ export default defineConfig({
   },
   overrides: [
     {
+      files: ['src/**/*.{ts,tsx}'],
+      rules: {
+        'playground-ui/no-text-separators': 'error',
+        'playground-ui/no-text-layout-spacing': 'error',
+      },
+    },
+    {
+      files: [
+        'src/**/*.{test,spec,stories,story}.*',
+        'src/**/{test,tests,__tests__,__mocks__,__fixtures__,fixtures,generated}/**',
+      ],
+      rules: {
+        'playground-ui/no-text-separators': 'off',
+        'playground-ui/no-text-layout-spacing': 'off',
+      },
+    },
+    {
       files: ['**/*.{ts,tsx}'],
       rules: { 'typescript/no-floating-promises': 'off', 'typescript/no-misused-promises': 'off' },
     },
     {
-      // Test stubs aren't UI people see.
       files: ['src/**/*.{test,spec}.*', 'src/**/__tests__/**'],
       rules: { 'mastra/sentence-case-labels': 'off', 'playground-ui/placeholder-text': 'off' },
     },

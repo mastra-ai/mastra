@@ -10,7 +10,7 @@ import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test
 
 type BatchInsertResponse = RouteResponse<'POST /datasets/:datasetId/items/batch'>;
 
-// CodeMirror doesn't render in jsdom; stub it so we can assert on the props it receives.
+// CodeMirror needs a browser; use a textarea in jsdom.
 vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
   CodeEditor: ({ value, language, onChange, editable = true, 'aria-label': label }: CodeEditorProps) =>
     onChange ? (
@@ -92,7 +92,8 @@ describe('JSONImportDialog', () => {
     renderDialog();
 
     pasteJSON(VALID_ITEMS);
-    expect(screen.getByRole('status').textContent).toBe('3 items ready · 1 without groundTruth');
+    expect(screen.getByRole('status').textContent).toContain('3 items ready');
+    expect(screen.getByText('1 without groundTruth')).not.toBeNull();
     expect((screen.getByRole('button', { name: 'Import 3 items' }) as HTMLButtonElement).disabled).toBe(false);
 
     pasteJSON('{}');
@@ -105,7 +106,7 @@ describe('JSONImportDialog', () => {
     expect(screen.getByRole('status').textContent).toBe('1 of 1 item has no input');
 
     pasteJSON('[');
-    expect(screen.getByRole('status').textContent).toMatch(/^Not valid JSON — /);
+    expect(screen.getByRole('status').textContent).toMatch(/^Not valid JSON: /);
     expect((screen.getByRole('button', { name: 'Import' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -136,7 +137,7 @@ describe('JSONImportDialog', () => {
     const file = new File(['hello'], 'notes.txt', { type: 'text/plain' });
     fireEvent.change(screen.getByLabelText('Choose a JSON file'), { target: { files: [file] } });
 
-    expect(screen.getByRole('status').textContent).toBe('Not valid JSON — Only .json files are supported');
+    expect(screen.getByRole('status').textContent).toBe('Not valid JSON: Only .json files are supported');
   });
 
   it('discards a file read that resolves after a newer selection', async () => {
@@ -158,13 +159,15 @@ describe('JSONImportDialog', () => {
 
       vi.stubGlobal('FileReader', OriginalFileReader);
       await uploadFile('fast.json', '[{"input":"only"}]');
-      expect(screen.getByRole('status').textContent).toBe('1 item ready · 1 without groundTruth');
+      expect(screen.getByRole('status').textContent).toContain('1 item ready');
+      expect(screen.getByText('1 without groundTruth')).not.toBeNull();
 
       releaseRead!();
       await new Promise(resolve => setTimeout(resolve, 20));
       expect(screen.getByText('fast.json')).not.toBeNull();
       expect(screen.queryByText('slow.json')).toBeNull();
-      expect(screen.getByRole('status').textContent).toBe('1 item ready · 1 without groundTruth');
+      expect(screen.getByRole('status').textContent).toContain('1 item ready');
+      expect(screen.getByText('1 without groundTruth')).not.toBeNull();
     } finally {
       vi.unstubAllGlobals();
     }
@@ -174,13 +177,15 @@ describe('JSONImportDialog', () => {
     renderDialog();
 
     await uploadFile('items.json', VALID_ITEMS);
-    expect(screen.getByRole('status').textContent).toBe('3 items ready · 1 without groundTruth');
+    expect(screen.getByRole('status').textContent).toContain('3 items ready');
+    expect(screen.getByText('1 without groundTruth')).not.toBeNull();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Paste JSON' }));
     expect(screen.getByRole('status').textContent).toBe('No items yet');
 
     fireEvent.click(screen.getByRole('tab', { name: 'Upload file' }));
-    expect(screen.getByRole('status').textContent).toBe('3 items ready · 1 without groundTruth');
+    expect(screen.getByRole('status').textContent).toContain('3 items ready');
+    expect(screen.getByText('1 without groundTruth')).not.toBeNull();
   });
 
   it('imports the validated items and closes the dialog', async () => {
@@ -256,7 +261,6 @@ describe('JSONImportDialog', () => {
       expect(onOpenChange).toHaveBeenCalledWith(false);
       expect(resetTimers).toHaveLength(1);
 
-      // If the timer survives unmount it fires into a torn-down tree ("window is not defined" after jsdom teardown).
       unmount();
       expect(clearSpy).toHaveBeenCalledWith(resetTimers[0]);
     });

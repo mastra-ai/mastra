@@ -4,13 +4,6 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useProvidersQuery } from '../../../../hooks/use-providers';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 
-/**
- * Warns when a factory-wide default model is backed only by the caller's
- * personal credential (tenant mode): the model works for them but fails for
- * teammates without their own key. Renders nothing when the credential is
- * shared org-wide, auth is off, or the provider is unknown (custom providers
- * manage keys separately).
- */
 export function SharedCredentialNotice({ modelId }: { modelId?: string }) {
   const authQuery = useFactoryAuth();
   const providersQuery = useProvidersQuery();
@@ -25,7 +18,7 @@ export function SharedCredentialNotice({ modelId }: { modelId?: string }) {
 
   return (
     <Txt tone="muted" as="p" variant="caption" className="m-0" role="note">
-      Personal {providerDisplayName(provider.provider)} credential — teammates without their own can&apos;t run this
+      Personal {providerDisplayName(provider.provider)} credential. Teammates without their own can&apos;t run this
       model.
     </Txt>
   );

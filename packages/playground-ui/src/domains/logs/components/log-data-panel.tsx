@@ -10,7 +10,7 @@ import { Txt } from '@/ds/components/Txt';
 import { formatTimestampPrecise } from '@/utils/date-format';
 
 export interface LogDataPanelProps {
-  /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
+  // Keep mounted for the drawer exit animation.
   log?: LogRecord;
   onClose: () => void;
   onTraceClick?: (traceId: string) => void;
@@ -37,7 +37,10 @@ export function LogDataPanel({
         <>
           <DataPanel.Header>
             <DataPanel.CloseButton onClick={onClose} />
-            <DataPanel.Heading>Log · {formattedDate}</DataPanel.Heading>
+            <DataPanel.Heading>Log</DataPanel.Heading>
+            <DataPanel.Metadata>
+              <DataPanel.Meta>{formattedDate}</DataPanel.Meta>
+            </DataPanel.Metadata>
             <DataPanel.HeaderActions>
               <DataPanel.NextPrevNav
                 onPrevious={onPrevious}

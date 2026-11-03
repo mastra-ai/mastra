@@ -1,4 +1,5 @@
 import { Pause, Play } from 'lucide-react';
+import type { ReactNode } from 'react';
 
 import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
 import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
@@ -13,12 +14,6 @@ const MARKER_TICK_CLASSES: Record<TimelineMarkerKind, string> = {
   'compare-point': 'bg-foreground border-border-strong',
 };
 
-/**
- * Time-axis landmark track shared by the flow timeline and compare mode. Each
- * landmark renders as a tick placed proportionally to when its snapshot became
- * the current state, with a day label under the first tick of each new day, so
- * bursty capture times and quiet gaps stay legible.
- */
 export function TimelineTrack({
   snapshots,
   totalCount,
@@ -29,7 +24,6 @@ export function TimelineTrack({
   snapshots: ThemeSnapshot[];
   totalCount: number;
   markers: ReadonlyMap<number, TimelineMarkerKind>;
-  /** Landmark index of a grabbed compare point — the next tick click moves it. */
   grabbedIndex?: number;
   onTickSelect: (index: number) => void;
 }) {
@@ -90,7 +84,7 @@ export function SnapshotTimeline({
   snapshots: ThemeSnapshot[];
   selectedIndex: number;
   totalSnapshots?: number;
-  summary: string;
+  summary: ReactNode;
   isPlaying: boolean;
   onPlayingChange: (isPlaying: boolean) => void;
   onSnapshotChange: (index: number) => void;
@@ -139,9 +133,8 @@ export function SnapshotTimeline({
           {summary}
         </Txt>
       </div>
-      {/* Keep the global ordinal and range-scoped position available to assistive tech. */}
       <p aria-live="polite" className="sr-only">
-        {statusParts.join(' · ')}
+        {statusParts.join('. ')}
       </p>
     </section>
   );

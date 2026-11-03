@@ -8,32 +8,21 @@ import { Txt } from '@/ds/components/Txt';
 import type { DragSelectionRange } from '@/ds/primitives/charts/drag-selection';
 import { cn } from '@/lib/utils';
 
-/** A thin strip: about 34px of bars above the time axis, so the list keeps its vertical space. */
 const CHART_HEIGHT = 64;
-/** A neutral surface tint, so the volume stays in the background and only errors carry color. */
 const VOLUME_COLOR = 'var(--fill-strong)';
-/** Up to 90 bars share the width; the cap only matters for short custom windows with few bars. */
 const MAX_BAR_SIZE = 40;
 const ERRORS_SERIES = { dataKey: 'errors', label: 'Errors', color: CHART_COLORS.error };
 
 export type ObservabilityHistogramProps = {
-  /** Accessible name of the chart region, e.g. "Traces over time". */
   label: string;
-  /** Series and total label for non-error rows, e.g. "Traces". */
   resourceLabel: string;
   buckets: HistogramBucket[];
   isLoading?: boolean;
   isError?: boolean;
-  /** Previous buckets stay on screen, dimmed, while a new selection loads. */
   isUpdating?: boolean;
-  /** Dragging across bars, or clicking one, reports the first and last selected bar; turn it into a window with `zoomWindow`. */
   onZoom?: (range: DragSelectionRange) => void;
 };
 
-/**
- * A compact, full-width stacked bar strip of non-error and error counts over the list's time
- * range. Per-bucket values live in the tooltip; the totals are announced to assistive tech only.
- */
 export function ObservabilityHistogram({
   label,
   resourceLabel,
@@ -58,7 +47,7 @@ export function ObservabilityHistogram({
     <section aria-label={label} aria-busy={isLoading || isUpdating} className="shrink-0">
       {!isError && !isLoading && (
         <span className="sr-only">
-          {formatCount(ok + errors)} {resourceLabel.toLowerCase()} · {formatCount(errors)} errors
+          {formatCount(ok + errors)} {resourceLabel.toLowerCase()}, {formatCount(errors)} errors
         </span>
       )}
       {isError ? (

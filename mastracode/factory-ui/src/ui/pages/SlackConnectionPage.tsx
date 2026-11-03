@@ -161,13 +161,12 @@ export function SlackConnectionSettings() {
                 <SettingsContainer key={`${account.externalTeamId}:${account.externalUserId}`}>
                   <SettingsRow
                     label={
-                      <span className="flex items-center gap-1.5">
+                      <span className="flex flex-wrap items-center gap-2">
                         <IdentityWithTooltip
                           label={account.externalTeamName ?? 'Slack workspace'}
                           idLabel="Workspace ID"
                           id={account.externalTeamId}
                         />
-                        <span aria-hidden="true">·</span>
                         <IdentityWithTooltip
                           label={account.externalUserName ?? account.externalUserId}
                           idLabel="Slack user ID"

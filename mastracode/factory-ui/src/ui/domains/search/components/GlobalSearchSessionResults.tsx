@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { GitBranch, GitPullRequest, SquareKanban } from 'lucide-react';
@@ -35,7 +36,13 @@ export function GlobalSearchSessionResults({
           key={`${result.kind}:${result.id}`}
           icon={sessionResultIcon(result.kind)}
           title={result.title}
-          subtitle={result.context}
+          subtitle={
+            <Metadata>
+              {result.context.map((part, index) => (
+                <Metadata.Item key={index}>{part}</Metadata.Item>
+              ))}
+            </Metadata>
+          }
           badge={result.identifier}
           value={result.value}
           onSelect={() => onSelect(result.path, result.preserveOrigin)}

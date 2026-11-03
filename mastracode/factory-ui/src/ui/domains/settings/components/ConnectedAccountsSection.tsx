@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2, RotateCcw } from 'lucide-react';
 import { Link, useParams } from 'react-router';
@@ -12,7 +13,6 @@ import { IntegrationLabel } from './IntegrationLabel';
 
 const slackLabel = <IntegrationLabel provider="slack" name="Slack" />;
 
-// Env vars alone do not prove the deployment registers SlackIntegration.
 export function SlackNotConfigured() {
   return (
     <SettingsContainer>
@@ -76,7 +76,12 @@ export function ConnectedAccountsSection() {
     <SettingsRow
       key={`${account.externalTeamId}:${account.externalUserId}`}
       label={slackLabel}
-      description={`${account.externalUserName || account.externalUserId} · ${account.externalTeamName || account.externalTeamId}`}
+      description={
+        <Metadata>
+          <Metadata.Item>{account.externalUserName || account.externalUserId}</Metadata.Item>
+          <Metadata.Item>{account.externalTeamName || account.externalTeamId}</Metadata.Item>
+        </Metadata>
+      }
     >
       {index === 0 && factoryId && (
         <ConnectionManagementButton render={<Link to={`/factories/${factoryId}/settings/connections/slack`} />}>

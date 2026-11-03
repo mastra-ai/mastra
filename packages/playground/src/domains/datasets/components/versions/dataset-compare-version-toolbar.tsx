@@ -1,5 +1,7 @@
 import { Column } from '@mastra/playground-ui/components/Columns';
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useDatasetVersions } from '@mastra/react/hooks/datasets';
 
@@ -8,14 +10,6 @@ export interface DatasetCompareVersionToolbarProps {
   versionA?: string;
   versionB?: string;
   onVersionChange?: (versionA: string, versionB: string) => void;
-}
-
-function formatVersionLabel(version: number, createdAt?: Date | string): string {
-  if (createdAt) {
-    const d = typeof createdAt === 'string' ? new Date(createdAt) : createdAt;
-    return `v${version}  ${formatDate(d, 'date-time')}`;
-  }
-  return `v${version}`;
 }
 
 export function DatasetCompareVersionToolbar({
@@ -29,10 +23,28 @@ export function DatasetCompareVersionToolbar({
     queryOptions: { enabled: Boolean(datasetId) },
   });
 
-  const options = (versions ?? []).map(v => ({
-    value: String(v.version),
-    label: `${formatVersionLabel(v.version, v.createdAt)}${v.isCurrent ? ' (current)' : ''}`,
-  }));
+  const options = (versions ?? []).map(version => {
+    const versionLabel = `v${version.version}`;
+    const dateLabel = version.createdAt ? formatDate(new Date(version.createdAt), 'date-time') : undefined;
+    const currentLabel = version.isCurrent ? '(current)' : undefined;
+    return {
+      value: String(version.version),
+      label: [versionLabel, dateLabel, currentLabel].filter(label => label !== undefined).join(' '),
+      content: (
+        <Metadata>
+          <Metadata.Item>{versionLabel}</Metadata.Item>
+          {dateLabel && (
+            <Metadata.Item>
+              <Txt as="span" variant="caption" tone="muted">
+                {dateLabel}
+              </Txt>
+            </Metadata.Item>
+          )}
+          {currentLabel && <Metadata.Item>{currentLabel}</Metadata.Item>}
+        </Metadata>
+      ),
+    };
+  });
 
   return (
     <Column.Toolbar className="grid w-full grid-cols-[1fr_1fr_1fr_10rem] gap-4">
@@ -43,8 +55,8 @@ export function DatasetCompareVersionToolbar({
         </SelectTrigger>
         <SelectContent>
           {options.map(option => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
+            <SelectItem key={option.value} value={option.value} label={option.label}>
+              {option.content}
             </SelectItem>
           ))}
         </SelectContent>
@@ -55,8 +67,8 @@ export function DatasetCompareVersionToolbar({
         </SelectTrigger>
         <SelectContent>
           {options.map(option => (
-            <SelectItem key={option.value} value={option.value}>
-              {option.label}
+            <SelectItem key={option.value} value={option.value} label={option.label}>
+              {option.content}
             </SelectItem>
           ))}
         </SelectContent>

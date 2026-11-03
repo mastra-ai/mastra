@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowUpRight } from 'lucide-react';
 import type { ReactNode } from 'react';
@@ -9,7 +10,6 @@ import { CardStatus, MetadataLabels, REVEAL_ON_CARD_HOVER, SourceTitle } from '.
 import { SourceIcon } from './BoardIcons';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
-// The card and its open copy draw these same rows, so opening moves nothing.
 export function CandidateCardRows({
   candidate,
   status,
@@ -20,9 +20,7 @@ export function CandidateCardRows({
   candidate: BoardCandidate;
   status: BoardCardStatus;
   titleId?: string;
-  /** Absolute in the corner: inline, its height would push every row down. */
   controls: ReactNode;
-  /** The copy's own row under the card's. */
   actions?: ReactNode;
 }) {
   return (
@@ -30,7 +28,11 @@ export function CandidateCardRows({
       <div className="absolute top-2 right-2 z-20 flex items-center gap-1.5">{controls}</div>
       <div className="flex min-w-0 flex-col gap-1.5">
         <Txt as="span" variant="meta" tone="faint" className="truncate pr-16">
-          {candidate.meta}
+          <Metadata>
+            {candidate.meta.map((part, index) => (
+              <Metadata.Item key={index}>{part}</Metadata.Item>
+            ))}
+          </Metadata>
         </Txt>
         <div className="flex min-w-0 items-center gap-1.5">
           <SourceIcon source={candidate.source} />

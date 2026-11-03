@@ -55,9 +55,9 @@ function resolveHolder(
 function describeHolder(holder: CredentialHolder): string {
   if (holder.kind === 'organization') return 'Shared by the organization';
   if (holder.kind === 'deployment') return 'Configured on the server';
-  if (holder.kind === 'teammate-owner') return holder.name ? `${holder.name} · session owner` : 'Session owner';
+  if (holder.kind === 'teammate-owner') return holder.name ? `${holder.name} (session owner)` : 'Session owner';
   if (!holder.ownsSession) return holder.name ? `${holder.name} (you)` : 'You';
-  return holder.name ? `${holder.name} · session owner (you)` : 'You · session owner';
+  return holder.name ? `${holder.name} (you, session owner)` : 'You (session owner)';
 }
 
 function teammateWarning(holder: CredentialHolder, credential: string): string | undefined {
@@ -65,7 +65,6 @@ function teammateWarning(holder: CredentialHolder, credential: string): string |
   return `Your messages use ${holder.name ? `${holder.name}’s` : 'the session owner’s'} ${credential}`;
 }
 
-/** The credential this session's requests to `modelId` run on right now, and who holds it. */
 export function useModelCredential(modelId: string | undefined): ModelCredential | undefined {
   const authQuery = useFactoryAuth();
   const { owner, draftSessionId } = useChatSessionContext();

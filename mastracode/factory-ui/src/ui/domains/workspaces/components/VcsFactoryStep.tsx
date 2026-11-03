@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { RadioGroup, RadioGroupItem } from '@mastra/playground-ui/components/RadioGroup';
 import { cn } from '@mastra/playground-ui/utils/cn';
@@ -43,7 +44,6 @@ function repositoryHost(repository: SourceControlRepository) {
   return isGitLabRepository(repository) ? 'gitlab' : 'github';
 }
 
-/** A draft can outlive its connection; a pin to a disconnected provider would wait on a disabled query forever. */
 function sourceControlView({
   pinned,
   githubConnected,
@@ -78,7 +78,6 @@ export function VcsFactoryStep({
   onSelectRepository,
   onPreviewRepository,
 }: VcsFactoryStepProps) {
-  // Undefined follows the connection status, so an OAuth return lands on the connected host.
   const [providerChoice, setProviderChoice] = useState<SourceControlView | undefined>(
     initialRepository && repositoryHost(initialRepository),
   );
@@ -404,8 +403,10 @@ function RepositoryRows({
               {repo.fullName}
             </Txt>
             <Txt as="span" variant="meta" tone="muted" className="mt-0.5 block">
-              {repo.defaultBranch}
-              {repo.private ? ' · Private' : ''}
+              <Metadata>
+                <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+                {repo.private && <Metadata.Item>Private</Metadata.Item>}
+              </Metadata>
             </Txt>
           </span>
         </label>

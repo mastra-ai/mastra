@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
@@ -7,10 +8,6 @@ import { useChatTranscript } from '../context/useChatTranscript';
 import { useModelCredential } from '../hooks/useModelCredential';
 import { HolderBadge } from './StatusLine/ModelCredential';
 
-/**
- * Only the latest failure, while the session is still on the failed model: older cards may predate a
- * credential change. A failure names its model without the provider, so a name two providers share stays unattributed.
- */
 export function RunErrorCredential({ entryId, modelId }: { entryId: string; modelId: string }) {
   const transcript = useChatTranscript();
   const { activeModelId } = useChatModels();
@@ -24,8 +21,13 @@ export function RunErrorCredential({ entryId, modelId }: { entryId: string; mode
   if (!modelCredential || transcript.transcript.entries.at(-1)?.id !== entryId) return null;
   return (
     <Txt variant="body-sm" tone="muted" className="flex items-center gap-1.5">
-      <HolderBadge holder={modelCredential.holder} />
-      Runs on {modelCredential.credential} · {modelCredential.holderDescription}
+      <Metadata>
+        <Metadata.Item>
+          <HolderBadge holder={modelCredential.holder} />
+          Runs on {modelCredential.credential}
+        </Metadata.Item>
+        <Metadata.Item>{modelCredential.holderDescription}</Metadata.Item>
+      </Metadata>
     </Txt>
   );
 }

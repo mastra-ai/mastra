@@ -148,8 +148,7 @@ beforeEach(() => {
 
 afterEach(async () => {
   cleanup();
-  // @hello-pangea/dnd removes its accessibility announcer in a zero-delay timer.
-  // Let that cleanup run before Vitest tears down this file's jsdom document.
+  // @hello-pangea/dnd defers announcer cleanup by one tick.
   await new Promise(resolve => setTimeout(resolve, 0));
   vi.restoreAllMocks();
 });
@@ -440,24 +439,23 @@ describe('SankeySignals drill-in', () => {
       renderSignals();
       const themeNode = await screen.findByLabelText(/Add transcript.+2 traces \(67%\)/);
       expect(themeNode.getAttribute('role')).toBe('button');
-      expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 3 traces ·');
+      expect(within(screen.getByTestId('snapshot-summary')).getByText('3 traces')).not.toBeNull();
 
       fireEvent.click(themeNode);
 
       const banner = await screen.findByLabelText('Active theme drill-in');
-      expect(within(banner).getByText('Goal · Add transcript')).not.toBeNull();
+      expect(within(banner).getByText('Goal')).not.toBeNull();
+      expect(within(banner).getByText('Add transcript')).not.toBeNull();
       expect(await within(banner).findByText('Showing the 2 of 3 traces that flow through this theme')).not.toBeNull();
       expect(screen.queryByText('Drill-in: Goal = "Add transcript"')).toBeNull();
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
-      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · ');
-      // Themes outside the drilled paths disappear instead of lingering as
-      // zero-count ghosts.
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('2 traces')).not.toBeNull());
+      expect(within(screen.getByTestId('snapshot-summary')).getByText('Filtered')).not.toBeNull();
       expect(screen.queryByLabelText(/^Other/)).toBeNull();
       expect(pathsRequestCount).toBe(2);
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear theme filter' }));
 
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 3 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('3 traces')).not.toBeNull());
       expect(screen.getAllByLabelText(/^Other/).length).toBeGreaterThan(0);
       expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
     });
@@ -484,13 +482,13 @@ describe('SankeySignals drill-in', () => {
 
       expect(await screen.findByRole('dialog', { name: 'Add transcript' })).not.toBeNull();
       expect(await screen.findByLabelText('Active theme drill-in')).not.toBeNull();
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · '));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('Filtered')).not.toBeNull());
 
       fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add transcript' })).toBeNull());
       expect(screen.getByLabelText('Active theme drill-in')).not.toBeNull();
-      expect(screen.getByTestId('snapshot-summary').textContent).toContain('Filtered · ');
+      expect(within(screen.getByTestId('snapshot-summary')).getByText('Filtered')).not.toBeNull();
     });
 
     it('opens theme details from the drill-in banner', async () => {
@@ -608,7 +606,7 @@ describe('SankeySignals drill-in', () => {
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('2 traces')).not.toBeNull());
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
 
       expect(await screen.findByText(/This theme is not present in the selected snapshot/)).not.toBeNull();
@@ -647,7 +645,7 @@ describe('SankeySignals drill-in', () => {
         </QueryClientProvider>,
       );
 
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 3 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('3 traces')).not.toBeNull());
       expect(screen.queryByLabelText('Active theme drill-in')).toBeNull();
       expect(replacementPathsRequests).toBe(0);
     });
@@ -764,7 +762,7 @@ describe('SankeySignals drill-in', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));
 
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 3 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('3 traces')).not.toBeNull());
       expect(screen.queryByText('Unable to load trace signal flow.')).toBeNull();
     });
 
@@ -794,7 +792,7 @@ describe('SankeySignals drill-in', () => {
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('2 traces')).not.toBeNull());
 
       fireEvent.click(screen.getByRole('button', { name: 'Play snapshots' }));
       await screen.findByRole('button', { name: 'Retry' }, { timeout: 2000 });
@@ -832,7 +830,7 @@ describe('SankeySignals drill-in', () => {
       await screen.findByRole('region', { name: 'Trace signal theme flow' });
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 4 of 4' }));
       fireEvent.click(await screen.findByRole('button', { name: /Add transcript.+2 traces \(67%\)/ }));
-      await waitFor(() => expect(screen.getByTestId('snapshot-summary').textContent).toContain('· 2 traces ·'));
+      await waitFor(() => expect(within(screen.getByTestId('snapshot-summary')).getByText('2 traces')).not.toBeNull());
       fireEvent.click(screen.getByRole('button', { name: 'Snapshot 3 of 4' }));
       expect(await screen.findByText('Filters unavailable for this snapshot')).not.toBeNull();
 

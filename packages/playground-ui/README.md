@@ -29,6 +29,35 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 @import '@mastra/playground-ui/sources.css';
 ```
 
+### Metadata
+
+Use separate elements for metadata fields. `Metadata` keeps a compact gap between fields, and `Metadata.Item` groups an icon with its label. Fields wrap as space narrows, and the list semantics keep them distinct for assistive technology.
+
+```tsx
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+
+<Metadata aria-label="Dataset version">
+  <Metadata.Item>
+    <Txt as="span" variant="label">
+      v8
+    </Txt>
+  </Metadata.Item>
+  <Metadata.Item>
+    <Txt as="span" variant="caption" tone="muted">
+      Nov 3, 2026, 10:24 AM
+    </Txt>
+  </Metadata.Item>
+  <Metadata.Item>
+    <Txt as="span" variant="caption" tone="muted">
+      (current)
+    </Txt>
+  </Metadata.Item>
+</Metadata>;
+```
+
+Use normal sentences in tooltips, accessible names, and other plain-text APIs. Parentheses such as `(current)` and missing-value placeholders remain useful; avoid decorative separators or repeated spaces as a substitute for layout.
+
 ### Data sizes
 
 Import `formatBytes` from the number utility:
@@ -516,15 +545,27 @@ export default defineConfig({
 });
 ```
 
-| Rule                              | Flags                                                                                            |
-| --------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `playground-ui/icon-button-size`  | A `<Button>` holding only an icon without an `icon-*` size                                       |
-| `playground-ui/text-role`         | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
-| `playground-ui/txt-tone`          | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
-| `playground-ui/font-mono`         | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |
-| `playground-ui/no-barrel-imports` | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
+| Rule                                   | Flags                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `playground-ui/icon-button-size`       | A `<Button>` holding only an icon without an `icon-*` size                                       |
+| `playground-ui/text-role`              | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
+| `playground-ui/txt-tone`               | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
+| `playground-ui/font-mono`              | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |
+| `playground-ui/no-barrel-imports`      | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
+| `playground-ui/no-text-separators`     | Decorative pipes, middots, double hyphens, and em dashes in authored UI copy                     |
+| `playground-ui/no-text-layout-spacing` | Repeated spaces or nonbreaking spaces used to lay out UI copy                                    |
 
 Turn rules off per glob in `overrides`, for example for tests and stories.
+
+#### Copy rules
+
+Use separate elements for metadata fields and normal punctuation for sentences. Parentheses such as `(current)` and standalone missing-value placeholders such as `—` are allowed.
+
+The copy rules inspect JSX text, copy props, copy-named fields and helpers such as `label`, `title`, `description`, and `meta`, toast messages, and assignments to copy fields such as `document.title`. They follow local bindings and helper returns within the same file. Imported helper implementations and dynamic user content are not inspected.
+
+Code, preformatted content, Markdown sources, agent prompts, tool descriptions, and technical style or schema fields are excluded. JSX source indentation is normalized before checking whitespace. The rules report without automatic fixes because a metadata row and a sentence need different replacements.
+
+In this workspace, the copy rules apply only to the `src` trees in Playground, Playground UI, and Factory UI. Tests, stories, fixtures, and generated source are excluded.
 
 ## Documentation
 

@@ -37,10 +37,6 @@ function ConfigTabLabel({ title, icon, badge }: { title: string; icon: React.Rea
   );
 }
 
-// ---------------------------------------------------------------------------
-// Read-only variable property renderer (recursive for nested objects)
-// ---------------------------------------------------------------------------
-
 function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchemaProperty; depth: number }) {
   const typeLabel = Array.isArray(prop.type) ? prop.type.filter((t: string) => t !== 'null').join(' | ') : prop.type;
   const properties = prop.properties;
@@ -50,12 +46,10 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
       <div className="flex items-center gap-2 py-1">
         <InlineCode className="text-caption text-foreground">{name}</InlineCode>
-        <Txt as="span" variant="caption" tone="muted">
-          {typeLabel}
-        </Txt>
+        {typeLabel && <InlineCode>{typeLabel}</InlineCode>}
         {prop.description && (
           <Txt as="span" variant="caption" tone="muted" className="truncate italic">
-            — {prop.description}
+            {prop.description}
           </Txt>
         )}
       </div>
@@ -70,17 +64,12 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
   );
 }
 
-// ---------------------------------------------------------------------------
-// Line-level diff algorithm
-// ---------------------------------------------------------------------------
-
 type DiffLine = { type: 'equal' | 'added' | 'removed'; text: string };
 
 function computeLineDiff(oldText: string, newText: string): DiffLine[] {
   const oldLines = oldText.split('\n');
   const newLines = newText.split('\n');
 
-  // Build LCS table
   const m = oldLines.length;
   const n = newLines.length;
   const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
@@ -95,7 +84,6 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
     }
   }
 
-  // Backtrack to produce diff
   const result: DiffLine[] = [];
   let i = m;
   let j = n;
@@ -116,14 +104,6 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
 
   return result.reverse();
 }
-
-// ---------------------------------------------------------------------------
-// Diff-aware read-only views
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Per-block content helpers (raw template text, not resolved)
-// ---------------------------------------------------------------------------
 
 function getRawBlockContent(block: Record<string, unknown>): string | null {
   if (block.type === 'prompt_block' && typeof block.content === 'string') {
@@ -157,11 +137,9 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
   const prevBlocksArr = Array.isArray(previousBlocks) ? previousBlocks : [];
   const currBlocksArr = Array.isArray(currentBlocks) ? currentBlocks : [];
 
-  // Build a map of current blocks by position for per-block comparison
   const currContentByIdx = currBlocksArr.map((b: Record<string, unknown>) => getRawBlockContent(b) ?? '');
   const prevContentByIdx = prevBlocksArr.map((b: Record<string, unknown>) => getRawBlockContent(b) ?? '');
 
-  // If only one block on each side, show a simple diff
   if (prevBlocksArr.length <= 1 && currBlocksArr.length <= 1) {
     const oldStr = prevContentByIdx[0] ?? '';
     const newStr = currContentByIdx[0] ?? '';
@@ -212,7 +190,6 @@ function InstructionsDiffView({ previousBlocks, currentBlocks }: { previousBlock
     );
   }
 
-  // Multiple blocks: show per-block with individual copy buttons
   const maxLen = Math.max(prevBlocksArr.length, currBlocksArr.length);
   return (
     <div className="flex flex-col gap-2">
@@ -557,10 +534,6 @@ function ReadOnlyVariables({ variables }: { variables: Record<string, unknown> |
   );
 }
 
-// ---------------------------------------------------------------------------
-// Read-only config with diff highlighting
-// ---------------------------------------------------------------------------
-
 function ReadOnlyConfigWithDiff({
   agentId,
   selectedVersionId,
@@ -672,10 +645,6 @@ function ReadOnlyConfigWithDiff({
     </Tabs>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Main component
-// ---------------------------------------------------------------------------
 
 interface AgentPlaygroundConfigProps {
   agentId: string;

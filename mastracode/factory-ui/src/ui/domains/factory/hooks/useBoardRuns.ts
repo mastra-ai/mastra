@@ -12,7 +12,6 @@ import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
 
 const PREPARING_SESSION_LABEL = 'Preparing session…';
 
-/** Opening the chat session a card carries, and minting one when it has none yet. */
 export function useBoardRuns({
   factoryProjectId,
   refetchItems,
@@ -32,14 +31,8 @@ export function useBoardRuns({
     ? repositories.filter(repository => repositoryMatchesCardSource(repository, repositorySelection.item.source))
     : [];
 
-  // A card click refetches items before it can decide whether to open an
-  // existing thread or mint a new session. That wait is a round trip long and
-  // the mutation isn't pending yet, so without this the card sits completely
-  // silent after the click.
   const [preparingItems, setPreparingItems] = useState<Record<string, string>>({});
-  // Guarded by a ref, not by preparingItems: two clicks landing in the same
-  // render both read the pre-click state, so the state value can't reject the
-  // second one.
+
   const preparingRef = useRef<Set<string>>(new Set());
   const beginPreparingItem = (itemId: string, label: string) => {
     if (preparingRef.current.has(itemId)) return false;
@@ -60,18 +53,16 @@ export function useBoardRuns({
     navigate(`/factories/${factoryProjectId}/workspaces/${session.sessionId}/threads/${session.threadId}`);
   };
 
-  // Refetch failures here used to be silent: an expired auth cookie made every
-  // board click a no-op with no feedback. Toast so the click never dies quietly.
   const refreshItem = async (itemId: string) => {
     const refreshedItems = await refetchItems();
     if (!refreshedItems.isSuccess) {
       const cause = refreshedItems.error;
-      toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board — try reloading the page');
+      toast.error(cause instanceof Error ? cause.message : 'Failed to refresh the board. Try reloading the page.');
       return;
     }
     const item = refreshedItems.data.find(candidate => candidate.id === itemId);
     if (!item) {
-      toast.error('This card no longer exists — the board may be out of date');
+      toast.error('This card no longer exists. The board may be out of date.');
       return;
     }
     return item;

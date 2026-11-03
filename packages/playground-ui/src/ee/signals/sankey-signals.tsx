@@ -12,15 +12,11 @@ import { useThemeFlows } from './hooks/use-theme-flows';
 import { useThemePaths } from './hooks/use-theme-paths';
 import { useThemeSnapshots } from './hooks/use-theme-snapshots';
 import { NoiseDetailPanel } from './noise-detail-panel';
-import {
-  buildSignalGraphSummary,
-  selectFlowSnapshotIds,
-  snapshotSummaryLabel,
-  stabilizeThemeFlow,
-} from './sankey-signals-data';
+import { buildSignalGraphSummary, selectFlowSnapshotIds, stabilizeThemeFlow } from './sankey-signals-data';
 import { orderedSignals, signalLabel } from './signal-formatting';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton, SignalsLoadingSkeleton } from './signals-loading-skeleton';
+import { SnapshotSummary } from './snapshot-summary';
 import { SnapshotTimeline } from './snapshot-timeline';
 import { ThemeCompare } from './theme-compare';
 import { ThemeDetailPanel } from './theme-detail-panel';
@@ -54,16 +50,13 @@ export interface SankeySignalsProps {
   height?: number;
   selectedThemeId: string | undefined;
   onSelectedThemeIdChange: (themeId: string | undefined) => void;
-  /** Snapshot id of the timeline frame currently displayed. The parent owns this state. */
   selectedFrameId: string;
   onFrameIdChange: (frameId: string) => void;
-  /** Date range control rendered in line with the view mode tabs. */
   dateRangePicker?: React.ReactNode;
 }
 
 const DRILL_IN_TRACE_LIMIT = 2000;
 
-/** One-line answer to "what am I looking at?" for each view, shown under the tabs. */
 const VIEW_DESCRIPTIONS: Omit<Record<SignalsViewMode, string>, 'flow'> = {
   compare: 'Which themes grew, shrank, appeared, or disappeared between two points in time.',
   lifelines: "Each theme's share of traces across the whole selected range.",
@@ -104,8 +97,6 @@ export function SankeySignals({
   const [viewMode, setViewMode] = useState<SignalsViewMode>('flow');
   const [drillStack, setDrillStack] = useState<ThemeSelection[]>([]);
   const [noiseSignalName, setNoiseSignalName] = useState<TraceSignalName>();
-  // Pure derivation: the parent owns the frame. The index-0 fallback only covers
-  // the transient render where a perspective change swapped the snapshot list.
   const matchedSnapshotIndex = snapshots.findIndex(snapshot => snapshot.snapshotId === selectedFrameId);
   const selectedSnapshotIndex = matchedSnapshotIndex >= 0 ? matchedSnapshotIndex : 0;
   const snapshot = snapshots[selectedSnapshotIndex];
@@ -119,15 +110,12 @@ export function SankeySignals({
     setViewMode(nextViewMode);
   };
   const handlePlayingChange = (nextIsPlaying: boolean) => {
-    // Restart from the first landmark when play is pressed at the end.
     if (nextIsPlaying && selectedSnapshotIndex === snapshots.length - 1) selectSnapshot(0);
     setIsPlaying(nextIsPlaying);
   };
   const setThemeDetails = (selection: SelectedTheme | undefined) => {
     onSelectedThemeIdChange(selection?.themeId);
   };
-  // Compare cards and lifeline points open details for the theme at the
-  // landmark they were clicked on, so the panel's snapshot follows the click.
   const openThemeDetailsAt = (selection: ThemeSelection, snapshotIndex: number) => {
     if (selection.kind !== 'theme') return;
     selectSnapshot(snapshotIndex);
@@ -135,17 +123,12 @@ export function SankeySignals({
     setThemeDetails(selection);
   };
 
-  // Undefined at the last landmark so playback stops instead of looping.
   const nextSnapshotId = snapshots[selectedSnapshotIndex + 1]?.snapshotId;
   const flowSnapshotIds = selectFlowSnapshotIds(snapshots, selectedSnapshotIndex);
   const flowQueries = useThemeFlows(entityId, entityType, signalNames, flowSnapshotIds);
   const flowQuery = flowQueries[flowSnapshotIds.indexOf(snapshot?.snapshotId ?? '')];
   const currentFlow = flowQuery?.data;
-  // The loading skeleton tracks only the selected snapshot's flow; prefetched
-  // neighbors warm the cache in the background without blocking the chart.
   const isFlowPending = flowQuery?.isPending ?? false;
-  // Errors stay window-wide: a failed preload surfaces the retry state instead
-  // of letting playback advance into a broken frame.
   const hasFlowError = flowQueries.some(query => query.isError);
   const isFlowWindowBusy = flowQueries.some(query => query.isPending) || hasFlowError;
   const windowFlows = useMemo(() => flowQueries.flatMap(query => (query.data ? [query.data] : [])), [flowQueries]);
@@ -242,7 +225,6 @@ export function SankeySignals({
     onSuccess: ({ nextSignalNames, nextFrameId }) => {
       setSignalNames(nextSignalNames);
       setPendingSignalNames(undefined);
-      // Keep the parent-owned frame pointing at a snapshot that exists in the new perspective.
       if (nextFrameId && nextFrameId !== selectedFrameId) onFrameIdChange(nextFrameId);
     },
     onError: () => setPendingSignalNames(undefined),
@@ -297,7 +279,7 @@ export function SankeySignals({
           snapshots={snapshots}
           selectedIndex={selectedSnapshotIndex}
           totalSnapshots={totalSnapshots}
-          summary={snapshot ? snapshotSummaryLabel(snapshot, undefined) : ''}
+          summary={snapshot ? <SnapshotSummary snapshot={snapshot} flow={undefined} /> : undefined}
           isPlaying={isPlaying}
           onPlayingChange={handlePlayingChange}
           onSnapshotChange={selectSnapshot}
@@ -352,6 +334,7 @@ export function SankeySignals({
     perspectiveMutation.mutate(mergedSignalNames);
   };
   const filtersResolved = drillStack.length > 0 && drillInAvailable && pathsQuery.data !== undefined;
+  const filterSummaryPrefix = drillInAvailable ? 'Filtered' : 'Filters unavailable';
   const detailStats = filtersResolved ? findSelectionStats(flow, drillStack, detailSelection) : undefined;
   const noiseStats = filtersResolved
     ? findSelectionStats(flow, drillStack, noiseSignalName ? { kind: 'noise', signalName: noiseSignalName } : undefined)
@@ -418,7 +401,13 @@ export function SankeySignals({
               snapshots={snapshots}
               selectedIndex={selectedSnapshotIndex}
               totalSnapshots={totalSnapshots}
-              summary={`${drillStack.length > 0 ? (drillInAvailable ? 'Filtered · ' : 'Filters unavailable · ') : ''}${snapshotSummaryLabel(snapshot, flow)}`}
+              summary={
+                <SnapshotSummary
+                  snapshot={snapshot}
+                  flow={flow}
+                  prefix={drillStack.length > 0 ? filterSummaryPrefix : undefined}
+                />
+              }
               isPlaying={isPlaying}
               onPlayingChange={handlePlayingChange}
               onSnapshotChange={selectSnapshot}
@@ -454,7 +443,7 @@ export function SankeySignals({
             ) : graphSummary.records.length === 0 ? (
               <section className="rounded-lg border border-border bg-background p-6 text-muted-foreground">
                 <Txt as="span" variant="body" className="block">
-                  No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
+                  No cross-signal flow for this snapshot. Its trace signals have not overlapped on shared traces yet.
                   Pick another snapshot from the timeline below.
                 </Txt>
               </section>

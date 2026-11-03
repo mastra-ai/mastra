@@ -33,7 +33,7 @@ function buildDialogTitle(sectionTitle: string, icon: React.ReactNode, score: Cl
 }
 
 export interface ScoreDataPanelProps {
-  /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */
+  // Keep mounted for the drawer exit animation.
   score?: ClientScoreRowData;
   onClose: () => void;
   onPrevious?: () => void;
@@ -45,7 +45,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
   const { Link, paths } = useLinkComponent();
   const [datasetDialogOpen, setDatasetDialogOpen] = useState(false);
   const isCodeBased = isCodeBasedScorer(score);
-  const naText = isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured';
+  const naText = isCodeBased ? 'Code-based scorer does not use prompts' : 'Step not configured';
 
   return (
     <>
@@ -137,7 +137,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
                 </div>
                 <Txt as="p" variant="body-sm" className="mt-2">
                   {score.reason ||
-                    (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')}
+                    (isCodeBased ? 'Code-based scorer does not generate a reason' : 'Step not configured')}
                 </Txt>
               </div>
 

@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import type { PlanResume } from '@mastra/client-js';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { useRevealedParts } from '@mastra/playground-ui/components/ai/message-reveal';
@@ -66,7 +67,6 @@ function metaText(entry: MessageEntry, prose: string, settled: boolean, reply?: 
   return settled ? reply : undefined;
 }
 
-/** The tail line steps aside for a live stretch at once, so the reveal must not hold it back. */
 function withLiveHost(entryId: string, written: MessagePart[], paced: MessagePart[], activity: EntryActivity) {
   const host = written.findIndex(
     (part, index) => index >= paced.length && activity.hosts.get(activityPartKey(entryId, part, index))?.live,
@@ -91,7 +91,6 @@ export function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
   owner?: ThreadOwner;
-  /** The stretches of tool work this entry hosts, and the parts an earlier entry's stretch draws instead. */
   activity?: EntryActivity;
 }) {
   const written = renderableParts(entry);
@@ -133,8 +132,10 @@ export function MessageBubble({
       <TooltipTrigger
         render={
           <MessageMetadata tabIndex={0}>
-            {formatModelName(modelId)}
-            {credentialLabel && ` · ${credentialLabel}`}
+            <Metadata>
+              <Metadata.Item>{formatModelName(modelId)}</Metadata.Item>
+              {credentialLabel && <Metadata.Item>{credentialLabel}</Metadata.Item>}
+            </Metadata>
           </MessageMetadata>
         }
       />

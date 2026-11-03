@@ -35,7 +35,6 @@ function renderGraph(props: Partial<Parameters<typeof KnowledgePageGraph>[0]> = 
   );
 }
 
-// jsdom has no ResizeObserver, which React Flow uses to measure its viewport.
 beforeAll(() => {
   window.ResizeObserver ??= class {
     observe() {}
@@ -186,7 +185,6 @@ describe('KnowledgePageGraph', () => {
       const badge = within(node).getByTestId('knowledge-pin-badge');
       const badgeSize = Number.parseFloat(badge.style.width);
       expect(badgeSize).toBeLessThanOrEqual(Math.max(10, size * 0.22) + 0.5);
-      // Its centre is the circle's top-right point at 45°: inset from the box corner by r(1 - 1/√2).
       const inset = (size / 2) * (1 - Math.SQRT1_2);
       expect(Number.parseFloat(badge.style.top)).toBeCloseTo(inset, 1);
       expect(Number.parseFloat(badge.style.right)).toBeCloseTo(inset, 1);
@@ -408,7 +406,6 @@ describe('KnowledgePageGraph', () => {
   });
 
   describe('dots', () => {
-    // Acme at the centre, Support one ring out, and Support's thread scopes collapsed into one dot further on.
     const deep = [
       page('org', null, { name: 'Acme' }),
       page('support', 'org', { name: 'Support', isScope: true }),
@@ -419,7 +416,7 @@ describe('KnowledgePageGraph', () => {
       const dot = document.querySelector<HTMLElement>(`[data-testid="knowledge-page-dot"][data-page-id="${id}"]`);
       if (!dot) throw new Error(`no ${id} dot`);
       fireEvent.pointerEnter(dot);
-      return within(dot).getByRole('tooltip').textContent;
+      return within(dot).getByRole('tooltip');
     };
 
     it('draws its tooltip on a solid background with a tail pointing down at the dot', () => {
@@ -499,12 +496,20 @@ describe('KnowledgePageGraph', () => {
 
     it('names a farther page, its path and how many children it has on hover', () => {
       renderGraph({ pages: deep });
-      expect(hoverDot('ticket')).toBe('TicketPageAcme › Support4 children');
+      const tooltip = within(hoverDot('ticket'));
+      expect(tooltip.getByText('Ticket')).toBeTruthy();
+      expect(tooltip.getByText('Page')).toBeTruthy();
+      expect(tooltip.getByText('Acme › Support')).toBeTruthy();
+      expect(tooltip.getByText('4 children')).toBeTruthy();
     });
 
     it('tells how to open a collapsed group of scopes rather than counting it twice', () => {
       renderGraph({ pages: deep });
-      expect(hoverDot('group:support:thread')).toBe('3 thread scopesAcme › Support · Click to show them');
+      const tooltip = within(hoverDot('group:support:thread'));
+      expect(tooltip.getByText('3 thread scopes')).toBeTruthy();
+      expect(tooltip.getByText('Acme › Support')).toBeTruthy();
+      expect(tooltip.getByText('Click to show them')).toBeTruthy();
+      expect(tooltip.queryByText('3 children')).toBeNull();
     });
 
     describe('when a dot has links', () => {
@@ -526,7 +531,12 @@ describe('KnowledgePageGraph', () => {
 
       it('shows its kind, address and how many links go in and out', () => {
         renderGraph({ pages: linked, knownLinks: known });
-        expect(hoverDot('ticket')).toBe('TicketPage · team:support#ticketorg:acme › team:support1 link in, 1 link out');
+        const tooltip = within(hoverDot('ticket'));
+        expect(tooltip.getByText('Ticket')).toBeTruthy();
+        expect(tooltip.getByText('Page')).toBeTruthy();
+        expect(tooltip.getByText('team:support#ticket')).toBeTruthy();
+        expect(tooltip.getByText('org:acme › team:support')).toBeTruthy();
+        expect(tooltip.getByText('1 link in, 1 link out')).toBeTruthy();
       });
 
       it('uses the store counts over the loaded ones, and says how many links lead to pages not drawn', () => {
@@ -625,12 +635,10 @@ describe('KnowledgePageGraph', () => {
           ).map(Number);
         const [x1 = 0, y1 = 0, x2 = 0, y2 = 0] = coords(out);
         const [bx = 0, by = 0, ex = 0, ey = 0] = coords(into);
-        // Both lines run between the same two points, one way each: no sideways offset.
         const apart = Math.abs((x2 - x1) * (y1 - by) - (x1 - bx) * (y2 - y1)) / Math.hypot(x2 - x1, y2 - y1);
         expect(apart).toBeCloseTo(0, 5);
         expect(Math.hypot(bx - x2, by - y2)).toBeCloseTo(0, 5);
         expect(Math.hypot(ex - x1, ey - y1)).toBeCloseTo(0, 5);
-        // The way in is the dashed one, and it sits above the way out.
         expect(into?.querySelector<SVGElement>('.react-flow__edge-path')?.style.strokeDasharray).toBeTruthy();
         expect(out?.querySelector<SVGElement>('.react-flow__edge-path')?.style.strokeDasharray).toBeFalsy();
         const layer = (el: SVGElement | null) => Number(el?.style.zIndex || el?.parentElement?.style.zIndex || 0);
@@ -643,7 +651,6 @@ describe('KnowledgePageGraph', () => {
         expect(legend.queryByTestId('knowledge-legend-link')).toBeNull();
         expect(legend.queryByTestId('knowledge-legend-mention')).toBeNull();
         expect(legend.getByTestId('knowledge-legend-dot-parent')).toBeTruthy();
-        // Lines touching the hovered page read by direction, so they get the in/out rows, not the plain ones.
         fireEvent.mouseEnter(dot('ticket'));
         expect(legend.getByTestId('knowledge-legend-out')).toBeTruthy();
         expect(legend.getByTestId('knowledge-legend-in')).toBeTruthy();
@@ -724,7 +731,6 @@ describe('KnowledgePageGraph', () => {
         fireEvent.mouseEnter(dot('ticket'));
         observer.takeRecords().forEach(record => touched.add(record.target as Element));
         observer.disconnect();
-        // Fading is the container's attribute plus a mark on the few neighbours; the other nodes are untouched.
         const untouched = nodes.filter(
           node => !node.classList.contains('knowledge-neighbour') && ![...touched].some(el => node.contains(el)),
         );

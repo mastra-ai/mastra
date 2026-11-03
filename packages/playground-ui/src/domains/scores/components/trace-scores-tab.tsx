@@ -3,6 +3,7 @@ import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { useState } from 'react';
 import { DataList } from '@/ds/components/DataList';
 import { EmptyState } from '@/ds/components/EmptyState';
+import { Metadata } from '@/ds/components/Metadata';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
 import { Spinner } from '@/ds/components/Spinner';
 import { getShortId } from '@/ds/components/Text';
@@ -20,10 +21,6 @@ export type TraceScoresTabProps = {
   onScoreSelect: (scoreId: string) => void;
 };
 
-/**
- * Scores for the trace's anchor span, one card per scoring. Owns its own pagination:
- * mount it with a `key` on the trace/anchor pair so a page index never leaks across traces.
- */
 export function TraceScoresTab({ traceId, spanId, onScoreSelect }: TraceScoresTabProps) {
   const [page, setPage] = useState(0);
   const { data: scoresData, isLoading } = useTraceSpanScores({
@@ -72,10 +69,14 @@ function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSele
         <MetricsKpiCard.Label>{scorerName}</MetricsKpiCard.Label>
         <MetricsKpiCard.Value>{String(score.score)}</MetricsKpiCard.Value>
         <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
-          <Txt as="span" variant="meta" font="mono">
-            {getShortId(score.id)}
-          </Txt>{' '}
-          · {formatDate(createdAt, 'date-time-seconds')}
+          <Metadata>
+            <Metadata.Item>
+              <Txt as="span" variant="meta" font="mono">
+                {getShortId(score.id)}
+              </Txt>
+            </Metadata.Item>
+            <Metadata.Item>{formatDate(createdAt, 'date-time-seconds')}</Metadata.Item>
+          </Metadata>
         </Txt>
       </button>
       {score.reason && <TraceScoreReason reason={score.reason} />}

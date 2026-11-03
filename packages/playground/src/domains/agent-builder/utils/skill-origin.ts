@@ -1,14 +1,3 @@
-/**
- * Helpers for reading the `metadata.origin` field on stored skills. Skills
- * that were imported from an external registry (skills.sh today, more later)
- * carry their provenance here so the UI can show a badge and link back.
- *
- * The shape lines up with `skillOriginSchema` in
- * `packages/server/src/server/schemas/stored-skills.ts`. We narrow at the
- * boundary because `StoredSkillResponse.metadata` is loosely typed as
- * `Record<string, unknown>` on the wire.
- */
-
 export interface SkillsShOrigin {
   type: 'skills-sh';
   owner: string;
@@ -58,13 +47,10 @@ export function getSkillOrigin(metadata: Record<string, unknown> | undefined | n
   return null;
 }
 
-/**
- * Build a human-readable label for an origin (e.g. `skills.sh · owner/repo`).
- */
 export function formatSkillOriginLabel(origin: SkillOrigin): string {
   switch (origin.type) {
     case 'skills-sh':
-      return `skills.sh · ${origin.owner}/${origin.repo}`;
+      return `Imported from skills.sh (${origin.owner}/${origin.repo})`;
     case 'library-copy':
       return `Copied from "${origin.sourceSkillName}"`;
     default:
@@ -72,9 +58,6 @@ export function formatSkillOriginLabel(origin: SkillOrigin): string {
   }
 }
 
-/**
- * Build the upstream URL for an origin, when known.
- */
 export function getSkillOriginUrl(origin: SkillOrigin): string | null {
   switch (origin.type) {
     case 'skills-sh':

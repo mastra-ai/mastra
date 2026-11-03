@@ -63,7 +63,7 @@ describe('IntakeSection gitlab', () => {
 
       await waitFor(() => expect(saved).toHaveLength(1));
       expect(saved[0].gitlab.sourceIds).toEqual(['gitlab-project:encoded']);
-      expect(await screen.findByText(/Not routed — this source's issues won't be picked up/)).toBeInTheDocument();
+      expect(await screen.findByText(/Not routed. This source's issues won't be picked up/)).toBeInTheDocument();
 
       await userEvent.click(await screen.findByLabelText('Factory for acme/app'));
       await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
@@ -135,8 +135,8 @@ describe('IntakeSection gitlab', () => {
       renderIntakeSection();
 
       await openSourcePicker('GitLab projects');
-      expect(await screen.findByText('acme · connection 1')).toBeInTheDocument();
-      expect(screen.getByText('acme · connection 2')).toBeInTheDocument();
+      expect(await screen.findByText('acme (connection 1)')).toBeInTheDocument();
+      expect(screen.getByText('acme (connection 2)')).toBeInTheDocument();
       expect(screen.getAllByRole('checkbox', { name: 'acme/app' })).toHaveLength(2);
     });
   });

@@ -1,8 +1,8 @@
 import { useThemeFlows } from './hooks/use-theme-flows';
-import { snapshotSummaryLabel } from './sankey-signals-data';
 import { SignalLifelines } from './signal-lifelines';
 import { SignalsErrorState } from './signals-error-state';
 import { SignalsFrameLoadingSkeleton } from './signals-loading-skeleton';
+import { SnapshotSummary } from './snapshot-summary';
 import { TimelineTrack } from './snapshot-timeline';
 import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
@@ -10,11 +10,6 @@ import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
 import { Txt } from '@/ds/components/Txt';
 
-/**
- * Lifelines mode: every theme holds a fixed row while landmarks run left to
- * right on the shared time axis, so persistent themes read as spines and
- * transient ones as short-lived segments — change over time without replay.
- */
 export function ThemeLifelines({
   entityId,
   entityType,
@@ -63,7 +58,6 @@ export function ThemeLifelines({
 
   return (
     <section aria-label="Theme lifelines" className="space-y-5">
-      {/* Spacers mirror each row's label and count columns so the shared track aligns with the rows. */}
       <div className="flex items-center gap-3">
         <span aria-hidden="true" className="w-52 shrink-0" />
         <TimelineTrack
@@ -76,7 +70,7 @@ export function ThemeLifelines({
       </div>
       {snapshots[selectedIndex] ? (
         <Txt variant="caption" tone="muted" data-testid="snapshot-summary">
-          {snapshotSummaryLabel(snapshots[selectedIndex], flows[selectedIndex])}
+          <SnapshotSummary snapshot={snapshots[selectedIndex]} flow={flows[selectedIndex]} />
         </Txt>
       ) : null}
       {signalNames.map(signalName => (

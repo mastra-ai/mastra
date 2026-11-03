@@ -32,7 +32,6 @@ export function WorkspaceTree() {
   const [pendingDelete, setPendingDelete] = useState<WorkspaceEntryRef | null>(null);
 
   if (isLoading) return <TreeSkeleton />;
-  // A failed background refetch keeps showing the last listing.
   if (!data) return <WorkspaceError error={error} fallback="Could not load files." className="m-2" />;
 
   return (
@@ -70,7 +69,6 @@ function Entries({
   });
 }
 
-/** Trailing row details, revealed on hover or keyboard focus. */
 function RowActions({ children }: { children: ReactNode }) {
   return (
     <span className="ml-auto flex shrink-0 items-center gap-1 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
@@ -105,7 +103,6 @@ interface NodeProps {
 function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?: WorkspaceMount }) {
   const { workspaceId, onDelete, onCreateDirectory, isReadOnly, openFolders, setFolderOpen } = useWorkspaceContext();
   const open = openFolders.has(path);
-  // Shares the query with FolderChildren; only used to flag the first load next to the name.
   const { isLoading } = useWorkspaceDirectory({
     workspaceId: workspaceId,
     path: path,
@@ -148,7 +145,7 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
             <span
               role="img"
               aria-label={`Mount: ${mount.displayName ?? mount.provider}`}
-              title={[mount.displayName ?? mount.provider, mount.description].filter(Boolean).join(' — ')}
+              title={[mount.displayName ?? mount.provider, mount.description].filter(Boolean).join(': ')}
               className="flex"
             >
               <MountIcon mount={mount} />
@@ -193,7 +190,6 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
   );
 }
 
-/** Mounted only once its folder is opened, so unopened folders are never listed. */
 function FolderChildren({
   path,
   creating,
@@ -213,7 +209,6 @@ function FolderChildren({
     try {
       await onCreateDirectory?.(joinPath(path, name.replace(/^\/+|\/+$/g, '')));
     } catch {
-      // The caller reports the failure; keep the input open so the user can retry or cancel.
       return;
     }
     onCreated();
@@ -240,7 +235,6 @@ function FileNode({ name, size, path, onRequestDelete }: NodeProps & { size?: nu
   const isActive = path === activeFilePath;
   const ref = useRef<HTMLLIElement>(null);
 
-  // Parents load lazily, so the active row may only appear after the selection changed.
   useEffect(() => {
     if (isActive) ref.current?.scrollIntoView?.({ block: 'nearest' });
   }, [isActive]);
@@ -275,7 +269,6 @@ function DeleteDialog({ entry, onClose }: { entry: WorkspaceEntryRef | null; onC
     try {
       await onDelete(entry);
     } catch {
-      // The caller reports the failure; keep the dialog open so the user can retry or cancel.
       return;
     } finally {
       setIsDeleting(false);

@@ -1,3 +1,4 @@
+import { Metadata } from '@mastra/playground-ui/components/Metadata';
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -115,9 +116,7 @@ export function CreateFactoryRepositoryRows({
         />
       ) : (
         (() => {
-          // Personal GitLab accounts see `enabled: true` from the status endpoint but the
-          // connect-session request answers 403 with `organization_required`, so gate the
-          // button here to keep it from starting a doomed Nango session.
+          // Personal GitLab status can be enabled while connect-session still rejects organization_required.
           const gitlabUnavailable = !gitlabStatus.data?.enabled || gitlabStatus.data.reason === 'organization_required';
           const gitlabSubtitle = !gitlabStatus.data?.enabled
             ? 'GitLab is not available for this deployment.'
@@ -162,7 +161,12 @@ function GithubRepositoryResults({
           key={repo.id}
           icon={<GithubIcon />}
           title={repo.fullName}
-          subtitle={`${repo.private ? 'Private' : 'Public'} · ${repo.defaultBranch}`}
+          subtitle={
+            <Metadata>
+              <Metadata.Item>{repo.private ? 'Private' : 'Public'}</Metadata.Item>
+              <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+            </Metadata>
+          }
           value={`repo-${repo.id}`}
           onSelect={() => onSelectRepository(repo)}
         />
@@ -200,7 +204,12 @@ function GitLabRepositoryResults({
             key={repo.id}
             icon={<GitLabIcon />}
             title={repo.fullName}
-            subtitle={`GitLab · ${repo.defaultBranch}`}
+            subtitle={
+              <Metadata>
+                <Metadata.Item>GitLab</Metadata.Item>
+                <Metadata.Item>{repo.defaultBranch}</Metadata.Item>
+              </Metadata>
+            }
             value={`gitlab-repo-${repo.id}`}
             onSelect={() => onSelectRepository(repo)}
           />

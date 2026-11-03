@@ -9,13 +9,10 @@ import { pluralize } from '@/lib/string';
 
 export type SpanOutcomeTone = 'neutral' | 'success' | 'change' | 'warning' | 'error';
 
-/** What a span did, in the words a reader looks for first, ahead of its raw payloads. */
 export interface SpanOutcome {
   headline: string;
-  /** One line quoting what the span produced (a reply, a result, an error message). */
   detail?: string;
   tone: SpanOutcomeTone;
-  /** The section that proves the outcome, which the panel shows first. */
   evidence?: SpanOutcomeEvidence;
 }
 
@@ -36,7 +33,6 @@ const asText = (value: unknown) => (typeof value === 'string' && value.trim() !=
 const isPrimitive = (value: unknown): value is string | number | boolean =>
   typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean';
 
-/** The first non-empty line of a text, trimmed to fit a single row. */
 function firstLine(text: string | undefined, max = 160): string | undefined {
   const line = text
     ?.split('\n')
@@ -46,24 +42,21 @@ function firstLine(text: string | undefined, max = 160): string | undefined {
   return line.length > max ? `${line.slice(0, max - 1)}…` : line;
 }
 
-/** `key: value` of an object's first scalar fields, as one line. */
 function scalarPreview(value: unknown, limit: number): string | undefined {
   if (!isRecord(value)) return undefined;
   const fields = Object.entries(value)
     .filter(entry => isPrimitive(entry[1]))
     .slice(0, limit)
     .map(([label, field]) => `${label}: ${String(field)}`);
-  return fields.length > 0 ? fields.join(' · ') : undefined;
+  return fields.length > 0 ? fields.join(', ') : undefined;
 }
 
-/** Get the outcome of a span, or `undefined` for spans that have nothing to lead with. */
 export function getSpanOutcome(span: SpanRecord): SpanOutcome | undefined {
   const outcome = describeOutcome(span);
   const error = describeSpanError(asCoreSpan(span));
   if (!error) return outcome;
   return {
     ...outcome,
-    // The error itself sits under the headline, with its details.
     headline: `${failedSubject(span)} failed`,
     detail: undefined,
     tone: 'error',
@@ -81,7 +74,6 @@ function describeOutcome(span: SpanRecord): SpanOutcome | undefined {
   const pipeline = describeProcessorPipeline(asCoreSpan(span));
   if (pipeline) return describePipeline(span, pipeline);
   if (MODEL_TYPES.has(type)) {
-    // The calls a model made are what it did; the answer it wrote after them stays in the output.
     const calledTools = getRequestedToolCalls(span).some(call => !isHiddenTool(call.toolName));
     return { ...describeModel(span), evidence: calledTools ? 'toolCalls' : 'output' };
   }
@@ -92,11 +84,8 @@ function describeOutcome(span: SpanRecord): SpanOutcome | undefined {
       : type === SpanType.MODEL_CHUNK
         ? describeChunk(span)
         : undefined;
-  // What a model, tool, agent or chunk produced is the proof of its outcome.
   return outcome && { ...outcome, evidence: 'output' };
 }
-
-// --- Pipeline spans: processors, memory, workspace and skills ------------------------------
 
 interface MutationTally {
   added: number;
@@ -107,7 +96,6 @@ interface MutationTally {
 function tallyMutations(mutations: ProcessorPipelineDescription['messageListMutations']): MutationTally {
   const tally: MutationTally = { added: 0, addedSystem: 0, removed: 0 };
   for (const mutation of mutations ?? []) {
-    // The log is only checked to be an array: skip an entry we cannot read, the Changes section shows it as JSON.
     if (typeof mutation !== 'object' || mutation === null) continue;
     const amount = mutation.count ?? mutation.ids?.length ?? 1;
     if (mutation.type === 'add') tally.added += amount;
@@ -117,7 +105,6 @@ function tallyMutations(mutations: ProcessorPipelineDescription['messageListMuta
   return tally;
 }
 
-/** "added 2 messages to the conversation, removed 1 message from the conversation", or `undefined` when nothing changed. */
 function describeTally({ added, addedSystem, removed }: MutationTally): string | undefined {
   const parts = [
     added > 0 && `added ${pluralize(added, 'message')} to the conversation`,
@@ -132,7 +119,6 @@ export interface SystemPromptChanges {
   removed: unknown[];
 }
 
-/** `from` entries with no equal entry left in `against`, matching each entry at most once. */
 function unmatched(from: unknown[], against: unknown[]): unknown[] {
   const pool = against.map(message => JSON.stringify(message));
   return from.filter(message => {
@@ -143,11 +129,6 @@ function unmatched(from: unknown[], against: unknown[]): unknown[] {
   });
 }
 
-/**
- * The system messages a pipeline span added to or dropped from the prompt, found by comparing
- * the `systemMessages` it received with the ones it returned. A processor that rewrites the
- * system prompt directly records no message-list mutation, so this is the only trace of it.
- */
 export function getSystemPromptChanges(span: SpanRecord): SystemPromptChanges {
   const after = isRecord(span.output) ? span.output.systemMessages : undefined;
   if (!Array.isArray(after)) return { added: [], removed: [] };
@@ -155,7 +136,6 @@ export function getSystemPromptChanges(span: SpanRecord): SystemPromptChanges {
   return { added: unmatched(after, before), removed: unmatched(before, after) };
 }
 
-/** "added 1 message to the system prompt", or `undefined` when the prompt is unchanged. */
 function describeSystemPromptChanges({ added, removed }: SystemPromptChanges): string | undefined {
   const parts = [
     added.length > 0 && `added ${pluralize(added.length, 'message')} to the system prompt`,
@@ -166,10 +146,6 @@ function describeSystemPromptChanges({ added, removed }: SystemPromptChanges): s
 
 type PipelineMutation = NonNullable<ProcessorPipelineDescription['messageListMutations']>[number];
 
-/**
- * What a pipeline span changed in the message list. Recorded mutations win; a processor that
- * rewrote the system prompt directly records none, so its changes come from diffing input and output.
- */
 export function getSpanChanges(span: SpanRecord): PipelineMutation[] {
   const recorded = describeProcessorPipeline(asCoreSpan(span))?.messageListMutations ?? [];
   if (recorded.length > 0) return recorded;
@@ -182,10 +158,8 @@ export function getSpanChanges(span: SpanRecord): PipelineMutation[] {
 
 const CHANGED_LABELS: Record<string, string> = { systemMessages: 'the system prompt', messages: 'the conversation' };
 
-/** What every pipeline span that changed nothing says, so "no change" always reads the same. */
 const UNCHANGED = 'left the system prompt and the conversation unchanged';
 
-/** Output keys whose value differs from the same key in the input, ignoring a no-op `shortCircuited`. */
 function changedKeys(input: unknown, output: unknown): string[] {
   if (!isRecord(output)) return [];
   const before = isRecord(input) ? input : {};
@@ -195,10 +169,8 @@ function changedKeys(input: unknown, output: unknown): string[] {
   });
 }
 
-/** Who ran the span (an agent, tool or processor name), so a headline reads on its own. */
 const actorOf = (span: SpanRecord, fallback: string) => asText(span.entityName) ?? asText(span.entityId) ?? fallback;
 
-/** Who to name when a pipeline span records no entity, so its sentence still has a subject. */
 const PIPELINE_ACTORS: Partial<Record<SpanType, string>> = {
   [SpanType.MEMORY_OPERATION]: 'Memory',
   [SpanType.WORKSPACE_ACTION]: 'The workspace',
@@ -218,8 +190,6 @@ function describePipeline(span: SpanRecord, pipeline: ProcessorPipelineDescripti
   };
 
   if (pipeline.tripwireAbort) {
-    // The full reason, retry flag and metadata read in the processor facts right under the headline;
-    // the changes keep their own section.
     return {
       ...base,
       evidence: undefined,
@@ -309,9 +279,6 @@ function describePipeline(span: SpanRecord, pipeline: ProcessorPipelineDescripti
   return { ...base, headline: `${processor} ${UNCHANGED}`, tone: 'neutral' };
 }
 
-// --- Model, tool, agent and chunk spans -------------------------------------------------------
-
-// Hidden tools (task list, working memory) stay out of the count, as they do out of the Tool calls list.
 const toolNamesOf = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.flatMap(call => {
@@ -320,7 +287,6 @@ const toolNamesOf = (value: unknown): string[] =>
       })
     : [];
 
-// A generation spans every step, so its output lists every call: name them while that stays readable, count otherwise.
 function describeToolCalls(names: string[]): string | undefined {
   if (names.length === 0) return undefined;
   const distinct = [...new Set(names)];
@@ -349,7 +315,6 @@ function describeModel(span: SpanRecord): SpanOutcome {
   if (finishReason === 'content-filter') {
     return { headline: `The provider's content filter blocked ${model}'s answer`, detail: reply, tone: 'warning' };
   }
-  // Tool calls lead to the answer, so the answer is the outcome.
   if (reply) {
     return {
       headline: calls ? `${model} called ${calls}, then wrote the answer` : `${model} wrote the answer`,
@@ -357,7 +322,6 @@ function describeModel(span: SpanRecord): SpanOutcome {
       tone: 'success',
     };
   }
-  // Without an answer yet, the model asked for tools; the tool spans run them.
   if (calls) return { headline: `${model} asked to call ${calls}`, tone: 'success' };
   return { headline: `${model} returned no text and no tool calls`, tone: 'neutral' };
 }
