@@ -144,7 +144,9 @@ function isAlive(pid: number): boolean {
     return false;
   }
   // A killed process nobody has reaped yet is a zombie: it still takes signals but no longer runs.
-  const state = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim();
+  const state = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout?.trim();
+  // Without `ps` there's no telling a zombie apart, so trust the signal.
+  if (state === undefined) return true;
   return state !== '' && !state.startsWith('Z');
 }
 
