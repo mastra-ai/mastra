@@ -1,5 +1,56 @@
 # @mastra/server
 
+## 1.82.0-alpha.3
+
+### Patch Changes
+
+- Fixed thread aborts for durable agents on multi-server deployments. Aborting a thread on a server that didn't start the run now stops the run on whichever server executes it, as aborting by run id already did. A run parked on a suspension, such as a tool waiting for approval, is released too. ([#28345](https://github.com/mastra-ai/mastra/pull/28345))
+
+  ```ts
+  agent.abortThreadStream({ resourceId, threadId });
+  // or POST /agents/:agentId/threads/abort
+  ```
+
+  The server finds the run through the thread lease, so this needs a pubsub with a shared lease backend such as Redis or Valkey.
+
+  **Return values**
+
+  - The HTTP route returns `{ aborted: true }` once the abort request is published, and an error if the lease backend can't be reached or doesn't answer in time.
+  - The synchronous `abortThreadStream` still returns `false` for a run on another server, because it can't wait for the lookup.
+  - An `expectedRunId` that doesn't match the running run leaves it alone and returns `false`.
+
+  **Queued input**
+
+  With `clearPendingSignals: true`, the server running the run clears its queued input before stopping it, as long as that run still holds the thread. Input queued for a run that has since taken over the thread is kept.
+
+- Fixed agent-builder routes in processes that run more than one Mastra instance. Each instance now gets its own agent-builder workflows. A run started for one instance no longer writes to another instance's storage, and an instance that was shut down can be garbage collected after serving an agent-builder request. Fixes [#29190](https://github.com/mastra-ai/mastra/issues/29190). ([#29253](https://github.com/mastra-ai/mastra/pull/29253))
+
+- Added `GET /knowledge/:knowledgeKey/link-counts` and `GET /knowledge/:knowledgeKey/pages/:pageId/links`: exact link counts for a set of pages, and one page's links with the pages at their other ends, both gated by the caller's read scope. They answer 501 on a core or store without a link index. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+  ```http
+  GET /api/knowledge/docs/link-counts?pageId=p1&pageId=p2
+  → { "counts": { "p1": { "in": 3, "out": 1 }, "p2": { "in": 0, "out": 2 } } }
+
+  GET /api/knowledge/docs/pages/p1/links?direction=in
+  → { "edges": [{ "fromPageId": "p7", "toPageId": "p1", "kind": "body", "count": 1 }], "pages": [{ "id": "p7", ... }], "truncated": false }
+  ```
+
+- `GET /knowledge/:knowledgeKey/pages/:pageId` also opens a page by the reference tools name it with: a scope address (`site:mastra`) or `scope#key/path` (`site:mastra#topics/observability`). It reads only what the caller can read, and an unreadable or unknown reference still returns 404. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- Each page in a Knowledge tree level (`GET /api/knowledge/:knowledgeKey/tree`, `listKnowledgeTreeChildren`) now carries `childCount`: how many readable pages, and for a scope how many readable child scopes, sit directly under it. A browsing UI can show the count and offer to open only pages that have children. The count is left out when the storage adapter can't count children yet. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+  ```ts
+  const level = await client.getKnowledge('main').tree({ parentId: scopeId });
+  level.pages.map(page => `${page.name} (${page.childCount ?? '?'})`);
+  ```
+
+  Storage adapters gain `countChildPages({ parentIds, read })`, which counts a batch of parents' child pages in one query (in-memory, LibSQL, PostgreSQL, MySQL, MongoDB).
+
+- Errors in streamed chunks now keep their message. This covers tool errors and run errors: any chunk whose `payload.error` is an Error. An error whose `name` was set (for example `Knowledge page "…" not found.`) used to reach clients as `{ "name": "Error" }` with no message; it now arrives as `{ "name", "message" }`. An error class with its own `toJSON` (such as `MastraError`) keeps the shape it chooses, plus its message. Stacks are no longer sent, including for errors that used to carry one. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0-alpha.3
+
 ## 1.82.0-alpha.2
 
 ### Minor Changes

@@ -1,5 +1,28 @@
 # @mastra/mongodb
 
+## 1.26.0-alpha.2
+
+### Minor Changes
+
+- Store Knowledge listing pins. The pins table gets a `kind` column (`page` or `list`) and a `depth` column, and a page now holds one pin per kind. Existing pins become page pins; no reset is needed. ([#29263](https://github.com/mastra-ai/mastra/pull/29263))
+
+  **Migration step on first start.** Each store upgrades its pins table once, the first time it starts with this version:
+
+  - LibSQL rebuilds the pins table (SQLite can't drop the old one-pin-per-page constraint in place): it creates the new table, copies every pin across as a page pin, and swaps it in, inside the init transaction.
+  - Postgres and MySQL alter the table in place (add `kind` and `depth`, replace the unique key on the page with one on page and kind).
+  - MongoDB sets `kind: 'page'` on existing pins and replaces the unique index on `pageId` with one on `pageId` and `kind`.
+
+### Patch Changes
+
+- Knowledge stores can list and count only the child scopes a reader can see, so `knowledge_list` no longer reads every child scope to show the readable ones. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- MongoDB now stores the Knowledge page link index, so `countPageLinks()` and `listPageLinks()` work on MongoDB Knowledge stores. The new `mastra_knowledge_page_links` collection is created on startup; links for existing pages fill in on `knowledge.reindexLinks()` or the page's next write. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- Removing a Knowledge note that's already removed now fails with `KnowledgeNotFoundError` on PostgreSQL and MongoDB, as it already did on LibSQL, MySQL and in memory. Before, these two stores returned the removed note, so a note update that raced another one could leave both copies live. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- Updated dependencies [[`47a6cd8`](https://github.com/mastra-ai/mastra/commit/47a6cd82e5261f56e6eb181b252cda09c3fa4966), [`9e1f7df`](https://github.com/mastra-ai/mastra/commit/9e1f7df61216f9b21a044acb7dd2498af60f1a5f), [`2d01b00`](https://github.com/mastra-ai/mastra/commit/2d01b00f0d5a74c731de46ab15358ccdc1649b59), [`fcf50d9`](https://github.com/mastra-ai/mastra/commit/fcf50d9cc1c16d265724700b1aed3435c63c3072), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`c17855e`](https://github.com/mastra-ai/mastra/commit/c17855e2bf21fa9dc71e2a8c77a2f622695b634b), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`f51fad8`](https://github.com/mastra-ai/mastra/commit/f51fad8a054b382e00370c3eecc4a40c6e58d8f6), [`7ad1918`](https://github.com/mastra-ai/mastra/commit/7ad1918a72a1961bbcbd23b4a615ecd7943e98ab), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`01524b2`](https://github.com/mastra-ai/mastra/commit/01524b22db5adb7dfdfe4950190918202338d9bd), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`19ca27a`](https://github.com/mastra-ai/mastra/commit/19ca27a666fb68cd309eace86cb488166858713f), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`234d7a3`](https://github.com/mastra-ai/mastra/commit/234d7a3ee6b84d9f7481649b137aea9f66ce8dae), [`d67a35d`](https://github.com/mastra-ai/mastra/commit/d67a35d034d9b5d5a345a083eb8acafcd57cf01a), [`ba50b06`](https://github.com/mastra-ai/mastra/commit/ba50b064243c9e8c389968c14e734af95f7cac76), [`f3265d8`](https://github.com/mastra-ai/mastra/commit/f3265d856d8834a5712e732fab5f81c367052b7a), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`4d2dbf5`](https://github.com/mastra-ai/mastra/commit/4d2dbf509e2394361cf96aa9a001ce8758782dfc), [`db9a817`](https://github.com/mastra-ai/mastra/commit/db9a81797fe0aa11c38326ed2d217624b0c76521), [`61d08dd`](https://github.com/mastra-ai/mastra/commit/61d08dd6302bc892f0c7b81705e1b7064b466462), [`cd6088d`](https://github.com/mastra-ai/mastra/commit/cd6088d0d69a4c22f788d833ace45bf69da35b3a), [`ead7272`](https://github.com/mastra-ai/mastra/commit/ead727266d200b9321482ef9057aa2cdf0e63b77)]:
+  - @mastra/core@1.82.0-alpha.3
+
 ## 1.26.0-alpha.1
 
 ### Patch Changes
