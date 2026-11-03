@@ -81,7 +81,17 @@ export interface StoredBoardRecord {
   createdAt: Date;
   updatedBy: string;
   updatedAt: Date;
+  /** The code definition's fingerprint when the board is a seeded copy of a code board; null otherwise. */
+  seedHash: string | null;
+  /** Whether an admin edited the board since it was seeded or reset. */
+  customized: boolean;
   phases: StoredPhaseRecord[];
+}
+
+/** A code board's definition as seeded into a project, with its fingerprint. */
+export interface CodeBoardSeed {
+  definition: StoredBoardInput;
+  hash: string;
 }
 
 export interface StoredBoardSnapshot {
@@ -197,6 +207,8 @@ interface BoardRow extends Record<string, unknown> {
   created_at: Date;
   updated_by: string;
   updated_at: Date;
+  seed_hash: string | null;
+  customized: boolean;
 }
 
 interface PhaseRow extends Record<string, unknown> {
@@ -287,6 +299,8 @@ function toRecord(row: BoardRow, phases: PhaseRow[]): StoredBoardRecord {
     createdAt: row.created_at,
     updatedBy: row.updated_by,
     updatedAt: row.updated_at,
+    seedHash: row.seed_hash ?? null,
+    customized: Boolean(row.customized),
     phases: phases.sort((left, right) => left.position - right.position).map(toPhaseRecord),
   };
 }
@@ -380,7 +394,62 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     await this.#write(scope, async ops => {
       const row = await findBoard(ops, scope, key);
       checkRevision(row, key, options.expectedRevision);
-      await writeBoard(ops, scope, row, { key, ...input }, options.actor);
+      await writeBoard(ops, scope, row, { key, ...input }, options.actor, { customized: true });
+      return { result: undefined, changed: true };
+    });
+    return (await this.get(scope, key))!;
+  }
+
+  /**
+   * Copies each code board into the project: a board the project lacks is added, and an unedited
+   * copy of an older code definition is rewritten to the current one. An edited copy, and a board
+   * created through the API under the same key, are never touched. Writes nothing when every copy
+   * is current, so it is cheap to call before each boards API read.
+   */
+  async seedCodeBoards(
+    scope: StoredBoardScope,
+    seeds: readonly CodeBoardSeed[],
+    actor: string = DEFAULT_INTAKE_ROUTE_ACTOR,
+  ): Promise<void> {
+    const pending = (rows: BoardRow[]) =>
+      seeds.some(seed => {
+        const row = rows.find(candidate => candidate.board_key === seed.definition.key);
+        return !row || isStaleSeed(row, seed);
+      });
+    if (!pending(await this.ops.findMany<BoardRow>(BOARDS, scopeWhere(scope)))) return;
+    await ensureVersionRow(this.ops, scope);
+    await this.#write(scope, async ops => {
+      const rows = await ops.findMany<BoardRow>(BOARDS, scopeWhere(scope));
+      let position = nextPosition(rows);
+      let changed = false;
+      for (const seed of seeds) {
+        const row = rows.find(candidate => candidate.board_key === seed.definition.key);
+        if (!row) {
+          await insertBoard(ops, scope, seed.definition, { position: position++, actor, seedHash: seed.hash });
+          changed = true;
+        } else if (isStaleSeed(row, seed)) {
+          await writeBoard(ops, scope, row, seed.definition, actor, { seed_hash: seed.hash });
+          changed = true;
+        }
+      }
+      return { result: undefined, changed };
+    });
+  }
+
+  /** Rewrites a board to its code definition and marks it unedited. */
+  async resetToSeed(
+    scope: StoredBoardScope,
+    key: string,
+    seed: CodeBoardSeed,
+    options: { expectedRevision: number; actor: string },
+  ): Promise<StoredBoardRecord> {
+    await this.#write(scope, async ops => {
+      const row = await findBoard(ops, scope, key);
+      checkRevision(row, key, options.expectedRevision);
+      await writeBoard(ops, scope, row, { ...seed.definition, key }, options.actor, {
+        seed_hash: seed.hash,
+        customized: false,
+      });
       return { result: undefined, changed: true };
     });
     return (await this.get(scope, key))!;
@@ -630,6 +699,11 @@ function checkRevision(row: BoardRow, key: string, expectedRevision: number): vo
   }
 }
 
+/** An unedited copy of a code board seeded from another definition than `seed`'s. */
+function isStaleSeed(row: BoardRow, seed: CodeBoardSeed): boolean {
+  return row.seed_hash != null && !row.customized && row.seed_hash !== seed.hash;
+}
+
 function nextPosition(rows: BoardRow[]): number {
   return rows.reduce((max, row) => Math.max(max, row.position), -1) + 1;
 }
@@ -667,7 +741,7 @@ async function insertBoard(
   ops: FactoryStorageOps,
   scope: StoredBoardScope,
   input: StoredBoardInput,
-  options: { position: number; actor: string },
+  options: { position: number; actor: string; seedHash?: string },
 ): Promise<void> {
   const now = new Date();
   await ops.insertOne<BoardRow>(BOARDS, {
@@ -681,6 +755,8 @@ async function insertBoard(
     created_at: now,
     updated_by: options.actor,
     updated_at: now,
+    seed_hash: options.seedHash ?? null,
+    customized: false,
   });
   await insertPhases(ops, scope, input);
 }
@@ -692,8 +768,9 @@ async function writeBoard(
   row: BoardRow,
   input: StoredBoardInput,
   actor: string,
+  set: Partial<Pick<BoardRow, 'seed_hash' | 'customized'>> = {},
 ): Promise<void> {
-  await updateRow(ops, row, { name: input.name, description: input.description ?? null, updated_by: actor });
+  await updateRow(ops, row, { ...set, name: input.name, description: input.description ?? null, updated_by: actor });
   await ops.deleteMany(PHASES, { ...scopeWhere(scope), board_key: row.board_key });
   await insertPhases(ops, scope, { ...input, key: row.board_key });
 }

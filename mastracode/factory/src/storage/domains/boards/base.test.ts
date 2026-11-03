@@ -4,11 +4,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { LibSQLFactoryStorage } from '@mastra/libsql';
-import { PgFactoryStorage } from '@mastra/pg';
+import { PgFactoryStorage, PostgresStore } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
 import { StoredBoardError, StoredBoardsStorage } from './base.js';
-import type { StoredBoardInput, StoredBoardScope } from './base.js';
+import type { CodeBoardSeed, StoredBoardInput, StoredBoardScope } from './base.js';
+import { FACTORY_BOARD_PHASES_SCHEMA, FACTORY_BOARDS_SCHEMA } from './schemas.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
@@ -293,6 +294,183 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
       expect(stored.map(row => row.key).sort()).toEqual(['bugs', 'release']);
       expect(stored.every(row => row.revision === 1 && row.phases.length === 3)).toBe(true);
       expect(await boards.readVersion(project)).not.toBeNull();
+    }
+  });
+
+  describe('seeding code boards', () => {
+    const seed = (key: string, hash: string, overrides: Partial<StoredBoardInput> = {}): CodeBoardSeed => ({
+      definition: board(key, overrides),
+      hash,
+    });
+
+    it('adds each code board once, then writes nothing while the copies are current', async () => {
+      const { boards, scope } = await setup();
+      const seeds = [seed('work', 'hash-work'), seed('review', 'hash-review')];
+
+      await boards.seedCodeBoards(scope, seeds);
+      const version = await boards.readVersion(scope);
+      const first = await boards.list(scope);
+      await boards.seedCodeBoards(scope, seeds);
+
+      expect(version).not.toBeNull();
+      expect(first.map(row => [row.key, row.revision, row.seedHash, row.customized])).toEqual([
+        ['work', 1, 'hash-work', false],
+        ['review', 1, 'hash-review', false],
+      ]);
+      expect(first[0]!.phases.map(phase => phase.key)).toEqual(['intake', 'build', 'done']);
+      expect(await boards.readVersion(scope)).toBe(version);
+      expect(await boards.list(scope)).toEqual(first);
+    });
+
+    it('follows a changed code board only on an unedited copy', async () => {
+      const { boards, scope } = await setup();
+      await boards.create(scope, board('legacy'), 'user-1');
+      await boards.seedCodeBoards(scope, [seed('work', 'v1'), seed('edited', 'v1')]);
+      await boards.replace(
+        scope,
+        'edited',
+        { name: 'Ours', phases: board('x').phases },
+        { expectedRevision: 1, actor: 'user-1' },
+      );
+      const version = await boards.readVersion(scope);
+      const changed = { name: 'New default', phases: board('x').phases.slice(0, 1) };
+
+      await boards.seedCodeBoards(scope, [
+        seed('work', 'v2', changed),
+        seed('edited', 'v2', changed),
+        seed('legacy', 'v2', changed),
+      ]);
+
+      const [legacy, work, edited] = await boards.list(scope);
+      expect(work).toMatchObject({ name: 'New default', revision: 2, seedHash: 'v2', customized: false });
+      expect(work!.phases.map(phase => phase.key)).toEqual(['intake']);
+      expect(edited).toMatchObject({ name: 'Ours', revision: 2, seedHash: 'v1', customized: true });
+      expect(legacy).toMatchObject({ name: 'Board legacy', revision: 1, seedHash: null, customized: false });
+      expect(await boards.readVersion(scope)).not.toBe(version);
+    });
+
+    it('marks a seeded board customized when it is replaced', async () => {
+      const { boards, scope } = await setup();
+      await boards.seedCodeBoards(scope, [seed('work', 'v1')]);
+
+      const replaced = await boards.replace(
+        scope,
+        'work',
+        { name: 'Edited', phases: board('x').phases },
+        { expectedRevision: 1, actor: 'user-1' },
+      );
+
+      expect(replaced).toMatchObject({ name: 'Edited', revision: 2, seedHash: 'v1', customized: true });
+    });
+
+    it('resets a board to its code definition and refuses a stale revision', async () => {
+      const { boards, scope } = await setup();
+      await boards.seedCodeBoards(scope, [seed('work', 'v1')]);
+      await boards.replace(
+        scope,
+        'work',
+        { name: 'Edited', phases: board('x').phases.slice(0, 1) },
+        { expectedRevision: 1, actor: 'user-1' },
+      );
+      const version = await boards.readVersion(scope);
+
+      await expect(
+        boards.resetToSeed(scope, 'work', seed('work', 'v2'), { expectedRevision: 1, actor: 'user-2' }),
+      ).rejects.toMatchObject({ code: 'revision_mismatch' });
+      expect(await boards.readVersion(scope)).toBe(version);
+
+      const reset = await boards.resetToSeed(scope, 'work', seed('work', 'v2'), {
+        expectedRevision: 2,
+        actor: 'user-2',
+      });
+      expect(reset).toMatchObject({
+        name: 'Board work',
+        revision: 3,
+        seedHash: 'v2',
+        customized: false,
+        updatedBy: 'user-2',
+      });
+      expect(reset.phases.map(phase => phase.key)).toEqual(['intake', 'build', 'done']);
+      expect(await boards.readVersion(scope)).not.toBe(version);
+    });
+
+    it('keeps one copy of each code board when two clients seed a project at once', async () => {
+      const { boards, scope, secondClient } = await setup();
+      const other = await secondClient();
+      const projects = Array.from({ length: 6 }, (_, index) => ({ ...scope, factoryProjectId: `project-${index}` }));
+      const seeds = [seed('work', 'v1'), seed('review', 'v1')];
+
+      await Promise.all(
+        projects.flatMap(project => [boards.seedCodeBoards(project, seeds), other.seedCodeBoards(project, seeds)]),
+      );
+
+      for (const project of projects) {
+        const stored = await boards.list(project);
+        expect(stored.map(row => [row.key, row.revision, row.phases.length])).toEqual([
+          ['work', 1, 3],
+          ['review', 1, 3],
+        ]);
+      }
+    });
+
+    it('reads a board stored before boards were seeded as unseeded and unedited', async () => {
+      const { scope } = await setup();
+      const { url, drop } = await emptyDatabase();
+      onTestFinished(drop);
+      const old =
+        backend === 'postgres'
+          ? new PgFactoryStorage({ connectionString: url })
+          : new LibSQLFactoryStorage({ id: 'old', url });
+      const { seed_hash: _seedHash, customized: _customized, ...oldColumns } = FACTORY_BOARDS_SCHEMA.columns;
+      await old.ensureCollections([{ ...FACTORY_BOARDS_SCHEMA, columns: oldColumns }, FACTORY_BOARD_PHASES_SCHEMA]);
+      const now = new Date();
+      await old.ops.insertOne('factory_boards', {
+        org_id: scope.orgId,
+        factory_project_id: scope.factoryProjectId,
+        board_key: 'bugs',
+        name: 'Bugs',
+        description: null,
+        position: 0,
+        revision: 4,
+        created_by: 'user-1',
+        created_at: now,
+        updated_by: 'user-1',
+        updated_at: now,
+      });
+      await old.close();
+
+      const storage =
+        backend === 'postgres'
+          ? new PgFactoryStorage({ connectionString: url })
+          : new LibSQLFactoryStorage({ id: 'new', url });
+      const boards = storage.registerDomain(new StoredBoardsStorage());
+      await storage.init();
+      onTestFinished(() => storage.close());
+
+      expect(await boards.get(scope, 'bugs')).toMatchObject({ revision: 4, seedHash: null, customized: false });
+    });
+
+    /** A database with none of the boards tables: a fresh file on libsql, a fresh schema on Postgres. */
+    async function emptyDatabase(): Promise<{ url: string; drop: () => Promise<void> }> {
+      if (backend === 'libsql') {
+        const dir = mkdtempSync(join(tmpdir(), 'factory-boards-old-'));
+        return {
+          url: `file:${join(dir, 'boards.db')}`,
+          drop: async () => rmSync(dir, { recursive: true, force: true }),
+        };
+      }
+      const admin = new PostgresStore({ id: `boards-admin-${randomUUID()}`, connectionString: postgresUrl! });
+      const schema = `boards_old_${randomUUID().replaceAll('-', '')}`;
+      await admin.pool.query(`CREATE SCHEMA "${schema}"`);
+      const url = new URL(postgresUrl!);
+      url.searchParams.set('options', `-c search_path=${schema}`);
+      return {
+        url: url.toString(),
+        drop: async () => {
+          await admin.pool.query(`DROP SCHEMA "${schema}" CASCADE`);
+          await admin.close();
+        },
+      };
     }
   });
 });
