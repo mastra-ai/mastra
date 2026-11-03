@@ -434,6 +434,12 @@
       "allowedVersions": "<0.20.0"
     },
     {
+      "description": "Keep the OTLP trace exporter in @mastra/arize and @mastra/arthur on the OpenTelemetry SDK 2 line. 0.300.0 is the SDK 3 exporter and needs @opentelemetry/api 1.10, while their sdk-trace-base, core and resources 2.x need api below 1.10. npm then hoists api 1.9.1 and `import` fails with \"does not provide an export named 'SeverityNumber'\". Remove when observability/* moves to SDK 3 together.",
+      "matchFileNames": ["observability/arize/package.json", "observability/arthur/package.json"],
+      "matchPackageNames": ["@opentelemetry/exporter-trace-otlp-proto"],
+      "allowedVersions": "<0.300.0"
+    },
+    {
       "groupName": "OpenCode",
       "commitMessageTopic": "OpenCode",
       "matchFileNames": ["+(package.json)", "**/package.json", "pnpm-workspace.yaml"],
