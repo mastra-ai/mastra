@@ -6003,7 +6003,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
             },
           })
         ).item;
-      return { ...seeded, ingest, cards, decisions, issueCard };
+      return { ...seeded, service, dispatch, ingest, cards, decisions, issueCard };
     }
 
     function openedPullRequest(
@@ -6187,6 +6187,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       const card = cards.find(item => item.id === issue.id)!;
       expect(card).toMatchObject({ stages: ['done'] });
       expect(card.workItem.sources.map(source => source.state)).toEqual(['open', 'merged']);
+    });
+
+    it('files only the first of two pull requests that fix the issue in one delivery batch', async () => {
+      const h = await harness('write');
+      const issue = await h.issueCard(42, 'intake');
+
+      // Both deliveries are evaluated against the resting card before either is filed.
+      await h.service.ingest(openedPullRequest(17, 'Fixes #42'));
+      await h.service.ingest(openedPullRequest(18, 'Fixes #42'));
+      await h.dispatch();
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue', 'pull-request']);
     });
 
     it('returns a card in PR review to Intake when its only pull request closes unmerged', async () => {

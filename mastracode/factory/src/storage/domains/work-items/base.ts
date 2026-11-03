@@ -1632,15 +1632,13 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     try {
       result = await this.#withTransaction(async ops => {
         const cards = new Cards(ops, this.#legacyMode);
-        if (expectedRevision !== undefined) {
-          const current = await cards.findOne({ org_id: orgId, id });
-          if (current && current.revision !== expectedRevision) throw new WorkItemUpdateConflictError('revision');
-        }
         const attached = await cards.attachSource(
           { org_id: orgId, id },
           { external_source: source, metadata, now: new Date() },
+          expectedRevision,
         );
         if (attached?.ownerWorkItemId) throw new WorkItemSourceConflictError(attached.ownerWorkItemId);
+        if (attached?.revisionConflict) throw new WorkItemUpdateConflictError('revision');
         return attached;
       });
     } catch (error) {

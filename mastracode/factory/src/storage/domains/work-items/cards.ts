@@ -371,7 +371,8 @@ export class Cards {
   async attachSource(
     where: { org_id: string; id: string },
     source: { external_source: ExternalWorkItemSource; metadata: Record<string, unknown> | null; now: Date },
-  ): Promise<{ row: WorkItemDbRow; attached: boolean; ownerWorkItemId?: string } | null> {
+    expectedRevision?: number,
+  ): Promise<{ row: WorkItemDbRow; attached: boolean; ownerWorkItemId?: string; revisionConflict?: true } | null> {
     if (this.legacyMode) throw new Error('[cards] attaching a source needs the split work item tables.');
     const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, where);
     if (!board) return null;
@@ -392,6 +393,23 @@ export class Cards {
         ? { row: joined!, attached: false }
         : { row: joined!, attached: false, ownerWorkItemId: existing.work_item_id };
     }
+    // Bump the card first: the row lock makes a concurrent attach against the same revision
+    // wait, then see the new revision and stop.
+    let stale = false;
+    const bumped = await this.ops.updateAtomic<BoardItemDbRecord>(BOARD_ITEMS, { id: board.id }, row => {
+      if (expectedRevision !== undefined && row.revision !== expectedRevision) {
+        stale = true;
+        return null;
+      }
+      return {
+        revision: row.revision + 1,
+        updated_at: source.now,
+        ...(isLegacyReviewPlacement(row.board, joined!.work_item_sources?.[0]?.source_type)
+          ? normalizeLegacyReviewColumns(row, {})
+          : {}),
+      };
+    });
+    if (!bumped || stale) return { row: joined!, attached: false, revisionConflict: true };
     await this.ops.insertOne<WorkItemSourceDbRecord>(SOURCES, {
       ...next,
       id: randomUUID(),
@@ -399,14 +417,7 @@ export class Cards {
       updated_at: source.now,
       synced_at: source.now,
     });
-    const bumped = await this.ops.updateAtomic<BoardItemDbRecord>(BOARD_ITEMS, { id: board.id }, row => ({
-      revision: row.revision + 1,
-      updated_at: source.now,
-      ...(isLegacyReviewPlacement(row.board, joined!.work_item_sources?.[0]?.source_type)
-        ? normalizeLegacyReviewColumns(row, {})
-        : {}),
-    }));
-    return { row: (await this.#join([bumped ?? board]))[0]!, attached: true };
+    return { row: (await this.#join([bumped]))[0]!, attached: true };
   }
 
   async updateMany(where: CollectionWhere, patch: Partial<WorkItemDbRow>): Promise<number> {

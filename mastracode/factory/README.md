@@ -474,7 +474,7 @@ const releaseBoard = defineBoard({
 });
 ```
 
-Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with contexts `triage`, `work`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with context `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
+Work declares `intake` resting; `triage`, `planning`, `execute`, `review`, and `pr-review` working (`review` is the builder's self-review, `pr-review` the independent review of a card's pull request); `done` and `canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 
 A new pull request or merge request that belongs to a card already on Work is attached to that card (see below). One with no such card gets its own card in Work Intake or PR review, as the intake routes decide. The card's Review action moves it into Work's PR review phase (`pr-review`), where an independent reviewer runs `factory-review` (`factory-gitlab-review` for GitLab) in the card's `review` session, or the re-review skill once a verdict is recorded. Work's Review phase is the builder's self-review of its own work, so a pull request's own card never enters it. A pull request's own card only enters Intake, PR review, Done, and Canceled; merging moves it to Done and closing it unmerged to Canceled.
 
