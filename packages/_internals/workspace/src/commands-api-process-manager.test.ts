@@ -87,9 +87,16 @@ class HostCommands implements CommandsApi {
       .map(([pid, entry]) => ({ pid, cmd: 'sh', args: ['-c', entry.cmd] }));
   }
 
+  /** Like envd, signals only the process itself, not what it started. */
   async kill(pid: number) {
     this.calls.push('kill');
-    return this.children.has(pid) ? killGroup(pid) : false;
+    if (!this.children.has(pid)) return false;
+    try {
+      process.kill(pid, 'SIGKILL');
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   async sendStdin(pid: number, data: string) {
@@ -127,6 +134,15 @@ class HostCommands implements CommandsApi {
 
   stopAll() {
     for (const pid of this.children.keys()) killGroup(pid);
+  }
+}
+
+function isAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -213,6 +229,20 @@ describe('CommandsApiProcessManager', () => {
     const kills = commands.calls.filter(call => call === 'kill').length;
     expect(await handle.kill()).toBe(false);
     expect(commands.calls.filter(call => call === 'kill')).toHaveLength(kills);
+  });
+
+  it('stops what a killed process started, so `npm run dev` takes its dev server down with it', async () => {
+    const processes = setup();
+    // A wrapper (like npm) whose child serves; the child's pid is printed.
+    const handle = await processes.spawn('sleep 300 & echo $!; sleep 300');
+    await until(() => /^\d+\n$/.test(handle.stdout));
+    const child = Number(handle.stdout.trim());
+    expect(isAlive(child)).toBe(true);
+
+    expect(await handle.kill()).toBe(true);
+
+    await until(() => !isAlive(child));
+    expect((await handle.wait()).exitCode).toBe(137);
   });
 
   it('writes stdin through runCommands, and refuses when stdin was detached', async () => {

@@ -16,6 +16,22 @@ export interface CommandsApiStreamOptions {
   timeoutMs?: number;
 }
 
+const KILL_DESCENDANTS_TIMEOUT_MS = 10_000;
+
+/**
+ * A shell command that SIGKILLs every process `pid` started, at any depth. It
+ * pauses `pid` first and leaves it to `kill(pid)`: a wrapper like npm exits on
+ * its own once its child dies, and the kill would then report it wasn't running.
+ */
+function killDescendants(pid: number): string {
+  const tree =
+    `ps -A -o pid= -o ppid= | awk -v root=${pid} ` +
+    `'{ parent[$1] = $2 } END { seen[root] = 1; do { grew = 0; ` +
+    `for (p in parent) if (!(p in seen) && (parent[p] in seen)) { seen[p] = 1; grew = 1 } } while (grew); ` +
+    `for (p in seen) if (p != root) print p }'`;
+  return `kill -STOP ${pid} 2>/dev/null; pids=$(${tree}); [ -z "$pids" ] || kill -KILL $pids 2>/dev/null; true`;
+}
+
 /** The envd commands calls the process manager makes (E2B's `sandbox.commands`). */
 export interface CommandsApi {
   run(
@@ -162,7 +178,20 @@ export class CommandsApiProcessHandle extends ProcessHandle {
 
   async kill(): Promise<boolean> {
     if (this.exitCode !== undefined) return false;
-    return this.manager.runCommands('kill', commands => commands.kill(this.inner.pid));
+    return this.manager.runCommands('kill', async commands => {
+      // envd signals only the process itself, so a wrapper like `npm run dev`
+      // would leave the dev server it started running. Take those down first.
+      // Best effort: failing to reach them mustn't stop the kill itself.
+      try {
+        const descendants = await commands.run(killDescendants(this.inner.pid), {
+          background: true,
+          stdin: false,
+          timeoutMs: KILL_DESCENDANTS_TIMEOUT_MS,
+        });
+        await descendants.wait();
+      } catch {}
+      return commands.kill(this.inner.pid);
+    });
   }
 
   async sendStdin(data: string): Promise<void> {
