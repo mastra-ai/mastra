@@ -1320,13 +1320,13 @@ function KnowledgePageGraphInner({
   }, []);
 
   // A refocus only pans: the newly focused page moves to the centre and the zoom stays where the user
-  // left it. Fit view is the one control that changes zoom.
+  // left it. A pane that merely changes size does the same. Fit view is the one control that changes zoom.
   const panToSelection = useCallback((duration?: number) => {
     const container = containerRef.current;
     const width = container?.clientWidth ?? 0;
     const height = container?.clientHeight ?? 0;
-    const { nodes: current, selectedPageId: selected, reactFlow: flow } = fitState.current;
-    const anchor = current.find(node => node.id === selected);
+    const { nodes: current, selectedPageId: selected, centerId: centre, reactFlow: flow } = fitState.current;
+    const anchor = current.find(node => node.id === (selected ?? centre));
     if (!anchor || width === 0 || height === 0) return;
     const { zoom } = flow.getViewport();
     const cx = anchor.position.x + (anchor.width ?? 0) / 2;
@@ -1337,8 +1337,10 @@ function KnowledgePageGraphInner({
     );
   }, []);
 
-  // A host that hides the graph behind a Tree/Graph toggle gives it zero size at first, so fit again
-  // whenever the container gets a new non-zero size (shown, or the window resized), at most once a frame.
+  // A host that hides the graph behind a Tree/Graph toggle gives it zero size at first, so fit when the
+  // container first gets a non-zero size. Once it has been laid out, a new size (the window resized, a
+  // banner appeared above it) keeps the zoom and re-centres, so it never undoes the user's zoom. At most
+  // once a frame.
   useEffect(() => {
     const container = containerRef.current;
     if (!container || typeof ResizeObserver === 'undefined') return;
@@ -1348,12 +1350,14 @@ function KnowledgePageGraphInner({
       if (!entry) return;
       const { width, height } = entry.contentRect;
       const changed = width !== last.width || height !== last.height;
+      const wasHidden = last.width === 0 || last.height === 0;
       last = { width, height };
       if ((!changed && !fitPending.current) || width === 0 || height === 0) return;
       if (frame !== undefined) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         frame = undefined;
-        fit(true);
+        if (wasHidden || fitPending.current) fit(true);
+        else panToSelection();
       });
     });
     observer.observe(container);
@@ -1361,7 +1365,7 @@ function KnowledgePageGraphInner({
       observer.disconnect();
       if (frame !== undefined) cancelAnimationFrame(frame);
     };
-  }, [hasNodes, fit]);
+  }, [hasNodes, fit, panToSelection]);
 
   // A selection made outside the graph (tree, search, a link) pans to that page at the current zoom. A
   // click on the graph itself leaves the view where the user put it.
