@@ -335,3 +335,30 @@ describe('DateTimeRangePicker (named ranges)', () => {
     expect(screen.getByRole('button', { name: 'This period' })).toBeDefined();
   });
 });
+
+describe('DateTimeRangePicker (named ranges and the custom editor)', () => {
+  it('opens the custom editor from an applied named range', () => {
+    render(<PeriodPicker />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'This period' }));
+    fireEvent.click(screen.getByRole('menuitemradio', { name: 'Custom range...' }));
+
+    expect(screen.getByRole('button', { name: /presets/i })).toBeDefined();
+  });
+
+  it('disables a named range that starts before minDate', () => {
+    render(
+      <DateTimeRangePicker
+        preset="last-7d"
+        presets={TRACE_PRESETS}
+        minDate={new Date(2026, 9, 20)}
+        namedRanges={[{ label: 'This period', from: PERIOD_START }]}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
+
+    const item = screen.getByRole('menuitemradio', { name: 'This period' });
+    expect(item.getAttribute('aria-disabled')).toBe('true');
+  });
+});

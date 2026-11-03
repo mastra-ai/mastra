@@ -1,3 +1,4 @@
+import { startOfDay } from 'date-fns';
 import { CalendarIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode, Ref } from 'react';
@@ -22,6 +23,17 @@ const DATE_PRESETS: { value: DateRangePreset; label: string; ms?: number }[] = [
 ];
 
 const sameTime = (a: Date | undefined, b: Date | undefined) => a?.getTime() === b?.getTime();
+
+/**
+ * Whether a named range breaks the limits the custom editor enforces: it starts before
+ * `minDate`'s day, or spans more than `maxRangeMs` (an open end counts up to now).
+ */
+function outsideLimits(range: DateTimeRangePickerNamedRange, minDate?: Date, maxRangeMs?: number) {
+  const tooEarly = minDate !== undefined && range.from < startOfDay(minDate);
+  const span = (range.to ?? new Date()).getTime() - range.from.getTime();
+  const tooWide = maxRangeMs !== undefined && span > maxRangeMs;
+  return tooEarly || tooWide;
+}
 
 const fmtClock = (d: Date) =>
   d.toLocaleTimeString('en-US', d.getMinutes() === 0 ? { hour: 'numeric' } : { hour: 'numeric', minute: '2-digit' });
@@ -160,7 +172,8 @@ export function DateTimeRangePicker({
     shownPreset === 'custom' ? namedRanges.findIndex(r => sameTime(r.from, dateFrom) && sameTime(r.to, dateTo)) : -1;
   const named = namedRanges[namedIndex];
   const canReset = defaultPreset !== undefined && shownPreset === 'custom' && !named;
-  const editingCustomRange = shownPreset === 'custom' && !presetMenuOpen && !named;
+  // A named range shows the preset list, unless "Custom range..." was picked to edit it.
+  const editingCustomRange = shownPreset === 'custom' && !presetMenuOpen && (!named || customRangeOpen);
   const label = named ? named.label : shownPreset === 'custom' ? customRangeLabel(dateFrom, dateTo) : datePresetLabel;
 
   const applyNamedRange = (range: DateTimeRangePickerNamedRange) => {
@@ -216,6 +229,7 @@ export function DateTimeRangePicker({
                 <DropdownMenu.RadioItem
                   key={`named-${i}`}
                   value={`named-${i}`}
+                  disabled={outsideLimits(r, minDate, maxRangeMs)}
                   closeOnClick
                   onClick={() => applyNamedRange(r)}
                 >
