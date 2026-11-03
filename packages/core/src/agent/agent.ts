@@ -236,12 +236,14 @@ import type { AgentScopesConfig, AgentScopesSnapshot, ResolvedAgentScopes } from
 import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
-import { publishAbortRequest } from './streams/abort-transport';
+import { publishAbortRequest, requestAcknowledgedAbort } from './streams/abort-transport';
 import { AgentStreamBus } from './streams/bus';
 import { agentStreamsConfig, areAgentStreamsEnabled, mergeDurableStreamsConfig } from './streams/config';
 import type { AgentStreamsOption } from './streams/config';
 import { createAgentStreamPublisher } from './streams/publisher';
 import type { AgentStreamPublisher } from './streams/publisher';
+import { readAgentRunRecord } from './streams/run-records';
+import type { AgentRunRecord } from './streams/run-records';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
@@ -969,8 +971,6 @@ export class Agent<
   #streamBus?: AgentStreamBus;
   /** Published runs executing in this process, with the owner the abort route checks. */
   #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
-  // Owners of runs whose stream topic still holds replay history (running, suspended, or finished but not yet cleared).
-  #runOwners = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
   /**
    * Cached DurableAgent wrapper created on-demand by `#getStandaloneDurable()`
    * when `durable: true` is set on the config but the agent is not attached
@@ -1818,25 +1818,38 @@ export class Agent<
       onEnd: () => {
         if (this.#publishedRuns.get(runId)?.publisher === publisher) this.#publishedRuns.delete(runId);
       },
-      onCleared: () => {
-        if (this.#runOwners.get(runId)?.publisher === publisher) this.#runOwners.delete(runId);
-      },
+      record: { cache: bus.runRecordCache, agentId: this.id, resourceId: owner.resourceId, threadId: owner.threadId },
     });
-    const entry = { publisher, resourceId: owner.resourceId, threadId: owner.threadId };
-    this.#publishedRuns.set(runId, entry);
-    this.#runOwners.set(runId, entry);
+    this.#publishedRuns.set(runId, { publisher, resourceId: owner.resourceId, threadId: owner.threadId });
     return publisher;
   }
 
   /**
-   * Owner of a run whose stream topic this process still holds (running,
-   * suspended, or finished within the cleanup window), or undefined. Lets the
-   * server authorize observing a run.
+   * Owner of a run executing in this process, or undefined. DurableAgent
+   * overrides this with its run registry.
    * @internal
    */
   __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
-    const run = this.#runOwners.get(runId);
-    return run ? { resourceId: run.resourceId, threadId: run.threadId } : undefined;
+    return this.__getPublishedRunOwner(runId);
+  }
+
+  /**
+   * The shared ownership record of a published run (see
+   * `streams/run-records.ts`), from any process sharing this agent's record
+   * cache: running, suspended, or finished and still replayable. Undefined when
+   * the run is unknown, expired, or streams are off. Rejects when the record
+   * cache cannot be read, so the server refuses instead of guessing.
+   * @internal Used by the server's observe and run abort routes.
+   */
+  async __getRunRecord(runId: string): Promise<AgentRunRecord | undefined> {
+    const local = this.#publishedRuns.get(runId);
+    if (local) {
+      const { resourceId, threadId } = local;
+      return { agentId: this.id, runId, resourceId, threadId, status: 'running', updatedAt: Date.now() };
+    }
+    const bus = this.#ownStreamBus();
+    if (!bus) return undefined;
+    return readAgentRunRecord(bus.runRecordCache, this.id, runId);
   }
 
   /**
@@ -10446,17 +10459,39 @@ export class Agent<
   }
 
   abortRunStream(runId: string): boolean {
+    const aborted = this.#abortLocalRun(runId);
+    if (aborted) return true;
+    // A published run may be executing in another process; it listens on its
+    // control topic.
+    const bus = this.#ownStreamBus();
+    if (bus) void this.#requestStreamAbort(bus, runId);
+    return false;
+  }
+
+  /** Abort `runId` if this process executes it or holds it parked. */
+  #abortLocalRun(runId: string): boolean {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     wrapperClose?.();
     if (wrapperClose !== undefined) return true;
     const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
     const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
     if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
-    // A published run may be executing in another process; it listens on its
-    // control topic.
-    const bus = this.#ownStreamBus();
-    if (!aborted && bus) void this.#requestStreamAbort(bus, runId);
     return aborted;
+  }
+
+  /**
+   * Abort `runId` wherever it executes and report whether that was confirmed:
+   * true when this process aborted it, or when the executing process answered
+   * the request on the run's control topic; false when nobody answered in
+   * time (the run finished, is parked elsewhere, or the transport dropped the
+   * request). Rejects when the request cannot be published.
+   * @internal Used by the server's run abort route.
+   */
+  async __abortRunAcknowledged(runId: string): Promise<boolean> {
+    if (this.#abortLocalRun(runId)) return true;
+    const bus = this.#ownStreamBus();
+    if (!bus) return false;
+    return requestAcknowledgedAbort(bus.pubsub, runId);
   }
 
   /**

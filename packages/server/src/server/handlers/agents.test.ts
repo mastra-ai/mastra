@@ -5049,7 +5049,7 @@ describe('plain Agent resumable streams', () => {
       streams: { pubsub },
     });
     const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
-    vi.spyOn(agent, '__getRunOwner').mockReturnValue({});
+    vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ status: 'running' });
     const runId = 'plain-observe';
     await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
       runId,
@@ -5078,7 +5078,7 @@ describe('plain Agent resumable streams', () => {
       streams: { pubsub },
     });
     const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
-    vi.spyOn(agent, '__getRunOwner').mockReturnValue({});
+    vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ status: 'running' });
     const runId = 'plain-suspended';
     const bus = agent.__getStreamBus()!.pubsub;
     // What a plain run publishes when a tool needs approval (pinned in core parity.test.ts).
@@ -5154,7 +5154,7 @@ describe('plain Agent resumable streams', () => {
     ])('lets %s observe a run: %s', async (_case, caller, allowed) => {
       const agent = plainAgent('plain-agent');
       const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
-      vi.spyOn(agent, '__getRunOwner').mockReturnValue({ resourceId: 'user-a' });
+      vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ resourceId: 'user-a', status: 'running' });
       const runId = 'owned-run';
       await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
         runId,
@@ -5172,7 +5172,7 @@ describe('plain Agent resumable streams', () => {
       }
     });
 
-    it('returns 404 for a run this server does not hold', async () => {
+    it('returns 404 for an unknown or expired run', async () => {
       const agent = plainAgent('plain-agent');
       const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
       await expect(observeAs(mastra, 'elsewhere', 'user-a')).rejects.toMatchObject({ status: 404 });
@@ -5190,9 +5190,8 @@ describe('plain Agent resumable streams', () => {
         auth: { mapUserToResourceId: (user: { id: string }) => user.id },
       } as any);
       vi.spyOn(mastra, 'getStudio').mockReturnValue({ fga: { check: vi.fn() } } as any);
-      vi.spyOn(agent, '__getRunOwner').mockReturnValue({ resourceId: 'user-a' });
-      vi.spyOn(agent, '__getPublishedRunOwner').mockReturnValue({ resourceId: 'user-a' });
-      const abort = vi.spyOn(agent, 'abortRunStream').mockReturnValue(true);
+      vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ resourceId: 'user-a', status: 'running' });
+      const abort = vi.spyOn(agent, '__abortRunAcknowledged').mockResolvedValue(true);
       return { agent, mastra, abort };
     }
     const studio = () => new RequestContext([[MASTRA_AUTH_MODE_KEY, 'studio']]);
@@ -5281,13 +5280,13 @@ describe('plain Agent resumable streams', () => {
     function setup() {
       const agent = plainAgent('plain-agent');
       const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
-      const abort = vi.spyOn(agent, 'abortRunStream').mockReturnValue(true);
+      const abort = vi.spyOn(agent, '__abortRunAcknowledged').mockResolvedValue(true);
       return { agent, mastra, abort };
     }
 
-    it('stops a run executing here for its owner', async () => {
+    it('stops a running run for its owner and reports the confirmation', async () => {
       const { agent, mastra, abort } = setup();
-      vi.spyOn(agent, '__getPublishedRunOwner').mockReturnValue({ resourceId: 'user-a' });
+      vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ resourceId: 'user-a', status: 'running' });
 
       await expect(
         ABORT_AGENT_RUN_ROUTE.handler({
@@ -5302,7 +5301,7 @@ describe('plain Agent resumable streams', () => {
 
     it('refuses a run owned by another resource', async () => {
       const { agent, mastra, abort } = setup();
-      vi.spyOn(agent, '__getPublishedRunOwner').mockReturnValue({ resourceId: 'user-a' });
+      vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ resourceId: 'user-a', status: 'running' });
 
       await expect(
         ABORT_AGENT_RUN_ROUTE.handler({
@@ -5315,7 +5314,7 @@ describe('plain Agent resumable streams', () => {
       expect(abort).not.toHaveBeenCalled();
     });
 
-    it('returns 404 for a run not executing on this server', async () => {
+    it('returns 404 for an unknown or expired run', async () => {
       const { mastra, abort } = setup();
 
       await expect(
@@ -5326,6 +5325,51 @@ describe('plain Agent resumable streams', () => {
           requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
         }),
       ).rejects.toMatchObject({ status: 404 });
+      expect(abort).not.toHaveBeenCalled();
+    });
+
+    it('reports false without aborting when the run already finished', async () => {
+      const { agent, mastra, abort } = setup();
+      vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ resourceId: 'user-a', status: 'finished' } as any);
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'plain-agent',
+          runId: 'done-run',
+          requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
+        }),
+      ).resolves.toEqual({ aborted: false });
+      expect(abort).not.toHaveBeenCalled();
+    });
+
+    it('reports false when the executing server does not confirm the abort', async () => {
+      const { agent, mastra, abort } = setup();
+      vi.spyOn(agent, '__getRunRecord').mockResolvedValue({ resourceId: 'user-a', status: 'running' } as any);
+      abort.mockResolvedValue(false);
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'plain-agent',
+          runId: 'remote-run',
+          requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
+        }),
+      ).resolves.toEqual({ aborted: false });
+      expect(abort).toHaveBeenCalledWith('remote-run');
+    });
+
+    it('refuses observe and abort with 503 when run ownership cannot be read', async () => {
+      const { agent, mastra, abort } = setup();
+      vi.spyOn(agent, '__getRunRecord').mockRejectedValue(new Error('cache down'));
+      const requestContext = new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]);
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({ mastra, agentId: 'plain-agent', runId: 'r', requestContext }),
+      ).rejects.toMatchObject({ status: 503 });
+      await expect(
+        OBSERVE_AGENT_STREAM_ROUTE.handler({ mastra, agentId: 'plain-agent', runId: 'r', requestContext } as any),
+      ).rejects.toMatchObject({ status: 503 });
       expect(abort).not.toHaveBeenCalled();
     });
   });

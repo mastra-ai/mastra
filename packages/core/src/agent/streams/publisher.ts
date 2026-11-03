@@ -7,6 +7,8 @@ import { subscribeToAbortRequests } from './abort-transport';
 import { scheduleStreamCleanup } from './bus';
 import { AGENT_STREAM_TOPIC } from './constants';
 import { emitChunkEvent, emitErrorEvent, emitFinishEvent, emitStepStartEvent, emitSuspendedEvent } from './events';
+import type { AgentRunRecordTarget } from './run-records';
+import { deleteAgentRunRecord, writeAgentRunRecord } from './run-records';
 
 /**
  * Publishes a run's chunks on its stream topic as the loop produces them, so
@@ -48,6 +50,12 @@ export interface CreateAgentStreamPublisherOptions {
   onEnd?: () => void;
   /** Called once the finished run's topic is cleared, i.e. when its replay history is gone. */
   onCleared?: () => void;
+  /**
+   * Where to keep the run's shared ownership record (see `run-records.ts`).
+   * It is written before the first event, marked `suspended` or `finished`
+   * after the run's last event, and deleted with the topic.
+   */
+  record?: AgentRunRecordTarget;
 }
 
 /**
@@ -69,6 +77,7 @@ export function createAgentStreamPublisher({
   abortSignal: callerSignal,
   onEnd,
   onCleared,
+  record,
 }: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
   const controller = new AbortController();
   const abort = (reason?: unknown) => {
@@ -98,7 +107,16 @@ export function createAgentStreamPublisher({
     stopListening = undefined;
   };
 
-  let queue: Promise<void> = Promise.resolve();
+  const writeRecord = (status: 'running' | 'suspended' | 'finished') => async () => {
+    if (!record) return;
+    const { cache, ...owner } = record;
+    await writeAgentRunRecord(cache, { ...owner, runId, status, updatedAt: Date.now() }).catch(error => {
+      logger?.warn?.(`[AgentStream:${runId}] failed to write run record`, { error });
+    });
+  };
+
+  // The record goes first, so a reader that sees any event can authorize.
+  let queue: Promise<void> = writeRecord('running')();
   let finished = false;
   let ended = false;
   let suspended: AgentSuspendedEventData | undefined;
@@ -114,6 +132,7 @@ export function createAgentStreamPublisher({
   const scheduleCleanup = () => {
     const timer = scheduleStreamCleanup(cleanupTimeoutMs, () => {
       void pubsub.clearTopic(AGENT_STREAM_TOPIC(runId)).catch(() => {});
+      if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId).catch(() => {});
       onCleared?.();
     });
     timer?.unref?.();
@@ -128,13 +147,15 @@ export function createAgentStreamPublisher({
       if (suspended) {
         const data = suspended;
         await enqueue(() => emitSuspendedEvent(pubsub, runId, data));
-        // The run resumes on the same topic; keep its history.
+        await enqueue(writeRecord('suspended'));
+        // The run resumes on the same topic; keep its history. Its record
+        // and log expire with their TTL if it is never resumed.
         return queue;
       }
       const error = toError(lastError ?? fallbackError());
       await enqueue(() => emitErrorEvent(pubsub, runId, error));
     }
-    await queue;
+    await enqueue(writeRecord('finished'));
     scheduleCleanup();
   };
 

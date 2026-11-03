@@ -99,6 +99,29 @@ describe('Agent streams remote abort', () => {
     expect(getMock().getRequests()).toHaveLength(1);
   });
 
+  it('__abortRunAcknowledged() on another agent instance stops the run and confirms it', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const { agent, remote, started, release } = setup(pubsub);
+
+    const output = await agent.stream('Look it up then continue.', { maxSteps: 3 });
+    const done = finishReason(output);
+    await started;
+
+    // The confirmation is the executing instance's answer, not a local boolean.
+    expect(remote.abortRunStream(output.runId)).toBe(false);
+    expect(await remote.__abortRunAcknowledged(output.runId)).toBe(true);
+    release();
+
+    expect(await done).toMatch(/abort|cancel/);
+    expect(getMock().getRequests()).toHaveLength(1);
+  });
+
+  it('__abortRunAcknowledged() reports false when no process runs the run', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const { remote } = setup(pubsub);
+    expect(await remote.__abortRunAcknowledged('nobody-runs-this')).toBe(false);
+  });
+
   it('records the owner of a running published run and forgets it once the run ends', async () => {
     const pubsub = new EventEmitterPubSub();
     const { agent, started, release } = setup(pubsub);

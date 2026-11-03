@@ -2758,7 +2758,7 @@ export class DurableAgent<
    *
    * @internal Used by the server's run abort route.
    */
-  async __abortRunAcknowledged(runId: string): Promise<boolean> {
+  override async __abortRunAcknowledged(runId: string): Promise<boolean> {
     const wrapperClose = getRunStreamSlot(this.#activeStreamUntilIdle, runId);
     if (wrapperClose) {
       wrapperClose();

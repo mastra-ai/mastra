@@ -140,8 +140,10 @@ describe('Agent streams option', () => {
     await waitForFinish(pubsub, output.runId);
 
     // Finished but still replayable: observers must still be authorizable.
-    expect(agent.__getRunOwner(output.runId)).toEqual({ resourceId: 'user-1', threadId: undefined });
-    await vi.waitFor(() => expect(agent.__getRunOwner(output.runId)).toBeUndefined(), { timeout: 2000 });
+    await vi.waitFor(async () =>
+      expect(await agent.__getRunRecord(output.runId)).toMatchObject({ resourceId: 'user-1', status: 'finished' }),
+    );
+    await vi.waitFor(async () => expect(await agent.__getRunRecord(output.runId)).toBeUndefined(), { timeout: 2000 });
   });
 
   describe('observe', () => {

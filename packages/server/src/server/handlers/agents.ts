@@ -368,7 +368,63 @@ type ResumableStreamsAgent = {
   __getStreamBus?: () => { pubsub: PubSub } | undefined;
   __getPublishedRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
   __getRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
+  __getRunRecord?: (runId: string) => Promise<PlainRunRecord | undefined>;
+  __abortRunAcknowledged?: (runId: string) => Promise<boolean>;
 };
+
+type PlainRunRecord = {
+  resourceId?: string;
+  threadId?: string;
+  status: 'running' | 'suspended' | 'finished';
+};
+
+/**
+ * The shared ownership record of a plain agent run, readable from any server
+ * sharing the agent's record cache. Undefined when the run is unknown or
+ * expired. Falls back to the owner of a run executing in this process on a
+ * core without shared records. A record cache that cannot be read is a 503:
+ * the caller is refused, never let through.
+ */
+async function getPlainRunRecord(agent: Agent, runId: string): Promise<PlainRunRecord | undefined> {
+  const resumable = agent as unknown as ResumableStreamsAgent;
+  if (typeof resumable.__getRunRecord === 'function') {
+    try {
+      return await resumable.__getRunRecord.call(agent, runId);
+    } catch {
+      throw new HTTPException(503, { message: 'Run ownership is temporarily unavailable' });
+    }
+  }
+  const owner = resumable.__getPublishedRunOwner?.call(agent, runId);
+  return owner ? { ...owner, status: 'running' } : undefined;
+}
+
+/** The caller must own the run and have `permission` on its thread. */
+async function authorizeRunOwner({
+  mastra,
+  agent,
+  owner,
+  requestContext,
+  permission,
+}: {
+  mastra: Mastra;
+  agent: Agent<any, any, any, any>;
+  owner: { resourceId?: string; threadId?: string };
+  requestContext: RequestContext;
+  permission: string;
+}): Promise<void> {
+  await validateRunOwnership(owner, getContextResourceId(requestContext), mastra, requestContext);
+  if (!owner.threadId) return;
+  const memory = await agent.getMemory({ requestContext });
+  const thread = await memory?.getThreadById({ threadId: owner.threadId });
+  await enforceThreadAccess({
+    mastra,
+    requestContext,
+    threadId: owner.threadId,
+    thread,
+    effectiveResourceId: getContextResourceId(requestContext),
+    permission,
+  });
+}
 
 /** Whether the agent publishes its runs, so a closed HTTP reader can detach instead of aborting. */
 function hasResumableStreams(agent: Agent): boolean {
@@ -2515,9 +2571,10 @@ async function authorizeDurableRun({
 
 /**
  * Authorizes observing a run: the caller must own it and have read access to
- * its thread. Uses the owner the agent tracks for runs whose replay history is
- * held in this process, then the workflow rows of a durable run. Throws 404
- * when the run cannot be found or verified.
+ * its thread. Plain agent runs are checked against their shared run record,
+ * so any server sharing the agent's record cache can authorize them. Durable
+ * runs use the owner the agent tracks in this process, then their workflow
+ * rows. Throws 404 when the run cannot be found or verified.
  */
 async function authorizeRunObservation({
   mastra,
@@ -2530,27 +2587,20 @@ async function authorizeRunObservation({
   runId: string;
   requestContext: RequestContext;
 }): Promise<void> {
+  const permission = MastraFGAPermissions.MEMORY_READ;
+  if (!isDurableAgentLike(agent)) {
+    const record = await getPlainRunRecord(agent, runId);
+    if (!record) throw new HTTPException(404, { message: 'Run not found' });
+    await authorizeRunOwner({ mastra, agent, owner: record, requestContext, permission });
+    return;
+  }
   const getOwner = (agent as unknown as ResumableStreamsAgent).__getRunOwner;
   const owner = typeof getOwner === 'function' ? getOwner.call(agent, runId) : undefined;
   if (owner) {
-    await validateRunOwnership(owner, getContextResourceId(requestContext), mastra, requestContext);
-    if (owner.threadId) {
-      const memory = await agent.getMemory({ requestContext });
-      const thread = await memory?.getThreadById({ threadId: owner.threadId });
-      await enforceThreadAccess({
-        mastra,
-        requestContext,
-        threadId: owner.threadId,
-        thread,
-        effectiveResourceId: getContextResourceId(requestContext),
-        permission: MastraFGAPermissions.MEMORY_READ,
-      });
-    }
+    await authorizeRunOwner({ mastra, agent, owner, requestContext, permission });
     return;
   }
-  const access = isDurableAgentLike(agent)
-    ? await authorizeDurableRun({ mastra, agent, runId, requestContext, permission: MastraFGAPermissions.MEMORY_READ })
-    : 'missing';
+  const access = await authorizeDurableRun({ mastra, agent, runId, requestContext, permission });
   if (access !== 'ok') {
     throw new HTTPException(404, { message: 'Run not found' });
   }
@@ -2572,30 +2622,29 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
       if (!isDurableAgentLike(agent)) {
-        const getOwner = (agent as unknown as ResumableStreamsAgent).__getPublishedRunOwner;
-        if (typeof getOwner !== 'function' || !hasResumableStreams(agent)) {
+        const resumable = agent as unknown as ResumableStreamsAgent;
+        if (
+          (typeof resumable.__getRunRecord !== 'function' && typeof resumable.__getPublishedRunOwner !== 'function') ||
+          !hasResumableStreams(agent)
+        ) {
           throw new HTTPException(501, {
             message: 'Run-scoped cancellation requires a durable agent or an agent with resumable streams',
           });
         }
-        // Plain runs keep no storage record, so only a run executing in this
-        // process has a known owner to authorize against.
-        const owner = getOwner.call(agent, runId);
-        if (!owner) {
-          throw new HTTPException(404, { message: 'Run is not executing on this server' });
-        }
-        await validateRunOwnership(owner, getContextResourceId(requestContext), mastra, requestContext);
-        if (owner.threadId) {
-          const memory = await agent.getMemory({ requestContext });
-          const thread = await memory?.getThreadById({ threadId: owner.threadId });
-          await enforceThreadAccess({
-            mastra,
-            requestContext,
-            threadId: owner.threadId,
-            thread,
-            effectiveResourceId: getContextResourceId(requestContext),
-            permission: MastraFGAPermissions.MEMORY_WRITE,
-          });
+        const record = await getPlainRunRecord(agent, runId);
+        if (!record) throw new HTTPException(404, { message: 'Run not found' });
+        await authorizeRunOwner({
+          mastra,
+          agent,
+          owner: record,
+          requestContext,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+        });
+        if (record.status === 'finished') return { aborted: false };
+        // The run may execute on another server: only report it aborted once
+        // the executing process confirms.
+        if (typeof resumable.__abortRunAcknowledged === 'function') {
+          return { aborted: await resumable.__abortRunAcknowledged.call(agent, runId) };
         }
         return { aborted: agent.abortRunStream(runId) };
       }
