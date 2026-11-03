@@ -88,19 +88,28 @@ function mediaBlock(data: string, mediaType: string, toolName: string, index: nu
   };
 }
 
-/** Splits a `data:` URI into its media type and Base64 payload. Returns `undefined` if it can't be decoded. */
+/**
+ * Splits a `data:` URI into its media type (with parameters such as `charset`, minus the `base64`
+ * marker) and Base64 payload. Returns `undefined` if it can't be decoded.
+ */
 function parseDataUri(value: string): { mediaType: string; data: string } | undefined {
   const match = DATA_URI.exec(value);
   if (!match) return undefined;
-  const [, mediaType = '', params = '', payload = ''] = match;
-  const base64 = params.split(';').some(param => param.toLowerCase() === 'base64');
+  const [, type = '', params = '', payload = ''] = match;
+  const parameters = params
+    .split(';')
+    .map(param => param.trim())
+    .filter(Boolean);
+  const base64 = parameters.some(param => param.toLowerCase() === 'base64');
   let data = payload;
   if (!base64) {
     const bytes = decodePercentEncoded(payload);
     if (!bytes) return undefined;
     data = bytes.toString('base64');
   }
-  return { mediaType: mediaType.trim().toLowerCase(), data };
+  const mediaType = type.trim().toLowerCase();
+  const kept = parameters.filter(param => param.toLowerCase() !== 'base64');
+  return { mediaType: mediaType && kept.length ? [mediaType, ...kept].join(';') : mediaType, data };
 }
 
 /** Decodes `%XX` escapes as raw octets (RFC 2397), not UTF-8 text. Returns `undefined` for a malformed escape. */

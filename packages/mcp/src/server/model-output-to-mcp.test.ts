@@ -101,6 +101,34 @@ describe('modelOutputToMcpContent', () => {
     ]);
   });
 
+  it('keeps data: URI media type parameters except the base64 marker', () => {
+    expect(
+      modelOutputToMcpContent(
+        {
+          type: 'content',
+          value: [
+            { type: 'file-url', url: 'data:text/plain;charset=iso-8859-1,caf%E9' },
+            { type: 'file-url', url: 'data:Text/CSV;header=present;base64,YSxi' },
+          ],
+        },
+        't',
+      )?.content,
+    ).toEqual([
+      {
+        type: 'resource',
+        resource: {
+          uri: 'mastra://tool-output/t/0',
+          mimeType: 'text/plain;charset=iso-8859-1',
+          blob: Buffer.from([0x63, 0x61, 0x66, 0xe9]).toString('base64'),
+        },
+      },
+      {
+        type: 'resource',
+        resource: { uri: 'mastra://tool-output/t/1', mimeType: 'text/csv;header=present', blob: 'YSxi' },
+      },
+    ]);
+  });
+
   it('decodes percent-escapes in data: URIs as raw bytes', () => {
     expect(
       modelOutputToMcpContent(
