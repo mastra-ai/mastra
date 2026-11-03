@@ -7,21 +7,27 @@ import { GoogleVoice } from './index';
 
 // Mock the Google Cloud clients for unit tests
 vi.mock('@google-cloud/speech', () => ({
-  SpeechClient: vi.fn().mockImplementation(() => ({
-    recognize: vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'test' }] }] }]),
-  })),
+  SpeechClient: vi.fn(function () {
+    return {
+      recognize: vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'test' }] }] }]),
+    };
+  }),
   v2: {
-    SpeechClient: vi.fn().mockImplementation(() => ({
-      recognize: vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'test v2' }] }] }]),
-    })),
+    SpeechClient: vi.fn(function () {
+      return {
+        recognize: vi.fn().mockResolvedValue([{ results: [{ alternatives: [{ transcript: 'test v2' }] }] }]),
+      };
+    }),
   },
 }));
 
 vi.mock('@google-cloud/text-to-speech', () => ({
-  TextToSpeechClient: vi.fn().mockImplementation(() => ({
-    synthesizeSpeech: vi.fn().mockResolvedValue([{ audioContent: Buffer.from('mock audio') }]),
-    listVoices: vi.fn().mockResolvedValue([{ voices: [{ name: 'en-US-Test', languageCodes: ['en-US'] }] }]),
-  })),
+  TextToSpeechClient: vi.fn(function () {
+    return {
+      synthesizeSpeech: vi.fn().mockResolvedValue([{ audioContent: Buffer.from('mock audio') }]),
+      listVoices: vi.fn().mockResolvedValue([{ voices: [{ name: 'en-US-Test', languageCodes: ['en-US'] }] }]),
+    };
+  }),
 }));
 
 describe('GoogleVoice Unit Tests', () => {
@@ -462,11 +468,12 @@ describe('GoogleVoice Integration Tests', () => {
   let voice: GoogleVoice;
   const outputDir = join(process.cwd(), 'test-outputs');
 
-  beforeAll(() => {
-    // Reset mocks for integration tests
+  beforeAll(async () => {
+    // Load a fresh copy of GoogleVoice backed by the real Google SDKs
     vi.resetModules();
-    vi.unmock('@google-cloud/speech');
-    vi.unmock('@google-cloud/text-to-speech');
+    vi.doUnmock('@google-cloud/speech');
+    vi.doUnmock('@google-cloud/text-to-speech');
+    const { GoogleVoice } = await import('./index');
 
     // Create output directory if it doesn't exist
     try {
