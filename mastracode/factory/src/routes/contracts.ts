@@ -150,7 +150,8 @@ const cardSchema = z
         labels: z.array(z.string()),
         author: z.string().nullable(),
       })
-      .passthrough(),
+      .passthrough()
+      .optional(),
   })
   .passthrough();
 const workItemResponseSchema = z.object({ workItem: cardSchema });

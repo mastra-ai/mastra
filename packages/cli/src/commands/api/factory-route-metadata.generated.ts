@@ -3048,9 +3048,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "additionalProperties": {}
               }
             },
-            "required": [
-              "workItem"
-            ],
             "additionalProperties": {}
           }
         },
@@ -5039,9 +5036,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "additionalProperties": {}
             }
           },
-          "required": [
-            "workItem"
-          ],
           "additionalProperties": {}
         }
       },
@@ -7431,9 +7425,6 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "additionalProperties": {}
             }
           },
-          "required": [
-            "workItem"
-          ],
           "additionalProperties": {}
         }
       },
