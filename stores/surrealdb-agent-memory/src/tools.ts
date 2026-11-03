@@ -2,6 +2,7 @@ import { createTool } from '@mastra/core/tools';
 import { AgentMemoryError } from '@surrealdb/memory';
 import type { AgentMemory as AgentMemoryClient } from '@surrealdb/memory';
 import { z } from 'zod';
+import { memoryLens } from './scopes';
 
 /** Run an Agent Memory call for a tool, returning a structured error instead of throwing. */
 async function safe<T>(fn: () => Promise<T>): Promise<T | { error: string }> {
@@ -17,15 +18,29 @@ async function safe<T>(fn: () => Promise<T>): Promise<T | { error: string }> {
   }
 }
 
+export interface AgentMemoryToolsOptions {
+  /** Scope prefix for the agent's resource and thread. Match `AgentMemory`'s `scopePrefix`. Defaults to `'mastra'`. */
+  scopePrefix?: string;
+}
+
+type ToolContext = { agent?: { resourceId?: string; threadId?: string } } | undefined;
+
 /**
  * Build a Mastra toolset that lets an agent call Agent Memory explicitly:
  * store facts, semantically recall memory, forget, fetch assembled context,
  * and search the document corpus (RAG).
  *
+ * When an agent with memory runs a tool, writes are tagged with, and reads are
+ * narrowed to, the scopes of the agent's current resource and thread, the same
+ * region `AgentMemory` uses.
+ *
  * @example
  * const agent = new Agent({ ..., tools: createAgentMemoryTools(client) });
  */
-export function createAgentMemoryTools(agentMemory: AgentMemoryClient) {
+export function createAgentMemoryTools(agentMemory: AgentMemoryClient, options: AgentMemoryToolsOptions = {}) {
+  const prefix = options.scopePrefix ?? 'mastra';
+  const scopesOf = (context: ToolContext) => memoryLens(prefix, context?.agent?.resourceId, context?.agent?.threadId);
+
   return {
     agentMemoryRemember: createTool({
       id: 'agent-memory-remember',
@@ -34,7 +49,8 @@ export function createAgentMemoryTools(agentMemory: AgentMemoryClient) {
         text: z.string().describe('The fact or note to remember.'),
         labels: z.array(z.string()).optional().describe('Optional key=value labels to tag the memory.'),
       }),
-      execute: async input => safe(() => agentMemory.remember(input.text, { labels: input.labels })),
+      execute: async (input, context) =>
+        safe(() => agentMemory.remember(input.text, { labels: input.labels, scopes: scopesOf(context) })),
     }),
 
     agentMemoryRecall: createTool({
@@ -44,10 +60,11 @@ export function createAgentMemoryTools(agentMemory: AgentMemoryClient) {
         query: z.string().describe('What to recall.'),
         k: z.number().int().positive().optional().describe('Maximum number of hits to return.'),
       }),
-      execute: async input =>
+      execute: async (input, context) =>
         safe(async () => {
           const res = await agentMemory.recall(input.query, {
             k: input.k,
+            lens: scopesOf(context),
           });
           return { hits: res.hits };
         }),
@@ -70,7 +87,8 @@ export function createAgentMemoryTools(agentMemory: AgentMemoryClient) {
         query: z.string().describe('The query to assemble context for.'),
         k: z.number().int().positive().optional(),
       }),
-      execute: async input => safe(() => agentMemory.context(input.query, { k: input.k })),
+      execute: async (input, context) =>
+        safe(() => agentMemory.context(input.query, { k: input.k, lens: scopesOf(context) })),
     }),
 
     agentMemorySearchDocuments: createTool({

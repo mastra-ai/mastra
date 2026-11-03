@@ -22,4 +22,5 @@ export { deleteDocument, ingestDocument, listDocuments, searchDocuments } from '
 export type { AgentMemoryExtractedContext, AgentMemoryExtractedSinkOptions } from './extractors';
 export { agentMemoryExtractedSink } from './extractors';
 export { AgentMemory } from './memory';
+export type { AgentMemoryToolsOptions } from './tools';
 export { createAgentMemoryTools } from './tools';

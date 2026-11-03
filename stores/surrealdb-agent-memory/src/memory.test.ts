@@ -173,6 +173,13 @@ describe('AgentMemory', () => {
     });
   });
 
+  it('does not forget Agent Memory facts with a context-wide query when a thread is deleted', async () => {
+    await memory.deleteThread('thread-1');
+
+    expect(calls.forget).toHaveLength(0);
+    expect(await memory.getThreadById({ threadId: 'thread-1' })).toBeNull();
+  });
+
   it('does not call AgentMemoryClient recall when no vectorSearchString', async () => {
     await memory.saveMessages({ messages: [textMsg('m1', 'user', 'hi')] });
     const res = await memory.recall({

@@ -134,7 +134,7 @@ Without `storage`, verbatim history is kept in memory and is lost when the proce
 
 ## Agent tools
 
-`createAgentMemoryTools()` lets an agent call Agent Memory explicitly. It returns `agentMemoryRemember`, `agentMemoryRecall`, `agentMemoryForget`, `agentMemoryContext` and `agentMemorySearchDocuments`.
+`createAgentMemoryTools()` lets an agent call Agent Memory explicitly. It returns `agentMemoryRemember`, `agentMemoryRecall`, `agentMemoryForget`, `agentMemoryContext` and `agentMemorySearchDocuments`. When an agent with memory calls them, `agentMemoryRemember` writes to the scopes of the current resource and thread, and `agentMemoryRecall` and `agentMemoryContext` read only from them. If you set `scopePrefix` on `AgentMemory`, pass the same value: `createAgentMemoryTools(client, { scopePrefix })`.
 
 ```typescript
 import { Agent } from '@mastra/core/agent'
@@ -180,7 +180,8 @@ Pass `onExtracted` to an extractor. Values are stored as they are, without runni
 
 ## Limitations
 
-- Deleting a thread or messages removes the verbatim rows. Facts Agent Memory already derived from them can't be removed by message ID.
+- Deleting a thread or messages removes only the verbatim rows. Facts Agent Memory already derived from them stay in Agent Memory.
+- `agentMemoryForget` matches its query across the whole Agent Memory context, not only the current resource and thread.
 - `recall()` adds Agent Memory hits only when a search string is provided. For recall the agent decides on, use the `agentMemoryRecall` tool.
 - With a shared API key, `resourceId` maps to Agent Memory scopes, not a hard tenant boundary.
 

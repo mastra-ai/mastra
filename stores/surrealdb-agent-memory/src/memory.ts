@@ -18,6 +18,7 @@ import type {
 import { AgentMemory as AgentMemoryClient, AgentMemoryError } from '@surrealdb/memory';
 import { isAgentMemoryInstanceConfig } from './config';
 import type { AgentMemoryConfig } from './config';
+import { memoryLens, memoryScopes } from './scopes';
 
 /** Marker written onto synthesized recall messages so they never round-trip as facts. */
 const AGENT_MEMORY_MARKER = '__agentMemory';
@@ -166,11 +167,7 @@ export class AgentMemory extends MastraMemory {
   }
 
   private scopesFor(resourceId: string | undefined, threadId: string): string[][] {
-    const scopes: string[][] = [[this.scopePrefix, 'thread', threadId]];
-    if (resourceId) {
-      scopes.unshift([this.scopePrefix, 'resource', resourceId]);
-    }
-    return scopes;
+    return memoryScopes(this.scopePrefix, resourceId, threadId);
   }
 
   /**
@@ -182,8 +179,7 @@ export class AgentMemory extends MastraMemory {
     if (this.recallScope === 'thread') {
       return threadId ? [[this.scopePrefix, 'thread', threadId]] : undefined;
     }
-    if (threadId) return this.scopesFor(resourceId, threadId);
-    return resourceId ? [[this.scopePrefix, 'resource', resourceId]] : undefined;
+    return memoryLens(this.scopePrefix, resourceId, threadId);
   }
 
   /**
@@ -373,7 +369,9 @@ export class AgentMemory extends MastraMemory {
     const store = await this.getMemoryStore();
     await store.deleteThread({ threadId });
     this.sessionCache.delete(threadId);
-    await this.mirror(() => this.agentMemory.forget(`thread ${threadId}`, { purge: true }));
+    // Facts Agent Memory derived from the thread stay: its forget API matches a
+    // natural-language query across the whole context, which could erase other
+    // threads' facts, and there is no way to forget only this thread's scope.
   }
 
   async deleteMessages(messageIds: MessageDeleteInput): Promise<void> {
