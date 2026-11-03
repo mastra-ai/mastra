@@ -902,7 +902,7 @@
     "@lukeed/uuid": "^2.0.1",
     "@mastra/schema-compat": "workspace:*",
     "@standard-schema/spec": "^1.1.0",
-    "chat": "^4.43.0",
+    "chat": "catalog:",
     "croner": "^10.0.1",
     "dotenv": "^17.4.2",
     "execa": "^9.6.1",
