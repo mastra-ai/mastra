@@ -6,6 +6,7 @@ Dashboard chart cards can now link to a fuller view, and line charts can mark po
 
 - `DashboardRenderer` takes an `expand` option. When `expand.href(widget)` returns a URL, the card shows its title as a link with an expand icon, in place of its views menu.
 - `MetricsLineChart` takes `markers`: dashed vertical lines at buckets, for example where a billing period starts. Each marker's `x` must match a bucket's `xKey` value.
+- `DateTimeRangePicker` (and `FilterBar.TimeRange`) take `namedRanges`: fixed ranges such as the current billing period, listed above the presets and named on the trigger while applied.
 
 ```tsx
 <DashboardRenderer

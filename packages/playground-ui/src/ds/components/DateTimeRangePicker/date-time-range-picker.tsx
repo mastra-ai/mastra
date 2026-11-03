@@ -21,6 +21,8 @@ const DATE_PRESETS: { value: DateRangePreset; label: string; ms?: number }[] = [
   { value: 'custom', label: 'Custom range...' },
 ];
 
+const sameTime = (a: Date | undefined, b: Date | undefined) => a?.getTime() === b?.getTime();
+
 const fmtClock = (d: Date) =>
   d.toLocaleTimeString('en-US', d.getMinutes() === 0 ? { hour: 'numeric' } : { hour: 'numeric', minute: '2-digit' });
 
@@ -41,6 +43,9 @@ function customRangeLabel(dateFrom: Date | undefined, dateTo: Date | undefined) 
   return `${start} \u2013 ${sameDay ? fmtClock(dateTo) : fmtMoment(dateTo)}`;
 }
 
+/** A fixed range offered beside the presets, e.g. the current billing period. */
+export type DateTimeRangePickerNamedRange = { label: string; from: Date; to?: Date };
+
 export interface DateTimeRangePickerProps {
   preset?: DateRangePreset;
   onPresetChange?: (preset: DateRangePreset) => void;
@@ -59,6 +64,11 @@ export interface DateTimeRangePickerProps {
   minDate?: Date;
   /** Subset of presets to show. If omitted, all presets are shown. */
   presets?: readonly DateRangePreset[];
+  /**
+   * Fixed ranges listed above the presets, e.g. `{ label: 'This period', from: periodStart }`.
+   * Picking one applies it as a custom range; while it's applied the trigger shows its label.
+   */
+  namedRanges?: readonly DateTimeRangePickerNamedRange[];
   /** Size of the trigger Button. Defaults to 'sm', the toolbar rung. */
   size?: TextButtonSize;
   /**
@@ -83,6 +93,7 @@ export function DateTimeRangePicker({
   maxRangeMs,
   minDate,
   presets,
+  namedRanges = [],
   size = 'sm',
   defaultPreset,
   onReset,
@@ -144,9 +155,19 @@ export function DateTimeRangePicker({
     setPresetMenuOpen(true);
   };
 
-  const canReset = defaultPreset !== undefined && shownPreset === 'custom';
-  const editingCustomRange = shownPreset === 'custom' && !presetMenuOpen;
-  const label = shownPreset === 'custom' ? customRangeLabel(dateFrom, dateTo) : datePresetLabel;
+  // The applied custom range, when it is one of the named ranges.
+  const namedIndex =
+    shownPreset === 'custom' ? namedRanges.findIndex(r => sameTime(r.from, dateFrom) && sameTime(r.to, dateTo)) : -1;
+  const named = namedRanges[namedIndex];
+  const canReset = defaultPreset !== undefined && shownPreset === 'custom' && !named;
+  const editingCustomRange = shownPreset === 'custom' && !presetMenuOpen && !named;
+  const label = named ? named.label : shownPreset === 'custom' ? customRangeLabel(dateFrom, dateTo) : datePresetLabel;
+
+  const applyNamedRange = (range: DateTimeRangePickerNamedRange) => {
+    setPresetMenuOpen(false);
+    onPresetChange?.('custom');
+    applyCustomRange(range.from, range.to);
+  };
   const trigger = (
     <Button
       ref={ref}
@@ -190,7 +211,18 @@ export function DateTimeRangePicker({
           <DropdownMenu.Content align="start">
             {/* Items select on click (not onValueChange) so re-picking the checked
               "Custom range..." still reopens the range editor. */}
-            <DropdownMenu.RadioGroup value={shownPreset}>
+            <DropdownMenu.RadioGroup value={named ? `named-${namedIndex}` : shownPreset}>
+              {namedRanges.map((r, i) => (
+                <DropdownMenu.RadioItem
+                  key={`named-${i}`}
+                  value={`named-${i}`}
+                  closeOnClick
+                  onClick={() => applyNamedRange(r)}
+                >
+                  {r.label}
+                </DropdownMenu.RadioItem>
+              ))}
+              {namedRanges.length > 0 && <DropdownMenu.Separator />}
               {visiblePresets.map(p => (
                 <DropdownMenu.RadioItem
                   key={p.value}
