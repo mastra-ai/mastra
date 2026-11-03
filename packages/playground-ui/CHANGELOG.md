@@ -1,5 +1,42 @@
 # @mastra/playground-ui
 
+## 68.0.0-alpha.4
+
+### Minor Changes
+
+- Dashboard chart cards can now link to a fuller view, and line charts can mark points in time. ([#29266](https://github.com/mastra-ai/mastra/pull/29266))
+
+  - `DashboardRenderer` takes an `expand` option. When `expand.href(widget)` returns a URL, the card shows its title as a link with an expand icon, in place of its views menu.
+  - `MetricsLineChart` takes `markers`: dashed vertical lines at buckets, for example where a billing period starts. Each marker's `x` must match a bucket's `xKey` value.
+  - `DateTimeRangePicker` (and `FilterBar.TimeRange`) take `namedRanges`: fixed ranges such as the current billing period, listed above the presets and named on the trigger while applied.
+
+  ```tsx
+  <DashboardRenderer
+    definition={definition}
+    scope="project"
+    expand={{ href: widget => `/query?widget=${widget.id}`, LinkComponent: RouterLink }}
+  />
+
+  <MetricsLineChart data={data} series={series} markers={[{ x: "2026-11-01", label: "Period starts" }]} />
+  ```
+
+  Metrics charts now use thin lines, and the large card header no longer shifts when its value finishes loading.
+
+### Patch Changes
+
+- Fixed Studio's MCP input request card so questions keyed `constructor` or `__proto__` can be answered and their answers are sent. ([#29306](https://github.com/mastra-ai/mastra/pull/29306))
+
+- Improved the connect card that `request_connection` renders in chat: ([#29210](https://github.com/mastra-ai/mastra/pull/29210))
+
+  - **Resumes the agent:** the card now appears while the run is paused on `request_connection`. Once the user's connection settles, the card resumes the paused tool, so the agent continues from the tool result. If the connection fails, the tool result includes the same reason the card shows. No message is added to the chat.
+  - **Shows the new tools right away:** agent and tool lists refresh as soon as a connection activates or is disconnected.
+  - **Loading state on the Connections page:** the connections table shows skeleton rows while it loads, instead of a bare spinner.
+
+- Updated dependencies [[`7c242c5`](https://github.com/mastra-ai/mastra/commit/7c242c55c565e9c447ab74a6f529612f0030f061)]:
+  - @mastra/core@1.82.0-alpha.4
+  - @mastra/client-js@1.59.0-alpha.4
+  - @mastra/react@1.14.1-alpha.4
+
 ## 68.0.0-alpha.3
 
 ### Minor Changes
