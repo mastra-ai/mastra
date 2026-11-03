@@ -70,7 +70,16 @@ export function createSlackChatTools({
     getThreadParticipants: getThreadParticipants(chat, anyChannel),
     getChannelInfo: getChannelInfo(chat, anyChannel),
     postMessage: note(postMessage(chat, write)),
-    postChannelMessage: postChannelMessage(chat, write),
+    // Given a thread id, Slack would silently post a new top-level message
+    // instead of replying in that thread.
+    postChannelMessage: postChannelMessage(chat, {
+      needsApproval: false,
+      guard: id => {
+        if (id.split(':').length > 2) {
+          throw new Error(`"${id}" is a thread, not a channel. Use postMessage to reply in a thread.`);
+        }
+      },
+    }),
     findChannel: createTool({
       id: 'findChannel',
       description:

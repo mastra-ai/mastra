@@ -209,6 +209,15 @@ describe('Slack tools on a Factory session', () => {
     expect(sent('chat.postMessage')).toEqual([expect.objectContaining({ channel: 'C2', text: 'On it.' })]);
   });
 
+  it("won't turn a thread reply into a new top-level post", async () => {
+    const { run } = await slackSession();
+
+    await expect(
+      run('postChannelMessage', { channelId: 'slack:C2:1700000000.000100', message: 'Replying here' }),
+    ).rejects.toThrow('Use postMessage to reply in a thread');
+    expect(sent('chat.postMessage')).toEqual([]);
+  });
+
   it("can't read a channel the app isn't in: Slack refuses it", async () => {
     const { run } = await slackSession();
 
