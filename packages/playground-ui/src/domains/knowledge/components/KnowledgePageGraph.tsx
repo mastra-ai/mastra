@@ -1346,18 +1346,23 @@ function KnowledgePageGraphInner({
     if (!container || typeof ResizeObserver === 'undefined') return;
     let last = { width: container.clientWidth, height: container.clientHeight };
     let frame: number | undefined;
+    // Set while the pane has been hidden, until a fit has run. A second resize can cancel the frame that
+    // would have fitted, so this has to outlive the callback.
+    let needsFit = false;
     const observer = new ResizeObserver(([entry]) => {
       if (!entry) return;
       const { width, height } = entry.contentRect;
       const changed = width !== last.width || height !== last.height;
-      const wasHidden = last.width === 0 || last.height === 0;
+      if (last.width === 0 || last.height === 0) needsFit = true;
       last = { width, height };
       if ((!changed && !fitPending.current) || width === 0 || height === 0) return;
       if (frame !== undefined) cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
         frame = undefined;
-        if (wasHidden || fitPending.current) fit(true);
-        else panToSelection();
+        if (needsFit || fitPending.current) {
+          needsFit = false;
+          fit(true);
+        } else panToSelection();
       });
     });
     observer.observe(container);

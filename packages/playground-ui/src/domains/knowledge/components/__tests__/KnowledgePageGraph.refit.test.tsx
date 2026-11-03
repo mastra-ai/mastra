@@ -105,6 +105,27 @@ describe('KnowledgePageGraph inside a host that hides or resizes it', () => {
     expect(setViewport).toHaveBeenCalledTimes(1);
   });
 
+  it('still fits when a second resize lands before the frame that would fit the shown graph', async () => {
+    const container = await renderGraph();
+    act(() => {
+      resize(container, 358, 392);
+      flushFrames();
+    });
+    act(() => {
+      resize(container, 0, 0);
+      flushFrames();
+    });
+    currentZoom = 0.5;
+    setViewport.mockClear();
+    act(() => {
+      resize(container, 358, 392);
+      resize(container, 400, 420);
+      flushFrames();
+    });
+    expect(setViewport).toHaveBeenCalledTimes(1);
+    expect(setViewport.mock.calls[0]?.[0].zoom).not.toBe(0.5);
+  });
+
   it('keeps the zoom the user chose when the graph is resized, once per frame', async () => {
     const container = await renderGraph();
     act(() => {
