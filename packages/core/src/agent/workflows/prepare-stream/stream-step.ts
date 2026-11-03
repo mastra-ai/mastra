@@ -3,7 +3,6 @@ import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
-import { hydrateSuspendedStreamState } from '../../../loop/suspended-stream-state';
 import type { AgentLoopResumeClaim, ToolCallConcurrency } from '../../../loop/types';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
@@ -34,6 +33,8 @@ interface StreamStepOptions<OUTPUT = undefined> {
     snapshot: any;
     claim?: AgentLoopResumeClaim;
   };
+  /** The resume snapshot with its transcript hydrated from memory; set when resuming. */
+  getResumeSnapshot?: () => Promise<any>;
   agentId: string;
   agentVersionId?: string;
   resolvedScopes?: string[];
@@ -69,6 +70,7 @@ export function createStreamStep<OUTPUT = undefined>({
   eagerToolExecution,
   streamPublisher,
   resumeContext,
+  getResumeSnapshot,
   agentId,
   agentVersionId,
   resolvedScopes,
@@ -113,12 +115,7 @@ export function createStreamStep<OUTPUT = undefined>({
 
       const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
-      const resumeSnapshot =
-        resumeContext &&
-        (await hydrateSuspendedStreamState(resumeContext.snapshot, memory, {
-          logger: capabilities.logger,
-          runId: _runId,
-        }));
+      const resumeSnapshot = resumeContext && (await getResumeSnapshot?.());
 
       const streamResult = capabilities.llm.stream({
         ...loopOptions,

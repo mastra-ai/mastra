@@ -3,6 +3,7 @@ import type { ActorSignal, MastraFGAPermissionInput } from '../../../auth/ee';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
+import { hydrateSuspendedStreamState } from '../../../loop/suspended-stream-state';
 import type { AgentLoopResumeClaim, ToolCallConcurrency } from '../../../loop/types';
 import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
@@ -140,6 +141,17 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     return check;
   };
 
+  // Hydrated once: prepare-tools-step restores processor-loaded tools from the
+  // suspended transcript, and stream-step resumes the loop from it.
+  let resumeSnapshot: Promise<any> | undefined;
+  const getResumeSnapshot = resumeContext
+    ? () =>
+        (resumeSnapshot ??= hydrateSuspendedStreamState(resumeContext.snapshot, memory, {
+          logger: capabilities.logger,
+          runId,
+        }))
+    : undefined;
+
   const prepareToolsStep = createPrepareToolsStep({
     capabilities,
     options,
@@ -151,6 +163,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     methodType,
     memory,
     backgroundTaskEnabled: backgroundTaskManager?.config?.enabled,
+    getResumeSnapshot,
     runScope,
   });
 
@@ -180,6 +193,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     eagerToolExecution,
     streamPublisher,
     resumeContext,
+    getResumeSnapshot,
     agentId,
     agentVersionId,
     resolvedScopes,

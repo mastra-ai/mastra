@@ -1,6 +1,6 @@
 {
   "name": "@mastra/evals",
-  "version": "1.10.10",
+  "version": "1.10.11-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -100,7 +100,7 @@
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0",
-    "vitest": ">=3.0.0 <5.0.0"
+    "vitest": ">=3.0.0 <6.0.0"
   },
   "peerDependenciesMeta": {
     "vitest": {
@@ -121,7 +121,7 @@
     "@types/string-similarity": "^4.0.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",

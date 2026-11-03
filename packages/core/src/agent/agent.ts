@@ -10458,6 +10458,11 @@ export class Agent<
     return aborted;
   }
 
+  /** @internal Abort the thread's run even when another process executes it, reporting whether one was asked to stop. */
+  async __abortThreadStreamAcrossProcesses(options: AgentAbortThreadOptions): Promise<boolean> {
+    return this.abortThreadStream(options);
+  }
+
   abortRunStream(runId: string): boolean {
     const aborted = this.#abortLocalRun(runId);
     if (aborted) return true;

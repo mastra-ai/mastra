@@ -23,7 +23,7 @@ import type {
   IntakeStorage,
 } from '../storage/domains/intake/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
@@ -245,11 +245,8 @@ async function githubRepositoryBoards({
   return boards;
 }
 
-function cardInRepository(
-  item: { metadata?: Record<string, unknown> | null; externalSource?: { url?: string } | null },
-  repository: GithubRepositoryBoard,
-): boolean {
-  const repositoryId = item.metadata?.githubRepositoryId;
+function cardInRepository(item: Card, repository: GithubRepositoryBoard): boolean {
+  const repositoryId = item.workItem.metadata?.githubRepositoryId;
   if (
     repository.externalId !== undefined &&
     repositoryId !== undefined &&

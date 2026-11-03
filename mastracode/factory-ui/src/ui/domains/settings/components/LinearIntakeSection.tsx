@@ -4,12 +4,13 @@ import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIntakeBindingsQuery } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
-import { isLinearReauthError, linearTeamSourceId } from '../../factory/services/linear';
+import { isLinearReauthError, isLinearTeamSourceId, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearStatus } from '../../factory/services/linear';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { RoutedSourcePicker } from './IntakeSourceRouting';
-import { groupLinearSourcesByTeam } from './intakeSourceGroups';
+import { DisconnectedLinearWorkspaces } from './DisconnectedLinearWorkspaces';
+import { groupLinearSourcesByTeam, partitionLinearSources } from './intakeSourceGroups';
 import { LinearRepositoryMappings } from './LinearRepositoryMappings';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
@@ -32,6 +33,20 @@ export function LinearIntakeSection({
   const bindings = bindingsQuery.data ?? [];
   const reauthRequired = isLinearReauthError(projectsQuery.error) || isLinearReauthError(teamsQuery.error);
   const sourceError = projectsQuery.isError || teamsQuery.isError;
+  const groups = groupLinearSourcesByTeam(projects, teams, config.linear.sourceIds);
+  const sourcesLoaded = projectsQuery.isSuccess && teamsQuery.isSuccess;
+  const sources = sourcesLoaded
+    ? partitionLinearSources(config.linear.sourceIds, groups)
+    : { selectedIds: config.linear.sourceIds ?? [], disconnected: [] };
+  const listedIds = new Set(groups.flatMap(group => group.items.map(item => item.id)));
+  const missingIds = sources.selectedIds.filter(id => !listedIds.has(id));
+  function missingSourceLabel(id: string) {
+    const team = isLinearTeamSourceId(id);
+    const sameKind = missingIds.filter(missing => isLinearTeamSourceId(missing) === team);
+    const kind = team ? 'Linear team' : 'Linear project';
+    const label = sourcesLoaded ? `Unknown ${kind}` : kind;
+    return sameKind.length > 1 ? `${label} ${sameKind.indexOf(id) + 1}` : label;
+  }
   const description = connectionDescription();
   function connectionDescription() {
     if (statusQuery.isError) return "Couldn't load Linear status.";
@@ -89,6 +104,16 @@ export function LinearIntakeSection({
         )
       }
     >
+      {connected && config.linear.enabled && !reauthRequired && sources.disconnected.length > 0 && (
+        <DisconnectedLinearWorkspaces
+          workspaces={sources.disconnected}
+          pending={busy}
+          onRemove={sourceIds => {
+            const next = (config.linear.sourceIds ?? []).filter(id => !sourceIds.includes(id));
+            update({ ...config, linear: { ...config.linear, sourceIds: next.length ? next : null } });
+          }}
+        />
+      )}
       {connected && config.linear.enabled && !reauthRequired && (
         <RoutedSourcePicker
           integrationId="linear"
@@ -97,8 +122,9 @@ export function LinearIntakeSection({
           label="Linear projects and teams"
           addLabel="Add project or team"
           itemIcon={<SettingsIntegrationIcon provider="linear" />}
-          groups={groupLinearSourcesByTeam(projects, teams, config.linear.sourceIds)}
-          selectedIds={projectsQuery.isPending ? [] : config.linear.sourceIds}
+          groups={groups}
+          selectedIds={projectsQuery.isPending || teamsQuery.isPending ? [] : sources.selectedIds}
+          fallbackLabel={missingSourceLabel}
           pending={busy}
           loading={projectsQuery.isPending}
           error={sourceError ? "Couldn't load Linear projects and teams." : undefined}

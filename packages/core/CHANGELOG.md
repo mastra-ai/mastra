@@ -1,5 +1,182 @@
 # @mastra/core
 
+## 1.82.0-alpha.3
+
+### Minor Changes
+
+- Fixed evented durable agents stopping when the API process shuts down. Workers now keep running the agent, finish cleanup, and free the thread, so the next message starts right away. ([#28951](https://github.com/mastra-ai/mastra/pull/28951))
+
+  Each run keeps its own ownership. Nested durable agents and runs that share a `RequestContext` no longer pick up each other's ownership. Canceling a suspended run still notifies listeners, and a late cancel can no longer stop a newer run of the same agent.
+
+  This needs storage that supports run fencing. Other shared setups keep their current behavior and log a warning once per agent: API shutdown can still stop remote workers. Single-process setups are unchanged.
+
+  To enable worker continuity across API loss, use a shared fencing-capable adapter, such as `PostgresStore` from `@mastra/pg`, and a shared pubsub transport:
+
+  ```ts
+  new Mastra({
+    storage: new PostgresStore({ id: 'shared-storage', connectionString }),
+    pubsub,
+    agents: { agent: createEventedAgent({ agent, pubsub }) },
+  });
+  ```
+
+- Agents can pin a listing of the Knowledge page tree with `knowledge_pin`. Pass `kind: 'list'` and an optional `depth` (1 to 3, default 1) to pin the pages under a page instead of the page itself: ([#29263](https://github.com/mastra-ai/mastra/pull/29263))
+
+  ```json
+  { "op": "pin", "kind": "list", "depth": 2, "page": "docs:acme#guides", "audience": ["org:acme"] }
+  ```
+
+  A page can hold a page pin and a listing pin at once; each is pinned and unpinned on its own, and pinning a listing again sets its new depth. Stored listings follow the same rules as config listings: only pages the run can read, one pin slot, shared `pinnedContext.maxTokens`. A stored listing that repeats a config listing is shown once.
+
+  Knowledge storage adapters store a pin `kind` (`page` or `list`) and a list pin's `depth`. Adapters report this with the `supportsPinKinds` capability. With a storage adapter from before this release, page pins keep working and pinning a listing is refused before anything is stored, with a message to upgrade the adapter.
+
+- Pin a listing of the Knowledge page tree into an agent's context. A scope's `pinnedContext` now also takes `{ list, depth? }` entries, so every run holding the scope sees the pages under a scope or page (ref, name and child count each) without calling `knowledge_list`: ([#29263](https://github.com/mastra-ai/mastra/pull/29263))
+
+  ```ts
+  scopes: {
+    'org:$orgId': { pinnedContext: [{ list: 'docs:$orgId#guides', depth: 1 }] },
+  }
+  ```
+
+  A listing shows only pages the run can read, updates when a listed page is added, renamed or removed, takes one pin slot and shares `pinnedContext.maxTokens` with pinned pages. A listing cut short ends with a `knowledge_list` pointer to the rest.
+
+- Added vector and hybrid workspace search for vector stores that generate embeddings themselves, so no `embedder` is needed. ([#27022](https://github.com/mastra-ai/mastra/pull/27022))
+
+  With MongoDB Automated Embedding, MongoDB embeds each file when it is indexed and the search string when you query:
+
+  ```ts
+  const workspace = new Workspace({
+    filesystem: new LocalFilesystem({ basePath: './workspace' }),
+    vectorStore: new MongoDBVector({ id: 'search', uri, dbName, autoEmbed: { model: 'voyage-4' } }),
+  });
+
+  await workspace.rebuildSearchIndex(['docs']);
+  await workspace.search('how do I reset a password?');
+  ```
+
+  The index is named `<workspace id>_search_selfembed` unless you set `searchIndexName`. Workspaces that pass an `embedder` keep working unchanged.
+
+### Patch Changes
+
+- dependencies updates: ([#29242](https://github.com/mastra-ai/mastra/pull/29242))
+  - Updated dependency [`@ai-sdk/provider-utils-v6@npm:@ai-sdk/provider-utils@4.0.63` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v6/v/4.0.63) (from `npm:@ai-sdk/provider-utils@4.0.62`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-utils-v7@npm:@ai-sdk/provider-utils@5.0.72` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-utils-v7/v/5.0.72) (from `npm:@ai-sdk/provider-utils@5.0.69`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/provider-v7@npm:@ai-sdk/provider@4.0.35` ↗︎](https://www.npmjs.com/package/@ai-sdk/provider-v7/v/4.0.35) (from `npm:@ai-sdk/provider@4.0.34`, in `dependencies`)
+
+- Fixed thread aborts for durable agents on multi-server deployments. Aborting a thread on a server that didn't start the run now stops the run on whichever server executes it, as aborting by run id already did. A run parked on a suspension, such as a tool waiting for approval, is released too. ([#28345](https://github.com/mastra-ai/mastra/pull/28345))
+
+  ```ts
+  agent.abortThreadStream({ resourceId, threadId });
+  // or POST /agents/:agentId/threads/abort
+  ```
+
+  The server finds the run through the thread lease, so this needs a pubsub with a shared lease backend such as Redis or Valkey.
+
+  **Return values**
+
+  - The HTTP route returns `{ aborted: true }` once the abort request is published, and an error if the lease backend can't be reached or doesn't answer in time.
+  - The synchronous `abortThreadStream` still returns `false` for a run on another server, because it can't wait for the lookup.
+  - An `expectedRunId` that doesn't match the running run leaves it alone and returns `false`.
+
+  **Queued input**
+
+  With `clearPendingSignals: true`, the server running the run clears its queued input before stopping it, as long as that run still holds the thread. Input queued for a run that has since taken over the thread is kept.
+
+- Updated `chat` and the Chat SDK adapters to ^4.44.0, so all Mastra channel packages resolve the same `chat` version. ([#29285](https://github.com/mastra-ai/mastra/pull/29285))
+
+- Improved how Knowledge reads fenced code and headings in page bodies, to match CommonMark: ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+  - Fenced code ends only on a fence of the same character, at least as long, with nothing after it. A ` ` `block can show` ```js ```` lines without breaking a page's sections, outline or embedding chunks. A fence indented four or more spaces is indented code and doesn't open or close a block.
+  - A heading keeps a `#` that's part of its title: `## Use C#` is the section "Use C#".
+  - Reading the last part of a page whose body ends in a newline returns a range that `knowledge_page` accepts back for an edit.
+
+  Embedding a long page now runs up to 4 chunk embeddings at once (one at a time when the embedding model doesn't support parallel calls), and one semantic search looks at no more than 1,000 distinct pages and notes.
+
+- `knowledge_list` now asks the store for only the child scopes the agent can read, and counts them in one call per level, instead of reading every child scope and dropping the unreadable ones. Listing under a scope with many private child scopes no longer loads all of them. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+- Knowledge pages too long for the embedder are now searchable by meaning. A long page is embedded as overlapping chunks of about 2,000 tokens, cut between paragraphs and before headings, and semantic search still returns the page once, ranked by its best chunk. Before, the embedder refused these pages and they could only be found by keyword. Rewriting a page replaces its chunks, and deleting it removes them all. Pages embedded before this change keep working; a page that was too long is chunked the next time it changes. ([#29218](https://github.com/mastra-ai/mastra/pull/29218))
+
+  A page is embedded as at most 100 chunks (about 200,000 tokens of body); past that, the rest of the body is found by keyword only. A page's name and description lead every chunk, up to 500 tokens. One semantic search looks at up to 1,000 distinct pages and notes (up to 10,000 vectors). A rewrite drops the page's old chunks by id after the new ones are stored; on a vector store that can't delete by id, old chunks stay but only ever point back to the same page.
+
+- Knowledge page and note writes now retry a failed embed or vector write a few times over about 10 seconds before giving up. That gives a cold scale-to-zero database (Neon, Lakebase) time to wake, so its pages aren't silently left out of semantic search. If every try fails, the write still succeeds and the warning names the page, for example `Knowledge couldn't embed page "docs:acme#guides/cli" after retrying; it is findable by keyword search only until it is rewritten`. Errors the embedding provider marks as not retryable, such as an input over its limit, are not retried. ([#29288](https://github.com/mastra-ai/mastra/pull/29288))
+
+- Fixed pinned Knowledge listings stopping at 100 pages per level. A listing now reads every child of a page while its token budget has room, and only ends with "…and more" when the budget runs out. ([#29298](https://github.com/mastra-ai/mastra/pull/29298))
+
+- `GET /knowledge/:knowledgeKey/pages/:pageId` also opens a page by the reference tools name it with: a scope address (`site:mastra`) or `scope#key/path` (`site:mastra#topics/observability`). It reads only what the caller can read, and an unreadable or unknown reference still returns 404. ([#29215](https://github.com/mastra-ai/mastra/pull/29215))
+
+- Sped up `readKnowledgePageGraph`, which loads the Studio Knowledge graph, on large page trees. It now reads the tree a level at a time: one child-page count for the whole level, a listing only for pages that have children, one note count across the walked pages, and one lookup for linked pages outside the walk. A 300-page tree went from 1,221 sequential storage calls to 37, which matters most on remote databases such as Turso. The returned graph is unchanged. ([#29288](https://github.com/mastra-ai/mastra/pull/29288))
+
+- Added an index of the `[[links]]` in Knowledge page bodies, so a host can count and list which pages link where without loading every page. `countPageLinks` and `listPageLinks` on the Knowledge store return in and out links for a set of pages, gated by the reader's scopes like every other read. Note `[[mentions]]` show up there as `note` links. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+  **How links resolve**
+
+  - Links resolve when a page is written through the Knowledge tools, `upsertPage` or `removePage`.
+  - A link matches by page id, `scope#key/key` path, scope address or page name: the page's own scope first, then the whole store.
+  - A link to a page that doesn't exist yet resolves once that page is created. It follows renames and moves, and goes back to unresolved when its target is deleted or merged away.
+  - One write re-resolves at most 100 pages that link to what it changed. Past that it logs a warning, and the rest catch up when they are next written or when `knowledge.reindexLinks()` runs.
+
+  Pages written before this release, or straight to the store, aren't indexed until they are written again. Run `knowledge.reindexLinks()` once to index them all; it needs no vector store.
+
+  ```ts
+  await knowledge.reindexLinks();
+  const store = await mastra.getStorage()!.getStore('knowledge');
+  const counts = await store!.countPageLinks({ pageIds: [page.id], read: 'all' });
+  // { [page.id]: { in: 3, out: 1 } }
+  ```
+
+- Added `readKnowledgePageLinkCounts` and `readKnowledgePageLinks` to `@mastra/core/knowledge`: exact link counts for any set of pages and one page's links with the pages at their other ends, read from the store's link index and filtered by the caller's read scope. Both return `null` when the store has no link index. ([#29260](https://github.com/mastra-ai/mastra/pull/29260))
+
+  ```ts
+  import { readKnowledgePageLinkCounts, readKnowledgePageLinks } from '@mastra/core/knowledge';
+
+  const counts = await readKnowledgePageLinkCounts(store, { pageIds: [pageId], read });
+  if (counts === null) {
+    // this store has no link index
+  }
+  const links = await readKnowledgePageLinks(store, { pageId, read, direction: 'out' });
+  ```
+
+- `pinnedContext.maxTokens` no longer has a 2,000-token ceiling. It budgets pinned pages only, so set it below your model's context limit to leave room for instructions, conversation history and model output, for example `pinnedContext: { maxTokens: 8000 }`. The default is still 500. ([#29257](https://github.com/mastra-ai/mastra/pull/29257))
+
+- Fill pinned Knowledge listings level by level within their token budget. A listing with `depth` 2 or 3 now shows every child that fits first, then grandchildren, and so on, instead of stopping at a fixed 50 entries in sibling order. Each entry still prints under its parent, and a listing that is cut still ends with `…and more; knowledge_list from: "<ref>"`. ([#29263](https://github.com/mastra-ai/mastra/pull/29263))
+
+- The `knowledge_read` tool now tells the model that a read from a line runs until the page ends or the read's token cap is reached, and that `limit` caps notes, children and mentioning notes, not lines. Models had been passing `limit` expecting a set number of lines back. ([#29258](https://github.com/mastra-ai/mastra/pull/29258))
+
+- Removed `knowledge.reindex()`. It re-embedded every page and note in the store, which is slow and costly on a large store. Pages and notes are embedded when they're written through the Knowledge tools, `upsertPage` or the note methods. If an embed fails, the write still succeeds and the content stays findable by keyword search; it's embedded again the next time it changes. `upsertPage` skips writes whose content is unchanged, so sending identical content again doesn't retry a failed embed; the Knowledge tools and `updateNote` embed on every write. ([#29256](https://github.com/mastra-ai/mastra/pull/29256))
+
+  If you called `reindex()` after loading content, delete the call and load the content through `upsertPage` instead, which embeds each new or changed page as it's written. There is no bulk re-embed for content that's already stored:
+
+  ```ts
+  // Before
+  await knowledge.reindex();
+
+  // After
+  await knowledge.upsertPage({ scope: 'org:acme', path: 'refunds', name: 'Refund policy', body });
+  ```
+
+- Fixed read-only Knowledge runs filling storage with empty scopes. A run that only searches, lists or reads Knowledge, and pinned-context delivery each turn, no longer creates the run's `resource:`, `thread:` or other held scopes. A held scope is created, with its template pages and its `belongsTo` placement, the first time a run writes Knowledge (`knowledge_page`, `knowledge_note`, `knowledge_pin`). ([#29288](https://github.com/mastra-ai/mastra/pull/29288))
+
+  Before, a Slack agent that only answered questions with `knowledge_search` created an empty `resource:slack:<userId>` and `thread:` scope for every user and conversation, which filled the Studio tree.
+
+  A scope with no pages yet reads as not found until the first write creates it.
+
+- Knowledge tree child counts now say when they were capped. If a scope has more child scopes than the 1,000 the tree looks through for each level, the page gets `childCountCapped: true` and its `childCount` is a lower bound. The Knowledge explorer then shows the count as "1000+" in the tree and in the graph's "pages under" line, instead of a number that's too low. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+- Each page in a Knowledge tree level (`GET /api/knowledge/:knowledgeKey/tree`, `listKnowledgeTreeChildren`) now carries `childCount`: how many readable pages, and for a scope how many readable child scopes, sit directly under it. A browsing UI can show the count and offer to open only pages that have children. The count is left out when the storage adapter can't count children yet. ([#29216](https://github.com/mastra-ai/mastra/pull/29216))
+
+  ```ts
+  const level = await client.getKnowledge('main').tree({ parentId: scopeId });
+  level.pages.map(page => `${page.name} (${page.childCount ?? '?'})`);
+  ```
+
+  Storage adapters gain `countChildPages({ parentIds, read })`, which counts a batch of parents' child pages in one query (in-memory, LibSQL, PostgreSQL, MySQL, MongoDB).
+
+- Fixed approving a tool loaded by `ToolSearchProcessor` after a server restart. The approved call failed with `Tool "<name>" not found` when memory no longer returned the search result. It now runs with the tools it had when the model made the call. Fixes [#29196](https://github.com/mastra-ai/mastra/issues/29196). ([#29251](https://github.com/mastra-ai/mastra/pull/29251))
+
+- Fixed controller tool status for validation failures and explicit error results, including delegated tool results. Successful results containing business error fields retain their successful status. ([#28812](https://github.com/mastra-ai/mastra/pull/28812))
+
+- Fixed dataset experiments that target a workflow so their traces carry the experiment ID. Workflow runs and every auto-resume now include `experimentId` in tracing metadata, so Studio's experiment page shows total cost, tokens and run duration for workflow experiments, the same as it does for agent experiments. ([#29245](https://github.com/mastra-ai/mastra/pull/29245))
+
 ## 1.82.0-alpha.2
 
 ### Minor Changes

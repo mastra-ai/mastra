@@ -8,6 +8,8 @@ import { MC_TOOLS } from '../../tool-names.js';
 
 interface ToolGuidanceOptions {
   hasWebSearch?: boolean;
+  /** `web_extract` is registered (Parallel/Tavily); provider-executed search has no extract tool. */
+  hasWebExtract?: boolean;
   hasSubagents?: boolean;
   /** Tool names that have been denied — omit their guidance sections. */
   deniedTools?: Set<string>;
@@ -130,10 +132,16 @@ You have access to the following tools. Use the RIGHT tool for the job:`);
   if (options.hasWebSearch) {
     const webTools: string[] = [];
     if (!denied.has('web_search')) webTools.push('**web_search**');
-    if (!denied.has('web_extract')) webTools.push('**web_extract**');
+    if (options.hasWebExtract && !denied.has('web_extract')) webTools.push('**web_extract**');
     if (webTools.length > 0) {
+      const purpose =
+        webTools.length === 2
+          ? 'Search the web / extract page content'
+          : webTools[0] === '**web_search**'
+            ? 'Search the web'
+            : 'Extract page content';
       sections.push(`
-${webTools.join(' / ')} — Search the web / extract page content
+${webTools.join(' / ')} — ${purpose}
 - Use for looking up documentation, error messages, package APIs.`);
     }
   }
