@@ -18,7 +18,8 @@ interface SessionThinkingControlProps {
 }
 
 type ThinkingControlState =
-  { unavailableReason: string; lockedLevel?: ThinkingLevelSetting } | { effective: EffectiveThinkingLevel };
+  | { unavailableReason: string; lockedLevel?: ThinkingLevelSetting }
+  | { effective: EffectiveThinkingLevel };
 
 function thinkingControlState({
   catalog,
