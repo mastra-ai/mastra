@@ -76,7 +76,7 @@ In an agent's chat, Knowledge tool calls show the pages they read or wrote, and 
 What the routes return depends on whether your app configures auth (`server.auth` or `studio.auth`):
 
 - **No auth:** the routes read as the instance owner and return every scope, page and note to anyone who can reach the server. Use this only for a local or test project, and add auth before you deploy.
-- **Auth:** the routes return only what the signed-in user can read. In `authorize`, set the request context key `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` to the user's Knowledge scopes. Knowledge applies the same access rules agents use. A user with no scopes set gets `403`.
+- **Auth:** the routes return only what the signed-in user can read. In `authorize`, set the request context key `MASTRA_KNOWLEDGE_PRINCIPALS_KEY` to the user's Knowledge scopes. Knowledge applies the same access rules agents use. A user with no scopes set gets `403`. In the alpha, these rules aren't an [isolation boundary](/docs/knowledge/scopes-and-access), so don't store content that must never reach another user.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
