@@ -96,11 +96,11 @@ describe('cardMoves', () => {
     expect(cardMoves(normalizedIssue, 'intake')).toEqual([
       { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
     ]);
-    expect(cardMoves({ ...normalizedIssue, acceptedAt: '2026-08-30T00:00:00.000Z' }, 'triage')).toEqual([
-      investigate,
-      build,
+    const legacyAcceptedIssue = { ...normalizedIssue, acceptedAt: '2026-08-30T00:00:00.000Z' };
+    expect(cardMoves(legacyAcceptedIssue, 'triage')).toEqual([
+      { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
     ]);
-    expect(cardMoves({ ...normalizedIssue, stages: ['planning'] }, 'planning')).toEqual([investigate, build]);
+    expect(cardMoves({ ...normalizedIssue, stages: ['planning'] }, 'planning')).toEqual([plan, build]);
   });
 
   it.each([{ labels: [] }, { labels: ['bug'] }])(
@@ -115,7 +115,7 @@ describe('cardMoves', () => {
           },
           'intake',
         ),
-      ).toEqual([investigate, build]);
+      ).toEqual([investigate, plan]);
     },
   );
 
