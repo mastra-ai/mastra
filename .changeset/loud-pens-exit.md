@@ -1,5 +1,6 @@
 ---
 '@mastra/factory': patch
+'mastra': patch
 ---
 
 Tool calls in Factory chats now look the same as in Studio, so failures read clearly:

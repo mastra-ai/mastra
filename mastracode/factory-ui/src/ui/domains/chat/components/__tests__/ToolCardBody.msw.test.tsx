@@ -42,6 +42,14 @@ describe('Factory tool body', () => {
 
       expect(screen.getByText(/file-0\.ts/)).toBeVisible();
     });
+
+    it('keeps escape codes its output spells out as text', async () => {
+      const result = "const clearLine = '\\u001b[2K';\n\nExit code: 1";
+      renderWithProviders(<ToolCard tool={{ ...failedCommand, output: '', result }} />);
+      await userEvent.click(screen.getByRole('button', { name: /Run/ }));
+
+      expect(screen.getByText(/const clearLine = '\\u001b\[2K';/)).toBeVisible();
+    });
   });
 
   describe('when an edit succeeds with diagnostics', () => {

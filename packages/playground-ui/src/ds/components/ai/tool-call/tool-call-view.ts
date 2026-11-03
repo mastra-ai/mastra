@@ -1,4 +1,4 @@
-import { stripSerializedAnsi } from './ansi';
+import { stripAnsi, stripSerializedAnsi } from './ansi';
 import { hasToolArguments, stringifyToolValue } from './tool-presentation';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 
@@ -16,7 +16,8 @@ export interface ToolCallView {
 
 export function toolCallResultText({ status, result }: ToolCallView): string | undefined {
   if (status === 'running' || result === undefined || result === null) return undefined;
-  return stripSerializedAnsi(stringifyToolValue(result)) || undefined;
+  const text = typeof result === 'string' ? stripAnsi(result) : stripSerializedAnsi(stringifyToolValue(result));
+  return text || undefined;
 }
 
 export function toolCallHasBody(view: ToolCallView): boolean {
