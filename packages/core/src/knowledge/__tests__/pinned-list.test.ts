@@ -1,3 +1,4 @@
+import { estimateTokenCount } from 'tokenx';
 import { describe, expect, it } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
@@ -116,9 +117,67 @@ describe('Knowledge pinned listings', () => {
     const [listing] = await knowledge.__deliveredPins(context(['org:acme']));
     const lines = listing!.text.split('\n');
     expect(lines[0]).toBe('Pages under Guides (docs:acme#guides, depth 1):');
-    expect(lines.at(-1)).toMatch(/^…and \d+ more; knowledge_list from: "docs:acme#guides"$/);
+    expect(lines.at(-1)).toMatch(/^…and (\d+ )?more; knowledge_list from: "docs:acme#guides"$/);
     expect(lines.length).toBeLessThan(22);
     for (const line of lines.slice(1, -1)) expect(line).toMatch(/^- docs:acme#guides\/\S+ — /);
+  });
+
+  it('fills a deep listing a level at a time by tokens: every child first, then as many grandchildren as fit', async () => {
+    const maxTokens = 1_500;
+    const { knowledge, storage, docs, context } = await seed([{ list: 'docs:$orgId#hub', depth: 2 }], maxTokens);
+    const hub = await storage.createPage({ parentId: docs.id, key: 'hub', name: 'Hub', provenance: host });
+    for (let i = 0; i < 45; i++) {
+      const child = await storage.createPage({ parentId: hub.id, key: `c${i}`, name: `Child ${i}`, provenance: host });
+      for (let j = 0; j < 3; j++) {
+        await storage.createPage({ parentId: child.id, key: `g${j}`, name: `Grandchild ${i}.${j}`, provenance: host });
+      }
+    }
+    const [listing] = await knowledge.__deliveredPins(context(['org:acme']));
+    const text = listing!.text;
+    const lines = text.split('\n');
+    expect(estimateTokenCount(text)).toBeLessThanOrEqual(maxTokens);
+    expect(lines[0]).toBe('Pages under Hub (docs:acme#hub, depth 2):');
+    expect(lines.at(-1)).toMatch(/^…and (\d+ )?more; knowledge_list from: "docs:acme#hub"$/);
+
+    const body = lines.slice(1, -1);
+    const children = body.filter(line => line.startsWith('- '));
+    const grandchildren = body.filter(line => line.startsWith('  - '));
+    expect(children).toHaveLength(45);
+    expect(grandchildren.length).toBeGreaterThan(20);
+    expect(grandchildren.length).toBeLessThan(135);
+    // Grandchildren fill in level order: the first parents' children, in sibling order.
+    expect(grandchildren.map(line => line.match(/#hub\/(c\d+\/g\d+)/)![1])).toEqual(
+      Array.from({ length: 45 * 3 }, (_, n) => `c${Math.floor(n / 3)}/g${n % 3}`).slice(0, grandchildren.length),
+    );
+    // Still a tree: each grandchild sits under its own parent.
+    let parent = '';
+    for (const line of body) {
+      if (line.startsWith('- ')) parent = line.match(/#hub\/(c\d+) /)![1]!;
+      else expect(line).toContain(`#hub/${parent}/`);
+    }
+
+    // With room for all of it, the whole tree shows and nothing points elsewhere.
+    const roomy = await seed([{ list: 'docs:$orgId#hub', depth: 2 }], 10_000);
+    const roomyHub = await roomy.storage.createPage({
+      parentId: roomy.docs.id,
+      key: 'hub',
+      name: 'Hub',
+      provenance: host,
+    });
+    for (let i = 0; i < 45; i++) {
+      const child = await roomy.storage.createPage({
+        parentId: roomyHub.id,
+        key: `c${i}`,
+        name: `C${i}`,
+        provenance: host,
+      });
+      for (let j = 0; j < 3; j++) {
+        await roomy.storage.createPage({ parentId: child.id, key: `g${j}`, name: `G${j}`, provenance: host });
+      }
+    }
+    const [whole] = await roomy.knowledge.__deliveredPins(roomy.context(['org:acme']));
+    expect(whole!.text.split('\n')).toHaveLength(1 + 45 + 135);
+    expect(whole!.text).not.toContain('knowledge_list from');
   });
 
   it('shares the budget with pinned pages: both always delivered, an equal share each when they overflow', async () => {

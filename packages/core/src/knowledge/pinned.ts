@@ -4,7 +4,7 @@ import type { KnowledgeListedPin, KnowledgePage } from '../storage/domains/knowl
 import { knowledgePinTarget, knowledgeScopeAddress } from './declarations';
 import type { CompiledKnowledgeScopes, KnowledgePinnedList } from './declarations';
 import { knowledgePageRefs } from './page-refs';
-import { LIST_DEFAULT_LIMIT, listKnowledgeTree } from './page-tools';
+import { listKnowledgeTree } from './page-tools';
 import type { KnowledgeRun } from './run';
 
 export const PINNED_KNOWLEDGE_STATE_ID = 'knowledge';
@@ -56,41 +56,61 @@ function bindConfigPin(entry: string | KnowledgePinnedList, params: Record<strin
 /** Prefix of a pinned listing's entry id; the rest is the listed page's id. */
 export const PIN_LIST_ID_PREFIX = 'list:';
 
-/** A config-pinned listing, resolved for this run. */
+/** A pinned listing, resolved for this run. */
 interface PinnedListing {
   origin: KnowledgePage;
   depth: number;
-  /** `- <ref> — <name> (<n> children)` per entry, indented by depth. */
-  lines: string[];
-  /** Listed entries left out because the listing hit its entry limit. */
+  /** `- <ref> — <name> (<n> children)` per entry, indented by depth, in tree order. */
+  lines: Array<{ text: string; depth: number }>;
+  /** Entries the walk left out, beyond the lines fetched. */
   more: boolean;
 }
 
-async function resolveListing(run: KnowledgeRun, origin: KnowledgePage, depth: number): Promise<PinnedListing> {
-  const listing = await listKnowledgeTree(run, { origin, depth, limit: LIST_DEFAULT_LIMIT });
-  const lines = listing.entries.map(
-    entry =>
-      `${'  '.repeat(entry.depth - 1)}- ${entry.ref} — ${entry.name}${entry.children ? ` (${entry.children} ${entry.children === 1 ? 'child' : 'children'})` : ''}`,
-  );
+/** Fewest tokens a listing line costs (`- a#b — B`): how many entries a token budget could hold. */
+const LISTING_LINE_MIN_TOKENS = 5;
+/** Most entries one listing walk fetches, however large the budget, to bound store calls per turn. */
+const LISTING_MAX_ENTRIES = 1_000;
+
+/** Walks the tree for as many entries as `maxTokens` could hold; rendering then fills it level by level. */
+async function resolveListing(
+  run: KnowledgeRun,
+  origin: KnowledgePage,
+  depth: number,
+  maxTokens: number,
+): Promise<PinnedListing> {
+  const limit = Math.min(Math.max(Math.ceil(maxTokens / LISTING_LINE_MIN_TOKENS), 1), LISTING_MAX_ENTRIES);
+  const listing = await listKnowledgeTree(run, { origin, depth, limit });
+  const lines = listing.entries.map(entry => ({
+    depth: entry.depth,
+    text: `${'  '.repeat(entry.depth - 1)}- ${entry.ref} — ${entry.name}${entry.children ? ` (${entry.children} ${entry.children === 1 ? 'child' : 'children'})` : ''}`,
+  }));
   return { origin, depth, lines, more: Boolean(listing.nextCursor) || listing.truncated };
 }
 
+/**
+ * Fills `maxTokens` a level at a time: every depth-1 line that fits, then depth 2, and so on, stopping
+ * at the first line that doesn't fit (always at least one). Lines print in tree order, so each child
+ * still sits under its parent; a cut ends with a pointer to knowledge_list.
+ */
 function renderListing(listing: PinnedListing, ref: string, maxTokens: number): string {
   const head = `Pages under ${listing.origin.name} (${ref}, depth ${listing.depth}):`;
   if (listing.lines.length === 0) return `${head} none.`;
-  const tail = (left: number) => `…${left > 0 ? `and ${left} more` : 'and more'}; knowledge_list from: "${ref}"`;
-  const all = [head, ...listing.lines, ...(listing.more ? [tail(0)] : [])].join('\n');
+  const tail = (left: number) =>
+    `…${left > 0 && !listing.more ? `and ${left} more` : 'and more'}; knowledge_list from: "${ref}"`;
+  const all = [head, ...listing.lines.map(line => line.text), ...(listing.more ? [tail(0)] : [])].join('\n');
   if (estimateTokenCount(all) <= maxTokens) return all;
-  // Whole lines only, always at least one, then a pointer to the rest.
-  const kept = [head];
+  // Tree order filtered to one depth is that level's order, so a stable sort by depth is breadth-first.
+  const levelOrder = listing.lines.map((line, index) => ({ ...line, index })).sort((a, b) => a.depth - b.depth);
+  const shown = new Set<number>();
   let used = estimateTokenCount(head) + estimateTokenCount(tail(listing.lines.length)) + 2;
-  for (const line of listing.lines) {
-    const cost = estimateTokenCount(line) + 1;
-    if (kept.length > 1 && used + cost > maxTokens) break;
-    kept.push(line);
+  for (const line of levelOrder) {
+    const cost = estimateTokenCount(line.text) + 1;
+    if (shown.size > 0 && used + cost > maxTokens) break;
+    shown.add(line.index);
     used += cost;
   }
-  return [...kept, tail(listing.lines.length - (kept.length - 1))].join('\n');
+  const kept = listing.lines.filter((_, index) => shown.has(index)).map(line => line.text);
+  return [head, ...kept, tail(listing.lines.length - kept.length)].join('\n');
 }
 
 /** What a pinned entry says about its page besides the body: where to read it, and how many notes it has. */
@@ -128,7 +148,10 @@ function priorityTiers(compiled: CompiledKnowledgeScopes, principals: string[]):
   return [...tiers.entries()].sort(([a], [b]) => b - a).map(([, addresses]) => addresses);
 }
 
-async function configPins(run: KnowledgeRun): Promise<{ pages: KnowledgePage[]; listings: PinnedListing[] }> {
+async function configPins(
+  run: KnowledgeRun,
+  maxTokens: number,
+): Promise<{ pages: KnowledgePage[]; listings: PinnedListing[] }> {
   const bound: BoundPin[] = [];
   for (const principal of run.principals) {
     const match = run.runtime.compiled.match(principal);
@@ -158,7 +181,7 @@ async function configPins(run: KnowledgeRun): Promise<{ pages: KnowledgePage[]; 
     if (!page || page.deletedAt) continue;
     if (pin.depth === undefined) pages.set(page.id, page);
     else if ((listings.get(page.id)?.depth ?? 0) < pin.depth) {
-      listings.set(page.id, await resolveListing(run, page, pin.depth));
+      listings.set(page.id, await resolveListing(run, page, pin.depth, maxTokens));
     }
   }
   return { pages: [...pages.values()], listings: [...listings.values()] };
@@ -225,7 +248,7 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
   // Store calls per turn: (pinnedContextPriority tiers the run holds) + 3 (one count, one getPages for pin
   // pages, one countNotes) + one getPages per page-tree level above the pinned pages, plus the config-pin
   // lookups and one tree walk per pinned listing; never one per page pin.
-  const configPinned = await configPins(run);
+  const configPinned = await configPins(run, budget.maxTokens);
   const configured = configPinned.pages.filter(page => page.body?.trim());
   const listings = configPinned.listings;
 
@@ -250,7 +273,8 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
   const storedListings = new Map<string, PinnedListing>();
   for (const pin of slotPins) {
     const page = pages.get(pin.pageId);
-    if (pin.kind === 'list' && page) storedListings.set(pin.id, await resolveListing(run, page, pin.depth ?? 1));
+    if (pin.kind === 'list' && page)
+      storedListings.set(pin.id, await resolveListing(run, page, pin.depth ?? 1, budget.maxTokens));
   }
   const pinnedPages = slotPins.flatMap(pin => {
     // A store from before pin kinds returns no kind: those are page pins.

@@ -773,7 +773,7 @@ function readTool(host: KnowledgePageToolHost) {
   });
 }
 
-export const LIST_DEFAULT_LIMIT = 50;
+const LIST_DEFAULT_LIMIT = 50;
 const LIST_MAX_LIMIT = 100;
 const LIST_MAX_DEPTH = 3;
 
