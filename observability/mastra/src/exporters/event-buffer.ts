@@ -27,16 +27,27 @@ export type BufferedEvent = ObservabilityEvent & RetryCount;
 export class EventBuffer {
   #preInit: BufferedEvent[] = [];
   #creates: BufferedEvent[] = [];
+  /** Updates a flush sends now */
   #updates: BufferedEvent[] = [];
+  /** Updates waiting out a retry delay, each due again at its `notBefore` */
+  #waiting: BufferedEvent[] = [];
   #allCreatedSpans: Set<string> = new Set();
   /** Spans whose SPAN_STARTED this buffer has seen but whose create isn't confirmed yet */
   #pendingCreateSpans: Set<string> = new Set();
+  /** Spans whose end storage accepted, oldest first */
+  #endedSpans: Set<string> = new Set();
   #firstEventTime?: Date;
   #storageStrategy?: ObservabilityStorageStrategy;
   #maxRetries: number;
+  #maxEndedSpans: number;
 
-  constructor(args: { maxRetries: number }) {
+  /**
+   * `maxEndedSpans` bounds how many ended spans the buffer remembers (see `rememberEndedSpans`).
+   * The exporter passes its `maxBufferSize`, so the set never outgrows what the buffer itself may hold.
+   */
+  constructor(args: { maxRetries: number; maxEndedSpans?: number }) {
     this.#maxRetries = args.maxRetries;
+    this.#maxEndedSpans = args.maxEndedSpans ?? 10_000;
   }
 
   /** Initialize with a storage strategy and replay any pre-init events. */
@@ -54,6 +65,7 @@ export class EventBuffer {
   reset() {
     this.#creates = [];
     this.#updates = [];
+    this.#waiting = [];
     this.#firstEventTime = undefined;
   }
 
@@ -160,23 +172,23 @@ export class EventBuffer {
    */
   reAddUpdates(events: BufferedEvent[], backoff?: (retryCount: number) => number): BufferedEvent[] {
     const now = Date.now();
-    const retryable: BufferedEvent[] = [];
     const dropped: BufferedEvent[] = [];
 
     for (const e of events) {
-      if (e.notBefore !== undefined && e.notBefore > now) {
-        retryable.push(e);
-      } else if (++e.retryCount <= this.#maxRetries) {
+      const sentEarly = e.notBefore !== undefined && e.notBefore > now;
+      if (!sentEarly) {
+        if (++e.retryCount > this.#maxRetries) {
+          dropped.push(e);
+          continue;
+        }
         e.notBefore = backoff ? now + backoff(e.retryCount) : undefined;
-        retryable.push(e);
-      } else {
-        dropped.push(e);
       }
-    }
-
-    if (retryable.length > 0) {
-      this.setFirstEventTime();
-      this.#updates.push(...retryable);
+      if (e.notBefore !== undefined && e.notBefore > now) {
+        this.#waiting.push(e);
+      } else {
+        this.setFirstEventTime();
+        this.#updates.push(e);
+      }
     }
 
     return dropped;
@@ -189,13 +201,14 @@ export class EventBuffer {
   take({ all = false } = {}): { creates: BufferedEvent[]; updates: BufferedEvent[] } {
     const now = Date.now();
     const creates = this.#creates;
-    const updates: BufferedEvent[] = [];
+    const updates = this.#updates;
     const waiting: BufferedEvent[] = [];
-    for (const event of this.#updates) {
+    for (const event of this.#waiting) {
       (all || (event.notBefore ?? 0) <= now ? updates : waiting).push(event);
     }
     this.#creates = [];
-    this.#updates = waiting;
+    this.#updates = [];
+    this.#waiting = waiting;
     this.#firstEventTime = undefined;
     return { creates, updates };
   }
@@ -203,17 +216,24 @@ export class EventBuffer {
   /** Earliest time a buffered update becomes due again, if any is waiting out its retry delay. */
   get nextRetryAt(): number | undefined {
     let earliest: number | undefined;
-    for (const { notBefore } of this.#updates) {
+    for (const { notBefore } of this.#waiting) {
       if (notBefore !== undefined && (earliest === undefined || notBefore < earliest)) earliest = notBefore;
     }
     return earliest;
   }
 
-  /** Whether a flush now would send anything: a create, or an update not waiting out a retry delay. */
+  /**
+   * Number of events a flush would send now: creates, and updates not waiting out a retry delay.
+   * Batch size and wait decisions count these. A waiting update whose delay has passed joins
+   * them when a flush takes it; the retry timer armed for it fires a flush then.
+   */
+  get dueSize(): number {
+    return this.#creates.length + this.#updates.length;
+  }
+
+  /** Whether a flush now would send anything. */
   get hasDueEvents(): boolean {
-    if (this.#creates.length > 0) return true;
-    const now = Date.now();
-    return this.#updates.some(event => (event.notBefore ?? 0) <= now);
+    return this.dueSize > 0;
   }
 
   /** Snapshot of buffered create events. */
@@ -221,14 +241,14 @@ export class EventBuffer {
     return [...this.#creates];
   }
 
-  /** Snapshot of buffered update events. */
+  /** Snapshot of buffered update events, the ones waiting out a retry delay included. */
   get updates(): BufferedEvent[] {
-    return [...this.#updates];
+    return [...this.#updates, ...this.#waiting];
   }
 
-  /** Total number of buffered events (creates + updates). */
+  /** Total number of buffered events (creates + updates, waiting ones included). */
   get totalSize(): number {
-    return this.#creates.length + this.#updates.length;
+    return this.#creates.length + this.#updates.length + this.#waiting.length;
   }
 
   /** Milliseconds since the first event was buffered in the current batch. */
@@ -284,6 +304,26 @@ export class EventBuffer {
   /** Check whether this buffer saw the span's SPAN_STARTED but its create hasn't been confirmed yet. */
   isAwaitingCreate(span: AnyExportedSpan): boolean {
     return this.#pendingCreateSpans.has(this.exportedSpanKey(span));
+  }
+
+  /**
+   * Remember spans whose end storage accepted, so a later update for one is dropped at once
+   * instead of retried as if another process still had to write the span's row. Once the set
+   * is full, the oldest end is forgotten first.
+   */
+  rememberEndedSpans(spans: { traceId: string; spanId: string }[]): void {
+    for (const span of spans) {
+      this.#endedSpans.add(this.buildSpanKey(span));
+    }
+    for (const key of this.#endedSpans) {
+      if (this.#endedSpans.size <= this.#maxEndedSpans) break;
+      this.#endedSpans.delete(key);
+    }
+  }
+
+  /** Check whether storage accepted this span's end through this buffer. */
+  wasEnded(span: AnyExportedSpan): boolean {
+    return this.#endedSpans.has(this.exportedSpanKey(span));
   }
 
   /** Remove completed spans from tracking after their SPAN_ENDED updates are flushed. */

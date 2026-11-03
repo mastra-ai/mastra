@@ -123,7 +123,10 @@ export class MastraStorageExporter extends BaseExporter {
       strategy: config.strategy ?? 'auto',
     };
 
-    this.#eventBuffer = new EventBuffer({ maxRetries: this.#config.maxRetries ?? 4 });
+    this.#eventBuffer = new EventBuffer({
+      maxRetries: this.#config.maxRetries ?? 4,
+      maxEndedSpans: this.#config.maxBufferSize,
+    });
   }
 
   /**
@@ -211,18 +214,21 @@ export class MastraStorageExporter extends BaseExporter {
       return true;
     }
 
+    // Updates waiting out a retry delay stay buffered but aren't sent, so they don't make a batch
+    const dueSize = this.#eventBuffer.dueSize;
+
     // Emergency flush - buffer overflow
-    if (this.#eventBuffer.totalSize >= this.#config.maxBufferSize!) {
+    if (dueSize >= this.#config.maxBufferSize!) {
       return true;
     }
 
     // Size-based flush
-    if (this.#eventBuffer.totalSize >= this.#config.maxBatchSize!) {
+    if (dueSize >= this.#config.maxBatchSize!) {
       return true;
     }
 
     // Time-based flush
-    if (this.#eventBuffer.totalSize > 0) {
+    if (dueSize > 0) {
       if (this.#eventBuffer.elapsed >= this.#config.maxBatchWaitMs!) {
         return true;
       }
@@ -345,6 +351,17 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   /**
+   * Reports span updates storage has no open row for: the span was never stored, or it had
+   * already ended. Routine for a single process too (a durable run ends its suspended step
+   * twice today), so it stays at debug level.
+   */
+  private dropNotUpdatable(count: number): void {
+    if (count === 0) return;
+    this.logger.debug('Span updates dropped: span not stored or already ended', { count });
+    this.emitDrop('tracing', 'span-not-updatable', count);
+  }
+
+  /**
    * Flush a batch of create events for a single signal type.
    * On "not implemented" errors, disables the signal for future flushes.
    * On other errors, re-adds events to the buffer for retry.
@@ -439,9 +456,11 @@ export class MastraStorageExporter extends BaseExporter {
       let retrying = false;
       if (batchUpdateUnendedSpans) {
         const { updated } = await batchUpdateUnendedSpans({ records: partials });
+        if (isEnd) this.#eventBuffer.rememberEndedSpans(updated);
         retrying = this.retryNotApplied(sent, updated);
       } else {
         await storage.batchUpdateSpans({ records: partials });
+        if (isEnd) this.#eventBuffer.rememberEndedSpans(partials);
       }
       if (isEnd) {
         this.#eventBuffer.endFinishedSpans({ records: partials });
@@ -479,11 +498,10 @@ export class MastraStorageExporter extends BaseExporter {
   /**
    * Handles conditional span updates that storage didn't apply. The store can't say
    * whether the row is missing or already ended. A span this exporter created and
-   * hasn't ended must have a row, so its update is dropped as already ended. Any other
-   * span may belong to a process whose create hasn't landed yet, so its update goes
-   * back on the retry budget, waits out its backoff, and is dropped only when the
-   * budget runs out. That drop is routine for a single process too (a durable run ends
-   * its suspended step twice today), so it stays at debug level.
+   * hasn't ended must have a row, and one whose end it already stored can't be open,
+   * so their updates are dropped as already ended. Any other span may belong to a
+   * process whose create hasn't landed yet, so its update goes back on the retry
+   * budget, waits out its backoff, and is dropped only when the budget runs out.
    *
    * Returns whether any update was re-queued.
    */
@@ -498,27 +516,25 @@ export class MastraStorageExporter extends BaseExporter {
       appliedCounts.set(key, (appliedCounts.get(key) ?? 0) + 1);
     }
     const retryable: BufferedEvent[] = [];
-    let alreadyEnded = 0;
+    const alreadyEnded: { traceId: string; spanId: string }[] = [];
     for (const event of events) {
       const span = event.exportedSpan;
       const key = `${span.traceId}:${span.id}`;
       const remaining = appliedCounts.get(key) ?? 0;
       if (remaining > 0) {
         appliedCounts.set(key, remaining - 1);
-      } else if (this.#eventBuffer.spanExists(span)) {
-        alreadyEnded++;
+      } else if (this.#eventBuffer.spanExists(span) || this.#eventBuffer.wasEnded(span)) {
+        alreadyEnded.push({ traceId: span.traceId, spanId: span.id });
       } else {
         retryable.push(event);
       }
     }
-    if (retryable.length === 0 && alreadyEnded === 0) return false;
+    if (retryable.length === 0 && alreadyEnded.length === 0) return false;
 
+    // An own open span whose update didn't apply was ended by another process; treat it as ended here too
+    this.#eventBuffer.rememberEndedSpans(alreadyEnded);
     const dropped = this.#eventBuffer.reAddUpdates(retryable, this.retryDelay);
-    const notApplied = alreadyEnded + dropped.length;
-    if (notApplied > 0) {
-      this.logger.debug('Span updates dropped: span not stored or already ended', { count: notApplied });
-      this.emitDrop('tracing', 'span-not-updatable', notApplied);
-    }
+    this.dropNotUpdatable(alreadyEnded.length + dropped.length);
     const retryAttempt = this.retryAttempt(retryable);
     if (retryAttempt !== undefined) {
       this.logger.debug('Span updates not applied yet, waiting for the span to be stored', {
@@ -604,16 +620,23 @@ export class MastraStorageExporter extends BaseExporter {
       }
     }
 
+    let alreadyEnded = 0;
     for (const updateEvent of updates) {
       switch (updateEvent.type) {
         case TracingEventType.SPAN_UPDATED:
-          updateSpanEvents.push(updateEvent);
-          break;
         case TracingEventType.SPAN_ENDED:
-          endSpanEvents.push(updateEvent);
+          // Storage accepted this span's end through us, so nothing more can apply to it
+          if (this.#eventBuffer.wasEnded(updateEvent.exportedSpan)) {
+            alreadyEnded++;
+          } else if (updateEvent.type === TracingEventType.SPAN_UPDATED) {
+            updateSpanEvents.push(updateEvent);
+          } else {
+            endSpanEvents.push(updateEvent);
+          }
           break;
       }
     }
+    this.dropNotUpdatable(alreadyEnded);
 
     // Flush all creates in parallel — signals are independent
     const flushResults = await Promise.all([
@@ -770,13 +793,12 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   async shutdown(): Promise<void> {
-    // flush() made the last attempt at every waiting update, and nothing retries once we
-    // return. The recipients of drop events shut down alongside this exporter, so report
-    // the stranded updates before the first await, while they still listen. Events that
-    // never got a flush, or a write still in flight, get one first.
-    if (this.#eventBuffer.hasDueEvents || this.#inFlightFlushes.size > 0) {
-      await this.flush();
-    }
+    // One last attempt at everything buffered, updates still waiting out a retry delay
+    // included: the row one waits for may have landed since. Nothing retries once we
+    // return, so whatever still didn't apply is reported as dropped. Exporters shut down
+    // together, so a recipient's own shutdown() may already have run by then; the
+    // observability instance delivers the drop to it before its shutdown resolves.
+    await this.flush();
     clearTimeout(this.#flushTimer);
     this.#flushTimer = undefined;
     const { creates, updates } = this.#eventBuffer.take({ all: true });
