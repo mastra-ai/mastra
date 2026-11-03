@@ -28,7 +28,7 @@ import { STEP_CONTENT_CHUNK_TYPES } from '../../../../loop/shared/step-content-c
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { TERMINAL_FINISH_REASONS } from '../../../../loop/shared/terminal-finish-reasons';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
-import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
+import { anyAbortSignal, getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { MastraTimeoutError } from '../../../../loop/timeout';
 import { buildMessagesFromChunks } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
 import type { CollectedChunk } from '../../../../loop/workflows/agentic-execution/build-messages-from-chunks';
@@ -90,6 +90,7 @@ import { createRunMessageList } from '../../utils/run-message-list';
 import { carriedSpanClocks } from '../shared/iteration-state';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 import { baseIterationStateSchema, durableOptionsSchema, responseRecordSchema } from '../shared/schemas';
+import { withStepLifetime } from './step-lifetime';
 
 /**
  * Detect a run-level budget expiry (`modelSettings.timeout.totalMs`, #21724
@@ -256,20 +257,6 @@ type LLMExecutionParams = ExecuteFunctionParams<
   unknown,
   DefaultEngineType
 >;
-
-type StepLifetime = { closed: boolean };
-
-/** Close on failure too, so retained callbacks never write to an abandoned step. */
-function withStepLifetime<Params, Result>(execute: (params: Params, lifetime: StepLifetime) => Promise<Result>) {
-  return async (params: Params): Promise<Result> => {
-    const lifetime = { closed: false };
-    try {
-      return await execute(params, lifetime);
-    } finally {
-      lifetime.closed = true;
-    }
-  };
-}
 
 /**
  * Create a durable LLM execution step.
@@ -467,7 +454,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       // block with stepResult.reason: 'abort' (set by the predicate's abort
       // guard). We intentionally do NOT emit an ABORT event here because
       // that would close the stream before the FINISH event arrives.
-      const selectedAbortSignal = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.abortSignal ?? abortSignal;
+      // The registry signal carries this process's abort and budget; the step's deadline signal
+      // carries the budget a cross-process engine handed to the worker running this step.
+      const selectedAbortSignal = anyAbortSignal(
+        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.abortSignal ?? abortSignal,
+        stepLifetime.deadlineSignal,
+      );
       const executionAbortSignalEarly = ownership?.composeSignal(selectedAbortSignal) ?? selectedAbortSignal;
       ownership?.throwIfLost();
       if (executionAbortSignalEarly?.aborted) {
@@ -944,7 +936,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 : undefined;
 
             const registryEntry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-            const selectedRunAbortSignal = registryEntry?.abortSignal ?? abortSignal;
+            const selectedRunAbortSignal = anyAbortSignal(
+              registryEntry?.abortSignal ?? abortSignal,
+              stepLifetime.deadlineSignal,
+            );
             if (selectedRunAbortSignal) {
               const endAbortedAttempt = () => {
                 const reason = getAbortReason(selectedRunAbortSignal);

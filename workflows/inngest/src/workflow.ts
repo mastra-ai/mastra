@@ -3,6 +3,7 @@ import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
+import type { ExecutionDeadline } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
@@ -478,10 +479,11 @@ export class InngestWorkflow<
           timeTravel,
           perStep,
           tracingOptions,
+          executionDeadline,
           actor,
           parentStream,
           nestedWorkflowOutputMode: requestedNestedWorkflowOutputMode,
-        } = event.data;
+        } = event.data as typeof event.data & { executionDeadline?: ExecutionDeadline };
         const nestedWorkflowOutputMode = resolveNestedWorkflowOutputMode(requestedNestedWorkflowOutputMode);
         const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === NESTED_WORKFLOW_OUTPUT_MODE.COMPACT;
 
@@ -560,7 +562,16 @@ export class InngestWorkflow<
           return span?.snapshot?.() ?? span?.exportSpan();
         });
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
+        // A durable agent's budget was armed where its session started; the steps this worker runs
+        // arm the same deadline so they stop there too (see createInngestAgent `armTotalTimeout`).
+        const engine = new InngestExecutionEngine(
+          this.#mastra,
+          step,
+          attempt,
+          this.options,
+          parentStream,
+          executionDeadline,
+        );
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
@@ -695,10 +706,13 @@ export class InngestWorkflow<
 
             // Ensure final snapshot is persisted BEFORE publishing workflow-finish
             // This fixes a race condition where getRunOutput reads the snapshot before it's fully written
-            const shouldPersistFinalSnapshot = this.options.shouldPersistSnapshot({
-              workflowStatus: result.status,
-              stepResults: result.steps,
-            });
+            // A run whose budget expired has had its snapshot deleted by the caller; do not write it back.
+            const shouldPersistFinalSnapshot =
+              !engine.executionDeadlinePassed() &&
+              this.options.shouldPersistSnapshot({
+                workflowStatus: result.status,
+                stepResults: result.steps,
+              });
             if (shouldPersistFinalSnapshot) {
               const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
               if (workflowsStore) {
