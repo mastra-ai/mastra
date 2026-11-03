@@ -48,7 +48,13 @@ To answer a question about one region, the agent asks for the matching lines and
 
 ## One agent, many customers
 
-One support agent serves every customer. Each customer's pages live in its own scope, and your server runs the agent with that customer's scope plus the user and conversation:
+One support agent serves every customer. Each customer's pages live in its own `tenant:` scope, declared as the tenant scope of `knowledgeMemoryScopes()`:
+
+```typescript oxfmt:false
+scopes: { ...knowledgeMemoryScopes({ org: 'tenant:$tenantId' }) },
+```
+
+Your server runs the agent with that customer's scope plus the user and conversation:
 
 ```typescript
 await agent.generate(message, {
