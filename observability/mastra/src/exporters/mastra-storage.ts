@@ -770,10 +770,13 @@ export class MastraStorageExporter extends BaseExporter {
   }
 
   async shutdown(): Promise<void> {
-    await this.flush();
-
-    // Nothing retries once we return, so send the waiting updates now and report the rest.
-    await this.trackFlushBuffer({ force: true });
+    // flush() made the last attempt at every waiting update, and nothing retries once we
+    // return. The recipients of drop events shut down alongside this exporter, so report
+    // the stranded updates before the first await, while they still listen. Events that
+    // never got a flush, or a write still in flight, get one first.
+    if (this.#eventBuffer.hasDueEvents || this.#inFlightFlushes.size > 0) {
+      await this.flush();
+    }
     clearTimeout(this.#flushTimer);
     this.#flushTimer = undefined;
     const { creates, updates } = this.#eventBuffer.take({ all: true });

@@ -208,8 +208,12 @@ export class ObservabilityBus extends BaseObservabilityEventBus<ObservabilityEve
     }
   }
 
-  /** Await in-flight routed handler promises, draining until empty. */
-  private async drainPendingHandlers(): Promise<void> {
+  /**
+   * Await in-flight routed handler promises, draining until empty. flush() runs this before
+   * draining exporter buffers; the instance runs it again after its components shut down, so
+   * a drop an exporter reports while shutting down reaches its recipients first.
+   */
+  async drainPendingHandlers(): Promise<void> {
     let iterations = 0;
     while (this.pendingHandlers.size > 0) {
       await Promise.allSettled([...this.pendingHandlers]);
