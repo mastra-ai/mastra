@@ -1,6 +1,6 @@
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from '@mastra/client-js';
 import { DASHBOARD_MAX_WIDGETS } from '@mastra/core/storage/dashboards';
-import { CircleAlertIcon, ListFilterIcon, PlusIcon, Settings2Icon } from 'lucide-react';
+import { CircleAlertIcon, ListFilterIcon, PlusIcon, Settings2Icon, XIcon } from 'lucide-react';
 import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { FormProvider, useForm, useWatch } from 'react-hook-form';
@@ -45,6 +45,8 @@ export type WidgetEditorProps = {
   scope: DashboardScope;
   /** Every edit, once on open too. The page decides what to keep and when to stop editing. */
   onChange: (change: WidgetEditorChange) => void;
+  /** Adds a "Delete" button on the card's far right. The page removes the widget and stops editing. */
+  onRemove?: () => void;
   className?: string;
 };
 
@@ -52,7 +54,7 @@ export type WidgetEditorProps = {
  * Edits one widget as the card it is on the dashboard: the title is renamed in place, and the
  * kind, metrics, filters, split and views sit in the card's settings popover. The card draws live.
  */
-export function WidgetEditor({ definition, widgetId, scope, onChange, className }: WidgetEditorProps) {
+export function WidgetEditor({ definition, widgetId, scope, onChange, onRemove, className }: WidgetEditorProps) {
   const scorers = useEditorScorers();
   // Read once: the editor owns the draft from here on, and the page may write each change back.
   const [opened] = useState(() => {
@@ -80,6 +82,7 @@ export function WidgetEditor({ definition, widgetId, scope, onChange, className 
           scorers={scorers}
           scope={scope}
           onChange={onChange}
+          onRemove={onRemove}
         />
       ) : (
         <Notice variant="info" title="This widget can't be edited here">
@@ -106,9 +109,10 @@ type WidgetEditorCardProps = {
   scorers: Scorer[];
   scope: DashboardScope;
   onChange: (change: WidgetEditorChange) => void;
+  onRemove?: () => void;
 };
 
-function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange }: WidgetEditorCardProps) {
+function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange, onRemove }: WidgetEditorCardProps) {
   const methods = useForm<WidgetDraft>({ defaultValues: initial });
   const { control, register, setValue } = methods;
   const draft = useWatch({ control }) as WidgetDraft;
@@ -124,13 +128,14 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange 
   const encoded = draftToWidget({ ...draft, kind }, scorers);
   const activeView = encoded.views[active];
   const activeEmpty = !views[active] || (views[active].metrics.length === 0 && views[active].combos.length === 0);
-  // Picking the first metric or a ready-made widget is done with the popover: it closes, and the
-  // cog reopens it on the chart.
-  const [wasEmpty, setWasEmpty] = useState(activeEmpty);
-  if (wasEmpty !== activeEmpty) {
-    setWasEmpty(activeEmpty);
-    if (!activeEmpty) setSettingsOpen(false);
-  }
+  // Picking the first metric or a ready-made widget is done with the popover. Filling the view swaps
+  // "Add metric" for the chart, and a popover still closing would lose its trigger and jump to the
+  // page's corner. So it closes first, and the pick lands once it's gone; the cog reopens it.
+  const afterClose = useRef<() => void>(undefined);
+  const fill = (apply: () => void) => {
+    afterClose.current = apply;
+    setSettingsOpen(false);
+  };
 
   const issues = [...encoded.issues];
   if (creating && others >= DASHBOARD_MAX_WIDGETS)
@@ -158,13 +163,14 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange 
     setValue('kindPicked', true, { shouldDirty: true });
   };
   // An empty view can take a ready-made widget whole; a title the user hasn't touched follows it.
-  const applyPreset = (preset: WidgetPreset) => {
-    setViews(views.map((v, i) => (i === active ? { ...preset.view(), label: v.label || DEFAULT_VIEW_LABEL } : v)));
-    if (draft.title === initial.title) setValue('title', preset.title, { shouldDirty: true });
-    // Not pickKind: that drops splits, and the preset's split is part of it.
-    setValue('kind', preset.kind, { shouldDirty: true });
-    setValue('kindPicked', true, { shouldDirty: true });
-  };
+  const applyPreset = (preset: WidgetPreset) =>
+    fill(() => {
+      setViews(views.map((v, i) => (i === active ? { ...preset.view(), label: v.label || DEFAULT_VIEW_LABEL } : v)));
+      if (draft.title === initial.title) setValue('title', preset.title, { shouldDirty: true });
+      // Not pickKind: that drops splits, and the preset's split is part of it.
+      setValue('kind', preset.kind, { shouldDirty: true });
+      setValue('kindPicked', true, { shouldDirty: true });
+    });
   const addView = () => {
     setViews([...views, emptyView(nextViewLabel(views))]);
     // A new view starts empty, so the card shows its setup screen.
@@ -212,6 +218,7 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange 
   // the settings.
   const cardless = kind === 'kpis' && activeView?.view !== undefined;
   const filterCount = views[active]?.filters.length ?? 0;
+  const buttonCount = (activeEmpty ? 0 : 3) + (onRemove ? 1 : 0);
 
   return (
     <FormProvider {...methods}>
@@ -219,11 +226,24 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange 
           kind), which would pull a popover off its trigger. So the header only keeps the buttons'
           room, and the buttons live on the frame, over that room. */}
       <ChartCardHeaderProvider
-        value={{ heading, actions: activeEmpty ? undefined : <span aria-hidden className="block h-7 w-23" /> }}
+        value={{
+          heading,
+          actions: buttonCount ? (
+            <span aria-hidden className={cn('block h-7', BUTTONS_ROOM[buttonCount])} />
+          ) : undefined,
+        }}
       >
         {/* One settings popover for the whole card: "Add metric" opens it on an empty view, the cog
             once there's a chart, and it stays open across the switch. */}
-        <Popover open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <Popover
+          open={settingsOpen}
+          onOpenChange={setSettingsOpen}
+          onOpenChangeComplete={open => {
+            if (open) return;
+            afterClose.current?.();
+            afterClose.current = undefined;
+          }}
+        >
           <div className="relative">
             {activeEmpty ? (
               <ChartCard title={draft.title || 'Untitled widget'}>
@@ -242,60 +262,75 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange 
             ) : (
               <Preview draft={draft} span={span} kind={kind} activeView={activeView} scope={scope} />
             )}
-            {!activeEmpty && (
+            {buttonCount > 0 && (
               <div
                 ref={buttons}
                 className={cn('absolute z-10 flex gap-1', cardless ? '-top-3.5 -right-3.5' : 'top-2 right-4')}
               >
-                <Button
-                  variant={cardless ? 'default' : 'ghost'}
-                  size="icon-sm"
-                  tooltip="Add tab"
-                  aria-label="Add tab"
-                  onClick={addView}
-                >
-                  <PlusIcon />
-                </Button>
-                <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
-                  <PopoverTrigger
+                {!activeEmpty && (
+                  <>
+                    <Button
+                      variant={cardless ? 'default' : 'ghost'}
+                      size="icon-sm"
+                      tooltip="Add tab"
+                      aria-label="Add tab"
+                      onClick={addView}
+                    >
+                      <PlusIcon />
+                    </Button>
+                    <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+                      <PopoverTrigger
+                        variant={cardless ? 'default' : 'ghost'}
+                        size="icon-sm"
+                        tooltip={filterCount ? `Filters (${filterCount})` : 'Filters'}
+                        aria-label={filterCount ? `Filters, ${filterCount} applied` : 'Filters'}
+                        className="relative"
+                      >
+                        <ListFilterIcon />
+                        {filterCount > 0 && (
+                          <span
+                            aria-hidden
+                            className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-foreground text-caption leading-none text-background tabular-nums"
+                          >
+                            {filterCount}
+                          </span>
+                        )}
+                      </PopoverTrigger>
+                      <PopoverContent
+                        anchor={buttons}
+                        side="right"
+                        align="start"
+                        sideOffset={8}
+                        collisionAvoidance={COLLISION}
+                        className="flex w-[min(28rem,calc(100vw-2rem))] flex-col gap-2 p-3"
+                      >
+                        <Txt as="h3" variant="label" tone="muted">
+                          {views.length > 1 ? <>Filters of the {quoted(views[active]?.label ?? '')} tab</> : 'Filters'}
+                        </Txt>
+                        <ViewFilterEditor key={active} index={active} scorers={scorers} />
+                      </PopoverContent>
+                    </Popover>
+                    <PopoverTrigger
+                      variant={cardless ? 'default' : 'ghost'}
+                      size="icon-sm"
+                      tooltip="Settings"
+                      aria-label="Settings"
+                    >
+                      <Settings2Icon />
+                    </PopoverTrigger>
+                  </>
+                )}
+                {onRemove && (
+                  <Button
                     variant={cardless ? 'default' : 'ghost'}
                     size="icon-sm"
-                    tooltip={filterCount ? `Filters (${filterCount})` : 'Filters'}
-                    aria-label={filterCount ? `Filters, ${filterCount} applied` : 'Filters'}
-                    className="relative"
+                    tooltip="Delete"
+                    aria-label="Delete"
+                    onClick={onRemove}
                   >
-                    <ListFilterIcon />
-                    {filterCount > 0 && (
-                      <span
-                        aria-hidden
-                        className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-foreground text-caption leading-none text-background tabular-nums"
-                      >
-                        {filterCount}
-                      </span>
-                    )}
-                  </PopoverTrigger>
-                  <PopoverContent
-                    anchor={buttons}
-                    side="right"
-                    align="start"
-                    sideOffset={8}
-                    collisionAvoidance={COLLISION}
-                    className="flex w-[min(28rem,calc(100vw-2rem))] flex-col gap-2 p-3"
-                  >
-                    <Txt as="h3" variant="label" tone="muted">
-                      {views.length > 1 ? <>Filters of the {quoted(views[active]?.label ?? '')} tab</> : 'Filters'}
-                    </Txt>
-                    <ViewFilterEditor key={active} index={active} scorers={scorers} />
-                  </PopoverContent>
-                </Popover>
-                <PopoverTrigger
-                  variant={cardless ? 'default' : 'ghost'}
-                  size="icon-sm"
-                  tooltip="Widget settings"
-                  aria-label="Widget settings"
-                >
-                  <Settings2Icon />
-                </PopoverTrigger>
+                    <XIcon />
+                  </Button>
+                )}
               </div>
             )}
           </div>
@@ -315,7 +350,7 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange 
                 index={active}
                 kind={kind}
                 scorers={scorers}
-                start={{ kind, onKind: pickKind, onPreset: applyPreset }}
+                start={{ kind, onKind: pickKind, onPreset: applyPreset, fill }}
               />
             ) : (
               <>
@@ -352,6 +387,9 @@ function WidgetEditorCard({ initial, creating, others, scorers, scope, onChange 
     </FormProvider>
   );
 }
+
+// Room the card header keeps for the buttons over it: 1.75rem each, 0.25rem apart.
+const BUTTONS_ROOM: Record<number, string> = { 1: 'w-7', 3: 'w-23', 4: 'w-31' };
 
 // Beside the button, so the card stays in view: on its left when the right has no room, under it
 // when neither side has (narrow screens). Never slid over the button.

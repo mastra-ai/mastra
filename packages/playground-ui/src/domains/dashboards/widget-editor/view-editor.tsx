@@ -57,7 +57,10 @@ export type ViewEditorProps = {
   kind: EditorKind;
   scorers: readonly Scorer[];
   /** Lets an empty view start from a kind or a ready-made widget: it shows the catalogue search alone. */
-  start?: MetricCommandProps['start'];
+  start?: NonNullable<MetricCommandProps['start']> & {
+    /** Runs a pick that fills the view; the page may hold it back, e.g. until a popover has closed. */
+    fill: (apply: () => void) => void;
+  };
 };
 
 /**
@@ -135,7 +138,13 @@ export function ViewEditor({ index, kind, scorers, start }: ViewEditorProps) {
   };
 
   if (empty && start) {
-    return <MetricCommand entries={pickable.map(p => p.entry)} start={start} onPick={pickMetric} />;
+    return (
+      <MetricCommand
+        entries={pickable.map(p => p.entry)}
+        start={start}
+        onPick={entry => start.fill(() => pickMetric(entry))}
+      />
+    );
   }
 
   return (

@@ -72,6 +72,16 @@ const SEEDED: DashboardDefinition = {
   rows: [{ widgets: [encode(tokensDraft)] }, { widgets: [encode(entitiesDraft)] }],
 };
 
+/** Drops the widget, and its row once empty. A new widget isn't on the dashboard, so nothing changes. */
+function removeWidget(definition: DashboardDefinition, widgetId: string): DashboardDefinition {
+  return {
+    ...definition,
+    rows: definition.rows
+      .map(r => ({ ...r, widgets: r.widgets.filter(w => w.id !== widgetId) }))
+      .filter(r => r.widgets.length > 0),
+  };
+}
+
 /** Inserts a new widget at the end of the last row when it fits, else on a new row; replaces one with its id. */
 function saveWidget(definition: DashboardDefinition, widget: DashboardWidget): DashboardDefinition {
   const exists = definition.rows.some(r => r.widgets.some(w => w.id === widget.id));
@@ -106,8 +116,19 @@ function Harness({ initial, scope, startOpen }: HarnessProps) {
     setEditing(undefined);
     setChange(undefined);
   };
+  const remove = (widgetId: string) => {
+    setDefinition(d => removeWidget(d, widgetId));
+    stop();
+  };
   const editor = (widgetId: string) => (
-    <WidgetEditor key={widgetId} definition={definition} widgetId={widgetId} scope={scope} onChange={setChange} />
+    <WidgetEditor
+      key={widgetId}
+      definition={definition}
+      widgetId={widgetId}
+      scope={scope}
+      onChange={setChange}
+      onRemove={() => remove(widgetId)}
+    />
   );
 
   return (
