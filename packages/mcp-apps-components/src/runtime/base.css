@@ -1,0 +1,6 @@
+@import 'tailwindcss';
+@import '@mastra/playground-ui/components.css';
+@import '@mastra/playground-ui/sources.css';
+
+/* Each app builds from its own folder; scan the shared runtime and every app's markup. */
+@source '..';
