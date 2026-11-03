@@ -7,7 +7,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
-import { DEFAULT_INTAKE_ROUTE, MAX_INTAKE_ROUTES, StoredBoardsStorage } from './base.js';
+import { DEFAULT_INTAKE_ROUTE, MAX_INTAKE_ROUTES, PULL_REQUEST_INTAKE_ROUTE, StoredBoardsStorage } from './base.js';
 import type { StoredBoardScope, StoredIntakeRouteInput } from './base.js';
 
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
@@ -23,7 +23,7 @@ function route(name: string, overrides: Partial<StoredIntakeRouteInput> = {}): S
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes on %s', backend => {
   /** One storage client; on libsql a shared `file:` database lets a second client act as another replica. */
-  async function client(url: string) {
+  async function open(url: string) {
     const storage =
       backend === 'postgres'
         ? new PgFactoryStorage({ id: `intake-routes-${randomUUID()}`, connectionString: postgresUrl! })
@@ -31,13 +31,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     const boards = storage.registerDomain(new StoredBoardsStorage());
     await storage.init();
     onTestFinished(() => storage.close());
-    return boards;
+    return { storage, boards };
   }
 
-  /** A project with no routes: the default route it starts with, deleted. */
+  async function client(url: string) {
+    return (await open(url)).boards;
+  }
+
+  /** A project with no routes: the default routes it starts with, deleted. */
   async function emptyProject(boards: StoredBoardsStorage, scope: StoredBoardScope) {
-    const [seeded] = await boards.listIntakeRoutes(scope);
-    await boards.deleteIntakeRoute(scope, seeded!.id, { expectedRevision: seeded!.revision });
+    // Last first, so no delete moves (and re-revisions) a route still to delete.
+    for (const seeded of (await boards.listIntakeRoutes(scope)).reverse()) {
+      await boards.deleteIntakeRoute(scope, seeded.id, { expectedRevision: seeded.revision });
+    }
   }
 
   async function setup({ seeded = false } = {}) {
@@ -47,11 +53,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
       url = `file:${join(dir, 'routes.db')}`;
     }
-    const boards = await client(url);
+    const { storage, boards } = await open(url);
     // The Postgres database is shared across runs, so every test gets its own org.
     const scope: StoredBoardScope = { orgId: `org-${randomUUID()}`, factoryProjectId: 'project-1' };
     if (!seeded) await emptyProject(boards, scope);
-    return { boards, scope, secondClient: () => client(url) };
+    return { storage, boards, scope, secondClient: () => client(url) };
   }
 
   async function names(boards: StoredBoardsStorage, scope: StoredBoardScope) {
@@ -60,10 +66,10 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
     return routes.map(row => row.name);
   }
 
-  it('gives a new project the default route, once, and never brings it back once deleted', async () => {
+  it('gives a new project the default routes, once, and never brings one back once deleted', async () => {
     const { boards, scope } = await setup({ seeded: true });
 
-    const [seeded, ...rest] = await boards.listIntakeRoutes(scope);
+    const [seeded, pullRequests, ...rest] = await boards.listIntakeRoutes(scope);
     expect(rest).toEqual([]);
     expect(seeded).toMatchObject({
       name: DEFAULT_INTAKE_ROUTE.name,
@@ -74,20 +80,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       revision: 1,
       createdBy: 'factory',
     });
-    expect(await boards.listIntakeRoutes(scope)).toEqual([seeded]);
+    // Outside authors come first, so their pull requests still wait in Intake.
+    expect(pullRequests).toMatchObject({
+      name: PULL_REQUEST_INTAKE_ROUTE.name,
+      position: 1,
+      when: PULL_REQUEST_INTAKE_ROUTE.when,
+      target: { boardKey: 'work', phaseKey: 'pr-review' },
+      createdBy: 'factory',
+    });
+    expect(await boards.listIntakeRoutes(scope)).toEqual([seeded, pullRequests]);
 
     await boards.deleteIntakeRoute(scope, seeded!.id, { expectedRevision: 1 });
+    await boards.deleteIntakeRoute(scope, pullRequests!.id, { expectedRevision: 2 });
     expect(await boards.listIntakeRoutes(scope)).toEqual([]);
     expect(await boards.listIntakeRoutes(scope)).toEqual([]);
   });
 
-  it("puts a new project's first route after the default route", async () => {
+  it("puts a new project's first route after the default routes", async () => {
     const { boards, scope } = await setup({ seeded: true });
     await boards.createIntakeRoute(scope, route('Mine'), 'u');
-    expect(await names(boards, scope)).toEqual([DEFAULT_INTAKE_ROUTE.name, 'Mine']);
+    expect(await names(boards, scope)).toEqual([DEFAULT_INTAKE_ROUTE.name, PULL_REQUEST_INTAKE_ROUTE.name, 'Mine']);
   });
 
-  it('seeds the default route once when two clients read a new project at once', async () => {
+  it('seeds the default routes once when two clients read a new project at once', async () => {
     const { boards, scope, secondClient } = await setup({ seeded: true });
     const other = await secondClient();
     const fresh = { ...scope, factoryProjectId: 'project-fresh' };
@@ -98,7 +113,65 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       other.createIntakeRoute(fresh, route('Mine'), 'u'),
     ]);
 
-    expect(await names(boards, fresh)).toEqual([DEFAULT_INTAKE_ROUTE.name, 'Mine']);
+    expect(await names(boards, fresh)).toEqual([DEFAULT_INTAKE_ROUTE.name, PULL_REQUEST_INTAKE_ROUTE.name, 'Mine']);
+  });
+
+  /**
+   * The state a project set up before the pull request route existed is in: the lock row lists no
+   * defaults (`seeded_defaults` null) and the project has only the outside-authors route.
+   */
+  async function projectFromBeforePullRequestRoute(setupResult: Awaited<ReturnType<typeof setup>>) {
+    const { storage, boards, scope } = setupResult;
+    const where = { org_id: scope.orgId, factory_project_id: scope.factoryProjectId };
+    await boards.listIntakeRoutes(scope);
+    await storage.ops.updateMany('factory_intake_route_locks', where, { seeded_defaults: null });
+    await storage.ops.deleteMany('factory_intake_routes', { ...where, name: PULL_REQUEST_INTAKE_ROUTE.name });
+  }
+
+  it('adds the pull request route once, at the end, to a project set up before it existed', async () => {
+    const project = await setup({ seeded: true });
+    const { boards, scope } = project;
+    await projectFromBeforePullRequestRoute(project);
+    // Routes the admin added since keep their place ahead of it.
+    await project.storage.ops.insertOne('factory_intake_routes', {
+      id: randomUUID(),
+      org_id: scope.orgId,
+      factory_project_id: scope.factoryProjectId,
+      name: 'Mine',
+      enabled: true,
+      position: 1,
+      when_condition: null,
+      board_key: 'work',
+      phase_key: null,
+      revision: 1,
+      created_by: 'u',
+      created_at: new Date(),
+      updated_by: 'u',
+      updated_at: new Date(),
+    });
+
+    expect(await names(boards, scope)).toEqual([DEFAULT_INTAKE_ROUTE.name, 'Mine', PULL_REQUEST_INTAKE_ROUTE.name]);
+    expect(await names(boards, scope)).toEqual([DEFAULT_INTAKE_ROUTE.name, 'Mine', PULL_REQUEST_INTAKE_ROUTE.name]);
+
+    const added = (await boards.listIntakeRoutes(scope)).at(-1)!;
+    await boards.deleteIntakeRoute(scope, added.id, { expectedRevision: added.revision });
+    expect(await names(boards, scope)).toEqual([DEFAULT_INTAKE_ROUTE.name, 'Mine']);
+  });
+
+  it('adds the pull request route once when two clients read an older project at once', async () => {
+    const project = await setup({ seeded: true });
+    await projectFromBeforePullRequestRoute(project);
+    const other = await project.secondClient();
+
+    await Promise.all([
+      project.boards.listIntakeRoutes(project.scope),
+      other.listIntakeRoutes(project.scope),
+      other.createIntakeRoute(project.scope, route('Mine'), 'u'),
+    ]);
+
+    const listed = await names(project.boards, project.scope);
+    expect(listed.filter(name => name === PULL_REQUEST_INTAKE_ROUTE.name)).toHaveLength(1);
+    expect(listed.toSorted()).toEqual([DEFAULT_INTAKE_ROUTE.name, 'Mine', PULL_REQUEST_INTAKE_ROUTE.name].toSorted());
   });
 
   it('reads back every field of a route, and fills the defaults', async () => {

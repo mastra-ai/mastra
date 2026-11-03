@@ -67,6 +67,74 @@ describe('Knowledge page key paths', () => {
   });
 });
 
+describe('Knowledge results name pages by full ref', () => {
+  async function nested() {
+    const env = setup({ pages: [] });
+    const { call } = env;
+    const guides = await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Guides', key: 'guides' });
+    const ops = await call('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      parent: guides.page.id,
+      name: 'Observability',
+      key: 'observability',
+    });
+    const logging = await call('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      parent: ops.page.id,
+      name: 'Logging',
+      key: 'logging',
+      body: 'Logging setup for zebrafish services.',
+    });
+    // No key: only its id reads it back.
+    const loose = await call('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      parent: ops.page.id,
+      name: 'Zebrafish tracing',
+      body: 'Tracing for zebrafish services.',
+    });
+    return { ...env, guides, ops, logging, loose };
+  }
+
+  it('returns the full key path from write, search and read, and every ref reads back the same page', async () => {
+    const { call, read, logging, loose, ops } = await nested();
+    expect(logging.page.ref).toBe('org:acme#guides/observability/logging');
+    expect(logging.page).not.toHaveProperty('key');
+    expect(loose.page.ref).toBe(loose.page.id);
+
+    const { results } = await call('knowledge_search', { query: 'zebrafish' });
+    const refs = results.map((hit: any) => hit.page.ref);
+    expect(refs).toEqual(expect.arrayContaining(['org:acme#guides/observability/logging', loose.page.id]));
+    for (const hit of results) expect((await read(hit.page.ref)).id).toBe(hit.page.id);
+
+    const parent = await call('knowledge_read', { page: 'org:acme#guides/observability' });
+    expect(parent.page.ref).toBe('org:acme#guides/observability');
+    expect(parent.page.id).toBe(ops.page.id);
+    for (const child of parent.children) expect((await read(child.ref)).id).toBe(child.id);
+    expect(parent.children.map((child: any) => child.ref)).toContain('org:acme#guides/observability/logging');
+
+    expect((await call('knowledge_read', { page: 'org:acme' })).page.ref).toBe('org:acme');
+  });
+
+  it('names close matches by full ref when a guessed path is not found', async () => {
+    const { read } = await nested();
+    await expect(read('org:acme#logging')).rejects.toThrow(
+      'Knowledge page "org:acme#logging" not found. Close matches: org:acme#guides/observability/logging (Logging).',
+    );
+    await expect(read('org:acme#no-such-page')).rejects.toThrow('Knowledge page "org:acme#no-such-page" not found.');
+  });
+
+  it('lists an ambiguous name by full refs', async () => {
+    const { call, read, guides } = await nested();
+    await call('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Logging', key: 'logging' });
+    await expect(read('Logging')).rejects.toThrow(/use one of these refs: .*org:acme#logging/);
+    await expect(read('Logging')).rejects.toThrow(/org:acme#guides\/observability\/logging/);
+    expect(guides.page.ref).toBe('org:acme#guides');
+  });
+});
+
 describe('Knowledge template pages belong to config', () => {
   it('refuses to move or merge away a template page, by key path, id and name', async () => {
     const { call, read } = setup();

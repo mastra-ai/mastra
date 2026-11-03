@@ -137,6 +137,32 @@ export async function participateInDurableExecution<T>(
   }
 }
 
+/**
+ * Stop renewing the claim of a root terminal delivery the processor abandoned, so another worker can recover the run.
+ * `published` is whether the processor published a compensating terminal for it; that delivery settles the run.
+ */
+export async function stopAbandonedDurableExecution(mastra: Mastra, event: Event, published: boolean): Promise<void> {
+  if (!isRootTerminal(event)) return;
+  const context = new RequestContext<unknown>(Object.entries(event.data?.requestContext ?? {}));
+  const claim = getExecutionClaim(context, event.runId);
+  if (!claim) return;
+  await mastra.__getRunScope(event.runId)?.get(PARTICIPANTS)?.get(claim.executionId)?.stop();
+  if (published) return;
+  // Nothing is left to settle the run. Release the captured claim and thread lease so the coordinator sees the
+  // loss and the thread can take a new run. Both releases are fenced to this execution, never a successor's.
+  await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim);
+  if (claim.threadId) {
+    await agentThreadStreamRuntime.abandonDurableThreadLease(
+      mastra.pubsub,
+      event.runId,
+      claim.threadId,
+      claim.resourceId,
+      claim.generation,
+      claim.executionId,
+    );
+  }
+}
+
 /** Retry only conditional cleanup after a terminal delivery released its claim before broker acknowledgement. */
 export async function retrySettledDurableExecution(mastra: Mastra, event: Event): Promise<boolean> {
   if (!isRootTerminal(event)) return false;

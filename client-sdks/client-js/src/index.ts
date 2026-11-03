@@ -21,6 +21,8 @@ export type {
   KnowledgeChangeNotice,
   KnowledgeGraphResponse,
   KnowledgeInstanceSummary,
+  KnowledgeLinkCountsResponse,
+  KnowledgePageLinksResponse,
   KnowledgePageResponse,
   KnowledgeSearchResponse,
   KnowledgeTreeResponse,

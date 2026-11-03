@@ -11,7 +11,7 @@ import type {
   Processor,
 } from '@mastra/core/processors';
 
-import { boardForWorkItem, resolveBoardToolRule, workItemPhaseSemantics } from '../boards/index.js';
+import { boardForWorkItem, resolveBoardToolRule, reviewsPullRequest, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { toBoardSource } from '../boards/project-boards.js';
 import type { ProjectBoardSource } from '../boards/project-boards.js';
@@ -421,17 +421,19 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       role: binding.role,
       configVersion: this.options.configVersion,
     };
-    const value: ActivePhaseSnapshotValue =
-      board === 'review'
-        ? {
-            ...baseValue,
-            board,
-            ...reviewRuntimeFromRequestContext(
-              args.requestContext,
-              await this.options.defaultThinkingLevel?.(args.requestContext),
-            ),
-          }
-        : { ...baseValue, board };
+    const value: ActivePhaseSnapshotValue = reviewsPullRequest({
+      board,
+      item: { source: workItemSource(item.externalSource) },
+    })
+      ? {
+          ...baseValue,
+          board,
+          ...reviewRuntimeFromRequestContext(
+            args.requestContext,
+            await this.options.defaultThinkingLevel?.(args.requestContext),
+          ),
+        }
+      : { ...baseValue, board };
     const cacheKey = await phaseCacheKey(value, linked);
     if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
       return;
@@ -443,7 +445,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const phaseLabel = phase?.name ?? stage;
     const exitText =
       phase?.kind === 'working' && phase.exitTool
-        ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
+        ? boards.get(board)?.tools[phase.exitTool.id]
+          ? `This phase ends when ${escapeText(phase.exitTool.id)} succeeds${phase.exitTool.id === 'submit_plan' ? ' and is approved' : ''}; that moves the card on. Next phases: ${phase.nextPhases.map(escapeText).join(', ')}. You can move it on to a working phase yourself with factory_transition_work_item only when ${escapeText(phase.exitTool.id)} is auto-approved for this card; otherwise a person approves the handoff.\n`
+          : `This phase ends when ${escapeText(phase.exitTool.id)} succeeds. Then move the card with factory_transition_work_item to one of: ${phase.nextPhases.map(escapeText).join(', ')}.\n`
         : '';
     const runtime =
       value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
@@ -655,6 +659,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         cause: 'tool_result_rule',
         causalChain: [{ ingressId, decisionType: entry.type }],
         ...(isApprovedPlanResult(toolResult) ? { planApproved: true } : {}),
+        ...(toolResult.status === 'success' ? { completedTool: toolResult.toolName } : {}),
       });
     }
   }

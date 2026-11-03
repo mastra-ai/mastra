@@ -55,13 +55,14 @@ export function intakeTargetProblem(
 }
 
 /**
- * The built-in Work board holds no pull requests and the built-in Review board nothing else;
- * `FactoryTransitionService` refuses any move that breaks this, so a route can't either.
+ * The built-in Review board holds only pull requests. On Work a new pull request card lands in
+ * Intake or PR review, and nothing else lands in PR review. `FactoryTransitionService` refuses
+ * any move that breaks this, so a route can't either.
  */
-function boardTakesCard(boardId: string, facts: RuleFacts): boolean {
+function placementTakesCard(boardId: string, phase: string, facts: RuleFacts): boolean {
   const pullRequest = facts['source.kind'] === 'pull_request';
-  if (boardId === 'work') return !pullRequest;
   if (boardId === 'review') return pullRequest;
+  if (boardId === 'work') return pullRequest ? phase === 'intake' || phase === 'pr-review' : phase !== 'pr-review';
   return true;
 }
 
@@ -78,8 +79,10 @@ export function resolveIntakePlacement(
   for (const route of routes) {
     if (!route.enabled || !evaluateRuleGroup(route.when, facts)) continue;
     const board = registry.get(route.target.boardKey);
-    if (!board || !boardTakesCard(board.id, facts)) continue;
-    return { board: board.id, phase: landingPhase(board, route.target.phaseKey), routeId: route.id };
+    if (!board) continue;
+    const phase = landingPhase(board, route.target.phaseKey);
+    if (!placementTakesCard(board.id, phase, facts)) continue;
+    return { board: board.id, phase, routeId: route.id };
   }
   return undefined;
 }

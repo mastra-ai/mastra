@@ -2,6 +2,7 @@ import EventEmitter from 'node:events';
 import {
   participateInDurableExecution,
   retrySettledDurableExecution,
+  stopAbandonedDurableExecution,
   settleEventedDurableExecution,
 } from '../../../agent/durable/evented-execution';
 import {
@@ -216,6 +217,9 @@ export class WorkflowEventProcessor extends EventProcessor {
   // release them; otherwise a later restart of the same runId would pick up an
   // already-aborted controller.
   private controlAbortedControllers: WeakSet<AbortController> = new WeakSet();
+  // Delivery keys the processor gave up on without publishing a compensating terminal for their run. Keyed like
+  // deliveryAttempts so a redelivery of the same event still sees it, and evicted with its TERMINAL_SENTINEL entry.
+  #abandonedUnpublished = new Set<string>();
   // Runs whose workflow.start this processor handled. Their abort controller and
   // parent link belong to the start path and live until cleanupRun; for other
   // runs, the step path drops both once its last step releases the run.
@@ -4565,6 +4569,13 @@ export class WorkflowEventProcessor extends EventProcessor {
       const execute = async () => {
         const result = await this.#handleDelivery(event);
         if (result.ok) await settleEventedDurableExecution(this.mastra, event);
+        // No delivery is left to settle an abandoned root terminal, so stop renewing its claim.
+        else if (!result.retry)
+          await stopAbandonedDurableExecution(
+            this.mastra,
+            event,
+            !this.#abandonedUnpublished.has(this.#deliveryKey(event)),
+          );
         return result;
       };
       return await participateInDurableExecution(this.mastra, event, execute);
@@ -4652,14 +4663,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // (or any monotonically-changing token) here — that resets the counter
     // every attempt and reopens the infinite-retry path this guards against.
     const baseWorkflowData = event.data as Partial<Pick<ProcessorArgs, 'workflowId' | 'executionPath'>>;
-    const eventKey =
-      event.id ??
-      JSON.stringify({
-        type: event.type,
-        runId: event.runId,
-        workflowId: baseWorkflowData?.workflowId,
-        executionPath: baseWorkflowData?.executionPath,
-      });
+    const eventKey = this.#deliveryKey(event);
 
     // If we've already declared this event terminal, stay terminal. A buggy
     // transport that re-delivers a poisoned event must not rerun
@@ -4754,16 +4758,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Transport-level retries are exhausted. Surface as a terminal workflow
       // failure so any caller awaiting workflows-finish (e.g. agent.generate())
       // sees an error instead of hanging forever.
-      const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
-      // Never republish workflow.fail for an event that IS workflow.fail.
-      // Each publish gets a fresh event id (fresh retry bucket), so with a
-      // persistently-broken dependency (e.g. missing workflows table) the
-      // fail event would exhaust its own budget and publish another
-      // workflow.fail forever.
-      if (event.type === 'workflow.fail' || !failWorkflowData?.workflowId || !failWorkflowData.runId) {
-        this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
-        return { ok: false, retry: false };
-      }
       return this.#publishPendingFailure(event, eventKey, { error: getErrorFromUnknown(err), publishAttempts: 0 });
     }
   }
@@ -4780,6 +4774,18 @@ export class WorkflowEventProcessor extends EventProcessor {
     eventKey: string,
     pending: { error: Error; publishAttempts: number },
   ): Promise<{ ok: false; retry: boolean }> {
+    const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
+    // Never republish workflow.fail for an event that IS workflow.fail.
+    // Each publish gets a fresh event id (fresh retry bucket), so with a
+    // persistently-broken dependency (e.g. missing workflows table) the
+    // fail event would exhaust its own budget and publish another
+    // workflow.fail forever.
+    if (event.type === 'workflow.fail' || !failWorkflowData?.workflowId || !failWorkflowData.runId) {
+      this.pendingFailures.delete(eventKey);
+      this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
+      this.#abandonedUnpublished.add(eventKey);
+      return { ok: false, retry: false };
+    }
     const publishAttempts = pending.publishAttempts + 1;
     try {
       await this.errorWorkflow(event.data as Omit<ProcessorArgs, 'workflow'>, pending.error);
@@ -4808,6 +4814,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
         return { ok: false, retry: true };
       }
+      this.#abandonedUnpublished.add(eventKey);
     }
     this.pendingFailures.delete(eventKey);
     this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
@@ -4830,7 +4837,22 @@ export class WorkflowEventProcessor extends EventProcessor {
       const oldestKey = this.deliveryAttempts.keys().next().value;
       if (oldestKey === undefined) break;
       this.deliveryAttempts.delete(oldestKey);
+      this.#abandonedUnpublished.delete(oldestKey);
     }
+  }
+
+  /** Identifies a logical delivery across redeliveries of the same event. */
+  #deliveryKey(event: Event): string {
+    const baseWorkflowData = event.data as Partial<Pick<ProcessorArgs, 'workflowId' | 'executionPath'>>;
+    return (
+      event.id ??
+      JSON.stringify({
+        type: event.type,
+        runId: event.runId,
+        workflowId: baseWorkflowData?.workflowId,
+        executionPath: baseWorkflowData?.executionPath,
+      })
+    );
   }
 
   /**

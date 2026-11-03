@@ -16,8 +16,10 @@ import { resolveRunFence, runOutsideRunFenceScope, RUN_FENCE_CONFLICT_ERROR_ID }
 import type { RunFence } from '../../storage/run-fencing';
 import { createTool } from '../../tools';
 import { createStep, createWorkflow } from '../../workflows/evented';
+import { EventedExecutionEngine } from '../../workflows/evented/execution-engine';
 import { WorkflowEventProcessor } from '../../workflows/evented/workflow-event-processor';
 import { Agent } from '../agent';
+import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { DurableStepIds } from './constants';
 import { createEventedAgent } from './create-evented-agent';
@@ -1277,3 +1279,342 @@ it('detaches worker participants on shutdown without invalidating a surviving pa
     generation: coordinator.generation,
   });
 });
+
+it('stops renewing the claim when the processor abandons a root terminal delivery', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  coordinator.stopHeartbeat();
+  const terminal: Event = {
+    id: 'abandoned-terminal',
+    type: 'workflow.end',
+    runId: 'run',
+    createdAt: new Date(),
+    data: {
+      workflowId: 'durable-agentic-loop',
+      runId: 'run',
+      requestContext: { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim } },
+    },
+  };
+  const processor = new WorkflowEventProcessor({ mastra });
+  vi.spyOn(processor, 'loadData').mockRejectedValue(
+    Object.assign(new Error('SQLITE_BUSY: database is locked (test)'), { code: 'SQLITE_BUSY' }),
+  );
+  const renewals = vi.spyOn(workflowsStore, 'renewRunOwnership');
+  try {
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: true });
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: true });
+    await vi.waitFor(() => expect(renewals).toHaveBeenCalled(), { timeout: EXECUTION_LEASE_TTL_MS * 2 });
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: false });
+    const renewed = renewals.mock.calls.length;
+    await new Promise(resolve => setTimeout(resolve, EXECUTION_LEASE_TTL_MS * 1.5));
+    expect(renewals).toHaveBeenCalledTimes(renewed);
+    expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+      ownerId: coordinator.executionId,
+      live: false,
+    });
+  } finally {
+    renewals.mockRestore();
+    await stopDurableExecutionParticipants(mastra);
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('releases the claim so a live coordinator sees the loss when the processor abandons a workflow.fail delivery', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-fail-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  const terminal: Event = {
+    id: 'abandoned-fail',
+    type: 'workflow.fail',
+    runId: 'run',
+    createdAt: new Date(),
+    data: {
+      workflowId: 'durable-agentic-loop',
+      runId: 'run',
+      requestContext: { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim } },
+    },
+  };
+  const processor = new WorkflowEventProcessor({ mastra });
+  vi.spyOn(processor, 'loadData').mockRejectedValue(
+    Object.assign(new Error('SQLITE_BUSY: database is locked (test)'), { code: 'SQLITE_BUSY' }),
+  );
+  try {
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: true });
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: true });
+    expect(coordinator.isLost()).toBe(false);
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: false });
+    expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+      ownerId: coordinator.executionId,
+      generation: coordinator.generation,
+      leaseExpiresAt: null,
+      live: false,
+    });
+    await vi.waitFor(() => expect(coordinator.isLost()).toBe(true), { timeout: EXECUTION_LEASE_TTL_MS * 2 });
+  } finally {
+    coordinator.stopHeartbeat();
+    await stopDurableExecutionParticipants(mastra);
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it.each(['exhausted', 'healthy'] as const)(
+  'settles the claim and thread lease of an abandoned root terminal whose compensating publication is %s',
+  async publication => {
+    const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-unpublished-'));
+    const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ storage, pubsub, logger: false });
+    const workflowsStore = (await storage.getStore('workflows'))!;
+    const coordinator = await ExecutionFence.claim({
+      workflowsStore,
+      leaseProvider: pubsub,
+      agentId: 'agent',
+      runId: 'run',
+      mode: 'acquire',
+    });
+    coordinator.stopHeartbeat();
+    const threadKey = 'resource\u0000thread';
+    await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'run', 'thread', 'resource', coordinator.generation);
+    const requestContext = {
+      [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: { ...coordinator.claim, threadId: 'thread', resourceId: 'resource' } },
+    };
+    const terminal: Event = {
+      id: `abandoned-${publication}`,
+      type: 'workflow.end',
+      runId: 'run',
+      createdAt: new Date(),
+      data: { workflowId: 'durable-agentic-loop', runId: 'run', requestContext },
+    };
+    const processor = new WorkflowEventProcessor({ mastra });
+    vi.spyOn(processor, 'loadData').mockRejectedValue(
+      Object.assign(new Error('SQLITE_BUSY: database is locked (test)'), { code: 'SQLITE_BUSY' }),
+    );
+    const errorWorkflow = vi.spyOn(processor, 'errorWorkflow');
+    if (publication === 'exhausted') errorWorkflow.mockRejectedValue(new Error('publish failed (test)'));
+    else errorWorkflow.mockResolvedValue(undefined);
+    const renewLease = vi.spyOn(pubsub, 'renewLease');
+    try {
+      const results = [];
+      for (let delivery = 0; delivery < 6; delivery++) {
+        const result = await processor.handle(terminal);
+        results.push(result.retry);
+        if (!result.retry) break;
+      }
+      expect(results).toEqual(publication === 'exhausted' ? [true, true, true, true, false] : [true, true, false]);
+
+      if (publication === 'healthy') {
+        // The published workflow.fail settles the run, so abandonment must leave the claim and lease to it.
+        expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+          ownerId: coordinator.executionId,
+          leaseExpiresAt: expect.any(Date),
+        });
+        expect(await pubsub.getLeaseOwner(threadKey)).toBeDefined();
+        await settleEventedDurableExecution(mastra, { ...terminal, id: 'published-fail', type: 'workflow.fail' });
+      }
+
+      expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+        ownerId: coordinator.executionId,
+        generation: coordinator.generation,
+        leaseExpiresAt: null,
+        live: false,
+      });
+      expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined();
+      renewLease.mockClear();
+      await new Promise(resolve => setTimeout(resolve, AGENT_LEASE_RENEW_INTERVAL_MS + 1_000));
+      expect(renewLease.mock.calls.filter(([key]) => key === threadKey)).toEqual([]);
+      expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined();
+      expect(await pubsub.acquireLease(threadKey, 'next-run', AGENT_LEASE_TTL_MS)).toMatchObject({ acquired: true });
+    } finally {
+      renewLease.mockRestore();
+      await stopDurableExecutionParticipants(mastra);
+      await pubsub.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+);
+
+it('releases an abandoned unpublished terminal on a serialized redelivery after its first release failed', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-redelivery-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  coordinator.stopHeartbeat();
+  const threadKey = 'resource\u0000thread';
+  await agentThreadStreamRuntime.claimDurableThreadLease(pubsub, 'run', 'thread', 'resource', coordinator.generation);
+  const requestContext = {
+    [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: { ...coordinator.claim, threadId: 'thread', resourceId: 'resource' } },
+  };
+  const terminal: Event = {
+    id: 'abandoned-redelivered',
+    type: 'workflow.end',
+    runId: 'run',
+    createdAt: new Date(),
+    data: { workflowId: 'durable-agentic-loop', runId: 'run', requestContext },
+  };
+  const processor = new WorkflowEventProcessor({ mastra });
+  vi.spyOn(processor, 'loadData').mockRejectedValue(
+    Object.assign(new Error('SQLITE_BUSY: database is locked (test)'), { code: 'SQLITE_BUSY' }),
+  );
+  vi.spyOn(processor, 'errorWorkflow').mockRejectedValue(new Error('publish failed (test)'));
+  const releaseSharedClaim = vi
+    .spyOn(ExecutionFence, 'releaseSharedClaim')
+    .mockRejectedValueOnce(new Error('release failed (test)'));
+  // Each delivery is a fresh object, as a transport that serializes events hands it over.
+  const redeliver = () => processor.handle(JSON.parse(JSON.stringify(terminal)));
+  try {
+    const results = [];
+    for (let delivery = 0; delivery < 6; delivery++) results.push((await redeliver()).retry);
+    // The abandoning delivery fails its release and asks for a retry; the next one finds the event terminal.
+    expect(results).toEqual([true, true, true, true, true, false]);
+    expect(releaseSharedClaim).toHaveBeenCalledTimes(2);
+    expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+      ownerId: coordinator.executionId,
+      generation: coordinator.generation,
+      leaseExpiresAt: null,
+      live: false,
+    });
+    expect(await pubsub.getLeaseOwner(threadKey)).toBeUndefined();
+  } finally {
+    releaseSharedClaim.mockRestore();
+    await stopDurableExecutionParticipants(mastra);
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it.each(['released', 'taken over', 'released while unsubscribe fails'] as const)(
+  'stops a shared caller waiting on a run whose claim was %s, without writing to the run',
+  async loss => {
+    const released = loss !== 'taken over';
+    const directory = await mkdtemp(join(tmpdir(), 'mastra-caller-loss-'));
+    const socket = join(directory, 'pubsub.sock');
+    const storage = new InMemoryStore();
+    const workflows = (await storage.getStore('workflows'))!;
+    const entered = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    const { model } = deliveryModel('worker answer', undefined, async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    const memory = new MockMemory({ storage });
+    const build = (pubsub: UnixSocketPubSub) =>
+      createEventedAgent({
+        agent: new Agent({ id: 'agent', name: 'agent', instructions: 'Answer.', model, memory }),
+        pubsub,
+      });
+    const apiPubsub = new UnixSocketPubSub(socket);
+    const workerPubsub = new UnixSocketPubSub(socket);
+    const apiAgent = build(apiPubsub);
+    const api = new Mastra({ agents: { agent: apiAgent }, storage, pubsub: apiPubsub, workers: false, logger: false });
+    const worker = new Mastra({ agents: { agent: build(workerPubsub) }, storage, pubsub: workerPubsub, logger: false });
+    const threadKey = 'resource\u0000thread';
+    const execute = vi.spyOn(EventedExecutionEngine.prototype, 'execute');
+    const unsubscribe = vi.spyOn(apiPubsub, 'unsubscribe');
+    // A failed unsubscribe must still reject the caller with the loss, not surface as an unhandled rejection.
+    if (loss === 'released while unsubscribe fails') {
+      unsubscribe.mockRejectedValueOnce(new Error('publisher queue full (test)'));
+    }
+    let successor: ExecutionFence | undefined;
+    try {
+      await worker.startWorkers();
+      const output = await apiAgent.stream('Answer the question.', {
+        runId: `caller-loss-${loss.replaceAll(' ', '-')}`,
+        memory: { resource: 'resource', thread: 'thread' },
+      });
+      const { runId } = output;
+      const streamEnd = (async () => {
+        let last: { type: string; message?: string } | undefined;
+        for await (const chunk of output.fullStream) {
+          last = {
+            type: chunk.type,
+            ...(chunk.type === 'error' ? { message: (chunk.payload.error as Error)?.message } : {}),
+          };
+        }
+        return last;
+      })().catch(() => undefined);
+      await entered.promise;
+      const started = execute.mock.results[0]!.value as Promise<unknown>;
+      const outcome = started.then(
+        () => ({ settled: 'resolved' as const }),
+        (error: { id?: string }) => ({ settled: 'rejected' as const, id: error?.id }),
+      );
+      const claimed = (await workflows.getRunOwnership({ runId }))!;
+
+      if (released) {
+        await workflows.releaseRunOwnership({ runId, generation: claimed.generation, ownerId: claimed.ownerId });
+      } else {
+        successor = await ExecutionFence.claim({
+          workflowsStore: workflows,
+          leaseProvider: workerPubsub,
+          agentId: 'agent',
+          runId,
+          mode: 'takeover',
+        });
+        successor.stopHeartbeat();
+      }
+      const ownership = await workflows.getRunOwnership({ runId });
+      const loopRow = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+      const threadOwner = await workerPubsub.getLeaseOwner(threadKey);
+      const publish = vi.spyOn(apiPubsub, 'publish');
+
+      expect(await outcome).toEqual({
+        settled: 'rejected',
+        id: released ? EXECUTION_UNVERIFIED_ERROR_ID : EXECUTION_SUPERSEDED_ERROR_ID,
+      });
+      expect(unsubscribe.mock.calls.some(([topic]) => topic === 'workflows-finish')).toBe(true);
+      expect(publish.mock.calls.filter(([topic]) => topic === 'workflows' || topic === 'workflows-finish')).toEqual([]);
+      expect(await workflows.getRunOwnership({ runId })).toEqual(ownership);
+      expect(await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP })).toEqual(loopRow);
+      // Nobody else will publish to a released run's stream, so the caller's stream must end with the loss.
+      if (released) {
+        expect(await streamEnd).toEqual({
+          type: 'error',
+          message: expect.stringContaining('could not verify that this execution still owns the run'),
+        });
+      }
+      if (loss === 'taken over') {
+        expect(ownership).toMatchObject({ ownerId: successor!.executionId, generation: successor!.generation });
+        expect(await workerPubsub.getLeaseOwner(threadKey)).toBe(threadOwner);
+      }
+    } finally {
+      execute.mockRestore();
+      release.resolve();
+      successor?.stopHeartbeat();
+      await api.shutdown();
+      await worker.shutdown();
+      await apiPubsub.close();
+      await workerPubsub.close();
+      await rm(directory, { recursive: true, force: true });
+    }
+  },
+  40_000,
+);

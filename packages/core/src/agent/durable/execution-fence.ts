@@ -1094,6 +1094,25 @@ export class ExecutionFence implements RunFenceScope {
     }
   }
 
+  /**
+   * The error to give this execution's caller once it lost the run: superseded when another execution holds the run,
+   * otherwise unverified. `undefined` while the run is still held, or when this process gave the run up itself.
+   */
+  async callerLossError(): Promise<DurableExecutionFenceError | undefined> {
+    const lost = this.#lossError;
+    if (!lost || lost.id === EXECUTION_ABANDONED_ERROR_ID) return undefined;
+    let superseded: boolean;
+    try {
+      superseded = this.#takenOver || (await this.#backend.isSuperseded(this.claim));
+    } catch {
+      return lost;
+    }
+    return new DurableExecutionFenceError(
+      superseded ? EXECUTION_SUPERSEDED_ERROR_ID : EXECUTION_UNVERIFIED_ERROR_ID,
+      this.#details(),
+    );
+  }
+
   async #noteTakeover(): Promise<void> {
     try {
       if (await this.#backend.isSuperseded(this.claim)) this.#takenOver = true;
@@ -1150,6 +1169,35 @@ export class ExecutionFence implements RunFenceScope {
     }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
     this.#heartbeat.unref?.();
   }
+}
+
+/**
+ * Watch for this process's execution of `runId` losing the run, and report it with the error its caller should see.
+ * A finishing worker releases the claim right after publishing its finish, so the loss is only reported if no finish
+ * stopped the watch within a renewal interval.
+ */
+export function watchExecutionLoss(
+  requestContext: RequestContext,
+  runId: string,
+  onLost: (error: DurableExecutionFenceError) => void,
+): () => void {
+  const claim = getExecutionClaim(requestContext, runId);
+  const fence = claim ? fencesByExecutionId.get(claim.executionId) : undefined;
+  if (!fence || fence.runId !== runId) return () => {};
+  let watching = true;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const stopListening = fence.onLost(() => {
+    timer = setTimeout(() => {
+      void fence.callerLossError().then(error => {
+        if (watching && error) onLost(error);
+      });
+    }, EXECUTION_LEASE_RENEW_INTERVAL_MS);
+  });
+  return () => {
+    watching = false;
+    stopListening();
+    if (timer) clearTimeout(timer);
+  };
 }
 
 /**

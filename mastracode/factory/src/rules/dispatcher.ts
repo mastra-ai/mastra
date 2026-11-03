@@ -7,8 +7,11 @@ import type { SubmitPlanResumeData } from '@mastra/core/tools';
 import {
   boardForWorkItem,
   cardRuleFacts,
+  isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
+  pullRequestReviewPhase,
+  reviewsPullRequest,
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
@@ -52,7 +55,7 @@ import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
-import { externalSourceForWorkItem, FACTORY_RULE_STAGES } from './types.js';
+import { externalSourceForWorkItem, FACTORY_RULE_STAGES, workItemSource } from './types.js';
 import {
   assertFactoryDecisionTarget,
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
@@ -403,8 +406,6 @@ export interface FactoryDecisionDispatcherOptions {
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
-  /** `true` lets the dispatcher answer a run's plan itself, so started work carries to Done. */
-  autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   reconcileToolResults?: () => Promise<void>;
   prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -540,11 +541,16 @@ function requestsConsent(
 // The Factory reviewing code it wrote is part of the same work, not new work to
 // consent to: a push to a Factory-authored PR re-reviews without a person's click.
 function reviewsFactoryAuthoredCode(
-  item: { metadata: Record<string, unknown> | null },
+  item: Pick<WorkItemRow, 'metadata' | 'externalSource'>,
   decision: FactoryCommitDecision,
 ): boolean {
   if (item.metadata?.factoryAuthored !== true) return false;
-  if (decision.type === 'transition') return decision.board === 'review' && decision.stage === 'review';
+  if (decision.type === 'transition') {
+    return (
+      decision.stage === pullRequestReviewPhase(decision.board) &&
+      reviewsPullRequest({ board: decision.board, item: { source: workItemSource(item.externalSource) } })
+    );
+  }
   return decision.type === 'invokeSkill' && decision.role === 'review';
 }
 
@@ -605,7 +611,6 @@ export class FactoryDecisionDispatcher {
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
-  readonly #autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   readonly #reconcileToolResults?: () => Promise<void>;
   readonly #prepareBinding?: (input: FactoryBindingPreparationInput) => Promise<void>;
   readonly #primeCredentials?: (tenant: { orgId: string; userId: string }) => Promise<void>;
@@ -641,7 +646,6 @@ export class FactoryDecisionDispatcher {
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
-    this.#autoApprovePlans = options.autoApprovePlans;
     this.#reconcileToolResults = options.reconcileToolResults;
     this.#prepareBinding = options.prepareBinding;
     this.#primeCredentials = options.primeCredentials;
@@ -1413,8 +1417,16 @@ export class FactoryDecisionDispatcher {
           reuseMode: 'preserve',
         });
     const itemBoard = boardForWorkItem(result.item);
-    if (!skipRules && itemBoard !== decision.board) {
-      throw new Error(`The work item belongs to board "${itemBoard}", not "${decision.board}".`);
+    // New pull request cards are filed on Work, but one filed on Review before
+    // that stays there: filing its pull request again acts on it where it sits.
+    const board =
+      itemBoard === 'review' &&
+      decision.board === 'work' &&
+      isPullRequestCard({ source: workItemSource(result.item.externalSource) })
+        ? itemBoard
+        : decision.board;
+    if (!skipRules && itemBoard !== board) {
+      throw new Error(`The work item belongs to board "${itemBoard}", not "${board}".`);
     }
     // A re-evaluation for an already-filed card (poll/reconcile re-emitting
     // "opened") resolves the card itself as the triggering item; it is not
@@ -1461,7 +1473,7 @@ export class FactoryDecisionDispatcher {
           boardRegistry: boards,
           userId: 'factory-rule-dispatcher',
           item: result.item,
-          targetBoard: decision.board,
+          targetBoard: board,
           targetStage: decision.stage,
         });
       }
@@ -1471,7 +1483,6 @@ export class FactoryDecisionDispatcher {
     if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))
       return;
 
-    const board = decision.board;
     let expectedRevision = result.item.revision;
     if (materializedByDecision) {
       const initial = await this.#transitionService.transition({
@@ -1711,9 +1722,8 @@ export class FactoryDecisionDispatcher {
   }
 
   /**
-   * Whether the run answers its plan approvals itself: the project says so, or the card's phase
-   * ends with an auto-approved `submit_plan`. Unset means off: a plan nobody asked us to answer is
-   * a plan someone should see.
+   * Whether the run answers its plan approvals itself: the card's phase ends with an auto-approved
+   * `submit_plan`. Otherwise a plan waits for a person.
    */
   async #plansAreAutoApproved({
     orgId,
@@ -1725,9 +1735,10 @@ export class FactoryDecisionDispatcher {
     workItemId: string | null;
   }): Promise<boolean> {
     const item = workItemId ? await this.#storage.get({ orgId, id: workItemId }) : null;
-    if (item && autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) === 'submit_plan')
-      return true;
-    return this.#autoApprovePlans ? await this.#autoApprovePlans({ orgId, factoryProjectId }) : false;
+    return (
+      item !== null &&
+      autoApprovedExitTool(await this.#boards.load({ orgId, factoryProjectId }), item) === 'submit_plan'
+    );
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {
