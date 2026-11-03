@@ -146,7 +146,7 @@ const workspace = new Workspace({
 
 Some vector stores generate the embeddings themselves. With one of those, leave `embedder` out: Mastra sends the file text, and the database embeds it on write and embeds the search string on query.
 
-MongoDB does this through [Automated Embedding](/reference/vectors/mongodb#automated-embedding). Name a Voyage AI model on the vector store:
+MongoDB does this through [Automated Embedding](/integrations/vectors/mongodb#automated-embedding). Name a Voyage AI model on the vector store:
 
 ```typescript title="src/mastra/workspaces.ts"
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace'
@@ -164,7 +164,7 @@ const workspace = new Workspace({
 })
 ```
 
-MongoDB embeds new documents in the background, so content indexed moments ago may not show up in search results yet. See the [MongoDB reference](/reference/vectors/mongodb#automated-embedding) for what Automated Embedding requires.
+MongoDB embeds new documents in the background, so content indexed moments ago may not show up in search results yet. See the [MongoDB reference](/integrations/vectors/mongodb#automated-embedding) for what Automated Embedding requires.
 
 Every other store expects your application to supply the vectors and keeps requiring an `embedder`.
 
