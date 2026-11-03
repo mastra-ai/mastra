@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { noopLogger } from '@mastra/core/logger';
-import { rollup } from 'rollup';
+import { rolldown } from 'rolldown';
 import { afterEach, describe, expect, it } from 'vitest';
 import { analyzeBundle } from './analyze';
 import { getInputOptions } from './bundler';
@@ -100,7 +100,7 @@ describe('bundling a transitive-only workspace package (#27134)', () => {
         workspaceRoot: tempDir,
         externalsPreset: true,
       });
-      const bundle = await rollup({ ...inputOptions, input: entryFile });
+      const bundle = await rolldown({ ...inputOptions, input: entryFile });
       const { output } = await bundle.generate({ format: 'esm' });
       await bundle.close();
 

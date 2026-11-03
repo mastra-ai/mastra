@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { basename } from 'node:path/posix';
@@ -289,6 +290,14 @@ async function buildExternalDependencies(
   });
 
   const outputDirRelative = prepareEntryFileName(outputDir, rootDir);
+  // Module ids are real paths, so workspace locations must be too.
+  const workspaceLocations = Array.from(workspaceMap.entries()).map(([pkgName, pkgInfo]) => {
+    let location = pkgInfo.location;
+    try {
+      location = realpathSync(location);
+    } catch {}
+    return [pkgName, slash(location)] as const;
+  });
 
   const { output } = await bundler.write({
     format: 'esm',
@@ -310,8 +319,7 @@ async function buildExternalDependencies(
 
         for (const moduleId of chunkInfo.moduleIds) {
           const normalized = slash(moduleId);
-          for (const [pkgName, pkgInfo] of workspaceMap.entries()) {
-            const location = slash(pkgInfo.location);
+          for (const [pkgName, location] of workspaceLocations) {
             if (normalized.startsWith(location)) {
               importedFromPackages.add(pkgName);
               break;

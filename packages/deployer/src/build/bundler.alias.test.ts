@@ -1,7 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { rollup } from 'rollup';
+import { rolldown } from 'rolldown';
 import { describe, expect, it } from 'vitest';
 import { getInputOptions } from './bundler';
 
@@ -31,14 +31,14 @@ describe('getInputOptions module aliases', () => {
           alias: { 'aliased-package': shimFile },
         },
       );
-      const bundler = await rollup({ ...inputOptions, input: entryFile });
+      const bundler = await rolldown({ ...inputOptions, input: entryFile });
 
       try {
         const { output } = await bundler.generate({ format: 'esm' });
         const code = output.map(chunk => ('code' in chunk ? chunk.code : '')).join('\n');
 
         expect(code).toContain('MASTRA_ALIAS_SHIM');
-        expect(code).not.toContain("from 'aliased-package'");
+        expect(code).not.toMatch(/["']aliased-package["']/);
       } finally {
         await bundler.close();
       }
@@ -73,14 +73,14 @@ describe('getInputOptions module aliases', () => {
           alias: { 'aliased-package': shimFile },
         },
       );
-      const bundler = await rollup({ ...inputOptions, input: entryFile });
+      const bundler = await rolldown({ ...inputOptions, input: entryFile });
 
       try {
         const { output } = await bundler.generate({ format: 'esm' });
         const code = output.map(chunk => ('code' in chunk ? chunk.code : '')).join('\n');
 
         expect(code).toContain('MASTRA_CJS_ALIAS_SHIM');
-        expect(code).not.toContain("from 'aliased-package'");
+        expect(code).not.toMatch(/["']aliased-package["']/);
       } finally {
         await bundler.close();
       }

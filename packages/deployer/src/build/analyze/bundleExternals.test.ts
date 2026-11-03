@@ -1,5 +1,6 @@
+import { realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { ensureDir, remove, pathExists, symlink, writeFile } from 'fs-extra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
@@ -26,10 +27,6 @@ vi.mock('../package-info', () => ({
     if (pkg === 'react') return '/node_modules/react';
     return null;
   }),
-}));
-
-vi.mock('../plugins/esbuild', () => ({
-  esbuild: vi.fn(() => ({ name: 'esbuild-mock' })),
 }));
 
 vi.mock('../plugins/hono-alias', () => ({
@@ -449,7 +446,7 @@ describe('bundleExternals', () => {
     expect(result.fileNameToDependencyMap).toBeInstanceOf(Map);
     expect(result.fileNameToDependencyMap.size).toBe(1);
     const mappingEntries = Array.from(result.fileNameToDependencyMap.entries());
-    expect(mappingEntries[0][1]).toBe('lodash');
+    expect(mappingEntries[0]![1]).toBe('lodash');
 
     // Verify usedExternals is a plain object
     expect(typeof result.usedExternals).toBe('object');
@@ -786,6 +783,107 @@ describe('bundleExternals', () => {
     expect(optionsTestResult.output).toBeDefined();
   });
 
+  async function writePackage(packageDir: string, files: Record<string, string>) {
+    for (const [file, content] of Object.entries(files)) {
+      const filePath = join(packageDir, file);
+      await ensureDir(dirname(filePath));
+      await writeFile(filePath, content);
+    }
+  }
+
+  it('hoists require() of a configured external into chunk imports', async () => {
+    const packageDir = join(testDir, 'node_modules', 'cjs-dep');
+    await writePackage(packageDir, {
+      'package.json': JSON.stringify({ name: 'cjs-dep', version: '1.0.0', main: 'index.js' }),
+      'index.js': `const ext = require('ext-pkg');\nexports.value = () => ext.value;\n`,
+    });
+    await writePackage(join(testDir, 'node_modules', 'ext-pkg'), {
+      'package.json': JSON.stringify({ name: 'ext-pkg', version: '1.0.0', main: 'index.js' }),
+      'index.js': `exports.value = 'EXT_PKG_SHOULD_NOT_BE_BUNDLED';\n`,
+    });
+
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      ['cjs-dep', { exports: ['value'], rootPath: packageDir, isWorkspace: false }],
+    ]);
+
+    const result = await bundleExternals(depsToOptimize, join(testDir, '.mastra', '.build'), {
+      projectRoot: testDir,
+      bundlerOptions: normalizeExternals(['ext-pkg']),
+    });
+
+    const chunks = result.output.filter(o => o.type === 'chunk');
+    const code = chunks.map(chunk => chunk.code).join('\n');
+    expect(chunks.some(chunk => chunk.imports.includes('ext-pkg'))).toBe(true);
+    expect(code).not.toContain('EXT_PKG_SHOULD_NOT_BE_BUNDLED');
+    // Externals are only reported when they show up in `chunk.imports`.
+    expect(Object.values(result.usedExternals).some(externals => 'ext-pkg' in externals)).toBe(true);
+    expect(result.requiredExternals.size).toBe(0);
+  });
+
+  it('reports bare packages required by a CommonJS workspace package without bundling them (dev)', async () => {
+    const workspaceDir = join(testDir, 'packages', 'cjs-utils');
+    await writePackage(workspaceDir, {
+      'package.json': JSON.stringify({ name: '@workspace/cjs-utils', version: '1.0.0', main: 'index.js' }),
+      'index.js': `const dep = require('bare-dep');\nexports.helper = () => dep.value;\n`,
+    });
+    await writePackage(join(testDir, 'node_modules', 'bare-dep'), {
+      'package.json': JSON.stringify({ name: 'bare-dep', version: '1.0.0', main: 'index.js' }),
+      'index.js': `exports.value = 'BARE_DEP_SHOULD_NOT_BE_BUNDLED';\n`,
+    });
+
+    const workspaceMap = new Map<string, WorkspacePackageInfo>([
+      ['@workspace/cjs-utils', { location: workspaceDir, dependencies: {}, version: '1.0.0' }],
+    ]);
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      ['@workspace/cjs-utils', { exports: ['helper'], rootPath: workspaceDir, isWorkspace: true }],
+    ]);
+
+    const result = await bundleExternals(depsToOptimize, join(testDir, 'app', '.mastra', '.build'), {
+      workspaceRoot: testDir,
+      projectRoot: join(testDir, 'app'),
+      workspaceMap,
+      bundlerOptions: { ...normalizeExternals(undefined), isDev: true },
+    });
+
+    const code = result.output
+      .filter(o => o.type === 'chunk')
+      .map(chunk => chunk.code)
+      .join('\n');
+    expect(result.requiredExternals).toEqual(new Set(['bare-dep']));
+    expect(code).toMatch(/require\(["']bare-dep["']\)/);
+    expect(code).not.toContain('BARE_DEP_SHOULD_NOT_BE_BUNDLED');
+  });
+
+  it('does not report an existing .node binary as missing', async () => {
+    const packageDir = join(testDir, 'node_modules', 'native-pkg');
+    await writePackage(packageDir, {
+      'package.json': JSON.stringify({ name: 'native-pkg', version: '1.0.0', main: 'index.js' }),
+      'index.js': `const binding = require('./build/Release/addon.node');\nexports.native = () => binding;\n`,
+    });
+    await ensureDir(join(packageDir, 'build', 'Release'));
+    // Mach-O magic bytes followed by NULs, like a real compiled addon.
+    await writeFile(
+      join(packageDir, 'build', 'Release', 'addon.node'),
+      Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x07, 0x00, 0x00, 0x01, 0x00, 0x00]),
+    );
+
+    const depsToOptimize = new Map<string, DependencyMetadata>([
+      ['native-pkg', { exports: ['native'], rootPath: packageDir, isWorkspace: false }],
+    ]);
+
+    const error = await bundleExternals(depsToOptimize, join(testDir, '.mastra', '.build'), {
+      projectRoot: testDir,
+      bundlerOptions: normalizeExternals(undefined),
+    }).then(
+      () => undefined,
+      (err: Error & { errors?: Array<{ id?: string }> }) => err,
+    );
+
+    // Rolldown still fails to load the binary itself (UNLOADABLE_DEPENDENCY); that is not the missing-binary hint.
+    expect(error?.errors?.[0]?.id).not.toBe('DEPLOYER_BUNDLE_EXTERNALS_MISSING_NATIVE_BUILD');
+    expect(error?.message ?? '').not.toContain('We found a possible binary dependency');
+  });
+
   describe('externals: true behavior', () => {
     it('should remove non-workspace deps from bundling and add to usedExternals', async () => {
       const depsToOptimize = new Map<string, DependencyMetadata>([
@@ -1113,11 +1211,13 @@ describe('bundleExternals', () => {
       });
 
       const chunks = result.output.filter(o => o.type === 'chunk');
+      // Rolldown reports real paths (the OS temp dir can be a symlink, e.g. /var -> /private/var on macOS).
+      const [realCoreDir, realLeafDir] = [realpathSync(coreDir), realpathSync(leafDir)];
       const sharedChunk = chunks.find(
         c =>
           !c.isEntry &&
-          c.moduleIds.some(id => id.startsWith(coreDir)) &&
-          c.moduleIds.some(id => id.startsWith(leafDir)),
+          c.moduleIds.some(id => id.startsWith(realCoreDir)) &&
+          c.moduleIds.some(id => id.startsWith(realLeafDir)),
       );
       expect(sharedChunk).toBeDefined();
       expect(sharedChunk!.fileName).not.toContain('node_modules/.cache');

@@ -1,6 +1,14 @@
 import { posix } from 'node:path';
+import { watch } from 'rolldown';
+import type { RolldownWatcher, RolldownWatcherEvent } from 'rolldown';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { getInputOptions } from './watcher';
+import type * as BundlerModule from './bundler';
+import { createWatcher, getInputOptions } from './watcher';
+
+vi.mock('rolldown', async importOriginal => ({
+  ...(await importOriginal<typeof import('rolldown')>()),
+  watch: vi.fn(),
+}));
 
 // Mock bundler module at the top level
 vi.mock('./bundler', () => ({
@@ -204,8 +212,86 @@ describe('watcher', () => {
         }),
       );
       expect(
-        inputOptions.plugins?.some(plugin => (plugin as { name?: string })?.name === 'workspace-deps-watcher'),
+        (inputOptions.plugins as { name?: string }[]).some(plugin => plugin.name === 'workspace-deps-watcher'),
       ).toBe(true);
+    });
+
+    it('uses the dev pipeline built by the bundler without swapping plugins', async () => {
+      const actualBundler = await vi.importActual<typeof BundlerModule>('./bundler');
+      const bundlerGetInputOptions = vi.mocked(await import('./bundler')).getInputOptions;
+      bundlerGetInputOptions.mockImplementationOnce(actualBundler.getInputOptions);
+
+      const inputOptions = await getInputOptions('test-entry.js', 'node');
+      const pluginNames = (inputOptions.plugins as { name?: string }[]).map(plugin => plugin.name);
+
+      expect(pluginNames).toEqual(
+        expect.arrayContaining(['tsconfig-paths', 'hono-alias', 'node-modules-externals', 'workspace-deps-watcher']),
+      );
+      expect(pluginNames.filter(name => name === 'tsconfig-paths')).toHaveLength(1);
+      expect(pluginNames.filter(name => name === 'hono-alias')).toHaveLength(1);
+    });
+  });
+
+  describe('createWatcher', () => {
+    type WatchBuild = Extract<RolldownWatcherEvent, { code: 'BUNDLE_END' }>['result'];
+
+    function mockBuild() {
+      const close = vi.fn().mockResolvedValue(undefined);
+      return Object.assign({ close } as unknown as WatchBuild, { close });
+    }
+
+    function mockWatch() {
+      const listeners: Array<(event: RolldownWatcherEvent) => unknown> = [];
+      const watcher = {
+        on: vi.fn((name: string, listener: (event: RolldownWatcherEvent) => unknown) => {
+          if (name === 'event') {
+            listeners.push(listener);
+          }
+          return watcher;
+        }),
+      };
+      vi.mocked(watch).mockReturnValue(watcher as unknown as RolldownWatcher);
+
+      return {
+        emit: async (event: RolldownWatcherEvent) => {
+          for (const listener of listeners) {
+            await listener(event);
+          }
+        },
+      };
+    }
+
+    it('writes ESM output with .mjs file names', async () => {
+      mockWatch();
+
+      await createWatcher({ input: 'entry.js' }, { dir: '/out' });
+
+      expect(watch).toHaveBeenCalledWith(
+        expect.objectContaining({
+          input: 'entry.js',
+          output: expect.objectContaining({
+            dir: '/out',
+            format: 'esm',
+            entryFileNames: '[name].mjs',
+            chunkFileNames: '[name].mjs',
+          }),
+        }),
+      );
+    });
+
+    it('closes the build result on BUNDLE_END and ERROR so Rolldown can release the build', async () => {
+      const { emit } = mockWatch();
+      await createWatcher({ input: 'entry.js' }, { dir: '/out' });
+
+      const bundleEndResult = mockBuild();
+      await emit({ code: 'BUNDLE_END', duration: 1, output: ['/out'], result: bundleEndResult });
+      expect(bundleEndResult.close).toHaveBeenCalledTimes(1);
+
+      const errorResult = mockBuild();
+      await emit({ code: 'ERROR', error: new Error('boom'), result: errorResult });
+      expect(errorResult.close).toHaveBeenCalledTimes(1);
+
+      await expect(emit({ code: 'START' })).resolves.toBeUndefined();
     });
   });
 });

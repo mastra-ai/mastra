@@ -4,18 +4,18 @@ import { join } from 'node:path';
 import { noopLogger } from '@mastra/core/logger';
 import { readFile } from 'fs-extra';
 import { resolveModule } from 'local-pkg';
-import { rollup } from 'rollup';
-import type * as RollupModule from 'rollup';
+import { rolldown } from 'rolldown';
+import type * as RolldownModule from 'rolldown';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { analyzeEntry } from './analyzeEntry';
 
 vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
-vi.mock('rollup', async () => {
-  const actual = await vi.importActual<typeof RollupModule>('rollup');
+vi.mock('rolldown', async () => {
+  const actual = await vi.importActual<typeof RolldownModule>('rolldown');
   return {
     ...actual,
-    rollup: vi.fn(actual.rollup),
+    rolldown: vi.fn(actual.rolldown),
   };
 });
 
@@ -29,7 +29,7 @@ vi.mock('local-pkg', async importOriginal => {
 
 describe('analyzeEntry', () => {
   beforeEach(() => {
-    vi.mocked(rollup).mockClear();
+    vi.mocked(rolldown).mockClear();
     vi.mocked(resolveModule).mockClear();
     vi.spyOn(process, 'cwd').mockReturnValue(join(import.meta.dirname, '__fixtures__', 'default'));
   });
@@ -186,9 +186,114 @@ describe('analyzeEntry', () => {
       });
 
       expect(result.dependencies.get('analysis-unsafe/subpath')?.exports).toEqual(['broken']);
-      expect(result.output.code).toContain(`from 'analysis-unsafe/subpath'`);
+      expect(result.output.code).toContain(`from "analysis-unsafe/subpath"`);
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('should record require() calls of externals in CommonJS files as default imports', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-cjs-require-'));
+    const entryFilePath = join(root, 'entry.ts');
+
+    try {
+      await Promise.all([
+        writeFile(
+          join(root, 'dependency.cjs'),
+          `const ext = require('cjs-required-ext');\nmodule.exports = ext.value;\n`,
+        ),
+        writeFile(entryFilePath, `import value from './dependency.cjs';\nexport { value };\n`),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+      });
+
+      expect(result.dependencies.get('cjs-required-ext')?.exports).toEqual(['default']);
+      expect(result.output.code).toContain(`__require("cjs-required-ext")`);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it.each([
+    { name: 'side-effect imports with no bindings', code: `import 'side-effect-ext';`, expected: [] },
+    { name: 'export * re-exports as *', code: `export * from 'side-effect-ext';`, expected: ['*'] },
+  ])('should record $name', async ({ code, expected }) => {
+    const result = await analyzeEntry({ entry: code, isVirtualFile: true }, '', {
+      logger: noopLogger,
+      sourcemapEnabled: false,
+      workspaceMap: new Map(),
+      projectRoot: process.cwd(),
+    });
+
+    expect(result.dependencies.size).toBe(1);
+    expect(result.dependencies.get('side-effect-ext')?.exports).toEqual(expected);
+  });
+
+  it('should keep packages that resolve from node_modules external', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'mastra-analyze-installed-'));
+    const packageDir = join(root, 'node_modules', 'installed-ext');
+    const entryFilePath = join(root, 'entry.ts');
+
+    try {
+      await mkdir(packageDir, { recursive: true });
+      await Promise.all([
+        writeFile(join(root, 'package.json'), JSON.stringify({ name: 'app', version: '0.0.0', type: 'module' })),
+        writeFile(
+          join(packageDir, 'package.json'),
+          JSON.stringify({ name: 'installed-ext', version: '1.2.3', type: 'module', exports: './index.js' }),
+        ),
+        writeFile(join(packageDir, 'index.js'), `export const installed = 'INSTALLED_PACKAGE_BODY';`),
+        writeFile(entryFilePath, `import { installed } from 'installed-ext';\nexport { installed };\n`),
+      ]);
+
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: root,
+      });
+
+      const dependency = result.dependencies.get('installed-ext');
+      expect(dependency?.exports).toEqual(['installed']);
+      expect(dependency?.version).toBe('1.2.3');
+      expect(dependency?.rootPath).toMatch(/node_modules\/installed-ext$/);
+      expect(result.output.code).toContain(`from "installed-ext"`);
+      expect(result.output.code).not.toContain('INSTALLED_PACKAGE_BODY');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  it('should not report dynamic imports from a removed development branch', async () => {
+    const tempDir = await mkdtemp(join(import.meta.dirname, '__fixtures__', 'dev-branch-'));
+    const entryFilePath = join(tempDir, 'entry.ts');
+    await writeFile(
+      entryFilePath,
+      `
+        if (process.env.NODE_ENV === 'development') {
+          await import('dev-only-ext');
+        }
+        export const value = 1;
+      `,
+    );
+
+    try {
+      const result = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
+        logger: noopLogger,
+        sourcemapEnabled: false,
+        workspaceMap: new Map(),
+        projectRoot: process.cwd(),
+      });
+
+      expect(result.output.code).not.toContain('dev-only-ext');
+      expect(result.dependencies.size).toBe(0);
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
     }
   });
 
@@ -384,7 +489,7 @@ describe('analyzeEntry', () => {
       projectRoot: process.cwd(),
     });
 
-    // Note: Sourcemaps might be null depending on Rollup configuration
+    // Note: Sourcemaps might be null depending on Rolldown configuration
     // The important thing is that sourcemapEnabled parameter is handled without errors
     expect(result.output.code).toBeTruthy();
     if (result.output.map) {
@@ -472,7 +577,7 @@ describe('analyzeEntry', () => {
         },
       );
 
-      expect(rollup).toHaveBeenCalledTimes(3);
+      expect(rolldown).toHaveBeenCalledTimes(3);
       expect(result.dependencies.size).toBe(2);
       expect(result.dependencies.get('@internal/a')?.exports).toEqual(['a']);
       expect(result.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
@@ -541,7 +646,7 @@ describe('analyzeEntry', () => {
 
       expect(result.dependencies.has('@internal/circular-a')).toBe(true);
       expect(result.dependencies.has('apps-mastra')).toBe(true);
-      expect(rollup).toHaveBeenCalledTimes(2);
+      expect(rolldown).toHaveBeenCalledTimes(2);
       expect(analyzeCache.size).toBe(2);
     } finally {
       vi.mocked(resolveModule).mockImplementation(actualLocalPkg.resolveModule);
@@ -549,7 +654,7 @@ describe('analyzeEntry', () => {
     }
   });
 
-  it('should deduplicate Rollup instances when analyzeCache is provided', async () => {
+  it('should deduplicate Rolldown builds when analyzeCache is provided', async () => {
     const entryFilePath = join(import.meta.dirname, '__fixtures__', 'default', 'entry.ts');
 
     const analyzeCache = new Map();
@@ -561,14 +666,14 @@ describe('analyzeEntry', () => {
       analyzeCache,
     };
 
-    // First call: cache miss — creates a Rollup instance
+    // First call: cache miss, runs a Rolldown build
     const result1 = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', opts);
 
-    // Second call with the same entry: cache hit — no new Rollup instance
+    // Second call with the same entry: cache hit, no new Rolldown build
     const result2 = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', opts);
 
-    // Only 1 Rollup instance created despite 2 analyzeEntry calls
-    expect(rollup).toHaveBeenCalledTimes(1);
+    // Only 1 Rolldown build despite 2 analyzeEntry calls
+    expect(rolldown).toHaveBeenCalledTimes(1);
     // Both return the same result
     expect(result1).toBe(result2);
     expect(result1.dependencies.size).toBe(4);
@@ -638,7 +743,7 @@ describe('analyzeEntry', () => {
 
       expect(directResult.dependencies.has('@internal/shared')).toBe(false);
       expect(transitiveResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
-      expect(rollup).toHaveBeenCalledTimes(5);
+      expect(rolldown).toHaveBeenCalledTimes(5);
       expect(analyzeCache.size).toBe(5);
     } finally {
       vi.mocked(resolveModule).mockImplementation(actualLocalPkg.resolveModule);
@@ -758,7 +863,7 @@ describe('analyzeEntry', () => {
 
     try {
       const uncachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', baseOpts);
-      const uncachedCalls = vi.mocked(rollup).mock.calls.length;
+      const uncachedCalls = vi.mocked(rolldown).mock.calls.length;
 
       expect(uncachedCalls).toBe(4);
       expect(uncachedResult.dependencies.size).toBe(3);
@@ -766,14 +871,14 @@ describe('analyzeEntry', () => {
       expect(uncachedResult.dependencies.get('@internal/b')?.exports).toEqual(['b']);
       expect(uncachedResult.dependencies.get('@internal/shared')?.exports).toEqual(['shared', 'shared2']);
 
-      vi.mocked(rollup).mockClear();
+      vi.mocked(rolldown).mockClear();
 
       const analyzeCache = new Map();
       const cachedResult = await analyzeEntry({ entry: entryFilePath, isVirtualFile: false }, '', {
         ...baseOpts,
         analyzeCache,
       });
-      const cachedCalls = vi.mocked(rollup).mock.calls.length;
+      const cachedCalls = vi.mocked(rolldown).mock.calls.length;
 
       expect(cachedCalls).toBe(4);
       expect(cachedResult.dependencies.size).toBe(uncachedResult.dependencies.size);
@@ -804,8 +909,8 @@ describe('analyzeEntry', () => {
     await analyzeEntry({ entry: entryCode, isVirtualFile: true }, '', opts);
     await analyzeEntry({ entry: entryCode, isVirtualFile: true }, '', opts);
 
-    // Virtual files have no stable path — each call creates a new Rollup instance
-    expect(rollup).toHaveBeenCalledTimes(2);
+    // Virtual files have no stable path, so each call runs a new Rolldown build
+    expect(rolldown).toHaveBeenCalledTimes(2);
     expect(analyzeCache.size).toBe(0);
   });
 });
