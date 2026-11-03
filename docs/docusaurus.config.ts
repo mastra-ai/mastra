@@ -75,6 +75,10 @@ const config: Config = {
       removeLegacyPostBuildHeadAttribute: true,
     },
     faster: true,
+    // No page shows git last-update dates, so skip reading git history. With
+    // `faster`, Docusaurus otherwise runs a full-history `git log` at build
+    // time, which stalls in blob-less CI clones while git fetches old files.
+    experimental_vcs: false,
   },
   // Custom fields for HubSpot and Analytics
   customFields: {
