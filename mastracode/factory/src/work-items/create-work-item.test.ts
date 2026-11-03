@@ -145,8 +145,24 @@ const gatedBoard = defineBoard({
 // Not GitHub or GitLab, which the project's default intake route catches first.
 const source = { integrationId: 'linear', type: 'issue', externalId: 'ENG-42' } as const;
 
-/** The steps of a create, after its upsert, that a concurrent create for the same source can land before. */
-type Step = 'route-stamp' | 'initial-entry' | 'route-move' | 'rollback';
+/** A board whose first phase takes every new card but whose later phases refuse it. */
+const closingBoard = defineBoard({
+  id: 'closing',
+  name: 'Closing',
+  initialPhase: 'inbox',
+  transitionPolicy: context =>
+    context.initialEntry ? { type: 'allow' } : { type: 'reject', code: 'forbidden', reason: 'Closed for moves' },
+  phases: {
+    inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['review'] },
+    review: { name: 'Review', kind: 'resting' },
+  },
+});
+
+/**
+ * The steps of a create, after its upsert, that a concurrent create for the
+ * same source can land before (or, for `entered`, just after the first phase's entry).
+ */
+type Step = 'route-stamp' | 'initial-entry' | 'entered' | 'route-move' | 'rollback';
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
   'createFactoryWorkItem racing a create for the same source on %s',
@@ -168,7 +184,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       for (const route of routes) {
         await intakeRoutes.createIntakeRoute({ orgId, factoryProjectId: project.id }, route, 'admin');
       }
-      const boards = createBoardRegistry({ boards: [gatedBoard] });
+      const boards = createBoardRegistry({ boards: [gatedBoard, closingBoard] });
       const service = new FactoryTransitionService({ storage: workItems, configVersion: 'test', boards });
       const create = (
         input: CreateWorkItemInput,
@@ -188,16 +204,29 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       /**
        * Runs `first` with a second create for the same source landing just
        * before the given step, through the real storage and transition service.
+       * A reuse only refreshes source facts and keeps the revision, so `edit`
+       * also has someone edit the card's own metadata then, which moves it.
        */
       async function race(
         step: Step,
         first: CreateWorkItemInput,
         secondInput: CreateWorkItemInput,
-        { transitions = true } = {},
+        { transitions = true, edit = false } = {},
       ) {
         let second: Promise<CreateFactoryWorkItemResult> | undefined;
         const interleave = async () => {
-          second ??= create(secondInput);
+          second ??= create(secondInput).then(async reused => {
+            if (edit && reused.status === 'reused') {
+              const edited = await update({
+                orgId,
+                id: reused.item.id,
+                userId: 'user-2',
+                patch: { metadata: { note: 'edited meanwhile' } },
+              });
+              expect(edited?.item.revision, 'the edit moved the revision').toBeGreaterThan(reused.item.revision);
+            }
+            return reused;
+          });
           await second;
         };
         const update = workItems.update.bind(workItems);
@@ -214,7 +243,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           transition: async request => {
             const at = request.ingress.identity.endsWith(':intake-route') ? 'route-move' : 'initial-entry';
             if (at === step) await interleave();
-            return service.transition(request);
+            const transitioned = await service.transition(request);
+            if (at === 'initial-entry' && step === 'entered') await interleave();
+            return transitioned;
           },
         };
         const result = await create(first, transitions ? transitionService : null).finally(() => {
@@ -245,10 +276,15 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         'initial-entry',
         { title: 'First filing', externalSource: source },
         { title: 'Second filing', externalSource: source },
+        { edit: true },
       );
 
       const id = sameCard(first, second);
-      expect(await stored(id)).toMatchObject({ title: 'Second filing', stages: ['intake'] });
+      expect(await stored(id)).toMatchObject({
+        title: 'Second filing',
+        stages: ['intake'],
+        metadata: { note: 'edited meanwhile' },
+      });
     });
 
     const toPlanning: StoredIntakeRouteInput = {
@@ -266,15 +302,47 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
           step,
           { title: 'First filing', externalSource: source, metadata: { labels: ['docs'] } },
           { title: 'Second filing', externalSource: source, metadata: { labels: ['docs'] } },
+          { edit: true },
         );
 
         const id = sameCard(first, second);
         const card = await stored(id);
         expect(card).toMatchObject({ title: 'Second filing', board: 'work', stages: ['planning'] });
-        expect(card?.metadata).toMatchObject({ intakeRouteId: expect.any(String) });
+        expect(card?.metadata).toMatchObject({ intakeRouteId: expect.any(String), note: 'edited meanwhile' });
         expect(card?.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'planning']);
       },
     );
+
+    const toClosing: StoredIntakeRouteInput = {
+      name: 'Docs to closing',
+      when: DOCS,
+      target: { boardKey: 'closing', phaseKey: 'review' },
+    };
+
+    it('removes a card nobody else touched when its route move is refused', async () => {
+      const { create, list } = await setup([toClosing]);
+
+      const refused = await create({ title: 'Refused', externalSource: source, metadata: { labels: ['docs'] } });
+
+      expect(refused).toMatchObject({ status: 'rejected', code: 'forbidden' });
+      expect(await list()).toEqual([]);
+    });
+
+    it('keeps a card that a concurrent create reused after it entered its first phase, when the route move is refused', async () => {
+      const { race, list } = await setup([toClosing]);
+
+      const { first, second } = await race(
+        'entered',
+        { title: 'First filing', externalSource: source, metadata: { labels: ['docs'] } },
+        { title: 'Second filing', externalSource: source, metadata: { labels: ['docs'] } },
+      );
+
+      expect(first).toMatchObject({ status: 'rejected', code: 'forbidden' });
+      expect(second.status).toBe('reused');
+      expect(await list()).toMatchObject([
+        { id: second.status === 'reused' ? second.item.id : '', board: 'closing', stages: ['inbox'] },
+      ]);
+    });
 
     it('removes a refused card nobody else touched', async () => {
       const { create, list } = await setup();

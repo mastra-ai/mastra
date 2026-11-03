@@ -160,14 +160,9 @@ export async function createFactoryWorkItem({
   ): Promise<TransitionResult | undefined> => {
     for (let attempt = 1; revision !== undefined; attempt++) {
       const transitioned = await transitionService.transition({ ...request, expectedRevision: revision });
-      if (transitioned.status === 'accepted' && transitioned.revision !== revision) {
-        // The result carries no timestamp, so read the one this commit wrote; a card already past
-        // it was written by someone else too.
-        const card = await workItems.getForProject(orgId, factoryProjectId, id);
-        if (card?.revision === transitioned.revision) updatedAt = card.updatedAt;
-        else contended = true;
-        revision = transitioned.revision;
-      }
+      // The result carries no timestamp, so `updatedAt` stays at the last write this call saw; the
+      // commit has moved the card past it, so a later rollback keeps the card instead of guessing.
+      if (transitioned.status === 'accepted') revision = transitioned.revision;
       if (transitioned.status !== 'rejected' || transitioned.code !== 'stale' || attempt >= STEP_ATTEMPTS) {
         return transitioned;
       }
