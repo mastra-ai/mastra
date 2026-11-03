@@ -71,8 +71,9 @@ export function withCarriedSegments(requestContext: RequestContext, carrier: Rec
 }
 
 /**
- * Wire form. `agent: null` marks a segment that opened no spans (tracing off, or the previous
- * segment unsampled): the worker must then end nothing, not fall back to the previous pair.
+ * Wire form. `agent: null` marks a segment that opened no spans (tracing off): the worker must
+ * then end nothing, not fall back to the previous pair. An unsampled segment carries its no-op
+ * pair, which every worker rebuilds as no-op spans, as the loop state does for an unsampled run.
  */
 interface CarriedSegment {
   v: 1;
@@ -312,9 +313,11 @@ export interface SegmentAgent {
  * carrying are one call, so a caller cannot open spans the worker never learns about.
  *
  * The new AGENT_RUN nests under `previous` in the same trace, with the chain's first segment as
- * `resumedFromSpanId`, and inherits its sampling decision and trace state. Returns undefined, and
- * carries "untraced", when tracing is off, `previous` is unsampled, or creation fails (logged).
- * Never throws.
+ * `resumedFromSpanId`, and inherits its sampling decision and trace state. A run's sampling
+ * decision is made once, when it starts: when `previous` was not sampled, or there is none, the
+ * pair is opened unsampled (no-op) and carried as such, so the engine and the steps nest every
+ * span of the execution under a no-op and the run stays unrecorded. Returns undefined, and
+ * carries "untraced", when tracing is off or creation fails (logged). Never throws.
  */
 export function openSegment(args: {
   mastra: Mastra | undefined;
@@ -336,21 +339,18 @@ export function openSegment(args: {
 }): OpenedSegment | undefined {
   const { mastra, kind, runId, agent, model, previous, adoptsStepsOf, requestContext, carryInto } = args;
   const untraced: CarriedSegment = { v: 1, agent: null, model: null };
-  if (!previous || !mastra?.observability) {
+  if (!mastra?.observability) {
     writeCarriedSegment(carryInto, runId, untraced);
     return undefined;
   }
   try {
-    const live = 'exportSpan' in previous;
-    const sampled = live ? previous.isValid : previous.id !== 'no-op';
-    const resumeFrom = getResumeTracingContext(previous);
-    if (!sampled || !resumeFrom) {
-      writeCarriedSegment(carryInto, runId, untraced);
-      return undefined;
-    }
+    // The segment this one continues, when it was sampled: an unsampled live span has no trace
+    // to join, and a snapshot of one cannot exist.
+    const resumeFrom = previous && previous.id !== 'no-op' ? getResumeTracingContext(previous) : undefined;
+    const continued = resumeFrom ? previous : undefined;
     const resolvedVersionId = agent.toRawConfig?.()?.resolvedVersionId;
     // A snapshot carries the trace state it was saved with; a bare export carries none.
-    const traceState = (previous as { traceState?: TraceState }).traceState;
+    const traceState = (continued as { traceState?: TraceState } | undefined)?.traceState;
     const agentSpan = getOrCreateSpan({
       type: SpanType.AGENT_RUN,
       outcome: null,
@@ -362,16 +362,18 @@ export function openSegment(args: {
       metadata: {
         runId,
         [kind]: true,
-        ...(kind === 'resumed'
-          ? { resumedFromSpanId: resumeFrom.resumedFromSpanId ?? resumeFrom.spanId }
-          : { recoveredFromSpanId: resumeFrom.spanId }),
+        ...(!resumeFrom
+          ? {}
+          : kind === 'resumed'
+            ? { resumedFromSpanId: resumeFrom.resumedFromSpanId ?? resumeFrom.spanId }
+            : { recoveredFromSpanId: resumeFrom.spanId }),
         ...(typeof resolvedVersionId === 'string' ? { entityVersionId: resolvedVersionId } : {}),
       },
       resumeFrom,
       tracingPolicy: agent.getTracingPolicy?.(),
-      tracingOptions: { traceId: previous.traceId, ...traceState },
+      tracingOptions: continued ? { traceId: continued.traceId, ...traceState } : undefined,
       traceState,
-      samplingDecision: sampled,
+      samplingDecision: !!continued,
       requestContext,
       mastra,
     });

@@ -606,7 +606,13 @@ async function recoverThenResume({
       initial: runs.find(span => span.name.endsWith("'recovered-resume'")),
       recoveredRun: runs.find(span => span.name.endsWith('(recovered)'))!,
       laterResume: runs.find(span => span.name.endsWith('(resumed)'))!,
-      spanTypes: exporter.getAllSpans().map(span => span.type),
+      spans: exporter.getAllSpans().map(span => ({
+        type: span.type,
+        name: span.name,
+        parentSpanId: span.parentSpanId ?? null,
+        traceId: span.traceId,
+        metadata: span.metadata,
+      })),
     };
   } finally {
     for (const cleanup of cleanups) cleanup();
@@ -632,11 +638,11 @@ it('a recovered durable run and a later resume keep the initial invocation as th
 }, 30_000);
 
 it('recovering a run whose start was not sampled keeps the recovery and the later resume unsampled', async () => {
-  const { initial, recoveredRun, laterResume, spanTypes } = await recoverThenResume({ sampleCrashedRun: false });
+  const { initial, recoveredRun, laterResume, spans } = await recoverThenResume({ sampleCrashedRun: false });
   expect(initial).toBeUndefined();
   expect(recoveredRun).toBeUndefined();
   expect(laterResume).toBeUndefined();
-  expect(spanTypes, 'no span of any type is exported for the run').toEqual([]);
+  expect(spans, 'no span of any type is exported for the run').toEqual([]);
 }, 30_000);
 
 it.each([
