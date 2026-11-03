@@ -173,7 +173,7 @@ export function SessionTrack({
               key={pinKey(pin)}
               className={cn(
                 'ring-popover absolute -top-px flex -translate-x-1/2 rounded-full ring-2',
-                  fadedUnlessFocused(pinKey(pin)),
+                fadedUnlessFocused(pinKey(pin)),
               )}
               data-track-hit={pinCaption(pin, nameOf(pin.personId))}
               style={{ left: `${pin.left}%` }}
