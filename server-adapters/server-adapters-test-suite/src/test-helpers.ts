@@ -35,16 +35,15 @@ import {
   getRouteSpecificSchemaDefaults,
   normalizeRoutePath,
 } from './route-test-utils';
-if (process.env.VITEST) {
-  vi.mock('@mastra/core/vector');
 
-  vi.mock('zod', async importOriginal => {
-    const actual: {} = await importOriginal();
-    return {
-      ...actual,
-    };
-  });
-}
+vi.mock('@mastra/core/vector');
+
+vi.mock('zod', async importOriginal => {
+  const actual: {} = await importOriginal();
+  return {
+    ...actual,
+  };
+});
 
 const z: any = zod;
 
