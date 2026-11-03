@@ -25,7 +25,7 @@ const result = await builder.generate('Create a weather agent with a typed forec
 console.log(result.text);
 ```
 
-## Workflows
+### Workflows
 
 `agentBuilderWorkflows`, `agentBuilderTemplateWorkflow`, `workflowBuilderWorkflow` and `planningAndApprovalWorkflow` are shared objects, created once when the package loads. A workflow uses the storage, logger and agents of the last Mastra instance that registered it, and keeps its unfinished runs in memory. Share them only in a process with a single Mastra instance.
 

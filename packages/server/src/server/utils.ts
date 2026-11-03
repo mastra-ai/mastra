@@ -285,8 +285,12 @@ export class WorkflowRegistry {
    * instance's registrations and the ones made without an instance are searched.
    */
   static getWorkflow(workflowId: string, mastra?: AnyMastra): Workflow | undefined {
-    if (!mastra) return this.getAllWorkflows()[workflowId];
-    return this.instanceWorkflows.get(mastra)?.workflows[workflowId] ?? this.additionalWorkflows[workflowId];
+    const registries = mastra
+      ? [this.instanceWorkflows.get(mastra)?.workflows ?? {}, this.additionalWorkflows]
+      : [this.getAllWorkflows()];
+    // Own properties only, so ids like `constructor` don't resolve to Object.prototype members
+    const registry = registries.find(workflows => Object.hasOwn(workflows, workflowId));
+    return registry?.[workflowId];
   }
 
   /**
