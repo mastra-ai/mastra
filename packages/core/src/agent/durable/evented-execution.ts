@@ -144,6 +144,10 @@ export async function stopAbandonedDurableExecution(mastra: Mastra, event: Event
   const claim = getExecutionClaim(context, event.runId);
   if (!claim) return;
   await mastra.__getRunScope(event.runId)?.get(PARTICIPANTS)?.get(claim.executionId)?.stop();
+  // An abandoned workflow.fail publishes no further terminal, so no finish ever reaches the coordinator.
+  // Release the captured generation so the coordinator's next renewal sees the loss instead of holding the run.
+  // Other terminals publish workflow.fail on exhaustion, and that delivery settles the claim.
+  if (event.type === 'workflow.fail') await ExecutionFence.releaseSharedClaim(mastra, event.runId, claim);
 }
 
 /** Retry only conditional cleanup after a terminal delivery released its claim before broker acknowledgement. */

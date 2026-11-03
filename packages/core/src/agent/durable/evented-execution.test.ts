@@ -1327,3 +1327,51 @@ it('stops renewing the claim when the processor abandons a root terminal deliver
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+it('releases the claim so a live coordinator sees the loss when the processor abandons a workflow.fail delivery', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'mastra-abandoned-fail-'));
+  const pubsub = new UnixSocketPubSub(join(directory, 'pubsub.sock'));
+  const storage = new InMemoryStore();
+  const mastra = new Mastra({ storage, pubsub, logger: false });
+  const workflowsStore = (await storage.getStore('workflows'))!;
+  const coordinator = await ExecutionFence.claim({
+    workflowsStore,
+    leaseProvider: pubsub,
+    agentId: 'agent',
+    runId: 'run',
+    mode: 'acquire',
+  });
+  const terminal: Event = {
+    id: 'abandoned-fail',
+    type: 'workflow.fail',
+    runId: 'run',
+    createdAt: new Date(),
+    data: {
+      workflowId: 'durable-agentic-loop',
+      runId: 'run',
+      requestContext: { [MASTRA_DURABLE_EXECUTIONS_KEY]: { run: coordinator.claim } },
+    },
+  };
+  const processor = new WorkflowEventProcessor({ mastra });
+  vi.spyOn(processor, 'loadData').mockRejectedValue(
+    Object.assign(new Error('SQLITE_BUSY: database is locked (test)'), { code: 'SQLITE_BUSY' }),
+  );
+  try {
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: true });
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: true });
+    expect(coordinator.isLost()).toBe(false);
+    expect(await processor.handle(terminal)).toEqual({ ok: false, retry: false });
+    expect(await workflowsStore.getRunOwnership({ runId: 'run' })).toMatchObject({
+      ownerId: coordinator.executionId,
+      generation: coordinator.generation,
+      leaseExpiresAt: null,
+      live: false,
+    });
+    await vi.waitFor(() => expect(coordinator.isLost()).toBe(true), { timeout: EXECUTION_LEASE_TTL_MS * 2 });
+  } finally {
+    coordinator.stopHeartbeat();
+    await stopDurableExecutionParticipants(mastra);
+    await pubsub.close();
+    await rm(directory, { recursive: true, force: true });
+  }
+});
