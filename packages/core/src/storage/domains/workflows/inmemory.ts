@@ -574,7 +574,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     stateBase?: StateRef;
     statePatch?: StatePatchOp[];
     fence?: RunFence;
-  }): Promise<{ lastSeq: number }> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<{ lastSeq: number } | null> {
     this.assertFence(args.fence, args.runId, 'writeWorkflowRunCheckpoint');
     return this.writeRunEntries({ ...args, append: false });
   }
@@ -590,7 +591,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     statePatch?: StatePatchOp[];
     startStateSeq?: number;
     fence?: RunFence;
-  }): Promise<{ lastSeq: number }> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<{ lastSeq: number } | null> {
     this.assertFence(args.fence, args.runId, 'appendWorkflowRunEntries');
     return this.writeRunEntries({ ...args, append: true });
   }
@@ -633,7 +635,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
    * Writes the header and one entry per step and step patch, then the state, state base or state
    * patch. A checkpoint first drops the old step entries and starts the state over (`{}` when it
    * carries none). It drops the old state entries too, unless another run's state builds on this
-   * run's (`stateShared`), which can name an earlier version.
+   * run's (`stateShared`), which can name an earlier version. Writes nothing, returning null, when
+   * the stored run's status doesn't match `expectedStatus`.
    */
   private writeRunEntries({
     workflowName,
@@ -646,6 +649,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     stateBase,
     statePatch,
     startStateSeq,
+    expectedStatus,
     append,
   }: {
     workflowName: string;
@@ -658,10 +662,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     stateBase?: StateRef;
     statePatch?: StatePatchOp[];
     startStateSeq?: number;
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
     append: boolean;
-  }): { lastSeq: number } {
+  }): { lastSeq: number } | null {
     const key = this.getWorkflowKey(workflowName, runId);
     const existing = this.db.workflowRunHeaders.get(key);
+    if (existing && !matchesExpectedWorkflowStatus(existing.header.status, expectedStatus)) return null;
     const now = new Date();
     let seq = existing?.lastSeq ?? 0;
     const previous = this.db.workflowRunEntries.get(key) ?? [];
@@ -755,7 +761,11 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     workflowName: string;
     runId: string;
   }): Promise<WorkflowRunStatus | null> {
-    const run = this.db.workflows.get(this.getWorkflowKey(workflowName, runId));
+    const key = this.getWorkflowKey(workflowName, runId);
+    // Looks in both stores, storage v2 first, as `loadWorkflowSnapshot` does.
+    const record = this.db.workflowRunHeaders.get(key);
+    if (record) return record.header.status ?? null;
+    const run = this.db.workflows.get(key);
     return run?.snapshot ? (this.snapshotStatus(run) ?? null) : null;
   }
 

@@ -138,6 +138,9 @@ describe('WorkflowsInMemory v1 methods on storage v2 runs', () => {
     });
     expect(await store.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'v2-run', storageVersion: 1 })).toBeNull();
     expect(await store.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'v1-run', storageVersion: 2 })).toBeNull();
+    expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'v1-run' })).toBe('success');
+    expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'v2-run' })).toBe('suspended');
+    expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'nope' })).toBeNull();
 
     const v2 = await store.getWorkflowRunById({ runId: 'v2-run', workflowName: 'wf' });
     expect(v2).toMatchObject({ runId: 'v2-run', workflowName: 'wf', resourceId: 'res', storageVersion: 2 });
@@ -421,6 +424,62 @@ describe('WorkflowsInMemory storage v2 methods', () => {
       undefined,
     );
     expect((await store.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'v1' }))!.status).toBe('running');
+  });
+
+  it('writes a checkpoint or an append only when the stored status matches expectedStatus', async () => {
+    const { store } = setup();
+    const notCanceled = ['running', 'success'] as const;
+    // A run that isn't stored yet is always written.
+    expect(
+      await store.writeWorkflowRunCheckpoint({
+        ...run,
+        header: makeHeader('r1'),
+        steps: { a: ok(1) },
+        state: { n: 1 },
+        expectedStatus: [...notCanceled],
+      }),
+    ).toEqual({ lastSeq: 2 });
+    expect(
+      await store.appendWorkflowRunEntries({
+        ...run,
+        header: makeHeader('r1'),
+        steps: { b: ok(2) },
+        expectedStatus: [...notCanceled],
+      }),
+    ).toEqual({ lastSeq: 3 });
+
+    await store.updateWorkflowRunHeader({ ...run, opts: { status: 'canceled' } });
+    const stored = await store.loadWorkflowRun({ ...run, successfulSteps: 'full' });
+
+    expect(
+      await store.appendWorkflowRunEntries({
+        ...run,
+        header: makeHeader('r1', { status: 'success' }),
+        steps: { c: ok(3) },
+        state: { n: 2 },
+        expectedStatus: [...notCanceled],
+      }),
+    ).toBeNull();
+    expect(
+      await store.writeWorkflowRunCheckpoint({
+        ...run,
+        header: makeHeader('r1'),
+        steps: {},
+        state: {},
+        expectedStatus: [...notCanceled],
+      }),
+    ).toBeNull();
+    expect(await store.loadWorkflowRun({ ...run, successfulSteps: 'full' })).toEqual(stored);
+    expect(await store.loadWorkflowRunHeader(run)).toMatchObject({ header: { status: 'canceled' }, lastSeq: 3 });
+
+    // Without a guard, the write lands on the canceled run.
+    expect(
+      await store.appendWorkflowRunEntries({
+        ...run,
+        header: makeHeader('r1', { status: 'canceled' }),
+        steps: { c: ok(3) },
+      }),
+    ).toEqual({ lastSeq: 4 });
   });
 
   it('clones on write and on read', async () => {
