@@ -118,6 +118,12 @@ describe('rule group schemas', () => {
     expect(cardRuleGroupSchema.safeParse(all({ field: 'item.body', operator: 'exists' })).success).toBe(false);
   });
 
+  it("lets a condition test whether the card's author is trusted", () => {
+    expect(
+      cardRuleGroupSchema.safeParse(all({ field: 'author.trusted', operator: 'equals', value: true })).success,
+    ).toBe(true);
+  });
+
   it('checks each operator gets the value it needs', () => {
     expect(cardRuleGroupSchema.safeParse(all({ field: 'item.author', operator: 'exists', value: 'x' })).success).toBe(
       false,

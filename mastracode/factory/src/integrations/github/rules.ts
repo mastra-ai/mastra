@@ -9,6 +9,7 @@ import {
   workItemPhaseSemantics,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { placedByIntakeRoute } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { selectEventRule } from '../../rules/event-rules.js';
@@ -440,6 +441,8 @@ export class GithubRules {
       item = updated.item;
       changed = true;
     }
+    // An intake route chose this card's board when it arrived; its labels no longer move it.
+    if (placedByIntakeRoute(item)) return { status: changed ? 'committed' : 'ignored' };
     const target = await this.#intakeTarget(project, repositoryName, labels);
     const outcome = await moveCardToBoard({
       workItems: this.options.storage,
@@ -674,10 +677,10 @@ export class GithubRules {
       factoryAuthored: (!senderIsResponder && provenance !== null) || this.#isFactoryLogin(login),
     });
     // A marked handoff comment is ignored only when Factory authored it: a
-    // human may quote the marker to add an investigation lead, and that must
-    // still retrigger triage. Recognising the author is therefore the whole
-    // guard — when identity cannot be resolved this fails open and Factory's
-    // own handoff cancels the run that wrote it.
+    // human may quote the marker to add an investigation lead, and a custom
+    // comment rule must still see it. Recognising the author is therefore the
+    // whole guard — when identity cannot be resolved this fails open, and a
+    // rule that starts triage on comments would cancel the run that wrote it.
     if (
       actor.type === 'github' &&
       actor.factoryAuthored &&

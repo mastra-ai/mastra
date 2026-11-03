@@ -1,5 +1,20 @@
 # @mastra/rag
 
+## 2.7.2-alpha.0
+
+### Patch Changes
+
+- Fix Markdown header splitting when a configured heading contains a pipe, preserving heading metadata and content around tables and fenced code blocks. ([#29221](https://github.com/mastra-ai/mastra/pull/29221))
+
+- Fixed JSON chunking so each chunk round-trips through a single `JSON.parse`. With `ensureAscii` enabled (the default), non-ASCII characters in keys and values are now escaped once instead of being returned as literal `\uXXXX` text. With `ensureAscii: false`, string values that contain literal `\uXXXX` text are no longer decoded. If your code decodes chunk values a second time to work around the old behavior, remove that step. ([#29223](https://github.com/mastra-ai/mastra/pull/29223))
+
+- Fixed JSON chunking silently dropping array items and nested object fields when a chunk was smaller than `minSize`. Previously, `MDocument.fromJSON(...).chunk({ strategy: 'json' })` could lose data with the default `minSize` (for example, a 150-item array chunked with `maxSize: 2000` kept only 116 items) or return no chunks at all for small inputs. Non-empty array groups and nested-object chunks are now kept even when they are smaller than `minSize`, so `minSize` no longer causes data loss. Split array objects are also now keyed by their index in the source array. ([#29222](https://github.com/mastra-ai/mastra/pull/29222))
+
+- Fixed regex separators that contain capture groups. Chunking with `separatorPosition` no longer duplicates or drops text, numbered backreferences such as `(,|;)\1` keep working, and unmatched optional captures no longer crash the `character` strategy. ([#29225](https://github.com/mastra-ai/mastra/pull/29225))
+
+- Updated dependencies [[`96853ee`](https://github.com/mastra-ai/mastra/commit/96853ee84f5060710339ef672d302ae139674443), [`4253a7d`](https://github.com/mastra-ai/mastra/commit/4253a7d27900a7f7f703fda33856c7becad68934), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`f21823d`](https://github.com/mastra-ai/mastra/commit/f21823d20466cab4afb42e401aa33be5561993cf), [`6f384d6`](https://github.com/mastra-ai/mastra/commit/6f384d6e068b63f69bdd905fda0d4df2cf00e8f4), [`76d8c88`](https://github.com/mastra-ai/mastra/commit/76d8c88c20d540c94c9955c133a1c664b1a05369), [`b623db8`](https://github.com/mastra-ai/mastra/commit/b623db8204d097b87531733200975075be60e203), [`c7d27f6`](https://github.com/mastra-ai/mastra/commit/c7d27f650bc336af4b1a3ff3ff8346482cc79af9), [`fa0d2b4`](https://github.com/mastra-ai/mastra/commit/fa0d2b4da23cb276cf74c723d4f588dddd0cd23c), [`4168b42`](https://github.com/mastra-ai/mastra/commit/4168b42f0d810c40e077ceac9e252d03b657a9c9), [`642c62f`](https://github.com/mastra-ai/mastra/commit/642c62fee331eab32abc24d9af85f05221b5fe5e), [`49d3efd`](https://github.com/mastra-ai/mastra/commit/49d3efd65c8f43675eb058e6328c502598eaacb6), [`5f337d4`](https://github.com/mastra-ai/mastra/commit/5f337d4423bf4a923d54ea2cd2de142d8f8b6fa6)]:
+  - @mastra/core@1.82.0-alpha.2
+
 ## 2.7.1
 
 ### Patch Changes
