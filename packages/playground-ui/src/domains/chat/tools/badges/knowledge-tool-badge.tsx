@@ -2,6 +2,8 @@ import { BookOpen } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { KnowledgePageLink } from '../../knowledge/knowledge-links';
 import { isRecord } from '../../messages/signal-data';
+import type { BodyExtent } from './knowledge-body-range';
+import { readExtent, writeExtent } from './knowledge-body-range';
 import type { MessageMetadata } from '@/domains/chat';
 import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
@@ -53,6 +55,24 @@ function asNotes(value: unknown): NoteSummary[] {
   return Array.isArray(value)
     ? value.filter((note): note is NoteSummary => isRecord(note) && typeof note.text === 'string')
     : [];
+}
+
+/** The collapsed row's detail: the page name, then which part of it was read or written. */
+const withExtent = (name: string, extent: BodyExtent | undefined) => (extent?.row ? `${name} · ${extent.row}` : name);
+
+/** The numbered lines of a part read: a window, or each match, under the range it covers. */
+function ReadLines({ page }: { page: unknown }) {
+  if (!isRecord(page)) return null;
+  const parts = Array.isArray(page.matches)
+    ? page.matches.filter(isRecord).map(match => str(match.lines))
+    : [str(page.lines)];
+  const lines = parts.filter((part): part is string => part !== undefined);
+  if (!lines.length) return null;
+  return (
+    <Txt as="p" variant="meta" font="mono" className="whitespace-pre-wrap">
+      {lines.join('\n⋯\n')}
+    </Txt>
+  );
 }
 
 const where = (page: PageSummary) => page.address ?? page.scope;
@@ -272,6 +292,7 @@ export function knowledgeCard(
           ),
         };
       }
+      const extent = readExtent(output, args);
       const notes = asNotes(output.notes);
       const children = Array.isArray(output.children)
         ? output.children.map(asPage).filter((child): child is PageSummary => child !== undefined)
@@ -280,12 +301,14 @@ export function knowledgeCard(
       const childScopes = Array.isArray(output.childScopes) ? output.childScopes.filter(isRecord) : [];
       return {
         title: 'Read',
-        detail: page.name,
+        detail: withExtent(page.name, extent),
         body: (
           <div className="flex flex-col gap-2">
             <PageLine page={page} />
+            {extent ? <Meta>{extent.summary}</Meta> : null}
             {page.description ? <Meta>{page.description}</Meta> : null}
             {page.body ? <Body markdown={page.body} /> : null}
+            <ReadLines page={output.page} />
             {notes.length ? <NoteList notes={notes} /> : null}
             {children.length ? <Meta>Child pages: {children.map(child => child.name).join(', ')}</Meta> : null}
             {childScopes.length ? (
@@ -320,12 +343,14 @@ export function knowledgeCard(
         op === 'move' ? 'Moved page' : op === 'merge' ? 'Merged page' : args.page ? 'Updated page' : 'Created page';
       const body = str(args.body);
       const description = str(args.description);
+      const extent = writeExtent(args);
       return {
         title,
-        detail: page.name,
+        detail: withExtent(page.name, extent),
         body: (
           <div className="flex flex-col gap-2">
             <PageLine page={page} />
+            {extent ? <Meta>{extent.summary}</Meta> : null}
             {op === 'merge' && str(args.page) ? <Meta>Merged {str(args.page)} into this page</Meta> : null}
             {typeof page.version === 'number' ? <Meta>Version {page.version}</Meta> : null}
             {description ? <Meta>{description}</Meta> : null}
