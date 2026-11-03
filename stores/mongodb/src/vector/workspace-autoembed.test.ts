@@ -15,10 +15,11 @@ import { MongoDBVector } from './';
  * changed file replaces its old text.
  *
  * Live, so they need an explicit opt-in as well as credentials:
- *   TEST_MONGODB_AUTOEMBEDDING=1 pnpm --filter @mastra/mongodb test
+ *   TEST_MONGODB_AUTOEMBEDDING=1 pnpm --filter @mastra/mongodb exec vitest run src/vector/workspace-autoembed.test.ts
  *
- * Against Atlas: set MONGODB_AUTOEMBED_URL. Against the local container: set VOYAGE_API_KEY
- * and ATLAS_LOCAL_TAG=preview, then recreate the container.
+ * Against Atlas: set MONGODB_AUTOEMBED_URL. No Docker is needed.
+ * Against the local container: set VOYAGE_API_KEY and ATLAS_LOCAL_TAG=preview in
+ * stores/mongodb/.env, then recreate it with `docker compose up -d --force-recreate --wait`.
  */
 const uri =
   'mongodb://mongodb:mongodb@localhost:27018/?authSource=admin&directConnection=true&serverSelectionTimeoutMS=2000';
