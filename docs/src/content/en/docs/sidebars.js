@@ -234,13 +234,13 @@ const sidebars = {
           items: [
             {
               type: 'doc',
-              id: 'knowledge/agents-and-tools',
-              label: 'Agents and tools',
+              id: 'knowledge/scopes-and-access',
+              label: 'Scopes and access',
             },
             {
               type: 'doc',
-              id: 'knowledge/scopes-and-access',
-              label: 'Scopes and access',
+              id: 'knowledge/agents-and-tools',
+              label: 'Agents and tools',
             },
             {
               type: 'doc',
@@ -254,8 +254,8 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'knowledge/seed-data',
-              label: 'Seed data',
+              id: 'knowledge/load-your-content',
+              label: 'Load your content',
             },
             {
               type: 'doc',

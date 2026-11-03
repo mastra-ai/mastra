@@ -262,7 +262,7 @@ upsertPage(input: {
 }): Promise<{ page: KnowledgePage; status: 'created' | 'updated' | 'unchanged' }>
 ```
 
-Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. A path with no keys throws `Knowledge page path "<path>" needs at least one key.` See [Seed data](/docs/knowledge/seed-data).
+Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. A path with no keys throws `Knowledge page path "<path>" needs at least one key.` See [Load your content](/docs/knowledge/load-your-content).
 
 `upsertPage()`, `removePage()`, `addNote()`, `updateNote()` and `removeNote()` are host-only: they check no run scopes or access rules. Don't expose them through an agent tool, or through a server route without admin-level auth.
 

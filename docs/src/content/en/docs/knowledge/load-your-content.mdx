@@ -1,12 +1,12 @@
 ---
-title: "Seed data"
+title: "Load your content"
 description: "Load your own content, such as product docs or policies, into Knowledge so agents can search and read it."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
 ---
 
-# Seed data
+# Load your content
 
 Agents write to Knowledge as they work, but you often want content in place before they start, such as your product docs or company policies. Seed it from your own server code with `knowledge.upsertPage()` and `knowledge.addNote()`.
 
@@ -81,8 +81,6 @@ await knowledge.addNote({
 
 These methods are for trusted server code. They don't check run scopes or access rules, so don't call them from an agent tool or from a route without admin-level auth.
 
-## Related
+## Next steps
 
-- [`upsertPage()` and the other seeding methods](/reference/knowledge/knowledge-class#upsertpage)
-- [Search](/docs/knowledge/search)
-- [Scopes and access](/docs/knowledge/scopes-and-access)
+Next, [open Knowledge in Studio](/docs/knowledge/studio) to check what you loaded. For every server-side write method, see [`upsertPage()`](/reference/knowledge/knowledge-class#upsertpage) and the methods after it.

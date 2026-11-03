@@ -23,7 +23,7 @@ Access is checked on every tool call, but Knowledge can't yet guarantee that dat
 
 ## Answer from your own docs
 
-Your server syncs your docs into a `product-docs:` scope with [`upsertPage()`](/docs/knowledge/seed-data), and a docs agent gets only the read tools. It lists the tree, reads the lines of a long page that match what it's looking for, and says it doesn't know when search comes back empty:
+Your server syncs your docs into a `product-docs:` scope with [`upsertPage()`](/docs/knowledge/load-your-content), and a docs agent gets only the read tools. It lists the tree, reads the lines of a long page that match what it's looking for, and says it doesn't know when search comes back empty:
 
 ```typescript
 const knowledge = new Knowledge({
@@ -205,8 +205,6 @@ Research, planning and coding agents on one initiative share a scope. Research w
 
 None of the agents talk to each other. They share pages, under the same access rules.
 
-## Related
+## Next steps
 
-- [Scopes and access](/docs/knowledge/scopes-and-access)
-- [Agents and tools](/docs/knowledge/agents-and-tools)
-- [Pinned context](/docs/knowledge/pinned-context)
+To start on any of these, declare the scopes you need in [Scopes and access](/docs/knowledge/scopes-and-access).
