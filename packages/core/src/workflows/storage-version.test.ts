@@ -1767,24 +1767,36 @@ describe('storage v2 nested runs', () => {
       expect(inner2).toEqual(inner);
     });
 
-    it("builds a foreach iteration on a draft of the parent's state with the earlier iterations' changes", async () => {
+    it("builds each foreach iteration on the parent's state with the earlier iterations' changes", async () => {
       const storage = new MockStore();
       const sends = recordStateSends(storage);
       await drive(2, scenarios['a foreach over a nested run that does not suspend']!, storage);
       const ran = ['running none', 'running patch', 'running none', 'running patch', 'running none', 'running patch'];
-      const byRun: Record<string, string[]> = {};
+      const inner: Record<string, string[]> = {};
       for (const { workflowName, runId, status, state } of sends) {
-        (byRun[`${workflowName}/${runId}`] ??= []).push(`${status} ${state}`);
+        if (workflowName !== 'outer') (inner[runId] ??= []).push(`${status} ${state}`);
       }
-      const { 'outer/run-1': outer, ...inner } = byRun;
-      // Each later iteration starts on a draft that holds the earlier iterations' changes, so it
-      // stores no patch of its own to catch up.
+      // Each later iteration starts on a parent state that holds the earlier iterations' changes
+      // (stored by the foreach's progress write, or a draft when that write hasn't landed yet), so
+      // it stores no patch of its own to catch up.
       expect(Object.values(inner)).toEqual([
         ['pending none', 'running none', ...ran, 'success none'],
         ['pending none', 'running none', ...ran, 'success none'],
         ['pending none', 'running none', ...ran, 'success none'],
       ]);
-      expect(outer!.filter(sent => sent.startsWith('draft'))).toEqual(['draft patch', 'draft patch']);
+      const store = storage.stores.workflows!;
+      const states = await Promise.all(
+        Object.keys(inner).map(
+          async runId =>
+            (await store.loadWorkflowRun({ workflowName: 'inner', runId, successfulSteps: 'summary' }))?.state,
+        ),
+      );
+      const own = (n: number) => [`inner-a:${n}`, `inner-wait:${n + 1}`, `inner-b:${n + 2}`];
+      expect(states).toEqual([
+        { items: [PAD, ...own(0)] },
+        { items: [PAD, ...own(0), ...own(10)] },
+        { items: [PAD, ...own(0), ...own(10), ...own(20)] },
+      ]);
     });
 
     it('stores no full state for a nested step outside a block when it pauses', async () => {
