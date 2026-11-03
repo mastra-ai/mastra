@@ -53,12 +53,15 @@ export function readExtent(output: Record<string, unknown>, args: Record<string,
     if (!ranges.length) {
       return { row: `no matches ${quoted(terms)}`, summary: `No line contains ${quoted(terms)} (${count ?? 0} lines)` };
     }
+    const capped =
+      Array.isArray(output.more) &&
+      output.more.some(note => typeof note === 'string' && note.startsWith('match: stopped'));
     const spans = ranges.map(range => linesText(range).replace(/^lines? /, '')).join(', ');
     return {
       row: `matches ${quoted(terms)}${context ? ` ±${context}` : ''}`,
-      summary: `${ranges.length} match${ranges.length === 1 ? '' : 'es'} for ${quoted(terms)}${
-        context ? ` with ${context} lines of context` : ''
-      }: lines ${spans}${of}`,
+      summary: `${capped ? 'First ' : ''}${ranges.length} match${ranges.length === 1 ? '' : 'es'} for ${quoted(terms)}${
+        capped ? ', more follow' : ''
+      }${context ? ` with ${context} lines of context` : ''}: lines ${spans}${of}`,
     };
   }
   if (isRange(page.range) && typeof page.lines === 'string') {
@@ -78,6 +81,7 @@ export function readExtent(output: Record<string, unknown>, args: Record<string,
   if (Array.isArray(page.outline))
     return { row: 'outline', summary: 'Outline: the page headings with their line numbers' };
   if (args.notes === true || args.mentionedIn === true) return undefined;
+  if (typeof page.body !== 'string' || !page.body) return { row: 'empty page', summary: 'The page has no body' };
   return { row: undefined, summary: 'Whole page' };
 }
 

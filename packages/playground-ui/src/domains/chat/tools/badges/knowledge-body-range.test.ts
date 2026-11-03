@@ -10,8 +10,9 @@ describe('readExtent', () => {
       expect(extent).toEqual({ row: undefined, summary: 'Whole page' });
     });
 
-    it('treats a page without a body the same way', () => {
-      expect(readExtent({ page: {} }, {})?.row).toBeUndefined();
+    it('calls a page with no body empty, rather than a whole page', () => {
+      expect(readExtent({ page: {} }, {})).toEqual({ row: 'empty page', summary: 'The page has no body' });
+      expect(readExtent({ page: {} }, { section: 'Setup' })?.row).toBe('empty page');
     });
   });
 
@@ -67,6 +68,17 @@ describe('readExtent', () => {
       expect(readExtent({ page: { matches, lineCount: 90 } }, { match: ['kv', 'queue'], context: 2 })).toEqual({
         row: 'matches "kv", "queue" ±2',
         summary: '2 matches for "kv", "queue" with 2 lines of context: lines 3–8, 40–44 of 90',
+      });
+    });
+
+    it('says the matches are the first ones when the read stopped at its token cap', () => {
+      const output = {
+        page: { matches, lineCount: 90 },
+        more: ['match: stopped at about 4,000 tokens; more matches from line 52. Read again with the same match.'],
+      };
+      expect(readExtent(output, { match: ['kv'] })).toEqual({
+        row: 'matches "kv"',
+        summary: 'First 2 matches for "kv", more follow: lines 3–8, 40–44 of 90',
       });
     });
 
