@@ -166,12 +166,11 @@ export const TaskListRow = ({ task, className, style, ...props }: TaskListRowPro
   </li>
 );
 
-const LIST_INSET_Y = 10;
-
 /* A full layer minus one fade per edge; the fades are sized by mask-size, so their depth animates. */
 const edgeFades =
-  'mask-no-repeat [--fade-bottom:0.875rem] [--fade-top:0.875rem] [mask-composite:subtract,add] [mask-image:linear-gradient(black,black),linear-gradient(to_bottom,black_40%,transparent),linear-gradient(to_top,black_40%,transparent)] [mask-position:0_0,0_0,0_100%] [mask-size:100%_100%,100%_var(--fade-top),100%_var(--fade-bottom)]';
-const edgeFadesWhenScrolled = 'data-[overflow-y-end]:[--fade-bottom:2rem] data-[overflow-y-start]:[--fade-top:2rem]';
+  'mask-no-repeat [--fade-bottom:0px] [--fade-top:0px] [mask-composite:subtract,add] [mask-image:linear-gradient(black,black),linear-gradient(to_bottom,black_40%,transparent),linear-gradient(to_top,black_40%,transparent)] [mask-position:0_0,0_0,0_100%] [mask-size:100%_100%,100%_var(--fade-top),100%_var(--fade-bottom)]';
+const edgeFadesWhenScrolled =
+  'data-[overflow-y-end]:[--fade-bottom:0.875rem] data-[overflow-y-start]:[--fade-top:0.875rem]';
 
 const focusedTaskIndex = (tasks: TaskListItem[]) => {
   const activeIndex = tasks.findIndex(task => task.status === 'in_progress');
@@ -225,7 +224,7 @@ export const TaskList = ({
       className={cn('group/task-list relative', !open && 'cursor-pointer', className)}
       {...props}
     >
-      <ScrollArea id={listId} maxHeight={`${windowHeight + 2 * LIST_INSET_Y}px`} mask={false}>
+      <ScrollArea id={listId} maxHeight={`${windowHeight}px`} mask={false} className="py-2.5">
         <ScrollAreaViewport
           ref={viewportRef}
           className={cn(
@@ -235,7 +234,7 @@ export const TaskList = ({
             open ? edgeFadesWhenScrolled : 'overflow-hidden!',
           )}
         >
-          <div className="px-3" style={{ paddingBlock: LIST_INSET_Y }}>
+          <div className="px-3">
             <div className="relative">
               <TaskGraphLines statuses={tasks.map(task => task.status)} singleLane={!open} />
               <ul>
