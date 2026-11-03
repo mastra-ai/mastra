@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { FactoryRuleItemContext, FactoryRuleSource, FactoryStageRuleContext } from '../rules/types.js';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { BoardDefinitionError, codeBoardOf, defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
 import { workLaneForRole, workStageCarries } from './legacy-plan-role.js';
@@ -285,6 +286,12 @@ function entering(
       stages: [stage],
       acceptedAt: null,
       metadata: {},
+      workItem: createProviderWorkItemForTests({
+        id: 'item-1',
+        title: 'Fix the crash',
+        source: { integrationId: 'github', type: 'issue', externalId: '3' },
+        metadata: { identifier: 'acme/app#3' },
+      }),
       ...item,
     },
     board: board.id,
