@@ -19,7 +19,7 @@ import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '
 import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
 import type { Step, SuspendOptions } from '../step';
-import { getStepResult } from '../step';
+import { getStepResult, getStepResultAsync } from '../step';
 import type {
   ExecutionContext,
   OutputWriter,
@@ -469,6 +469,7 @@ export async function executeStep(
         ...createObservabilityContext({ currentSpan: stepSpan }),
         getInitData: () => stepResults?.input as any,
         getStepResult: getStepResult.bind(null, stepResults),
+        getStepResultAsync: getStepResultAsync.bind(null, stepResults),
         suspend: async (suspendPayload?: any, suspendOptions?: SuspendOptions): Promise<void> => {
           const { suspendData, validationError: suspendValidationError } = await validateStepSuspendData({
             suspendData: suspendPayload,

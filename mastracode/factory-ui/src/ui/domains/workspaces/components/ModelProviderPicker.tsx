@@ -132,7 +132,7 @@ export function ModelProviderPicker({
           <div className="flex h-36 flex-col gap-3 pt-2">
             <SearchInput
               label="Search model providers"
-              placeholder="Search providers…"
+              placeholder="Search providers"
               value={search}
               onValueChange={setSearch}
             />

@@ -7,7 +7,7 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import type { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { createFactoryStorageForTests, createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { prepareFactoryRuleBinding } from './surface.js';
 
 async function seedFactoryWithRepository(options?: { defaultModelId?: string; modelScope?: 'factory' | 'user' }) {
@@ -65,7 +65,13 @@ function bindingInput(
       stages,
       sessions: [],
       externalSource: { integrationId: 'github', type: board === 'review' ? 'pull-request' : 'issue' },
-      metadata: { githubIssueNumber: 49, repository: 'mastra-ai/mastra' },
+      metadata: { repository: 'mastra-ai/mastra' },
+      workItem: createProviderWorkItemForTests({
+        id: 'item-1',
+        title: 'Broken login',
+        source: { integrationId: 'github', type: board === 'review' ? 'pull-request' : 'issue', externalId: '49' },
+        metadata: { githubIssueNumber: 49 },
+      }),
     },
     role,
   } as unknown as FactoryBindingPreparationInput;

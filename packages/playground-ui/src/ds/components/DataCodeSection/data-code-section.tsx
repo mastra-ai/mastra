@@ -168,7 +168,7 @@ export function DataCodeSection({
             ) : (
               <SearchInput
                 label="Search code"
-                placeholder="Search..."
+                placeholder="Search"
                 size="sm"
                 value={searchQuery}
                 onValueChange={setSearchQuery}
@@ -226,7 +226,7 @@ export function DataCodeSection({
                 {!expandedMultiline && (
                   <SearchInput
                     label="Search code"
-                    placeholder="Search..."
+                    placeholder="Search"
                     size="sm"
                     value={expandedSearchQuery}
                     onValueChange={setExpandedSearchQuery}

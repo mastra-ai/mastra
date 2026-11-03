@@ -21,7 +21,7 @@ import type { RouteAuth } from '../../routes/route.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
-import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
+import type { Card, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { LinearIntegration } from './integration.js';
 import { LinearReauthRequiredError } from './integration.js';
 import type { LinearRulesIngress } from './rules.js';
@@ -180,7 +180,7 @@ async function holdsLiveCardFor(
   issueId: string | undefined,
 ) {
   if (!options.workItems) return false;
-  const isLive = (item: WorkItemRow) =>
+  const isLive = (item: Card) =>
     !(options.boards ? isTerminalWorkItem(options.boards, item) : isTerminalFactoryRuleStage(item.stages));
   const byIdentifier = await options.workItems.getByProjectSource({
     orgId,
@@ -190,7 +190,7 @@ async function holdsLiveCardFor(
   if (byIdentifier && isLive(byIdentifier)) return true;
   if (!issueId) return false;
   const items = await options.workItems.listShared({ orgId, factoryProjectId });
-  return items.some(item => item.metadata?.linearIssueId === issueId && isLive(item));
+  return items.some(item => item.workItem.metadata?.linearIssueId === issueId && isLive(item));
 }
 
 /** Map a Linear read failure to the API response for the SPA. */

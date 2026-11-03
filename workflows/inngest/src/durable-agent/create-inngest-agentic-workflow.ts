@@ -592,6 +592,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
                 finishReason: state.lastStepResult?.reason || 'stop',
                 ...(usageIncomplete ? { usageIncomplete: true } : {}),
                 ...clocks,
+                responseId: state.lastResponse?.id,
+                responseModel: state.lastResponse?.modelId,
               },
               usage,
             });

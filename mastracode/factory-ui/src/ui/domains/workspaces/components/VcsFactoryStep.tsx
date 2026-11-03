@@ -152,7 +152,7 @@ export function VcsFactoryStep({
           </div>
           <SearchInput
             label="Search repositories"
-            placeholder="Find a repository…"
+            placeholder="Find a repository"
             value={query}
             onValueChange={value => {
               setQuery(value);

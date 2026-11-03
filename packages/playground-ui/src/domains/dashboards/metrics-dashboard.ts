@@ -351,7 +351,7 @@ const TRACES = { label: 'Traces', value: { query: 'figures', measure: 'count' },
 const tableOptions = (groupBy: string[], name: string, emptyMessage: string, extra: Record<string, unknown> = {}) => ({
   groupBy,
   defaultSort: { column: 'count', direction: 'desc' },
-  pageSize: 13,
+  pageSize: 10,
   emptyMessage,
   ariaLabel: `${name} breakdown`,
   ...extra,

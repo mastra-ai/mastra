@@ -184,6 +184,24 @@ On EC2, an instance profile alone isn't detected. Add a profile to `~/.aws/confi
 
 Every signed-in account can then run Bedrock models, billed to that AWS account. Settings show Bedrock as **From deployment** and offer no key field. Without `FACTORY_DEPLOYMENT_MODEL_PROVIDERS`, Bedrock stays hidden and runs fail with a message that tells the operator what to set. Local mode without sign-in uses any AWS credentials in the environment, as before.
 
+### Google Vertex AI
+
+Vertex AI authenticates with the server's Google Cloud Application Default Credentials (ADC). With sign-in enabled, add these values to `mastracode/web/.env`:
+
+```dotenv
+FACTORY_DEPLOYMENT_MODEL_PROVIDERS=google-vertex
+GOOGLE_VERTEX_PROJECT=my-google-cloud-project
+GOOGLE_VERTEX_LOCATION=us-central1
+```
+
+For local development, create ADC credentials with:
+
+```shell
+gcloud auth application-default login
+```
+
+Deployments can instead use a service account or a Google Cloud runtime identity. Every signed-in account can then run Vertex AI models using the configured project and location. Settings show Vertex AI as **From deployment** and offer no key field.
+
 ## Tests
 
 ```shell
