@@ -205,7 +205,7 @@ const useInfiniteReviewItemsByStatus = (
   // Waits for refetches too: `fetchNextPage` would cancel the refresh that follows a status change.
   useEffect(() => {
     if (isEndOfListInView && query.hasNextPage && !query.isFetching) {
-      void query.fetchNextPage();
+      void query.fetchNextPage({ cancelRefetch: false });
     }
   }, [isEndOfListInView, query]);
 

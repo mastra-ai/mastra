@@ -159,6 +159,41 @@ describe('Review Queue page', () => {
       expect(requestedPages).toEqual(['0', '1']);
     });
 
+    it('requests each page once while it looks for a deep-linked result', async () => {
+      const many = Array.from({ length: 300 }, (_, index) => ({
+        ...results[2],
+        id: `res-many-${index}`,
+        itemId: `item-many-${index}`,
+        input: { q: `many question ${index}` },
+      }));
+      const requested: string[] = [];
+      server.use(
+        http.get(
+          `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/experiments/${EXPERIMENT_ID}/results`,
+          async ({ request }) => {
+            const query = new URL(request.url).searchParams;
+            const status = query.get('status');
+            const page = Number(query.get('page'));
+            const perPage = Number(query.get('perPage'));
+            if (status === 'needs-review') requested.push(String(page));
+            await new Promise(resolve => setTimeout(resolve, 30));
+            const list = many.filter(r => r.status === status);
+            return HttpResponse.json({
+              results: list.slice(page * perPage, (page + 1) * perPage),
+              pagination: { total: list.length, page, perPage, hasMore: (page + 1) * perPage < list.length },
+            });
+          },
+        ),
+      );
+      renderPage(`?experiment=${EXPERIMENT_ID}&review=res-many-250`);
+
+      await screen.findByText(/many question 0\b/);
+      act(() => intersect(true));
+
+      await screen.findAllByText(/many question 250\b/, undefined, { timeout: 10_000 });
+      await waitFor(() => expect(requested).toEqual(['0', '1', '2']));
+    });
+
     it('keeps loading when no loaded result matches the tag filter yet', async () => {
       const taggedFlagged = {
         ...results[2],

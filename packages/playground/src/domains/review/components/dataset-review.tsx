@@ -407,7 +407,7 @@ export function DatasetReview({
   const needsMoreItems = displayItems.length === 0 || Boolean(featuredItemId && !featuredItem);
   useEffect(() => {
     if (needsMoreItems && displayQuery.hasNextPage && !displayQuery.isFetching) {
-      void displayQuery.fetchNextPage();
+      void displayQuery.fetchNextPage({ cancelRefetch: false });
     }
   }, [needsMoreItems, displayQuery]);
 
