@@ -69,13 +69,23 @@ await agent.generate('Our refund window is 30 days. Save that for the team.', {
 })
 ```
 
-The agent can save a page to the user's org, and anyone else in that org finds it later. Users in other orgs don't. The `resource:` and `thread:` scopes also tell Memory which user and thread the conversation belongs to. Scopes always come from your server code, never from the model or the request body. To set them for every request, see [Set who a run is](/docs/knowledge/scopes-and-access#set-who-a-run-is).
+The `resource:` and `thread:` scopes also tell Memory which user and thread the conversation belongs to. Scopes always come from your server code, never from the model or the request body. To set them for every request, see [Set who a run is](/docs/knowledge/scopes-and-access#set-who-a-run-is).
+
+### What happens
+
+When Dana at Acme sends that message, the agent calls `knowledge_page` to save a page in her org and gets back:
+
+```json
+{
+  "page": { "name": "Refund window", "ref": "org:acme#refunds", "scope": "org:acme", "version": 1 }
+}
+```
+
+Later, Bea at Acme asks the agent about refunds in a new thread. The agent calls `knowledge_search`, finds `org:acme#refunds`, reads it with `knowledge_read` and answers from it. A user at another org who asks the same question gets no results from Knowledge, because their run holds a different `org:` scope.
+
+From here, [pin a page](/docs/knowledge/pinned-context) so the agent sees it every turn, or [sync your own docs](/docs/knowledge/search-and-sync#sync-your-content) into Knowledge so the agent answers from them.
 
 `tools` is off by default, so an agent with Knowledge attached gets no tools until you turn them on. An agent without Memory works too, as long as the call passes `scopes`.
-
-## Storage
-
-Leave out `storage` to use the storage configured on `Mastra`. Knowledge storage is supported by `LibSQLStore`, `PostgresStore`, `MySQLStore`, `MongoDBStore` and `InMemoryStore` (for tests).
 
 ## Next steps
 
