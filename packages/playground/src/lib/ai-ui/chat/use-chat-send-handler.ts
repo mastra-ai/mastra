@@ -157,6 +157,15 @@ export const useChatSendHandler = ({
   const baseClient = useMastraClient();
   const queryClient = useQueryClient();
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Latest context per source (an MCP App's tool call, for instance), carried by the next send only.
+  const modelContextRef = useRef(new Map<string, string>());
+  const setModelContext = useCallback((sourceId: string, context: string | undefined) => {
+    if (context) {
+      modelContextRef.current.set(sourceId, context);
+    } else {
+      modelContextRef.current.delete(sourceId);
+    }
+  }, []);
   const sendDepsRef = useRef<SendDeps>({
     requestContext,
     agentVersionId,
@@ -265,6 +274,10 @@ export const useChatSendHandler = ({
       const controller = new AbortController();
       abortControllerRef.current = controller;
       const requestContextInstance = buildRequestContext(deps);
+      const heldContext = new Map(modelContextRef.current);
+      modelContextRef.current.clear();
+      const system = [...heldContext.values()].join('\n\n') || undefined;
+      const modelSettings = system ? { ...deps.modelSettingsArgs, system } : deps.modelSettingsArgs;
       // An error can still be thrown once the server has the message, by a chunk handler or a refresh.
       // Those must not put the message back in the composer.
       let delivered = false;
@@ -277,7 +290,7 @@ export const useChatSendHandler = ({
             coreUserMessages: attachments,
             requestContext: requestContextInstance,
             threadId: deps.threadId,
-            modelSettings: deps.modelSettingsArgs,
+            modelSettings,
             model: deps.model,
             signal: controller.signal,
             tracingOptions: deps.tracingOptions,
@@ -299,7 +312,7 @@ export const useChatSendHandler = ({
             coreUserMessages: attachments,
             requestContext: requestContextInstance,
             threadId: deps.threadId,
-            modelSettings: deps.modelSettingsArgs,
+            modelSettings,
             model: deps.model,
             signal: controller.signal,
             tracingOptions: deps.tracingOptions,
@@ -315,7 +328,7 @@ export const useChatSendHandler = ({
             coreUserMessages: attachments,
             requestContext: requestContextInstance,
             threadId: deps.threadId,
-            modelSettings: deps.modelSettingsArgs,
+            modelSettings,
             model: deps.model,
             tracingOptions: deps.tracingOptions,
             onChunk: async (chunk: any) => {
@@ -353,7 +366,14 @@ export const useChatSendHandler = ({
         }
         setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);
         resetObservationalMemoryStreamState();
-        return delivered || mayHaveBeenStored(error);
+        const stored = delivered || mayHaveBeenStored(error);
+        if (!stored) {
+          // The message goes back to the composer, so its context waits for the retry.
+          heldContext.forEach((context, sourceId) => {
+            if (!modelContextRef.current.has(sourceId)) modelContextRef.current.set(sourceId, context);
+          });
+        }
+        return stored;
       } finally {
         abortControllerRef.current = null;
       }
@@ -380,5 +400,5 @@ export const useChatSendHandler = ({
     completeObservationalMemoryBuffering(sendDepsRef.current.threadId);
   }, [cancelRun, completeObservationalMemoryBuffering, resetObservationalMemoryStreamState]);
 
-  return { send, cancel };
+  return { send, cancel, setModelContext };
 };

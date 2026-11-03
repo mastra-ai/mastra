@@ -40,6 +40,12 @@ export interface SendContextValue {
    * as a body too large), so the composer can put it back.
    */
   send: (args: ChatSendArgs) => void | Promise<boolean>;
+  /**
+   * Holds context for the agent's next turn, keyed by where it comes from (such as an MCP App's tool
+   * call). Each source's latest value rides along as system context on the next send, then is
+   * cleared. `undefined` drops a source's context. Absent when the chat can't carry it.
+   */
+  setModelContext?: (sourceId: string, context: string | undefined) => void;
 }
 
 export interface TasksContextValue {
@@ -69,4 +75,6 @@ export const ChatAgentContext = createContext<AgentContextValue | undefined>(und
 export const useChatMessages = (): MastraDBMessage[] => useContext(ChatMessagesContext).messages;
 export const useChatRunning = (): RunningContextValue => useContext(ChatRunningContext);
 export const useChatSend = (): SendContextValue['send'] => useContext(ChatSendContext).send;
+export const useChatModelContext = (): SendContextValue['setModelContext'] =>
+  useContext(ChatSendContext).setModelContext;
 export const useChatTasks = (): TaskItem[] => useContext(ChatTasksContext).tasks;

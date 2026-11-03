@@ -1,5 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
+import {
+  useChatMessages,
+  useChatModelContext,
+  useChatRunning,
+  useChatSend,
+} from '@mastra/playground-ui/domains/chat/context/chat-context';
 import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
 import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { MastraReactProvider } from '@mastra/react';
@@ -548,6 +553,56 @@ describe('ChatProvider', () => {
     expect(isRecord(modelSettings) ? modelSettings.temperature : undefined).toBe(0.4);
     const serialized = JSON.stringify(captured[0].body.messages ?? []);
     expect(serialized).toContain('Hello agent');
+  });
+
+  describe('when an MCP App sets context for the next turn', () => {
+    const ModelContextHarness = () => {
+      const send = useChatSend();
+      const setModelContext = useChatModelContext();
+      return (
+        <>
+          <button onClick={() => setModelContext?.('call-1', 'Selected chart: agent runs')}>Set context</button>
+          <button onClick={() => setModelContext?.('call-1', 'Selected chart: token usage')}>Replace context</button>
+          <button onClick={() => send({ message: 'Show me more' })}>Send message</button>
+        </>
+      );
+    };
+
+    const renderHarness = (captured: Captured[]) => {
+      server.use(
+        ...baseHandlers(captured),
+        http.post(`${BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+          captured.push({ url: request.url, body: await captureBody(request) });
+          return sseResponse();
+        }),
+      );
+      render(
+        <Wrapper>
+          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]}>
+            <ModelContextHarness />
+          </ChatProvider>
+        </Wrapper>,
+      );
+    };
+
+    it('sends the latest context as system context with the next message only', async () => {
+      const captured: Captured[] = [];
+      renderHarness(captured);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Set context' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Replace context' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+      await waitFor(() => expect(captured).toHaveLength(1));
+      await act(async () => {
+        await new Promise(resolve => setTimeout(resolve, 80));
+      });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Send message' }));
+      await waitFor(() => expect(captured).toHaveLength(2));
+
+      expect(captured[0].body.system).toBe('Selected chart: token usage');
+      expect(captured[1].body.system).toBeUndefined();
+    });
   });
 
   it('sets the agentVersionId on the request context', async () => {

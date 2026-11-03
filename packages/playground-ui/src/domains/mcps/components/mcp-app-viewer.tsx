@@ -1,6 +1,7 @@
 import { AppRenderer } from '@mcp-ui/client';
 import type { AppRendererHandle, SandboxConfig } from '@mcp-ui/client';
-import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
+import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js';
+import type { CallToolRequest, CallToolResult, JSONRPCRequest } from '@modelcontextprotocol/sdk/types.js';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 import { useTheme } from '@/ds/components/ThemeProvider';
@@ -28,6 +29,22 @@ function getSandboxBlobUrl(): URL {
   return _blobUrl;
 }
 
+/** Renders an app's model context as text, labelled with the app it comes from. Empty context clears it. */
+function modelContextText(toolName: string, params: JSONRPCRequest['params']): string | undefined {
+  const text = Array.isArray(params?.content)
+    ? params.content
+        .filter(
+          (block): block is { type: 'text'; text: string } => block?.type === 'text' && typeof block.text === 'string',
+        )
+        .map(block => block.text)
+    : [];
+  if (params?.structuredContent !== undefined) {
+    text.push(JSON.stringify(params.structuredContent));
+  }
+  if (text.length === 0) return undefined;
+  return [`Context from the "${toolName}" MCP App shown in this conversation:`, ...text].join('\n');
+}
+
 export interface McpAppViewerProps {
   /** The HTML content to render in the sandboxed iframe */
   html: string;
@@ -43,6 +60,11 @@ export interface McpAppViewerProps {
   onToolCall?: (toolName: string, args: Record<string, unknown>) => Promise<unknown>;
   /** Callback when the app sends a message via sendMessage (drives new chat turns) */
   onSendMessage?: (content: string) => void;
+  /**
+   * Callback when the app updates its model context via updateModelContext. Receives the context as
+   * text for the agent's next turn, or `undefined` when the app clears it.
+   */
+  onUpdateModelContext?: (context: string | undefined) => void;
   /** Sandbox configuration — URL to the sandbox proxy HTML. If omitted, a blob URL is generated automatically. */
   sandboxUrl?: URL;
   /** Optional className for the container */
@@ -64,6 +86,7 @@ export function McpAppViewer({
   toolResult,
   onToolCall,
   onSendMessage,
+  onUpdateModelContext,
   sandboxUrl,
   className,
 }: McpAppViewerProps) {
@@ -78,13 +101,15 @@ export function McpAppViewer({
   // Memoized for the same reason as hostInfo.
   const canCallTools = Boolean(onToolCall);
   const canSendMessages = Boolean(onSendMessage);
+  const canUpdateModelContext = Boolean(onUpdateModelContext);
   const hostCapabilities: HostCapabilities = useMemo(
     () => ({
       openLinks: {},
       ...(canCallTools && { serverTools: {} }),
       ...(canSendMessages && { message: {} }),
+      ...(canUpdateModelContext && { updateModelContext: { text: {}, structuredContent: {} } }),
     }),
-    [canCallTools, canSendMessages],
+    [canCallTools, canSendMessages, canUpdateModelContext],
   );
   const { resolvedTheme } = useTheme();
   const hostContext = useMemo(() => ({ theme: resolvedTheme }), [resolvedTheme]);
@@ -145,6 +170,18 @@ export function McpAppViewer({
     [onSendMessage],
   );
 
+  // AppRenderer has no prop for ui/update-model-context, so it arrives as an unhandled request.
+  const handleFallbackRequest = useCallback(
+    async (request: JSONRPCRequest) => {
+      if (request.method !== 'ui/update-model-context' || !onUpdateModelContext) {
+        throw new McpError(ErrorCode.MethodNotFound, `No handler for method: ${request.method}`);
+      }
+      onUpdateModelContext(modelContextText(toolName, request.params));
+      return {};
+    },
+    [onUpdateModelContext, toolName],
+  );
+
   const handleOpenLink = useCallback(async (params: { url: string }) => {
     if (typeof params.url === 'string') {
       window.open(params.url, '_blank', 'noopener,noreferrer');
@@ -184,6 +221,7 @@ export function McpAppViewer({
         hostContext={hostContext}
         onCallTool={handleCallTool}
         onMessage={handleMessage}
+        onFallbackRequest={handleFallbackRequest}
         onOpenLink={handleOpenLink}
         onSizeChanged={handleSizeChanged}
         onError={handleError}

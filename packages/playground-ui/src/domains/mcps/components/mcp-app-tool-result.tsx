@@ -10,6 +10,7 @@ interface McpAppToolResultProps {
   toolArgs?: Record<string, unknown>;
   toolResult?: unknown;
   onSendMessage?: (content: string) => void;
+  onUpdateModelContext?: (context: string | undefined) => void;
   readOnly?: boolean;
 }
 
@@ -21,7 +22,14 @@ interface McpAppToolResultProps {
  * (ui/notifications/tool-input and ui/notifications/tool-result), enabling
  * the app to hydrate with data from the tool call.
  */
-export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage, readOnly }: McpAppToolResultProps) {
+export function McpAppToolResult({
+  appInfo,
+  toolArgs,
+  toolResult,
+  onSendMessage,
+  onUpdateModelContext,
+  readOnly,
+}: McpAppToolResultProps) {
   const client = useMastraClient();
 
   const { data: html, isLoading } = useQuery({
@@ -59,6 +67,7 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage,
       toolResult={toolResult}
       onToolCall={readOnly ? undefined : handleToolCall}
       onSendMessage={readOnly ? undefined : onSendMessage}
+      onUpdateModelContext={readOnly ? undefined : onUpdateModelContext}
       className="rounded-md border border-border"
     />
   );
