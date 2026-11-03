@@ -41,7 +41,7 @@ const knowledge = new Knowledge({
 
 ## What agents can read
 
-With the read tools, an agent finds and reads what its run can see. It can browse how a scope is organized, search pages and notes by keyword (and by meaning, with [semantic search](/docs/knowledge/search-and-sync#add-search-by-meaning)), and read a page with its notes and the notes on other pages that mention it. A long page comes back in parts: the first read shows the page's headings, and the agent then reads the section it needs, reads on from a line, or reads only the lines that match a term. When nothing matches, the result says so, so the agent can tell the user it doesn't know instead of guessing.
+With the read tools, an agent finds and reads what its run can see. It can browse how a scope is organized, search pages and notes by keyword (and by meaning, with [semantic search](/docs/knowledge/search#add-search-by-meaning)), and read a page with its notes and the notes on other pages that mention it. A long page comes back in parts: the first read shows the page's headings, and the agent then reads the section it needs, reads on from a line, or reads only the lines that match a term. When nothing matches, the result says so, so the agent can tell the user it doesn't know instead of guessing.
 
 One read returns at most 1,000 tokens of a page by default. Raise the cap for models with large context windows, or lower it for small models:
 

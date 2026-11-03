@@ -146,14 +146,6 @@ getInstructions(options?: { read?: boolean; write?: boolean; pinnedContext?: boo
 
 Returns the usage instructions that go with `createTools(options)`, built the same way as for an attached agent: the built-in parts for the enabled groups, or what the `instructions` option makes of them.
 
-### `reindex()`
-
-```typescript oxfmt:false
-reindex(): Promise<number>
-```
-
-Re-embeds every live page and note in the store, across all scopes, and resolves to how many it indexed. It embeds one item at a time and doesn't skip items already embedded. Its cost grows with the whole store. Use it for content written straight to the store or after a failed embed. Throws without `vector` and `embedder`.
-
 ### `explainAccess()`
 
 ```typescript oxfmt:false
@@ -262,7 +254,7 @@ upsertPage(input: {
 }): Promise<{ page: KnowledgePage; status: 'created' | 'updated' | 'unchanged' }>
 ```
 
-Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. An empty key throws `Knowledge page path "<path>" needs non-empty keys.` See [sync content into Knowledge](/docs/knowledge/search-and-sync#sync-your-content).
+Creates or updates the page at `path` (keys joined by `/`, such as `guides/install`) in `scope`, creating the scope and any missing pages along the path. Writing the same path again updates that page. `description` and `body` keep their stored values when left out. An `unchanged` result means nothing was written. The page keeps its version, emits no change event and isn't re-embedded. `author` is recorded as the writer and defaults to `host`. An empty key throws `Knowledge page path "<path>" needs non-empty keys.` See [Seed data](/docs/knowledge/seed-data).
 
 `upsertPage()`, `removePage()`, `addNote()`, `updateNote()` and `removeNote()` are host-only: they check no run scopes or access rules. Don't expose them through an agent tool, or through a server route without admin-level auth.
 

@@ -1,0 +1,68 @@
+---
+title: "Search"
+description: "How Knowledge search ranks results, and how to add search by meaning."
+packages:
+  - "@mastra/core"
+  - "@mastra/libsql"
+---
+
+# Search
+
+:::alpha
+
+Knowledge is in alpha. Its API may change between releases.
+
+:::
+
+Agents find pages with `knowledge_search`, which matches words out of the box. This page shows how to add search by meaning and how search ranks what it returns.
+
+## Add search by meaning
+
+Pass a `vector` store and an `embedder` to match pages and notes by meaning as well as by keyword. A search for "reimbursement" then finds a page about getting money back, with no shared word:
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
+import { LibSQLStore, LibSQLVector } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+  vector: new LibSQLVector({ id: 'knowledge-vector', url: 'file:./knowledge.db' }),
+  embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
+  scopes: { ...knowledgeMemoryScopes() },
+  tools: true,
+})
+```
+
+Pass both or neither. Passing only one throws ``Knowledge semantic search needs both `vector` and `embedder`; pass both or neither.`` `embedderOptions` (`maxRetries`, `headers`, `providerOptions`, `telemetry`) applies to every embedding call, the same way it does in Memory. `maxRetries` retries transient provider errors.
+
+`knowledge_search` then merges keyword and meaning results by rank, so a close meaning match can come before a name match. Every semantic hit is read again with the run's access before it can take a place in the results. A run never sees content it can't read, and that content never takes a slot from content it can.
+
+Pages and notes written through the tools are embedded as they're written. Scope pages aren't embedded, but notes on them are.
+
+A page too long for one embedding is embedded as overlapping chunks of about 2,000 tokens, cut between paragraphs and before headings. Each chunk starts with the page's name and description. Search still returns the page once, ranked by its best chunk. A page gets at most 100 chunks, about 200,000 tokens of body. Search finds the rest of a longer body by keyword only. Rewriting a page replaces its chunks, and deleting it removes them.
+
+If embedding fails when a page or note is written, the write still succeeds and Mastra logs a warning. That page or note stays keyword-only until it's written again with a change, which embeds it. An `upsertPage()` call that comes back `unchanged` writes nothing and doesn't embed it.
+
+If the embedder or vector store fails during a search, the search returns keyword results and logs a warning.
+
+## How search ranks results
+
+`knowledge_search` splits the query into words and matches each one case-insensitively as part of any word, so `refund` matches `refunds`. A page matches when its name, description or body contains at least one of the words, and a note when its own text does. Quotes and operators have no special meaning.
+
+Pages come before notes, in this order:
+
+1. A page whose name contains the whole query.
+1. Pages that contain more of the query's words, so a long question still finds the page that holds most of it.
+1. Among pages with as many words, a word in the name counts for more than one in the description, and one in the description for more than one in the body.
+1. Then the most recently updated page.
+
+Notes follow, ranked by how many of the words they contain, then newest first. A one-word query therefore favors pages with that word in their name. `limit` defaults to 10 (at most 50), and results are ranked before the limit is applied. The limit keeps the best matches. A search only returns what the run can read.
+
+With `MongoDBStore`, reads that span many scopes, such as a search without `scope`, slow down as the number of scopes a run can read grows, because the store first collects every readable scope. Reads within one scope stay fast.
+
+## Related
+
+- [Seed data](/docs/knowledge/seed-data)
+- [Agents and tools](/docs/knowledge/agents-and-tools)

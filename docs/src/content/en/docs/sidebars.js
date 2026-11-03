@@ -250,8 +250,13 @@ const sidebars = {
             },
             {
               type: 'doc',
-              id: 'knowledge/search-and-sync',
-              label: 'Search and sync',
+              id: 'knowledge/search',
+              label: 'Search',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/seed-data',
+              label: 'Seed data',
             },
           ],
         },

@@ -83,7 +83,7 @@ When Dana at Acme sends that message, the agent calls `knowledge_page` to save a
 
 Later, Bea at Acme asks the agent about refunds in a new thread. The agent calls `knowledge_search`, finds `org:acme#refunds`, reads it with `knowledge_read` and answers from it. A user at another org who asks the same question gets no results from Knowledge, because their run holds a different `org:` scope.
 
-From here, [pin a page](/docs/knowledge/pinned-context) so the agent sees it every turn, or [sync your own docs](/docs/knowledge/search-and-sync#sync-your-content) into Knowledge so the agent answers from them.
+From here, [pin a page](/docs/knowledge/pinned-context) so the agent sees it every turn, or [seed your own docs](/docs/knowledge/seed-data) into Knowledge so the agent answers from them.
 
 `tools` is off by default, so an agent with Knowledge attached gets no tools until you turn them on. An agent without Memory works too, as long as the call passes `scopes`.
 
@@ -93,6 +93,7 @@ From here, [pin a page](/docs/knowledge/pinned-context) so the agent sees it eve
 - [Scopes and access](/docs/knowledge/scopes-and-access): declare scopes, set who a run is, and check what it can reach.
 - [Agents and tools](/docs/knowledge/agents-and-tools): the tools agents get and how they read and write pages.
 - [Pinned context](/docs/knowledge/pinned-context): keep a page in an agent's context every turn.
-- [Search and sync](/docs/knowledge/search-and-sync): add semantic search, and sync your own content in.
+- [Search](/docs/knowledge/search): add search by meaning, and see how results are ranked.
+- [Seed data](/docs/knowledge/seed-data): load your own content into Knowledge.
 
 Knowledge has no built-in importers, retention or stored per-user grants. Access is computed from your declarations each time a tool runs, and nothing is stored per user.
