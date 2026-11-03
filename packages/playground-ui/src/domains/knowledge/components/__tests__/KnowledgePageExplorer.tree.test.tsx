@@ -214,6 +214,30 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       restore();
     });
 
+    it('measures the ancestor that actually scrolls, not the tree element inside it', () => {
+      // In the explorer the tree is as tall as its rows; a wrapper around it is what scrolls.
+      const original = HTMLElement.prototype.getBoundingClientRect;
+      const rect = (top: number, bottom: number) =>
+        ({ top, bottom, left: 0, right: 100, width: 100, height: bottom - top }) as DOMRect;
+      HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(this: HTMLElement) {
+        if (this.dataset.testid === 'outer-scroller') return rect(0, 100);
+        if (this.getAttribute('role') === 'tree') return rect(-2800, 8500);
+        if (this.getAttribute('role') === 'treeitem') return rect(300, 332);
+        return original.call(this);
+      };
+      renderWithProviders(
+        <div data-testid="outer-scroller" style={{ overflowY: 'auto' }}>
+          <Host requested={[]} extraSiblings={3} />
+        </div>,
+      );
+      fireEvent.click(row('Articles'));
+      fireEvent.click(row('Second article'));
+      const first = selectedScrolls();
+      fireEvent.click(screen.getByRole('button', { name: 'Expand Extra 0' }));
+      expect(selectedScrolls()).toBeGreaterThan(first);
+      HTMLElement.prototype.getBoundingClientRect = original;
+    });
+
     describe.each([
       ['scrolls the wheel', (tree: HTMLElement) => fireEvent.wheel(tree)],
       ['presses a key in the tree', (tree: HTMLElement) => fireEvent.keyDown(tree, { key: 'ArrowDown' })],

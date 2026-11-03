@@ -8,6 +8,15 @@ import type { KnowledgePagePayload } from '../pageTypes';
 
 import { cn } from '@/utils/cn';
 
+/** The box of the nearest ancestor (or the element itself) that scrolls vertically: the tree may sit inside the scroller. */
+function scrollingBox(element: HTMLElement | null): DOMRect | undefined {
+  for (let node = element; node; node = node.parentElement) {
+    const { overflowY } = getComputedStyle(node);
+    if (overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay') return node.getBoundingClientRect();
+  }
+  return element?.getBoundingClientRect();
+}
+
 /** The key {@link KnowledgePageTree}'s `loadMore` uses for the root level. */
 export const KNOWLEDGE_TREE_ROOT = '';
 
@@ -100,7 +109,7 @@ export function KnowledgePageTree({
       scrolledTo.current = selectedPageId;
       userScrolled.current = false;
     } else {
-      const box = scroller.current?.getBoundingClientRect();
+      const box = scrollingBox(scroller.current);
       const at = element.getBoundingClientRect();
       if (userScrolled.current || !box || (at.top >= box.top && at.bottom <= box.bottom)) return;
     }
