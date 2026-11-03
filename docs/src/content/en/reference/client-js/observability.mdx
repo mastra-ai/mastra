@@ -423,8 +423,6 @@ const response = await mastraClient.createScore({
 
 `createScore()` requires a nonblank `score.traceId`, with an optional `spanId`. The server generates `scoreId` when omitted, sets `timestamp` on receipt, and returns `{ success: true }`.
 
-**Compatibility:** `POST /observability/scores` now returns `400` for an omitted, null, empty, or whitespace-only `traceId`, including requests that supply only `spanId`. Callers that previously omitted it must supply the trace ID, but the route doesn't check whether the trace exists. Storage and batch APIs still accept nullable trace IDs, and existing records remain readable.
-
 ## Feedback
 
 Feedback methods create, list, and query human-in-the-loop signals such as ratings, thumbs, comments, and corrections through the target Mastra runtime and its configured observability storage. They don't call the hosted Mastra Platform Feedback API. See the [feedback guide](/docs/observability/feedback) for examples and the [feedback reference](/reference/observability/feedback) for full schemas.
@@ -447,8 +445,6 @@ const response = await mastraClient.createFeedback({
 ```
 
 `createFeedback()` requires a nonblank `feedback.traceId`, with an optional `spanId`. The server generates `feedbackId` when omitted, sets `timestamp` on receipt, and returns `{ success: true }`.
-
-**Compatibility:** `POST /observability/feedback` now returns `400` for an omitted, null, empty, or whitespace-only `traceId`, including requests that supply only `spanId`. Callers that previously omitted it must supply the trace ID, but the route doesn't check whether the trace exists. Storage and batch APIs still accept nullable trace IDs, and existing records remain readable.
 
 ### Deleting feedback and scores
 
