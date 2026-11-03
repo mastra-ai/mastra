@@ -93,6 +93,22 @@ export function isValidationError(value: unknown): value is ValidationError {
 }
 
 /**
+ * Lists the dotted paths that failed validation (`root` for top-level issues), for log lines.
+ * `message` echoes the submitted values back to the caller, so logs carry these paths instead.
+ */
+export function getValidationIssuePaths(error: ValidationError): string[] {
+  const paths: string[] = [];
+  const walk = (node: { errors: string[]; fields: unknown }, path: string[]) => {
+    if (node.errors.length > 0) paths.push(path.join('.') || 'root');
+    for (const [key, child] of Object.entries((node.fields ?? {}) as Record<string, typeof node>)) {
+      walk(child, [...path, key]);
+    }
+  };
+  walk(error.validationErrors, []);
+  return paths;
+}
+
+/**
  * Extracts a string key from a path segment (handles both PropertyKey and PathSegment objects).
  */
 function getPathKey(segment: PropertyKey | { key: PropertyKey }): string {

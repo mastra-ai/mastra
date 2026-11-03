@@ -60,6 +60,7 @@ import type {
 } from '../types';
 import {
   createStandardSchemaIssuesError,
+  getValidationIssuePaths,
   isValidationError,
   registerToolOutputValidationSchema,
   validateToolInput,
@@ -863,7 +864,10 @@ export class CoreToolBuilder extends MastraBase {
           if (resumeData != null) {
             const resumeValidation = validateToolInput(resumeSchema, resumeData, options.name);
             if (resumeValidation.error) {
-              logger?.warn(resumeValidation.error.message);
+              logger?.warn('Tool resume data validation failed', {
+                ...logData,
+                issuePaths: getValidationIssuePaths(resumeValidation.error),
+              });
               toolSpan?.end({
                 output: resumeValidation.error,
                 ...executionFailureTermination(resumeValidation.error),
@@ -895,7 +899,10 @@ export class CoreToolBuilder extends MastraBase {
           const suspendSchema = this.getSuspendSchema();
           const suspendValidation = validateToolSuspendData(suspendSchema, suspendData, options.name);
           if (suspendValidation.error) {
-            logger?.warn(suspendValidation.error.message);
+            logger?.warn('Tool suspend data validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(suspendValidation.error),
+            });
             toolSpan?.end({
               output: suspendValidation.error,
               ...executionFailureTermination(suspendValidation.error),
@@ -925,7 +932,10 @@ export class CoreToolBuilder extends MastraBase {
           const outputSchema = this.getOutputSchema();
           const outputValidation = validateToolOutput(outputSchema, result, options.name, false);
           if (outputValidation.error) {
-            logger?.warn(outputValidation.error.message);
+            logger?.warn('Tool output validation failed', {
+              ...logData,
+              issuePaths: getValidationIssuePaths(outputValidation.error),
+            });
             toolSpan?.end({
               output: outputValidation.error,
               ...executionFailureTermination(outputValidation.error),
@@ -1028,7 +1038,7 @@ export class CoreToolBuilder extends MastraBase {
           const suspendedToolRunIdErrToIgnore =
             error?.message?.includes('suspendedToolRunId: Required') && !(args as Record<string, unknown>)?.resumeData;
           if (error && !suspendedToolRunIdErrToIgnore) {
-            logger.warn('Tool input validation failed', { ...logData, validationError: error.message });
+            logger.warn('Tool input validation failed', { ...logData, issuePaths: getValidationIssuePaths(error) });
             toolSpan?.end({ output: error, ...executionFailureTermination(error), attributes: { success: false } });
             return error;
           }

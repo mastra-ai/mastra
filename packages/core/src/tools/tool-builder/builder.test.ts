@@ -1027,6 +1027,151 @@ describe('CoreToolBuilder execution failures', () => {
   });
 });
 
+describe('CoreToolBuilder validation failure logs', () => {
+  const email = 'jane.doe@example.com';
+
+  function spyLogger() {
+    return { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), trackException: vi.fn() };
+  }
+
+  function expectNoLoggedValue(logger: ReturnType<typeof spyLogger>, value: string) {
+    for (const level of ['debug', 'info', 'warn', 'error'] as const) {
+      for (const call of logger[level].mock.calls) {
+        expect(JSON.stringify(call)).not.toContain(value);
+      }
+    }
+  }
+
+  it('logs the failing input paths without the submitted values (#29318)', async () => {
+    const logger = spyLogger();
+    const tool = createTool({
+      id: 'register_user',
+      description: 'Registers a user',
+      inputSchema: z.object({ email: z.string().email(), address: z.object({ zip: z.string() }) }),
+      execute: async () => ({ ok: true }),
+    });
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'register_user', logger: logger as any },
+    }).build();
+
+    const result: any = await builtTool.execute!(
+      { email: 123, address: { zip: 98101 }, note: email },
+      { toolCallId: 'call-1', messages: [] },
+    );
+
+    // The model still sees what it sent so it can correct the call.
+    expect(result.message).toContain('Provided arguments');
+    expect(result.message).toContain(email);
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool input validation failed',
+      expect.objectContaining({ tool: 'register_user', issuePaths: ['email', 'address.zip'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+
+  it('logs the failing resume data paths without the submitted values', async () => {
+    const logger = spyLogger();
+    const tool = createTool({
+      id: 'confirm_order',
+      description: 'Confirms an order',
+      inputSchema: z.object({ orderId: z.string() }),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async () => ({ ok: true }),
+    });
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'confirm_order', logger: logger as any },
+    }).build();
+
+    const result: any = await builtTool.execute!(
+      { orderId: 'o-1' },
+      { toolCallId: 'call-1', messages: [], resumeData: { confirmed: 'yes', contact: email } },
+    );
+
+    expect(result.message).toContain('Tool input validation failed');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool resume data validation failed',
+      expect.objectContaining({ tool: 'confirm_order', issuePaths: ['confirmed'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+
+  it('logs the failing suspend data paths without the suspended values', async () => {
+    const logger = spyLogger();
+    const tool = createTool({
+      id: 'ask_approval',
+      description: 'Asks for approval',
+      inputSchema: z.object({ amount: z.number() }),
+      suspendSchema: z.object({ reason: z.string() }),
+      resumeSchema: z.object({ approved: z.boolean() }),
+      execute: async (_input, context) => {
+        await context.agent!.suspend({ reason: 42, requester: email } as any);
+      },
+    });
+    const builtTool = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'ask_approval', logger: logger as any },
+    }).build();
+
+    const result: any = await builtTool.execute!({ amount: 10 }, {
+      toolCallId: 'call-1',
+      messages: [],
+      suspend: vi.fn(),
+    } as any);
+
+    expect(result.message).toContain('Tool suspension data validation failed');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool suspend data validation failed',
+      expect.objectContaining({ tool: 'ask_approval', issuePaths: ['reason'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+
+  it('logs the failing output paths of an AI SDK tool without the returned values', async () => {
+    const logger = spyLogger();
+    const vercelTool = {
+      description: 'Looks up a user',
+      inputSchema: z.object({ id: z.string() }),
+      outputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ name: 7, email }),
+    };
+    const builtTool = new CoreToolBuilder({
+      originalTool: vercelTool as any,
+      options: { name: 'lookup_user', logger: logger as any },
+    }).build();
+
+    const result: any = await builtTool.execute!({ id: 'u-1' }, { toolCallId: 'call-1', messages: [] });
+
+    expect(result.message).toContain('Tool output validation failed');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool output validation failed',
+      expect.objectContaining({ tool: 'lookup_user', issuePaths: ['name'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+
+  it('logs the failing output paths of a Mastra tool without the returned values', async () => {
+    const logger = spyLogger();
+    const tool = createTool({
+      id: 'lookup_user',
+      description: 'Looks up a user',
+      inputSchema: z.object({ id: z.string() }),
+      outputSchema: z.object({ name: z.string() }),
+      execute: async () => ({ name: 7, email }) as any,
+    });
+
+    const result: any = await tool.execute!({ id: 'u-1' }, { mastra: { getLogger: () => logger } as any });
+
+    expect(result.message).toContain('Tool output validation failed');
+    expect(logger.warn).toHaveBeenCalledWith(
+      'Tool output validation failed',
+      expect.objectContaining({ toolId: 'lookup_user', issuePaths: ['name'] }),
+    );
+    expectNoLoggedValue(logger, email);
+  });
+});
+
 describe('CoreToolBuilder skipToolSpan', () => {
   it('creates no tool span and passes the caller span to the tool context', async () => {
     let receivedSpan: unknown;

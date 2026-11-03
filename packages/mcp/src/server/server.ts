@@ -21,7 +21,13 @@ import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-cont
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
 import { createTool, isValidationError, validateToolInput } from '@mastra/core/tools';
-import type { InternalCoreTool, MCPToolExecutionContext, MCPToolType, ToolAction } from '@mastra/core/tools';
+import type {
+  InternalCoreTool,
+  MCPToolExecutionContext,
+  MCPToolType,
+  ToolAction,
+  ValidationError,
+} from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { ToolExecuteFGACheck } from '@mastra/core/utils';
 import type { SuspendOptions, Workflow } from '@mastra/core/workflows';
@@ -1501,7 +1507,7 @@ export class MCPServer extends MCPServerBase {
     // Rejected input answers as the plain tool does, before a run or task exists to be left behind.
     const input = validateToolInput(workflow.inputSchema, args, name);
     if (input.error) {
-      this.logger.warn(`Tool '${name}' rejected its input.`, { error: input.error.message });
+      this.logger.warn(`Tool '${name}' rejected its input.`, { issuePaths: validationIssuePaths(input.error) });
       return errorResult(input.error.message);
     }
     // Never the task id: a task id is unguessable, a run id is visible to anyone who can list runs.
@@ -1907,7 +1913,7 @@ export class MCPServer extends MCPServerBase {
 
   private toCallToolResult(name: string, tool: InternalCoreTool, value: unknown): CallToolResult {
     if (isValidationError(value)) {
-      this.logger.warn(`Tool '${name}' rejected its input.`, { error: value.message });
+      this.logger.warn(`Tool '${name}' rejected its input.`, { issuePaths: validationIssuePaths(value) });
       return errorResult(value.message);
     }
     // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
@@ -2445,7 +2451,7 @@ export class MCPServer extends MCPServerBase {
             id: 'MCP_SERVER_TOOL_EXECUTE_FAILED',
             domain: ErrorDomain.MCP,
             category: ErrorCategory.USER,
-            details: { toolId, args: JSON.stringify(args) },
+            details: { toolId },
           },
           error,
         );
@@ -2552,6 +2558,22 @@ function taskLimitMessage({ scope, limit, kind }: MCPTaskLimitError): string {
   return scope === 'principal'
     ? `Too many open tasks for this client (limit ${limit}). Wait for one to finish or cancel one.`
     : `Too many open tasks on this server (limit ${limit}). Try again later.`;
+}
+
+/**
+ * The dotted paths that failed validation (`root` for top-level issues). A validation error's message
+ * echoes the submitted arguments back to the caller, so logs carry these paths instead.
+ */
+function validationIssuePaths(error: ValidationError): string[] {
+  const paths: string[] = [];
+  const walk = (node: { errors: string[]; fields: unknown }, path: string[]) => {
+    if (node.errors.length > 0) paths.push(path.join('.') || 'root');
+    for (const [key, child] of Object.entries((node.fields ?? {}) as Record<string, typeof node>)) {
+      walk(child, [...path, key]);
+    }
+  };
+  walk(error.validationErrors, []);
+  return paths;
 }
 
 function errorResult(text: string): CallToolResult {
