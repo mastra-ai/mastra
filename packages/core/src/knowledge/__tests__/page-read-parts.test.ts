@@ -136,6 +136,27 @@ describe('writing back a long page read in part', () => {
     expect(await readAll(call, 'docs:acme#anthropic')).toBe(body);
   });
 
+  it('writes back the last part of a long body that ends in a newline, with the range its read returned', async () => {
+    const { knowledge, call } = setup();
+    const body = `${referenceBody()}\n`;
+    await knowledge.upsertPage({ scope: 'docs:acme', path: 'anthropic', name: 'Anthropic', body });
+    const last = body.split('\n').length - 1;
+
+    const tail = await call('knowledge_read', { page: 'docs:acme#anthropic', from: { line: last - 2 } });
+    expect(tail.page.range.end).toEqual({ line: last });
+    await call('knowledge_page', {
+      op: 'write',
+      page: 'docs:acme#anthropic',
+      body: numbered(tail.page.lines)
+        .map(([, text]) => text.replace('A table.', 'A bigger table.'))
+        .join('\n'),
+      range: tail.page.range,
+      expectedVersion: tail.page.version,
+    });
+
+    expect(await readAll(call, 'docs:acme#anthropic')).toBe(body.replace('A table.', 'A bigger table.').slice(0, -1));
+  });
+
   it('writes just the lines a read returned, from a later read and from a section', async () => {
     const { knowledge, call } = setup();
     const body = referenceBody();
