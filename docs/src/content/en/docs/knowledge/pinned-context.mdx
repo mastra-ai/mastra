@@ -116,13 +116,64 @@ An Acme policy admin can pin for `role:acme:support`, but not for `role:globex:s
 
 `editor` on a role scope also lets the run create pages there, and no one can read those pages without a `self` rule. Keep pages in content scopes such as `policy:`, and use role scopes only as audiences.
 
+## Pinned listings
+
+A pinned listing puts the pages under a scope or page into context, the way [`knowledge_list`](/reference/knowledge/knowledge-tools#knowledge_list) returns them: each page's ref, name and child count. Pin a listing when the agent needs to know what exists and where, such as the sections of a docs site, so it can go straight to the right page with `knowledge_read`. Pin a page when the agent needs its content on every turn.
+
+Add a listing to a scope's `pinnedContext` as `{ list, depth }`. `list` names a scope or a page path, and `depth` is how many levels below it to show, from 1 to 3 (default 1):
+
+```typescript title="src/mastra/knowledge.ts"
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'docs',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./mastra.db' }),
+  tools: true,
+  pinnedContext: true,
+  scopes: {
+    ...knowledgeMemoryScopes(),
+    'site:$siteId': {
+      description: 'A website',
+      access: [{ principal: 'self', role: 'viewer' }],
+      pinnedContext: [{ list: 'site:$siteId', depth: 1 }],
+    },
+  },
+})
+```
+
+Every run holding `site:mastra` gets the listing:
+
+```text
+Pages under site:mastra (site:mastra, depth 1):
+- site:mastra#docs — Docs (2 children)
+- site:mastra#blog — Blog
+- site:mastra#pricing — Pricing
+```
+
+A listing follows the same rules as a pinned page:
+
+- It shows only the pages the run can read, the same as `knowledge_list`. A run that can't read the listed scope or page gets nothing.
+- It updates on the next turn when a listed page is added, renamed or removed.
+- It takes one pin slot out of `maxPins` and shares the `maxTokens` budget with pinned pages.
+
+A listing that doesn't fit fills a level at a time: every first-level page that fits, then second-level pages, down to `depth`. When pages are left out, it ends with a pointer that tells the agent to continue with `knowledge_list`. With the default 500-token budget, a large scope may show only its first level, so raise `maxTokens` to show deeper levels. See [Limits](/reference/knowledge/limits) for the listing caps.
+
+Agents pin listings at runtime with `knowledge_pin` and `kind: "list"`, which needs the same roles as pinning a page:
+
+```json
+{ "op": "pin", "kind": "list", "depth": 2, "page": "site:mastra#docs", "audience": ["site:mastra"] }
+```
+
+A page can have both a page pin and a listing pin, and each is pinned and unpinned separately. See [`knowledge_pin`](/reference/knowledge/knowledge-tools#knowledge_pin) for the arguments.
+
 ## What a run receives
 
 On each turn, Knowledge builds the run's pinned context in this order:
 
-1. Pages pinned in config for every scope the run holds. If they're over budget, each one is shortened to an equal share.
-1. Pages pinned by agents for any scope the run holds, highest priority first, then newest first. A page already pinned in config isn't repeated.
-1. Pinned pages that don't fit are listed by name, so the agent can open them with the read tools.
+1. Pages and listings pinned in config for every scope the run holds. If they're over budget, each one is shortened to an equal share.
+1. Pages and listings pinned by agents for any scope the run holds, highest priority first, then newest first. A pin already in config isn't repeated.
+1. Pins that don't fit are listed by name, so the agent can open them with the read tools.
 
 A shortened page ends with a note that tells the agent to read the rest.
 

@@ -81,9 +81,9 @@ export const knowledge = new Knowledge({
   },
   {
     name: 'pinnedContext',
-    type: 'string[]',
+    type: 'Array<string | { list: string; depth?: number }>',
     description:
-      'Page paths every run holding a scope of this type gets pinned, such as `policy:$orgId#refund-policy`. Each entry is a [page path](/reference/knowledge/knowledge-tools#page-references) whose `$params` bind from the holding scope. A malformed path, an undeclared scope type, or a `$param` the holding scope lacks fails at startup. See [Pinned context](/docs/knowledge/pinned-context).',
+      "What every run holding a scope of this type gets pinned. A string is a page path, such as `policy:$orgId#refund-policy`. `{ list, depth }` pins a listing of the pages under a scope or page path, `depth` 1 to 3 (default 1), such as `{ list: 'site:$siteId', depth: 1 }`. Each path is a [page path](/reference/knowledge/knowledge-tools#page-references) whose `$params` bind from the holding scope. A malformed path, an undeclared scope type, or a `$param` the holding scope lacks fails at startup. See [Pinned context](/docs/knowledge/pinned-context).",
     isOptional: true,
   },
   {
@@ -183,9 +183,9 @@ Roles don't carry over. A run holding `org:acme` reads `team:acme:support` throu
 },
 ```
 
-The address `project:p1` has no `$orgId`, so the `org:$orgId` rule binds it from the project's place in the tree. The first run that uses `project:p1` while holding exactly one `org:` scope places it under that scope, and the placement sticks. After that, a run holding `org:acme` can read `project:p1`, and a run holding `org:globex` can't.
+The address `project:p1` has no `$orgId`, so the `org:$orgId` rule binds it from the project's place in the tree. The first run that writes Knowledge while holding `project:p1` and exactly one `org:` scope places it under that scope, and the placement sticks. After that, a run holding `org:acme` can read `project:p1`, and a run holding `org:globex` can't.
 
-Until it's placed, the `org:$orgId` rule gives nothing on `project:p1`. A run that holds several `org:` scopes logs a warning and leaves the placement unchanged. A run that holds a different `org:` scope from the stored placement also logs a warning, and the placement stays.
+Runs that only read create and place nothing. Until a writing run places `project:p1`, the `org:$orgId` rule gives nothing on it. A run that holds several `org:` scopes logs a warning and leaves the placement unchanged. A run that holds a different `org:` scope from the stored placement also logs a warning, and the placement stays.
 
 ## Child scopes and keyed pages
 
@@ -220,11 +220,11 @@ Keys are unique among siblings and can't contain `/`, `#` or `%`. A duplicate or
 
 Template pages belong to the config:
 
-- Runs create any template page a scope is missing, including ones you add to the config later. A page already sitting at that path is adopted instead, and becomes a template page.
+- A run that writes creates any template page its scopes are missing, including ones you add to the config later. Runs that only read create nothing. A page already sitting at that path is adopted instead, and becomes a template page.
 - Tools can edit a template page's name, description and body under the usual roles, add notes to it, and merge other pages into it.
 - Tools can't move a template page or merge it away. They get `"team:acme:support#handbook" is declared in config; change the scope's pages to move it.`
-- A page you take out of `pages` becomes an ordinary page and keeps its key. Putting the template back adopts the page at that path, with its body and notes. If the page has moved, the run creates a new one there.
-- If host code deletes a template page through the store, the next run creates a new, empty one at that path.
+- A page you take out of `pages` becomes an ordinary page and keeps its key. Putting the template back adopts the page at that path, with its body and notes. If the page has moved, the next writing run creates a new one there.
+- If host code deletes a template page through the store, the next writing run creates a new, empty one at that path.
 
 A child gets no rules from its parent. List every rule it needs, with params bound from the parent's address. In a child's rules `self` is the child, which no run holds, so name the parent's pattern as the principal, as above. A run holding `org:acme` reads the team's pages but not the private child's.
 
@@ -275,7 +275,7 @@ A run's scopes come from host code: the `MASTRA_SCOPES_KEY` request context key,
 
 With Knowledge attached, every scope a run holds must match a declared type. A type that only names who a run is still needs a declaration, even an empty one such as `'role:$orgId:support': {}`.
 
-A run has exactly one Memory resource and one thread. `knowledgeMemoryScopes()` places a user's `resource:` scope under the org it first runs with, and that placement doesn't change. Give a user who works in several orgs a resource ID per org, such as `acme-dana` and `globex-dana`.
+A run has exactly one Memory resource and one thread. `knowledgeMemoryScopes()` places a user's `resource:` scope under the org held by its first writing run, and that placement doesn't change. Give a user who works in several orgs a resource ID per org, such as `acme-dana` and `globex-dana`.
 
 `MASTRA_SCOPES_KEY` is reserved: the server ignores it in request bodies. It needs a `@mastra/server` release that reserves it.
 
