@@ -43,20 +43,14 @@ const PREPARE_APPROVAL: CardMove = {
   stage: 'triage',
   awaitsHumanDecision: true,
 };
-/** A pull request's own card is reviewed in Work's PR review, or in Reviewing on the Review board it was filed on. */
-function reviewMoves(item: MovableCard): { review: CardMove; reReview: CardMove } {
-  // Pull request cards with no board predate persisted boards and sit on Review.
-  const stage = (item.board ?? 'review') === 'review' ? 'review' : 'pr-review';
-  return {
-    review: { label: 'Review', role: 'review', stage },
-    reReview: { label: 'Re-review', role: 'review', stage },
-  };
-}
+/** A card's pull request is reviewed in Work's PR review. */
+const REVIEW_MOVE: CardMove = { label: 'Review', role: 'review', stage: 'pr-review' };
+const RE_REVIEW_MOVE: CardMove = { label: 'Re-review', role: 'review', stage: 'pr-review' };
 
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
-  if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
-  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [reviewMoves(item).reReview] : [];
+  if (item.board != null && item.board !== 'work') return [];
+  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW_MOVE] : [];
   if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
   if (item.source === 'github-issue') {
     return needsApproval({ ...item, workItem: item.workItem ?? { labels: metadataLabels(item.metadata) } })
@@ -71,7 +65,7 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   ) {
     return issueMoves(columnStage);
   }
-  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [reviewMoves(item).review] : [];
+  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [REVIEW_MOVE] : [];
 }
 
 function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
@@ -93,7 +87,7 @@ const WORKING_LANES: readonly FactoryRuleStage[] = [...Object.values(FACTORY_ROL
 export function resumeStage(
   columnStage: BoardStageId,
   item: {
-    /** The card's resolved board (`itemBoard`): a legacy pull request card with no board sits on Review. */
+    /** The card's resolved board (`itemBoard`). */
     board: string;
     sessions: Record<string, WorkItemSessionRef>;
     stageHistory?: readonly { stage: string }[];
@@ -103,7 +97,7 @@ export function resumeStage(
   const visited = new Set((item.stageHistory ?? []).map(entry => entry.stage));
   const lane = WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
   // On Work, Intake leads to neither Building nor its self-review: a card that got that far
-  // resumes in Planning. The Review board has no Planning, and its Intake leads back to Reviewing.
+  // resumes in Planning.
   return item.board === 'work' && (lane === 'execute' || lane === 'review') ? 'planning' : lane;
 }
 

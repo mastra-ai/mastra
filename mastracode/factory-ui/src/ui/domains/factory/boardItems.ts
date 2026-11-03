@@ -147,6 +147,18 @@ export function pullRequestStatusForItem(item: Pick<WorkItem, 'workItem' | 'meta
   return metadata.draft === true ? 'draft' : 'open';
 }
 
+/** Status of a pull request attached to an issue card, read from that source alone. */
+export function pullRequestStatusForSource(source: {
+  state: string | null;
+  metadata: Record<string, unknown> | null;
+}): PullRequestStatus {
+  const metadata = source.metadata ?? {};
+  const state = source.state ?? metadata.state;
+  if (state === 'merged' || metadata.merged === true) return 'merged';
+  if (state === 'closed') return 'closed';
+  return metadata.draft === true ? 'draft' : 'open';
+}
+
 /**
  * Source key for a GitHub issue or pull request. Numbers repeat across a
  * project's repositories, so the key is repository-scoped whenever the

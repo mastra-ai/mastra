@@ -584,7 +584,7 @@ describe('factory_transition_work_item', () => {
     expect(onEnter).toHaveBeenCalledTimes(1);
   });
 
-  it('derives the Review board for PR bindings and ignores linked-card presence for Work authority', async () => {
+  it('moves a PR binding on Work and ignores linked-card presence for Work authority', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const review = await prepareBoundItem(storage, 'github-pr');
     const transition = vi.fn(async () => ({ status: 'accepted' as const }));
@@ -596,11 +596,11 @@ describe('factory_transition_work_item', () => {
     });
 
     await execute(tools.factory_transition_work_item as ExecutableTool, context, {
-      stage: 'review',
+      stage: 'pr-review',
       expectedRevision: review.item.revision,
       rationale: 'Review started.',
     });
-    expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'review', workItemId: review.item.id }));
+    expect(transition).toHaveBeenCalledWith(expect.objectContaining({ board: 'work', workItemId: review.item.id }));
   });
 
   describe('factory_record_review_verdict', () => {
@@ -678,7 +678,7 @@ describe('factory_transition_work_item', () => {
       });
     });
 
-    async function reviewingItem(storage: WorkItemsStorage, stage = 'review') {
+    async function reviewingItem(storage: WorkItemsStorage, stage = 'pr-review') {
       const prepared = await prepareBoundItem(storage, 'github-pr');
       await storage.update({
         orgId: 'org-1',
@@ -689,7 +689,7 @@ describe('factory_transition_work_item', () => {
       return prepared.item.id;
     }
 
-    it('records the verdict on a Reviewing card and leaves it in Reviewing', async () => {
+    it('records the verdict on a card in PR review and leaves it there', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       const id = await reviewingItem(storage);
       const context = requestContext();
@@ -707,7 +707,7 @@ describe('factory_transition_work_item', () => {
       ).resolves.toMatchObject({ status: 'recorded', verdict: 'request changes' });
 
       const item = await storage.get({ orgId: 'org-1', id });
-      expect(item?.stages).toEqual(['review']);
+      expect(item?.stages).toEqual(['pr-review']);
       expect(item?.metadata).toMatchObject({
         factoryAuthored: true,
         reviewVerdict: 'request changes',
@@ -822,7 +822,7 @@ describe('factory_transition_work_item', () => {
       ).toBeUndefined();
     });
 
-    it('rejects a verdict for a card that is no longer Reviewing', async () => {
+    it('rejects a verdict for a card that is no longer in PR review', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
       await reviewingItem(storage, 'done');
       const context = requestContext();
@@ -837,7 +837,7 @@ describe('factory_transition_work_item', () => {
           verdict: 'approve',
           reviewedHeadSha: 'abc1234def000000000000000000000000000000',
         }),
-      ).rejects.toThrow('Only a card in Reviewing records a verdict');
+      ).rejects.toThrow('Only a card in PR review records a verdict');
     });
 
     it('is offered only to review bindings and bounds its input', async () => {

@@ -219,8 +219,8 @@ function buildWorkItem(context: FactoryStageRuleContext) {
 }
 
 function selfReviewWorkItem(context: FactoryStageRuleContext) {
-  // A card whose change request is already open is past self-review; the Review
-  // board's reviewer covers it on the change request itself.
+  // A card whose change request is already open is past self-review; PR review
+  // covers it on the change request itself.
   if (typeof context.item.metadata?.openPullRequestNumber === 'number') return;
   if (context.selfReviewEnabled !== true) return;
   return {
@@ -291,13 +291,17 @@ const NON_PULL_REQUEST_PHASES: ReadonlySet<string> = new Set(['triage', 'plannin
 
 /**
  * Why a move breaks the shape of a card on Work, or undefined when it does not: a pull request's
- * card is only reviewed, and PR review holds only pull request cards. `nextPhases` cannot say
- * this: Intake leads to both Triage and PR review, and which one fits depends on the card.
+ * own card is only reviewed, and PR review holds only cards that carry a pull request (their own,
+ * or one attached to their issue). `nextPhases` cannot say this: Intake leads to both Triage and
+ * PR review, and which one fits depends on the card.
  */
-export function workPullRequestCardRejection(isPullRequest: boolean, toStage: string): string | undefined {
-  if (!isPullRequest && toStage === 'pr-review')
-    return 'PR review holds only pull request cards; this work item goes to Review after Building.';
-  if (!isPullRequest || !NON_PULL_REQUEST_PHASES.has(toStage)) return undefined;
+export function workPullRequestCardRejection(
+  card: { readonly standalonePullRequest: boolean; readonly hasPullRequest: boolean },
+  toStage: string,
+): string | undefined {
+  if (!card.hasPullRequest && toStage === 'pr-review')
+    return 'PR review holds only cards with a pull request; this work item goes to Review after Building.';
+  if (!card.standalonePullRequest || !NON_PULL_REQUEST_PHASES.has(toStage)) return undefined;
   return `A pull request card is reviewed on the Work board; it cannot enter ${toStage}. Move it to pr-review, done, or canceled.`;
 }
 
@@ -372,7 +376,8 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
       kind: 'working',
       runner: { context: 'work' },
       // Self-review sends the card back to Building, or parks it in Intake at its round limit.
-      nextPhases: ['execute', 'intake', 'done', 'canceled'],
+      // A maintainer's review request takes its open pull request to PR review.
+      nextPhases: ['execute', 'intake', 'pr-review', 'done', 'canceled'],
       onEnter: {
         issue: selfReviewWorkItem,
         gitlabIssue: selfReviewWorkItem,
@@ -384,16 +389,20 @@ export const workBoard = compileBoardDefinition<'work', Record<WorkBoardPhase, B
     },
     'pr-review': {
       name: 'PR review',
-      // A pull request's own card is reviewed here by the independent reviewer, in its own
-      // review seat. Kept apart from Review, the builder's self-review, so a card never
-      // reaches the builder's lanes through a pull request's.
+      // A card's pull request is reviewed here by the independent reviewer, in its own
+      // review seat on the pull request's branch. Kept apart from Review, the builder's
+      // self-review of its own branch.
       kind: 'working',
       runner: { context: 'work' },
-      // Merged, closed, or set aside in Intake: it never reaches the builder's lanes.
-      nextPhases: ['intake', 'done', 'canceled'],
+      // Merged, closed, or set aside in Intake. An issue card can go back to its builder for a
+      // fix; a pull request's own card never reaches the builder's lanes (workPullRequestCardRejection).
+      nextPhases: ['intake', 'planning', 'execute', 'done', 'canceled'],
       onEnter: {
         pullRequest: reviewPullRequest,
         gitlabPullRequest: reviewPullRequest,
+        // An issue card reviews the pull or merge request attached to it.
+        issue: reviewPullRequest,
+        gitlabIssue: reviewPullRequest,
       },
     },
     done: {

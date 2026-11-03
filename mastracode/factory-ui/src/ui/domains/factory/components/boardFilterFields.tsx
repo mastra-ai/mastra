@@ -17,7 +17,7 @@ import type { BoardFilterFieldId, BoardFilterState } from '../boardFilters';
 import { factoryParticipantId } from '../boardPeople';
 import type { BoardParticipant } from '../boardPeople';
 import type { BoardKind } from '../boardStages';
-import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
+import { BOARD_SOURCE_OPTIONS, PULL_REQUEST_SOURCE_FILTER } from '../boardSourceFilters';
 import type { LinearProject } from '../services/linear';
 import { BoardSourceIcon } from './BoardSourceIcon';
 
@@ -78,7 +78,12 @@ export function boardFilterFields({
   const suggestions: Record<BoardFilterFieldId, FilterBarOption[]> = {
     // Keep already-picked sources so saved views still label and edit them after a provider disconnects.
     source: BOARD_SOURCE_OPTIONS.filter(
-      option => option.value === 'manual' || connectedSources?.has(option.value) || filters.source.has(option.value),
+      option =>
+        option.value === 'manual' ||
+        connectedSources?.has(option.value) ||
+        (option.value === PULL_REQUEST_SOURCE_FILTER &&
+          (connectedSources?.has('github') === true || connectedSources?.has('gitlab') === true)) ||
+        filters.source.has(option.value),
     ).map(option => ({ ...option, start: <BoardSourceIcon source={option.value} /> })),
     linearProject: linearProjects.map(project => ({
       value: project.id,

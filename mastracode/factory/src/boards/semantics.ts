@@ -1,5 +1,6 @@
 import type { FactoryRuleBoardClosure, FactoryRulePhaseContext } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
+import type { WorkItemSourceRow } from '../storage/domains/work-items/work-item-schema.js';
 import type {
   BoardEventIntegration,
   BoardEventRules,
@@ -16,37 +17,136 @@ export interface PhaseSemantics {
 
 /**
  * Board that owns a work item. Rows created before boards were persisted carry no `board`;
- * they belong to Review when they track a pull request and to Work otherwise, matching the
- * legacy assignment the transition service performs on their next move.
+ * they belong to Work. (Pull requests used to default to the retired Review board; storage
+ * now reads those rows as Work.)
  */
-export function boardForWorkItem(item: Pick<Card, 'board' | 'externalSource'>): string {
-  return item.board ?? (item.externalSource?.type === 'pull-request' ? 'review' : 'work');
+export function boardForWorkItem(item: Pick<Card, 'board'>): string {
+  return item.board ?? 'work';
+}
+
+/** The Work phase where a card's pull or merge request gets its independent review. */
+export const PULL_REQUEST_REVIEW_PHASE = 'pr-review';
+
+interface SourcedItem {
+  readonly workItem?: { readonly sources?: readonly WorkItemSourceRow[] } | null;
 }
 
 /**
- * A card that tracks a pull or merge request itself, as opposed to the card whose work opened it.
- * Both can sit on Work, so rules tell them apart by source rather than by board.
+ * A card whose own primary source is a pull or merge request: an outside contributor's
+ * PR filed on its own card, or a PR card filed before PRs attached to their issue's card.
+ * An issue card with an attached PR is not one; see {@link hasPullRequest}.
  */
 export function isPullRequestCard(item: { readonly source: string }): boolean {
   return item.source === 'github-pr' || item.source === 'gitlab-pr';
 }
 
-/** Whether the rule's card is the change request's own card, which the reviewer reviews. */
-export function reviewsPullRequest(context: {
-  readonly board?: string;
-  readonly item?: { readonly source: string };
-}): boolean {
-  if (context.board === 'review') return true;
-  return context.board === 'work' && context.item !== undefined && isPullRequestCard(context.item);
+/** Every pull or merge request source on a card, oldest first. */
+export function pullRequestSources(item: SourcedItem): WorkItemSourceRow[] {
+  return (item.workItem?.sources ?? []).filter(source => source.sourceType === 'pull-request');
+}
+
+/** Whether a card carries a pull or merge request: its own, or one attached to its issue. */
+export function hasPullRequest(item: SourcedItem & { readonly source?: string }): boolean {
+  return (
+    (item.source !== undefined && isPullRequestCard({ source: item.source })) || pullRequestSources(item).length > 0
+  );
+}
+
+/** The provider number (GitHub PR number, GitLab MR IID) a pull request source names. */
+/** A source row's external id without the type/workspace scope storage prefixes it with. */
+export function sourceExternalId(source: Pick<WorkItemSourceRow, 'sourceType' | 'workspaceId' | 'externalId'>): string {
+  const prefix = `${source.sourceType}:${source.workspaceId ? `${source.workspaceId}:` : ''}`;
+  return source.externalId.startsWith(prefix) ? source.externalId.slice(prefix.length) : source.externalId;
+}
+
+export function pullRequestSourceNumber(source: Pick<WorkItemSourceRow, 'metadata'>): number | undefined {
+  const metadata = source.metadata ?? {};
+  const value = metadata.githubPullRequestNumber ?? metadata.gitlabMergeRequestIid ?? metadata.number;
+  return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
+}
+
+function openSource(source: Pick<WorkItemSourceRow, 'state' | 'metadata'>): boolean {
+  const state = source.state ?? source.metadata?.state;
+  return state !== 'closed' && state !== 'merged' && source.metadata?.merged !== true;
 }
 
 /**
- * The phase a pull or merge request's own card is reviewed in: Work's `pr-review`, or Review's
- * `review` for cards filed on the Review board before pull requests moved to Work. Work's own
- * `review` phase is the builder's self-review, which a pull request card never enters.
+ * The pull request a PR review pass on this card reviews: the one the card's
+ * `openPullRequestNumber` names, else the newest open one, else the newest one.
  */
-export function pullRequestReviewPhase(board: string | undefined): 'review' | 'pr-review' {
-  return board === 'review' ? 'review' : 'pr-review';
+export function reviewedPullRequest(
+  item: SourcedItem & { readonly metadata?: Record<string, unknown> | null },
+): WorkItemSourceRow | undefined {
+  const sources = pullRequestSources(item);
+  const pointer = item.metadata?.openPullRequestNumber;
+  return (
+    (typeof pointer === 'number' ? sources.find(source => pullRequestSourceNumber(source) === pointer) : undefined) ??
+    sources.findLast(openSource) ??
+    sources.at(-1)
+  );
+}
+
+/** The newest still-open pull request on a card other than `except`, for re-pointing `openPullRequestNumber`. */
+export function newestOpenPullRequestNumber(item: SourcedItem, except?: number): number | null {
+  const open = pullRequestSources(item).filter(
+    source => openSource(source) && pullRequestSourceNumber(source) !== except,
+  );
+  return (open.length ? pullRequestSourceNumber(open.at(-1)!) : undefined) ?? null;
+}
+
+/** The pull or merge request a card's PR review covers, whichever card shape carries it. */
+export interface ReviewedChangeRequest {
+  readonly provider: 'github' | 'gitlab';
+  readonly number: number | undefined;
+  readonly url: string | null;
+  readonly headBranch: string | undefined;
+  /** The card is the change request's own card rather than an issue card it is attached to. */
+  readonly standalone: boolean;
+}
+
+/**
+ * What a PR review on this card reviews: the card's own change request when the card is one,
+ * otherwise the attached one {@link reviewedPullRequest} picks. Undefined for a card with none.
+ */
+export function reviewedChangeRequest(item: {
+  readonly source: string;
+  readonly url?: string | null;
+  readonly metadata?: Record<string, unknown> | null;
+  readonly workItem: {
+    readonly url?: string | null;
+    readonly metadata?: Record<string, unknown> | null;
+    readonly sources?: readonly WorkItemSourceRow[];
+  };
+}): ReviewedChangeRequest | undefined {
+  if (isPullRequestCard(item)) {
+    const metadata = item.workItem.metadata ?? {};
+    const gitlab = item.source === 'gitlab-pr';
+    const value = (gitlab ? metadata.gitlabMergeRequestIid : metadata.githubPullRequestNumber) ?? metadata.number;
+    return {
+      provider: gitlab ? 'gitlab' : 'github',
+      number: typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined,
+      url: item.url ?? item.workItem.url ?? null,
+      headBranch: typeof metadata.headBranch === 'string' ? metadata.headBranch : undefined,
+      standalone: true,
+    };
+  }
+  const source = reviewedPullRequest(item);
+  if (!source) return undefined;
+  return {
+    provider: source.integrationId === 'gitlab' ? 'gitlab' : 'github',
+    number: pullRequestSourceNumber(source),
+    url: source.url ?? null,
+    headBranch: typeof source.metadata?.headBranch === 'string' ? source.metadata.headBranch : undefined,
+    standalone: false,
+  };
+}
+
+/** Whether the rule's card carries the change request the reviewer reviews. */
+export function reviewsPullRequest(context: {
+  readonly board?: string;
+  readonly item?: SourcedItem & { readonly source: string };
+}): boolean {
+  return context.board === 'work' && context.item !== undefined && hasPullRequest(context.item);
 }
 
 /**
@@ -127,7 +227,7 @@ export function rulePhaseContext(
 
 /**
  * Whether a persisted card has finished, judged by the board it sits on: the installed
- * board's phase kind first, then the built-in Work and Review names for rows whose board is
+ * board's phase kind first, then the built-in Work names for rows whose board is
  * not installed. Unknown boards or phases are never terminal, so a card is only ever
  * released from ownership on the board's own say-so.
  */
@@ -137,8 +237,7 @@ export function isTerminalWorkItem(
 ): boolean {
   const semantics = workItemPhaseSemantics(boards, item);
   if (semantics) return semantics.kind === 'terminal';
-  const board = boardForWorkItem(item);
-  if (board !== 'work' && board !== 'review') return false;
+  if (boardForWorkItem(item) !== 'work') return false;
   const stage = item.stages.length === 1 ? item.stages[0] : undefined;
   return stage === 'done' || stage === 'canceled';
 }

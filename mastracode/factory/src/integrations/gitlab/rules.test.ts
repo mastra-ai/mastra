@@ -1,9 +1,11 @@
+import type { FactoryStorage } from '@mastra/core/storage';
+import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { FactoryGitLabRuleContext } from '../../rules/types.js';
-import { createFactoryStorageForTests } from '../../storage/test-utils.js';
+import { createFactoryStorageForTests, createIsolatedFactoryPostgresForTests } from '../../storage/test-utils.js';
 import { resolveGitLabRules } from './default-rules.js';
 import { encodeIssueReference, encodeSourceId } from './integration.js';
 import { GitLabRules } from './rules.js';
@@ -111,9 +113,12 @@ async function setup(
     installationHost?: string;
     platformOnly?: boolean;
     boards?: ReturnType<typeof createBoardRegistry>;
+    storage?: FactoryStorage;
   } = {},
 ) {
-  const seeded = await createFactoryStorageForTests();
+  const seeded = options.storage
+    ? await createFactoryStorageForTests(options.storage)
+    : await createFactoryStorageForTests();
   const sourceControl = seeded.sourceControl.forIntegration('gitlab');
   const project = await seeded.projects.create({
     orgId: 'org-1',
@@ -1133,13 +1138,14 @@ describe('merge request cards on the Work board', () => {
       await dispatch();
 
       expect(await seeded.workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).toHaveLength(1);
-      expect(await get(card.id)).toMatchObject({ board, stages: ['intake'] });
+      // A card stored on the retired Review board reads as Work.
+      expect(await get(card.id)).toMatchObject({ board: 'work', stages: ['intake'] });
       const upserts = (await decisions()).filter(entry => entry.decision.type === 'upsertLinkedWorkItem');
       expect(upserts.map(entry => entry.status)).toEqual(['succeeded']);
     },
   );
 
-  /** Where a merge request's own card is reviewed: Work's PR review, or Review's Reviewing. */
+  /** Where a merge request's own card was stored for review: Work's PR review, or the retired Review board's Reviewing. */
   const reviewPhase = (board: 'work' | 'review') => (board === 'work' ? 'pr-review' : 'review');
 
   it.each(['work', 'review'] as const)('re-reviews a push to a reviewed merge request card on %s', async board => {
@@ -1149,11 +1155,12 @@ describe('merge request cards on the Work board', () => {
     await service.ingest(mergeRequestEvent('d-push', 'update'));
     await dispatch();
 
-    expect(await get(card.id)).toMatchObject({ board, stages: [reviewPhase(board)] });
+    // Either way the card reads as Work's PR review.
+    expect(await get(card.id)).toMatchObject({ board: 'work', stages: ['pr-review'] });
     const recorded = await decisions();
     expect(recorded.find(entry => entry.decision.type === 'transition')?.decision).toMatchObject({
-      board,
-      stage: reviewPhase(board),
+      board: 'work',
+      stage: 'pr-review',
       reenter: true,
     });
     expect(recorded.find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
@@ -1169,13 +1176,13 @@ describe('merge request cards on the Work board', () => {
       const mergedCard = await mergeRequestCard(merged.seeded, merged.project.id, board, reviewPhase(board));
       await merged.service.ingest(mergeRequestEvent('d-merge', 'merge'));
       await merged.dispatch();
-      expect(await merged.get(mergedCard.id)).toMatchObject({ board, stages: ['done'] });
+      expect(await merged.get(mergedCard.id)).toMatchObject({ board: 'work', stages: ['done'] });
 
       const closed = await harness();
       const closedCard = await mergeRequestCard(closed.seeded, closed.project.id, board, 'intake');
       await closed.service.ingest(mergeRequestEvent('d-close', 'close'));
       await closed.dispatch();
-      expect(await closed.get(closedCard.id)).toMatchObject({ board, stages: ['canceled'] });
+      expect(await closed.get(closedCard.id)).toMatchObject({ board: 'work', stages: ['canceled'] });
     },
   );
 
@@ -1416,3 +1423,179 @@ describe('GitLab activity signals', () => {
     expect(JSON.stringify(decisions)).not.toContain('Do this instead');
   });
 });
+
+const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
+
+describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
+  'one card for an issue and the merge requests that close it, on %s',
+  backend => {
+    async function harness(accessLevel = 40) {
+      const base = await setup({
+        accessLevel,
+        storage:
+          backend === 'postgres'
+            ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
+            : new LibSQLFactoryStorage({ id: 'gitlab-one-card', url: ':memory:' }),
+      });
+      const boards = createBoardRegistry();
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: { getSession: vi.fn(async () => undefined) } as never,
+        transitionService: new FactoryTransitionService({
+          storage: base.seeded.workItems,
+          configVersion: 'gitlab-test-v1',
+          boards,
+        }),
+        storage: base.seeded.workItems,
+        boards,
+        intakeRoutes: base.seeded.boards,
+        isAutoRunEnabled: async () => true,
+        ownerId: 'worker-1',
+      });
+      let tick = 0;
+      const ingest = async (delivery: Parameters<typeof base.service.ingest>[0]) => {
+        await base.service.ingest(delivery);
+        for (let pass = 0; pass < 2; pass++) {
+          await dispatcher.runOnce(new Date(Date.parse('2030-01-02T00:00:00Z') + 1000 * tick++));
+        }
+      };
+      const cards = () => base.seeded.workItems.list({ orgId: 'org-1', factoryProjectId: base.project.id });
+      const decisions = () => base.seeded.workItems.listDeferredDecisions('org-1', base.project.id);
+      const issueCard = async (stage: string) =>
+        (
+          await base.seeded.workItems.upsert({
+            orgId: 'org-1',
+            userId: 'user-1',
+            factoryProjectId: base.project.id,
+            input: {
+              board: 'work',
+              externalSource: {
+                integrationId: 'gitlab',
+                type: 'issue',
+                externalId: encodeIssueReference({ host: 'gitlab.example.com', projectId: PROJECT_ID, issueIid: 42 }),
+                url: 'https://gitlab.example.com/acme/app/-/issues/42',
+              },
+              title: 'Issue 42',
+              stages: [stage],
+              sessions: {},
+              metadata: { authorTrusted: true, state: 'opened' },
+            },
+          })
+        ).item;
+      return { ...base, ingest, cards, decisions, issueCard };
+    }
+
+    function mergeRequest(
+      iid: number,
+      description: string,
+      { deliveryId = `d-open-${iid}`, action = 'open', author = 'maintainer', sourceBranch = `feature-${iid}` } = {},
+    ) {
+      const opened = mergeRequestOpened(deliveryId, author);
+      const state = action === 'close' ? 'closed' : action === 'merge' ? 'merged' : 'opened';
+      return {
+        ...opened,
+        payload: {
+          ...opened.payload,
+          object_attributes: {
+            ...opened.payload.object_attributes,
+            id: iid * 10,
+            iid,
+            title: `MR ${iid}`,
+            url: `https://gitlab.example.com/acme/app/-/merge_requests/${iid}`,
+            description,
+            action,
+            state,
+            source_branch: sourceBranch,
+            source_project_id: 101,
+            ...(action === 'open' ? {} : { updated_at: `2030-01-01 0${iid % 10}:00:00 UTC` }),
+          },
+        },
+      };
+    }
+
+    const sourceTypes = (card: { workItem: { sources: Array<{ sourceType: string }> } }) =>
+      card.workItem.sources.map(source => source.sourceType);
+
+    it("files a maintainer's \"Closes #42\" merge request on issue 42's card, which goes to PR review", async () => {
+      const h = await harness();
+      const issue = await h.issueCard('intake');
+
+      await h.ingest(mergeRequest(17, 'Closes #42'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: issue.id, board: 'work', stages: ['pr-review'] });
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect((await h.decisions()).map(entry => entry.decision)).toContainEqual(
+        expect.objectContaining({ type: 'invokeSkill', role: 'review' }),
+      );
+    });
+
+    it("never files an outsider's \"Closes #42\" merge request on issue 42's card", async () => {
+      const h = await harness(10);
+      const issue = await h.issueCard('intake');
+
+      await h.ingest(mergeRequest(17, 'Closes #42', { author: 'external-author' }));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      const issueAfter = cards.find(card => card.id === issue.id)!;
+      expect(issueAfter).toMatchObject({ stages: ['intake'], revision: issue.revision });
+      expect(sourceTypes(issueAfter)).toEqual(['issue']);
+      expect(cards.find(card => card.id !== issue.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      expect((await h.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+    });
+
+    it('gives a merge request that closes no issue on the board its own card', async () => {
+      const h = await harness();
+      const issue = await h.issueCard('intake');
+
+      await h.ingest(mergeRequest(17, 'Closes other/project#42'));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
+      expect(sourceTypes(cards.find(card => card.id !== issue.id)!)).toEqual(['pull-request']);
+    });
+
+    it('files a merge request from the branch a card builds on that card', async () => {
+      const h = await harness();
+      const issue = await h.issueCard('execute');
+      await h.seeded.workItems.update({
+        orgId: 'org-1',
+        factoryProjectId: h.project.id,
+        userId: 'user-1',
+        id: issue.id,
+        patch: {
+          sessions: {
+            work: { sessionId: 'sess-work', threadId: 'thread-work', branch: 'factory/gitlab-issue-42', startedBy: 'user-1' },
+          },
+        },
+      });
+
+      await h.ingest(mergeRequest(17, 'Implements the fix.', { sourceBranch: 'factory/gitlab-issue-42' }));
+
+      const cards = await h.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]!.id).toBe(issue.id);
+      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
+      expect(cards[0]!.metadata).toMatchObject({ openPullRequestNumber: 17 });
+    });
+
+    it('keeps a card open while a second merge request is open, and moves it to Done when that one merges', async () => {
+      const h = await harness();
+      const issue = await h.issueCard('intake');
+      await h.ingest(mergeRequest(17, 'Closes #42'));
+      await h.ingest(mergeRequest(18, 'Closes #42'));
+
+      await h.ingest(mergeRequest(17, 'Closes #42', { deliveryId: 'd-close-17', action: 'close' }));
+      let [card] = await h.cards();
+      expect(card).toMatchObject({ id: issue.id, stages: ['pr-review'] });
+      expect(card!.workItem.sources.slice(1).map(source => source.state)).toEqual(['closed', 'open']);
+
+      await h.ingest(mergeRequest(18, 'Closes #42', { deliveryId: 'd-merge-18', action: 'merge' }));
+      [card] = await h.cards();
+      expect(card).toMatchObject({ id: issue.id, stages: ['done'] });
+      expect(card!.workItem.sources[2]).toMatchObject({ state: 'merged' });
+    });
+  },
+);

@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { defineBoard } from '../boards/define-board.js';
 import { createBoardRegistry } from '../boards/registry.js';
-import { reviewBoard } from '../boards/review.js';
 import { withBoardClosure } from '../boards/semantics.js';
 import { workBoard } from '../boards/work.js';
 import { defaultGithubRules } from '../integrations/github/default-rules.js';
@@ -96,13 +95,13 @@ function reject() {
   return { type: 'reject', code: 'forbidden', reason: 'Not allowed.' } as const;
 }
 
-function stageContext(actor: FactoryStageRuleContext['actor'], board: 'work' | 'review'): FactoryStageRuleContext {
-  const source = board === 'work' ? 'issue' : 'pullRequest';
+function stageContext(actor: FactoryStageRuleContext['actor'], card: 'work' | 'pull-request'): FactoryStageRuleContext {
+  const source = card === 'work' ? 'issue' : 'pullRequest';
   return {
     ...base,
     actor,
-    item: ruleItem({ ...item, source: board === 'work' ? 'github-issue' : 'github-pr' }),
-    board,
+    item: ruleItem({ ...item, source: card === 'work' ? 'github-issue' : 'github-pr' }),
+    board: 'work',
     itemRevision: 1,
     source,
     stage: 'intake',
@@ -195,8 +194,8 @@ describe('built-in board and integration handlers', () => {
     expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
     expect(workBoard.rules.triage?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
-    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
-    expect(reviewBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
+    expect(workBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
+    expect(workBoard.rules['pr-review']?.pullRequest?.onEnter).toBeTypeOf('function');
     expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(defaultGithubRules.issueOpened).toBeTypeOf('function');
     // Triage runs once: issue edits and comments start nothing by default.
@@ -284,7 +283,7 @@ describe('built-in board and integration handlers', () => {
     const linear = linearContext();
 
     expect(
-      githubRule?.({ ...github, item: ruleItem({ ...item, source: 'github-pr' }), board: 'review', itemRevision: 1 }),
+      githubRule?.({ ...github, item: ruleItem({ ...item, source: 'github-pr' }), board: 'work', itemRevision: 1 }),
     ).toBeUndefined();
     expect(githubRule?.({ ...github, ...onBoard('work', ['done']) })).toBeUndefined();
     expect(
@@ -666,13 +665,13 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('starts PR understanding when a human moves a pull request into Review', async () => {
-    const rule = reviewBoard.rules.review?.pullRequest?.onEnter;
+  it('starts PR understanding when a human moves a pull request into PR review', async () => {
+    const rule = workBoard.rules['pr-review']?.pullRequest?.onEnter;
     const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
-      stage: 'review',
+      ...stageContext({ type: 'human', id: 'user-1' }, 'pull-request'),
+      stage: 'pr-review',
       fromStage: 'intake',
-      toStage: 'review',
+      toStage: 'pr-review',
     } as FactoryStageRuleContext;
     const decision = await rule?.(context);
     expect(decision).toMatchObject({
@@ -686,17 +685,17 @@ describe('built-in board and integration handlers', () => {
   });
 
   it('tells the review agent how to check the pull request out and which branch to expect', async () => {
-    const rule = reviewBoard.rules.review?.pullRequest?.onEnter;
+    const rule = workBoard.rules['pr-review']?.pullRequest?.onEnter;
     const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
+      ...stageContext({ type: 'human', id: 'user-1' }, 'pull-request'),
       item: ruleItem({
         ...item,
         source: 'github-pr',
         metadata: { githubPullRequestNumber: 7, headBranch: 'factory/issue-42' },
       }),
-      stage: 'review',
+      stage: 'pr-review',
       fromStage: 'intake',
-      toStage: 'review',
+      toStage: 'pr-review',
     } as FactoryStageRuleContext;
 
     expect(await rule?.(context)).toMatchObject({
@@ -706,13 +705,13 @@ describe('built-in board and integration handlers', () => {
   });
 
   it('dispatches factory-rereview without cancellation when a completed review restarts', async () => {
-    const rule = reviewBoard.rules.review?.pullRequest?.onEnter;
+    const rule = workBoard.rules['pr-review']?.pullRequest?.onEnter;
     const context = {
-      ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'review'),
+      ...stageContext({ type: 'github', login: 'author', trusted: true, factoryAuthored: false }, 'pull-request'),
       cause: 'github.pullRequestUpdated',
-      stage: 'review',
+      stage: 'pr-review',
       fromStage: 'done',
-      toStage: 'review',
+      toStage: 'pr-review',
     } as FactoryStageRuleContext;
     const decision = await rule?.(context);
     expect(decision).toMatchObject({
@@ -728,12 +727,12 @@ describe('built-in board and integration handlers', () => {
     // Review from Review itself. There is no prior published review to
     // reconcile against, so the fresh pass is a regular factory-review — the
     // cancellation just clears the aborted in-flight run.
-    const rule = reviewBoard.rules.review?.pullRequest?.onEnter;
+    const rule = workBoard.rules['pr-review']?.pullRequest?.onEnter;
     const context = {
-      ...stageContext({ type: 'human', id: 'user-1' }, 'review'),
-      stage: 'review',
-      fromStage: 'review',
-      toStage: 'review',
+      ...stageContext({ type: 'human', id: 'user-1' }, 'pull-request'),
+      stage: 'pr-review',
+      fromStage: 'pr-review',
+      toStage: 'pr-review',
     } as FactoryStageRuleContext;
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
@@ -964,11 +963,13 @@ describe('built-in board and integration handlers', () => {
       }
     });
 
-    it('never fires on the Review card that posted the review', async () => {
-      // Only the PR's author can act on the feedback. Reacting on the Review
+    it("never fires on the pull request's own card, whose reviewer posted the review", async () => {
+      // Only the PR's author can act on the feedback. Reacting on the PR's own
       // card would loop the reviewer against its own output.
       const rule = defaultGithubRules.pullRequestReviewSubmitted;
-      expect(await rule?.(reviewContext({ board: 'review' }))).toBeUndefined();
+      expect(
+        await rule?.(reviewContext({ item: ruleItem({ ...item, source: 'github-pr', stages: ['pr-review'] }) })),
+      ).toBeUndefined();
       expect(await rule?.(reviewContext({ item: undefined, board: undefined }))).toBeUndefined();
       expect(await rule?.(reviewContext({ review: undefined }))).toBeUndefined();
     });
@@ -1063,9 +1064,11 @@ describe('built-in board and integration handlers', () => {
       ).toBeUndefined();
     });
 
-    it('stays quiet on the Review card and on pull requests that are no longer open', async () => {
+    it("stays quiet on the pull request's own card and on pull requests that are no longer open", async () => {
       const rule = defaultGithubRules.pullRequestCommentCreated;
-      expect(await rule?.(commentContext({ board: 'review' }))).toBeUndefined();
+      expect(
+        await rule?.(commentContext({ item: ruleItem({ ...item, source: 'github-pr', stages: ['pr-review'] }) })),
+      ).toBeUndefined();
       expect(await rule?.(commentContext({ issueComment: undefined }))).toBeUndefined();
       const openPr = commentContext().pullRequest!;
       expect(await rule?.(commentContext({ pullRequest: { ...openPr, state: 'closed' } }))).toBeUndefined();
@@ -1136,34 +1139,34 @@ describe('built-in board and integration handlers', () => {
       return {
         ...githubContext('pullRequestReviewRequested'),
         item: prItem,
-        board: 'review',
+        board: 'work',
         itemRevision: 5,
         reviewRequest: { reviewer: 'factory-app[bot]', factoryReviewer: true },
         ...overrides,
       };
     }
 
-    it('re-enters Review when review is re-requested from Factory on a finished card', async () => {
+    it('re-enters PR review when review is re-requested from Factory on a finished card', async () => {
       const rule = defaultGithubRules.pullRequestReviewRequested;
       expect(await rule?.(reReviewContext())).toMatchObject({
         type: 'transition',
         idempotencyKey: 'delivery-1:re-review-requested',
-        board: 'review',
-        stage: 'review',
+        board: 'work',
+        stage: 'pr-review',
       });
     });
 
-    it('re-enters Reviewing when review is re-requested on a card resting with a recorded verdict', async () => {
+    it('re-enters PR review when review is re-requested on a card resting with a recorded verdict', async () => {
       const rule = defaultGithubRules.pullRequestReviewRequested;
       const resting = ruleItem({
         ...prItem,
-        stages: ['review'],
+        stages: ['pr-review'],
         metadata: { ...prItem.metadata, reviewVerdict: 'approve' },
       });
       expect(await rule?.(reReviewContext({ item: resting }))).toMatchObject({
         type: 'transition',
         idempotencyKey: 'delivery-1:re-review-requested',
-        stage: 'review',
+        stage: 'pr-review',
         reenter: true,
       });
     });
@@ -1179,7 +1182,7 @@ describe('built-in board and integration handlers', () => {
         // Factory-authored ingress must not restart its own review.
         reReviewContext({ actor: { type: 'github', login: 'factory-app[bot]', trusted: true, factoryAuthored: true } }),
         // Card already in Reviewing: a pass is pending or running.
-        reReviewContext({ item: ruleItem({ ...prItem, stages: ['review'] }) }),
+        reReviewContext({ item: ruleItem({ ...prItem, stages: ['pr-review'] }) }),
       ]) {
         expect(await rule?.(context)).toBeUndefined();
       }
@@ -1210,38 +1213,38 @@ describe('built-in board and integration handlers', () => {
       return {
         ...githubContext('pullRequestUpdated'),
         item: prItem,
-        board: 'review',
+        board: 'work',
         itemRevision: 5,
         ...overrides,
       };
     }
 
-    it('re-enters Review when a push arrives for a PR whose card already finished Reviewing', async () => {
+    it('re-enters PR review when a push arrives for a PR whose card already finished Reviewing', async () => {
       const rule = defaultGithubRules.pullRequestUpdated;
       expect(await rule?.(pushContext())).toMatchObject({
         type: 'transition',
         idempotencyKey: 'delivery-1:re-review-updated',
-        board: 'review',
-        stage: 'review',
+        board: 'work',
+        stage: 'pr-review',
       });
     });
 
-    it('supersedes the pass in flight when a push lands on a card still in Reviewing', async () => {
+    it('supersedes the pass in flight when a push lands on a card still in PR review', async () => {
       // The push invalidates whatever the running pass is reading, so it has to
       // start over on the new head. Re-entering the stage is how that pass gets
       // cancelled; dropping the push would strand the review on stale code.
       const rule = defaultGithubRules.pullRequestUpdated;
-      expect(await rule?.(pushContext({ item: ruleItem({ ...prItem, stages: ['review'] }) }))).toMatchObject({
+      expect(await rule?.(pushContext({ item: ruleItem({ ...prItem, stages: ['pr-review'] }) }))).toMatchObject({
         type: 'transition',
-        board: 'review',
-        stage: 'review',
+        board: 'work',
+        stage: 'pr-review',
         // Without the re-entry flag a same-stage transition is inert and the
         // in-flight pass is never superseded.
         reenter: true,
       });
     });
 
-    it('does nothing when the PR is still in Intake, is unlinked, or is not on the Review board', async () => {
+    it('does nothing when the PR is still in Intake, is unlinked, or its card is not reviewing it', async () => {
       const rule = defaultGithubRules.pullRequestUpdated;
       for (const context of [
         // Card is still in intake — a review pass has not started yet.
@@ -1301,11 +1304,11 @@ describe('built-in board and integration handlers', () => {
     },
   );
 
-  it('does not run default arrival handlers from Work or Review Intake', () => {
+  it('does not run default arrival handlers from Work Intake', () => {
     expect(workBoard.rules.intake?.issue?.onEnter).toBeUndefined();
     expect(workBoard.rules.intake?.gitlabIssue?.onEnter).toBeUndefined();
-    expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
-    expect(reviewBoard.rules.intake?.gitlabPullRequest?.onEnter).toBeUndefined();
+    expect(workBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
+    expect(workBoard.rules.intake?.gitlabPullRequest?.onEnter).toBeUndefined();
   });
 
   it('keeps a factory-authored pull request opened before the Factory from being picked up on its own', async () => {
@@ -1422,15 +1425,15 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('moves the merged Review card to Done and carries a session-only message', async () => {
+  it("moves a merged pull request's own card to Done and carries a session-only message", async () => {
     const context = githubContext('pullRequestMerged');
     context.item = ruleItem({ ...item, source: 'github-pr', sourceKey: 'github-pr:17' });
-    context.board = 'review';
+    context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: true };
     const decision = await defaultGithubRules.pullRequestMerged?.(context);
     expect(decision).toMatchObject({
       type: 'transition',
-      board: 'review',
+      board: 'work',
       stage: 'done',
       message: { text: expect.stringContaining('merged') },
     });
@@ -1471,15 +1474,15 @@ describe('built-in board and integration handlers', () => {
     expect(await defaultGithubRules.pullRequestOpened?.(context)).toBeUndefined();
   });
 
-  it('cancels the Review card when the PR is closed without merging', async () => {
+  it("cancels a pull request's own card when the PR is closed without merging", async () => {
     const context = githubContext('pullRequestClosed');
     context.item = ruleItem({ ...item, source: 'github-pr', sourceKey: 'github-pr:17' });
-    context.board = 'review';
+    context.board = 'work';
     context.pullRequest = { ...context.pullRequest!, state: 'closed', merged: false };
     const decision = await defaultGithubRules.pullRequestClosed?.(context);
     expect(decision).toMatchObject({
       type: 'transition',
-      board: 'review',
+      board: 'work',
       stage: 'canceled',
       message: { text: expect.stringContaining('closed without merging') },
     });

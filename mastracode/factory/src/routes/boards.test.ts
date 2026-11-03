@@ -207,12 +207,14 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     return (response.body.boards as Array<Record<string, any>>).find(board => board.id === key);
   }
 
-  it('refuses creating over a built-in or app board, deleting the Work board, and changing the legacy Review board, and stores nothing else', async () => {
+  it("refuses creating over a built-in or app board, deleting the Work board, and any write under the retired Review board's key, and stores nothing else", async () => {
     const { a, scope, base, replicaA } = await setup();
     const refused = (key: string, message: string) => ({ status: 409, body: { error: 'code_board', message } });
     const deleteMessage = (key: string) =>
       `Board "${key}" is defined in code and can't be deleted; reset it to its default instead.`;
     const createMessage = (key: string) => `Board "${key}" is defined in code and can't be created over here.`;
+    // The project's first load stores its Work and app boards.
+    await getBoard(replicaA.send, base, 'work');
 
     expect(await replicaA.send('DELETE', `${base}/work?expectedRevision=1`)).toEqual(
       refused('work', deleteMessage('work')),
@@ -223,17 +225,24 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'work' })).toEqual(
       refused('work', createMessage('work')),
     );
-    expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).toEqual(
-      refused('review', createMessage('review')),
-    );
-    const review = await getBoard(replicaA.send, base, 'review');
-    const reviewChanged = `Board "review" is defined in code and can't be changed here.`;
+    // The retired Review board's key stays reserved: its stored cards read as Work.
+    const reserved = {
+      status: 409,
+      body: {
+        error: 'reserved_board',
+        message: 'Board "review" is reserved: the retired Review board\'s cards now live on Work.',
+      },
+    };
+    expect(await replicaA.send('POST', base, { ...bugsBoard, key: 'review' })).toEqual(reserved);
     expect(
-      await replicaA.send('PATCH', `${base}/review`, { name: 'Renamed', phases: review.phases, expectedRevision: 1 }),
-    ).toEqual(refused('review', reviewChanged));
-    expect(await replicaA.send('POST', `${base}/review/reset`, { expectedRevision: 1 })).toEqual(
-      refused('review', reviewChanged),
-    );
+      await replicaA.send('PATCH', `${base}/review`, {
+        name: 'Renamed',
+        phases: bugsBoard.phases,
+        expectedRevision: 1,
+      }),
+    ).toEqual(reserved);
+    expect(await replicaA.send('POST', `${base}/review/reset`, { expectedRevision: 1 })).toEqual(reserved);
+    expect(await replicaA.send('DELETE', `${base}/review?expectedRevision=1`)).toEqual(reserved);
 
     // The project's first load stored its Work and app boards; no refusal wrote anything.
     expect((await a.boards.list(scope)).map(row => [row.key, row.revision])).toEqual([
@@ -241,7 +250,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       ['release', 1],
     ]);
     expect((await catalogBoard(replicaA.send, base, 'work'))!.name).toBe('Work');
-    expect((await catalogBoard(replicaA.send, base, 'review'))!.editable).toBe(false);
+    expect(await catalogBoard(replicaA.send, base, 'review')).toBeUndefined();
   });
 
   it("deletes an app board like the project's own boards, and doesn't store it again on a later load or restart", async () => {
@@ -255,7 +264,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     const restarted = replica(a, orgId);
     for (const send of [replicaA.send, restarted.send]) {
       const catalog = await send('GET', base);
-      expect((catalog.body.boards as Array<{ id: string }>).map(board => board.id)).toEqual(['work', 'review']);
+      expect((catalog.body.boards as Array<{ id: string }>).map(board => board.id)).toEqual(['work']);
       expect(catalog.body.problems).toBeUndefined();
       expect(await send('GET', `${base}/release`)).toMatchObject({ status: 404, body: { error: 'board_not_found' } });
     }
@@ -322,7 +331,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     expect((await a.boards.list(scope)).map(row => row.key)).toEqual(['work', 'release']);
   });
 
-  it('lists the Work and app boards as editable, the legacy Review board as read-only, and boards the project created as editable', async () => {
+  it('lists the Work and app boards and the boards the project created, all editable', async () => {
     const { base, replicaA } = await setup();
     expect((await replicaA.send('POST', base, bugsBoard)).status).toBe(201);
     const catalog = await replicaA.send('GET', base);
@@ -330,13 +339,12 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
       (catalog.body.boards as Array<Record<string, unknown>>).map(board => [board.id, board.source, board.editable]),
     ).toEqual([
       ['work', 'builtin', true],
-      ['review', 'builtin', false],
       ['release', 'app', true],
       ['bugs', 'stored', true],
     ]);
   });
 
-  it('returns the Work and app boards the project stored, editable at revision 1, and the Review board read-only', async () => {
+  it('returns the Work and app boards the project stored, editable at revision 1, and no Review board', async () => {
     const { a, scope, base, replicaA } = await setup();
     const work = await getBoard(replicaA.send, base, 'work');
     const { description, ...definition } = boardDefinitionOf(workBoard);
@@ -356,10 +364,9 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('board managemen
     const version = await a.boards.readVersion(scope);
     await getBoard(replicaA.send, base, 'work');
     expect(await a.boards.readVersion(scope)).toBe(version);
-    expect(await getBoard(replicaA.send, base, 'review')).toMatchObject({
-      revision: null,
-      source: 'builtin',
-      editable: false,
+    expect(await replicaA.send('GET', `${base}/review`)).toMatchObject({
+      status: 404,
+      body: { error: 'board_not_found' },
     });
     expect(work.phases.map(phase => [phase.key, phase.name, phase.kind])).toEqual(
       Object.entries(workBoard.phases).map(([key, phase]) => [key, phase.name, phase.kind]),

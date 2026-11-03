@@ -6,6 +6,9 @@ import {
   boardEventHandlers,
   boardForWorkItem,
   eventBoardId,
+  isTerminalWorkItem,
+  newestOpenPullRequestNumber,
+  pullRequestSources,
   rulePhaseField,
   withBoardClosure,
   workItemPhaseSemantics,
@@ -18,6 +21,7 @@ import { deploymentOwnsEvent, routeEventDecision, selectEventRule, withoutRouteE
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
+  FactoryPullRequestHome,
   FactoryRuleActor,
   FactoryRuleDecision,
   FactorySignalActivityDecision,
@@ -37,7 +41,9 @@ import {
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
 import { primarySource } from '../../storage/domains/work-items/work-item-schema.js';
+import type { WorkItemSourceRow } from '../../storage/domains/work-items/work-item-schema.js';
 import type { IntegrationContext, IntegrationHooks } from '../base.js';
+import { closingIssueNumbers } from '../closing-references.js';
 import { recordPullRequestHead } from '../pull-request-head.js';
 import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubEventRules } from './default-rules.js';
@@ -253,6 +259,27 @@ export function githubItemSources(
     type: kind,
     externalId,
   }));
+}
+
+/**
+ * The pull request source an issue card carries for this repository's pull request, when it was
+ * attached to the card rather than filed on a card of its own.
+ */
+export function attachedPullRequestSource(
+  item: Card,
+  repositoryId: number,
+  repositoryFullName: string,
+  pullRequestNumber: number,
+): WorkItemSourceRow | undefined {
+  if (item.externalSource?.type === 'pull-request') return undefined;
+  const ids = [canonicalSourceKey('pull-request', pullRequestNumber), legacySourceKey(repositoryId, 'pull-request', pullRequestNumber)].map(
+    key => `pull-request:${key}`,
+  );
+  return pullRequestSources(item).find(source => {
+    if (source.integrationId !== 'github' || !ids.includes(source.externalId)) return false;
+    const match = source.url ? /^https?:\/\/[^/]+\/(.+)\/pull\/\d+(?:[/?#]|$)/.exec(source.url) : null;
+    return match ? match[1] === repositoryFullName : source.metadata?.githubRepositoryId === repositoryId;
+  });
 }
 
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
@@ -725,8 +752,16 @@ export class GithubRules {
     );
     // A review-entry request must never treat a branch-matched authoring Work
     // card as the PR's Review card. A missing Review card is materialized below.
-    const relatedItem =
-      reviewEntryRequested && resolvedItem?.externalSource?.type !== 'pull-request' ? undefined : resolvedItem;
+    const matchedItem =
+      reviewEntryRequested &&
+      resolvedItem?.externalSource?.type !== 'pull-request' &&
+      !(
+        resolvedItem &&
+        pullRequestNumber &&
+        attachedPullRequestSource(resolvedItem, repositoryId, repositoryName, pullRequestNumber)
+      )
+        ? undefined
+        : resolvedItem;
     const intake = issueNumber
       ? await this.#intakeTarget(project, repositoryName, labelNames(issue?.labels))
       : undefined;
@@ -749,6 +784,26 @@ export class GithubRules {
     ) {
       return { status: 'ignored' };
     }
+    // A pull request seen for the first time is filed on the card it belongs to, when one is
+    // on the board: the card that authored it, or the card of the issue it closes.
+    const home =
+      event === 'pullRequestOpened' && pullRequestNumber
+        ? await this.#pullRequestHome({
+            orgId: project.orgId,
+            factoryProjectId: project.factoryProjectId,
+            repositoryId,
+            repositoryName,
+            pullRequestNumber,
+            matchedItem,
+            factoryAuthored: pullRequestFactoryAuthored,
+            authorTrusted: actor.type === 'github' && actor.trusted,
+            body: string(pullRequest?.body),
+          })
+        : undefined;
+    const relatedItem = home?.card ?? matchedItem;
+    const pullRequestHome: FactoryPullRequestHome | undefined = home
+      ? { workItemId: home.card.id, reason: home.reason }
+      : undefined;
     // One delivery can concern two cards — a merged pull request settles both
     // its own Review card and the Work item that authored it — and every
     // decision a rule returns is committed against a single item, at that
@@ -790,6 +845,7 @@ export class GithubRules {
           : {}),
         ...(intake ? { intake } : {}),
         ...(pullRequestIntake ? { pullRequestIntake: true } : {}),
+        ...(pullRequestHome ? { pullRequestHome } : {}),
         event,
         deliveryId: parsed.deliveryId,
         factory: { createdAt: factoryProject.createdAt.toISOString() },
@@ -961,6 +1017,17 @@ export class GithubRules {
       const headSha = string(object(pullRequest?.head)?.sha)?.toLowerCase();
       if (event !== 'pullRequestUpdated' || !headSha || !pullRequestNumber) return;
       const headAt = timestamp(pullRequest?.updated_at);
+      // A pull request attached to its issue's card records its head there, while it is the one out.
+      if (relatedItem && attachedPullRequestSource(relatedItem, repositoryId, repositoryName, pullRequestNumber)) {
+        await recordPullRequestHead(this.options.storage, {
+          orgId: relatedItem.orgId,
+          id: relatedItem.id,
+          headSha,
+          headAt,
+          ownedPullRequestNumber: pullRequestNumber,
+        });
+        return;
+      }
       if (relatedItem?.externalSource?.type !== 'pull-request') return;
       const parent = await this.#linkedClosureItem(
         project.orgId,
@@ -1040,10 +1107,13 @@ export class GithubRules {
           pullRequestNumber,
           authoringItem,
         );
+        // Filed on the authoring card itself, the pull request's own source says whether it is open.
+        const attached = attachedPullRequestSource(authoringItem, repositoryId, repositoryName, pullRequestNumber);
+        const recordedState = reviewCard ? reviewCard.workItem.state : attached?.state;
         const stillOpen =
           companionStatus === 'replayed'
-            ? reviewCard !== undefined && !['closed', 'merged'].includes(reviewCard.workItem.state ?? '')
-            : !['closed', 'merged'].includes(reviewCard?.workItem.state ?? '');
+            ? (reviewCard !== undefined || attached !== undefined) && !['closed', 'merged'].includes(recordedState ?? '')
+            : !['closed', 'merged'].includes(recordedState ?? '');
         if (!stillOpen) return;
         // The head comes along so a head recorded for an earlier pull
         // request cannot mark this one's verdict outdated.
@@ -1065,6 +1135,20 @@ export class GithubRules {
       for (const card of [relatedItem, linked]) {
         if (!card) continue;
         if (card.externalSource?.type !== 'pull-request') {
+          // A pull request attached to this card settles on its own source, never the issue's.
+          const attached = attachedPullRequestSource(card, repositoryId, repositoryName, pullRequestNumber);
+          if (attached) {
+            await this.options.storage.syncWorkItemSource({
+              orgId: card.orgId,
+              factoryProjectId: card.factoryProjectId,
+              provider: attached.provider,
+              externalId: attached.externalId,
+              patch: {
+                state: event === 'pullRequestMerged' ? 'merged' : 'closed',
+                metadata: { state: 'closed', merged: event === 'pullRequestMerged' },
+              },
+            });
+          }
           // A merge settles the review, so the authoring Work item's mirrored
           // "request changes" no longer stops it from being closed.
           // Only the pull request the card has out settles it; an older one
@@ -1075,7 +1159,10 @@ export class GithubRules {
             ...(ownsCard && event === 'pullRequestMerged' && typeof card.metadata?.reviewVerdict === 'string'
               ? { reviewVerdict: null }
               : {}),
-            ...(recorded === pullRequestNumber ? { openPullRequestNumber: null } : {}),
+            // With several pull requests on the card, the newest one still open is the one out next.
+            ...(recorded === pullRequestNumber
+              ? { openPullRequestNumber: newestOpenPullRequestNumber(card, pullRequestNumber) }
+              : {}),
           };
           if (Object.keys(settled).length > 0) {
             await this.options.storage.update({
@@ -1152,6 +1239,56 @@ export class GithubRules {
               cardBelongsToRepository(item, repositoryId, repositoryFullName),
           );
     return linked?.id === resolved.id ? undefined : linked;
+  }
+
+  /**
+   * The existing card a pull request opened for the first time is filed on, or undefined when it
+   * gets a card of its own. The card must be open on Work, in this repository, and not a pull
+   * request's own card. In order: the card that authored it, by provenance or session branch,
+   * when the pull request is Factory-authored or its author is trusted; then, for a trusted
+   * author only, the card of the first issue its description says it closes. An untrusted
+   * author's pull request never lands on another card, whatever it says.
+   */
+  async #pullRequestHome(input: {
+    orgId: string;
+    factoryProjectId: string;
+    repositoryId: number;
+    repositoryName: string;
+    pullRequestNumber: number;
+    matchedItem: Card | undefined;
+    factoryAuthored: boolean;
+    authorTrusted: boolean;
+    body: string | undefined;
+  }): Promise<{ card: Card; reason: FactoryPullRequestHome['reason'] } | undefined> {
+    if (!input.factoryAuthored && !input.authorTrusted) return undefined;
+    const items = await this.options.storage.list({ orgId: input.orgId, factoryProjectId: input.factoryProjectId });
+    const filed = items.some(
+      item =>
+        attachedPullRequestSource(item, input.repositoryId, input.repositoryName, input.pullRequestNumber) ||
+        (item.externalSource?.type === 'pull-request' &&
+          (item.externalSource.externalId === canonicalSourceKey('pull-request', input.pullRequestNumber) ||
+            item.externalSource.externalId ===
+              legacySourceKey(input.repositoryId, 'pull-request', input.pullRequestNumber)) &&
+          cardBelongsToRepository(item, input.repositoryId, input.repositoryName)),
+    );
+    if (filed) return undefined;
+    const eligible = (card: Card) =>
+      card.externalSource?.type !== 'pull-request' &&
+      boardForWorkItem(card) === 'work' &&
+      !isTerminalWorkItem(this.options.boards, card) &&
+      cardBelongsToRepository(card, input.repositoryId, input.repositoryName);
+    if (input.matchedItem && eligible(input.matchedItem)) return { card: input.matchedItem, reason: 'authored' };
+    if (!input.authorTrusted) return undefined;
+    for (const issueNumber of closingIssueNumbers(input.body, { provider: 'github', repository: input.repositoryName })) {
+      const card = items.find(
+        item =>
+          (item.externalSource?.externalId === canonicalSourceKey('issue', issueNumber) ||
+            item.externalSource?.externalId === legacySourceKey(input.repositoryId, 'issue', issueNumber)) &&
+          eligible(item),
+      );
+      if (card) return { card, reason: 'closes' };
+    }
+    return undefined;
   }
 
   async #relatedItem(
@@ -1237,6 +1374,8 @@ export class GithubRules {
         items.find(
           item => item.externalSource?.externalId === legacySourceKey(repositoryId, 'pull-request', pullRequestNumber),
         ) ??
+        // A pull request attached to its issue's card.
+        items.find(item => attachedPullRequestSource(item, repositoryId, repositoryFullName, pullRequestNumber)) ??
         // Provenance fallback: a PR pushed from a work item's session branch
         // belongs to that item even when no gh-pr-create provenance was
         // recorded (session predating state seeding, or the PR was opened
@@ -1360,6 +1499,17 @@ function reconcilablePullRequestNumber(item: Card, repository: ReconcileReposito
   if (legacy) return Number(legacy[1]) === repository.id ? Number(legacy[2]) : undefined;
   const canonical = /^github-pr:(\d+)$/.exec(externalId);
   return canonical ? Number(canonical[1]) : undefined;
+}
+
+/** The number of an attached pull request source, when it belongs to the given repository. */
+function attachedPullRequestNumber(source: WorkItemSourceRow, repository: ReconcileRepository): number | undefined {
+  if (source.integrationId !== 'github') return undefined;
+  if (source.url) {
+    const match = /^https?:\/\/[^/]+\/(.+)\/pull\/(\d+)(?:[/?#]|$)/.exec(source.url);
+    return match && match[1] === repository.fullName ? Number(match[2]) : undefined;
+  }
+  const legacy = /^pull-request:github:(\d+):pull-request:(\d+)$/.exec(source.externalId);
+  return legacy && Number(legacy[1]) === repository.id ? Number(legacy[2]) : undefined;
 }
 
 /**
@@ -1647,6 +1797,9 @@ export function createGithubPullRequestReconciler(
       // One broken repository (or a failing token exchange for its
       // installation) must not abort the sweep for the others.
       let cardsByNumber: Map<number, Card[]>;
+      // Open pull requests attached to an issue's card. Their facts live on their own source, so
+      // the sweep only replays a missed close; the rules settle the source and the card.
+      let attachedOpen: Set<number>;
       let unanswered: Array<{ item: Card; author: string }>;
       try {
         const projects = await options.sourceControl.projectRepositories.listByExternalRepository({
@@ -1655,6 +1808,7 @@ export function createGithubPullRequestReconciler(
         });
         if (projects.length === 0) continue;
         cardsByNumber = new Map<number, Card[]>();
+        attachedOpen = new Set<number>();
         unanswered = [];
         for (const project of projects) {
           const items = await options.storage.list({
@@ -1664,6 +1818,12 @@ export function createGithubPullRequestReconciler(
           for (const item of items) {
             const unansweredAuthor = authorAwaitingTrust(item, repository);
             if (unansweredAuthor) unanswered.push({ item, author: unansweredAuthor });
+            if (item.externalSource?.type !== 'pull-request' && !isTerminalWorkItem(options.boards, item)) {
+              for (const source of pullRequestSources(item)) {
+                const number = attachedPullRequestNumber(source, repository);
+                if (number !== undefined && !['closed', 'merged'].includes(source.state ?? '')) attachedOpen.add(number);
+              }
+            }
             const pullRequestNumber = reconcilablePullRequestNumber(item, repository);
             if (!pullRequestNumber) continue;
             const metadata = { ...item.workItem.metadata, ...item.metadata };
@@ -1782,6 +1942,24 @@ export function createGithubPullRequestReconciler(
               recordFailure(repository, error, pullRequestNumber);
             }
           }
+          if (state.merged) summary.merged += 1;
+          else summary.closed += 1;
+        } catch (error) {
+          recordFailure(repository, error, pullRequestNumber);
+        }
+      }
+      for (const pullRequestNumber of attachedOpen) {
+        if (cardsByNumber.has(pullRequestNumber)) continue;
+        try {
+          const state = await fetchPullRequest({
+            installationId: repository.installationId,
+            repository: repository.fullName,
+            number: pullRequestNumber,
+          });
+          summary.checked += 1;
+          if (state?.state !== 'closed') continue;
+          await rules.ingest(reconciledClosedEvent(repository, pullRequestNumber, state));
+          await retireReconciledSubscriptions(options.integrationStorage, repository, pullRequestNumber, state.merged);
           if (state.merged) summary.merged += 1;
           else summary.closed += 1;
         } catch (error) {

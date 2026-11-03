@@ -54,7 +54,13 @@ import {
 import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
 import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
-import { boardForWorkItem, createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
+import {
+  boardForWorkItem,
+  createBoardRegistry,
+  isTerminalWorkItem,
+  PULL_REQUEST_REVIEW_PHASE,
+  reviewedPullRequest,
+} from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { ProjectBoardCache } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
@@ -620,8 +626,8 @@ export class MastraFactory {
    * so the definition is checked as an edit is; a new key gets none (no handlers, outcomes, tool or
    * event rules). The board is validated once, as the boards API does, and each write is audited
    * as `factory.board.created` or `factory.board.updated` by `system:factory`. Refusals throw a
-   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `code_board` for the
-   * legacy Review board, `phase_in_use` when cards sit in a phase it removes, `project_not_found`).
+   * `BoardWriteError` (`invalid_board`, `unknown_skill`, `code_behaviour`, `reserved_board` for the
+   * retired Review board's key, `phase_in_use` when cards sit in a phase it removes, `project_not_found`).
    * Available after `prepare()`.
    *
    * @example
@@ -654,7 +660,7 @@ export class MastraFactory {
     }
     const { writes, projects, audit } = store;
     const input = writes.validate(board);
-    // Work and app boards are stored per project like any other; the legacy Review board isn't.
+    // Work and app boards are stored per project like any other; the retired Review board's key is reserved.
     writes.refuseCodeBoard(input.key, 'edit');
     await projects.ensureReady();
     let scopes: StoredBoardScope[];
@@ -1822,8 +1828,13 @@ export class MastraFactory {
                         if (binding?.role !== 'review') return undefined;
                         const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
                         const source = item?.externalSource;
-                        if (!source || !/pull-request|merge-request/.test(source.type)) return undefined;
-                        return /(\d+)$/.exec(source.externalId)?.[1];
+                        if (source && /pull-request|merge-request/.test(source.type)) {
+                          return /(\d+)$/.exec(source.externalId)?.[1];
+                        }
+                        // An issue card in PR review reviews the pull request attached to it.
+                        if (!item || item.stages[0] !== PULL_REQUEST_REVIEW_PHASE) return undefined;
+                        const attached = reviewedPullRequest(item);
+                        return attached ? /(\d+)$/.exec(attached.externalId)?.[1] : undefined;
                       },
                     }
                   : {}),
