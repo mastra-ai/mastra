@@ -257,6 +257,17 @@ export async function runDurableFinishSideEffects({
   const assertOwned = () => assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra });
   await assertOwned();
 
+  // A signal drained on the last allowed step rotates the id, then the loop stops before any
+  // reply uses it. Attach data to the final reply instead of saving it as its own message.
+  const replyMessageId = () => {
+    const responses = messageList.get.response.db();
+    if (responses.some(message => message.id === messageId)) return messageId;
+    return (
+      responses.findLast(message => message.role === 'assistant' && !message.content?.metadata?.completionResult)?.id ??
+      messageId
+    );
+  };
+
   // This step has no pubsub (remote engines call it too), so chunks are buffered for the
   // caller. Non-transient ones go into the MessageList now so the flush below saves them.
   const outputResultChunks: ChunkType[] = [];
@@ -265,7 +276,7 @@ export async function runDurableFinishSideEffects({
       data: { type: string; data?: unknown; transient?: boolean },
       writerOptions?: { messageId?: string },
     ) => {
-      persistProcessorDataChunk(messageList, writerOptions?.messageId ?? messageId, data);
+      persistProcessorDataChunk(messageList, writerOptions?.messageId ?? replyMessageId(), data);
       outputResultChunks.push(data as ChunkType);
     },
   };
