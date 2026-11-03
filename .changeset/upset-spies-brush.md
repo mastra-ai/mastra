@@ -4,8 +4,8 @@
 
 Dashboard chart cards can now link to a fuller view, and line charts can mark points in time.
 
-- `DashboardRenderer` takes an `expand` option. A chart card it returns a link for shows its title as a link with an expand icon, in place of its views menu.
-- `MetricsLineChart` takes `markers`: dashed vertical lines at buckets, for example where a billing period starts.
+- `DashboardRenderer` takes an `expand` option. When `expand.href(widget)` returns a URL, the card shows its title as a link with an expand icon, in place of its views menu.
+- `MetricsLineChart` takes `markers`: dashed vertical lines at buckets, for example where a billing period starts. Each marker's `x` must match a bucket's `xKey` value.
 
 ```tsx
 <DashboardRenderer

@@ -99,7 +99,10 @@ export type MetricsLineChartProps = {
   showYAxis?: boolean;
   /** Show a ghost of the chart while data loads, in the chart's own footprint. */
   isLoading?: boolean;
-  /** Vertical lines at buckets (by their `xKey` value), e.g. where a billing period starts. */
+  /**
+   * Vertical lines at buckets, e.g. where a billing period starts. `x` must be one of the data's
+   * `xKey` values: the axis is categorical, so any other value draws nothing.
+   */
   markers?: { x: string; label?: string }[];
   className?: string;
 };
@@ -206,7 +209,6 @@ function LinePlot({
             x={m.x}
             stroke="var(--border-strong)"
             strokeDasharray="3 3"
-            ifOverflow="extendDomain"
             label={
               m.label
                 ? { value: m.label, position: 'insideTopLeft', fill: 'var(--muted-foreground)', fontSize: 11 }
