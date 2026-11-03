@@ -163,6 +163,15 @@ describe('Factory work item relationships', () => {
 
     expect(relationshipLabel(item)).toBe(`Work item: ${identifier}`);
   });
+
+  it.each([
+    { source: 'github-issue', sourceKey: 'github-issue:24', label: 'Work item: Issue #24' },
+    { source: 'linear-issue', sourceKey: 'linear:ENG-24', label: 'Work item: ENG-24' },
+  ] as const)('reads a $source key off its source key when metadata lost it', ({ source, sourceKey, label }) => {
+    const item = workItem({ id: `${source}-legacy`, source, sourceKey });
+
+    expect(relationshipLabel(item)).toBe(label);
+  });
 });
 
 describe('related work item index', () => {
