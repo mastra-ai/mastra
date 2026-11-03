@@ -6103,22 +6103,22 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(cards.find(card => card.id === issue.id)).toMatchObject({ stages: ['done'] });
     });
 
-    it("files a maintainer's pull request on an issue still being planned, and leaves its phase alone", async () => {
-      const h = await harness('write');
-      const issue = await h.issueCard(42, 'planning');
+    it.each(['triage', 'planning', 'review'])(
+      "gives someone else's pull request its own card once the issue has been in %s",
+      async stage => {
+        const h = await harness('write');
+        const issue = await h.issueCard(42, stage);
 
-      await h.ingest(openedPullRequest(17, 'Fixes #42'));
+        await h.ingest(openedPullRequest(17, 'Fixes #42'));
 
-      const cards = await h.cards();
-      expect(cards).toHaveLength(1);
-      expect(cards[0]).toMatchObject({ id: issue.id, stages: ['planning'] });
-      expect(sourceTypes(cards[0]!)).toEqual(['issue', 'pull-request']);
-      expect((await h.decisions()).filter(entry => entry.decision.type === 'sendMessage')).toEqual([]);
-      expect(await reviewsStarted(h, issue.id)).toEqual([]);
-      // Someone else's pull request: recording it as the card's own would switch off the
-      // builder's self-review and its own pull request once building starts.
-      expect(cards[0]!.metadata.openPullRequestNumber ?? null).toBeNull();
-    });
+        const cards = await h.cards();
+        expect(cards).toHaveLength(2);
+        const issueAfter = cards.find(card => card.id === issue.id)!;
+        expect(issueAfter).toMatchObject({ stages: [stage], revision: issue.revision });
+        expect(sourceTypes(issueAfter)).toEqual(['issue']);
+        expect(await reviewsStarted(h, issue.id)).toEqual([]);
+      },
+    );
 
     it("gives someone else's pull request its own card when the issue has been in Building, even with no session left", async () => {
       const h = await harness('write');
@@ -6172,22 +6172,21 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(await reviewsStarted(h, issue.id)).toHaveLength(1);
     });
 
-    it('keeps a card open while a second pull request is open, and moves it to Done when that one merges', async () => {
+    it('gives a second pull request its own card once the first is under review, and moves the card to Done when the first merges', async () => {
       const h = await harness('write');
       const issue = await h.issueCard(42, 'intake');
       await h.ingest(openedPullRequest(17, 'Fixes #42'));
       await h.ingest(openedPullRequest(18, 'Fixes #42'));
-      expect(sourceTypes((await h.cards())[0]!)).toEqual(['issue', 'pull-request', 'pull-request']);
 
-      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-close-17', 'closed'));
-      let [card] = await h.cards();
-      expect(card).toMatchObject({ id: issue.id, stages: ['pr-review'] });
-      expect(card!.workItem.sources.map(source => source.state)).toEqual(['open', 'closed', 'open']);
+      let cards = await h.cards();
+      expect(cards).toHaveLength(2);
+      expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue', 'pull-request']);
 
-      await h.ingest(openedPullRequest(18, 'Fixes #42', 'delivery-merge-18', 'closed', true));
-      [card] = await h.cards();
-      expect(card).toMatchObject({ id: issue.id, stages: ['done'] });
-      expect(card!.workItem.sources.map(source => source.state)).toEqual(['open', 'closed', 'merged']);
+      await h.ingest(openedPullRequest(17, 'Fixes #42', 'delivery-merge-17', 'closed', true));
+      cards = await h.cards();
+      const card = cards.find(item => item.id === issue.id)!;
+      expect(card).toMatchObject({ stages: ['done'] });
+      expect(card.workItem.sources.map(source => source.state)).toEqual(['open', 'merged']);
     });
 
     it('returns a card in PR review to Intake when its only pull request closes unmerged', async () => {
