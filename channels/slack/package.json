@@ -29,7 +29,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@chat-adapter/slack": "^4.43.0"
+    "@chat-adapter/slack": "catalog:"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",

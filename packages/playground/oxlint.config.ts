@@ -99,7 +99,7 @@ export default defineConfig({
     {
       // Test stubs aren't UI people see.
       files: ['src/**/*.{test,spec}.*', 'src/**/__tests__/**'],
-      rules: { 'mastra/sentence-case-labels': 'off' },
+      rules: { 'mastra/sentence-case-labels': 'off', 'playground-ui/placeholder-text': 'off' },
     },
     {
       files: ['src/**/*.{test,spec}.{ts,tsx}'],

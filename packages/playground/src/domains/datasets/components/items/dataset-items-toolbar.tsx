@@ -84,7 +84,7 @@ export function DatasetItemsToolbar({
     <div className="max-w-120 flex-1">
       <ListSearch
         label="Search items"
-        placeholder="Search items..."
+        placeholder="Search items"
         value={searchQuery ?? ''}
         onSearch={query => onSearchChange?.(query)}
       />

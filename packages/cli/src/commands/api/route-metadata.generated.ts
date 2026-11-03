@@ -3064,6 +3064,143 @@ export const API_ROUTE_METADATA = {
       "listProperty": "embedders"
     }
   },
+  "GET /knowledge": {
+    "method": "GET",
+    "path": "/knowledge",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "instances"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/tree": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/tree",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "cursor",
+      "limit",
+      "parentId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/pages/:pageId": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/pages/:pageId",
+    "pathParams": [
+      "knowledgeKey",
+      "pageId"
+    ],
+    "queryParams": [
+      "noteCursor",
+      "noteLimit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/graph": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/graph",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "maxPages",
+      "rootId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/link-counts": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/link-counts",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "pageId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/pages/:pageId/links": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/pages/:pageId/links",
+    "pathParams": [
+      "knowledgeKey",
+      "pageId"
+    ],
+    "queryParams": [
+      "direction"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/search": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/search",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "limit",
+      "q",
+      "scopeId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "results"
+    }
+  },
+  "GET /knowledge/:knowledgeKey/activity": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/activity",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [
+      "cursor",
+      "limit",
+      "pageId",
+      "scopeId"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "record"
+    }
+  },
   "GET /workspaces": {
     "method": "GET",
     "path": "/workspaces",
@@ -3776,6 +3913,7 @@ export const API_ROUTE_METADATA = {
       "mcpClients",
       "memory",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -3813,6 +3951,7 @@ export const API_ROUTE_METADATA = {
       "mcpClients",
       "memory",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -3867,6 +4006,7 @@ export const API_ROUTE_METADATA = {
       "memory",
       "metadata",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -3907,6 +4047,7 @@ export const API_ROUTE_METADATA = {
       "memory",
       "metadata",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -5980,6 +6121,23 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [],
     "hasQuery": false,
     "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /background-tasks/:backgroundTaskId/resume": {
+    "method": "POST",
+    "path": "/background-tasks/:backgroundTaskId/resume",
+    "pathParams": [
+      "backgroundTaskId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resumeData",
+      "suspendedAt"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
     "responseShape": {
       "kind": "single"
     }

@@ -20,6 +20,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQuery: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
+  traceQueryContextFields: false,
   traceQueryTimeToFirstChunk: false,
   traceQueryRootSpanFields: false,
   traceQueryRootEntityId: false,
@@ -37,6 +38,8 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   spanQueryModelFields: false,
   spanQueryOutcomeFields: false,
   spanAggregate: false,
+  spanAggregateModelDimensions: false,
+  aggregateTimeToFirstMeasures: false,
   feedback: false,
 };
 
@@ -691,6 +694,45 @@ describe('System Handlers', () => {
 
           expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
             spanQueryModelFields: supported,
+          });
+        },
+      );
+
+      it.each([
+        { features: ['span-aggregate', 'span-aggregate-model-dimensions'], supported: true },
+        { features: ['span-aggregate', 'span-query-model-fields'], supported: false },
+        { features: ['span-aggregate-model-dimensions'], supported: false },
+      ] as const)(
+        'reports model and provider span aggregate dimensions for $features as $supported',
+        async ({ features, supported }) => {
+          class SpanAggregateStore extends BaseObservabilityStore {
+            getFeatures() {
+              return features;
+            }
+          }
+
+          expect(await capabilitiesFor(new SpanAggregateStore())).toMatchObject({
+            spanAggregateModelDimensions: supported,
+          });
+        },
+      );
+
+      it.each([
+        { features: ['trace-aggregate', 'aggregate-time-to-first-measures'], supported: true },
+        { features: ['span-aggregate', 'aggregate-time-to-first-measures'], supported: true },
+        { features: ['trace-aggregate', 'span-aggregate'], supported: false },
+        { features: ['aggregate-time-to-first-measures'], supported: false },
+      ] as const)(
+        'reports time-to-first aggregate measures for $features as $supported',
+        async ({ features, supported }) => {
+          class AggregateStore extends BaseObservabilityStore {
+            getFeatures() {
+              return features;
+            }
+          }
+
+          expect(await capabilitiesFor(new AggregateStore())).toMatchObject({
+            aggregateTimeToFirstMeasures: supported,
           });
         },
       );

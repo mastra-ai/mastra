@@ -36,6 +36,7 @@
     "hono": "^4.13.11",
     "ws": "^8.21.3",
     "nodemailer": "^10.2.1",
+    "read-excel-file": "9.3.12",
     "unicorn-magic": "0.4.0",
     "zod": "^4.6.7"
   },

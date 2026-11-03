@@ -27,7 +27,7 @@ export const Empty: Story = {
   render: () => (
     <Composer aria-label="Message composer">
       <ComposerBox>
-        <ComposerInput aria-label="Message" placeholder="Enter your message..." />
+        <ComposerInput aria-label="Message" placeholder="Enter your message" />
         <ComposerActions>
           <span />
           <Button type="submit" size="icon-md" aria-label="Send message" disabled>
@@ -59,7 +59,7 @@ const RingStory = ({ busy }: { busy: boolean }) => (
   <Composer aria-label="Message composer">
     <ComposerRing busy={busy}>
       <ComposerBox>
-        <ComposerInput aria-label="Message" placeholder="Enter your message..." />
+        <ComposerInput aria-label="Message" placeholder="Enter your message" />
         <ComposerActions>
           <span />
           <Button type="submit" size="icon-md" aria-label="Send message">

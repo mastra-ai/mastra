@@ -222,8 +222,6 @@ export interface UpdateWorkItemInput {
   title?: string;
   sessions?: Record<string, WorkItemSessionInput>;
   metadata?: Record<string, unknown>;
-  /** Hands-off: every plan this card parks is approved from here on. Stamped once. */
-  plansPreapproved?: true;
 }
 
 /**
@@ -388,9 +386,9 @@ export interface WorkItemStarters {
   changesRequested: number;
   /** Open pull requests waiting in Review Intake that were opened in the last month. */
   review: { count: number; oldestOpenedAt?: string };
-  /** Work cards not started that triage classified and nobody accepted. */
+  /** Cards triage looked at and left in Work Intake for a person to decide on. */
   undecided: number;
-  /** Cards in Work Intake that triage has not classified. */
+  /** Cards in Work Intake that triage has not run on. */
   untriaged: number;
   /** Bugs not started that have no plan. */
   unplannedBugs: number;

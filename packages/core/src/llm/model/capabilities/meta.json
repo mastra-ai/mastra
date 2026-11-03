@@ -30,12 +30,6 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "muse-spark-1.2-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
     "muse-spark-1.1": [
       {
         "type": "effort",
@@ -43,6 +37,12 @@
       }
     ],
     "muse-spark-1.3-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "muse-spark-1.2-contributor": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]

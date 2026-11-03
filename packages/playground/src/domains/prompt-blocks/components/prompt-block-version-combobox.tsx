@@ -59,7 +59,7 @@ export function PromptBlockVersionCombobox({
       value={value}
       onValueChange={onValueChange}
       placeholder={isLoading ? 'Loading versions...' : 'Versions'}
-      searchPlaceholder="Search versions..."
+      searchPlaceholder="Search versions"
       emptyText="No versions found."
       className={className}
       disabled={disabled || isLoading}

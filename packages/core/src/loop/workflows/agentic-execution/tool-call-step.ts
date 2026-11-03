@@ -50,7 +50,10 @@ import {
 } from '../../run-scope-keys';
 import { approvalResumeSchema } from '../../shared/approval-schema';
 import { dispatchBackgroundTool } from '../../shared/steps/background-dispatch-core';
-import { applyBackgroundToolResult } from '../../shared/steps/background-task-result-core';
+import {
+  applyBackgroundToolExecution,
+  applyBackgroundToolResult,
+} from '../../shared/steps/background-task-result-core';
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
@@ -80,6 +83,8 @@ type AddToolMetadataOptions = {
   parentArgs?: unknown;
   resumeSchema: string;
   suspendedToolRunId?: string;
+  delegatedToolCallId?: string;
+  delegatedToolName?: string;
   metadata?: Record<string, unknown>;
 } & (
   | {
@@ -111,6 +116,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
   mcp,
+  agent,
 }: OuterLLMRun<Tools, OUTPUT>) {
   // Shared by every suspension of the run, so parallel suspends verify recalled messages once.
   const memoryMessageRefs = new MemoryMessageRefs();
@@ -201,6 +207,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         resumeSchema,
         type,
         suspendedToolRunId,
+        delegatedToolCallId,
+        delegatedToolName,
         metadata: toolStateTransformMetadata,
       }: AddToolMetadataOptions) => {
         const metadataKey = type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
@@ -240,6 +248,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           // from `runId` directly; legacy entries with `parentRunId` keep working.
           runId,
           ...(suspendedToolRunId && suspendedToolRunId !== runId ? { delegatedRunId: suspendedToolRunId } : {}),
+          // The delegate's own tool call that paused. Resume stays keyed on `toolCallId`.
+          ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+          ...(delegatedToolName ? { delegatedToolName } : {}),
           ...(type === 'suspension' ? { suspendPayload: transformedSuspendPayload } : {}),
           resumeSchema,
           ...(toolStateTransformMetadata ? { metadata: toolStateTransformMetadata } : {}),
@@ -364,6 +375,10 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             toolName: entry.toolName ?? inputData.toolName,
             kind,
             args: entry.args,
+            ...(typeof entry.delegatedToolCallId === 'string'
+              ? { delegatedToolCallId: entry.delegatedToolCallId }
+              : {}),
+            ...(typeof entry.delegatedToolName === 'string' ? { delegatedToolName: entry.delegatedToolName } : {}),
             ...(kind === 'suspension' ? { suspendPayload: entry.suspendPayload } : {}),
             resumeSchema: entry.resumeSchema,
           },
@@ -608,6 +623,14 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // `args`, `transformChunk`, `flushMessagesBeforeSuspension` and `approvalSchema`, and
         // called before approval gating so a handed-back call is never re-gated or re-run.
         const raiseToolSuspension = async (suspendPayload: any, options?: SuspendOptions): Promise<any> => {
+          // Set by the agent-tool wrapper when a delegated sub-agent paused: the sub-agent's own
+          // tool call. Carried alongside the delegation call, which stays the resume key. Ignored
+          // unless the wrapper raised the pause, so a plain tool's suspend options can't set it.
+          const fromDelegate = options?.isAgentSuspend === true;
+          const delegatedToolCallId =
+            fromDelegate && typeof options?.delegatedToolCallId === 'string' ? options.delegatedToolCallId : undefined;
+          const delegatedToolName =
+            fromDelegate && typeof options?.delegatedToolName === 'string' ? options.delegatedToolName : undefined;
           if (options?.requireToolApproval) {
             const innerApproval =
               typeof options.requireToolApproval === 'object' && options.requireToolApproval
@@ -633,6 +656,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 toolCallId: inputData.toolCallId,
                 toolName: approvalToolName,
                 args: approvalArgs,
+                ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+                ...(delegatedToolName ? { delegatedToolName } : {}),
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
                 usage: suspendedStepUsage,
@@ -649,6 +674,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 : {}),
               type: 'approval',
               suspendedToolRunId: options.runId,
+              delegatedToolCallId,
+              delegatedToolName,
               resumeSchema: approvalResumeSchema,
               metadata: approvalChunk.metadata,
             });
@@ -716,6 +743,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             payload: {
               toolCallId: inputData.toolCallId,
               toolName: inputData.toolName,
+              ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+              ...(delegatedToolName ? { delegatedToolName } : {}),
               suspendPayload,
               args: inputData.args,
               resumeSchema: options?.resumeSchema,
@@ -730,6 +759,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             args,
             suspendPayload,
             suspendedToolRunId: options?.runId,
+            delegatedToolCallId,
+            delegatedToolName,
             type: 'suspension',
             resumeSchema: options?.resumeSchema,
             metadata: suspensionChunk.metadata,
@@ -1189,6 +1220,16 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             }
             let backgroundChunkTransformQueue: Promise<void> = Promise.resolve();
             const emittedReplayedToolCalls = new Set<string>();
+            const flushBackgroundMessages = async () => {
+              const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
+              const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+              const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
+              // readOnly runs must not persist background-task updates to memory —
+              // mirrors the durable engine's readOnly flush guard.
+              if (sqm && tid && !mcfg?.readOnly) {
+                await sqm.flushMessages(messageList, tid, mcfg);
+              }
+            };
 
             return {
               // Executor — uses the tool from the current closure
@@ -1201,6 +1242,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     suspend?: (data?: unknown, options?: SuspendOptions) => Promise<void>;
                     resumeData?: unknown;
                     suspendedToolRunId?: string;
+                    suspendPayload?: unknown;
                   },
                 ) => {
                   // Override the agent loop's `suspend`/`resumeData` (which
@@ -1224,7 +1266,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                           invocationKind: isAgentTool ? 'agent' : 'tool',
                           disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
                         },
-                        ...(opts?.resumeData !== undefined ? { resumeData: opts.resumeData } : {}),
+                        ...(opts?.resumeData !== undefined
+                          ? { resumeData: opts.resumeData, suspendPayload: opts.suspendPayload }
+                          : {}),
                         // Framework-resolved delegated run id recovered from persisted
                         // suspension state (#23739) — never the model-authored one.
                         suspendedToolRunId: opts?.suspendedToolRunId,
@@ -1424,16 +1468,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                       ?.toModelOutput,
                     generateId: readScoped(scopeCtx, GENERATE_ID_KEY, 'generateId'),
                     logger,
-                    flush: async () => {
-                      const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
-                      const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
-                      const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
-                      // readOnly runs must not persist the patched background result
-                      // to memory — mirrors the durable engine's readOnly flush guard.
-                      if (sqm && tid && !mcfg?.readOnly) {
-                        await sqm.flushMessages(messageList, tid, mcfg);
-                      }
-                    },
+                    flush: flushBackgroundMessages,
                   });
 
                   resolveReconciliation({});
@@ -1446,24 +1481,44 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                     disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
                     status: params.status === 'failed' ? 'failed' : 'completed',
                   });
+                  if (info.disposition !== 'awaited') {
+                    const threadId = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
+                    const resourceId = readScoped(scopeCtx, RESOURCE_ID_KEY, 'resourceId');
+                    if (agent && threadId && resourceId) {
+                      void agent.__notifyBackgroundTaskFinished({
+                        threadId,
+                        resourceId,
+                        taskId: params.taskId,
+                        toolCallId: params.toolCallId,
+                        toolName: params.toolName,
+                        status: params.status === 'failed' ? 'failed' : 'completed',
+                      });
+                    }
+                  }
                 } catch (error) {
                   resolveReconciliation({ error });
                   throw error;
                 }
               },
-              // Execution injector — records background task lifecycle metadata on the
-              // assistant message without changing the model-visible tool result.
+              // Execution injector — records background task lifecycle metadata (and an
+              // open suspension) on the assistant message without changing the
+              // model-visible tool result.
               onExecution: async params => {
-                messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
-                  mode: 'stream',
-                  backgroundTasks: {
-                    [params.toolCallId]: {
-                      startedAt: params.startedAt,
-                      suspendedAt: params.suspendedAt,
-                      taskId: params.taskId,
-                    },
-                  },
+                const changed = await applyBackgroundToolExecution({
+                  params,
+                  args,
+                  messageList,
+                  transformChunk: chunk =>
+                    applyToolPayloadTransformToChunk(chunk, {
+                      policy: transformSource.policy,
+                      toolTransform: transformSource.toolTransform,
+                      logger,
+                      transformInput: {
+                        providerMetadata: inputData.providerMetadata as Record<string, unknown> | undefined,
+                      },
+                    }),
                 });
+                if (changed) await flushBackgroundMessages();
               },
 
               // Per-task callbacks

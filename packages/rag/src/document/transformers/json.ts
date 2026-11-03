@@ -3,13 +3,11 @@ import type { JsonChunkOptions } from '../types';
 
 export class RecursiveJsonTransformer {
   private maxSize: number;
-  private minSize: number;
   private ensureAscii: boolean;
   private convertLists: boolean;
 
-  constructor({ maxSize = 2000, minSize, ensureAscii = false, convertLists = true }: JsonChunkOptions) {
+  constructor({ maxSize = 2000, ensureAscii = false, convertLists = true }: JsonChunkOptions) {
     this.maxSize = maxSize;
-    this.minSize = minSize ?? Math.max(maxSize - 200, 50);
     this.ensureAscii = ensureAscii;
     this.convertLists = convertLists;
   }
@@ -202,15 +200,12 @@ export class RecursiveJsonTransformer {
 
     const saveCurrentGroup = () => {
       if (currentGroup.length > 0) {
-        const groupChunk = this.createChunk(currentGroup, path);
-        if (RecursiveJsonTransformer.jsonSize(groupChunk) >= this.minSize) {
-          chunks.push(groupChunk);
-          currentGroup = [];
-        }
+        chunks.push(this.createChunk(currentGroup, path));
+        currentGroup = [];
       }
     };
 
-    for (const item of value) {
+    for (const [itemIndex, item] of value.entries()) {
       // Try adding item to current group
       const testGroup = [...currentGroup, item];
       const testChunk = this.createChunk(testGroup, path);
@@ -231,7 +226,7 @@ export class RecursiveJsonTransformer {
         if (this.isWithinSizeLimit(singleItemChunk)) {
           currentGroup = singleItemArray;
         } else {
-          const itemPath = [...path, String(chunks.length)];
+          const itemPath = [...path, String(itemIndex)];
           const nestedChunks = this.handleNestedObject(item, itemPath, depth + 1, maxDepth);
           chunks.push(...nestedChunks);
         }
@@ -273,11 +268,8 @@ export class RecursiveJsonTransformer {
 
     const saveCurrentChunk = () => {
       if (Object.keys(currentChunk).length > 0) {
-        const objChunk = this.createChunk(currentChunk, path);
-        if (RecursiveJsonTransformer.jsonSize(objChunk) >= this.minSize) {
-          chunks.push(objChunk);
-          currentChunk = {};
-        }
+        chunks.push(this.createChunk(currentChunk, path));
+        currentChunk = {};
       }
     };
 
@@ -423,27 +415,6 @@ export class RecursiveJsonTransformer {
   }
 
   /**
-   * Converts Unicode characters to their escaped ASCII representation
-   * e.g., 'café' becomes 'caf\u00e9'
-   */
-  private escapeNonAscii(obj: any): any {
-    if (typeof obj === 'string') {
-      return obj.replace(/[\u0080-\uffff]/g, char => {
-        return `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
-      });
-    }
-
-    if (Array.isArray(obj)) {
-      return obj.map(item => this.escapeNonAscii(item));
-    }
-
-    if (typeof obj === 'object' && obj !== null) {
-      return Object.fromEntries(Object.entries(obj).map(([key, value]) => [key, this.escapeNonAscii(value)]));
-    }
-
-    return obj;
-  }
-  /**
    * Splits JSON into a list of JSON formatted strings
    */
   splitText({
@@ -457,20 +428,16 @@ export class RecursiveJsonTransformer {
   }): string[] {
     const chunks = this.splitJson({ jsonData, convertLists });
 
-    if (ensureAscii) {
-      const escapedChunks = chunks.map(chunk => this.escapeNonAscii(chunk));
-      return escapedChunks.map(chunk => JSON.stringify(chunk));
+    const serialized = chunks.map(chunk => JSON.stringify(chunk));
+
+    if (!ensureAscii) {
+      return serialized;
     }
 
-    return chunks.map(chunk =>
-      JSON.stringify(chunk, (key, value) => {
-        // Convert escaped Unicode sequences back to actual characters
-        // e.g., '\u00e9' -> 'é'
-        if (typeof value === 'string') {
-          return value.replace(/\\u[\da-f]{4}/gi, match => String.fromCharCode(parseInt(match.slice(2), 16)));
-        }
-        return value;
-      }),
+    // Non-ASCII characters only appear inside JSON string literals, so escaping each
+    // UTF-16 code unit keeps the output valid JSON that parses back to the original.
+    return serialized.map(text =>
+      text.replace(/[\u0080-\uffff]/g, char => `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`),
     );
   }
 

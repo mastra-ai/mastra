@@ -106,6 +106,7 @@ export function WorkItemCardRows({
 
 export function columnReviewVerdict(item: WorkItem, columnStage: BoardStageId) {
   if (columnStage === 'review') return reviewVerdict(item.metadata) ?? selfReviewVerdict(item.metadata);
+  if (columnStage === 'pr-review') return reviewVerdict(item.metadata);
   if (columnStage === 'execute') return selfReviewVerdict(item.metadata);
   return undefined;
 }

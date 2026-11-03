@@ -225,7 +225,7 @@ export const ToolkitFilterPane = ({
         size="md"
         className="flex-none"
         data-testid={`${TEST_ID_PREFIX}-filter-search`}
-        placeholder="Filter toolkits..."
+        placeholder="Filter toolkits"
         value={search}
         onValueChange={setSearch}
       />

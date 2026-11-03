@@ -9,7 +9,10 @@ import { takeDelegationFailure } from '../../../../loop/shared/delegation-outcom
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
-import { applyBackgroundToolResult } from '../../../../loop/shared/steps/background-task-result-core';
+import {
+  applyBackgroundToolExecution,
+  applyBackgroundToolResult,
+} from '../../../../loop/shared/steps/background-task-result-core';
 import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core';
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
@@ -374,7 +377,7 @@ export function createDurableToolCallStep() {
         requestContext,
         actor,
         getInitData,
-        getStepResult,
+        getStepResultAsync,
       } = params;
 
       const ownership = getExecutionOwnershipGuard(params);
@@ -799,7 +802,7 @@ export function createDurableToolCallStep() {
       // Replayed step transcripts supply context only, not messages to persist.
       let contextMessageList = messageList;
       if (!contextMessageList) {
-        const llmOutput = getStepResult?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
+        const llmOutput = await getStepResultAsync?.<DurableLLMStepOutput>(DurableStepIds.LLM_EXECUTION);
         const messageListState = await readMessageListState(params, llmOutput ?? {});
         if (messageListState) {
           contextMessageList = createRunMessageList({
@@ -894,6 +897,8 @@ export function createDurableToolCallStep() {
         resumeSchema?: string;
         suspendPayload?: unknown;
         delegatedRunId?: string;
+        delegatedToolCallId?: string;
+        delegatedToolName?: string;
         approvalToolName?: string;
         approvalArgs?: unknown;
       }) => {
@@ -912,6 +917,9 @@ export function createDurableToolCallStep() {
           // (mirrors the regular engine's tool-call-step metadata shape).
           runId,
           ...(opts.delegatedRunId && opts.delegatedRunId !== runId ? { delegatedRunId: opts.delegatedRunId } : {}),
+          // The delegate's own tool call that paused. Resume stays keyed on `toolCallId`.
+          ...(opts.delegatedToolCallId ? { delegatedToolCallId: opts.delegatedToolCallId } : {}),
+          ...(opts.delegatedToolName ? { delegatedToolName: opts.delegatedToolName } : {}),
           ...(opts.type === 'suspension' ? { suspendPayload: opts.suspendPayload } : {}),
           ...(opts.resumeSchema ? { resumeSchema: opts.resumeSchema } : {}),
         };
@@ -1051,6 +1059,12 @@ export function createDurableToolCallStep() {
               toolName: matchedEntry.toolName ?? toolName,
               kind: type,
               args: displayed.payload.args,
+              ...(typeof matchedEntry.delegatedToolCallId === 'string'
+                ? { delegatedToolCallId: matchedEntry.delegatedToolCallId }
+                : {}),
+              ...(typeof matchedEntry.delegatedToolName === 'string'
+                ? { delegatedToolName: matchedEntry.delegatedToolName }
+                : {}),
               ...(type === 'suspension' ? { suspendPayload: (displayed.payload as any).suspendPayload } : {}),
               resumeSchema: displayed.payload.resumeSchema,
             },
@@ -1458,6 +1472,18 @@ export function createDurableToolCallStep() {
             typeof suspendOptions?.runId === 'string' && suspendOptions.runId !== runId
               ? suspendOptions.runId
               : undefined;
+          // Set by the agent-tool wrapper when a delegated sub-agent paused: the sub-agent's own
+          // tool call. Carried alongside the delegation call, which stays the resume key. Ignored
+          // unless the wrapper raised the pause, so a plain tool's suspend options can't set it.
+          const fromDelegate = suspendOptions?.isAgentSuspend === true;
+          const delegatedToolCallId =
+            fromDelegate && typeof suspendOptions?.delegatedToolCallId === 'string'
+              ? suspendOptions.delegatedToolCallId
+              : undefined;
+          const delegatedToolName =
+            fromDelegate && typeof suspendOptions?.delegatedToolName === 'string'
+              ? suspendOptions.delegatedToolName
+              : undefined;
           if (suspendOptions?.requireToolApproval) {
             const innerApproval =
               typeof suspendOptions.requireToolApproval === 'object' && suspendOptions.requireToolApproval
@@ -1477,6 +1503,8 @@ export function createDurableToolCallStep() {
               type: 'approval',
               resumeSchema: approvalResumeSchema,
               delegatedRunId,
+              delegatedToolCallId,
+              delegatedToolName,
               ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
             });
 
@@ -1492,6 +1520,8 @@ export function createDurableToolCallStep() {
                     toolCallId,
                     toolName: approvalToolName,
                     args: approvalArgs,
+                    ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+                    ...(delegatedToolName ? { delegatedToolName } : {}),
                     resumeSchema: approvalResumeSchema,
                     updatedAt: Date.now(),
                     usage: typedInput.stepUsage,
@@ -1548,6 +1578,8 @@ export function createDurableToolCallStep() {
             suspendPayload,
             resumeSchema: suspendOptions?.resumeSchema,
             delegatedRunId,
+            delegatedToolCallId,
+            delegatedToolName,
           });
 
           await doFlush();
@@ -1561,6 +1593,8 @@ export function createDurableToolCallStep() {
                 payload: {
                   toolCallId,
                   toolName,
+                  ...(delegatedToolCallId ? { delegatedToolCallId } : {}),
+                  ...(delegatedToolName ? { delegatedToolName } : {}),
                   suspendPayload,
                   args,
                   resumeSchema: suspendOptions?.resumeSchema,
@@ -1680,7 +1714,9 @@ export function createDurableToolCallStep() {
                       invocationKind: isAgentTool ? 'agent' : 'tool',
                       disposition: info.disposition === 'awaited' ? 'awaited' : 'deferred',
                     },
-                    ...(taskContext?.resumeData !== undefined ? { resumeData: taskContext.resumeData } : {}),
+                    ...(taskContext?.resumeData !== undefined
+                      ? { resumeData: taskContext.resumeData, suspendPayload: taskContext.suspendPayload }
+                      : {}),
                     // Framework-resolved delegated run id recovered from persisted
                     // suspension state (#23739) — never the model-authored one.
                     suspendedToolRunId: taskContext?.suspendedToolRunId,
@@ -1852,6 +1888,17 @@ export function createDurableToolCallStep() {
                 },
               });
               resolveReconciliation({});
+              if (info.disposition !== 'awaited' && state?.threadId && state?.resourceId) {
+                const owner = Object.values(mastra?.listAgents?.() ?? {}).find(agent => agent.id === initData.agentId);
+                void owner?.__notifyBackgroundTaskFinished({
+                  threadId: state.threadId,
+                  resourceId: state.resourceId,
+                  taskId: params.taskId,
+                  toolCallId: params.toolCallId,
+                  toolName: params.toolName,
+                  status: params.status === 'failed' ? 'failed' : 'completed',
+                });
+              }
             } catch (error) {
               resolveReconciliation({ error });
               throw error;
@@ -1861,18 +1908,19 @@ export function createDurableToolCallStep() {
           onExecution: async (params: any) => {
             if (!messageList) return;
 
-            messageList.updateMessageMetadataByToolCallId(params.toolCallId, {
-              mode: 'stream',
-              backgroundTasks: {
-                [params.toolCallId]: {
-                  startedAt: params.startedAt,
-                  suspendedAt: params.suspendedAt,
-                  taskId: params.taskId,
-                },
-              },
+            await applyBackgroundToolExecution({
+              params,
+              args: cleanedArgs,
+              messageList,
+              transformChunk: chunk =>
+                applyToolPayloadTransformToChunk(chunk, {
+                  policy: toolPayloadTransform,
+                  tools: toolsForTransform,
+                  logger: logger as any,
+                }),
             });
 
-            // Flush to storage so the metadata update (especially suspendedAt)
+            // Flush to storage so the metadata update (especially an open suspension)
             // is persisted. Unlike the regular agent which has a single long-lived
             // messageList, the durable agent's workflow state is serialized before
             // this async callback fires, so we must flush directly.

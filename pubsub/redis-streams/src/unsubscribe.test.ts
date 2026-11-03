@@ -51,7 +51,7 @@ describe('unsubscribe acquired batches', () => {
       connect: vi.fn(),
       quit: vi.fn(),
       xGroupCreate: vi.fn(),
-      xGroupDestroy: vi.fn(),
+      xGroupDestroy: vi.fn(async () => {}),
       xPendingRange: vi.fn(async () =>
         entries.map(e => ({ id: e.id, consumer: 'c', millisecondsSinceLastDelivery: 1, deliveriesCounter: 1 })),
       ),

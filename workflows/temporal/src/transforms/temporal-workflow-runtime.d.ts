@@ -3,6 +3,8 @@ import type { ActivityOptions } from '@temporalio/workflow';
 export type WorkflowRuntimeOptions = {
   startToCloseTimeout?: string;
   retry?: ActivityOptions['retry'];
+  /** The workflow's `options.validateInputs`, read at build time. */
+  validateInputs?: boolean;
 };
 
 export interface WorkflowExecutionResult {
@@ -35,6 +37,7 @@ export type WorkflowRuntime = ((startArgs?: {
   inputData?: unknown;
   initialState?: unknown;
   recordStepMeta?: boolean;
+  validateInputs?: boolean;
 }) => Promise<WorkflowExecutionResult>) & {
   then(stepId: string): WorkflowRuntime;
   thenWorkflow(workflowType: string, id: string): WorkflowRuntime;
@@ -58,6 +61,7 @@ export class TemporalExecutionEngine {
     workflowId: string;
     runId?: string;
     resourceId?: string;
+    validateInputs?: boolean;
     graph: { id: string; steps: unknown[] };
     input?: unknown;
     initialState?: unknown;

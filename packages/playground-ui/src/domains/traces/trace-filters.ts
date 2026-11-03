@@ -7,7 +7,6 @@ import {
   BoxIcon,
   BracesIcon,
   BuildingIcon,
-  ClockIcon,
   CloudIcon,
   CpuIcon,
   FingerprintIcon,
@@ -380,7 +379,6 @@ export const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
 };
 
 const TRACE_FILTER_BAR_FIELD_ICONS: Record<string, LucideIcon> = {
-  timeRange: ClockIcon,
   rootEntityType: BoxIcon,
   entityName: TagIcon,
   entityId: FingerprintIcon,

@@ -2,6 +2,7 @@ import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
 import type { MessageListInput } from '../../../agent/message-list';
 import type { MastraServerCache } from '../../../cache';
+import type { ServerConfig } from '../../../server/types';
 import type { ObservabilityEntrypoint, TracingOptions } from '../../../observability';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
@@ -137,6 +138,8 @@ export interface RunLoopScenarioOptions {
   fixtures: (llm: LLMock) => void;
   /** Real observability implementation for exported-span assertions. */
   observability?: ObservabilityEntrypoint;
+  /** Server config for the Mastra instance, e.g. an FGA provider. Local engines only. */
+  server?: ServerConfig;
   /** The input that kicks off the loop: a user prompt, or messages (e.g. ending on an assistant prefill). */
   prompt: string | MessageListInput;
   /**

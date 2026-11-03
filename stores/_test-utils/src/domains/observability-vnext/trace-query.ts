@@ -33,6 +33,7 @@ import {
   type TrustedTraceQueryPredicate,
   type TrustedTraceQueryScalarPredicate,
   type TraceQueryTenantScope,
+  type ObservabilityStorageFeature,
 } from '@mastra/core/storage';
 
 export interface RawTraceQuerySpan {
@@ -848,6 +849,9 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       resourceId: 'project-1',
       sessionId: 'session-123',
       userId: 'user-1',
+      requestId: 'request-a',
+      serviceName: 'checkout',
+      experimentId: 'exp-1',
       startedAt: '2026-09-02T10:00:00.000Z',
       endedAt: '2026-09-02T10:00:01.000Z',
     }),
@@ -860,6 +864,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       runId: 'run-42',
       sessionId: 'session-123',
       userId: 'user-1',
+      requestId: 'request-a',
+      serviceName: 'payments',
       startedAt: '2026-09-02T10:00:00.100Z',
       endedAt: '2026-09-02T10:00:00.500Z',
     }),
@@ -879,6 +885,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       resourceId: 'project-9',
       sessionId: 'session-123',
       userId: 'user-2',
+      requestId: 'request-b',
+      serviceName: 'checkout',
       startedAt: '2026-09-03T10:00:00.000Z',
       endedAt: '2026-09-03T10:00:01.000Z',
     }),
@@ -1199,6 +1207,7 @@ export interface ThreadQueryConformanceCase {
   scope?: TraceQueryTenantScope;
   expected: Array<{ threadId: string }>;
   requiresStrictFeedbackValueTypes?: boolean;
+  requiresFeature?: ObservabilityStorageFeature;
 }
 
 export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
@@ -1445,6 +1454,18 @@ export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
     },
     expected: [{ threadId: 'thread-org-b' }],
   },
+  {
+    name: 'thread queries qualify threads through request and service fields',
+    request: {
+      traces: {
+        timeRange: scopedRange,
+        where: { spans: { some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'payments' } } } },
+      },
+      where: { traces: { some: { op: 'eq', left: { path: 'requestId' }, right: { literal: 'request-a' } } } },
+    },
+    expected: [{ threadId: 'thread-org-a' }],
+    requiresFeature: 'trace-query-context-fields',
+  },
 ];
 
 const commentMatches = (literal: string, op: 'matches' | 'notMatches' = 'matches'): TraceQueryScalarPredicate => ({
@@ -1460,6 +1481,7 @@ export interface TraceQueryConformanceCase {
   scope?: TraceQueryTenantScope;
   expected: Array<{ traceId: string }>;
   requiresStrictFeedbackValueTypes?: boolean;
+  requiresFeature?: ObservabilityStorageFeature;
 }
 
 const scoreReplacementRequest = (
@@ -2578,6 +2600,88 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [],
   },
   {
+    name: 'request predicates match the root that recorded the request',
+    request: {
+      timeRange: scopedRange,
+      where: { op: 'eq', left: { path: 'requestId' }, right: { literal: 'request-a' } },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+    requiresFeature: 'trace-query-context-fields',
+  },
+  {
+    name: 'service membership matches roots in any listed service',
+    request: {
+      timeRange: scopedRange,
+      where: { op: 'in', value: { path: 'serviceName' }, set: ['checkout', 'billing'] },
+    },
+    expected: [{ traceId: 'trace-org-b' }, { traceId: 'trace-org-a' }],
+    requiresFeature: 'trace-query-context-fields',
+  },
+  {
+    name: 'experiment inequality keeps roots that never recorded an experiment',
+    request: {
+      timeRange: scopedRange,
+      where: { op: 'ne', left: { path: 'experimentId' }, right: { literal: 'exp-1' } },
+    },
+    expected: [{ traceId: 'trace-org-none' }, { traceId: 'trace-org-b' }],
+    requiresFeature: 'trace-query-context-fields',
+  },
+  {
+    name: 'service exclusion keeps roots that never recorded a service',
+    request: { timeRange: scopedRange, where: { op: 'notIn', value: { path: 'serviceName' }, set: ['checkout'] } },
+    expected: [{ traceId: 'trace-org-none' }],
+    requiresFeature: 'trace-query-context-fields',
+  },
+  {
+    name: 'experiment presence matches only roots that recorded one',
+    request: { timeRange: scopedRange, where: { op: 'exists', path: 'experimentId' } },
+    expected: [{ traceId: 'trace-org-a' }],
+    requiresFeature: 'trace-query-context-fields',
+  },
+  {
+    name: 'request absence matches roots that never recorded a request',
+    request: { timeRange: scopedRange, where: { op: 'notExists', path: 'requestId' } },
+    expected: [{ traceId: 'trace-org-none' }],
+    requiresFeature: 'trace-query-context-fields',
+  },
+  {
+    name: 'service predicates find a service recorded only on a child span',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'payments' } } } },
+    },
+    expected: [{ traceId: 'trace-org-a' }],
+    requiresFeature: 'trace-query-context-fields',
+  },
+  {
+    name: 'span context fields bind to one related span',
+    request: {
+      timeRange: scopedRange,
+      where: {
+        spans: {
+          some: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'serviceName' }, right: { literal: 'payments' } },
+              { op: 'eq', left: { path: 'experimentId' }, right: { literal: 'exp-1' } },
+            ],
+          },
+        },
+      },
+    },
+    expected: [],
+    requiresFeature: 'trace-query-context-fields',
+  },
+  {
+    name: 'span request absence excludes traces with one matching span',
+    request: {
+      timeRange: scopedRange,
+      where: { spans: { none: { op: 'eq', left: { path: 'requestId' }, right: { literal: 'request-a' } } } },
+    },
+    expected: [{ traceId: 'trace-org-none' }, { traceId: 'trace-org-b' }],
+    requiresFeature: 'trace-query-context-fields',
+  },
+  {
     name: 'includes matches traces whose current root carries the tag',
     request: { timeRange: fullRange, where: { op: 'includes', path: 'tags', value: 'production' } },
     expected: [{ traceId: 'trace-d' }, { traceId: 'trace-a' }],
@@ -3228,6 +3332,9 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
     sessionId: span.sessionId,
     userId: span.userId,
     organizationId: span.organizationId,
+    requestId: span.requestId ?? null,
+    serviceName: span.serviceName ?? null,
+    experimentId: span.experimentId ?? null,
   };
 }
 
@@ -3297,6 +3404,9 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     sessionId: root.sessionId,
     userId: root.userId,
     organizationId: root.organizationId,
+    requestId: root.requestId ?? null,
+    serviceName: traceQueryDimensionValue(root, 'serviceName'),
+    experimentId: traceQueryDimensionValue(root, 'experimentId'),
     startedAt: root.startedAt,
     endedAt: root.endedAt,
     durationMs: durationMsBetween(root.startedAt, root.endedAt),

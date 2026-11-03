@@ -66,6 +66,12 @@ export const spanOutcomeCapabilities: GetObservabilityCapabilitiesResponse = {
   capabilities: { ...spanQueryCapabilities.capabilities, spanQueryOutcomeFields: true },
 };
 
+/** A store that fills the model and provider columns and filters span queries on them. */
+export const spanModelCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: { ...spanQueryCapabilities.capabilities, spanQueryModelFields: true },
+};
+
 export const spanQueryCoreOnlyCapabilities: GetObservabilityCapabilitiesResponse = {
   ...spanQueryCapabilities,
   capabilities: { ...spanQueryCapabilities.capabilities, spanQueryContextFields: false },

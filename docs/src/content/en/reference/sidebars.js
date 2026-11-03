@@ -500,13 +500,13 @@ const sidebars = {
           label: 'Tracing',
           items: [
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
+            { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
+            { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
             {
               type: 'doc',
               id: 'observability/tracing/advanced-queries',
-              label: 'Advanced trace queries',
+              label: 'Query traces and spans',
             },
-            { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
-            { type: 'doc', id: 'observability/tracing/interfaces', label: 'Interfaces' },
             { type: 'doc', id: 'observability/tracing/span-filtering', label: 'Span filtering' },
             { type: 'doc', id: 'observability/tracing/spans', label: 'Spans' },
             {
@@ -709,6 +709,7 @@ const sidebars = {
           label: 'createNotificationInboxTool()',
         },
         { type: 'doc', id: 'signals/notifications', label: 'Notifications' },
+        { type: 'doc', id: 'signals/ring-signals', label: 'RingSignals' },
         { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
         { type: 'doc', id: 'signals/task-signal-provider', label: 'TaskSignalProvider' },
         { type: 'doc', id: 'signals/thread-events', label: 'Thread events' },

@@ -162,8 +162,8 @@ importers:
   service-mastra:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.19.17
-        version: 1.19.17(hono@4.13.11)
+        specifier: ^2.1.5
+        version: 2.1.5(hono@4.13.11)
       '@hono/otel':
         specifier: ^1.1.0
         version: 1.1.0(hono@4.13.11)
@@ -223,8 +223,8 @@ importers:
   service-one:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.19.17
-        version: 1.19.17(hono@4.13.11)
+        specifier: ^2.1.5
+        version: 2.1.5(hono@4.13.11)
       '@hono/otel':
         specifier: ^1.1.0
         version: 1.1.0(hono@4.13.11)
@@ -257,8 +257,8 @@ importers:
   service-two:
     dependencies:
       '@hono/node-server':
-        specifier: ^1.19.17
-        version: 1.19.17(hono@4.13.11)
+        specifier: ^2.1.5
+        version: 2.1.5(hono@4.13.11)
       '@hono/otel':
         specifier: ^1.1.0
         version: 1.1.0(hono@4.13.11)
@@ -490,9 +490,9 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hono/node-server@1.19.17':
-    resolution: {integrity: sha512-dSneS5qhiauZWGDCeK4o695Xd9nUNjviSZCMQrj10eetr8Uln1ucn6bbphOM6UynAMMtNIzZNSpL9vnASJwrPQ==}
-    engines: {node: '>=18.14.1'}
+  '@hono/node-server@2.1.5':
+    resolution: {integrity: sha512-MgP/I06GdvsilDspMk/qmRzpk8LOUStP6jFAbSRi40W09DhoyUn+Mj7eyKICPqeYKybOjVFLVIAQzvu1bfIa7Q==}
+    engines: {node: '>=20'}
     peerDependencies:
       hono: 4.13.11
 
@@ -694,6 +694,7 @@ packages:
   '@opentelemetry/propagator-jaeger@2.11.0':
     resolution: {integrity: sha512-RUOqgoIqXOPQTOhpBrs07Y8sBlxVoLY5Fka6ueZ0prW+k6fWQsba/nHDY4gm+gmfuwtRqbX5Y9YKhDvktjbIqQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Package no longer supported. See https://github.com/open-telemetry/opentelemetry-js/pull/7077
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -1890,7 +1891,7 @@ snapshots:
       protobufjs: 8.8.0
       yargs: 18.2.0
 
-  '@hono/node-server@1.19.17(hono@4.13.11)':
+  '@hono/node-server@2.1.5(hono@4.13.11)':
     dependencies:
       hono: 4.13.11
 

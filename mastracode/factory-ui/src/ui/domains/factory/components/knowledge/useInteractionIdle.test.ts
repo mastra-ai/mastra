@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { knowledgeRefetchInterval } from '../../../../../hooks/useKnowledgeGraph';
 import { RequestError } from '../../services/request';
-import { isIdle } from './useInteractionIdle';
+import { isIdle } from '@mastra/playground-ui/domains/knowledge/hooks/useInteractionIdle';
 
 describe('isIdle', () => {
   it('is idle only once idleMs has elapsed since the last interaction', () => {

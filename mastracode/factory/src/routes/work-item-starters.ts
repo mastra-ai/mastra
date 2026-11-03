@@ -5,7 +5,7 @@
  */
 
 import { boardForWorkItem } from '../boards/semantics.js';
-import { FACTORY_RULE_STAGES } from '../rules/types.js';
+import { FACTORY_ROLE_STAGES, FACTORY_RULE_STAGES } from '../rules/types.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -25,23 +25,27 @@ const GITHUB_TYPE_LABELS = new Set([
 ]);
 /** The columns the Review board shows; a review card holding none of them sits in Intake. */
 const REVIEW_BOARD_STAGES = ['intake', 'review', 'done', 'canceled'];
+/** The lanes a pull request's own card moves through on Work. */
+const WORK_PULL_REQUEST_STAGES = ['intake', 'pr-review', 'done', 'canceled'];
+/** Lanes a card parked in Intake resumes into, shallowest first. */
+const WORKING_LANES: readonly string[] = [...Object.values(FACTORY_ROLE_STAGES), 'pr-review'];
 
 export interface WorkItemStarters {
   /** Open cards whose latest run failed. */
   failed: number;
   /** Factory's open pull requests whose current review asked for changes. */
   changesRequested: number;
-  /** Open pull requests waiting in Review Intake that were opened in the last month. */
+  /** Open pull requests waiting in Intake (on Work, or Review where older ones were filed) opened in the last month. */
   review: { count: number; oldestOpenedAt?: string };
-  /** Work cards not started that triage classified and nobody accepted. */
+  /** Cards triage looked at and left in Work Intake for a person to decide on. */
   undecided: number;
-  /** Cards in Work Intake that triage has not classified. */
+  /** Cards in Work Intake that triage has not run on. */
   untriaged: number;
   /** Bugs not started that have no plan. */
   unplannedBugs: number;
   /** The area label with the most cards not started, when it has enough of them. */
   sweep?: { area: string; count: number };
-  /** Open pull requests waiting in Review Intake for over a month. */
+  /** Open pull requests waiting in Intake for over a month. */
   stale: number;
 }
 
@@ -63,12 +67,24 @@ function isOpen(item: WorkItemRow): boolean {
   return !item.stages.some(stage => stage === 'done' || stage === 'canceled');
 }
 
+function isPullRequest(item: WorkItemRow): boolean {
+  return item.externalSource?.type === 'pull-request';
+}
+
 function inIntake(item: WorkItemRow): boolean {
-  return boardForWorkItem(item) === 'work' && inColumn(item, 'intake', FACTORY_RULE_STAGES);
+  return boardForWorkItem(item) === 'work' && !isPullRequest(item) && inColumn(item, 'intake', FACTORY_RULE_STAGES);
 }
 
 function notStarted(item: WorkItemRow): boolean {
-  return inIntake(item) || (boardForWorkItem(item) === 'work' && item.stages.includes('triage'));
+  return (
+    inIntake(item) || (boardForWorkItem(item) === 'work' && !isPullRequest(item) && item.stages.includes('triage'))
+  );
+}
+
+/** A pull request's own card, on Work or on the Review board it used to be filed on. */
+function reviewedPullRequest(item: WorkItemRow): boolean {
+  const board = boardForWorkItem(item);
+  return isPullRequest(item) && (board === 'work' || board === 'review');
 }
 
 function pullRequestIsOpen(item: WorkItemRow): boolean {
@@ -81,7 +97,9 @@ function pullRequestIsOpen(item: WorkItemRow): boolean {
 
 function waitsForReview(item: WorkItemRow): boolean {
   return (
-    boardForWorkItem(item) === 'review' && inColumn(item, 'intake', REVIEW_BOARD_STAGES) && pullRequestIsOpen(item)
+    reviewedPullRequest(item) &&
+    inColumn(item, 'intake', boardForWorkItem(item) === 'work' ? WORK_PULL_REQUEST_STAGES : REVIEW_BOARD_STAGES) &&
+    pullRequestIsOpen(item)
   );
 }
 
@@ -95,24 +113,26 @@ function openedAt(item: WorkItemRow): number {
 /** A current request for changes: a push past the reviewed head makes the verdict outdated. */
 function changesRequested(item: WorkItemRow): boolean {
   const metadata = metadataOf(item);
-  if (boardForWorkItem(item) !== 'review' || metadata.factoryAuthored !== true) return false;
+  if (!reviewedPullRequest(item) || metadata.factoryAuthored !== true) return false;
   if (!pullRequestIsOpen(item) || metadata.reviewVerdict !== 'request changes') return false;
   const reviewed = typeof metadata.reviewedHeadSha === 'string' ? metadata.reviewedHeadSha : undefined;
   const head = typeof metadata.pullRequestHeadSha === 'string' ? metadata.pullRequestHeadSha : undefined;
   return reviewed === undefined || head === undefined || reviewed.toLowerCase() === head.toLowerCase();
 }
 
+/**
+ * Triage ran and left the card in Intake for a person to decide on. A card that has been past
+ * Triage since (a parked build, say) resumes instead, so it is not waiting on a decision.
+ */
 function awaitsDecision(item: WorkItemRow): boolean {
-  return (
-    (item.board == null || item.board === 'work') &&
-    item.triageType !== null &&
-    item.triageType !== 'bug' &&
-    item.acceptedAt === null
-  );
+  if (item.sessions.triage === undefined) return false;
+  const visited = new Set(item.stageHistory.map(entry => entry.stage));
+  const lane = WORKING_LANES.filter(stage => visited.has(stage)).at(-1);
+  return lane === undefined || lane === 'triage';
 }
 
 function isBug(item: WorkItemRow): boolean {
-  return item.triageType === 'bug' || labelsOf(item).some(label => label.toLowerCase() === 'bug');
+  return labelsOf(item).some(label => label.toLowerCase() === 'bug');
 }
 
 function areaLabels(item: WorkItemRow): string[] {
@@ -149,9 +169,9 @@ export function workItemStarters(
         starters.stale += 1;
       }
     }
-    if (inIntake(item) && item.triageType === null) starters.untriaged += 1;
+    if (inIntake(item) && item.sessions.triage === undefined) starters.untriaged += 1;
+    if (inIntake(item) && awaitsDecision(item)) starters.undecided += 1;
     if (!notStarted(item)) continue;
-    if (awaitsDecision(item)) starters.undecided += 1;
     if (isBug(item) && item.sessions.plan === undefined) starters.unplannedBugs += 1;
     for (const area of areaLabels(item)) byArea.set(area, (byArea.get(area) ?? 0) + 1);
   }

@@ -323,6 +323,22 @@ describe('ProcessorOutputResultPhaseSchema', () => {
       messageList: fakeMessageList,
       result: { text: 'hi', usage: {}, finishReason: 'stop', steps: [] },
     }));
+  it('keeps inputAccepted on the result when parsing', () => {
+    const parsed = ProcessorOutputResultPhaseSchema.parse({
+      phase: 'outputResult',
+      messages: [],
+      messageList: fakeMessageList,
+      result: { text: '', usage: {}, finishReason: 'error', steps: [], inputAccepted: true },
+    });
+    expect(parsed.result?.inputAccepted).toBe(true);
+  });
+  it('rejects a non-boolean inputAccepted', () =>
+    fail(ProcessorOutputResultPhaseSchema, {
+      phase: 'outputResult',
+      messages: [],
+      messageList: fakeMessageList,
+      result: { text: '', usage: {}, finishReason: 'error', steps: [], inputAccepted: 'yes' },
+    }));
   it('rejects wrong phase', () =>
     fail(ProcessorOutputResultPhaseSchema, { phase: 'input', messages: [], messageList: fakeMessageList }));
 });

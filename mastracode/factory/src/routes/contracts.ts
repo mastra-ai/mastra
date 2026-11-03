@@ -1,11 +1,13 @@
 import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
 import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
+import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 import { WORK_ITEM_SORTS, decodeWorkItemCursor, decodeWorkItemSyncCursor } from './work-item-cursor.js';
 
@@ -13,7 +15,7 @@ const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...stri
 export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   description: string;
   pathSchema?: z.ZodType;
@@ -65,6 +67,73 @@ const storedBoardResponseSchema = z.object({
     problems: z.array(z.string()),
   }),
 });
+const intakeRoutePathSchema = z.object({ id: uuidSchema, routeId: uuidSchema });
+const intakeRouteIdentifierSchema = z.string().max(MAX_BOARD_IDENTIFIER_LENGTH).regex(BOARD_IDENTIFIER_RE);
+const intakeRouteTargetSchema = z
+  .object({
+    boardKey: intakeRouteIdentifierSchema,
+    /** Unset lands the card in the board's first phase. */
+    phaseKey: intakeRouteIdentifierSchema.nullable().optional(),
+  })
+  .strict();
+const intakeRouteFields = {
+  name: nonEmptyTrimmed(120),
+  enabled: z.boolean(),
+  /** Which new cards the route applies to; null matches every card. */
+  when: cardRuleGroupSchema.nullable(),
+  /** Where matching new cards land. */
+  target: intakeRouteTargetSchema,
+};
+export const intakeRouteInputSchema = z
+  .object({
+    name: intakeRouteFields.name,
+    enabled: intakeRouteFields.enabled.default(true),
+    when: intakeRouteFields.when.default(null),
+    target: intakeRouteFields.target,
+  })
+  .strict();
+/** Changes the named fields; send the `revision` you read so a concurrent edit is not overwritten. */
+export const intakeRoutePatchSchema = z
+  .object({
+    name: intakeRouteFields.name.optional(),
+    enabled: intakeRouteFields.enabled.optional(),
+    when: intakeRouteFields.when.optional(),
+    target: intakeRouteFields.target.optional(),
+    expectedRevision: boardRevisionSchema,
+  })
+  .strict()
+  .refine(({ expectedRevision: _revision, ...fields }) => Object.values(fields).some(value => value !== undefined), {
+    message: 'Change at least one field.',
+  });
+export const intakeRouteReorderBodySchema = z
+  .object({
+    /** Every route of the project, once each, in the new order. */
+    ids: z
+      .array(uuidSchema)
+      .min(1)
+      .max(MAX_INTAKE_ROUTES)
+      .refine(ids => new Set(ids).size === ids.length, { message: 'Each route may appear only once.' }),
+  })
+  .strict();
+const intakeRouteSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+  /** 0 is evaluated first. */
+  position: z.number().int(),
+  when: cardRuleGroupSchema.nullable(),
+  target: z.object({ boardKey: z.string(), phaseKey: z.string().nullable() }),
+  /** Send it back as `expectedRevision` when editing or deleting. */
+  revision: z.number().int(),
+  createdBy: z.string(),
+  createdAt: z.string(),
+  updatedBy: z.string(),
+  updatedAt: z.string(),
+  /** Why the route's target can't take cards right now, such as a deleted board; such a route is skipped. */
+  problems: z.array(z.string()),
+});
+const intakeRouteResponseSchema = z.object({ intakeRoute: intakeRouteSchema });
+const intakeRouteListResponseSchema = z.object({ intakeRoutes: z.array(intakeRouteSchema) });
 const workItemPathSchema = z.object({ id: uuidSchema });
 const transitionPathSchema = z.object({ id: uuidSchema, workItemId: uuidSchema });
 
@@ -87,6 +156,7 @@ export const updateProjectBodySchema = z
     modelScope: z.enum(FACTORY_MODEL_SCOPES).optional(),
     defaultThinkingLevel: z.enum(THINKING_LEVELS).optional(),
     autoRunEnabled: z.boolean().optional(),
+    /** @deprecated Ignored. Plans are approved per board with `exitTool.autoApprove`; Work's always wait for a person. */
     autoApprovePlans: z.boolean().optional(),
     reviewTestChecksEnabled: z.boolean().optional(),
     selfReviewEnabled: z.boolean().optional(),
@@ -299,7 +369,6 @@ export const updateWorkItemBodySchema = z
     stages: stagesSchema.optional(),
     sessions: sessionsSchema.optional(),
     metadata: metadataSchema.optional(),
-    plansPreapproved: z.literal(true).optional(),
   })
   .refine(input => Object.keys(input).length > 0, { message: 'At least one work-item field is required' });
 
@@ -555,6 +624,37 @@ const attentionActionPathSchema = z
     path: ['sourceId'],
   });
 
+/** Largest SKILL.md a project may save as an edit. */
+export const MAX_SKILL_OVERRIDE_LENGTH = 200_000;
+
+const skillNameSchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const skillPathSchema = z.object({ id: uuidSchema, name: skillNameSchema });
+const skillResponseSchema = z.object({ skill: entitySchema });
+
+/** Adds the runtime's SKILL.md validation errors, checking the frontmatter name against `directoryName` when given. */
+function refineSkillContent(content: string, context: z.RefinementCtx, directoryName?: string) {
+  const result = validateSkillContent({ content, directoryName });
+  for (const message of result.errors) context.addIssue({ code: 'custom', message, path: ['content'] });
+}
+
+const skillContentSchema = z.string().min(1).max(MAX_SKILL_OVERRIDE_LENGTH);
+
+export const skillOverrideBodySchema = z
+  .object({ content: skillContentSchema })
+  .strict()
+  .superRefine((input, context) => refineSkillContent(input.content, context));
+
+/**
+ * The full save request: the edited SKILL.md must load under the skill's own
+ * name, exactly as the runtime validates it.
+ */
+export const skillOverrideSaveRequestSchema = skillPathSchema
+  .extend({ content: skillContentSchema })
+  .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
+
 export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
@@ -752,6 +852,52 @@ export const FACTORY_ROUTE_CONTRACTS = {
     pathSchema: boardPathSchema,
     querySchema: boardDeleteQuerySchema,
     responseSchema: z.null(),
+  },
+  intakeRouteList: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-routes',
+    description: "List a Factory project's intake routes in evaluation order",
+    pathSchema: projectPathSchema,
+    responseSchema: intakeRouteListResponseSchema,
+  },
+  intakeRouteGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/intake-routes/:routeId',
+    description: 'Get a Factory intake route',
+    pathSchema: intakeRoutePathSchema,
+    responseSchema: intakeRouteResponseSchema,
+  },
+  intakeRouteCreate: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake-routes',
+    description: 'Add an intake route at the end of a Factory project',
+    pathSchema: projectPathSchema,
+    bodySchema: intakeRouteInputSchema,
+    responseSchema: intakeRouteResponseSchema,
+  },
+  intakeRouteUpdate: {
+    method: 'PATCH',
+    path: '/web/factory/projects/:id/intake-routes/:routeId',
+    description: 'Change a Factory intake route',
+    pathSchema: intakeRoutePathSchema,
+    bodySchema: intakeRoutePatchSchema,
+    responseSchema: intakeRouteResponseSchema,
+  },
+  intakeRouteDelete: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/intake-routes/:routeId',
+    description: 'Delete a Factory intake route',
+    pathSchema: intakeRoutePathSchema,
+    querySchema: boardDeleteQuerySchema,
+    responseSchema: z.null(),
+  },
+  intakeRouteReorder: {
+    method: 'POST',
+    path: '/web/factory/projects/:id/intake-routes/reorder',
+    description: "Reorder a Factory project's intake routes",
+    pathSchema: projectPathSchema,
+    bodySchema: intakeRouteReorderBodySchema,
+    responseSchema: intakeRouteListResponseSchema,
   },
   workItemList: {
     method: 'GET',
@@ -994,6 +1140,28 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Restore an archived Factory attention receipt',
     pathSchema: attentionActionPathSchema,
     responseSchema: z.object({ receipt: entitySchema }),
+  },
+  skillList: {
+    method: 'GET',
+    path: '/web/factory/skills',
+    description: "List Factory skills, with a project's edits when a project is given",
+    querySchema: z.object({ projectId: uuidSchema.optional() }),
+    responseSchema: z.object({ skills: z.array(entitySchema), canEdit: z.boolean().optional() }),
+  },
+  skillOverrideSave: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/skills/:name',
+    description: "Save a project's edited SKILL.md for a Factory skill",
+    pathSchema: skillPathSchema,
+    bodySchema: skillOverrideBodySchema,
+    responseSchema: skillResponseSchema,
+  },
+  skillOverrideRevert: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/skills/:name',
+    description: "Revert a project's edited Factory skill to its original SKILL.md",
+    pathSchema: skillPathSchema,
+    responseSchema: skillResponseSchema,
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 

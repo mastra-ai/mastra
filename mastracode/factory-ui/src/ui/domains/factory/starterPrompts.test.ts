@@ -85,7 +85,7 @@ describe('starterPrompts', () => {
     expect(promptFor('bug', { unplannedBugs: 2 })).toMatchObject({ action: 'Plan a fix for one' });
     expect(promptFor('stale', { stale: 2 })).toMatchObject({ value: 2, action: 'Flag what to close' });
     expect(promptFor('decide', { undecided: 2 })).toMatchObject({
-      label: 'Not yet accepted',
+      label: 'Triaged, waiting for you',
       action: 'Help me decide',
     });
     expect(promptFor('feedback', { changesRequested: 1 })).toMatchObject({ label: 'Changes requested' });

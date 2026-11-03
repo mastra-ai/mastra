@@ -94,7 +94,7 @@ export function AddRepositoryPicker({
         <div className="mt-3 flex items-center gap-2">
           <SearchInput
             label="Search repositories"
-            placeholder="Search repositories…"
+            placeholder="Search repositories"
             value={query}
             onValueChange={setQuery}
             ref={searchInput}
