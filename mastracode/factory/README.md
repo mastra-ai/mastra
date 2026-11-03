@@ -56,7 +56,7 @@ function summarizeCard(card: Card) {
 }
 ```
 
-Each work item has one board item. Factory's card-to-card parent link is `parentBoardItemId`; a provider sub-issue parent is `card.workItem.parentWorkItemId`. Existing card IDs, comments, subscriptions, run bindings, and `/work-items/:id` URLs stay unchanged. The work item gets its own ID. For one release, work-item API responses also retain the legacy top-level title, external source, and merged metadata fields.
+Each work item has one board item. Factory's card-to-card parent link is `parentBoardItemId`. Provider sub-issue ancestry is not populated into `card.workItem.parentWorkItemId`; migrated work items leave that field null. Existing card IDs, comments, subscriptions, run bindings, and `/work-items/:id` URLs stay unchanged. The work item gets its own ID. For one release, work-item API responses also retain the legacy top-level title, external source, and merged metadata fields.
 
 #### Migration and dry run
 
