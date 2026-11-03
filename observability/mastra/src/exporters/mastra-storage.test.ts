@@ -1808,6 +1808,29 @@ class DropRecorder extends BaseExporter {
   }
 }
 
+/** A monitoring exporter whose drop delivery is a network round trip it waits for on shutdown. */
+class SlowDropRecipient extends BaseExporter {
+  name = 'slow-drop-recipient';
+  timeline: string[] = [];
+  #posts: Promise<void>[] = [];
+
+  protected async _exportTracingEvent(): Promise<void> {}
+
+  onDroppedEvent(event: ObservabilityDropEvent): Promise<void> {
+    this.timeline.push(`drop received: ${event.reason}`);
+    const post = new Promise<void>(resolve => setTimeout(resolve, 20)).then(() => {
+      this.timeline.push('drop posted');
+    });
+    this.#posts.push(post);
+    return post;
+  }
+
+  async shutdown(): Promise<void> {
+    await Promise.all(this.#posts);
+    this.timeline.push('recipient shut down');
+  }
+}
+
 // Issue #27479: under update-based strategies, a span started by one exporter instance
 // couldn't be ended by another. Durable-agent crash recovery hits this: the recovering
 // process rebuilds the crashed run's spans and ends them as interrupted, but its exporter
@@ -2077,27 +2100,77 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
       }
     });
 
-    // The bus flushes every exporter again when a drop event fires, and an Inngest worker
-    // flushes after every run. Neither may spend the end's retry budget early.
-    it('does not spend a retry on a flush while the end waits out its delay', async () => {
+    // A worker that flushes and returns exits before the retry timer fires, so the flush itself
+    // must send the waiting end once the API's row is there.
+    it('ends a span whose start row landed by the time the caller flushes', async () => {
       const storage = new InMemoryStore();
+      const api = openProcess(storage, { maxRetries: 4, retryDelayMs: 5000 });
       const worker = openProcess(storage, { maxRetries: 4, retryDelayMs: 5000 });
       const observabilityStore = (await storage.getStore('observability'))!;
-      const conditionalUpdate = vi.spyOn(observabilityStore, 'batchUpdateUnendedSpans');
+      const creates = holdCreates(observabilityStore);
       try {
-        const { snapshot } = await unstoredSnapshot();
+        const span = api.tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run started on the api' });
+        const snapshot = structuredClone(span.exportSpan());
+        if (strategy === 'batch-with-updates') void api.tracing.flush();
+
+        worker.tracing.rebuildSpan(snapshot).end({ output: 'finished on the worker', outcome: 'success' });
+        await worker.tracing.flush();
+        expect(await getStoredSpan(storage, span)).toBeNull();
+
+        creates.release();
+        await api.tracing.flush();
+        await worker.tracing.flush();
+
+        const stored = await getStoredSpan(storage, span);
+        expect(stored?.endedAt).toBeInstanceOf(Date);
+        expect(stored?.output).toBe('finished on the worker');
+        expect((await observabilityStore.getTrace({ traceId: span.traceId }))?.spans).toHaveLength(1);
+        expect(worker.drops).toEqual([]);
+      } finally {
+        creates.release();
+        creates.restore();
+        await worker.mastra.shutdown();
+        await api.mastra.shutdown();
+      }
+    });
+
+    // An Inngest worker flushes after every run, and the bus flushes every exporter again when
+    // a drop event fires. Each flush sends the waiting end, but a miss must not spend one of
+    // its retries: five misses here would exhaust a budget of four.
+    it('sends a waiting end on every flush without spending its retries', async () => {
+      const storage = new InMemoryStore();
+      const api = openProcess(storage, { maxRetries: 4, retryDelayMs: 5000 });
+      const worker = openProcess(storage, { maxRetries: 4, retryDelayMs: 5000 });
+      const observabilityStore = (await storage.getStore('observability'))!;
+      const creates = holdCreates(observabilityStore);
+      const conditionalUpdate = vi.spyOn(observabilityStore, 'batchUpdateUnendedSpans');
+      const logger = spyLogger();
+      worker.exporter.__setLogger(logger as any);
+      try {
+        const span = api.tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run started on the api' });
+        const snapshot = structuredClone(span.exportSpan());
+        if (strategy === 'batch-with-updates') void api.tracing.flush();
+
         worker.tracing.rebuildSpan(snapshot).end({ output: 'finished on the worker' });
         await worker.tracing.flush();
         expect(conditionalUpdate).toHaveBeenCalledTimes(1);
 
-        await worker.tracing.flush();
-        await worker.exporter.flush();
-
-        expect(conditionalUpdate).toHaveBeenCalledTimes(1);
+        for (let run = 0; run < 5; run++) await worker.tracing.flush();
+        expect(conditionalUpdate).toHaveBeenCalledTimes(6);
+        expect(await getStoredSpan(storage, span)).toBeNull();
         expect(worker.drops).toEqual([]);
+
+        creates.release();
+        await api.tracing.flush();
+        await worker.tracing.flush();
+        expect((await getStoredSpan(storage, span))?.endedAt).toBeInstanceOf(Date);
+        expect(logger.warn).not.toHaveBeenCalled();
       } finally {
+        creates.release();
         conditionalUpdate.mockRestore();
+        creates.restore();
         await worker.mastra.shutdown();
+        await api.mastra.shutdown();
       }
     });
 
@@ -2213,6 +2286,51 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
         expect(stored?.endedAt).toBeInstanceOf(Date);
         expect(stored?.output).toBe('finished on the worker');
         expect(worker.drops).toEqual([]);
+      } finally {
+        creates.release();
+        creates.restore();
+        await api.mastra.shutdown();
+      }
+    });
+
+    // Exporters shut down together. A monitoring exporter that posts each drop over the network
+    // must get the shutdown drop while it still runs, and shutdown must wait for that post.
+    it('delivers the drop for an end stranded at shutdown while its recipients still listen', async () => {
+      const storage = new InMemoryStore();
+      const api = openProcess(storage, { maxRetries: 4, retryDelayMs: 5000 });
+      const recipient = new SlowDropRecipient();
+      const observability = new Observability({
+        configs: {
+          default: {
+            serviceName: 'span-recovery',
+            exporters: [new MastraStorageExporter({ strategy, maxRetries: 4, retryDelayMs: 5000 }), recipient],
+          },
+        },
+      });
+      const worker = {
+        mastra: new Mastra({ storage, observability, logger: false }),
+        tracing: observability.getDefaultInstance()!,
+      };
+      const observabilityStore = (await storage.getStore('observability'))!;
+      const creates = holdCreates(observabilityStore);
+      try {
+        const span = api.tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run started on the api' });
+        const snapshot = structuredClone(span.exportSpan());
+        if (strategy === 'batch-with-updates') void api.tracing.flush();
+
+        worker.tracing.rebuildSpan(snapshot).end({ output: 'finished on the worker' });
+        await worker.tracing.flush();
+        expect(await getStoredSpan(storage, span)).toBeNull();
+
+        await worker.tracing.shutdown();
+        recipient.timeline.push('shutdown returned');
+
+        expect(recipient.timeline).toEqual([
+          'drop received: retry-exhausted',
+          'drop posted',
+          'recipient shut down',
+          'shutdown returned',
+        ]);
       } finally {
         creates.release();
         creates.restore();
