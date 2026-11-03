@@ -94,20 +94,26 @@ describe('createFactoryWorkItem with intake routes', () => {
     });
   });
 
-  it("skips a route to the Work board for a pull request card, which Work can't hold", async () => {
-    const { create } = await setup([
-      { name: 'Everything to triage', target: { boardKey: 'work', phaseKey: 'triage' } },
-    ]);
-    const created = await create({
-      title: 'Review the patch',
-      externalSource: {
-        integrationId: 'github',
-        type: 'pull-request',
-        externalId: '7',
-        url: 'https://github.com/acme/app/pull/7',
-      },
-      metadata: {},
+  it('files a trusted pull request in Work › PR review by the default route, and an outside one in Intake', async () => {
+    const { create } = await setup();
+    const pullRequest = (externalId: string, authorTrusted: boolean) =>
+      create({
+        title: `Review the patch ${externalId}`,
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId,
+          url: `https://github.com/acme/app/pull/${externalId}`,
+        },
+        metadata: { authorTrusted },
+      });
+    const trusted = await pullRequest('7', true);
+    expect(trusted).toMatchObject({ status: 'created', item: { board: 'work', stages: ['pr-review'] } });
+    if (trusted.status !== 'created') return;
+    expect(trusted.item.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'pr-review']);
+    expect(await pullRequest('8', false)).toMatchObject({
+      status: 'created',
+      item: { board: 'work', stages: ['intake'] },
     });
-    expect(created).toMatchObject({ status: 'created', item: { board: 'review', stages: ['intake'] } });
   });
 });
