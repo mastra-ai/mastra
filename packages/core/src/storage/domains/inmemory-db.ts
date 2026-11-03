@@ -22,7 +22,6 @@ import type {
   ExperimentResult,
 } from '../types';
 import type { AgentVersion } from './agents';
-import type { KnowledgeActivityEvent, KnowledgeRecord, KnowledgeNode, KnowledgeSemanticOutboxEntry } from './knowledge';
 import type { MCPClientVersion } from './mcp-clients';
 import type { MCPServerVersion } from './mcp-servers';
 import type { TraceEntry } from './observability';
@@ -103,15 +102,6 @@ export class InMemoryDB {
   // Background tasks domain
   readonly backgroundTasks = new Map<string, BackgroundTask>();
 
-  // Knowledge domain
-  readonly knowledgeNodes = new Map<string, KnowledgeNode>();
-  readonly knowledgeNodeKeys = new Map<string, string>();
-  readonly knowledgeRecords = new Map<string, KnowledgeRecord>();
-  readonly knowledgeMentions = new Map<string, Set<string>>();
-  readonly knowledgeActivity: KnowledgeActivityEvent[] = [];
-  readonly knowledgeSemanticOutbox = new Map<string, KnowledgeSemanticOutboxEntry>();
-  readonly knowledgeSemanticIdempotency = new Map<string, string>();
-
   // Schedules domain
   readonly schedules = new Map<string, Schedule>();
   readonly scheduleTriggers: ScheduleTrigger[] = [];
@@ -168,13 +158,6 @@ export class InMemoryDB {
     this.experiments.clear();
     this.experimentResults.clear();
     this.backgroundTasks.clear();
-    this.knowledgeNodes.clear();
-    this.knowledgeNodeKeys.clear();
-    this.knowledgeRecords.clear();
-    this.knowledgeMentions.clear();
-    this.knowledgeActivity.length = 0;
-    this.knowledgeSemanticOutbox.clear();
-    this.knowledgeSemanticIdempotency.clear();
     this.schedules.clear();
     this.scheduleTriggers.length = 0;
     this.toolProviderConnections.clear();

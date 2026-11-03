@@ -14,6 +14,7 @@ import type { LinearIssue } from '../domains/factory/services/linear';
 import { useStartFactoryRun } from '../../hooks/useStartFactoryRun';
 import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
+import { providerFactsCard } from './fixtures/providerFactsCard';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -588,6 +589,52 @@ describe('Board card pending states', () => {
     expect(within(unstarted).queryByRole('link', { name: 'Open session' })).toBeNull();
   });
 
+  it('starts a normalized Linear card session on its provider branch rather than an item-id fallback', async () => {
+    stubBoardEndpoints();
+    const item = {
+      ...providerFactsCard,
+      id: ITEM_ID,
+      title: 'ENG-42: Repair source facts',
+      stages: ['done'],
+      sessions: {},
+      externalSource: { integrationId: 'linear', type: 'issue', externalId: 'linear:ENG-42' },
+      metadata: { repository: 'acme/app', authorTrusted: true },
+      workItem: {
+        ...providerFactsCard.workItem,
+        provider: 'linear',
+        key: 'ENG-42',
+        title: 'ENG-42: Repair source facts',
+        metadata: {},
+      },
+    };
+    const requests: unknown[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [item] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+        HttpResponse.json({ sessions: [] }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json({ session: { sessionId: SESSION_ID, branch: 'factory/linear-eng-42' } });
+      }),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/runs/start`, () =>
+        HttpResponse.json({
+          prepared: { workItemId: ITEM_ID, threadId: THREAD_ID, sessionId: SESSION_ID, kickoffStatus: 'sent' },
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderWorkBoard();
+    await user.click(await screen.findByRole('button', { name: `Details for ${item.title}` }));
+    const dialog = await screen.findByRole('dialog', { name: item.title });
+    await user.click(within(dialog).getByRole('button', { name: 'Start session' }));
+    await waitFor(() => expect(requests).toHaveLength(1));
+    expect(requests[0]).toMatchObject({ branch: 'factory/linear-eng-42' });
+    await waitForMutationsIdle(client);
+  });
+
   it('acknowledges a session start from the card details while it is still resolving the session', async () => {
     stubBoardEndpoints();
     const refreshGate = deferred();
@@ -899,7 +946,7 @@ describe('Board card pending states', () => {
     await user.click(await screen.findByRole('button', { name: 'Actions for Fix Jira intake sync' }));
 
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.queryByRole('menuitem', { name: 'Add to board' })).not.toBeInTheDocument();
     const jiraLink = screen.getByRole('menuitem', { name: 'Open in Jira' });
     expect(jiraLink).toHaveAttribute('href', jiraIssue.url);
@@ -908,7 +955,7 @@ describe('Board card pending states', () => {
 
   it.each([
     ['Investigate', 'triage'],
-    ['Build', 'execute'],
+    ['Plan', 'planning'],
   ] as const)('%s files the Jira intake candidate and starts its run', async (action, stage) => {
     const createRequests: unknown[] = [];
     const transitionRequests: unknown[] = [];
@@ -1037,7 +1084,7 @@ describe('Board card pending states', () => {
 
     // The filed Jira card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Jira' })).toHaveAttribute('href', jiraIssue.url);
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
@@ -1052,7 +1099,7 @@ describe('Board card pending states', () => {
     await user.click(await screen.findByRole('button', { name: 'Actions for Add retry to incident pager' }));
 
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.queryByRole('menuitem', { name: 'Add to board' })).not.toBeInTheDocument();
     const incidentioLink = screen.getByRole('menuitem', { name: 'Open in incident.io' });
     expect(incidentioLink).toHaveAttribute('href', incidentioIssue.url);
@@ -1061,7 +1108,7 @@ describe('Board card pending states', () => {
 
   it.each([
     ['Investigate', 'triage'],
-    ['Build', 'execute'],
+    ['Plan', 'planning'],
   ] as const)('%s files the incident.io intake candidate and starts its run', async (action, stage) => {
     const createRequests: unknown[] = [];
     const transitionRequests: unknown[] = [];
@@ -1189,7 +1236,7 @@ describe('Board card pending states', () => {
 
     // The filed incident.io card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
-    expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
+    expect(screen.getByRole('menuitem', { name: 'Plan' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in incident.io' })).toHaveAttribute('href', incidentioIssue.url);
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
@@ -1508,6 +1555,27 @@ describe('Board card pending states', () => {
     );
     expect(await within(planningColumn).findByText('Plan onboarding')).toBeInTheDocument();
     await waitFor(() => expect(getPlanningTrigger()).toHaveFocus());
+  });
+
+  it('offers Intake card creation while the external intake feed is still loading', async () => {
+    stubBoardEndpoints();
+    stubJiraCandidate();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/jira/issues`, async () => {
+        await delay('infinite');
+        return HttpResponse.json({ issues: [], nextCursor: null });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWorkBoard();
+
+    const intakeColumn = await screen.findByTestId('board-column-intake');
+    expect(await within(intakeColumn).findByRole('status', { name: 'Loading Intake column' })).toBeInTheDocument();
+
+    await user.click(await screen.findByRole('button', { name: 'Create work item in Intake' }));
+    const composer = await within(intakeColumn).findByRole('form', { name: 'New work item in Intake' });
+    expect(within(composer).getByRole('textbox', { name: 'Work item title' })).toHaveFocus();
+    expect(within(intakeColumn).getByRole('status', { name: 'Loading Intake column' })).toBeInTheDocument();
   });
 
   it('keeps transition errors inline and retries the same manual work item', async () => {

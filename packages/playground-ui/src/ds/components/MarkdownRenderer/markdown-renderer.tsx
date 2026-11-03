@@ -17,6 +17,8 @@ import './markdown-renderer.css';
 
 export type MarkdownExternalLinkTarget = 'tab' | 'window';
 
+type RemarkPlugins = NonNullable<Options['remarkPlugins']>;
+
 export interface MarkdownRendererProps {
   children: string;
   className?: string;
@@ -25,6 +27,10 @@ export interface MarkdownRendererProps {
   streaming?: boolean;
   /** Opt in to table copy/download controls; disabled while this text is streaming. */
   tableActions?: boolean;
+  /** Remark plugins run after the built-in ones, e.g. to turn a syntax of the host's into elements. Keep it stable. */
+  remarkPlugins?: RemarkPlugins;
+  /** Element overrides merged over the built-in ones. Keep it stable: a new object re-renders every block. */
+  components?: Components;
 }
 
 /**
@@ -52,11 +58,17 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
   externalLinkTarget = 'tab',
   streaming = false,
   tableActions = false,
+  remarkPlugins: extraRemarkPlugins,
+  components: extraComponents,
 }: MarkdownRendererProps) {
   const shown = decodeEscapedNewlines(children);
   const blocks = useMemo(() => splitBlocks(shown), [shown]);
   const last = blocks.length - 1;
-  const components = (tableActions ? TABLE_COMPONENTS : DEFAULT_COMPONENTS)[externalLinkTarget];
+  const baseComponents = (tableActions ? TABLE_COMPONENTS : DEFAULT_COMPONENTS)[externalLinkTarget];
+  const components = useMemo(
+    () => (extraComponents ? { ...baseComponents, ...extraComponents } : baseComponents),
+    [baseComponents, extraComponents],
+  );
 
   const spans = wordSpans(blocks);
   const settled = useSettledWords(spans.at(-1)?.end ?? 0, streaming);
@@ -79,6 +91,7 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({
           components={components}
           streaming={streaming}
           tableActions={tableActions}
+          extraRemarkPlugins={extraRemarkPlugins}
         />
       ))}
     </div>
@@ -92,24 +105,26 @@ const MarkdownBlock = memo(function MarkdownBlock({
   settledWords,
   streaming,
   tableActions,
+  extraRemarkPlugins,
 }: {
   components: Components;
   content: string;
   settledWords?: number;
   streaming: boolean;
   tableActions: boolean;
+  extraRemarkPlugins?: RemarkPlugins;
 }) {
+  const remarkPlugins = useMemo(() => {
+    const builtIn = tableActions && !streaming ? COPYABLE_REMARK_PLUGINS : REMARK_PLUGINS;
+    return extraRemarkPlugins ? [...builtIn, ...extraRemarkPlugins] : builtIn;
+  }, [tableActions, streaming, extraRemarkPlugins]);
   const rehypePlugins = useMemo(
     () => (settledWords === undefined ? SETTLED : [rehypeArriving(settledWords)]),
     [settledWords],
   );
 
   return (
-    <Markdown
-      remarkPlugins={tableActions && !streaming ? COPYABLE_REMARK_PLUGINS : REMARK_PLUGINS}
-      rehypePlugins={rehypePlugins}
-      components={components}
-    >
+    <Markdown remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components}>
       {content}
     </Markdown>
   );

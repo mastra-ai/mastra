@@ -17,16 +17,6 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5-turbo": [
-      {
-        "type": "toggle"
-      }
-    ],
     "glm-5.3": [
       {
         "type": "effort",
@@ -37,6 +27,16 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5-turbo": [
+      {
+        "type": "toggle"
       }
     ],
     "glm-5.2-highspeed": [

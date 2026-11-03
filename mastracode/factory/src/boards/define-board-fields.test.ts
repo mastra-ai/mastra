@@ -2,6 +2,7 @@ import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { RuleGroup } from '../rules/rule-group.js';
 import type { FactoryStageRuleContext } from '../rules/types.js';
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { cardRuleFacts } from './card-facts.js';
 import { BoardDefinitionError, defineBoard } from './define-board.js';
 import { reviewBoard } from './review.js';
@@ -51,12 +52,12 @@ describe('defineBoard phase fields', () => {
 
     for (const board of [legacy, current]) {
       expect(board.name).toBe('Release');
-      expect(board).not.toHaveProperty('title');
-      expect(board.phases.build).not.toHaveProperty('title');
-      expect(board.phases.build).not.toHaveProperty('role');
-      expect(board.phases.backlog).not.toHaveProperty('next');
+      // The old names stay readable, always equal to the new ones.
+      expect(board.title).toBe('Release');
       expect(board.phases.build).toMatchObject({
         name: 'Build',
+        title: 'Build',
+        role: 'review',
         runner: { agentId: 'code-agent', context: 'review' },
         nextPhases: ['done'],
       });
@@ -66,10 +67,13 @@ describe('defineBoard phase fields', () => {
       expect(board.phaseForRole('review')).toBe('build');
     }
     expect(current.transitions).toEqual(legacy.transitions);
+    expect(legacy.phases.backlog.next).toBe('build');
+    expect(current.phases.backlog).not.toHaveProperty('next');
   });
 
   it('keeps the built-in Work board contexts as the old role names', () => {
-    expect(workBoard.phases.planning).toMatchObject({ name: 'Planning', runner: { context: 'plan' } });
+    // Planning and Building share the `work` session, so the builder keeps the plan's context.
+    expect(workBoard.phases.planning).toMatchObject({ name: 'Planning', runner: { context: 'work' } });
     expect(workBoard.phases.intake.nextPhases).toEqual(workBoard.transitions.intake.map(({ to }) => to));
   });
 
@@ -77,7 +81,7 @@ describe('defineBoard phase fields', () => {
     const copy = defineBoard({ id: 'copy', name: 'Copy', initialPhase: 'intake', phases: workBoard.phases });
     expect(copy.transitions).toEqual(workBoard.transitions);
     expect(copy.phases.review).toMatchObject({ kind: 'working', runner: { context: 'work' } });
-    expect(copy.phases.review).not.toHaveProperty('role');
+    expect(copy.phases.review).toMatchObject({ role: 'work' });
   });
 
   it('lists each next phase once when several outcomes lead to it', () => {
@@ -139,8 +143,16 @@ describe('defineBoard phase fields', () => {
       lowEffort: { name: 'Low effort', kind: 'working', autoStart: true, autoStartWhen: LOW_EFFORT },
       manual: { name: 'Manual', kind: 'working' },
     });
-    const lowEffort = cardRuleFacts({ title: 'Fix', metadata: { labels: ['effort:low'] }, externalSource: null });
-    const highEffort = cardRuleFacts({ title: 'Fix', metadata: { labels: ['effort:high'] }, externalSource: null });
+    const facts = (label: string) =>
+      cardRuleFacts({
+        title: 'Fix',
+        externalSource: null,
+        metadata: { labels: [label] },
+        stages: ['backlog'],
+        workItem: createProviderWorkItemForTests({ id: 'item-1', title: 'Fix', source: null, metadata: null }),
+      });
+    const lowEffort = facts('effort:low');
+    const highEffort = facts('effort:high');
 
     expect(board.startsAutomatically('always')).toBe(true);
     expect(board.startsAutomatically('lowEffort', lowEffort)).toBe(true);
@@ -261,6 +273,8 @@ describe('defineBoard phase fields', () => {
       role: 'release',
       skillName: 'release-notes',
       arguments: 'Work item (https://github.test/acme/repo/issues/7)\n\nKeep it short.',
+      // Entering from another phase, the skill starts even when that phase's agent made the move.
+      startsAfterOwnMove: true,
     });
     expect(await board.rules.build!.manual!.onEnter!(stageContext('build'))).toMatchObject({
       prompt: 'Ship it.\n\nKeep it short.',
@@ -304,6 +318,34 @@ describe('defineBoard phase fields', () => {
     );
   });
 
+  it('warns once per board that a transition policy is deprecated, and still keeps the policy', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const transitionPolicy = () => undefined;
+    const gated = {
+      id: 'policy-release',
+      name: 'Release',
+      initialPhase: 'backlog',
+      transitionPolicy,
+      phases: {
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    } as const;
+
+    const board = defineBoard(gated);
+    defineBoard(gated);
+    defineBoard({ ...gated, id: 'policy-release-2' });
+
+    expect(board.transitionPolicy).toBe(transitionPolicy);
+    expect(warn.mock.calls.map(([message]) => message)).toEqual([
+      '[Mastra Factory] Board "policy-release" uses deprecated fields: transitionPolicy → phases.*.nextPhases and exitTool. ' +
+        'They still work but will be removed in a future release.',
+      '[Mastra Factory] Board "policy-release-2" uses deprecated fields: transitionPolicy → phases.*.nextPhases and exitTool. ' +
+        'They still work but will be removed in a future release.',
+    ]);
+  });
+
   it('stays quiet for new fields, built-in boards and defined phases declared again', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     onTestFinished(() => warn.mockRestore());
@@ -326,6 +368,44 @@ describe('defineBoard phase fields', () => {
     defineBoard({ id: 'work-again', name: 'Work', initialPhase: 'intake', phases: workBoard.phases });
     defineBoard({ id: 'review-again', name: 'Review', initialPhase: 'intake', phases: reviewBoard.phases });
 
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('still reads title, role and next from a defined board, so code written for older versions keeps working', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+
+    // How apps extended the Work board before `name` replaced `title`.
+    const relaxed = defineBoard({
+      id: workBoard.id,
+      title: workBoard.title,
+      initialPhase: workBoard.initialPhase,
+      phases: workBoard.phases,
+      tools: workBoard.tools,
+    });
+
+    expect(workBoard.title).toBe('Work');
+    expect(relaxed).toMatchObject({ name: 'Work', title: 'Work' });
+    expect(relaxed.phases.planning).toMatchObject({ name: 'Planning', title: 'Planning', role: 'work' });
+    // Only the board's own `title:` is reported; the re-declared phases are not.
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toContain('Board "work" uses deprecated fields: title → name. ');
+
+    const legacy = defineBoard({
+      id: 'legacy-next',
+      title: 'Release',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { title: 'Backlog', kind: 'resting', next: 'build' },
+        build: { title: 'Build', kind: 'working', role: 'publisher', next: 'done' },
+        done: { title: 'Done', kind: 'terminal' },
+      },
+    });
+    expect(legacy.phases.backlog).toMatchObject({ title: 'Backlog', next: 'build', nextPhases: ['build'] });
+    expect(legacy.phases.build).toMatchObject({ role: 'publisher', runner: { context: 'publisher' } });
+    // Resolved phases carry each old field next to its replacement, so declaring them again stays quiet.
+    warn.mockClear();
+    defineBoard({ id: 'legacy-next-again', name: 'Release', initialPhase: 'backlog', phases: legacy.phases });
     expect(warn).not.toHaveBeenCalled();
   });
 

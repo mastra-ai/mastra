@@ -1,6 +1,6 @@
 {
   "name": "@internal/llm-recorder",
-  "version": "0.0.82",
+  "version": "0.0.83",
   "description": "LLM response recording and replay for tests",
   "type": "module",
   "private": true,
@@ -51,7 +51,7 @@
     "vitest": "catalog:"
   },
   "dependencies": {
-    "diff": "^8.0.4",
+    "diff": "^9.0.0",
     "msw": "^2.15.0",
     "string-similarity": "^4.0.4"
   },

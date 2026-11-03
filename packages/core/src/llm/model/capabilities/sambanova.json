@@ -20,11 +20,6 @@
         "type": "toggle"
       }
     ],
-    "gemma-4-31B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gpt-oss-120b": [
       {
         "type": "effort",
@@ -32,6 +27,11 @@
       }
     ],
     "DeepSeek-V3.2": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemma-4-31B-it": [
       {
         "type": "toggle"
       }

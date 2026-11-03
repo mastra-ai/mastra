@@ -48,7 +48,11 @@ export interface SourcePickerProps {
   onRetry?: () => void;
   onToggleItem: (id: string) => Promise<void>;
   itemDescription?: (id: string) => string | undefined;
+  /** Label for a saved source that is no longer listed; defaults to its ID. */
+  fallbackLabel?: (id: string) => string;
   itemActions?: (item: SourcePickerItem) => ReactNode;
+  /** Full-width content under a selected item's row, for routing that doesn't fit beside it. */
+  itemDetails?: (item: SourcePickerItem) => ReactNode;
   addControl?: (item: SourcePickerItem, focusSearch: () => void) => ReactNode;
 }
 
@@ -65,7 +69,9 @@ export function SourcePicker(props: SourcePickerProps) {
     onRetry,
     onToggleItem,
     itemDescription,
+    fallbackLabel,
     itemActions,
+    itemDetails,
   } = props;
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
@@ -88,9 +94,13 @@ export function SourcePicker(props: SourcePickerProps) {
           <ul className="divide-border border-border divide-y border-b">
             {selected.map(id => {
               const group = groups.find(candidate => candidate.items.some(item => item.id === id));
-              const item: SourcePickerItem = group?.items.find(candidate => candidate.id === id) ?? { id, label: id };
+              const item: SourcePickerItem = group?.items.find(candidate => candidate.id === id) ?? {
+                id,
+                label: fallbackLabel?.(id) ?? id,
+              };
               const context = [groups.length > 1 ? group?.label : undefined, item.hint].filter(Boolean).join(' · ');
               const description = itemDescription?.(id);
+              const details = itemDetails?.(item);
               return (
                 <li key={id} className={cn(settingsRowLayout, 'flex flex-wrap items-center')}>
                   <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
@@ -131,6 +141,7 @@ export function SourcePicker(props: SourcePickerProps) {
                       Remove
                     </Button>
                   </div>
+                  {details && <div className="min-w-0 basis-full">{details}</div>}
                 </li>
               );
             })}
@@ -211,7 +222,7 @@ function SourcePickerDrawer({
           <SearchInput
             ref={searchInput}
             label={`Search ${label}`}
-            placeholder="Search…"
+            placeholder="Search"
             value={query}
             onValueChange={setQuery}
             className="w-full"

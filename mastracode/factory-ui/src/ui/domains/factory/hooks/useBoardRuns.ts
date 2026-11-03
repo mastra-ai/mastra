@@ -95,7 +95,10 @@ export function useBoardRuns({
         toast.error("No repository matching this card's provider is linked to this Factory.");
         return;
       }
-      const targetSlug = await repositorySlugFor(refreshed.source, refreshed.metadata);
+      const targetSlug = await repositorySlugFor(refreshed.source, {
+        ...refreshed.metadata,
+        ...refreshed.workItem?.metadata,
+      });
       const hasLinkedTarget = compatibleRepositories.some(repository => repository.slug === targetSlug);
       if (!targetSlug && compatibleRepositories.length > 1) {
         setRepositorySelection({ item: refreshed, ...spec });
@@ -116,6 +119,7 @@ export function useBoardRuns({
           sourceKey: refreshed.sourceKey,
           title: refreshed.title,
           metadata: refreshed.metadata,
+          workItem: refreshed.workItem,
         },
       });
     } finally {
@@ -139,6 +143,7 @@ export function useBoardRuns({
           sourceKey: item.sourceKey,
           title: item.title,
           metadata: item.metadata,
+          workItem: item.workItem,
         },
       });
     } catch (error) {

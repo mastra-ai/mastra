@@ -65,6 +65,7 @@ export interface TraceSpanPanelProps {
   scoresTabBadge?: ReactNode;
   scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
   usage?: TraceDataPanelViewProps['usage'];
+  rootStreamingTimings?: TraceDataPanelViewProps['rootStreamingTimings'];
   traceHref?: string;
   /** Drawer width; defaults to `wide`. */
   size?: TraceDataPanelViewProps['size'];
@@ -81,8 +82,8 @@ export interface TraceSpanPanelProps {
   onSpanViewChange?: TraceDataPanelViewProps['onSpanViewChange'];
 
   // Span-panel pass-through.
-  spanActiveTab?: string;
-  onSpanTabChange?: (tab: string) => void;
+  spanActiveTab?: SpanDataPanelViewProps['activeTab'];
+  onSpanTabChange?: SpanDataPanelViewProps['onTabChange'];
   spanFeedbackTabBadge?: ReactNode;
   spanFeedbackTabSlot?: SpanDataPanelViewProps['feedbackTabSlot'];
 }
@@ -118,6 +119,7 @@ export function TraceSpanPanel({
   scoresTabBadge,
   scoresTabSlot,
   usage,
+  rootStreamingTimings,
   traceHref,
   size,
   depth,
@@ -162,6 +164,7 @@ export function TraceSpanPanel({
         entityType={entityType}
         entityHref={entityHref}
         usage={usage}
+        rootStreamingTimings={rootStreamingTimings}
         isLoading={isLoadingSpans}
         onClose={onClose}
         onSpanSelect={onSpanSelect}
@@ -211,7 +214,6 @@ export function TraceSpanPanel({
               traceId={traceId}
               spanId={selectedSpanId}
               span={spanDetailData?.span}
-              isAnchor={anchorSpanId ? selectedSpanId === anchorSpanId : undefined}
               isLoading={isLoadingSpanDetail}
               onClose={() => onSpanSelect(undefined)}
               activeTab={spanActiveTab}

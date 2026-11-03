@@ -13,6 +13,8 @@ import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { ProjectRoutes } from './projects.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
+vi.mock('../integrations/github/commits.js', () => ({ getBranchHead: vi.fn(async () => 'f'.repeat(40)) }));
+
 const projectRoutes = (
   seed: FactoryStorageTestSeed,
   versionControlIntegrationIds?: string[],
@@ -73,6 +75,38 @@ describe('ProjectRoutes', () => {
     expect((await app.request(`/web/factory/projects/${created.project.id}`)).status).toBe(404);
   });
 
+  it("hands a deleted factory's Jira projects back so another factory can take all their issues", async () => {
+    const seed = await createFactoryStorageForTests();
+    const create = (name: string) => seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name } });
+    const platform = await create('Platform');
+    const payments = await create('Payments');
+    const growth = await create('Growth');
+    const bind = (factoryProjectId: string, labels: string[] | null) =>
+      seed.intake.setSharedBinding({
+        orgId: 'org-1',
+        integrationId: 'jira',
+        sourceId: '10000',
+        factoryProjectId,
+        board: 'work',
+        labels,
+      });
+    await bind(platform.id, null);
+    await bind(payments.id, ['payments']);
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed, undefined, undefined, undefined, { intake: seed.intake }));
+
+    expect((await app.request(`/web/factory/projects/${platform.id}`, { method: 'DELETE' })).status).toBe(204);
+
+    expect(await bind(growth.id, null)).toEqual({ conflicts: [] });
+    expect(
+      (await seed.intake.listBindings({ orgId: 'org-1' })).map(({ factoryProjectId }) => factoryProjectId).sort(),
+    ).toEqual([payments.id, growth.id].sort());
+  });
+
   it('treats the removed slackWorkItemsEnabled setting from an old client as an unknown field', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
@@ -98,6 +132,37 @@ describe('ProjectRoutes', () => {
     const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
     expect(updated.name).toBe('Renamed');
     expect(updated).not.toHaveProperty('slackWorkItemsEnabled');
+  });
+
+  it('accepts and ignores the retired autoApprovePlans switch from an old client', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Platform' } });
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, projectRoutes(seed));
+    const patch = (body: unknown) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    // An old Board settings toggle still gets a 200, so it does not show an error; plans
+    // are approved per board now, so nothing is stored or returned.
+    const alone = await patch({ autoApprovePlans: true });
+    expect(alone.status).toBe(200);
+    expect(((await alone.json()) as { project: Record<string, unknown> }).project).not.toHaveProperty(
+      'autoApprovePlans',
+    );
+
+    const mixed = await patch({ name: 'Renamed', autoApprovePlans: true });
+    expect(mixed.status).toBe(200);
+    const { project: updated } = (await mixed.json()) as { project: Record<string, unknown> };
+    expect(updated.name).toBe('Renamed');
+    expect(updated).not.toHaveProperty('autoApprovePlans');
   });
 
   it('requires an organization and scopes project access by organization', async () => {
@@ -1271,8 +1336,6 @@ describe('ProjectRoutes', () => {
 
     describe('builds', () => {
       const SHA = 'f'.repeat(40);
-      vi.mock('../integrations/github/commits.js', () => ({ getBranchHead: vi.fn(async () => 'f'.repeat(40)) }));
-
       type Settings = Record<string, unknown>;
       class BuildingSandbox extends FactorySandbox<Settings> {
         readonly provider = 'building';

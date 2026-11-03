@@ -9,7 +9,7 @@ packages:
 
 Tracing is the observability signal that records how a request moves through agents, workflows, tools, and model calls. Mastra represents each operation as a span and groups related spans into a trace so you can inspect the full execution path.
 
-This page focuses on trace-specific concepts: span hierarchy, sampling, metadata, filtering, trace IDs, and third-party trace context.
+This page focuses on trace-specific concepts: execution outcomes, span hierarchy, sampling, metadata, filtering, trace IDs, and third-party trace context.
 
 <Inject>
   **For AI agents:** Run `npx mastra api trace list '{"page":0,"perPage":20}'` to inspect recent traces directly instead of opening Studio or writing a temporary script. The command requires a running Mastra server with observability configured; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api trace list --schema` before constructing different filters. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
@@ -28,6 +28,46 @@ To get started with tracing, configure observability in your Mastra instance and
 
 - [Configuration](/docs/observability/overview#configuration): Base observability config and multiple configs, plus serverless flushing
 - [Storage](/docs/observability/overview#storage): Storage routing for traces, logs, and metrics
+
+## Execution outcomes
+
+Spans report the meaning of an individual execution through three native fields:
+
+- `outcome`: The execution result, such as `success`, `error`, `abort`, `interrupted`, `suspend`, `limit`, `blocked`, or `unknown`.
+- `stopReason`: An optional machine-readable cause, such as `max_steps`, `guardrail`, or `observer_failed`.
+- `stopReasonContext`: Optional compact facts about that cause, such as a provider error code, processor ID, signal ID, or related span ID.
+
+A `null` or absent outcome means no outcome has been recorded. Use `endTime` to determine whether a span has finished. Older observability versions can retain a `null` outcome on finished spans. Completing on the last allowed step is `success`. Needing another step after exhausting the allowance is `limit / max_steps`.
+
+Configured completion through `stopWhen` or an iteration hook records `success` with `stop_condition` or `iteration_hook`. A successful delegation followed by a supervisor's `bail()` records `success / delegation_bail`. If the delegated worker fails and the hook bails, the worker retains its failure and the supervisor records `interrupted / delegation_bail` with `causeOutcome` and, when known, `causeStopReason` in `stopReasonContext`.
+
+Caller cancellation records `abort / caller_cancelled` on the targeted run. Unfinished descendants stopped by that cancellation record `interrupted / caller_cancelled`. A run deadline records `limit / timeout` on the run; work interrupted by that deadline records `interrupted / timeout`. Completed spans retain their outcomes. Generic cleanup ends otherwise unclassified spans as `unknown`.
+
+A [guardrail](/docs/agents/guardrails) that stops execution by firing a tripwire reports `blocked / guardrail`. Its context identifies the processor:
+
+```json
+{
+  "outcome": "blocked",
+  "stopReason": "guardrail",
+  "stopReasonContext": { "processorId": "moderation" }
+}
+```
+
+For Mastra-generated outcomes, `stopReasonContext` is a flat tooltip summary with at most three scalar fields. It excludes raw error messages, signal contents, tripwire metadata, and nested causes. Strings are limited to 128 characters. Oversized values are omitted. Missing facts are omitted, and a context with no available facts is `null`.
+
+Custom producers can supply their own outcome strings, stop reasons, and context objects. These values are preserved through span updates, exports, and rebuilds, with the same serialization limits used for span metadata. The framework allowlist applies to Mastra-generated context.
+
+Model chunk spans capture content after output processors have accepted or redacted it. Provider timing and completion are recorded separately without capturing raw chunk content. A workflow waiting intentionally records `suspend`; a stopped executor handing off unfinished work records `interrupted`, even when the persisted workflow status is `waiting`.
+
+When an observer fails and stops the main execution, the observer span records its own result and the main span reports `interrupted / observer_failed`. The context links to the observer memory operation through `observerSpanId` and summarizes its result with `causeOutcome` and `causeStopReason`. For example, context-window exhaustion remains `limit / context_window_exceeded` on the observer. Read that span for its diagnostics. Signal interruptions retain only `signalId` and `signalType`.
+
+If the configured failure policy lets the main execution continue, it can still succeed. A guardrail retry that recovers also preserves the successful final outcome and the rejected attempt's separate result.
+
+`MastraStorageExporter` and `MastraPlatformExporter` carry these fields in exported span records. Persisting them requires a storage implementation that supports the fields.
+
+Model inference spans (`MODEL_INFERENCE`) measure provider execution and record usage. Model chunk spans (`MODEL_CHUNK`) capture content after output processors have accepted or transformed it. Chunks belong to the logical step (`MODEL_STEP`), so buffered output can arrive after provider execution ends without outliving its parent. In the agent streaming paths, inference spans no longer capture response output; use the processed chunk spans or the generation output instead.
+
+When durable execution finishes on another worker, the original termination cause may be unavailable. Normal completion and step-limit exits can then report `unknown`. Separate resumed-segment tracing isn't supported on Inngest. A caller-side Inngest deadline may also be missing from worker-owned outcomes. Core durable resume tracing also requires the workers to share live tracing state. Span identity and finalization across workers aren't yet guaranteed.
 
 ## Sampling strategies
 

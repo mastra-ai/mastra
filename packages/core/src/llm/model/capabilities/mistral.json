@@ -12,6 +12,7 @@
     "ministral-8b-latest",
     "mistral-large-2512",
     "mistral-large-4",
+    "mistral-large-4-0-8",
     "mistral-large-latest",
     "mistral-medium-2505",
     "mistral-medium-2508",
@@ -44,6 +45,7 @@
     "ministral-8b-latest",
     "mistral-large-2512",
     "mistral-large-4",
+    "mistral-large-4-0-8",
     "mistral-large-latest",
     "mistral-medium-2505",
     "mistral-medium-2508",
@@ -73,6 +75,7 @@
     "ministral-8b-latest",
     "mistral-large-2512",
     "mistral-large-4",
+    "mistral-large-4-0-8",
     "mistral-large-latest",
     "mistral-medium-2604",
     "mistral-medium-latest",
@@ -97,10 +100,10 @@
         "values": ["none", "high"]
       }
     ],
-    "magistral-medium-latest": [
+    "mistral-large-4-0-8": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "mistral-medium-2604": [
@@ -109,22 +112,16 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-glm-5-3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "mistral-small-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "glm-5-2": [
+    "magistral-medium-latest": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
     "mistral-medium-latest": [
@@ -133,13 +130,25 @@
         "values": ["none", "high"]
       }
     ],
+    "zai-glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "mistral-large-4": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "zai-glm-5-3-flash": [
+    "glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "zai-glm-5-3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

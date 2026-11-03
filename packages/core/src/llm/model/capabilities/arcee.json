@@ -55,6 +55,12 @@
         "values": ["high", "max"]
       }
     ],
+    "moonshotai/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "zai-org/glm-5.3": [
       {
         "type": "effort",
@@ -71,12 +77,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

@@ -7,8 +7,8 @@
     "            └── model_step: \"step: 0\"",
     "                ├── processor_run: \"llm request processor: provider-history-compat\"",
     "                ├── processor_run: \"llm request processor: unsupported-file-handler\"",
-    "                └── model_inference: \"inference: 0\"",
-    "                    └── model_chunk: \"chunk: 'text'\""
+    "                ├── model_inference: \"inference: 0\"",
+    "                └── model_chunk: \"chunk: 'text'\""
   ],
   "spans": [
     {
@@ -80,7 +80,8 @@
                   "instructions": "You are a test agent",
                   "model": "mock-model-id",
                   "provider": "mock-provider",
-                  "completionStartTime": "<date>"
+                  "completionStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -111,6 +112,7 @@
                       "streaming": true,
                       "parameters": {},
                       "completionStartTime": "<date>",
+                      "timeToFirstTokenMs": "<ms>",
                       "finishReason": "stop",
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
@@ -173,6 +175,7 @@
                           "provider": "mock-provider",
                           "messageId": "<messageId-1>",
                           "completionStartTime": "<date>",
+                          "timeToFirstTokenMs": "<ms>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -335,9 +338,8 @@
                                 }
                               },
                               "finishReason": "stop",
-                              "warnings": [],
                               "completionStartTime": "<date>",
-                              "responseModel": "mock-model-id"
+                              "timeToFirstTokenMs": "<ms>"
                             },
                             "metadata": {
                               "runId": "<runId-2>",
@@ -352,39 +354,33 @@
                                 "role": "user",
                                 "content": "Hello from workflow"
                               }
-                            ],
+                            ]
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-9>",
+                            "traceId": "<trace-1>",
+                            "name": "chunk: 'text'",
+                            "type": "model_chunk",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-5>",
+                            "entityType": "agent",
+                            "entityId": "test-agent",
+                            "attributes": {
+                              "chunkType": "text",
+                              "sequenceNumber": 0
+                            },
+                            "metadata": {
+                              "runId": "<runId-2>",
+                              "environment": "test"
+                            },
                             "output": {
-                              "text": "Mock V2 generate response",
-                              "toolCalls": []
+                              "text": "Mock V2 generate response"
                             }
-                          },
-                          "children": [
-                            {
-                              "span": {
-                                "id": "<span-9>",
-                                "traceId": "<trace-1>",
-                                "name": "chunk: 'text'",
-                                "type": "model_chunk",
-                                "completed": true,
-                                "isEvent": false,
-                                "isRootSpan": false,
-                                "parentId": "<span-8>",
-                                "entityType": "agent",
-                                "entityId": "test-agent",
-                                "attributes": {
-                                  "chunkType": "text",
-                                  "sequenceNumber": 0
-                                },
-                                "metadata": {
-                                  "runId": "<runId-2>",
-                                  "environment": "test"
-                                },
-                                "output": {
-                                  "text": "Mock V2 generate response"
-                                }
-                              }
-                            }
-                          ]
+                          }
                         }
                       ]
                     }

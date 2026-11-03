@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.5.24",
+  "version": "1.5.26-alpha.2",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.136",
+    "@ai-sdk/openai": "^2.0.139",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
