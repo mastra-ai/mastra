@@ -134,6 +134,8 @@ export function KnowledgePageTree({
       element.style.scrollMarginTop = `${box.height * SCROLL_ROW_AT}px`;
     }
     element.scrollIntoView?.({ block: 'start', behavior: first && prefersMotion() ? 'smooth' : 'auto' });
+    // The margin only steers this scroll; left on, focus() scrolls and a resized pane would keep a stale gap.
+    element.style.scrollMarginTop = '';
   }, [rows, selectedPageId]);
   const activeId =
     focusedId && rows.some(row => row.page.id === focusedId)

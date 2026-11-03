@@ -164,11 +164,15 @@ describe('KnowledgePageExplorer tree with child counts', () => {
   });
 
   describe('when a page is focused in the graph while its row is out of sight', () => {
-    const scrolled: Array<{ id: string | null; options: unknown }> = [];
+    const scrolled: Array<{ id: string | null; options: unknown; margin: string }> = [];
     beforeEach(() => {
       scrolled.length = 0;
       Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: unknown) {
-        scrolled.push({ id: this.getAttribute('aria-selected') === 'true' ? this.textContent : null, options });
+        scrolled.push({
+          id: this.getAttribute('aria-selected') === 'true' ? this.textContent : null,
+          options,
+          margin: (this as HTMLElement).style.scrollMarginTop,
+        });
       };
     });
     afterEach(() => {
@@ -226,7 +230,9 @@ describe('KnowledgePageExplorer tree with child counts', () => {
         const restore = withRowAt(260);
         focusSecond();
         expect(selectedScrolls()).toBeGreaterThan(0);
-        expect(row('Second article').style.scrollMarginTop).toBe('100px');
+        expect(scrolled.find(entry => entry.id?.startsWith('Second article'))?.margin).toBe('100px');
+        // It steers the one scroll and is gone after, so focus() on the row does not leave a gap.
+        expect(row('Second article').style.scrollMarginTop).toBe('');
         expect(scrolled.find(entry => entry.id?.startsWith('Second article'))?.options).toMatchObject({
           block: 'start',
         });
