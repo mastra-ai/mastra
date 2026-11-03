@@ -533,6 +533,8 @@ describe('EventBuffer', () => {
 
         expect(buffer.take().updates).toHaveLength(0);
         expect(buffer.totalSize).toBe(1);
+        expect(buffer.dueSize).toBe(0);
+        expect(buffer.hasDueEvents).toBe(false);
         expect(buffer.nextRetryAt).toBe(Date.now() + 1000);
         vi.advanceTimersByTime(1000);
         expect(buffer.take().updates).toEqual([expect.objectContaining({ retryCount: 1 })]);
@@ -567,6 +569,43 @@ describe('EventBuffer', () => {
       expect(again.creates).toHaveLength(1);
       expect(again.updates).toHaveLength(1);
       expect(buffer.nextRetryAt).toBeUndefined();
+    });
+
+    it('counts only the events a flush would send toward a batch', () => {
+      const buffer = new EventBuffer({ maxRetries: 3 });
+      buffer.init({ strategy: 'batch-with-updates' });
+      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_ENDED));
+      buffer.reAddUpdates(buffer.take().updates, () => 60_000);
+      expect(buffer.dueSize).toBe(0);
+      expect(buffer.elapsed).toBe(0);
+
+      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_STARTED));
+      buffer.addEvent(createTracingEvent(TracingEventType.SPAN_UPDATED));
+
+      expect(buffer.dueSize).toBe(2);
+      expect(buffer.totalSize).toBe(3);
+      expect(buffer.hasDueEvents).toBe(true);
+    });
+  });
+
+  describe('rememberEndedSpans', () => {
+    const span = (spanId: string) => ({ traceId: 'trace-1', spanId });
+    const exported = (spanId: string) =>
+      createTracingEvent(TracingEventType.SPAN_ENDED, 'trace-1', spanId).exportedSpan;
+
+    it('knows a span whose end it stored and forgets the oldest past its bound', () => {
+      const buffer = new EventBuffer({ maxRetries: 3, maxEndedSpans: 2 });
+      buffer.init({ strategy: 'batch-with-updates' });
+
+      buffer.rememberEndedSpans([span('a'), span('b')]);
+      expect(buffer.wasEnded(exported('a'))).toBe(true);
+      expect(buffer.wasEnded(exported('b'))).toBe(true);
+      expect(buffer.wasEnded(exported('c'))).toBe(false);
+
+      buffer.rememberEndedSpans([span('c')]);
+      expect(buffer.wasEnded(exported('a'))).toBe(false);
+      expect(buffer.wasEnded(exported('b'))).toBe(true);
+      expect(buffer.wasEnded(exported('c'))).toBe(true);
     });
   });
 });

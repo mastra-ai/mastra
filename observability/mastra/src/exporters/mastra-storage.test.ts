@@ -2227,6 +2227,52 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
       }
     });
 
+    // Ends waiting out a retry delay stay buffered but aren't sent by a flush. They must not count
+    // toward the batch size, or every new span would be written on its own until they drain.
+    it.runIf(strategy === 'batch-with-updates')(
+      'keeps batching new spans while a thousand ends wait for their retry',
+      async () => {
+        const storage = new InMemoryStore();
+        const worker = openProcess(storage, { maxRetries: 4, retryDelayMs: 60_000, maxBatchWaitMs: 500 });
+        const observabilityStore = (await storage.getStore('observability'))!;
+        const createSpans = vi.spyOn(observabilityStore, 'batchCreateSpans');
+        const conditionalUpdate = vi.spyOn(observabilityStore, 'batchUpdateUnendedSpans');
+        try {
+          const unstored = openProcess(new InMemoryStore());
+          const snapshots = Array.from({ length: 1000 }, (_, i) =>
+            structuredClone(
+              unstored.tracing.startSpan({ type: SpanType.AGENT_RUN, name: `run ${i} never stored` }).exportSpan(),
+            ),
+          );
+          await unstored.mastra.shutdown();
+          for (const snapshot of snapshots) {
+            worker.tracing.rebuildSpan(snapshot).end({ output: 'finished on the worker' });
+          }
+          await worker.tracing.flush();
+          expect(worker.drops).toEqual([]);
+          createSpans.mockClear();
+          conditionalUpdate.mockClear();
+
+          for (let i = 0; i < 100; i++) {
+            worker.tracing.startSpan({ type: SpanType.GENERIC, name: `live work ${i}` }).end();
+          }
+          await new Promise(resolve => setTimeout(resolve, 100));
+          expect(createSpans).not.toHaveBeenCalled();
+          expect(conditionalUpdate).not.toHaveBeenCalled();
+
+          await vi.waitFor(() => expect(createSpans).toHaveBeenCalledTimes(1), { timeout: 2000 });
+          expect(createSpans.mock.calls[0]![0].records).toHaveLength(100);
+          await vi.waitFor(() => expect(conditionalUpdate).toHaveBeenCalledTimes(1), { timeout: 2000 });
+          expect(conditionalUpdate.mock.calls[0]![0].records).toHaveLength(100);
+        } finally {
+          createSpans.mockRestore();
+          conditionalUpdate.mockRestore();
+          await worker.mastra.shutdown();
+        }
+      },
+      15_000,
+    );
+
     it('reports an end it could not apply before shutdown as dropped', async () => {
       const storage = new InMemoryStore();
       const api = openProcess(storage, { maxRetries: 4, retryDelayMs: 20 });
@@ -2299,9 +2345,43 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
       }
     });
 
-    // Exporters shut down together. A monitoring exporter that posts each drop over the network
-    // must get the shutdown drop while it still runs, and shutdown must wait for that post.
-    it('delivers the drop for an end stranded at shutdown while its recipients still listen', async () => {
+    // The exporter can be shut down on its own, without the instance's flush ahead of it. It still
+    // owes the waiting end one last attempt, because its row may have landed since.
+    it('applies an end whose start row landed before the exporter alone shuts down', async () => {
+      const storage = new InMemoryStore();
+      const api = openProcess(storage, { maxRetries: 4, retryDelayMs: 5000 });
+      const worker = openProcess(storage, { maxRetries: 4, retryDelayMs: 5000 });
+      const observabilityStore = (await storage.getStore('observability'))!;
+      const creates = holdCreates(observabilityStore);
+      try {
+        const span = api.tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run started on the api' });
+        const snapshot = structuredClone(span.exportSpan());
+        if (strategy === 'batch-with-updates') void api.tracing.flush();
+
+        worker.tracing.rebuildSpan(snapshot).end({ output: 'finished on the worker' });
+        await worker.tracing.flush();
+        expect(await getStoredSpan(storage, span)).toBeNull();
+
+        creates.release();
+        await api.tracing.flush();
+        await worker.exporter.shutdown();
+
+        const stored = await getStoredSpan(storage, span);
+        expect(stored?.endedAt).toBeInstanceOf(Date);
+        expect(stored?.output).toBe('finished on the worker');
+        expect(worker.drops).toEqual([]);
+      } finally {
+        creates.release();
+        creates.restore();
+        await worker.mastra.shutdown();
+        await api.mastra.shutdown();
+      }
+    });
+
+    // Exporters shut down together, so a monitoring exporter's own shutdown() can run before the
+    // storage exporter's last attempt is over. The drop still reaches it, and shutdown waits for
+    // the post it starts, before the instance's shutdown resolves.
+    it('delivers the drop for an end stranded at shutdown before shutdown resolves', async () => {
       const storage = new InMemoryStore();
       const api = openProcess(storage, { maxRetries: 4, retryDelayMs: 5000 });
       const recipient = new SlowDropRecipient();
@@ -2331,10 +2411,10 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
         await worker.tracing.shutdown();
         recipient.timeline.push('shutdown returned');
 
-        expect(recipient.timeline).toEqual([
+        expect(recipient.timeline).toContain('recipient shut down');
+        expect(recipient.timeline.filter(entry => entry !== 'recipient shut down')).toEqual([
           'drop received: retry-exhausted',
           'drop posted',
-          'recipient shut down',
           'shutdown returned',
         ]);
       } finally {
@@ -2372,6 +2452,38 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
         conditionalUpdate.mockRestore();
         await worker.mastra.shutdown();
         await api.mastra.shutdown();
+      }
+    });
+
+    // A durable run ends its suspended step twice in one process today. The exporter stored the
+    // first end itself, so the second can never apply: it's dropped at once, not retried as if
+    // another process still had to write the span's row.
+    it('drops a second end of a span it already ended without another write', async () => {
+      const storage = new InMemoryStore();
+      const worker = openProcess(storage, { maxRetries: 4, retryDelayMs: 60_000 });
+      const observabilityStore = (await storage.getStore('observability'))!;
+      const conditionalUpdate = vi.spyOn(observabilityStore, 'batchUpdateUnendedSpans');
+      const logger = spyLogger();
+      worker.exporter.__setLogger(logger as any);
+      try {
+        const span = worker.tracing.startSpan({ type: SpanType.WORKFLOW_STEP, name: 'suspended step' });
+        const snapshot = structuredClone(span.exportSpan());
+        span.end({ output: 'first end' });
+        await worker.tracing.flush();
+        expect(conditionalUpdate).toHaveBeenCalledTimes(1);
+
+        worker.tracing.rebuildSpan(snapshot).end({ output: 'second end' });
+        await worker.tracing.flush();
+
+        expect(conditionalUpdate).toHaveBeenCalledTimes(1);
+        expect(worker.drops).toEqual([
+          expect.objectContaining({ signal: 'tracing', reason: 'span-not-updatable', count: 1 }),
+        ]);
+        expect((await getStoredSpan(storage, span))?.output).toBe('first end');
+        expect(logger.warn).not.toHaveBeenCalled();
+      } finally {
+        conditionalUpdate.mockRestore();
+        await worker.mastra.shutdown();
       }
     });
 
