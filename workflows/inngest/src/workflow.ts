@@ -3,8 +3,9 @@ import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
+import type { ExecutionDeadline } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType } from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
@@ -25,7 +26,7 @@ import {
   NESTED_WORKFLOW_OUTPUT_MODE,
   resolveNestedWorkflowOutputMode,
 } from './nested-workflow-output';
-import { workflowTermination } from './observability-compat';
+import { workflowResumeTracingContext, workflowTermination } from './observability-compat';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {
@@ -478,10 +479,11 @@ export class InngestWorkflow<
           timeTravel,
           perStep,
           tracingOptions,
+          executionDeadline,
           actor,
           parentStream,
           nestedWorkflowOutputMode: requestedNestedWorkflowOutputMode,
-        } = event.data;
+        } = event.data as typeof event.data & { executionDeadline?: ExecutionDeadline };
         const nestedWorkflowOutputMode = resolveNestedWorkflowOutputMode(requestedNestedWorkflowOutputMode);
         const shouldCompactNestedWorkflowOutput = nestedWorkflowOutputMode === NESTED_WORKFLOW_OUTPUT_MODE.COMPACT;
 
@@ -537,13 +539,23 @@ export class InngestWorkflow<
         // Create the workflow root span durably - exports SPAN_STARTED immediately on first execution
         // On replay, returns memoized ExportedSpan data without re-creating the span
         const workflowSpanData = await step.run(`workflow.${this.id}.span.start`, async () => {
-          const observability = mastra?.observability?.getSelectedInstance({ requestContext });
-          if (!observability) return undefined;
+          if (!mastra?.observability?.getSelectedInstance({ requestContext })) return undefined;
 
-          const span = observability.startSpan({
+          // A resume continues the suspended run's trace: same sampling decision, nested under its span.
+          const suspendedTracingContext = resume
+            ? (
+                await (
+                  await mastra.getStorage()?.getStore('workflows')
+                )?.loadWorkflowSnapshot({
+                  workflowName: this.id,
+                  runId,
+                })
+              )?.tracingContext
+            : undefined;
+          const span = getOrCreateSpan({
             type: SpanType.WORKFLOW_RUN,
             outcome: null,
-            name: `workflow run: '${this.id}'`,
+            name: resume ? `workflow run: '${this.id}' (resumed)` : `workflow run: '${this.id}'`,
             entityType: EntityType.WORKFLOW_RUN,
             entityId: this.id,
             entityName: this.id,
@@ -551,16 +563,28 @@ export class InngestWorkflow<
             metadata: {
               resourceId,
               runId,
+              ...(resume ? { resumed: true, resumedFromSpanId: suspendedTracingContext?.spanId } : {}),
             },
             tracingPolicy,
             tracingOptions,
             requestContext,
+            resumeFrom: suspendedTracingContext,
+            mastra,
           });
 
           return span?.snapshot?.() ?? span?.exportSpan();
         });
 
-        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
+        // A durable agent's budget was armed where its session started; the steps this worker runs
+        // arm the same deadline so they stop there too (see createInngestAgent `armTotalTimeout`).
+        const engine = new InngestExecutionEngine(
+          this.#mastra,
+          step,
+          attempt,
+          this.options,
+          parentStream,
+          executionDeadline,
+        );
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
@@ -729,12 +753,7 @@ export class InngestWorkflow<
                   result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
                   error: result.status === 'failed' ? result.error : undefined,
                   requestContext: requestContext.toJSON(),
-                  tracingContext: workflowSpanData
-                    ? {
-                        traceId: workflowSpanData.traceId,
-                        spanId: workflowSpanData.id,
-                      }
-                    : undefined,
+                  tracingContext: workflowResumeTracingContext(workflowSpanData),
                   timestamp: Date.now(),
                 };
 
@@ -746,6 +765,16 @@ export class InngestWorkflow<
                     ? this.options.pruneSnapshot({ snapshot: finalSnapshot, workflowStatus: result.status })
                     : finalSnapshot,
                 });
+
+                // A durable agent's caller deletes the run's rows at its `modelSettings.timeout.totalMs`
+                // deadline (createInngestAgent `armTotalTimeout`). A terminal row this worker wrote past
+                // that deadline would bring the run back, so it goes too, and the run converges to
+                // deleted whichever of the write and the delete landed last. Deleting a row that is
+                // already gone is a no-op, so a replay of this step is safe. A suspended row stays: the
+                // caller cleared its timer when the run parked.
+                if (executionDeadline && result.status !== 'suspended' && Date.now() >= executionDeadline.at) {
+                  await workflowsStore.deleteWorkflowRunById({ workflowName: this.id, runId });
+                }
               }
             }
 

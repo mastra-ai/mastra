@@ -4,6 +4,7 @@ import type { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown, MastraNonRetryableError } from '@mastra/core/error';
 import type { SerializedError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
+import type { ExecutionDeadline } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
@@ -69,6 +70,8 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inngestAttempts: number = 0,
     options: ExecutionEngineOptions,
     private parentStream?: { workflowId: string; runId: string },
+    /** The session's run-level deadline: each step arms it, and nested function runs receive it too. */
+    private executionDeadline?: ExecutionDeadline,
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -293,7 +296,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * Provide Inngest step primitive in engine context
    */
   getEngineContext(): Record<string, any> {
-    return { step: this.inngestStep };
+    return { step: this.inngestStep, executionDeadline: this.executionDeadline };
   }
 
   /**
@@ -655,6 +658,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
+            executionDeadline: this.executionDeadline,
             actor,
           },
         })) as any;
@@ -688,6 +692,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
+            executionDeadline: this.executionDeadline,
             actor,
           },
         })) as any;
@@ -714,6 +719,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             nestedWorkflowOutputMode: NESTED_WORKFLOW_OUTPUT_MODE.COMPACT,
             perStep,
             tracingOptions: nestedTracingContext,
+            executionDeadline: this.executionDeadline,
             actor,
           },
         })) as any;
