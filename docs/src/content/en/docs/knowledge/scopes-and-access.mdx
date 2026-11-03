@@ -182,14 +182,14 @@ To a run, anything outside its reach looks like it doesn't exist. A hidden page 
 
 Each note is **stamped** with one or more scopes. A run sees a note only when it can read the page and can read at least one of the note's stamps. The run doesn't have to hold the stamp. For example, on a team page:
 
-- A note stamped `resource:dana` is visible only to Dana's runs.
-- A note stamped `resource:dana` and `team:acme:support` is visible to Dana and her team.
+- A note stamped `resource:dana` is visible only to Dana's runs, because only they can read `resource:dana`.
+- A note stamped `team:acme:support` is visible to every run that can read the team scope. With the rules above, that's the whole of `org:acme`, not only the team.
 
 ### Test access with `explainAccess()`
 
 [`explainAccess()`](/reference/knowledge/knowledge-class#explainaccess) takes a list of run scopes and a scope or page. It returns the role those run scopes have there, and the rules that give it.
 
-Access depends only on your declarations, so a test can check each rule without calling a model or writing pages:
+Rules that bind from a scope's address, like all of the rules above, depend only on your declarations. A test can check them without calling a model or writing pages. A rule that binds through a scope's [place in the tree](/reference/knowledge/scope-declarations#place-scopes-with-belongsto) gives no role until a writing run has placed the scope, so test those after a write:
 
 ```typescript title="src/mastra/knowledge.test.ts"
 import { describe, expect, it } from 'vitest'
