@@ -27,10 +27,10 @@ export type BufferedEvent = ObservabilityEvent & RetryCount;
 export class EventBuffer {
   #preInit: BufferedEvent[] = [];
   #creates: BufferedEvent[] = [];
-  /** Updates a flush sends now */
+  /** Updates in arrival order. One with a `notBefore` is waiting out a retry delay until then. */
   #updates: BufferedEvent[] = [];
-  /** Updates waiting out a retry delay, each due again at its `notBefore` */
-  #waiting: BufferedEvent[] = [];
+  /** How many of `#updates` a flush sends now: the ones without a `notBefore` */
+  #dueUpdates = 0;
   #allCreatedSpans: Set<string> = new Set();
   /** Spans whose SPAN_STARTED this buffer has seen but whose create isn't confirmed yet */
   #pendingCreateSpans: Set<string> = new Set();
@@ -65,7 +65,7 @@ export class EventBuffer {
   reset() {
     this.#creates = [];
     this.#updates = [];
-    this.#waiting = [];
+    this.#dueUpdates = 0;
     this.#firstEventTime = undefined;
   }
 
@@ -83,6 +83,7 @@ export class EventBuffer {
   private pushUpdate(event: ObservabilityEvent): void {
     this.setFirstEventTime();
     this.#updates.push({ ...event, retryCount: 0 });
+    this.#dueUpdates++;
   }
 
   /** Route an event to the create or update buffer based on its type and the storage strategy. */
@@ -181,34 +182,34 @@ export class EventBuffer {
           dropped.push(e);
           continue;
         }
-        e.notBefore = backoff ? now + backoff(e.retryCount) : undefined;
+        const notBefore = backoff ? now + backoff(e.retryCount) : now;
+        e.notBefore = notBefore > now ? notBefore : undefined;
       }
-      if (e.notBefore !== undefined && e.notBefore > now) {
-        this.#waiting.push(e);
-      } else {
+      if (e.notBefore === undefined) {
         this.setFirstEventTime();
-        this.#updates.push(e);
+        this.#dueUpdates++;
       }
+      this.#updates.push(e);
     }
 
     return dropped;
   }
 
   /**
-   * Remove and return the events a flush should send now. An update still waiting out its
-   * retry delay stays buffered, unless `all` is set.
+   * Remove and return the events a flush should send now, in arrival order. An update still
+   * waiting out its retry delay stays buffered, unless `all` is set.
    */
   take({ all = false } = {}): { creates: BufferedEvent[]; updates: BufferedEvent[] } {
     const now = Date.now();
     const creates = this.#creates;
-    const updates = this.#updates;
+    const updates: BufferedEvent[] = [];
     const waiting: BufferedEvent[] = [];
-    for (const event of this.#waiting) {
+    for (const event of this.#updates) {
       (all || (event.notBefore ?? 0) <= now ? updates : waiting).push(event);
     }
     this.#creates = [];
-    this.#updates = [];
-    this.#waiting = waiting;
+    this.#updates = waiting;
+    this.#dueUpdates = 0;
     this.#firstEventTime = undefined;
     return { creates, updates };
   }
@@ -216,7 +217,7 @@ export class EventBuffer {
   /** Earliest time a buffered update becomes due again, if any is waiting out its retry delay. */
   get nextRetryAt(): number | undefined {
     let earliest: number | undefined;
-    for (const { notBefore } of this.#waiting) {
+    for (const { notBefore } of this.#updates) {
       if (notBefore !== undefined && (earliest === undefined || notBefore < earliest)) earliest = notBefore;
     }
     return earliest;
@@ -228,7 +229,7 @@ export class EventBuffer {
    * them when a flush takes it; the retry timer armed for it fires a flush then.
    */
   get dueSize(): number {
-    return this.#creates.length + this.#updates.length;
+    return this.#creates.length + this.#dueUpdates;
   }
 
   /** Whether a flush now would send anything. */
@@ -243,12 +244,12 @@ export class EventBuffer {
 
   /** Snapshot of buffered update events, the ones waiting out a retry delay included. */
   get updates(): BufferedEvent[] {
-    return [...this.#updates, ...this.#waiting];
+    return [...this.#updates];
   }
 
   /** Total number of buffered events (creates + updates, waiting ones included). */
   get totalSize(): number {
-    return this.#creates.length + this.#updates.length + this.#waiting.length;
+    return this.#creates.length + this.#updates.length;
   }
 
   /** Milliseconds since the first event was buffered in the current batch. */
