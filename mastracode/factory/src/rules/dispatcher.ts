@@ -1463,6 +1463,7 @@ export class FactoryDecisionDispatcher {
           id: result.item.id,
           userId: 'factory-rule-dispatcher',
           patch: { metadata: missing },
+          fillOnly: true,
         });
         if (filled) result = { ...result, item: filled.item };
       }

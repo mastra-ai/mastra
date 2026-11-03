@@ -153,6 +153,35 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     expect(retried?.item.workItem.sources[0]?.revision).toBe(item.workItem.sources[0]!.revision + 1);
   });
 
+  it('fills only still-missing source and placement facts and leaves revisions unchanged on replay', async () => {
+    const { workItems, scope, item } = await setup();
+    const refresh = await workItems.syncCard({
+      ...scope,
+      id: item.id,
+      patch: { metadata: { author: 'latest-author', labels: [] } },
+    });
+    const patch = {
+      metadata: {
+        author: 'stale-author',
+        labels: ['stale'],
+        authorTrusted: true,
+        sourceCreatedAt: '2029-12-01T00:00:00Z',
+      },
+    };
+    const filled = await workItems.syncCard({ ...scope, id: item.id, patch, fillOnly: true });
+    expect(filled?.item).toMatchObject({
+      id: item.id,
+      board: item.board,
+      stages: item.stages,
+      revision: item.revision,
+      metadata: { authorTrusted: false },
+      workItem: { author: 'latest-author', labels: [], metadata: { sourceCreatedAt: '2029-12-01T00:00:00Z' } },
+    });
+    expect(filled?.item.workItem.sources[0]?.revision).toBe(refresh!.item.workItem.sources[0]!.revision + 1);
+    const replay = await workItems.syncCard({ ...scope, id: item.id, patch, fillOnly: true });
+    expect(replay?.item).toEqual(filled?.item);
+  });
+
   it('refreshes Factory-native work without manufacturing an external source', async () => {
     const { storage, workItems, scope } = await setup();
     const { item } = await workItems.upsert({ ...scope, input: { title: 'Manual task', stages: ['intake'] } });
