@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execa } from 'execa';
+import { glob } from 'tinyglobby';
 import { afterAll, beforeAll, describe, expect, inject, it } from 'vitest';
 import { installWithRetry } from '../_local-registry-setup/install.js';
 
@@ -53,6 +54,11 @@ describe.for(apps)('%s', app => {
       });
       expect(result.exitCode, result.stderr).toBe(0);
     });
+  });
+
+  it('installs one copy of @opentelemetry/api', async () => {
+    const copies = await glob('**/node_modules/@opentelemetry/api/package.json', { cwd: appDir });
+    expect(copies).toEqual(['node_modules/@opentelemetry/api/package.json']);
   });
 
   it.runIf(existsSync(join(templateDir, 'export-span.mjs')))('sends a span over HTTP/protobuf', async () => {
