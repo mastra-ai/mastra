@@ -73,8 +73,9 @@ export type ParentStateLink = (state: unknown) => Promise<StateBase | undefined>
  * what it believes is stored. So a write that can overlap others names its steps (`stepIds`) and
  * sends only those, and overlapping writes name different steps. Everything else (other steps'
  * changes, the state, the checkpoint) goes out with boundary writes, which the engine makes only
- * when no other write of the run is in flight (an entry's end, a loop iteration's start, sleeps,
- * the run stopping). `write` throws when a write breaks that.
+ * when no other write of the run is in flight (an entry's end, a loop iteration's start, a
+ * finished parallel arm or foreach item, sleeps, the run stopping). `write` throws when a write
+ * breaks that.
  *
  * @internal
  */
@@ -224,9 +225,9 @@ export class RunJournal {
    * @param stepIds Set by a write that can be in flight together with other writes of the run (a
    * step's start write): only these steps are sent, never the state, and no other write in flight
    * may name them. Leave it unset for a boundary write, made when no other write of the run is in
-   * flight (an entry's end, a loop iteration's start, sleeps, the run stopping): it sends every step
-   * result that changed since it was last written, the state's changes, and the checkpoint when
-   * that is still to do.
+   * flight (an entry's end, a loop iteration's start, a finished parallel arm or foreach item,
+   * sleeps, the run stopping): it sends every step result that changed since it was last written,
+   * the state's changes, and the checkpoint when that is still to do.
    */
   async write({
     resourceId,
