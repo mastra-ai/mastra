@@ -11,6 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@mastra/playground-ui/components/Dialog';
+import { Field, FieldDescription, FieldLabel } from '@mastra/playground-ui/components/Field';
 import {
   InputGroup,
   InputGroupAddon,
@@ -133,13 +134,13 @@ function PurchaseForm({
         </DialogDescription>
       </DialogHeader>
       <DialogBody>
-        <div className="flex flex-col gap-1.5">
+        <Field>
+          <FieldLabel>Amount</FieldLabel>
           <InputGroup>
             <InputGroupAddon>
               <InputGroupText>$</InputGroupText>
             </InputGroupAddon>
             <InputGroupInput
-              aria-label="Amount in dollars"
               inputMode="numeric"
               value={draft}
               disabled={pending}
@@ -149,12 +150,8 @@ function PurchaseForm({
               }}
             />
           </InputGroup>
-          {problem !== undefined && (
-            <Txt as="p" variant="caption" tone="muted" role="note">
-              {problem}
-            </Txt>
-          )}
-        </div>
+          {problem !== undefined && <FieldDescription>{problem}</FieldDescription>}
+        </Field>
         {error && (
           <div className="flex flex-col items-start gap-1">
             <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">

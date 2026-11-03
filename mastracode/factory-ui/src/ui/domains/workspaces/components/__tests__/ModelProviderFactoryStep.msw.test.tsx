@@ -193,11 +193,11 @@ describe('Model provider onboarding', () => {
       await user.click(await screen.findByRole('button', { name: 'Use Mastra Gateway' }));
       await user.click(await screen.findByRole('button', { name: 'Add credits' }));
       const dialog = await screen.findByRole('dialog', { name: 'Add credits' });
-      const amount = within(dialog).getByRole('textbox', { name: 'Amount in dollars' });
+      const amount = within(dialog).getByRole('textbox', { name: 'Amount' });
       await user.clear(amount);
       await user.type(amount, '3');
 
-      expect(within(dialog).getByText('Minimum amount is $5')).toBeVisible();
+      expect(amount).toHaveAccessibleDescription('Minimum amount is $5');
       expect(within(dialog).getByRole('button', { name: 'Add credits' })).toBeDisabled();
 
       await user.clear(amount);
