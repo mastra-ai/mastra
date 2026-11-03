@@ -1,7 +1,10 @@
 ---
 '@mastra/factory': minor
-'@mastra/code-sdk': patch
-'@mastra/auth-studio': patch
 ---
 
-Added one-click Mastra Gateway setup to Factory. A signed-in Factory now offers **Mastra Gateway · Recommended** when you connect a model provider during onboarding, when creating a factory, and in Settings > Models. One click creates a gateway key on your Mastra account and stores it with your credentials, so every model runs on your organization's Mastra credits without bringing provider keys. Factory warns with an Add credits link when the organization has no gateway credits left.
+Added one-click Mastra Gateway setup to Factory. When Factory signs users in with their Mastra account, onboarding, factory creation, and Settings > Models offer **Mastra Gateway · Recommended**. One click creates a gateway key on the user's Mastra organization and stores it with their model credentials, so every model runs on the organization's Mastra credits without provider keys.
+
+- Factory creates no key while the user's Mastra session is on a different organization than the Factory, and asks them to sign in again with the Factory's organization.
+- Removing the Mastra Gateway credential also revokes its key on Mastra.
+- Factory warns with an **Add credits** link when the organization has no gateway credits left, including on a run that failed for lack of credits.
+- With other auth providers, or without auth, Mastra Gateway stays available as a regular API-key provider.

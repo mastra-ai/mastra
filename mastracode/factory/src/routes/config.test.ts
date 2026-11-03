@@ -605,11 +605,29 @@ describe('provider key routes with a tenant', () => {
 
 describe('Mastra Gateway routes with a tenant', () => {
   let seed: FactoryStorageTestSeed;
-  const fetchPlatformAsUser = vi.fn<NonNullable<RouteAuth['fetchPlatformAsUser']>>();
   const controller = makeAgentController([{ provider: 'anthropic', hasApiKey: false }]);
   const user = { workosId: 'user-a', organizationId: 'org1', email: 'user-a@example.com' };
+  const KEYS = '/gateway/organization/v2/keys';
 
-  function buildApp() {
+  interface FakePlatform {
+    requests: Array<{ method: string; path: string; body?: unknown }>;
+    fetchPlatformAsUser: NonNullable<RouteAuth['fetchPlatformAsUser']>;
+  }
+
+  function fakePlatform(routes: Record<string, () => Response> = {}, sessionOrganizationId = 'org1'): FakePlatform {
+    const requests: FakePlatform['requests'] = [];
+    const fetchPlatformAsUser: FakePlatform['fetchPlatformAsUser'] = async (_c, path, init) => {
+      const method = init?.method ?? 'GET';
+      requests.push({ method, path, ...(typeof init?.body === 'string' ? { body: JSON.parse(init.body) } : {}) });
+      if (path === '/auth/me') {
+        return Response.json({ user: { email: user.email }, organizationId: sessionOrganizationId });
+      }
+      return routes[`${method} ${path}`]?.() ?? new Response(null, { status: 404 });
+    };
+    return { requests, fetchPlatformAsUser };
+  }
+
+  function buildApp(platform?: FakePlatform) {
     const app = new Hono();
     app.use('*', async (c, next) => {
       c.set('factoryAuthUser' as never, user as never);
@@ -618,7 +636,7 @@ describe('Mastra Gateway routes with a tenant', () => {
     mountApiRoutes(
       app as any,
       new ConfigRoutes({
-        auth: { ...fakeRouteAuth(), fetchPlatformAsUser },
+        auth: platform ? { ...fakeRouteAuth(), fetchPlatformAsUser: platform.fetchPlatformAsUser } : fakeRouteAuth(),
         controller,
         modelCredentials: seed.credentials,
         memorySettings: seed.memorySettings,
@@ -636,28 +654,29 @@ describe('Mastra Gateway routes with a tenant', () => {
 
   beforeEach(async () => {
     seed = await createFactoryStorageForTests();
-    fetchPlatformAsUser.mockReset();
   });
 
-  it('creates a gateway key as the signed-in user and lists the gateway models', async () => {
-    fetchPlatformAsUser.mockResolvedValue(Response.json({ keyId: 'key_1', apiKey: 'msk_factory' }, { status: 201 }));
-    const app = buildApp();
+  it("creates a gateway key on the user's Mastra organization and lists the gateway models", async () => {
+    const platform = fakePlatform({
+      [`POST ${KEYS}`]: () => Response.json({ keyId: 'key_1', apiKey: 'msk_factory' }, { status: 201 }),
+    });
+    const app = buildApp(platform);
 
     const res = await connect(app, 'user');
 
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({
-      provider: { provider: 'mastra', source: 'stored-user' },
-      defaultModelId: `mastra/${PROVIDER_DEFAULT_MODELS.anthropic}`,
+      provider: { provider: 'mastra', source: 'stored-user', connectWithMastraAccount: true },
     });
-    expect(fetchPlatformAsUser).toHaveBeenCalledWith(expect.anything(), '/gateway/organization/v2/keys', {
+    expect(platform.requests).toContainEqual({
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'Factory · user-a@example.com' }),
+      path: KEYS,
+      body: { label: 'Factory · user-a@example.com' },
     });
     expect(await seed.credentials.getCredential({ orgId: 'org1', userId: 'user-a' }, 'mastra-gateway')).toEqual({
       type: 'api_key',
       key: 'msk_factory',
+      keyId: 'key_1',
     });
     const { models } = (await (await app.request('/web/config/models')).json()) as { models: Array<{ id: string }> };
     expect(models.map(m => m.id)).toContain(`mastra/${PROVIDER_DEFAULT_MODELS.anthropic}`);
@@ -665,44 +684,111 @@ describe('Mastra Gateway routes with a tenant', () => {
 
   it('reuses the key the scope already has', async () => {
     await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', { type: 'api_key', key: 'msk_existing' });
+    const platform = fakePlatform();
 
-    const res = await connect(buildApp(), 'org');
+    const res = await connect(buildApp(platform), 'org');
 
     expect(res.status).toBe(200);
-    expect(fetchPlatformAsUser).not.toHaveBeenCalled();
+    expect(platform.requests).toEqual([]);
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toMatchObject({
       key: 'msk_existing',
     });
   });
 
-  it('stores nothing when the user cannot create keys for their Mastra organization', async () => {
-    fetchPlatformAsUser.mockResolvedValue(new Response(null, { status: 403 }));
+  it("creates no key while the user's Mastra session is on another organization than the Factory", async () => {
+    const platform = fakePlatform(
+      { [`POST ${KEYS}`]: () => Response.json({ keyId: 'key_1', apiKey: 'msk_other_org' }, { status: 201 }) },
+      'org-other',
+    );
 
-    const res = await connect(buildApp(), 'org');
+    const res = await connect(buildApp(platform), 'org');
+
+    expect(res.status).toBe(409);
+    expect((await res.json()).error).toBe('mastra_organization_mismatch');
+    expect(platform.requests.map(r => r.path)).toEqual(['/auth/me']);
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
+  });
+
+  it('stores nothing when the user cannot create keys for their Mastra organization', async () => {
+    const platform = fakePlatform({ [`POST ${KEYS}`]: () => new Response(null, { status: 403 }) });
+
+    const res = await connect(buildApp(platform), 'org');
 
     expect(res.status).toBe(403);
     expect((await res.json()).error).toBe('mastra_org_write_required');
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
   });
 
-  it('reports the remaining gateway credits and where to add more', async () => {
-    fetchPlatformAsUser.mockResolvedValue(
-      Response.json({
-        customer: {
-          creditPool: { featureId: 'gateway_credits' },
-          balances: { gateway_credits: { featureId: 'gateway_credits', granted: 5, usage: 5 } },
-        },
-      }),
-    );
+  it("revokes the Factory's gateway key on Mastra when its credential is removed", async () => {
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
+      type: 'api_key',
+      key: 'msk_factory',
+      keyId: 'key_1',
+    });
+    const platform = fakePlatform({ [`DELETE ${KEYS}/key_1`]: () => new Response(null, { status: 204 }) });
 
-    const res = await buildApp().request('/web/config/providers/mastra/credits');
+    const res = await buildApp(platform).request('/web/config/providers/mastra/key?scope=org', { method: 'DELETE' });
+
+    expect(res.status).toBe(200);
+    expect(platform.requests).toContainEqual({ method: 'DELETE', path: `${KEYS}/key_1` });
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
+  });
+
+  it('keeps the credential while Mastra refuses to revoke its key, so no live key is orphaned', async () => {
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
+      type: 'api_key',
+      key: 'msk_factory',
+      keyId: 'key_1',
+    });
+    const platform = fakePlatform({ [`DELETE ${KEYS}/key_1`]: () => new Response(null, { status: 403 }) });
+
+    const res = await buildApp(platform).request('/web/config/providers/mastra/key?scope=org', { method: 'DELETE' });
+
+    expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe('mastra_org_write_required');
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toMatchObject({
+      keyId: 'key_1',
+    });
+  });
+
+  it('reports the remaining gateway credits and where to add more', async () => {
+    const platform = fakePlatform({
+      'GET /billing/customer': () =>
+        Response.json({
+          customer: {
+            creditPool: { featureId: 'gateway_credits' },
+            balances: { gateway_credits: { featureId: 'gateway_credits', granted: 5, usage: 5 } },
+          },
+        }),
+    });
+
+    const res = await buildApp(platform).request('/web/config/providers/mastra/credits');
 
     expect(await res.json()).toEqual({
       remaining: 0,
       unlimited: false,
       addCreditsUrl: 'https://projects.mastra.ai/add-credits/org1',
     });
-    expect(fetchPlatformAsUser).toHaveBeenCalledWith(expect.anything(), '/billing/customer', undefined);
+  });
+
+  it('reports unknown credits, not zero, when the platform has no balance for the pool', async () => {
+    const platform = fakePlatform({ 'GET /billing/customer': () => Response.json({ customer: null }) });
+
+    const res = await buildApp(platform).request('/web/config/providers/mastra/credits');
+
+    expect(await res.json()).toMatchObject({ remaining: null });
+  });
+
+  it('offers the one-click gateway only when auth can act on the Mastra platform', async () => {
+    const gatewayRow = async (app: Hono) => {
+      const { providers } = (await (await app.request('/web/config/providers')).json()) as {
+        providers: Array<{ provider: string; connectWithMastraAccount?: true }>;
+      };
+      return providers.find(p => p.provider === 'mastra');
+    };
+
+    expect(await gatewayRow(buildApp(fakePlatform()))).toMatchObject({ connectWithMastraAccount: true });
+    expect(await gatewayRow(buildApp())).not.toHaveProperty('connectWithMastraAccount');
   });
 });
 

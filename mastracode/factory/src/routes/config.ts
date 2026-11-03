@@ -37,7 +37,7 @@ import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { THINKING_LEVELS } from './contracts.js';
-import { createGatewayKey, factoryGatewayKeyLabel, getGatewayCredits, MastraGatewayError } from './mastra-gateway.js';
+import { createGatewayKey, getGatewayCredits, MastraGatewayError, revokeGatewayKey } from './mastra-gateway.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -49,7 +49,7 @@ import {
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
-import { MASTRA_GATEWAY_DEFAULT_MODEL, resolveTenantProviderDefaultModel } from './tenant-credentials.js';
+import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -114,6 +114,8 @@ export interface ProviderInfo {
   oauth?: { supported: true; modes: LoginSessionKind[] };
   /** The provider is a stored custom OpenAI-compatible endpoint. */
   custom?: true;
+  /** Tenant mode: Factory can mint this provider's key with the caller's Mastra account (the Mastra Gateway). */
+  connectWithMastraAccount?: true;
 }
 
 /** Minimal session surface the config routes touch. */
@@ -179,12 +181,15 @@ export async function listProviders({
   tenantCredentials,
   deploymentProviders,
   listCustomProviders,
+  connectWithMastraAccount,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
   deploymentProviders?: ReadonlySet<string>;
   listCustomProviders?: () => Promise<CustomProviderRecord[]>;
+  /** The auth provider can act on the Mastra platform as the caller. */
+  connectWithMastraAccount?: boolean;
 }): Promise<ProviderInfo[]> {
   const models = await listCatalogModels(controller, tenantCredentials);
   const seen = new Map<string, ProviderInfo>();
@@ -248,6 +253,9 @@ export async function listProviders({
       ...(orgCredential ? { orgCredential } : {}),
       ...(orgCredentialExpired ? { orgCredentialExpired: true as const } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
+      ...(tenantCredentials && connectWithMastraAccount && model.provider === MASTRA_GATEWAY_CATALOG_PROVIDER
+        ? { connectWithMastraAccount: true as const }
+        : {}),
     });
   }
 
@@ -824,6 +832,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const options = this.deps;
     const { controller, authStorage, auth, deploymentProviders } = options;
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
+    const connectWithMastraAccount = auth.fetchPlatformAsUser !== undefined;
+    const listTenantProviders = (records: CredentialRecord[]) =>
+      listProviders({ controller, tenantCredentials: records, deploymentProviders, connectWithMastraAccount });
+    const gatewayFailure = (c: Context, error: unknown) =>
+      error instanceof MastraGatewayError
+        ? c.json({ error: error.code, message: error.message }, error.status)
+        : c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
 
     const resolveSessionModelContext = async (
@@ -1005,6 +1020,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 tenantCredentials,
                 deploymentProviders,
                 listCustomProviders,
+                connectWithMastraAccount,
               }),
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
@@ -1054,7 +1070,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               await ctx.storage.setCredential(tenant, getAuthProviderId(provider), { type: 'api_key', key });
               onCredentialsChanged(tenant);
               const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-              const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
+              const providers = await listTenantProviders(records);
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
@@ -1085,11 +1101,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               400,
             );
           }
-          let body: { scope?: unknown } = {};
+          let body: { scope?: unknown };
           try {
             body = await c.req.json();
           } catch {
-            // No body: personal scope.
+            return c.json({ error: 'Invalid JSON body' }, 400);
           }
           const scope = body.scope === 'org' ? 'org' : 'user';
           if (scope === 'org' && !(await auth.isOrganizationAdmin(loose(c), ctx.orgId))) {
@@ -1097,27 +1113,19 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
           const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
           try {
-            const existing = (await ctx.storage.listCredentials(ctx.orgId, ctx.userId)).some(
-              r => r.scope === scope && r.provider === MASTRA_GATEWAY_PROVIDER,
-            );
-            if (!existing) {
-              const user = (await auth.ensureUser(loose(c))) as { email?: string } | undefined;
-              const key = await createGatewayKey(auth, loose(c), factoryGatewayKeyLabel(scope, user?.email));
-              await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, { type: 'api_key', key });
+            if (!(await ctx.storage.getCredential(tenant, MASTRA_GATEWAY_PROVIDER))) {
+              const { apiKey, keyId } = await createGatewayKey(auth, loose(c), ctx.orgId, scope);
+              await ctx.storage.setCredential(tenant, MASTRA_GATEWAY_PROVIDER, {
+                type: 'api_key',
+                key: apiKey,
+                ...(keyId ? { keyId } : {}),
+              });
               onCredentialsChanged(tenant);
             }
-            const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-            const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
-            return c.json({
-              ok: true,
-              provider: providers.find(p => p.provider === MASTRA_GATEWAY_CATALOG_PROVIDER),
-              defaultModelId: MASTRA_GATEWAY_DEFAULT_MODEL,
-            });
+            const providers = await listTenantProviders(await ctx.storage.listCredentials(ctx.orgId, ctx.userId));
+            return c.json({ ok: true, provider: providers.find(p => p.provider === MASTRA_GATEWAY_CATALOG_PROVIDER) });
           } catch (error) {
-            if (error instanceof MastraGatewayError) {
-              return c.json({ error: error.code, message: error.message }, error.status);
-            }
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+            return gatewayFailure(loose(c), error);
           }
         },
       }),
@@ -1132,10 +1140,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           try {
             return c.json(await getGatewayCredits(auth, loose(c), ctx.orgId));
           } catch (error) {
-            if (error instanceof MastraGatewayError) {
-              return c.json({ error: error.code, message: error.message }, error.status);
-            }
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+            return gatewayFailure(loose(c), error);
           }
         },
       }),
@@ -1155,10 +1160,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 return c.json({ error: 'organization_admin_required' }, 403);
               }
               const tenant = scope === 'org' ? { orgId: ctx.orgId } : { orgId: ctx.orgId, userId: ctx.userId };
-              await ctx.storage.removeCredential(tenant, getAuthProviderId(provider));
+              const credentialId = getAuthProviderId(provider);
+              const stored =
+                credentialId === MASTRA_GATEWAY_PROVIDER && connectWithMastraAccount
+                  ? await ctx.storage.getCredential(tenant, credentialId)
+                  : undefined;
+              if (stored?.type === 'api_key' && stored.keyId) {
+                await revokeGatewayKey(auth, loose(c), ctx.orgId, stored.keyId);
+              }
+              await ctx.storage.removeCredential(tenant, credentialId);
               onCredentialsChanged(tenant);
-              const records = await ctx.storage.listCredentials(ctx.orgId, ctx.userId);
-              const providers = await listProviders({ controller, tenantCredentials: records, deploymentProviders });
+              const providers = await listTenantProviders(await ctx.storage.listCredentials(ctx.orgId, ctx.userId));
               return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
             }
             if (!authStorage) return c.json({ error: 'Credential storage is not available' }, 503);
@@ -1166,7 +1178,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const providers = await listProviders({ controller, authStorage });
             return c.json({ ok: true, provider: providers.find(p => p.provider === provider) });
           } catch (error) {
-            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+            return gatewayFailure(loose(c), error);
           }
         },
       }),

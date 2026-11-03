@@ -322,7 +322,7 @@ export async function resolveTenantProviderDefaultModel(
 }
 
 /** Default model for a Factory that only has a Mastra Gateway key: the Anthropic default, through the gateway. */
-export const MASTRA_GATEWAY_DEFAULT_MODEL = `${MASTRA_GATEWAY_PREFIX}${PROVIDER_DEFAULT_MODELS.anthropic}`;
+const MASTRA_GATEWAY_DEFAULT_MODEL = `${MASTRA_GATEWAY_PREFIX}${PROVIDER_DEFAULT_MODELS.anthropic}`;
 
 /** Test hook: clear registration and cached tenant snapshots. */
 export function resetTenantCredentialResolverForTests(): void {
