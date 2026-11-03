@@ -155,14 +155,19 @@ export class EventBuffer {
    * Re-add failed update events to the buffer, returning events that exceed max retries.
    * With `backoff`, each kept event waits that many milliseconds for its new retry count
    * before `take` hands it out again. Without it, the event is due at the next flush.
+   * An event sent before its due time was an extra attempt made by an explicit flush, so
+   * it keeps its retry count and due time.
    */
   reAddUpdates(events: BufferedEvent[], backoff?: (retryCount: number) => number): BufferedEvent[] {
+    const now = Date.now();
     const retryable: BufferedEvent[] = [];
     const dropped: BufferedEvent[] = [];
 
     for (const e of events) {
-      if (++e.retryCount <= this.#maxRetries) {
-        e.notBefore = backoff ? Date.now() + backoff(e.retryCount) : undefined;
+      if (e.notBefore !== undefined && e.notBefore > now) {
+        retryable.push(e);
+      } else if (++e.retryCount <= this.#maxRetries) {
+        e.notBefore = backoff ? now + backoff(e.retryCount) : undefined;
         retryable.push(e);
       } else {
         dropped.push(e);

@@ -2029,7 +2029,9 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
             expect.objectContaining({ signal: 'tracing', reason: 'span-not-updatable', count: 1 }),
           ]);
         });
-        expect(conditionalUpdate).toHaveBeenCalledTimes(3);
+        // Two retries after the first attempt. Realtime sent the end on arrival, so the flush
+        // that followed was one more attempt that did not count against the budget.
+        expect(conditionalUpdate).toHaveBeenCalledTimes(strategy === 'realtime' ? 4 : 3);
         expect(await getStoredSpan(storage, source)).toBeNull();
         // A single-process durable run ends the suspended step twice today, so this path is
         // routine and must stay quiet: the retries and the final drop are debug lines.
@@ -2087,9 +2089,11 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
         expect(stored?.output).toBe('finished on the worker');
         expect((await observabilityStore.getTrace({ traceId: span.traceId }))?.spans).toHaveLength(1);
         // Attempts at 0, 50, 150, 350 and 750 ms: never more than the budget, each after its delay.
-        expect(attemptsAt.length).toBeLessThanOrEqual(5);
-        attemptsAt.slice(1).forEach((at, index) => {
-          expect(at - attemptsAt[index]!).toBeGreaterThanOrEqual(50 * 2 ** index - 5);
+        // Realtime sent the end on arrival, so the flush right after it was a free second attempt.
+        const budgeted = strategy === 'realtime' ? attemptsAt.filter((_, index) => index !== 1) : attemptsAt;
+        expect(budgeted.length).toBeLessThanOrEqual(5);
+        budgeted.slice(1).forEach((at, index) => {
+          expect(at - budgeted[index]!).toBeGreaterThanOrEqual(50 * 2 ** index - 5);
         });
       } finally {
         creates.release();
@@ -2153,10 +2157,12 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
 
         worker.tracing.rebuildSpan(snapshot).end({ output: 'finished on the worker' });
         await worker.tracing.flush();
-        expect(conditionalUpdate).toHaveBeenCalledTimes(1);
+        // Realtime sent the end on arrival, so that first flush was already a second attempt.
+        const attemptsSoFar = strategy === 'realtime' ? 2 : 1;
+        expect(conditionalUpdate).toHaveBeenCalledTimes(attemptsSoFar);
 
         for (let run = 0; run < 5; run++) await worker.tracing.flush();
-        expect(conditionalUpdate).toHaveBeenCalledTimes(6);
+        expect(conditionalUpdate).toHaveBeenCalledTimes(attemptsSoFar + 5);
         expect(await getStoredSpan(storage, span)).toBeNull();
         expect(worker.drops).toEqual([]);
 

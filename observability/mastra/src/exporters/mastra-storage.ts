@@ -735,9 +735,10 @@ export class MastraStorageExporter extends BaseExporter {
    * This is useful in serverless environments where you need to ensure spans
    * are exported before the runtime instance is terminated.
    *
-   * An update still waiting out its retry delay stays buffered for its timer: sending it
-   * early cannot make it apply before its span's row lands, and callers such as an Inngest
-   * worker flush after every run. Only `shutdown()` sends it regardless.
+   * An update still waiting out its retry delay is sent too, so a span whose row has landed
+   * since is ended before the caller exits. One that still doesn't apply keeps its retry
+   * count and due time: an Inngest worker flushes after every run, and those flushes must
+   * not spend the retry budget.
    */
   async flush(): Promise<void> {
     // A timer or size trigger may have taken a batch out of the buffer and still be
@@ -756,7 +757,7 @@ export class MastraStorageExporter extends BaseExporter {
         this.logger.debug('Flushing buffered events', {
           bufferedEvents: this.#eventBuffer.totalSize,
         });
-        await this.trackFlushBuffer();
+        await this.trackFlushBuffer({ force: true });
       }
       if (this.#inFlightFlushes.size === 0) {
         return;
