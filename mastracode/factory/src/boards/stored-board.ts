@@ -123,10 +123,12 @@ export interface MergedStoredBoard {
  *
  * - A phase's `onEnter`, `onExit` and `outcomes` attach only when the row keeps the phase in the
  *   shape they depend on: the same kind and, on phases with code handlers, the same runner context
- *   and skill, the declared exit tool and no other. Outcomes whose target the row lacks are dropped.
+ *   and skill, the declared exit tool and no other. Outcomes whose target the row lacks or doesn't
+ *   allow are dropped.
  * - The board's `tools`, `events` and `transitionPolicy` attach only when the row has every code
- *   phase, since their handlers may move cards to any of them; `sourceClosed` when it has both of
- *   its phases.
+ *   phase, since their handlers may move cards to any of them; `sourceClosed` when both of its
+ *   phases are stored and terminal.
+ * - A move code makes that the row's `nextPhases` don't allow is reported; code making it is refused.
  * - If the board still fails to compile with that behaviour, it runs without any.
  *
  * The result links to `code` as its code board either way. Throws only when the row itself is
@@ -140,21 +142,39 @@ export function mergeCodeBehaviour(row: StoredBoardInput, code: InstalledBoard):
   for (const [key, phase] of Object.entries(code.phases) as [string, BoardPhase<string>][]) {
     const declared = declaration.phases[key];
     const outcomes = Object.entries(declared?.outcomes ?? {});
-    if (!hasHandlers(declared) && outcomes.length === 0) continue;
     const edited = stored.get(key);
+    const conflicts = edited ? phaseShapeConflicts(key, phase, declared, edited) : [];
+    if (edited && edited.kind === phase.kind) {
+      // A move code makes that the row doesn't allow is refused when code makes it.
+      const allowed = storedNextPhases(edited, row.phases);
+      const outcomeTargets = new Set(outcomes.map(([, target]) => target));
+      for (const target of phase.nextPhases) {
+        if (stored.has(target) && !allowed.includes(target) && !outcomeTargets.has(target)) {
+          problems.push(
+            `Board "${row.key}" doesn't let phase "${key}" move cards to "${target}", so Factory's code can't make that move.`,
+          );
+        }
+      }
+    }
+    if (!hasHandlers(declared) && outcomes.length === 0) continue;
     if (!edited) {
       problems.push(`Phase "${key}" isn't on stored board "${row.key}", so its code behaviour doesn't run.`);
       continue;
     }
-    const conflicts = phaseShapeConflicts(key, phase, declared, edited);
     if (conflicts.length > 0) {
       problems.push(...conflicts.map(conflict => `Phase "${key}" runs without its code behaviour: ${conflict}`));
       continue;
     }
+    const allowed = storedNextPhases(edited, row.phases);
     const kept: Record<string, string> = {};
     for (const [outcome, target] of outcomes) {
-      if (stored.has(target)) kept[outcome] = target;
-      else problems.push(`Phase "${key}" runs without its code outcome "${outcome}": phase "${target}" isn't stored.`);
+      if (!stored.has(target)) {
+        problems.push(`Phase "${key}" runs without its code outcome "${outcome}": phase "${target}" isn't stored.`);
+      } else if (!allowed.includes(target)) {
+        problems.push(
+          `Phase "${key}" runs without its code outcome "${outcome}": the board doesn't let it move cards to "${target}".`,
+        );
+      } else kept[outcome] = target;
     }
     phases[key] = {
       onEnter: declared?.onEnter,
@@ -182,10 +202,16 @@ export function mergeCodeBehaviour(row: StoredBoardInput, code: InstalledBoard):
   }
   const sourceClosed = declaration.sourceClosed;
   if (sourceClosed) {
-    const closedMissing = [sourceClosed.completed, sourceClosed.canceled].filter(key => !stored.has(key));
-    if (closedMissing.length === 0) board.sourceClosed = sourceClosed;
-    else
+    const closed = [sourceClosed.completed, sourceClosed.canceled];
+    const closedMissing = closed.filter(key => !stored.has(key));
+    const closedOpen = closed.filter(key => stored.has(key) && stored.get(key)!.kind !== 'terminal');
+    if (closedMissing.length > 0) {
       problems.push(`Board "${row.key}" doesn't move cards when their source closes: ${missingPhases(closedMissing)}`);
+    } else if (closedOpen.length > 0) {
+      problems.push(
+        `Board "${row.key}" doesn't move cards when their source closes: ${closedOpen.map(key => `phase "${key}"`).join(' and ')} isn't terminal.`,
+      );
+    } else board.sourceClosed = sourceClosed;
   }
 
   try {

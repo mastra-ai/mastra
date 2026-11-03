@@ -662,20 +662,37 @@ describe('serving a stored row that fell out of step with code', () => {
     expect(board.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan?.onResult);
   });
 
-  it('serves the row without any code behaviour when the board would not compile with it', () => {
+  it("serves a board whose Done is no longer terminal without sourceClosed, and keeps Work's other behaviour", async () => {
     const row = editWork('done', phase => ({ ...phase, kind: 'resting', nextPhases: ['pr-review'] }));
 
     const { board, problems } = mergeCodeBehaviour(row, workBoard);
 
     expect(problems).toEqual([
       'Phase "done" runs without its code behaviour: Phase "done" must stay terminal; its code behaviour depends on it.',
-      'Board "work" runs without its code behaviour: Board sourceClosed.completed "done" must name a terminal phase.',
+      'Board "work" doesn\'t move cards when their source closes: phase "done" isn\'t terminal.',
     ]);
     expect(board.phaseKind('done')).toBe('resting');
-    expect(board.rules).toEqual({});
-    expect(board.tools).toEqual({});
+    expect(board.rules.done).toBeUndefined();
     expect(board.sourceClosed).toBeUndefined();
+    const plan = await board.rules.planning?.issue?.onEnter?.(entering(board, 'planning', 'issue'));
+    expect(plan).toMatchObject({ type: 'invokeSkill', role: 'work', skillName: 'factory-plan' });
+    expect(board.tools.submit_plan?.onResult).toBe(workBoard.tools.submit_plan?.onResult);
     expect(codeBoardOf(board)).toBe(workBoard);
+  });
+
+  it('reports a move Factory code makes that the row no longer allows, and serves the row as stored', () => {
+    const row = editWork('planning', phase => ({
+      ...phase,
+      nextPhases: workBoard.phases.planning.nextPhases.filter(next => next !== 'execute'),
+    }));
+
+    const { board, problems } = mergeCodeBehaviour(row, workBoard);
+
+    expect(problems).toEqual([
+      'Board "work" doesn\'t let phase "planning" move cards to "execute", so Factory\'s code can\'t make that move.',
+    ]);
+    expect(board.allowsTransition('planning', 'execute')).toBe(false);
+    expect(board.rules.planning?.issue?.onEnter).toBeTypeOf('function');
   });
 
   describe('an app board with outcomes and exit handlers', () => {
@@ -731,6 +748,19 @@ describe('serving a stored row that fell out of step with code', () => {
       await board.rules.shipping?.manual?.onExit?.(entering(board, 'shipping', 'manual', { source: 'manual' }));
       expect(exited).toEqual(['shipping']);
       expect(codeBoardOf(board)).toBe(app);
+    });
+
+    it("drops an outcome whose move the row doesn't allow, instead of allowing it again", () => {
+      const row = withShipping(phase => phase);
+      row.phases.push({ key: 'live', name: 'Live', kind: 'terminal' });
+
+      const { board, problems } = mergeCodeBehaviour(row, app);
+
+      expect(problems).toEqual([
+        'Phase "shipping" runs without its code outcome "shipped": the board doesn\'t let it move cards to "live".',
+      ]);
+      expect(board.allowsTransition('shipping', 'live')).toBe(false);
+      expect(board.transitions.shipping).toEqual([{ outcome: null, to: 'archived' }]);
     });
 
     it('serves the phase without its handlers or outcomes once its skill changed', () => {
