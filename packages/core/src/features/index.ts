@@ -50,4 +50,7 @@ export const coreFeatures = new Set<string>([
   // `@mastra/core/features` is itself a recent subpath, so importing it raises
   // the oldest core the dependent can load against.
   'processor-span-types',
+  // A resumed or recovered durable run carries its own AGENT_RUN + MODEL_GENERATION pair to
+  // the workers (`openSegment` / `currentSegment` in `@mastra/core/agent/durable`).
+  'durable-resume-segments',
 ]);
