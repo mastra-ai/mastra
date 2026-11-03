@@ -5,7 +5,8 @@ import { z } from 'zod';
 import {
   boardForWorkItem,
   isPullRequestCard,
-  pullRequestReviewPhase,
+  PULL_REQUEST_REVIEW_PHASE,
+  reviewedChangeRequest,
   reviewsPullRequest,
   workItemPhaseSemantics,
 } from '../boards/index.js';
@@ -214,9 +215,14 @@ function createReviewVerdictTool(
             toolCallId: execution.agent?.toolCallId,
           });
         }
-        if (!reviewsPullRequest({ board, item: { source } }) || item.stages[0] !== pullRequestReviewPhase(board)) {
-          throw new Error(`Only a card in Reviewing records a verdict; this one is in ${item.stages.join(', ')}.`);
+        if (
+          !reviewsPullRequest({ board, item: { source, workItem: item.workItem } }) ||
+          item.stages[0] !== PULL_REQUEST_REVIEW_PHASE
+        ) {
+          throw new Error(`Only a card in PR review records a verdict; this one is in ${item.stages.join(', ')}.`);
         }
+        // An issue card can carry several pull requests; the verdict names the one it covers.
+        const reviewedNumber = reviewedChangeRequest({ ...item, source })?.number;
         const reviewedAt = new Date().toISOString();
         // Revision-checked, so a merge that moves the card between the stage
         // check and this write fails the call instead of stamping a Done card.
@@ -232,6 +238,7 @@ function createReviewVerdictTool(
                 reviewVerdict: verdict,
                 reviewedHeadSha: reviewedHeadSha.toLowerCase(),
                 reviewedAt,
+                ...(reviewedNumber !== undefined ? { reviewedPullRequestNumber: reviewedNumber } : {}),
               },
             },
           });

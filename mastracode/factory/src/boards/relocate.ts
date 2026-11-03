@@ -3,9 +3,9 @@ import type { Card, WorkItemsStorage } from '../storage/domains/work-items/base.
 import { holdsLegacyPlanner } from './legacy-plan-role.js';
 import type { BoardRegistry } from './registry.js';
 
-/** Rows that predate persisted boards used source-type routing. */
+/** Rows that predate persisted boards sit on Work. */
 export function effectiveBoard(item: Card): string {
-  return item.board ?? (item.externalSource?.type === 'pull-request' ? 'review' : 'work');
+  return item.board ?? 'work';
 }
 
 /**

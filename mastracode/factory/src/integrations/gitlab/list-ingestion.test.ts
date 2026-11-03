@@ -94,7 +94,7 @@ describe('GitLab listed merge requests through rules ingress', () => {
       decision => !priorDecisions.some(previous => previous.id === decision.id),
     );
     expect(newDecisions).toEqual(
-      expect.arrayContaining([expect.objectContaining({ decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'review' }) })]),
+      expect.arrayContaining([expect.objectContaining({ decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'pr-review' }) })]),
     );
 
     const decisionsAfterPush = await seeded.workItems.listDeferredDecisions('org-1', project.id);

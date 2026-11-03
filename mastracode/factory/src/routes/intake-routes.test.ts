@@ -299,6 +299,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect((await replicaA.send('POST', `${projectPath}/boards`, stepwise)).status).toBe(201);
     const cases = [
       [{ boardKey: 'nope' }, 'unknown_board'],
+      // The retired Review board is no target any more.
+      [{ boardKey: 'review', phaseKey: 'review' }, 'unknown_board'],
       [{ boardKey: 'work', phaseKey: 'nope' }, 'unknown_phase'],
       [{ boardKey: 'work', phaseKey: 'done' }, 'terminal_phase'],
       [{ boardKey: 'stepwise', phaseKey: 'fixing' }, 'unreachable_phase'],
@@ -313,7 +315,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
       .intakeRoute as Route;
     expect(route.target).toEqual({ boardKey: 'work', phaseKey: null });
     const patch = await replicaA.send('PATCH', `${base}/${route.id}`, {
-      target: { boardKey: 'review', phaseKey: 'done' },
+      target: { boardKey: 'work', phaseKey: 'canceled' },
       expectedRevision: 1,
     });
     expect(patch).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });

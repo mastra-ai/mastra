@@ -19,6 +19,7 @@ import type {
   StoredPhaseInput,
 } from '../storage/domains/boards/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { LEGACY_REVIEW_BOARD } from '../storage/domains/work-items/legacy-review.js';
 import { codeBoardOf } from './define-board.js';
 import type { ProjectBoardCache } from './project-boards.js';
 import { createBoardRegistry } from './registry.js';
@@ -84,14 +85,24 @@ async function stored<T>(write: () => Promise<T>): Promise<T> {
   }
 }
 
+/** Cards stored on the retired Review board read as Work, so a board under its key would lose them. */
+function refuseReservedBoard(key: string): void {
+  if (key !== LEGACY_REVIEW_BOARD) return;
+  throw new BoardWriteError(409, {
+    error: 'reserved_board',
+    message: `Board "${key}" is reserved: the retired Review board's cards now live on Work.`,
+  });
+}
+
 export class BoardWrites {
   constructor(private readonly deps: BoardWritesDeps) {}
 
   /**
    * Code boards can't be created over, and Work can't be deleted while its code handlers run by its
-   * key; the legacy Review board can't be changed at all.
+   * key; the retired Review board's key can't be used at all.
    */
   refuseCodeBoard(key: string, action: 'create' | 'edit' | 'delete'): void {
+    refuseReservedBoard(key);
     const { boards } = this.deps;
     const code = boards.codeRegistry.get(key);
     if (!code) return;
@@ -123,6 +134,7 @@ export class BoardWrites {
     if (!parsed.success) {
       throw new BoardWriteError(422, { error: 'invalid_board', message: issueMessage(parsed.error.issues) });
     }
+    refuseReservedBoard(parsed.data.key);
     const code = boards.seedFor(parsed.data.key) && boards.codeRegistry.get(parsed.data.key);
     if (code) {
       const conflicts = codeBehaviourConflicts(parsed.data, code);
@@ -162,6 +174,7 @@ export class BoardWrites {
     board: StoredBoardInput,
     writer: BoardWriter,
   ): Promise<'inserted' | 'updated' | 'unchanged'> {
+    refuseReservedBoard(board.key);
     const { storage, boards } = this.deps;
     await boards.describe(scope);
     for (let attempt = 1; ; attempt++) {

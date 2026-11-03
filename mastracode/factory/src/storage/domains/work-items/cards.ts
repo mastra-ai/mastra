@@ -5,6 +5,12 @@ import type { CollectionListOptions, CollectionWhere, FactoryStorageOps } from '
 import { splitLegacyWorkItem } from '../../../work-items/split-migration.js';
 import type { ExternalWorkItemSource, WorkItemDbRow } from './base.js';
 import {
+  isLegacyReviewPlacement,
+  normalizeLegacyReviewColumns,
+  readLegacyReviewRow,
+  widenLegacyReviewBoardFilter,
+} from './legacy-review.js';
+import {
   FACTORY_BOARD_ITEMS_SCHEMA,
   FACTORY_WORK_ITEMS_SCHEMA,
   FACTORY_WORK_ITEM_SOURCES_SCHEMA,
@@ -79,7 +85,7 @@ function joinCard(
 ): WorkItemDbRow {
   if (!work) throw new Error(`Board item ${board.id} has no work item ${board.work_item_id}.`);
   const source = sources[0];
-  return {
+  return readLegacyReviewRow({
     work_item: work,
     work_item_sources: sources,
     id: board.id,
@@ -105,7 +111,7 @@ function joinCard(
     created_by: board.created_by,
     created_at: board.created_at,
     updated_at: board.updated_at,
-  };
+  });
 }
 
 function boardColumns(patch: Partial<WorkItemDbRow>, { filter = false } = {}): Partial<BoardItemDbRecord> {
@@ -161,6 +167,7 @@ export class Cards {
   async #where(where: CollectionWhere): Promise<CollectionWhere | null> {
     const { source_key: sourceKey, ...rest } = where;
     const boardWhere = boardColumns(rest as Partial<WorkItemDbRow>, { filter: true }) as CollectionWhere;
+    if (boardWhere.board !== undefined) boardWhere.board = widenLegacyReviewBoardFilter(boardWhere.board) as never;
     if (sourceKey === undefined) return boardWhere;
     const scope: CollectionWhere = {};
     if (rest.org_id !== undefined) scope.org_id = rest.org_id;
@@ -341,6 +348,10 @@ export class Cards {
         if (!touch) return null;
         return { updated_at: new Date(Math.max(Date.now(), new Date(row.updated_at).getTime() + 1)) };
       }
+      // A legacy Review row stores its Work placement on its first real write.
+      if (isLegacyReviewPlacement(row.board, joined.work_item_sources?.[0]?.source_type)) {
+        Object.assign(columns, normalizeLegacyReviewColumns(row, columns));
+      }
       return {
         ...columns,
         ...(nativeTitleChanged
@@ -349,6 +360,53 @@ export class Cards {
       };
     });
     return board ? ((await this.#join([board]))[0] ?? null) : null;
+  }
+
+  /**
+   * Add one more source to an existing card's work item. The new source sorts
+   * after the existing ones, so the card's primary source never changes. Only
+   * the source's provider facts are stored; Factory-owned keys in `metadata`
+   * (trust stamps, process state) belong to the card and are ignored here.
+   */
+  async attachSource(
+    where: { org_id: string; id: string },
+    source: { external_source: ExternalWorkItemSource; metadata: Record<string, unknown> | null; now: Date },
+  ): Promise<{ row: WorkItemDbRow; attached: boolean; ownerWorkItemId?: string } | null> {
+    if (this.legacyMode) throw new Error('[cards] attaching a source needs the split work item tables.');
+    const board = await this.ops.findOne<BoardItemDbRecord>(BOARD_ITEMS, where);
+    if (!board) return null;
+    const [joined] = await this.#join([board]);
+    const next = splitCardRows(
+      { ...joined!, external_source: source.external_source, metadata: source.metadata },
+      { workItemId: board.work_item_id },
+    ).source;
+    if (!next) throw new Error('[cards] an attached source must carry provider facts.');
+    const existing = await this.ops.findOne<WorkItemSourceDbRecord>(SOURCES, {
+      org_id: board.org_id,
+      factory_project_id: board.factory_project_id,
+      provider: next.provider,
+      external_id: next.external_id,
+    });
+    if (existing) {
+      return existing.work_item_id === board.work_item_id
+        ? { row: joined!, attached: false }
+        : { row: joined!, attached: false, ownerWorkItemId: existing.work_item_id };
+    }
+    await this.ops.insertOne<WorkItemSourceDbRecord>(SOURCES, {
+      ...next,
+      id: randomUUID(),
+      created_at: source.now,
+      updated_at: source.now,
+      synced_at: source.now,
+    });
+    const bumped = await this.ops.updateAtomic<BoardItemDbRecord>(BOARD_ITEMS, { id: board.id }, row => ({
+      revision: row.revision + 1,
+      updated_at: source.now,
+      ...(isLegacyReviewPlacement(row.board, joined!.work_item_sources?.[0]?.source_type)
+        ? normalizeLegacyReviewColumns(row, {})
+        : {}),
+    }));
+    return { row: (await this.#join([bumped ?? board]))[0]!, attached: true };
   }
 
   async updateMany(where: CollectionWhere, patch: Partial<WorkItemDbRow>): Promise<number> {

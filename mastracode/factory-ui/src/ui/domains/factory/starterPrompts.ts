@@ -84,9 +84,9 @@ function notStarted(item: WorkItem): boolean {
   );
 }
 
-/** A pull request's own card, on Work or on the Review board it used to be filed on. */
+/** A pull request's own card on Work. */
 function reviewedPullRequest(item: WorkItem): boolean {
-  return isPullRequestSource(item.source) && (belongsToBoard(item, 'work') || belongsToBoard(item, 'review'));
+  return isPullRequestSource(item.source) && belongsToBoard(item, 'work');
 }
 
 function waitsForReview(item: WorkItem): boolean {
