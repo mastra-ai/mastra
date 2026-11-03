@@ -25,13 +25,16 @@ export type StateRef = StateVersion & { workflowName: string; runId: string };
  * One storage v2 entry. A run's entries are append-only and ordered by `seq`, which only
  * increases within a run, also across checkpoints.
  *
- * The run's state is a `state` (full) or `state-base` (another run's state version) entry, with
- * the later `state-patch` entries applied. A `state-draft` doesn't change the run's state: it is a
- * version of its live state that nested runs build on (see `materializeState`).
+ * A step's result is its latest `step` entry, with the later `step-patch` entries for the step
+ * applied (see `latestStepResults`). The run's state is a `state` (full) or `state-base` (another
+ * run's state version) entry, with the later `state-patch` entries applied. A `state-draft` doesn't
+ * change the run's state: it is a version of its live state that nested runs build on (see
+ * `materializeState`).
  * @experimental
  */
 export type WorkflowRunEntry =
   | { seq: number; kind: 'step'; stepId: string; result: unknown }
+  | { seq: number; kind: 'step-patch'; stepId: string; ops: StatePatchOp[] }
   | { seq: number; kind: 'state'; state: Record<string, any> }
   | { seq: number; kind: 'state-patch'; ops: StatePatchOp[] }
   | { seq: number; kind: 'state-base'; base: StateRef }
@@ -167,8 +170,42 @@ export function materializeState(
 }
 
 /**
+ * The latest result of each step (only of `stepIds` when given), from a run's entries (in `seq`
+ * order), keyed in the order each step was first written: its latest `step` entry, with every later
+ * `step-patch` entry for the step applied in order. A patch with no earlier `step` entry for its
+ * step is ignored. A patched result is a JSON copy; the others are the entries' own objects.
+ * Shared so every adapter rebuilds step results the same way.
+ * @experimental
+ */
+export function latestStepResults(
+  entries: readonly WorkflowRunEntry[],
+  stepIds?: ReadonlySet<string>,
+): Map<string, unknown> {
+  // A Map keeps each step at its first write while later entries replace the value.
+  const latest = new Map<string, { result: unknown; patches: StatePatchOp[][] }>();
+  for (const entry of entries) {
+    if (entry.kind === 'step') {
+      if (!stepIds || stepIds.has(entry.stepId)) latest.set(entry.stepId, { result: entry.result, patches: [] });
+    } else if (entry.kind === 'step-patch') {
+      latest.get(entry.stepId)?.patches.push(entry.ops);
+    }
+  }
+  const results = new Map<string, unknown>();
+  for (const [stepId, { result, patches }] of latest) {
+    if (!patches.length) {
+      results.set(stepId, result);
+      continue;
+    }
+    let patched = JSON.parse(JSON.stringify(result));
+    for (const ops of patches) patched = applyStatePatch(patched, ops);
+    results.set(stepId, patched);
+  }
+  return results;
+}
+
+/**
  * Rebuild a run's `WorkflowRunState` from its storage v2 header and entries (in `seq` order).
- * Each step's latest entry wins, and `materializeState` rebuilds `value` (`base` as there).
+ * `latestStepResults` rebuilds `context`, and `materializeState` rebuilds `value` (`base` as there).
  * @experimental
  */
 export function materializeWorkflowRun(
@@ -176,9 +213,6 @@ export function materializeWorkflowRun(
   entries: readonly WorkflowRunEntry[],
   base?: Record<string, any>,
 ): WorkflowRunState {
-  const context: Record<string, unknown> = {};
-  for (const entry of entries) {
-    if (entry.kind === 'step') context[entry.stepId] = entry.result;
-  }
+  const context = Object.fromEntries(latestStepResults(entries));
   return { ...header, context, value: materializeState(entries, { base }).state } as WorkflowRunState;
 }

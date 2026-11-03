@@ -508,6 +508,50 @@ describe('WorkflowsInMemory storage v2 methods', () => {
   });
 });
 
+describe('WorkflowsInMemory storage v2 step patches', () => {
+  const run = { workflowName: 'wf', runId: 'r1' };
+  const header = makeHeader('r1');
+  const progress = (k: number, output: unknown) => ({
+    op: 'set' as const,
+    path: ['metadata', 'foreachProgress', String(k)],
+    value: { output },
+  });
+  const running = (done: Record<number, { output: unknown }>) =>
+    ({ status: 'running', payload: [1, 2, 3], startedAt: 1, metadata: { foreachProgress: done } }) as any;
+  const steps = async (store: WorkflowsInMemory) =>
+    (await store.loadWorkflowRun({ ...run, successfulSteps: 'full' }))!.steps;
+
+  it('rebuilds a step from its latest full entry and the patches after it, on every read', async () => {
+    const { store } = setup();
+    await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { a: ok(1), each: running({}) }, state: {} });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { each: [progress(0, 10)] } });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { each: [progress(1, 20)] } });
+    const each = running({ 0: { output: 10 }, 1: { output: 20 } });
+
+    expect(await steps(store)).toEqual({ a: ok(1), each });
+    expect(await store.loadWorkflowRunSteps({ ...run, stepIds: ['each'] })).toEqual({ each });
+    expect((await store.loadWorkflowSnapshot(run))!.context).toEqual({ a: ok(1), each });
+    // A patched result is a copy: editing it doesn't reach the store.
+    const edited: any = await steps(store);
+    edited.each.metadata.foreachProgress[2] = { output: 30 };
+    expect(await steps(store)).toEqual({ a: ok(1), each });
+  });
+
+  it('applies only the patches after the latest full entry, and a checkpoint drops them', async () => {
+    const { db, store } = setup();
+    await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { stray: [progress(0, 1)] } });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: { each: running({}) } });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { each: [progress(0, 10)] } });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: { each: running({ 5: { output: 50 } }) } });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { each: [progress(6, 60)] } });
+    expect(await steps(store)).toEqual({ each: running({ 5: { output: 50 }, 6: { output: 60 } }) });
+
+    await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { each: running({}) }, state: {} });
+    expect(db.workflowRunEntries.get('wf-r1')!.map(e => e.kind)).toEqual(['step', 'state']);
+    expect(await steps(store)).toEqual({ each: running({}) });
+  });
+});
+
 describe('WorkflowsInMemory storage v2 state patches', () => {
   const parent = { workflowName: 'parent', runId: 'r1' };
   const child = { workflowName: 'child', runId: 'r1' };

@@ -129,8 +129,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }
 
   /**
-   * A storage v2 run's header, state and latest result per step. With
-   * `successfulSteps: 'summary'`, successful steps come back as summaries
+   * A storage v2 run's header, state and latest result per step (as `latestStepResults` rebuilds
+   * them). With `successfulSteps: 'summary'`, successful steps come back as summaries
    * (`summarizeStepResult`) and are listed in `summarizedStepIds`.
    *
    * The state is rebuilt by `materializeState`: the latest `state` or `state-base` entry with every
@@ -148,7 +148,8 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }
 
   /**
-   * The latest result of each given step of a storage v2 run. Steps without an entry are left out.
+   * The latest result of each given step of a storage v2 run (as `latestStepResults` rebuilds it).
+   * Steps without an entry are left out.
    * @experimental
    */
   async loadWorkflowRunSteps(_args: {
@@ -175,10 +176,11 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }
 
   /**
-   * Replace a storage v2 run's step entries with one per step, in the given order, and start its
-   * state over: from `state`, or from `stateBase` with `statePatch` applied, or from `{}`. Earlier
-   * state entries are kept, so a nested run built on an earlier version of this run's state still
-   * reads it. Writes the header, creating the run if it isn't stored. Returns the run's `lastSeq`.
+   * Replace a storage v2 run's step entries (and step patches) with one per step, in the given
+   * order, and start its state over: from `state`, or from `stateBase` with `statePatch` applied, or
+   * from `{}`. Earlier state entries are kept, so a nested run built on an earlier version of this
+   * run's state still reads it. Writes the header, creating the run if it isn't stored. Returns the
+   * run's `lastSeq`.
    * @experimental
    */
   async writeWorkflowRunCheckpoint(_args: {
@@ -196,8 +198,10 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }
 
   /**
-   * Append one entry per given step to a storage v2 run, then the full state or a state patch
-   * when given (at most one of them). Writes the header, creating the run if it isn't stored.
+   * Append one entry per given step to a storage v2 run, then one `step-patch` entry per step in
+   * `stepPatches` (its ops change the step's latest result, see `latestStepResults`; a step is in
+   * `steps` or `stepPatches`, not both), then the full state or a state patch when given (at most
+   * one of them). Writes the header, creating the run if it isn't stored.
    * With `startStateSeq` (a resumed run's first append), records it as the run's `startStateSeq`.
    * Returns the run's `lastSeq`.
    * @experimental
@@ -208,6 +212,7 @@ export abstract class WorkflowsStorage extends StorageDomain {
     resourceId?: string;
     header: WorkflowRunHeader;
     steps: Record<string, StepResult<any, any, any, any>>;
+    stepPatches?: Record<string, StatePatchOp[]>;
     state?: Record<string, any>;
     statePatch?: StatePatchOp[];
     startStateSeq?: number;

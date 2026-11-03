@@ -684,6 +684,62 @@ describe('storage v2 write volume', () => {
     }
   });
 
+  it.each([1, 4])(
+    "stores step bytes linear in a foreach's result as it records its finished items (concurrency %s)",
+    async concurrency => {
+      /** The JSON size of every step result and step patch the run sent, and of the foreach's final result. */
+      async function stepBytes(count: number) {
+        const storage = new MockStore();
+        const store = storage.stores.workflows!;
+        let sent = 0;
+        const add = (args: { steps: Record<string, unknown>; stepPatches?: Record<string, unknown> }) => {
+          sent += JSON.stringify(args.steps).length;
+          if (args.stepPatches) sent += JSON.stringify(args.stepPatches).length;
+        };
+        const checkpoint = store.writeWorkflowRunCheckpoint.bind(store);
+        store.writeWorkflowRunCheckpoint = async args => (add(args), checkpoint(args));
+        const append = store.appendWorkflowRunEntries.bind(store);
+        store.appendWorkflowRunEntries = async args => (add(args), append(args));
+
+        const kb = createStep({
+          id: 'kb',
+          inputSchema: num,
+          outputSchema: z.object({ text: z.string() }),
+          execute: async ({ inputData }) => ({ text: String(inputData.n % 10).repeat(1024) }),
+        });
+        const workflow = createWorkflow({
+          id: 'items',
+          inputSchema: z.array(num),
+          outputSchema: z.array(z.object({ text: z.string() })),
+          options: { storageVersion: 2 },
+        })
+          .foreach(kb, { concurrency })
+          .commit();
+        new Mastra({ logger: false, storage, workflows: { items: workflow } });
+
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: Array.from({ length: count }, (_, n) => ({ n })) });
+        expect(result.status).toBe('success');
+        const stored = await store.loadWorkflowRun({
+          workflowName: 'items',
+          runId: run.runId,
+          successfulSteps: 'full',
+        });
+        expect(stored!.steps.kb).toMatchObject({
+          status: 'success',
+          output: result.status === 'success' && result.result,
+        });
+        return { sent, final: JSON.stringify(stored!.steps.kb).length };
+      }
+
+      for (const count of [64, 256]) {
+        const { sent, final } = await stepBytes(count);
+        // Writing the whole foreach result each time an item finishes would send about count / 2 times its final size.
+        expect(sent).toBeLessThanOrEqual(6 * final);
+      }
+    },
+  );
+
   it('keeps the patches after the latest full state within the state size across suspend and resume cycles', async () => {
     const storage = new MockStore();
     const store = storage.stores.workflows!;
