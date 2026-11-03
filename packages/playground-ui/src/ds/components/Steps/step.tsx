@@ -30,7 +30,7 @@ export function Step({ title, description, action, done, className, children }: 
           className={cn(
             'flex size-6 shrink-0 items-center justify-center rounded-full',
             transitions.colors,
-            done ? 'bg-success-subtle text-success-indicator' : 'bg-fill text-foreground',
+            done ? 'bg-success-indicator/18 text-success-indicator' : 'bg-fill text-foreground',
           )}
         >
           {done ? (
@@ -43,15 +43,16 @@ export function Step({ title, description, action, done, className, children }: 
       </div>
 
       <div className="flex min-w-0 flex-col gap-3 pb-8 group-last/step:pb-0">
-        <div className="flex min-h-6 flex-col gap-1">
-          <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
-            <Txt as={headingLevel === 2 ? 'h2' : 'h3'} variant="label">
+        <div className="flex flex-col gap-1">
+          {/* As tall as the marker, so a one-line title centers on it. */}
+          <div className="flex min-h-6 flex-wrap items-center justify-between gap-x-6 gap-y-2">
+            <Txt as={headingLevel === 2 ? 'h2' : 'h3'} variant="label" className="text-pretty">
               {title}
             </Txt>
             {action != null ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
           </div>
           {description != null ? (
-            <Txt as="p" variant="body-sm" tone="muted" className="max-w-[70ch]">
+            <Txt as="p" variant="body-sm" tone="muted" className="max-w-[70ch] text-pretty">
               {description}
             </Txt>
           ) : null}

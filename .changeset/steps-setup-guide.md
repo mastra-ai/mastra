@@ -12,3 +12,5 @@ import { Steps } from '@mastra/playground-ui/components/Steps';
   <Steps.Step title="Send your first request" />
 </Steps>
 ```
+
+`PageHeader.Description` now wraps with `text-pretty`, so a long description no longer leaves a single word on its last line.
