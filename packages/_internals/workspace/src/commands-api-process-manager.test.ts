@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
 
 import { MastraSandbox } from '@mastra/core/workspace';
@@ -140,10 +140,12 @@ class HostCommands implements CommandsApi {
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
-    return true;
   } catch {
     return false;
   }
+  // A killed process nobody has reaped yet is a zombie: it still takes signals but no longer runs.
+  const state = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim();
+  return state !== '' && !state.startsWith('Z');
 }
 
 function killGroup(pid: number): boolean {
