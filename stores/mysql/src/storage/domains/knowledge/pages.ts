@@ -1,6 +1,7 @@
 import {
   createKnowledgePagesCoreLoader,
   knowledgePageKeyProblem,
+  KNOWLEDGE_SEARCH_WEIGHTS,
   knowledgeSearchWords,
 } from '@internal/core/knowledge-compat';
 import { coreFeatures } from '@mastra/core/features';
@@ -290,6 +291,14 @@ function isRetryableRace(error: unknown): boolean {
   for (let current = error; current && typeof current === 'object'; current = (current as { cause?: unknown }).cause) {
     const { code, errno } = current as { code?: unknown; errno?: unknown };
     if (code === 'ER_DUP_ENTRY' || errno === 1062 || code === 'ER_LOCK_DEADLOCK' || errno === 1213) return true;
+  }
+  return false;
+}
+
+function isLiveKeyClash(error: unknown): boolean {
+  for (let current = error; current && typeof current === 'object'; current = (current as { cause?: unknown }).cause) {
+    const { code, errno, message } = current as { code?: unknown; errno?: unknown; message?: unknown };
+    if ((code === 'ER_DUP_ENTRY' || errno === 1062) && String(message).includes('idx_kpages_live_key')) return true;
   }
   return false;
 }
@@ -846,7 +855,16 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
 
   async createPage(input: CreateKnowledgePageInput): Promise<KnowledgePage> {
     await assertKnowledgePageDescriptionWithinBound(input.description);
-    return this.#transaction(tx => this.#insertPage(tx, input));
+    try {
+      return await this.#transaction(tx => this.#insertPage(tx, input));
+    } catch (error) {
+      // A concurrent create of the same key passes the clash check too; the live-key index stops it.
+      if (input.key !== undefined && isLiveKeyClash(error)) {
+        const core = await loadPagesCore();
+        throw new core.KnowledgePageKeyConflictError(input.key, input.parentId);
+      }
+      throw error;
+    }
   }
 
   async updatePage(input: UpdateKnowledgePageInput): Promise<KnowledgePage> {
@@ -1145,6 +1163,20 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     return this.#noteOutput(rows, limit);
   }
 
+  async countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (ids.length === 0) return counts;
+    const readable = pageReadable('p', input.read);
+    const rows = await this.#query(
+      this.#read,
+      `SELECT p.parentId AS parentId, COUNT(*) AS total FROM ${T.pages} p WHERE p.parentId IN ${JV} AND p.isScope = 0 AND p.deletedAt IS NULL AND ${readable.sql} GROUP BY p.parentId`,
+      [jsonList(ids), ...readable.args],
+    );
+    for (const row of rows) counts[String(row.parentId)] = Number(row.total);
+    return counts;
+  }
+
   async countNotes(input: { pageIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
     const ids = [...new Set(input.pageIds)];
     const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
@@ -1331,26 +1363,33 @@ export class MySQLKnowledgePages implements KnowledgePageStore {
     const readable = pagesInReadableScopes('p', input.read);
     const scopeFilter = input.scopeIds ? ` AND p.scopeId IN ${JV}` : '';
     const scopeArgs: InValue[] = input.scopeIds ? [jsonList(input.scopeIds)] : [];
+    const field = (column: string) => `LOWER(COALESCE(${column}, '')) LIKE ? ESCAPE '='`;
     const pageMatch = words
+      .map(() => `(${field('p.name')} OR ${field('p.description')} OR ${field('p.body')})`)
+      .join(' OR ');
+    const pageScore = words
       .map(
         () =>
-          `(LOWER(p.name) LIKE ? ESCAPE '=' OR LOWER(COALESCE(p.description, '')) LIKE ? ESCAPE '=' OR LOWER(COALESCE(p.body, '')) LIKE ? ESCAPE '=')`,
+          `(CASE WHEN ${field('p.name')} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.name} WHEN ${field('p.description')} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.description} WHEN ${field('p.body')} THEN ${KNOWLEDGE_SEARCH_WEIGHTS.body} ELSE 0 END)`,
       )
-      .join(' AND ');
-    const nameMatch = words.map(() => `LOWER(p.name) LIKE ? ESCAPE '='`).join(' AND ');
+      .join(' + ');
+    const pageCount = words
+      .map(() => `(CASE WHEN ${field('p.name')} OR ${field('p.description')} OR ${field('p.body')} THEN 1 ELSE 0 END)`)
+      .join(' + ');
+    const triple = likes.flatMap(like => [like, like, like]);
     const pageRows = await this.#query(
       this.#read,
-      `SELECT p.* ${readable.sql} WHERE p.deletedAt IS NULL AND p.isScope = 0${scopeFilter} AND ${pageMatch} ORDER BY CASE WHEN LOCATE(?, p.canonicalName) > 0 THEN 0 WHEN ${nameMatch} THEN 1 ELSE 2 END, p.updatedAt DESC, p.id ASC LIMIT ?`,
-      [...readable.args, ...scopeArgs, ...likes.flatMap(like => [like, like, like]), phrase, ...likes, limit],
+      `SELECT p.* ${readable.sql} WHERE p.deletedAt IS NULL AND p.isScope = 0${scopeFilter} AND (${pageMatch}) ORDER BY CASE WHEN LOCATE(?, p.canonicalName) > 0 THEN 0 ELSE 1 END, (${pageCount}) DESC, (${pageScore}) DESC, p.updatedAt DESC, p.id ASC LIMIT ?`,
+      [...readable.args, ...scopeArgs, ...triple, phrase, ...triple, ...triple, limit],
     );
     const hits: KnowledgePageSearchHit[] = pageRows.map(row => ({ type: 'page', page: toPage(row) }));
     if (hits.length >= limit) return hits;
     const noteVisible = noteReadable('n', input.read);
-    const noteMatch = words.map(() => `LOWER(n.text) LIKE ? ESCAPE '='`).join(' AND ');
+    const noteHas = words.map(() => `LOWER(n.text) LIKE ? ESCAPE '='`);
     const noteRows = await this.#query(
       this.#read,
-      `SELECT n.* FROM ${T.notes} n JOIN ${T.pages} p ON p.id = n.pageId WHERE n.deletedAt IS NULL AND p.deletedAt IS NULL${scopeFilter} AND ${noteMatch} AND ${noteVisible.sql} ORDER BY n.updatedAt DESC, n.id DESC LIMIT ?`,
-      [...scopeArgs, ...likes, ...noteVisible.args, limit - hits.length],
+      `SELECT n.* FROM ${T.notes} n JOIN ${T.pages} p ON p.id = n.pageId WHERE n.deletedAt IS NULL AND p.deletedAt IS NULL${scopeFilter} AND (${noteHas.join(' OR ')}) AND ${noteVisible.sql} ORDER BY (${noteHas.map(has => `(CASE WHEN ${has} THEN 1 ELSE 0 END)`).join(' + ')}) DESC, n.updatedAt DESC, n.id DESC LIMIT ?`,
+      [...scopeArgs, ...likes, ...noteVisible.args, ...likes, limit - hits.length],
     );
     const notes = await this.#hydrateNotes(this.#read, noteRows);
     for (const note of notes) {

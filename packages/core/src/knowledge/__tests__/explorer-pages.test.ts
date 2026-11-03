@@ -150,6 +150,49 @@ describe('readKnowledgePage', () => {
   });
 });
 
+describe('readKnowledgePage by reference', () => {
+  // Tool results (knowledge_list) name pages by scope address and key path, not id.
+  async function keyed() {
+    const seeded = await seed();
+    const { store, support, eng } = seeded;
+    const policies = await store.createPage({
+      parentId: support.id,
+      key: 'policies',
+      name: 'Policies',
+      provenance: host,
+    });
+    const guides = await store.createPage({ parentId: policies.id, key: 'guides', name: 'Guides', provenance: host });
+    const disputes = await store.createPage({
+      parentId: guides.id,
+      key: 'disputes',
+      name: 'Disputes',
+      provenance: host,
+    });
+    const plans = await store.createPage({ parentId: eng.id, key: 'plans', name: 'Plans', provenance: host });
+    return { ...seeded, disputes, plans };
+  }
+
+  it('opens a scope by its address', async () => {
+    const { store, support } = await keyed();
+    expect((await readKnowledgePage(store, { pageId: 'team:acme:support', read: 'all' }))?.page.id).toBe(support.id);
+  });
+
+  it('opens a page by scope#key/path at any depth', async () => {
+    const { store, disputes } = await keyed();
+    const view = await readKnowledgePage(store, { pageId: 'team:acme:support#policies/guides/disputes', read: 'all' });
+    expect(view?.page.id).toBe(disputes.id);
+    expect(names(view?.ancestors ?? [])).toEqual(['Acme', 'Support', 'Policies', 'Guides']);
+  });
+
+  it('finds nothing the caller cannot read, nor a ref that names no page', async () => {
+    const { store } = await keyed();
+    expect(await readKnowledgePage(store, { pageId: 'team:acme:eng', read: supportOnly })).toBeNull();
+    expect(await readKnowledgePage(store, { pageId: 'team:acme:eng#plans', read: supportOnly })).toBeNull();
+    expect(await readKnowledgePage(store, { pageId: 'team:acme:support#nowhere', read: 'all' })).toBeNull();
+    expect(await readKnowledgePage(store, { pageId: 'team:acme:nobody', read: 'all' })).toBeNull();
+  });
+});
+
 describe('readKnowledgePageGraph', () => {
   it('walks every root as the owner with parent and mention edges, and marks pins', async () => {
     const { store, billing, refunds, roadmap, support } = await seed();

@@ -53,7 +53,6 @@ import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
 import { ProjectBoardCache } from './boards/project-boards.js';
 import type { ProjectBoardSource } from './boards/project-boards.js';
-import { boardForWorkItem } from './boards/semantics.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
 import { touchFeed } from './feed-events.js';
@@ -106,6 +105,7 @@ import { isValidGitRef } from './sandbox/git-ref.js';
 import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
+import { peekSessionSandbox } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
@@ -123,6 +123,7 @@ import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
+import { selfReviewApprovedHead } from './session/self-review-gate.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
@@ -149,6 +150,7 @@ import { factoryMemorySettingsUserId, MemorySettingsStorage } from './storage/do
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
+import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
 import { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
@@ -287,8 +289,10 @@ export interface MastraFactoryConfig {
    * credentials instead of per-account credentials. With auth enabled, these
    * providers are only usable when listed here; the stored-key flow is never
    * offered for them. Supported: `'amazon-bedrock'` (AWS credential chain —
-   * `AWS_BEARER_TOKEN_BEDROCK` or access keys/profile/role plus `AWS_REGION`).
-   * Every signed-in account can then run these models on the deployment's
+   * `AWS_BEARER_TOKEN_BEDROCK` or access keys/profile/role plus `AWS_REGION`)
+   * and `'google-vertex'` (Application Default Credentials plus
+   * `GOOGLE_VERTEX_PROJECT` and `GOOGLE_VERTEX_LOCATION`). Every signed-in
+   * account can then run these models on the deployment's
    * credentials. Default: none.
    */
   deploymentModelProviders?: readonly string[];
@@ -677,6 +681,7 @@ export class MastraFactory {
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
+    const skillOverridesStorage = storage.registerDomain(new SkillOverridesStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -691,6 +696,7 @@ export class MastraFactory {
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
       comments: workItemCommentsStorage,
+      skillOverrides: skillOverridesStorage,
     };
     const auditDomain = new AuditDomain({
       auth: routeAuth,
@@ -1072,6 +1078,7 @@ export class MastraFactory {
       feed: commentsDomain,
       audit: auditStorage,
       boards: boards,
+      ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
       transitionService,
       auditRecorder: auditDomain,
       sessions: sourceControlSessions,
@@ -1353,6 +1360,7 @@ export class MastraFactory {
         resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
         workspace: createWorkspaceFactory({
           skills: this.#skills,
+          ...(storage.isDomainReady('skill-overrides') ? { skillOverrides: skillOverridesStorage } : {}),
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
           sourceControls: integrations.flatMap(integration =>
@@ -1574,30 +1582,12 @@ export class MastraFactory {
                 },
                 ...(workItemsStorage
                   ? {
-                      selfReviewApprovedHead: async () => {
-                        const resolution = await resolveFactorySessionAddress({
+                      selfReviewApprovedHead: () =>
+                        selfReviewApprovedHead({
                           requestContext,
-                          storage: workItemsStorage,
-                        });
-                        if (!resolution) return undefined;
-                        const binding =
-                          resolution.binding ?? (await workItemsStorage.findActiveRunBinding(resolution.address));
-                        if (!binding) return undefined;
-                        const item = await workItemsStorage.get({ orgId: binding.orgId, id: binding.workItemId });
-                        if (!item || boardForWorkItem(item) !== 'work') return undefined;
-                        if (typeof item.metadata?.openPullRequestNumber === 'number') return undefined;
-                        // A verdict already recorded still binds the change request to its head.
-                        if (item.metadata?.selfReviewVerdict === undefined) {
-                          await factoryProjectsStorage.ensureReady();
-                          const project = await factoryProjectsStorage.get({
-                            orgId: binding.orgId,
-                            id: binding.factoryProjectId,
-                          });
-                          if (!project?.selfReviewEnabled) return undefined;
-                        }
-                        const sha = item.metadata?.selfReviewedHeadSha;
-                        return item.metadata?.selfReviewVerdict === 'approve' && typeof sha === 'string' ? sha : null;
-                      },
+                          workItems: workItemsStorage,
+                          projects: factoryProjectsStorage,
+                        }),
                       boundChangeRequestId: async () => {
                         const resolution = await resolveFactorySessionAddress({
                           requestContext,
@@ -1684,6 +1674,12 @@ export class MastraFactory {
                     createFactorySandboxTools(scope, {
                       sessions: sourceControlSessions,
                       resetSandbox: input => sessionRetirement.resetSessionSandbox(input),
+                      findSandbox: async ({ sourceControl, orgId, sessionId }) => {
+                        const session = await sourceControl.sessions.getBySessionId(sessionId);
+                        if (!session || session.orgId !== orgId) return undefined;
+                        return peekSessionSandbox(session.id)?.sandbox;
+                      },
+                      browser: this.#config.browser,
                     }),
                   );
                 }
@@ -1805,6 +1801,7 @@ export class MastraFactory {
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
                 boards: boards,
+                ...(this.#projectBoards ? { intakeRoutes: storedBoardsStorage } : {}),
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();

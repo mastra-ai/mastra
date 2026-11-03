@@ -32,19 +32,13 @@
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "nvidia/GLM-5.3-Flash-NVFP4": [
+    "Qwen/Qwen3.8-2.4T-A95B": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -56,10 +50,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-2.4T-A95B": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "nvidia/GLM-5.3-Flash-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

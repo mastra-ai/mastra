@@ -113,7 +113,7 @@ export function DatasetsFilterBar({
       className="min-w-64 flex-1"
     >
       <FilterBar.Chips />
-      <FilterBar.Input placeholder="Filter datasets…" />
+      <FilterBar.Input placeholder="Filter datasets" />
     </FilterBar>
   );
 }

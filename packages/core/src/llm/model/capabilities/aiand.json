@@ -36,28 +36,34 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "meta/muse-spark-open": [
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "qwen/qwen3.6-27b": [
+    "motif-technologies/motif-3": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "qwen/qwen3.8-27b": [
+    "deepseek-ai/deepseek-v4-pro": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "high", "max"]
       }
     ],
-    "openai/gpt-oss-120b": [
+    "deepseek-ai/deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-ai/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
     "moonshotai/kimi-k3": [
@@ -66,22 +72,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/deepseek-v4.1-flash-1017": [
+    "google/gemma-4-31b-it": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
-    "deepseek-ai/deepseek-v4.1-flash": [
+    "meta/muse-spark-open": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "deepseek-ai/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "zai-org/glm-5.3": [
@@ -96,16 +96,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "motif-technologies/motif-3": [
+    "qwen/qwen3.6-27b": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "google/gemma-4-31b-it": [
+    "qwen/qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

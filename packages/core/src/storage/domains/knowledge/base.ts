@@ -253,6 +253,11 @@ export abstract class KnowledgeStorage extends StorageDomain implements Knowledg
   getNote(_input: Parameters<KnowledgePageStore['getNote']>[0]): ReturnType<KnowledgePageStore['getNote']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('getNote'));
   }
+  countChildPages(
+    _input: Parameters<KnowledgePageStore['countChildPages']>[0],
+  ): ReturnType<KnowledgePageStore['countChildPages']> {
+    return Promise.reject(new KnowledgeUnsupportedCapabilityError('countChildPages'));
+  }
   countNotes(_input: Parameters<KnowledgePageStore['countNotes']>[0]): ReturnType<KnowledgePageStore['countNotes']> {
     return Promise.reject(new KnowledgeUnsupportedCapabilityError('countNotes'));
   }

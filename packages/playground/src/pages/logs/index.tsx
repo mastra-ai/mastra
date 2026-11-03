@@ -156,6 +156,7 @@ export default function LogsPage() {
             onTokensChange={url.handleFilterTokensChange}
             disabled={isLoadingLogs}
             onStartTextFilter={setAutoFocusFilterFieldId}
+            size="sm"
           />
         </ActionRow.Start>
       </ActionRow>

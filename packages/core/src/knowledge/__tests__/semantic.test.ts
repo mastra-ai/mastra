@@ -1,4 +1,5 @@
 import { APICallError } from '@internal/ai-sdk-v5';
+import { estimateTokenCount } from 'tokenx';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
@@ -63,7 +64,10 @@ class MemoryVector extends MastraVector {
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     this.indexes.get(indexName)?.rows.delete(id);
   }
+  /** Set to make deleteVectors throw, like Astra, which can't delete by id list. */
+  failDeletes = false;
   async deleteVectors({ indexName, ids }: DeleteVectorsParams): Promise<void> {
+    if (this.failDeletes) throw new Error('deleteVectors is not supported');
     for (const id of ids ?? []) this.indexes.get(indexName)?.rows.delete(id);
   }
   ids(): string[] {
@@ -85,7 +89,14 @@ const CONCEPTS: Record<string, number> = {
   vacation: 2,
   leave: 2,
 };
-type EmbedderState = { fail: boolean; calls: number; transient?: number; options?: Record<string, unknown>[] };
+type EmbedderState = {
+  fail: boolean;
+  calls: number;
+  transient?: number;
+  options?: Record<string, unknown>[];
+  /** Refuses any input over this many estimated tokens, like a real embedder's input limit. */
+  maxTokens?: number;
+};
 function conceptEmbedder(state: EmbedderState): MastraEmbeddingModel<string> {
   return {
     specificationVersion: 'v2',
@@ -97,6 +108,15 @@ function conceptEmbedder(state: EmbedderState): MastraEmbeddingModel<string> {
       state.calls++;
       state.options?.push(options);
       if (state.fail) throw new Error('embedder down');
+      if (state.maxTokens && values.some(text => estimateTokenCount(text) > state.maxTokens!)) {
+        throw new APICallError({
+          message: 'input too long',
+          url: 'x',
+          requestBodyValues: {},
+          statusCode: 400,
+          isRetryable: false,
+        });
+      }
       if (state.transient && state.transient-- > 0) {
         throw new APICallError({
           message: 'rate limited',
@@ -263,7 +283,7 @@ describe('Knowledge semantic search', () => {
     expect(vector.ids()).not.toContain(`page:${other.id}`);
   });
 
-  it('a failed embed keeps the write, warns, and reindex() repairs it; a failed search falls back to keywords', async () => {
+  it('a failed embed keeps the write, warns, and the next change embeds it; a failed search falls back to keywords', async () => {
     embedder.fail = true;
     const created = await acme()('knowledge_page', {
       op: 'write',
@@ -272,7 +292,10 @@ describe('Knowledge semantic search', () => {
       body: 'Refunds within 30 days.',
     });
     expect(created.page.name).toBe('Refund policy');
-    expect(warnings.some(w => w.includes('run knowledge.reindex()'))).toBe(true);
+    expect(
+      warnings.some(w => w.includes('stays findable by keyword search and is embedded again the next time it changes')),
+    ).toBe(true);
+    expect(warnings.some(w => w.includes('reindex'))).toBe(false);
 
     expect(titles(await acme()('knowledge_search', { query: 'refund' }))).toEqual(['Refund policy']);
     expect(warnings.some(w => w.includes('returning keyword results only'))).toBe(true);
@@ -280,26 +303,84 @@ describe('Knowledge semantic search', () => {
     embedder.fail = false;
     expect(vector.ids()).toEqual([]);
     expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual([]);
-    // Scope pages are not embedded; the one ordinary page is.
-    expect(await knowledge.reindex()).toBe(1);
+
+    await acme()('knowledge_page', { op: 'write', page: created.page.id, body: 'Refunds within 60 days.' });
+    expect(vector.ids()).toEqual([`page:${created.page.id}`]);
     expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual(['Refund policy']);
   });
 
-  it('reindex() repairs notes written on scope pages, which listPages leaves out', async () => {
-    embedder.fail = true;
-    await acme()('knowledge_note', {
-      op: 'add',
-      page: 'org:acme',
-      scope: ['org:acme'],
-      text: 'Vacation requests go to HR.',
+  it('a failed vector removal warns that old vectors may remain, and search skips the removed page', async () => {
+    const { page: mine } = await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'resource:u-acme',
+      name: 'Mine',
+      body: 'x',
     });
-    expect(vector.ids()).toEqual([]);
+    const { page } = await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'resource:u-acme',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    vector.failDeletes = true;
+    await acme()('knowledge_page', { op: 'merge', page: page.id, into: mine.id });
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'old', name: 'Old desk', body: 'x' });
+    await knowledge.removePage({ scope: 'org:acme', path: 'old' });
+
+    const removals = warnings.filter(w => w.includes('removal failed'));
+    expect(removals).toHaveLength(2);
+    expect(removals.every(w => w.includes('search skips content that no longer exists'))).toBe(true);
+    expect(warnings.some(w => w.includes('embedded again the next time it changes'))).toBe(false);
+    expect(vector.ids()).toContain(`page:${page.id}`);
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).not.toContain('Refund policy');
+  });
+
+  it('a host upsertPage whose embed failed is embedded when the page next changes', async () => {
+    embedder.fail = true;
+    const first = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'refunds',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    expect(first.status).toBe('created');
+    expect(warnings.some(w => w.includes('embedded again the next time it changes'))).toBe(true);
     embedder.fail = false;
 
-    expect(await knowledge.reindex()).toBe(1);
-    expect(titles(await acme()('knowledge_search', { query: 'holiday' }))).toEqual([
-      'note:Vacation requests go to HR.',
-    ]);
+    // Re-sending the same content writes nothing, so nothing is embedded either.
+    const same = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'refunds',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    expect(same.status).toBe('unchanged');
+    expect(vector.ids()).toEqual([]);
+
+    const changed = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'refunds',
+      name: 'Refund policy',
+      body: 'Refunds within 60 days.',
+    });
+    expect(changed.status).toBe('updated');
+    expect(vector.ids()).toEqual([`page:${first.page.id}`]);
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual(['Refund policy']);
+  });
+
+  it('a note whose embed failed is embedded when it is next changed', async () => {
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'ops', name: 'Ops', body: 'misc' });
+    const pages = vector.ids();
+    embedder.fail = true;
+    const note = await knowledge.addNote({ scope: 'org:acme', path: 'ops', text: 'Vacation requests go to HR.' });
+    expect(vector.ids()).toEqual(pages);
+    embedder.fail = false;
+
+    const updated = await knowledge.updateNote({ id: note.id, text: 'Vacation requests go to HR by Friday.' });
+    expect(vector.ids()).toEqual([...pages, `note:${updated.id}`]);
+    expect(titles(await acme()('knowledge_search', { query: 'holiday' }))[0]).toBe(
+      'note:Vacation requests go to HR by Friday.',
+    );
   });
 
   it('embeds through the SDK: maxRetries retries transient failures, headers and providerOptions reach the model', async () => {
@@ -331,11 +412,95 @@ describe('Knowledge semantic search', () => {
     });
     await store.deletePage({ id: page.id, expectedVersion: page.version, deletedBy: 'host' });
     expect(vector.ids()).toContain(`page:${page.id}`);
-    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual([]);
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).not.toContain('Refund policy');
   });
 
-  it('needs both vector and embedder; reindex without them throws', async () => {
+  /** About 5,000 estimated tokens of filler, with `fact` as one paragraph near the end. */
+  const longBody = (fact: string) =>
+    Array.from({ length: 24 }, (_, i) =>
+      i === 20 ? fact : `## Part ${i}\n\n${'Lorem ipsum dolor sit amet consectetur adipiscing elit. '.repeat(25)}`,
+    ).join('\n\n');
+  const chunkIds = (pageId: string) => vector.ids().filter(id => id.startsWith(`page:${pageId}`));
+
+  it('embeds a page too long for the embedder as chunks, and finds it once by meaning', async () => {
+    embedder.maxTokens = 3_000;
+    const body = longBody('Reimbursement goes back to the original card.');
+    expect(estimateTokenCount(body)).toBeGreaterThan(4_000);
+    const { page } = await acme()('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Handbook', body });
+    await acme()('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Courier contacts', body: 'Shipping.' });
+
+    expect(warnings).toEqual([]);
+    const ids = chunkIds(page.id);
+    expect(ids.length).toBeGreaterThan(1);
+    expect(ids).toContain(`page:${page.id}`);
+    expect(ids).toContain(`page:${page.id}#1`);
+
+    const result = await acme()('knowledge_search', { query: 'money' });
+    expect(titles(result)).toEqual(['Handbook', 'Courier contacts']);
+    // The same hit as an unchunked page: one result, page summary only.
+    expect(Object.keys(result.results[0]).sort()).toEqual(Object.keys(result.results[1]).sort());
+  });
+
+  it('a host upsertPage of a page too long for the embedder is searchable by meaning', async () => {
+    embedder.maxTokens = 3_000;
+    const result = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'guides/handbook',
+      name: 'Handbook',
+      body: longBody('Reimbursement goes back to the original card.'),
+    });
+    expect(result.status).toBe('created');
+    expect(warnings).toEqual([]);
+    expect(titles(await acme()('knowledge_search', { query: 'refund' }))).toContain('Handbook');
+  });
+
+  it('a shorter rewrite drops the old chunks, and deleting the page drops them all', async () => {
+    embedder.maxTokens = 3_000;
+    // A long body can only be replaced whole by the host; the tool edits it part by part.
+    const write = (body: string) =>
+      knowledge.upsertPage({ scope: 'org:acme', path: 'handbook', name: 'Handbook', body });
+    const { page } = await write(longBody('Reimbursement goes back to the original card.'));
+    expect(chunkIds(page.id).length).toBeGreaterThan(1);
+
+    await write('Courier pickups at 3pm.');
+    expect(chunkIds(page.id)).toEqual([`page:${page.id}`]);
+    expect(titles(await acme()('knowledge_search', { query: 'money' }))).toEqual(['Handbook']);
+    expect(titles(await acme()('knowledge_search', { query: 'delivery' }))[0]).toBe('Handbook');
+
+    await write(longBody('Holiday calendar.'));
+    expect(chunkIds(page.id).length).toBeGreaterThan(1);
+    await knowledge.removePage({ scope: 'org:acme', path: 'handbook' });
+    expect(chunkIds(page.id)).toEqual([]);
+  });
+
+  it('a rewrite still embeds the new body when the store cannot delete old chunks', async () => {
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'a', name: 'A', body: 'Courier pickups at 3pm.' });
+    vector.failDeletes = true;
+    await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'a',
+      name: 'A',
+      body: 'Reimbursement goes back to the card.',
+    });
+    expect(warnings).toEqual([]);
+    expect(titles(await acme()('knowledge_search', { query: 'money' }))).toEqual(['A']);
+  });
+
+  it('a long name does not crowd the body out of its chunks', async () => {
+    embedder.maxTokens = 3_000;
+    const name = 'Handbook '.repeat(2_000);
+    const { page } = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'handbook',
+      name,
+      body: longBody('Reimbursement goes back to the original card.'),
+    });
+    expect(warnings).toEqual([]);
+    expect(chunkIds(page.id).length).toBeGreaterThan(1);
+    expect(chunkIds(page.id).length).toBeLessThan(10);
+  });
+
+  it('needs both vector and embedder', () => {
     expect(() => new Knowledge({ scopes: {}, vector })).toThrow(/needs both `vector` and `embedder`/);
-    await expect(new Knowledge({ scopes: {}, storage: new InMemoryStore() }).reindex()).rejects.toThrow(/no `vector`/);
   });
 });

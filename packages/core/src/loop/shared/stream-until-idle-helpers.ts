@@ -308,6 +308,30 @@ export function releaseStreamSlot(
 // Idle-loop state machine
 // ---------------------------------------------------------------------------
 
+// Tasks left running by an `untilIdle` stream its caller stopped (cancel, abort).
+// Keyed by the agent's stream registry, so each agent tracks its own.
+const callerStoppedTasks = new WeakMap<Map<string, unknown>, Set<string>>();
+
+// Consumes the mark: each finished task is checked once.
+function takeCallerStoppedTask(activeStreams: Map<string, unknown>, taskId: string): boolean {
+  return callerStoppedTasks.get(activeStreams)?.delete(taskId) ?? false;
+}
+
+/**
+ * Whether a finished background task is already handled by an `untilIdle`
+ * stream on this agent: one is open for the thread and runs its own follow-up
+ * turn, or the caller stopped the stream that was waiting for the task.
+ */
+export function untilIdleHandlesBackgroundTask(
+  activeStreams: Map<string, unknown>,
+  threadId: string,
+  resourceId: string,
+  taskId: string,
+): boolean {
+  const stopped = takeCallerStoppedTask(activeStreams, taskId);
+  return stopped || activeStreams.has(`${threadId}|${resourceId}`);
+}
+
 export interface IdleLoopDeps {
   activeStreams: Map<string, () => void>;
   bgManager: BackgroundTaskManager | undefined;
@@ -484,6 +508,12 @@ export async function runIdleLoop<
       return;
     }
     aborting = true;
+    // The caller stopped waiting, so a task this stream was waiting for must not wake the agent later.
+    if (runningTaskIds.size > 0) {
+      let stopped = callerStoppedTasks.get(deps.activeStreams);
+      if (!stopped) callerStoppedTasks.set(deps.activeStreams, (stopped = new Set()));
+      for (const taskId of runningTaskIds) stopped.add(taskId);
+    }
     // External engines route abortRunStream back through this registry; release before forwarding.
     releaseWrapperSlots();
     initialAbort.abort();
