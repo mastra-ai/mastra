@@ -1,10 +1,22 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SpanType } from '@mastra/core/observability';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SpanDataPanelView } from '../span-data-panel-view';
 import type { SpanDataPanelViewProps } from '../span-data-panel-view';
-import { spanFixture } from './fixtures/span-data-panel-view';
+import { spanFixture, traceFixture } from './fixtures/span-data-panel-view';
+import { server } from '@/test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+
+// jsdom does not provide PointerEvent, which Base UI tabs dispatch.
+beforeAll(() => vi.stubGlobal('PointerEvent', MouseEvent));
+afterAll(() => vi.unstubAllGlobals());
+beforeEach(() => {
+  server.use(http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(traceFixture)));
+});
+afterEach(cleanup);
 
 const baseProps: SpanDataPanelViewProps = {
   traceId: 'trace-1',
@@ -12,118 +24,270 @@ const baseProps: SpanDataPanelViewProps = {
   span: spanFixture,
 };
 
-afterEach(cleanup);
+const valueOf = (label: string) => screen.getByText(label, { selector: 'dt' }).nextElementSibling?.textContent;
 
-describe('SpanDataPanelView — header summary', () => {
-  it('shows started and duration in the header (end is implied), not in the details list', () => {
-    render(<SpanDataPanelView {...baseProps} />);
+describe('SpanDataPanelView', () => {
+  describe('header', () => {
+    it('names the span and shows how long it took', () => {
+      renderWithProviders(<SpanDataPanelView {...baseProps} />);
 
-    expect(screen.getByLabelText(/^Started at/)).toBeTruthy();
-    expect(screen.queryByLabelText(/^Ended at/)).toBeNull();
-    // Same `X.XXX s` format as the timeline timing column.
-    expect(screen.getByLabelText(/^Duration/).textContent).toBe('1.000 s');
-    expect(screen.queryByText('Started')).toBeNull();
-    expect(screen.queryByText('Ended')).toBeNull();
-    expect(screen.queryByText('Duration')).toBeNull();
+      expect(screen.getByRole('heading', { name: 'agent run' })).toBeTruthy();
+      expect(screen.getByText('1s')).toBeTruthy();
+    });
+
+    describe('when the span belongs to an entity', () => {
+      it('names it after the entity', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} span={{ ...spanFixture, entityName: 'chef-agent' }} />);
+
+        expect(screen.getByRole('heading', { name: 'chef-agent' })).toBeTruthy();
+      });
+    });
+
+    describe('when the span failed', () => {
+      it('says so next to the name', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} span={{ ...spanFixture, error: { message: 'boom' } }} />);
+
+        expect(screen.getByText('Failed')).toBeTruthy();
+      });
+    });
+
+    describe('when the span succeeded', () => {
+      it('adds no status badge', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} />);
+
+        expect(screen.queryByText('Failed')).toBeNull();
+        expect(screen.queryByText(/^Retried/)).toBeNull();
+      });
+    });
   });
 
-  it('drops Name, Type, Trace Id, Thread Id and Resource Id from the details list', () => {
-    render(
-      <SpanDataPanelView {...baseProps} span={{ ...spanFixture, threadId: 'thread-1', resourceId: 'resource-1' }} />,
-    );
+  describe('tabs', () => {
+    it('offers Details, Input and Output, with Details open by default', () => {
+      renderWithProviders(<SpanDataPanelView {...baseProps} />);
 
-    for (const label of ['Name', 'Type', 'Trace Id', 'Thread Id', 'Resource Id']) {
-      expect(screen.queryByText(label)).toBeNull();
-    }
+      expect(screen.getByRole('tab', { name: /details/i }).getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByRole('tab', { name: /input/i })).toBeTruthy();
+      expect(screen.getByRole('tab', { name: /output/i })).toBeTruthy();
+      expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
+    });
+
+    it('uses the pill-ghost variant, like the agent page tabs', () => {
+      const { container } = renderWithProviders(<SpanDataPanelView {...baseProps} />);
+
+      expect(container.querySelector('[data-variant="pill-ghost"]')).not.toBeNull();
+    });
+
+    describe('when a feedback slot is provided', () => {
+      it('adds a Feedback tab that renders the slot when opened', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} feedbackTabSlot={() => <div>feedback here</div>} />);
+
+        expect(screen.queryByText('feedback here')).toBeNull();
+        fireEvent.click(screen.getByRole('tab', { name: /feedback/i }));
+        expect(screen.getByText('feedback here')).toBeTruthy();
+      });
+    });
+
+    describe('when the caller asks for the feedback tab but offers no feedback', () => {
+      it('falls back to Details', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} activeTab="feedback" />);
+
+        expect(screen.getByRole('tab', { name: /details/i }).getAttribute('aria-selected')).toBe('true');
+      });
+    });
+
+    it('reports the tab the user opens', () => {
+      const onTabChange = vi.fn();
+      renderWithProviders(<SpanDataPanelView {...baseProps} onTabChange={onTabChange} />);
+
+      fireEvent.click(screen.getByRole('tab', { name: /output/i }));
+
+      expect(onTabChange).toHaveBeenCalledWith('output');
+    });
+
+    it('keeps the open tab when another span is selected', () => {
+      const { rerender } = renderWithProviders(<SpanDataPanelView {...baseProps} />);
+      fireEvent.click(screen.getByRole('tab', { name: /input/i }));
+
+      rerender(<SpanDataPanelView {...baseProps} spanId="span-2" span={{ ...spanFixture, spanId: 'span-2' }} />);
+
+      expect(screen.getByRole('tab', { name: /input/i }).getAttribute('aria-selected')).toBe('true');
+    });
   });
 
-  it('shows the run id truncated to 8 characters in the header', () => {
-    render(<SpanDataPanelView {...baseProps} span={{ ...spanFixture, runId: 'run-abcdefghijklmnop' }} />);
+  describe('input and output tabs', () => {
+    describe('when the span recorded no payload', () => {
+      it('says so', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} activeTab="input" />);
+        expect(screen.getByText('No input recorded.')).toBeTruthy();
 
-    const runId = screen.getByLabelText('Run Id run-abcdefghijklmnop');
-    expect(runId.textContent).toContain('run-abcd');
-    expect(runId.textContent).not.toContain('run-abcdefghijklmnop');
-    expect(screen.queryByText('Run Id')).toBeNull();
-  });
-});
+        cleanup();
+        renderWithProviders(<SpanDataPanelView {...baseProps} activeTab="output" />);
+        expect(screen.getByText('No output recorded.')).toBeTruthy();
+      });
+    });
 
-describe('SpanDataPanelView — span id in the header', () => {
-  const fullId = 'span-0123456789abcdef';
+    describe('when the span failed', () => {
+      it('flags the Output tab and explains the failure in it', () => {
+        renderWithProviders(
+          <SpanDataPanelView {...baseProps} activeTab="output" span={{ ...spanFixture, error: { message: 'boom' } }} />,
+        );
 
-  it('shows the id truncated without a # prefix', () => {
-    render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
-
-    const heading = screen.getByRole('heading', { name: /^Span span-0123456…/ });
-    expect(heading.textContent).not.toContain('#');
-    expect(screen.queryByText(fullId)).toBeNull();
-  });
-
-  it('shows the copy action instead of the full id in a tooltip', async () => {
-    render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
-
-    fireEvent.focus(screen.getByRole('button', { name: 'span-0123456…' }));
-
-    expect((await screen.findByRole('tooltip')).textContent).toBe('Copy to clipboard');
-    expect(screen.queryByText(fullId)).toBeNull();
+        expect(screen.getByText('boom')).toBeTruthy();
+      });
+    });
   });
 
-  it('copies the full id on click', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
+  describe('details tab', () => {
+    it('lists when the span started and ended, and its precise duration', () => {
+      renderWithProviders(<SpanDataPanelView {...baseProps} />);
 
-    render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
+      expect(screen.getByText('Started', { selector: 'dt' })).toBeTruthy();
+      expect(screen.getByText('Ended', { selector: 'dt' })).toBeTruthy();
+      expect(valueOf('Duration')).toBe('1.000 s');
+    });
 
-    const button = screen.getByRole('button', { name: 'span-0123456…' });
-    fireEvent.click(button);
+    describe('when the span streamed', () => {
+      it('lists how long it took to stream its first chunk and first token', () => {
+        renderWithProviders(
+          <SpanDataPanelView
+            {...baseProps}
+            span={{ ...spanFixture, timeToFirstChunkMs: 412, timeToFirstTokenMs: 538 }}
+          />,
+        );
 
-    expect(writeText).toHaveBeenCalledWith(fullId);
-    expect((await screen.findByRole('tooltip')).textContent).toBe('Copied to clipboard');
-    expect(button.textContent).toBe('span-0123456…');
-    expect(button.querySelector('svg')).toBeNull();
+        expect(valueOf('Time to first chunk')).toBe('412 ms');
+        expect(valueOf('Time to first token')).toBe('538 ms');
+      });
+    });
+
+    describe('when the span did not stream', () => {
+      it('lists neither timing', () => {
+        renderWithProviders(
+          <SpanDataPanelView
+            {...baseProps}
+            span={{ ...spanFixture, timeToFirstChunkMs: null, timeToFirstTokenMs: null }}
+          />,
+        );
+
+        expect(screen.queryByText('Time to first chunk')).toBeNull();
+        expect(screen.queryByText('Time to first token')).toBeNull();
+      });
+    });
+
+    it('lists the ids the span has, each copyable, and skips the ones it does not', () => {
+      renderWithProviders(
+        <SpanDataPanelView {...baseProps} span={{ ...spanFixture, runId: 'run-1', sessionId: 'session-1' }} />,
+      );
+
+      const identifiers = screen.getByText('Identifiers').closest('section');
+      if (!(identifiers instanceof HTMLElement)) throw new Error('Missing Identifiers section');
+      expect(within(identifiers).getByText('span-1')).toBeTruthy();
+      expect(within(identifiers).getByText('trace-1')).toBeTruthy();
+      expect(within(identifiers).getByText('run-1')).toBeTruthy();
+      expect(within(identifiers).getByText('session-1')).toBeTruthy();
+      expect(within(identifiers).queryByText('Thread')).toBeNull();
+      expect(within(identifiers).getByRole('button', { name: /copy run id/i })).toBeTruthy();
+    });
+
+    describe('when the span is a model call', () => {
+      const modelSpan = {
+        ...spanFixture,
+        spanType: SpanType.MODEL_GENERATION,
+        startedAt: new Date('2026-10-26T11:28:14.930Z'),
+        endedAt: new Date('2026-10-26T11:28:20.504Z'),
+        attributes: {
+          model: 'gpt-5-mini',
+          provider: 'openai',
+          finishReason: 'stop',
+          completionStartTime: '2026-10-26T11:28:16.376Z',
+          usage: {
+            inputTokens: 6606,
+            outputTokens: 365,
+            inputDetails: { cacheRead: 5632, cacheWrite: 0, text: 974 },
+            outputDetails: { reasoning: 256, text: 109 },
+          },
+        },
+      };
+
+      it('names the span after the model', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} span={modelSpan} />);
+
+        expect(screen.getByRole('heading', { name: 'gpt-5-mini' })).toBeTruthy();
+      });
+
+      it('lists the model, how it finished and its timings', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} span={modelSpan} />);
+
+        expect(valueOf('Model')).toBe('gpt-5-mini');
+        expect(screen.getByRole('img', { name: 'openai logo' })).toBeTruthy();
+        expect(valueOf('Provider')).toBe('openai');
+        expect(valueOf('Finish reason')).toBe('stop');
+        expect(valueOf('First token')).toBe('1.45s');
+        expect(valueOf('Speed')).toBe('88 tok/s');
+      });
+
+      it('lists its tokens with their breakdown, without the zero counts', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} span={modelSpan} />);
+
+        expect(valueOf('Input tokens')).toBe('6,606 (5,632 cached · 974 text)');
+        expect(valueOf('Output tokens')).toBe('365 (256 reasoning · 109 text)');
+        expect(screen.queryByText(/cache write/i)).toBeNull();
+      });
+    });
+
+    describe('when the span is not a model call', () => {
+      it('shows no Model or Token usage section', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} />);
+
+        expect(screen.queryByText('Model')).toBeNull();
+        expect(screen.queryByText('Token usage')).toBeNull();
+      });
+
+      describe('but recorded the model it ran', () => {
+        const agentRunSpan = { ...spanFixture, model: 'claude-sonnet-4-5', provider: 'anthropic' };
+
+        it('lists the model and provider, keeping the span named after its entity', () => {
+          renderWithProviders(<SpanDataPanelView {...baseProps} span={agentRunSpan} />);
+
+          expect(valueOf('Model')).toBe('claude-sonnet-4-5');
+          expect(screen.getByRole('img', { name: 'anthropic logo' })).toBeTruthy();
+          expect(valueOf('Provider')).toBe('anthropic');
+          expect(screen.getByRole('heading', { name: 'agent run' })).toBeTruthy();
+        });
+      });
+    });
   });
 
-  it('copies a short id by clicking the id itself', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.assign(navigator, { clipboard: { writeText } });
-    render(<SpanDataPanelView {...baseProps} spanId="span-1" />);
+  describe('close', () => {
+    it('renders a close button only when onClose is provided, and calls it', () => {
+      const { rerender } = renderWithProviders(<SpanDataPanelView {...baseProps} />);
+      expect(screen.queryByRole('button', { name: 'Close span' })).toBeNull();
 
-    expect(screen.getByRole('heading', { name: /^Span span-1/ })).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'span-1' }));
-    expect(writeText).toHaveBeenCalledWith('span-1');
-    expect((await screen.findByRole('tooltip')).textContent).toBe('Copied to clipboard');
-  });
-});
-
-describe('SpanDataPanelView — tabs', () => {
-  it('renders the tab list with the pill-ghost variant, like the agent page tabs', () => {
-    const { container } = render(<SpanDataPanelView {...baseProps} feedbackTabSlot={() => <div>feedback</div>} />);
-
-    expect(container.querySelector('[data-variant="pill-ghost"]')).not.toBeNull();
+      const onClose = vi.fn();
+      rerender(<SpanDataPanelView {...baseProps} onClose={onClose} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
   });
 
-  it('renders Details and Feedback tabs, with Details active by default', () => {
-    render(<SpanDataPanelView {...baseProps} feedbackTabSlot={() => <div>feedback here</div>} />);
+  describe('go to trace', () => {
+    describe('when no onShowTrace callback is provided', () => {
+      it('does not offer to go to the trace', () => {
+        renderWithProviders(<SpanDataPanelView {...baseProps} />);
 
-    expect(screen.getByRole('tab', { name: /details/i })).toBeTruthy();
-    expect(screen.getByRole('tab', { name: /feedback/i })).toBeTruthy();
-    expect(screen.queryByText('feedback here')).toBeNull();
-  });
+        expect(screen.queryByRole('button', { name: 'Go to trace' })).toBeNull();
+      });
+    });
 
-  it('renders no tabs when no feedback slot is provided', () => {
-    render(<SpanDataPanelView {...baseProps} />);
+    describe('when an onShowTrace callback is provided', () => {
+      it('calls it with the trace and span ids', () => {
+        const onShowTrace = vi.fn();
+        renderWithProviders(<SpanDataPanelView {...baseProps} onShowTrace={onShowTrace} />);
 
-    expect(screen.queryByRole('tab', { name: /details/i })).toBeNull();
-  });
-});
+        fireEvent.click(screen.getByRole('button', { name: 'Go to trace' }));
 
-describe('SpanDataPanelView — close', () => {
-  it('renders a close button only when onClose is provided, and calls it', () => {
-    const { rerender } = render(<SpanDataPanelView {...baseProps} />);
-    expect(screen.queryByRole('button', { name: 'Close span' })).toBeNull();
-
-    const onClose = vi.fn();
-    rerender(<SpanDataPanelView {...baseProps} onClose={onClose} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Close span' }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+        expect(onShowTrace).toHaveBeenCalledWith({ traceId: 'trace-1', spanId: 'span-1' });
+      });
+    });
   });
 });

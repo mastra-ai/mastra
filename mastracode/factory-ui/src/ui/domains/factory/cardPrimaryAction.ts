@@ -1,4 +1,4 @@
-import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
+import { FACTORY_ROLE_STAGES, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
@@ -63,21 +63,20 @@ function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): bo
   );
 }
 
-function seatDepth(role: string): number {
-  return Object.keys(FACTORY_ROLE_STAGES).indexOf(role);
-}
+const WORKING_LANES: readonly FactoryRuleStage[] = Object.values(FACTORY_ROLE_STAGES);
 
-/** Resume re-enters the lane of the deepest seat the card has used, and lets that lane's rule dispatch. */
+/**
+ * Resume re-enters the deepest working lane a card parked in Intake has been in, and lets
+ * that lane's rule dispatch. Phases can share a session, so the lane comes from the card's
+ * stage history; a card that never had a session is a fresh arrival with nothing to resume.
+ */
 export function resumeStage(
   columnStage: BoardStageId,
-  sessions: Record<string, WorkItemSessionRef>,
+  item: { sessions: Record<string, WorkItemSessionRef>; stageHistory?: readonly { stage: string }[] },
 ): FactoryRuleStage | undefined {
-  if (columnStage !== 'intake') return undefined;
-  const deepest = Object.keys(sessions)
-    .filter(isFactoryRole)
-    .sort((left, right) => seatDepth(left) - seatDepth(right))
-    .at(-1);
-  return deepest === undefined ? undefined : FACTORY_ROLE_STAGES[deepest];
+  if (columnStage !== 'intake' || Object.keys(item.sessions).length === 0) return undefined;
+  const visited = new Set((item.stageHistory ?? []).map(entry => entry.stage));
+  return WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
 }
 
 /**

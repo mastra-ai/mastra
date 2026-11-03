@@ -487,6 +487,60 @@ describe('PlatformGithubIntegration', () => {
     }
   });
 
+  it('publishes commit checks through the platform check-run route', async () => {
+    const head = 'cd1e5903851234567890abcdef1234567890abcd';
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(json({ id: 9, htmlUrl: 'https://github.com/acme/app/runs/9' }))
+      .mockResolvedValueOnce(json({ id: 10, htmlUrl: 'https://github.com/acme/app/runs/10' }));
+    const integration = createIntegration(fetchImpl);
+    const base = {
+      connection: { type: 'app-installation' as const, installationId: 7 },
+      sourceId: 'acme/app',
+      headSha: head,
+      name: 'Factory Review / tests',
+    };
+
+    await expect(
+      integration.versionControl.publishCommitCheck!({
+        ...base,
+        status: 'in-progress',
+        title: 'Running',
+        summary: 'Plan',
+      }),
+    ).resolves.toEqual({
+      id: '9',
+      name: 'Factory Review / tests',
+      headSha: head,
+      status: 'in-progress',
+      url: 'https://github.com/acme/app/runs/9',
+    });
+    await integration.versionControl.publishCommitCheck!({
+      ...base,
+      status: 'failure',
+      title: 'x'.repeat(300),
+      summary: '1 failed',
+      details: 'stack',
+    });
+
+    expect(String(fetchImpl.mock.calls[0]?.[0])).toBe(
+      'https://platform.example.com/v1/server/github/repos/acme/app/check-runs',
+    );
+    expect(JSON.parse(String((fetchImpl.mock.calls[0]?.[1] as RequestInit).body))).toEqual({
+      name: 'Factory Review / tests',
+      headSha: head,
+      status: 'in_progress',
+      output: { title: 'Running', summary: 'Plan' },
+    });
+    expect(JSON.parse(String((fetchImpl.mock.calls[1]?.[1] as RequestInit).body))).toEqual({
+      name: 'Factory Review / tests',
+      headSha: head,
+      status: 'completed',
+      conclusion: 'failure',
+      output: { title: 'x'.repeat(255), summary: '1 failed', text: 'stack' },
+    });
+  });
+
   it('sends the acting user header on writes when actingUserId is provided', async () => {
     const fetchImpl = vi
       .fn<typeof fetch>()
@@ -906,6 +960,21 @@ describe('PlatformGithubIntegration', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('looks up one installation repository from the cached listing', async () => {
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
+      json({
+        repositories: [
+          { id: 101, owner: 'acme', name: 'app', fullName: 'acme/app', private: true, defaultBranch: 'main' },
+        ],
+      }),
+    );
+    const integration = createIntegration(fetchImpl);
+
+    await expect(integration.getInstallationRepo(7, 'acme/app')).resolves.toMatchObject({ id: 101 });
+    await expect(integration.getInstallationRepo(7, 'acme/other')).resolves.toBeNull();
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
   });
 
   it('evicts the oldest installation listing once the cache bound is reached', async () => {

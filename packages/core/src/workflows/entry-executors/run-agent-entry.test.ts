@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
-import { runAgentEntry } from './run-agent-entry';
+import { resolveRegisteredAgent, runAgentEntry } from './run-agent-entry';
 import type { EntryExecuteContext } from './types';
 
 /**
@@ -147,6 +147,57 @@ function makeDefaultCtx(): EntryExecuteContext {
   } as unknown as EntryExecuteContext;
 }
 
+describe('runAgentEntry durable stream result', () => {
+  it('consumes the nested model output and cleans up after success', async () => {
+    const cleanup = vi.fn();
+    const agent = {
+      name: 'durable-agent',
+      getModel: async () => ({ specificationVersion: 'v2' }),
+      stream: async (_prompt: string, opts: { onFinish?: (result: any) => void }) => ({
+        output: {
+          text: Promise.resolve('durable response'),
+          fullStream: (async function* () {
+            opts.onFinish?.({ text: 'durable response' });
+          })(),
+        },
+        runId: 'durable-run-1',
+        cleanup,
+      }),
+    };
+
+    const result = await runAgentEntry(
+      { type: 'agent', id: 'step-1', agentId: 'durable-agent', agent },
+      makeDefaultCtx(),
+    );
+
+    expect(result).toEqual({ text: 'durable response' });
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+
+  it('cleans up after preserving a stream error', async () => {
+    const cleanup = vi.fn();
+    const agent = {
+      name: 'durable-agent',
+      getModel: async () => ({ specificationVersion: 'v2' }),
+      stream: async () => ({
+        output: {
+          text: Promise.resolve(''),
+          fullStream: (async function* () {
+            throw new Error('durable stream failed');
+          })(),
+        },
+        runId: 'durable-run-1',
+        cleanup,
+      }),
+    };
+
+    await expect(
+      runAgentEntry({ type: 'agent', id: 'step-1', agentId: 'durable-agent', agent }, makeDefaultCtx()),
+    ).rejects.toThrow('durable stream failed');
+    expect(cleanup).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('runAgentEntry structured output guard', () => {
   const structuredOptions = { structuredOutput: { schema: { parse: (v: unknown) => v } } };
 
@@ -224,5 +275,39 @@ describe('runAgentEntry structured output guard', () => {
     const result = await runAgentEntry({ type: 'agent', id: 'step-1', agentId: 'v2-agent', agent }, makeDefaultCtx());
 
     expect(result).toEqual({ text: '' });
+  });
+});
+
+describe('resolveRegisteredAgent', () => {
+  function makeMastra(agents: Record<string, unknown> = {}) {
+    const warn = vi.fn();
+    return { mastra: { listAgents: () => agents, getLogger: () => ({ warn }) } as any, warn };
+  }
+
+  it('does not warn or swap for a wrapper that forwards durable to its inner agent', () => {
+    const { mastra: owner } = makeMastra();
+    const { mastra, warn } = makeMastra();
+    const inner = { id: 'inner', name: 'inner', durable: true };
+    const proxyWrapper = {
+      id: 'inner',
+      name: 'inner',
+      durable: true,
+      agent: inner,
+      getMastraInstance: () => owner,
+      stream: vi.fn(),
+      recover: vi.fn(),
+      recoverActiveRuns: vi.fn(),
+    };
+
+    expect(resolveRegisteredAgent(proxyWrapper, mastra)).toBe(proxyWrapper);
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('warns when a durable agent is attached to the same Mastra without a registered wrapper', () => {
+    const { mastra, warn } = makeMastra();
+    const subAgent = { id: 'sub', name: 'sub', durable: true, getMastraInstance: () => mastra };
+
+    expect(resolveRegisteredAgent(subAgent, mastra)).toBe(subAgent);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('no durable wrapper for it is registered'));
   });
 });

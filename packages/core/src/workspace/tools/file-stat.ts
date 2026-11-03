@@ -28,6 +28,7 @@ export const fileStatTool = createTool({
       const stat = await filesystem.stat(path);
       const modifiedAt = stat.modifiedAt.toISOString();
 
+      // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve eager string coercion before formatting the remaining stat fields.
       const parts = [`${path}`, `Type: ${stat.type}`];
       if (stat.size !== undefined) parts.push(`Size: ${stat.size} bytes`);
       parts.push(`Modified: ${modifiedAt}`);

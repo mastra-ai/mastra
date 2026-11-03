@@ -1,5 +1,5 @@
 import { hasRecordedVerdict } from '../../boards/review.js';
-import { normalizedVerdictLine } from '../../review-verdict.js';
+import { requestsChangesVerdict } from '../../review-verdict.js';
 import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import { isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGithubEventName, FactoryGithubRuleContext, FactoryRuleHandler } from '../../rules/types.js';
@@ -25,9 +25,10 @@ function retriageGithubIssue(context: FactoryGithubRuleContext) {
   if (context.actor.type === 'github' && context.actor.factoryAuthored) return;
   // The stage checks below use Work lane names; other boards opt in with their own rules.
   if (context.board !== 'work') return;
-  // Re-triage would take over a card that is being built or reviewed.
+  // A card in Intake waits for a person to move it; talk on it starts nothing. Re-triage would
+  // take over a card that is being built or reviewed.
   const stage = context.item.stages?.length === 1 ? context.item.stages[0] : undefined;
-  if (stage === 'execute' || stage === 'review') return;
+  if (stage === 'intake' || stage === 'execute' || stage === 'review') return;
   // A finished card has nothing left to triage; talk on a closed issue must not park a run on it.
   if (isTerminalFactoryRuleStage(context.item.stages)) return;
 
@@ -294,25 +295,6 @@ function dismissStaleFactoryReviews(context: FactoryGithubRuleContext) {
 
 function pullRequestReviewSubmitted(context: FactoryGithubRuleContext) {
   return addressReviewFeedback(context) ?? dismissStaleFactoryReviews(context);
-}
-
-/**
- * Detects the `factory-review` handoff verdict in a comment body.
- *
- * GitHub forbids an app from reviewing a pull request it authored, so on
- * Factory-authored PRs the review skill falls back to posting its verdict as a
- * plain comment. That comment is the only signal the authoring agent gets, so
- * it has to be readable back out. The skill's handoff contract puts the verdict
- * on the first line (`Verdict: request changes`), so only that line is
- * inspected — a verdict quoted later in the findings must not count.
- */
-function requestsChangesVerdict(body: string | undefined): boolean {
-  // Tolerate the markdown the skill wraps the line in (`**Verdict: ...**`).
-  const normalized = normalizedVerdictLine(body);
-  if (!normalized) return false;
-  // Match the verdict exactly so negated phrasings ("Verdict: do not request
-  // changes") cannot wake the author.
-  return /^verdict: ?(request changes|changes requested)$/.test(normalized);
 }
 
 function addressPullRequestComment(context: FactoryGithubRuleContext) {

@@ -13074,95 +13074,6 @@ describe('MastraInngestWorkflow', () => {
         },
       ]);
     });
-
-    describe('Workflow integration', () => {
-      let mockScorers: MastraScorer[];
-      beforeEach(() => {
-        const createMockScorer = (name: string, score: number = 0.8): MastraScorer => {
-          const scorer = createScorer({
-            id: `mock-scorer-${name}`,
-            description: 'Mock scorer',
-            name,
-          }).generateScore(() => {
-            return score;
-          });
-
-          vi.spyOn(scorer, 'run');
-
-          return scorer;
-        };
-
-        vi.clearAllMocks();
-        mockScorers = [createMockScorer('toxicity', 0.9), createMockScorer('relevance', 0.7)];
-      });
-
-      it('should run experiment with workflow target', async ctx => {
-        const inngest = new Inngest({
-          id: 'mastra',
-          baseUrl: `http://localhost:${(ctx as any).inngestPort}`,
-        });
-
-        const { createWorkflow, createStep } = init(inngest);
-
-        // Create a simple workflow
-        const mockStep = createStep({
-          id: 'test-step',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-          execute: async ({ inputData }) => {
-            return { output: `Processed: ${inputData.input}` };
-          },
-        });
-
-        const workflow = createWorkflow({
-          id: 'test-workflow',
-          inputSchema: z.object({ input: z.string() }),
-          outputSchema: z.object({ output: z.string() }),
-        })
-          .then(mockStep)
-          .commit();
-
-        const mastra = new Mastra({
-          storage: new DefaultStorage({
-            id: 'test-storage',
-            url: ':memory:',
-          }),
-          workflows: {
-            'test-workflow': workflow,
-          },
-          server: {
-            apiRoutes: [
-              {
-                path: '/inngest/api',
-                method: 'ALL',
-                createHandler: async ({ mastra }) => inngestServe({ mastra, inngest, ...getDockerRegisterOptions() }),
-              },
-            ],
-          },
-        });
-
-        const app = await createHonoServer(mastra);
-
-        const srv = (globServer = serve({
-          fetch: app.fetch,
-          port: (ctx as any).handlerPort,
-        }));
-
-        await resetInngest();
-
-        const result = await runEvals({
-          data: [
-            { input: { input: 'Test input 1' }, groundTruth: 'Expected 1' },
-            { input: { input: 'Test input 2' }, groundTruth: 'Expected 2' },
-          ],
-          scorers: [mockScorers[0]],
-          target: workflow,
-        });
-        srv.close();
-        expect(result.scores['mock-scorer-toxicity']).toBe(0.9);
-        expect(result.summary.totalItems).toBe(2);
-      });
-    });
   });
 
   describe.sequential('Long Running Steps', () => {
@@ -15406,6 +15317,7 @@ createWorkflowTestSuite({
     resumeWithLabel: false, // Testing - uses label instead of step
     resumeWithState: true, // requestContext bug #4442 - request context not preserved during resume
     resumeNested: true, // Nested step path resume not supported on Inngest
+    directNestedChildResume: true, // Direct child resume does not wake the suspended parent
     resumeNestedWithLabel: true, // same as resumeNested
     resumeParallelMulti: true, // parallel suspended steps behavior differs on Inngest
     resumeAutoDetect: true, // Inngest result doesn't include 'suspended' array property

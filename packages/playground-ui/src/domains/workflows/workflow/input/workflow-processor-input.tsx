@@ -105,7 +105,7 @@ export const WorkflowProcessorInput = ({
             setErrors(NO_ERRORS);
             onChange(withPhaseRole(updateProcessorMessage(value, event.target.value)));
           }}
-          placeholder="Enter a test message..."
+          placeholder="Enter a test message"
           rows={4}
           disabled={isSubmitLoading}
         />

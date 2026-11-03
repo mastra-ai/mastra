@@ -22,6 +22,7 @@ import { DEFAULT_MAX_TURNS } from '../goal-manager.js';
 import type { GoalState } from '../goal-manager.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
+import { requireLocal } from '../runtime.js';
 import { stripControlChars } from '../sanitize-ansi.js';
 import { getSelectListTheme, theme } from '../theme.js';
 
@@ -50,7 +51,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       ctx.showInfo('No goal to pause.');
       return;
     }
-    await goalManager.saveToThread(state);
+    await goalManager.saveToThread(requireLocal(state, '/goal'));
     ctx.updateStatusLine();
     ctx.showInfo(
       `Goal paused: "${stripControlChars(goal.objective)}" (${goal.turnsUsed}/${goal.maxTurns} turns used). Use /goal resume to continue.`,
@@ -75,7 +76,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
     }
 
     goalManager.resume();
-    await goalManager.saveToThread(state);
+    await goalManager.saveToThread(requireLocal(state, '/goal'));
     ctx.updateStatusLine();
 
     // The goal-reminder signal below is echoed back into the live stream as the
@@ -85,7 +86,7 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
       await state.session.sendSignal(createGoalReminderSignal(resumedGoal!)).accepted;
     } catch (err) {
       goalManager.pause();
-      await goalManager.saveToThread(state);
+      await goalManager.saveToThread(requireLocal(state, '/goal'));
       if (isSessionStartupCancelledError(err)) {
         ctx.showInfo('Interrupted');
         return;
@@ -100,9 +101,9 @@ export async function handleGoalCommand(ctx: SlashCommandContext, args: string[]
   // /goal clear
   if (subCommand === 'clear') {
     goalManager.clear();
-    if (!(await goalManager.deleteFromThread(state))) {
+    if (!(await goalManager.deleteFromThread(requireLocal(state, '/goal')))) {
       // Loading retries the delete once; only a retry that lands counts as cleared.
-      if (!(await goalManager.loadFromThread(state))) {
+      if (!(await goalManager.loadFromThread(requireLocal(state, '/goal')))) {
         ctx.updateStatusLine();
         ctx.showError('Could not clear the goal; it may still be active. Try /goal clear again.');
         return;
@@ -221,7 +222,7 @@ export async function handleJudgeCommand(ctx: SlashCommandContext): Promise<void
   if (!defaults) return;
 
   const activeGoal = await ctx.state.goalManager.updateJudgeDefaults(
-    ctx.state,
+    requireLocal(ctx.state, '/goal'),
     defaults.judgeModelId,
     defaults.maxTurns,
   );
@@ -370,7 +371,7 @@ async function setGoal(
       state.pendingNewThread = false;
     }
 
-    goal = await goalManager.setGoal(state, objective, judgeModelId, maxTurns);
+    goal = await goalManager.setGoal(requireLocal(state, '/goal'), objective, judgeModelId, maxTurns);
   } catch (error) {
     if (shouldPersistToCreatedThread) {
       goalManager.consumePersistOnNextThreadCreate();
@@ -386,7 +387,7 @@ async function setGoal(
     return null;
   }
 
-  await goalManager.saveToThread(state);
+  await goalManager.saveToThread(requireLocal(state, '/goal'));
   ctx.updateStatusLine();
   return goal;
 }
@@ -412,7 +413,7 @@ export async function sendGoalReminder(
     ).accepted;
   } catch (err) {
     goalManager.pause();
-    await goalManager.saveToThread(state);
+    await goalManager.saveToThread(requireLocal(state, '/goal'));
     if (isSessionStartupCancelledError(err)) {
       ctx.showInfo('Interrupted');
       return;

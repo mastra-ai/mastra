@@ -177,7 +177,7 @@ export async function syncInitialThreadState(state: TUIState): Promise<void> {
   state.activeGithubPrSubscriptions = getGithubPrSubscriptionsFromMetadata(metadata);
   // Prefer the durable ThreadState objective; fall back to the legacy
   // thread-metadata goal for threads created before the migration.
-  await state.goalManager.loadFromThread(state);
+  if (state.local) await state.goalManager.loadFromThread(state.local);
   if (state.session.thread.getId() !== initThreadId) return;
   if (!state.goalManager.getGoal()) {
     state.goalManager.loadFromThreadMetadata(metadata);
@@ -374,7 +374,7 @@ export class MastraTUI {
 
   private async abortBackgroundActivity(activity: BackgroundActivity): Promise<void> {
     try {
-      const manager = this.state.controller.getMastra()?.backgroundTaskManager;
+      const manager = this.state.local?.controller.getMastra()?.backgroundTaskManager;
       if (!manager) return;
       await manager.cancel(activity.taskId);
     } catch (error) {
@@ -761,8 +761,11 @@ export class MastraTUI {
     if (this.state.isInitialized) return;
 
     // Initialize controller (but don't select thread yet)
-    await this.state.controller.init();
-    await this.state.controller.getMastra()?.startWorkers();
+    const local = this.state.local;
+    if (local) {
+      await local.controller.init();
+      await local.controller.getMastra()?.startWorkers();
+    }
 
     if (this.state.pluginManager && !this.cleanupPluginReloadListener) {
       this.cleanupPluginReloadListener = this.state.pluginManager.onReload(plugins =>
@@ -844,7 +847,7 @@ export class MastraTUI {
     // Load OM progress now that we're subscribed (the event during
     // thread selection fired before we were listening).
     // This emits om_status → display_state_changed → updateStatusLine.
-    await this.state.controller.loadOMProgress(this.state.session);
+    await this.state.local?.controller.loadOMProgress(this.state.local.session);
 
     // Sync current thread metadata — the thread_changed event from
     // Initial thread setup ran before we subscribed above.
@@ -1088,14 +1091,15 @@ export class MastraTUI {
   }
 
   private emitErrorFeedback(errorMessage: string): void {
-    const controller = this.state.controller;
+    const local = this.state.local;
+    if (!local) return;
     const traceId = this.state.session.run.getTraceId() ?? undefined;
     const runId = this.state.session.getCurrentRunId() ?? undefined;
     const threadId = this.state.session.thread.getId() ?? undefined;
 
     if (!traceId && !runId && !threadId) return;
 
-    const mastra = controller.getMastra();
+    const mastra = local.controller.getMastra();
     const observability = mastra?.observability;
     if (!observability?.addFeedback) return;
 
@@ -1425,7 +1429,7 @@ export class MastraTUI {
    * Get the workspace, preferring controller-owned workspace over the direct option.
    */
   private getResolvedWorkspace(): Workspace | undefined {
-    return this.state.controller.getWorkspace() ?? this.state.workspace;
+    return this.state.local?.controller.getWorkspace() ?? this.state.workspace;
   }
 
   // ===========================================================================

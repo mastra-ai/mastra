@@ -261,6 +261,7 @@ describe('storageVersion per run', () => {
     await vi.waitFor(() => expect(died).toBe(true));
     store.writeWorkflowRunCheckpoint = checkpoint;
     store.appendWorkflowRunEntries = append;
+    await expireRunLeases(storage);
 
     // The checkpoint still holds b's earlier success; a restart must run b again, not skip to c.
     const second = build();
@@ -313,6 +314,7 @@ describe('storageVersion per run', () => {
       const run = await first.createRun();
       void run.start({ inputData: { n: 0 }, initialState: { seen: [] } });
       await vi.waitFor(() => expect(died).toBe(true));
+      await expireRunLeases(storage);
       const stored = () => store.loadWorkflowSnapshot({ workflowName: 'counted', runId: run.runId });
       const atDeath = await stored();
 
@@ -682,6 +684,62 @@ describe('storage v2 write volume', () => {
     }
   });
 
+  it.each([1, 4])(
+    "stores step bytes linear in a foreach's result as it records its finished items (concurrency %s)",
+    async concurrency => {
+      /** The JSON size of every step result and step patch the run sent, and of the foreach's final result. */
+      async function stepBytes(count: number) {
+        const storage = new MockStore();
+        const store = storage.stores.workflows!;
+        let sent = 0;
+        const add = (args: { steps: Record<string, unknown>; stepPatches?: Record<string, unknown> }) => {
+          sent += JSON.stringify(args.steps).length;
+          if (args.stepPatches) sent += JSON.stringify(args.stepPatches).length;
+        };
+        const checkpoint = store.writeWorkflowRunCheckpoint.bind(store);
+        store.writeWorkflowRunCheckpoint = async args => (add(args), checkpoint(args));
+        const append = store.appendWorkflowRunEntries.bind(store);
+        store.appendWorkflowRunEntries = async args => (add(args), append(args));
+
+        const kb = createStep({
+          id: 'kb',
+          inputSchema: num,
+          outputSchema: z.object({ text: z.string() }),
+          execute: async ({ inputData }) => ({ text: String(inputData.n % 10).repeat(1024) }),
+        });
+        const workflow = createWorkflow({
+          id: 'items',
+          inputSchema: z.array(num),
+          outputSchema: z.array(z.object({ text: z.string() })),
+          options: { storageVersion: 2 },
+        })
+          .foreach(kb, { concurrency })
+          .commit();
+        new Mastra({ logger: false, storage, workflows: { items: workflow } });
+
+        const run = await workflow.createRun();
+        const result = await run.start({ inputData: Array.from({ length: count }, (_, n) => ({ n })) });
+        expect(result.status).toBe('success');
+        const stored = await store.loadWorkflowRun({
+          workflowName: 'items',
+          runId: run.runId,
+          successfulSteps: 'full',
+        });
+        expect(stored!.steps.kb).toMatchObject({
+          status: 'success',
+          output: result.status === 'success' && result.result,
+        });
+        return { sent, final: JSON.stringify(stored!.steps.kb).length };
+      }
+
+      for (const count of [64, 256]) {
+        const { sent, final } = await stepBytes(count);
+        // Writing the whole foreach result each time an item finishes would send about count / 2 times its final size.
+        expect(sent).toBeLessThanOrEqual(6 * final);
+      }
+    },
+  );
+
   it('keeps the patches after the latest full state within the state size across suspend and resume cycles', async () => {
     const storage = new MockStore();
     const store = storage.stores.workflows!;
@@ -772,6 +830,7 @@ describe('storage v2 write volume', () => {
         void (await workflow.createRun({ runId })).restart();
       }
       await vi.waitFor(() => expect(died).toBe(true));
+      await expireRunLeases(storage);
       const stored = await store.loadWorkflowRun({ workflowName: 'restarted', runId, successfulSteps: 'full' });
       expect(stored!.state.a).toBe(kb(life));
       expect(stored!.statePatchBytes).toBeLessThanOrEqual(size);
@@ -1133,6 +1192,14 @@ function innerCheckpoints(sends: ReturnType<typeof recordStateSends>) {
   return [...byRun.values()];
 }
 
+/** A dead process stops renewing its run ownership leases; let them lapse so another process can restart its runs. */
+async function expireRunLeases(storage: InstanceType<typeof MockStore>) {
+  const store = storage.stores.workflows!;
+  for (const runId of [...(store as any).db.runOwners.keys()]) {
+    await store.claimRunOwnership({ runId, ownerId: 'lapsed', leaseMs: -1, force: true });
+  }
+}
+
 /** Every stored run's status and state. */
 async function storedStates(storage: InstanceType<typeof MockStore>, storageVersion: 1 | 2) {
   const store = storage.stores.workflows!;
@@ -1304,6 +1371,7 @@ describe('storage v2 nested runs', () => {
         new Mastra({ logger: false, storage, workflows: { outer: first } });
         void (await first.createRun({ runId: 'run-1' })).start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
         await vi.waitFor(() => expect(died).toBe(true));
+        await expireRunLeases(storage);
 
         const second = build(storageVersion);
         new Mastra({ logger: false, storage, workflows: { outer: second } });
@@ -1371,6 +1439,7 @@ describe('storage v2 nested runs', () => {
         initialState: { items: [PAD] },
       });
       await vi.waitFor(() => expect(died).toBe(true));
+      await expireRunLeases(storage);
 
       await new Mastra({ logger: false, storage, workflows: build() }).restartAllActiveWorkflowRuns();
 
@@ -1698,24 +1767,36 @@ describe('storage v2 nested runs', () => {
       expect(inner2).toEqual(inner);
     });
 
-    it("builds a foreach iteration on a draft of the parent's state with the earlier iterations' changes", async () => {
+    it("builds each foreach iteration on the parent's state with the earlier iterations' changes", async () => {
       const storage = new MockStore();
       const sends = recordStateSends(storage);
       await drive(2, scenarios['a foreach over a nested run that does not suspend']!, storage);
       const ran = ['running none', 'running patch', 'running none', 'running patch', 'running none', 'running patch'];
-      const byRun: Record<string, string[]> = {};
+      const inner: Record<string, string[]> = {};
       for (const { workflowName, runId, status, state } of sends) {
-        (byRun[`${workflowName}/${runId}`] ??= []).push(`${status} ${state}`);
+        if (workflowName !== 'outer') (inner[runId] ??= []).push(`${status} ${state}`);
       }
-      const { 'outer/run-1': outer, ...inner } = byRun;
-      // Each later iteration starts on a draft that holds the earlier iterations' changes, so it
-      // stores no patch of its own to catch up.
+      // Each later iteration starts on a parent state that holds the earlier iterations' changes
+      // (stored by the foreach's progress write, or a draft when that write hasn't landed yet), so
+      // it stores no patch of its own to catch up.
       expect(Object.values(inner)).toEqual([
         ['pending none', 'running none', ...ran, 'success none'],
         ['pending none', 'running none', ...ran, 'success none'],
         ['pending none', 'running none', ...ran, 'success none'],
       ]);
-      expect(outer!.filter(sent => sent.startsWith('draft'))).toEqual(['draft patch', 'draft patch']);
+      const store = storage.stores.workflows!;
+      const states = await Promise.all(
+        Object.keys(inner).map(
+          async runId =>
+            (await store.loadWorkflowRun({ workflowName: 'inner', runId, successfulSteps: 'summary' }))?.state,
+        ),
+      );
+      const own = (n: number) => [`inner-a:${n}`, `inner-wait:${n + 1}`, `inner-b:${n + 2}`];
+      expect(states).toEqual([
+        { items: [PAD, ...own(0)] },
+        { items: [PAD, ...own(0), ...own(10)] },
+        { items: [PAD, ...own(0), ...own(10), ...own(20)] },
+      ]);
     });
 
     it('stores no full state for a nested step outside a block when it pauses', async () => {
@@ -1887,7 +1968,7 @@ describe('a nested run hands back only its changes', () => {
     stateSchema: typeof items | undefined = items,
   ) =>
     steps
-      .reduce(
+      .reduce<any>(
         (wf, step) => wf.then(step),
         createWorkflow({
           id: 'inner',
@@ -1895,7 +1976,7 @@ describe('a nested run hands back only its changes', () => {
           outputSchema: num,
           stateSchema,
           options: { storageVersion },
-        }) as any,
+        }),
       )
       .commit();
   const outerOf = (storageVersion: 1 | 2, inputSchema: z.ZodType = num) =>
@@ -2026,7 +2107,10 @@ describe('a re-driven nested step whose nested run already finished', () => {
         if (args.workflowName === 'inner' && (args.snapshot ?? args.header)?.status === 'success') innerDone = true;
       };
     }
-    return dead.then(() => (dying = false));
+    return dead.then(async () => {
+      dying = false;
+      await expireRunLeases(storage);
+    });
   }
 
   it.each([1, 2] as const)('keeps its state changes on v%s', async storageVersion => {
@@ -2107,7 +2191,7 @@ describe('a restarted v2 nested run', () => {
     const build = () => {
       const nested = (id: string, ...steps: ReturnType<typeof appendItem>[]) =>
         steps
-          .reduce(
+          .reduce<any>(
             (wf, s) => wf.then(s),
             createWorkflow({
               id,
@@ -2115,7 +2199,7 @@ describe('a restarted v2 nested run', () => {
               outputSchema: num,
               stateSchema: items,
               options: { storageVersion: 2 },
-            }) as any,
+            }),
           )
           .commit();
       const dies = () => {
@@ -2141,6 +2225,7 @@ describe('a restarted v2 nested run', () => {
     new Mastra({ logger: false, storage, workflows: { outer: first } });
     void (await first.createRun({ runId: 'run-1' })).start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
     await vi.waitFor(() => expect(died).toBe(true));
+    await expireRunLeases(storage);
 
     dying = false;
     const outer = build();

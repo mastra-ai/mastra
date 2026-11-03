@@ -5,6 +5,7 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
 import type {
   AnySpan,
+  ClassifierEvaluationAttributes,
   CostContext,
   MetricsContext,
   ModelGenerationAttributes,
@@ -34,18 +35,19 @@ export function emitDurationMetrics(span: AnySpan, metrics: MetricsContext): voi
   });
 }
 
-/** Emit token usage metrics for a model-generation span. */
+/** Emit token usage metrics for a model-generation or classifier-evaluation span. */
 export function emitTokenMetrics(span: AnySpan, metrics: MetricsContext): void {
-  if (span.type !== SpanType.MODEL_GENERATION) {
+  if (span.type === SpanType.MODEL_GENERATION) {
+    const attrs = span.attributes as ModelGenerationAttributes | undefined;
+    if (attrs?.usage) emitUsageMetrics(attrs, attrs.usage, metrics);
     return;
   }
 
-  const attrs = span.attributes as ModelGenerationAttributes | undefined;
-  if (!attrs?.usage) {
-    return;
+  if (span.type === SpanType.CLASSIFIER_EVALUATION) {
+    // Classifier spans name their model `modelId`; cost lookup reads `model`.
+    const attrs = span.attributes as ClassifierEvaluationAttributes | undefined;
+    if (attrs?.usage) emitUsageMetrics({ provider: attrs.provider, model: attrs.modelId }, attrs.usage, metrics);
   }
-
-  emitUsageMetrics(attrs, attrs.usage, metrics);
 }
 
 /**

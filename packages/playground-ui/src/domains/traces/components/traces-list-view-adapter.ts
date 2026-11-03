@@ -10,6 +10,8 @@ export function toTracesListViewTraces(traces: TraceQueryTrace[]): TracesListVie
     name: displayTraceName(trace.name),
     createdAt: trace.createdAt,
     inputPreview: trace.inputPreview,
+    outputPreview: trace.outputPreview ?? undefined,
+    errorPreview: trace.errorPreview ?? undefined,
     metadata: trace.metadata,
     entityId: trace.entityId,
     entityName: trace.entityName,
@@ -18,7 +20,12 @@ export function toTracesListViewTraces(traces: TraceQueryTrace[]): TracesListVie
     resourceId: trace.resourceId,
     environment: trace.environment,
     status: trace.status,
+    outcome: trace.outcome,
+    stopReason: trace.stopReason,
+    stopReasonContext: trace.stopReasonContext,
     startedAt: trace.startedAt,
     endedAt: trace.endedAt,
+    timeToFirstChunkMs: trace.timeToFirstChunkMs,
+    timeToFirstTokenMs: trace.timeToFirstTokenMs,
   }));
 }

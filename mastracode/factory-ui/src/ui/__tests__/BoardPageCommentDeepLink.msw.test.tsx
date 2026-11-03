@@ -146,14 +146,13 @@ describe('Board comment deep link', () => {
     const { router } = renderBoard(`?item=${ITEM_ID}&comment=c1`);
 
     await screen.findByRole('dialog', { name: 'Fix login bug' });
-    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
-    await user.type(screen.getByRole('combobox', { name: 'Add filter' }), 'login{Enter}');
+    await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'login');
 
     await waitFor(() => {
       const params = new URLSearchParams(router.state.location.search);
       expect(params.get('item')).toBeNull();
       expect(params.get('comment')).toBeNull();
-      expect(params.get('q')).toBe('login');
+      expect(params.get('search')).toBe('login');
     });
   });
 });

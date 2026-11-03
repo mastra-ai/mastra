@@ -21,7 +21,7 @@ export function SidebarHeader({ className, children, collapsedLogo, actions, ...
     <header
       data-slot="sidebar-header"
       className={cn(
-        'flex h-header-default shrink-0 items-center gap-2',
+        'flex h-header-default shrink-0 items-center gap-0.5',
         collapsed ? 'px-1' : 'pr-2 pl-3.5',
         collapsed && actions && 'h-auto flex-col gap-3 py-3',
         !collapsed && !isMobile && 'w-[calc(var(--sidebar-width)-1rem)]',

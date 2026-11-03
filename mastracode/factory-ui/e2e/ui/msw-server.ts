@@ -1,7 +1,6 @@
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
-import { attentionKindSummaries } from './attention';
 import { builtinBoardCatalog } from './board-catalog';
 
 /**
@@ -43,6 +42,8 @@ export const server = setupServer(
   http.get('*/web/integrations/platform/:provider/connections', () =>
     HttpResponse.json({ error: 'not_found' }, { status: 404 }),
   ),
+  // Board filters read connection status even when no provider is configured.
+  http.get('*/web/github/status', () => HttpResponse.json({ enabled: false, connected: false, installations: [] })),
   // Ambient GitHub label routing (read by every board's intake feed); label-routing
   // tests override it with `server.use(...)`.
   http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),
@@ -51,9 +52,6 @@ export const server = setupServer(
   http.get('*/web/gitlab/projects', () => HttpResponse.json({ error: 'not_found' }, { status: 404 })),
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
-  http.get('*/web/factory/projects/:id/attention', () =>
-    HttpResponse.json({ items: [], kinds: attentionKindSummaries([]), hasMore: false }),
-  ),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   http.get('*/web/factory/projects/:id/mention-roster', () => HttpResponse.json({ members: [] })),

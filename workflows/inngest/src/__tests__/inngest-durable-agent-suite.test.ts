@@ -39,14 +39,22 @@ createDurableAgentTestSuite({
     const mastra = getSharedMastra();
     const testId = generateTestId();
 
+    // Every agent registers on the one shared Mastra, so a per-test store can't be honoured.
+    if (config.storage) {
+      throw new Error('The Inngest durable agent suite shares one Mastra storage; config.storage is not supported');
+    }
+
     // Create a regular Mastra Agent
     const agent = new Agent({
-      id: `${config.id}-${testId}`,
+      id: config.exactId ? config.id : `${config.id}-${testId}`,
       name: config.name || config.id,
       instructions: config.instructions,
       model: config.model,
       tools: config.tools,
       ...(config.agents ? { agents: config.agents } : {}),
+      ...(config.memory ? { memory: config.memory } : {}),
+      ...(config.outputProcessors ? { outputProcessors: config.outputProcessors } : {}),
+      ...(config.requestContextSchema ? { requestContextSchema: config.requestContextSchema } : {}),
     });
 
     // Wrap with Inngest durable execution

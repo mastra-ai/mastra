@@ -49,6 +49,14 @@ export class ObservationTurn {
   /** Generation count at turn start — used to detect if reflection happened during the turn. */
   private _generationCountAtStart = -1;
 
+  /**
+   * Fingerprints of the non-marker parts each message had when a step last drained it. A message
+   * is unread step output only if it gained a part the model has not seen — including a tool result
+   * merged in place into an existing tool-invocation part — not when it only gained OM markers.
+   * @internal
+   */
+  drainedPartKeys = new Map<string, Set<string>>();
+
   /** Memory context provider — set via start(). Used by steps for beforeBuffer persistence. */
   memory?: MemoryContextProvider;
 
@@ -81,7 +89,10 @@ export class ObservationTurn {
   /** Processor-provided hooks for turn/step lifecycle integration. */
   readonly hooks: ObservationTurnHooks;
 
+  readonly abortSignal?: AbortSignal;
+
   constructor(opts: {
+    abortSignal?: AbortSignal;
     om: ObservationalMemory;
     threadId: string;
     resourceId?: string;
@@ -93,6 +104,7 @@ export class ObservationTurn {
     observabilityContext?: ObservabilityContext;
     hooks?: ObservationTurnHooks;
   }) {
+    this.abortSignal = opts.abortSignal;
     this.om = opts.om;
     this.threadId = opts.threadId;
     this.resourceId = opts.resourceId;
@@ -231,7 +243,7 @@ export class ObservationTurn {
     // rather than waiting for the next turn's step.prepare() to trigger buffering.
     const asyncObservationEnabled = this.om.buffering.isAsyncObservationEnabled();
     const bufferOnIdle = this.om.getObservationConfig().bufferOnIdle;
-    if (asyncObservationEnabled && bufferOnIdle) {
+    if (!this.abortSignal?.aborted && asyncObservationEnabled && bufferOnIdle) {
       const allMessages = getObservableMessages(messageList);
       const record = this._record!;
       const unobservedMessages = this.om.getUnobservedMessages(allMessages, record);
@@ -258,6 +270,7 @@ export class ObservationTurn {
             .catch((err: Error) => {
               omDebug(`[OM:turn.end] idle buffer failed: ${err?.message}`);
             }),
+          { threadId: this.threadId, resourceId: this.resourceId },
         );
       }
     }

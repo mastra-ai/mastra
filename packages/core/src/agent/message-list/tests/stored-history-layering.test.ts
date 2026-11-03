@@ -148,6 +148,53 @@ describe('live tool state only moves a stored call forward', () => {
       ),
     ).toMatchObject({ state: 'approval-responded', approval: { approved: true } });
   });
+
+  it('keeps a completed live background result when a different stored result advances', () => {
+    const response = (firstStatus: string, secondStatus: string): MastraDBMessage =>
+      ({
+        id: 'assistant',
+        role: 'assistant',
+        createdAt: new Date(1),
+        threadId: 'thread',
+        resourceId: 'resource',
+        content: {
+          format: 2,
+          parts: [
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'first',
+                toolName: 'research',
+                args: {},
+                result: firstStatus,
+              },
+              providerMetadata: { mastra: { backgroundTask: { status: firstStatus } } },
+            },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'result',
+                toolCallId: 'second',
+                toolName: 'research',
+                args: {},
+                result: secondStatus,
+              },
+              providerMetadata: { mastra: { backgroundTask: { status: secondStatus } } },
+            },
+          ],
+        },
+      }) as MastraDBMessage;
+    const list = new MessageList({ threadId: 'thread', resourceId: 'resource' });
+    list.add(response('completed', 'running'), 'response');
+    list.add(response('running', 'completed'), 'memory');
+
+    const parts = list.get.all.db()[0]!.content.parts.filter(part => part.type === 'tool-invocation');
+    expect(parts[0]?.toolInvocation.result).toBe('completed');
+    expect(parts[0]?.providerMetadata?.mastra?.backgroundTask).toMatchObject({ status: 'completed' });
+    expect(parts[1]?.toolInvocation.result).toBe('completed');
+    expect(parts[1]?.providerMetadata?.mastra?.backgroundTask).toMatchObject({ status: 'completed' });
+  });
 });
 
 function withText(message: MastraDBMessage, text: string, extra: Partial<MastraDBMessage['content']> = {}) {

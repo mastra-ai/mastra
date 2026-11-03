@@ -21,12 +21,12 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../../evals';
+import type { CapturedRequest, EngineTurnOptions, ModelScript } from '../../../loop/test-utils/aimock/parity';
+import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from '../../../loop/test-utils/aimock/parity';
 import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage/mock';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import type { CapturedRequest, EngineTurnOptions, ModelScript } from './parity-harness';
-import { chunksOfType, expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
 
 type Engine = 'plain' | 'durable' | 'evented';
 type ScorerMode = 'pass' | 'throws';

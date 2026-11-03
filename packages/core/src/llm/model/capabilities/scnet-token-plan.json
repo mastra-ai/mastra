@@ -15,6 +15,7 @@
     "MiniMax-M2.5",
     "MiniMax-M2.7",
     "MiniMax-M3",
+    "Qwen3.8-Flash",
     "Qwen3.8-Max"
   ],
   "structuredOutput": [
@@ -43,9 +44,13 @@
         "values": ["high", "max"]
       }
     ],
-    "Qwen3.8-Max": [
+    "DeepSeek-V4.1-Flash": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "DeepSeek-V4-Pro-0813": [
@@ -57,13 +62,14 @@
         "values": ["high", "max"]
       }
     ],
-    "DeepSeek-V4.1-Flash": [
+    "Qwen3.8-Flash": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "Qwen3.8-Max": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "DeepSeek-V4-Flash": [
@@ -82,11 +88,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "Qwen3.8-Flash": [
-      {
-        "type": "toggle"
       }
     ]
   }

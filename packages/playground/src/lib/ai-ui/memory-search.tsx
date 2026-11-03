@@ -196,7 +196,7 @@ export const MemorySearch = ({
       <SearchInput
         label="Search memory"
         className="shrink-0"
-        placeholder="Search memory..."
+        placeholder="Search memory"
         value={query}
         onValueChange={handleInputChange}
         onKeyDown={handleKeyDown}

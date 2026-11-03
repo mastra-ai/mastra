@@ -1,113 +1,150 @@
 import { Readable } from 'node:stream';
+import type { ReadableStream as WebReadableStream } from 'node:stream/web';
 
 import { MastraVoice } from '@internal/voice';
-import { Speechify } from '@speechify/api-sdk';
-import type { AudioStreamRequest, VoiceModelName } from '@speechify/api-sdk';
+import { SpeechifyClient } from '@speechify/api';
+import type { Speechify } from '@speechify/api';
 
-import { SIMBA_3_VOICES, SPEECHIFY_VOICES } from './voices';
 import type { SpeechifyVoiceId } from './voices';
 
-/**
- * Models accepted by the Speechify API. Extends the SDK's `VoiceModelName`
- * with the Simba 3 generation models, which the API accepts but the SDK's
- * type union does not yet include. `simba-3.0` and `simba-3.2` are
- * currently English only and serve only the curated `SIMBA_3_VOICES`
- * (plus, on `simba-3.2`, cloned voices approved by Speechify) — the
- * classic catalog voices return an error on them.
- */
-type SpeechifyModel = VoiceModelName | 'simba-3.0' | 'simba-3.2';
+// Injected by tsdown at build time; undefined under vitest and in source form.
+declare const __SPEECHIFY_VOICE_VERSION__: string | undefined;
 
-const isSimba3Model = (model: string | undefined) => model === 'simba-3.0' || model === 'simba-3.2';
+/**
+ * Models accepted by the Speechify API. `simba-3.5` is Speechify's recommended
+ * model: 48 languages on one id, and every catalog voice speaks all of them.
+ * The SDK's union does not list it yet, so it is added here; the SDK sends
+ * the value to the API verbatim. `simba-3.2` is English only. `simba-english`
+ * and `simba-multilingual` are retired for new workspaces and are served by
+ * `simba-3.2` and `simba-3.5` from 2026-11-21.
+ */
+type SpeechifyModel = Speechify.GetStreamRequest.Model | 'simba-3.5';
+
+const DEFAULT_MODEL: SpeechifyModel = 'simba-3.5';
+const SIMBA_3_MODELS: ReadonlySet<string> = new Set(['simba-3.0', 'simba-3.2', 'simba-3.5']);
+
+/** The `harper_32` voice is Speechify's first en-US staff pick; `george` is the classic default. */
+const defaultSpeaker = (model: string): SpeechifyVoiceId => (SIMBA_3_MODELS.has(model) ? 'harper_32' : 'george');
+
+/** Container of the streamed audio. `pcm` is signed 16-bit little-endian. */
+type SpeechifyAudioFormat = 'mp3' | 'ogg' | 'aac' | 'pcm';
+
+const ACCEPT_HEADER: Record<SpeechifyAudioFormat, Speechify.StreamAudioRequestAccept> = {
+  mp3: 'audio/mpeg',
+  ogg: 'audio/ogg',
+  aac: 'audio/aac',
+  pcm: 'audio/pcm',
+};
 
 interface SpeechifyConfig {
   name?: SpeechifyModel;
   apiKey?: string;
 }
 
+interface SpeechifySpeakOptions {
+  /** Voice id for this request. Any catalog voice; see `getSpeakers()`. */
+  speaker?: SpeechifyVoiceId;
+  /** Model for this request. */
+  model?: SpeechifyModel;
+  /**
+   * Locale of the text, such as `pt-BR`. On `simba-3.5` any voice speaks it.
+   * When omitted, the voice's own locale decides.
+   */
+  language?: string;
+  /** Container of the audio stream. Defaults to `mp3`. */
+  audioFormat?: SpeechifyAudioFormat;
+  /** Sample rate and bitrate, such as `mp3_24000_128` or `pcm_16000`. */
+  outputFormat?: Speechify.AudioStreamOutputFormat;
+  /** Synthesis switches such as `loudness_normalization`. */
+  options?: Speechify.GetStreamOptionsRequest;
+}
+
+/**
+ * Integration attribution, per Speechify's integration guide. It identifies
+ * this package's traffic and never changes limits, pricing or access.
+ */
+function attributionHeaders(): Record<string, string> {
+  const version = typeof __SPEECHIFY_VOICE_VERSION__ === 'string' ? __SPEECHIFY_VOICE_VERSION__ : undefined;
+  return {
+    'Speechify-Caller': 'mastra',
+    ...(version ? { 'Speechify-Caller-Version': version } : {}),
+  };
+}
+
 export class SpeechifyVoice extends MastraVoice {
-  private client: Speechify;
+  private client: SpeechifyClient;
+  private readonly explicitSpeaker?: SpeechifyVoiceId;
 
   constructor({ speechModel, speaker }: { speechModel?: SpeechifyConfig; speaker?: SpeechifyVoiceId } = {}) {
-    const modelName = speechModel?.name ?? 'simba-english';
+    const modelName = speechModel?.name ?? DEFAULT_MODEL;
+    const apiKey = speechModel?.apiKey ?? process.env.SPEECHIFY_API_KEY;
     super({
-      speechModel: {
-        name: modelName,
-        apiKey: speechModel?.apiKey ?? process.env.SPEECHIFY_API_KEY,
-      },
-      // The Simba 3 models serve only the curated SIMBA_3_VOICES, so the
-      // default speaker has to follow the configured model.
-      speaker: speaker ?? (isSimba3Model(modelName) ? 'harper_32' : 'george'),
+      speechModel: { name: modelName, apiKey },
+      speaker: speaker ?? defaultSpeaker(modelName),
     });
 
-    const apiKey = speechModel?.apiKey ?? process.env.SPEECHIFY_API_KEY;
     if (!apiKey) {
       throw new Error('SPEECHIFY_API_KEY is not set');
     }
 
-    this.client = new Speechify({ apiKey });
+    this.explicitSpeaker = speaker;
+    this.client = new SpeechifyClient({ token: apiKey, headers: attributionHeaders() });
   }
 
+  /**
+   * Lists every voice the API key can use, read live from Speechify's
+   * catalog, with the models that render each one.
+   */
   async getSpeakers() {
-    return [...SIMBA_3_VOICES, ...SPEECHIFY_VOICES].map(voice => ({
-      voiceId: voice,
-      name: voice,
-    }));
+    const speakers: Array<{ voiceId: string; name: string; language: string; gender: string; models: string[] }> = [];
+    for await (const voice of await this.client.voices.list()) {
+      speakers.push({
+        voiceId: voice.id,
+        name: voice.display_name,
+        language: voice.locale,
+        gender: voice.gender,
+        models: voice.models.map(model => model.name),
+      });
+    }
+    return speakers;
   }
 
   private async streamToString(stream: NodeJS.ReadableStream): Promise<string> {
     const chunks: Buffer[] = [];
     for await (const chunk of stream) {
-      if (typeof chunk === 'string') {
-        chunks.push(Buffer.from(chunk));
-      } else {
-        chunks.push(chunk);
-      }
+      chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
     }
     return Buffer.concat(chunks).toString('utf-8');
   }
 
-  async speak(
-    input: string | NodeJS.ReadableStream,
-    options?: {
-      speaker?: string;
-      model?: SpeechifyModel;
-    } & Omit<AudioStreamRequest, 'voiceId' | 'input' | 'model'>,
-  ): Promise<NodeJS.ReadableStream> {
+  async speak(input: string | NodeJS.ReadableStream, options?: SpeechifySpeakOptions): Promise<NodeJS.ReadableStream> {
     const text = typeof input === 'string' ? input : await this.streamToString(input);
+    const { speaker, model, language, audioFormat, outputFormat, options: synthesisOptions } = options ?? {};
+    const resolvedModel = model || this.speechModel?.name || DEFAULT_MODEL;
 
-    const { speaker, model, ...streamOptions } = options ?? {};
-    const request: AudioStreamRequest = {
-      ...streamOptions,
-      input: text,
-      // The SDK sends `model` to the API verbatim, so casting the wider
-      // SpeechifyModel union into its narrower VoiceModelName is safe.
-      model: (model || this.speechModel?.name) as VoiceModelName,
-      voiceId: (speaker || this.speaker) as SpeechifyVoiceId,
-    };
-
-    const webStream = await this.client.audioStream(request);
-    const reader = webStream.getReader();
-
-    const nodeStream = new Readable({
-      read: async function () {
-        try {
-          const { done, value } = await reader.read();
-          if (done) {
-            this.push(null);
-          } else {
-            this.push(value);
-          }
-        } catch (error) {
-          this.destroy(error as Error);
-        }
+    const response = await this.client.audio.stream({
+      Accept: ACCEPT_HEADER[audioFormat ?? 'mp3'],
+      body: {
+        input: text,
+        voice_id:
+          speaker ??
+          this.explicitSpeaker ??
+          (model ? defaultSpeaker(resolvedModel) : this.speaker) ??
+          defaultSpeaker(resolvedModel),
+        // The SDK sends `model` verbatim, so the wider SpeechifyModel union
+        // narrows safely into the SDK's own type.
+        model: resolvedModel as Speechify.GetStreamRequest.Model,
+        ...(language ? { language } : {}),
+        ...(outputFormat ? { output_format: outputFormat } : {}),
+        ...(synthesisOptions ? { options: synthesisOptions } : {}),
       },
     });
 
-    nodeStream.on('end', () => {
-      reader.releaseLock();
-    });
-
-    return nodeStream;
+    const body = response.stream();
+    if (!body) {
+      throw new Error('Speechify returned an empty audio stream');
+    }
+    return Readable.fromWeb(body as WebReadableStream<Uint8Array>);
   }
 
   /**
@@ -127,4 +164,5 @@ export class SpeechifyVoice extends MastraVoice {
   }
 }
 
-export type { SpeechifyConfig, SpeechifyModel, SpeechifyVoiceId };
+export { SPEECHIFY_FEATURED_VOICES } from './voices';
+export type { SpeechifyAudioFormat, SpeechifyConfig, SpeechifyModel, SpeechifySpeakOptions, SpeechifyVoiceId };

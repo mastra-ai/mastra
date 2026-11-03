@@ -46,8 +46,13 @@ describe('DatasetsList', () => {
       renderList();
       const row = screen.getByRole('link', { name: /Dataset A/ });
       expect(row.getAttribute('href')).toBe('/datasets/ds-a');
-      expect(within(row).getByText('Customer support examples')).toBeTruthy();
       expect(within(row).getByText('v3')).toBeTruthy();
+    });
+
+    it('does not render the Description column or dataset descriptions', () => {
+      renderList();
+      expect(screen.queryByText('Description')).toBeNull();
+      expect(screen.queryByText('Customer support examples')).toBeNull();
     });
 
     it('shows the first two tags with an overflow count', () => {

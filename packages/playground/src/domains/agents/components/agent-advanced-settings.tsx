@@ -222,25 +222,25 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                     type="button"
                     onClick={formatProviderOptions}
                     className={buttonClass}
-                    aria-label="Format Provider Options"
+                    aria-label="Format provider options"
                   >
                     <Icon>
                       <Braces />
                     </Icon>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Format the Provider Options JSON</TooltipContent>
+                <TooltipContent>Format the provider options JSON</TooltipContent>
               </Tooltip>
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy Provider Options">
+                  <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy provider options">
                     <Icon>
                       <CopyIcon />
                     </Icon>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Copy Provider Options</TooltipContent>
+                <TooltipContent>Copy provider options</TooltipContent>
               </Tooltip>
 
               {canEdit && (
@@ -250,12 +250,12 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                       type="button"
                       onClick={saveProviderOptions}
                       className={buttonClass}
-                      aria-label="Save Provider Options"
+                      aria-label="Save provider options"
                     >
                       <Icon>{saved ? <CheckIcon /> : <SaveIcon />}</Icon>
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>{saved ? 'Saved' : 'Save Provider Options'}</TooltipContent>
+                  <TooltipContent>{saved ? 'Saved' : 'Save provider options'}</TooltipContent>
                 </Tooltip>
               )}
             </div>

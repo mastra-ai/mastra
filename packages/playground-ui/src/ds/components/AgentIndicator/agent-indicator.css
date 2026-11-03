@@ -1,0 +1,28 @@
+/* Idle and waiting move here, not in poses.ts: a resting drawing lets the frame loop stop. */
+@keyframes agent-indicator-breathe {
+  25% {
+    scale: 1.02;
+  }
+  75% {
+    scale: 0.98;
+  }
+}
+
+@keyframes agent-indicator-pulse {
+  25% {
+    scale: 1 1.088;
+  }
+  75% {
+    scale: 1 0.912;
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .agent-indicator[data-state='idle']:not([data-still]) {
+    animation: agent-indicator-breathe 5.236s ease-in-out var(--agent-indicator-morph) infinite;
+  }
+
+  .agent-indicator[data-state='waiting']:not([data-still]) {
+    animation: agent-indicator-pulse 2.4s ease-in-out var(--agent-indicator-morph) infinite;
+  }
+}

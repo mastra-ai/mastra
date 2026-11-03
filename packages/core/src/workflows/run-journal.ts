@@ -11,6 +11,8 @@ import type { StepResult, WorkflowRunState } from './types';
 
 type StepResults = Record<string, StepResult<any, any, any, any>>;
 
+type StepCopy = { json: unknown; patchBytes: number; write: number };
+
 // Private to this module, so only the journal can make an object count as a stub. A spread or
 // clone of a stub is a new object, so it isn't one.
 const stubs = new WeakSet<object>();
@@ -62,7 +64,9 @@ export type ParentStateLink = (state: unknown) => Promise<StateBase | undefined>
  * JSON copy of the state it last wrote and diffs the live state against it. A change is written
  * as a patch, unless the patches written since the latest full state would outgrow the state:
  * then the full state is written again, so reading the state back never replays more than
- * about twice its size.
+ * about twice its size. A step result that is rewritten before it succeeds (a running foreach
+ * recording its finished items) is written the same way, as a `step-patch` on the result last
+ * written, once it has been written twice.
  *
  * The start writes of a parallel or branch block's steps are in flight at the same time, and
  * the store can commit them in any order. If two of them carried the same step, the older value
@@ -70,8 +74,9 @@ export type ParentStateLink = (state: unknown) => Promise<StateBase | undefined>
  * what it believes is stored. So a write that can overlap others names its steps (`stepIds`) and
  * sends only those, and overlapping writes name different steps. Everything else (other steps'
  * changes, the state, the checkpoint) goes out with boundary writes, which the engine makes only
- * when no other write of the run is in flight (an entry's end, a loop iteration's start, sleeps,
- * the run stopping). `write` throws when a write breaks that.
+ * when no other write of the run is in flight (an entry's end, a loop iteration's start, a
+ * finished parallel arm or foreach item, sleeps, the run stopping). `write` throws when a write
+ * breaks that.
  *
  * @internal
  */
@@ -82,6 +87,14 @@ export class RunJournal {
   readonly runId: string;
   /** stepId -> the object last written for it (a stub once evicted) */
   #written: Map<string, unknown>;
+  /**
+   * stepId -> a JSON copy of the result last written for it, the JSON size of the patches stored
+   * after it was last written in full, and the write of the step it came from (see `#stepWrites`).
+   * Only for a result that a later non-success result can be written as a patch on (see `#stepWrite`).
+   */
+  #writtenCopies = new Map<string, StepCopy>();
+  /** stepId -> how many writes that send the step have started */
+  #stepWrites = new Map<string, number>();
   /** A JSON copy of the stored state. Replaced on each write, never edited. */
   #writtenState: Record<string, unknown> | undefined;
   /**
@@ -213,9 +226,9 @@ export class RunJournal {
    * @param stepIds Set by a write that can be in flight together with other writes of the run (a
    * step's start write): only these steps are sent, never the state, and no other write in flight
    * may name them. Leave it unset for a boundary write, made when no other write of the run is in
-   * flight (an entry's end, a loop iteration's start, sleeps, the run stopping): it sends every step
-   * result that changed since it was last written, the state's changes, and the checkpoint when
-   * that is still to do.
+   * flight (an entry's end, a loop iteration's start, a finished parallel arm or foreach item,
+   * sleeps, the run stopping): it sends every step result that changed since it was last written,
+   * the state's changes, and the checkpoint when that is still to do.
    */
   async write({
     resourceId,
@@ -260,10 +273,24 @@ export class RunJournal {
         stepId =>
           stepId in results && results[stepId] !== this.#written.get(stepId) && !isStepResultStub(results[stepId]),
       );
-      if (!boundary && !sent.length) return;
     }
     const steps: StepResults = {};
-    for (const stepId of sent) steps[stepId] = results[stepId] as StepResult<any, any, any, any>;
+    const stepPatches: Record<string, StatePatchOp[]> = {};
+    // Built now: the live step results can change while the write is in flight, and a patch has to
+    // match the copy kept for its step.
+    const sentWrites = sent.map(stepId => {
+      const result = results[stepId] as StepResult<any, any, any, any>;
+      const write = this.#stepWrite(stepId, result, !checkpoint);
+      if (write.ops) stepPatches[stepId] = write.ops;
+      else if (!write.unchanged) steps[stepId] = result;
+      return { stepId, result, copy: write.copy, unchanged: write.unchanged };
+    });
+    const patched = Object.keys(stepPatches).length > 0;
+    if (!boundary && !patched && !Object.keys(steps).length) {
+      // Results that only changed object are stored as they are.
+      this.#recordWritten(sentWrites);
+      return;
+    }
 
     // The engine makes boundary writes only where nothing else of the run is running. Failing here
     // finds an engine path that breaks that before it loses a write.
@@ -274,6 +301,9 @@ export class RunJournal {
         category: ErrorCategory.SYSTEM,
         text: `Storage v2 run ${this.runId} started a write while ${boundary ? 'another write' : 'a boundary write'} was in flight.`,
       });
+    }
+    for (const { stepId, unchanged } of sentWrites) {
+      if (!unchanged) this.#stepWrites.set(stepId, (this.#stepWrites.get(stepId) ?? 0) + 1);
     }
 
     let writtenState = this.#writtenState;
@@ -328,7 +358,7 @@ export class RunJournal {
       };
       const written = checkpoint
         ? await store.writeWorkflowRunCheckpoint({ ...run, stateBase })
-        : await store.appendWorkflowRunEntries({ ...run, startStateSeq });
+        : await store.appendWorkflowRunEntries({ ...run, ...(patched ? { stepPatches } : {}), startStateSeq });
       lastSeq = written?.lastSeq;
       this.#startStateSeq = undefined;
     } catch (error) {
@@ -338,9 +368,7 @@ export class RunJournal {
       this.#inFlight--;
       if (boundary) this.#boundaryInFlight = false;
     }
-    for (const stepId of sent) {
-      this.#written.set(stepId, steps[stepId]);
-    }
+    this.#recordWritten(sentWrites);
     if (checkpoint || state || statePatch) {
       this.#writtenRef =
         lastSeq === undefined ? undefined : { workflowName: this.workflowName, runId: this.runId, seq: lastSeq };
@@ -353,6 +381,49 @@ export class RunJournal {
     }
     this.#writtenState = writtenState;
     this.#patchBytes = patchBytes;
+  }
+
+  /**
+   * How a write sends a step's result: as a patch on the result last written (`ops`), not at all
+   * when it holds the same JSON (`unchanged`), else in full. A patch needs both results to be
+   * non-success (only a success is summarized, and a step's start and success writes never pay for
+   * a copy), the new one to be plain JSON (what JSON keeps as it is), every earlier write of the
+   * step to be stored (else the stored result the patch applies to isn't known), and the patches
+   * since the last full write to stay within its size, as for the state. `copy` is what
+   * `#writtenCopies` holds for the step once the write is stored.
+   */
+  #stepWrite(
+    stepId: string,
+    result: StepResult<any, any, any, any>,
+    mayPatch: boolean,
+  ): { ops?: StatePatchOp[]; unchanged?: true; copy: StepCopy | undefined } {
+    const previous = this.#written.get(stepId) as { status?: string } | undefined;
+    const rewritten = previous !== undefined && previous.status !== 'success' && result?.status !== 'success';
+    const json = rewritten && isPlainJson(result, new Set()) ? JSON.stringify(result) : undefined;
+    if (json === undefined) return { copy: undefined };
+    const next: unknown = JSON.parse(json);
+    const started = this.#stepWrites.get(stepId) ?? 0;
+    const prior = this.#writtenCopies.get(stepId);
+    if (mayPatch && prior?.write === started) {
+      const ops = diffState(prior.json, next);
+      if (!ops.length) return { unchanged: true, copy: prior };
+      const patchBytes = prior.patchBytes + JSON.stringify(ops).length;
+      if (patchBytes <= json.length) return { ops, copy: { json: next, patchBytes, write: started + 1 } };
+    }
+    return { copy: { json: next, patchBytes: 0, write: started + 1 } };
+  }
+
+  /**
+   * Records what a stored write sent. A copy is kept only from the latest write of its step: an
+   * earlier write that finishes later doesn't hold what the store has last.
+   */
+  #recordWritten(writes: readonly { stepId: string; result: unknown; copy: StepCopy | undefined }[]): void {
+    for (const { stepId, result, copy } of writes) {
+      this.#written.set(stepId, result);
+      if (copy && copy.write !== (this.#stepWrites.get(stepId) ?? 0)) continue;
+      if (copy) this.#writtenCopies.set(stepId, copy);
+      else this.#writtenCopies.delete(stepId);
+    }
   }
 
   /**
@@ -470,4 +541,41 @@ function normalizeState(state: unknown): {
 } {
   const json = JSON.stringify(state ?? {});
   return { state: JSON.parse(json), bytes: json.length };
+}
+
+/**
+ * Whether JSON keeps `value` as it is: only strings, finite numbers, booleans, null, arrays and
+ * plain objects (no `Date`, `Error` or other class instance, and no `undefined` array item). An
+ * `undefined` object value is allowed: JSON drops the key, which reads back the same.
+ */
+function isPlainJson(value: unknown, ancestors: Set<object>): boolean {
+  switch (typeof value) {
+    case 'string':
+    case 'boolean':
+      return true;
+    case 'number':
+      return Number.isFinite(value);
+    case 'object': {
+      if (value === null) return true;
+      if (ancestors.has(value)) return false;
+      const proto = Object.getPrototypeOf(value);
+      if (!Array.isArray(value) && proto !== Object.prototype && proto !== null) return false;
+      ancestors.add(value);
+      let plain = true;
+      if (Array.isArray(value)) {
+        for (let i = 0; plain && i < value.length; i++) plain = isPlainJson(value[i], ancestors);
+      } else {
+        for (const item of Object.values(value)) {
+          if (item !== undefined && !isPlainJson(item, ancestors)) {
+            plain = false;
+            break;
+          }
+        }
+      }
+      ancestors.delete(value);
+      return plain;
+    }
+    default:
+      return false;
+  }
 }

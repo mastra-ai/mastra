@@ -42,11 +42,17 @@ const SETTINGS_SCHEMA = {
     },
     memoryMb: {
       type: 'integer',
-      title: 'Memory (MB)',
-      description: 'Memory in MB for the sandbox template',
+      title: 'Memory',
+      description: 'Memory for the sandbox template',
       default: DEFAULT_SETTINGS.memoryMb,
-      minimum: 512,
-      maximum: 65536,
+      // E2B caps sandbox memory at 8 GiB by default.
+      oneOf: [
+        { const: 512, title: '512 MB' },
+        { const: 1024, title: '1 GB' },
+        { const: 2048, title: '2 GB' },
+        { const: 4096, title: '4 GB' },
+        { const: 8192, title: '8 GB' },
+      ],
     },
     idleTimeoutMinutes: {
       type: 'integer',
@@ -83,7 +89,13 @@ function settingsSchema(options: E2BFactorySandboxOptions): PublicSchema<E2BFact
   return { ...SETTINGS_SCHEMA, properties } as PublicSchema<E2BFactorySandboxSettings>;
 }
 
-export interface E2BFactorySandboxOptions extends Omit<E2BSandboxOptions, 'id' | 'sandboxId' | 'template'> {
+export interface E2BFactorySandboxOptions extends Omit<E2BSandboxOptions, 'id' | 'sandboxId' | 'template' | 'env'> {
+  /**
+   * Environment variables of every session sandbox. A function receives each
+   * session's context, so a credential can go to one factory's sessions only:
+   * `ctx => (ctx.factoryId === id ? { TOKEN } : {})`.
+   */
+  env?: Record<string, string> | ((ctx: FactorySandboxContext) => Record<string, string>);
   /** Provider-side defaults used when a setting is unset. Never stored by factory. */
   defaults?: Partial<E2BFactorySandboxSettings>;
 }
@@ -131,9 +143,10 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
   }
 
   create(ctx: FactorySandboxContext, settings: E2BFactorySandboxSettings): E2BSandbox {
-    const { defaults, ...options } = this.#options;
+    const { defaults, env, ...options } = this.#options;
     return new E2BSandbox({
       ...options,
+      ...(env ? { env: typeof env === 'function' ? env(ctx) : env } : {}),
       id: ctx.sessionId,
       sandboxId: ctx.sandboxId,
       template: this.template(ctx, settings),

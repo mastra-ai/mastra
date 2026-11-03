@@ -293,7 +293,7 @@ describe('handleGitLabWebhook session dispatch', () => {
       ingestFactoryEvent,
       controller: {
         queryThreadById: async () => ({ id: 'thread-1', resourceId: 'resource-1' }),
-        getSessionByResource: async () => session,
+        getSession: async () => session,
       } as never,
       listSubscriptions: async () => [
         {

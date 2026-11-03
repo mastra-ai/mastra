@@ -30,14 +30,14 @@ describe('useSetAgentDescriptionTool', () => {
 
   it('writes the description to the form', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({ description: 'A helpful agent' } as any);
+    await tool.execute!({ description: 'A helpful agent' });
     expect(form().getValues('description')).toBe('A helpful agent');
   });
 
   it('allows clearing the description with an empty string', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({ description: 'something' } as any);
-    await tool.execute!({ description: '' } as any);
+    await tool.execute!({ description: 'something' });
+    await tool.execute!({ description: '' });
     expect(form().getValues('description')).toBe('');
   });
 

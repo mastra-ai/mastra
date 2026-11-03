@@ -1,6 +1,6 @@
 ---
 title: 'Reference: channels() | Connect'
-description: "API reference for channels() in @mastra/connect: a live channel-provider resolver over a project's platform connections for Slack, Telegram, and Discord."
+description: "API reference for channels() in @mastra/connect: a live channel-provider resolver over a project's platform connections for Slack, Telegram, Discord, and Microsoft Teams."
 packages:
   - '@mastra/connect'
 ---
@@ -21,9 +21,9 @@ export const mastra = new Mastra({
 
 Returns: `Promise<ChannelsResolver>`. See [The resolver](#the-resolver).
 
-The [documented channel setup](/docs/mastra-platform/connect/channels#connect-a-provider) covers Slack, Telegram, and Discord. Their implementations come from `@mastra/slack`, `@mastra/telegram`, and `@mastra/discord`, loaded on demand. Use those packages directly to configure a channel outside the platform connection flow.
+The [documented channel setup](/docs/mastra-platform/connect/channels#connect-a-provider) covers Slack, Telegram, Discord, and Microsoft Teams. Their implementations come from `@mastra/slack`, `@mastra/telegram`, `@mastra/discord`, and `@mastra/teams`, loaded on demand. Use those packages directly to configure a channel outside the platform connection flow.
 
-The SDK also registers `microsoft-teams`, backed by `@mastra/teams`. SDK registration doesn't guarantee availability in the platform catalog. Constructing the Teams provider requires `MASTRA_ENCRYPTION_KEY`, a base64-encoded 32-byte value for protecting stored bot secrets. Without it, the resolver warns and skips Teams, including its routes.
+The Teams provider encrypts stored bot secrets with `MASTRA_ENCRYPTION_KEY` when set. When it isn't, the key is derived from the platform access token and a warning is logged while a Teams connection is active. Rotating the platform access token makes stored bot credentials unreadable (disconnect and reconnect to re-provision). Projects without a Teams connection are unaffected.
 
 ## Parameters
 
@@ -105,7 +105,7 @@ Each value in the `providers` record form is `true`, `false`, or a `ChannelsProv
 
 The resolved `ChannelsResolver` satisfies `@mastra/core`'s channels-resolver contract:
 
-- **Callable**: returns the current `Record<string, ChannelProvider>` of providers with an active connection. Mastra invokes it at runtime; the TTL cache makes repeat calls cheap. Only the first resolution waits on the platform. After the TTL expires, resolution returns the stale snapshot immediately and refreshes in the background, skipping the refresh during a short cooldown after a failed fetch, so a new connection can appear one resolution later than the TTL suggests.
+- **Callable**: returns the current `Record<string, ChannelProvider>` of providers with an active connection. Mastra invokes it at runtime, using the TTL cache to keep repeat calls cheap. Only the first resolution waits on the platform. After the TTL expires, resolution returns the stale snapshot immediately and refreshes in the background, skipping the refresh during a short cooldown after a failed fetch, so a new connection can appear one resolution later than the TTL suggests.
 - `getRoutes()`: the union of API routes for every enabled channel, available synchronously so Mastra can mount them at construction. Routes exist before (and after) their provider has an active connection.
 - `refresh()`: fetches connections from the platform now and updates the cache. Rejects if the platform fetch fails.
 - `disconnect()`: clears the cached snapshot so the next resolution fetches fresh. It doesn't tear down providers, sessions, or credentials.

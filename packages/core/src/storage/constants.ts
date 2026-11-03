@@ -242,6 +242,7 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   description: { type: 'text', nullable: true },
   instructions: { type: 'text', nullable: false },
   model: { type: 'jsonb', nullable: false },
+  modelList: { type: 'jsonb', nullable: true },
   tools: { type: 'jsonb', nullable: true },
   defaultOptions: { type: 'jsonb', nullable: true },
   workflows: { type: 'jsonb', nullable: true },
@@ -1013,6 +1014,8 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
     completedAt: { type: 'timestamp', nullable: true },
     ownerId: { type: 'text', nullable: true },
     leaseExpiresAt: { type: 'timestamp', nullable: true },
+    expiresAt: { type: 'timestamp', nullable: true },
+    metadata: { type: 'jsonb', nullable: true },
   },
   [TABLE_SCHEDULES]: {
     id: { type: 'text', nullable: false, primaryKey: true },

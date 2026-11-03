@@ -126,6 +126,7 @@ export class SensitiveDataFilter implements SpanOutputProcessor {
     span.input = this.tryFilter(span.input, indexedState);
     span.output = this.tryFilter(span.output, indexedState);
     span.errorInfo = this.tryFilter(span.errorInfo, indexedState);
+    span.stopReasonContext = this.tryFilter(span.stopReasonContext, indexedState);
     span.requestContext = this.tryFilter(span.requestContext, indexedState);
     return span;
   }

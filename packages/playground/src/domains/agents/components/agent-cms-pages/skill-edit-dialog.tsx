@@ -4,6 +4,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { SideDialog } from '@mastra/playground-ui/components/SideDialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { SkillSimpleForm } from '@mastra/playground-ui/domains/skills/skill-simple-form';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { SkillIcon } from '@mastra/playground-ui/icons/SkillIcon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
@@ -37,7 +38,6 @@ import {
   updateRootFolderName,
 } from './skill-file-tree-utils';
 import { SkillFolder } from './skill-folder';
-import { SkillSimpleForm } from './skill-simple-form';
 import { AgentColorProvider } from '@/domains/agent-builder/contexts/agent-color-context';
 import { useBuilderSettings } from '@/domains/agent-builder/hooks/use-builder-settings';
 import { useDefaultVisibility } from '@/domains/auth/hooks/use-default-visibility';
@@ -103,12 +103,12 @@ export function SkillEditDialog({
     workspaceId: workspaceId || undefined,
     queryOptions: { enabled: !!workspaceId },
   });
-  const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? true;
+  // Skill files are written through the /fs routes, which cannot reach a filesystem that comes from a resolver.
+  const hasDynamicFilesystem = !!workspaceInfo?.capabilities?.hasDynamicFilesystem;
+  const hasFilesystem = (workspaceInfo?.capabilities?.hasFilesystem ?? true) && !hasDynamicFilesystem;
 
   const builderDefaultWorkspaceId = useMemo(() => {
-    const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
+    const ws = builderSettings?.configuration?.agent?.workspace as { type: string; workspaceId?: string } | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -305,7 +305,7 @@ export function SkillEditDialog({
           {!isReadOnly && (
             <>
               {authEnabled && (
-                <Select value={visibility} onValueChange={next => setVisibility(next as 'private' | 'public')}>
+                <Select value={visibility} onValueChange={next => setVisibility(next)}>
                   <SelectTrigger size="sm" aria-label="Visibility" className="w-fit gap-1.5">
                     <SelectValue placeholder="Visibility" />
                   </SelectTrigger>
@@ -386,7 +386,9 @@ export function SkillEditDialog({
                     <Txt as="span" variant="caption">
                       {!workspaceId
                         ? 'No workspace available. The skill will be saved to the database only.'
-                        : 'No workspace filesystem configured. The skill will be saved to the database only.'}
+                        : hasDynamicFilesystem
+                          ? "This workspace resolves its filesystem per request, so skill files can't be written to it. The skill will be saved to the database only."
+                          : 'No workspace filesystem configured. The skill will be saved to the database only.'}
                     </Txt>
                   </div>
                 )}

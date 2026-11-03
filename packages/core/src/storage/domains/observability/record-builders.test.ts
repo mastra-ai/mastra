@@ -33,6 +33,106 @@ describe('record-builders', () => {
       expect(buildCreateSpanRecord(span()).links).toBeNull();
       expect(buildUpdateSpanRecord(span()).links).toBeNull();
     });
+
+    it('derives time to first chunk, clamps clock skew to zero, and leaves it off updates until the first chunk arrived', () => {
+      const streamed = (ms: number): AnyExportedSpan => ({
+        ...span(),
+        attributes: { completionStartTime: new Date(span().startTime.getTime() + ms) },
+      });
+      expect(buildCreateSpanRecord(streamed(250)).timeToFirstChunkMs).toBe(250);
+      expect(buildUpdateSpanRecord(streamed(250)).timeToFirstChunkMs).toBe(250);
+      expect(buildCreateSpanRecord(streamed(0)).timeToFirstChunkMs).toBe(0);
+      expect(buildCreateSpanRecord(streamed(-5)).timeToFirstChunkMs).toBe(0);
+      expect(buildCreateSpanRecord(span()).timeToFirstChunkMs).toBeNull();
+      expect(buildUpdateSpanRecord(span())).not.toHaveProperty('timeToFirstChunkMs');
+    });
+
+    it('stores the version of the span own entity, not an inherited metadata version', () => {
+      const inherited: AnyExportedSpan = { ...span(), metadata: { entityVersionId: 'agent-v1' } };
+      expect(buildCreateSpanRecord(inherited).entityVersionId).toBeNull();
+      expect(buildCreateSpanRecord({ ...inherited, entityVersionId: 'tool-v2' }).entityVersionId).toBe('tool-v2');
+    });
+
+    it('stores native span fields as supplied, null when the span has none, and off updates when unset', () => {
+      const fields = {
+        externalParentSpanId: 'b7ad6b7169203331',
+        resumedFromSpanId: 'span-0',
+        model: 'gpt-6.1-sol',
+        provider: 'openai',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
+      };
+      const absent = Object.fromEntries(Object.keys(fields).map(key => [key, null]));
+
+      expect(buildCreateSpanRecord({ ...span(), ...fields })).toMatchObject(fields);
+      expect(buildUpdateSpanRecord({ ...span(), ...fields })).toMatchObject(fields);
+      expect(buildCreateSpanRecord(span())).toMatchObject(absent);
+
+      // An ended span that only learned its outcome must not clear the model written at start.
+      const update = buildUpdateSpanRecord({ ...span(), outcome: 'error' });
+      expect(update.outcome).toBe('error');
+      for (const key of Object.keys(fields).filter(key => key !== 'outcome')) {
+        expect(update).not.toHaveProperty(key);
+      }
+    });
+
+    it('fills the time to first token column from the attribute and drops it from the attributes JSON', () => {
+      const streamed: AnyExportedSpan = {
+        ...span(),
+        type: SpanType.MODEL_INFERENCE,
+        attributes: { model: 'gpt-6.1-sol', timeToFirstTokenMs: 210 },
+      };
+      for (const record of [buildCreateSpanRecord(streamed), buildUpdateSpanRecord(streamed)]) {
+        expect(record.timeToFirstTokenMs).toBe(210);
+        expect(record.attributes).toEqual({ model: 'gpt-6.1-sol' });
+      }
+      expect(buildCreateSpanRecord({ ...span(), attributes: { model: 'gpt-6.1-sol' } }).timeToFirstTokenMs).toBeNull();
+    });
+
+    it('stores the parent and root entity carried on the exported span, null when absent', () => {
+      const nested: AnyExportedSpan = {
+        ...span(),
+        isRootSpan: false,
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'wf-1',
+        parentEntityName: 'triage',
+        parentEntityVersionId: 'wf-v1',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'agent-1',
+        rootEntityName: 'support',
+        rootEntityVersionId: 'agent-v1',
+      };
+      expect(buildCreateSpanRecord(nested)).toMatchObject({
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'wf-1',
+        parentEntityName: 'triage',
+        parentEntityVersionId: 'wf-v1',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'agent-1',
+        rootEntityName: 'support',
+        rootEntityVersionId: 'agent-v1',
+      });
+      expect(buildCreateSpanRecord(span())).toMatchObject({
+        parentEntityType: null,
+        parentEntityId: null,
+        parentEntityName: null,
+        parentEntityVersionId: null,
+        rootEntityType: null,
+        rootEntityId: null,
+        rootEntityName: null,
+        rootEntityVersionId: null,
+      });
+    });
+  });
+
+  it('preserves exporter-supplied previews for create and update records', () => {
+    const previews = { inputPreview: ' custom ', outputPreview: '', errorPreview: null };
+    const span = { id: 'span', traceId: 'trace', ...previews } as AnyExportedSpan;
+    expect(buildCreateSpanRecord(span)).toMatchObject(previews);
+    expect(buildUpdateSpanRecord(span)).toMatchObject(previews);
   });
 
   describe('buildMetricRecord', () => {

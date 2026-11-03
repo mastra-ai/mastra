@@ -43,7 +43,7 @@ import {
   WORKFLOW_RUN_JOURNAL_TABLE_CONFIGS,
   WorkflowsStorage,
 } from '@mastra/core/storage';
-import type { WorkflowRunState, StepResult } from '@mastra/core/workflows';
+import type { WorkflowRunState, WorkflowRunStatus, StepResult } from '@mastra/core/workflows';
 import { LibSQLDB, resolveClient } from '../../db';
 import type { LibSQLDomainConfig } from '../../db';
 import type { SqliteClient as Client, SqliteInValue as InValue, SqliteStatement, SqliteValue } from '../../db/client';
@@ -324,6 +324,10 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }
 
   supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
+  supportsGuardedSnapshotWrites(): boolean {
     return true;
   }
 
@@ -1206,6 +1210,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -1214,31 +1219,67 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }) {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     const now = new Date();
     const createdAtValue = (createdAt ?? now).toISOString();
     const updatedAtValue = (updatedAt ?? now).toISOString();
 
     this.logger.debug('Persisting workflow snapshot', { workflowName, runId });
 
-    const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
     // Upsert keyed on (workflow_name, run_id) so re-persisting an existing run preserves the
     // original createdAt and only advances updatedAt. The generic INSERT OR REPLACE helper
     // would rewrite the whole row, resetting createdAt on every step persist. This mirrors
     // updateWorkflowResults above and the pg/mysql/mongodb stores.
-    await this.executeWithRetry(
+    // The status guard sits on the upsert itself, so it is checked and applied in one
+    // statement and a concurrent status change can't land between the check and the write.
+    const expected =
+      expectedStatus === undefined ? [] : Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus];
+    // An explicit empty list matches no status, so an existing row is never overwritten.
+    const guard =
+      expectedStatus === undefined
+        ? ''
+        : expected.length
+          ? ` WHERE json_extract(${TABLE_WORKFLOW_SNAPSHOT}.snapshot, '$.status') IN (${expected.map(() => '?').join(', ')})`
+          : ' WHERE 0';
+    const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
+    const result = await this.executeWithRetry(
       () =>
         withRunFence(this.#client, check, writer =>
           writer.execute({
             sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, resourceId, snapshot, createdAt, updatedAt)
                 VALUES (?, ?, ?, jsonb(?), ?, ?)
                 ON CONFLICT(workflow_name, run_id)
-                DO UPDATE SET resourceId = COALESCE(excluded.resourceId, ${TABLE_WORKFLOW_SNAPSHOT}.resourceId), snapshot = excluded.snapshot, updatedAt = excluded.updatedAt`,
-            args: [workflowName, runId, resourceId ?? null, safeStringify(snapshot), createdAtValue, updatedAtValue],
+                DO UPDATE SET resourceId = COALESCE(excluded.resourceId, ${TABLE_WORKFLOW_SNAPSHOT}.resourceId), snapshot = excluded.snapshot, updatedAt = excluded.updatedAt${guard}`,
+            args: [
+              workflowName,
+              runId,
+              resourceId ?? null,
+              safeStringify(snapshot),
+              createdAtValue,
+              updatedAtValue,
+              ...expected,
+            ],
           }),
         ),
       'persistWorkflowSnapshot',
     );
+    return result.rowsAffected > 0;
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    const result = await this.#client.execute({
+      sql: `SELECT json_extract(snapshot, '$.status') AS status FROM ${TABLE_WORKFLOW_SNAPSHOT} WHERE workflow_name = ? AND run_id = ?`,
+      args: [workflowName, runId],
+    });
+    const status = result.rows?.[0]?.status;
+    return (status ?? null) as WorkflowRunStatus | null;
   }
 
   async loadWorkflowSnapshot({

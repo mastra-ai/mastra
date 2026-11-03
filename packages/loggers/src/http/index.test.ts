@@ -155,6 +155,56 @@ describe('HttpTransport', () => {
   });
 
   describe('error handling and retries', () => {
+    describe('serialization', () => {
+      afterEach(() => {
+        (transport as any).logBuffer = [];
+      });
+
+      it('rejects a throwing toJSON immediately without retrying or fetching', async () => {
+        const serializationError = new Error('serializer exploded');
+        const toJSON = vi.fn(() => {
+          throw serializationError;
+        });
+        transport._transform({ msg: 'bad', toJSON } as any, 'utf8', () => {});
+
+        await expect(transport._flush()).rejects.toBe(serializationError);
+        expect(toJSON).toHaveBeenCalledTimes(1);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(1); // only the flush interval, no retry delay pending
+      });
+
+      it('rejects circular values immediately without fetching', async () => {
+        const circular: any = { msg: 'circular' };
+        circular.self = circular;
+        transport._transform(circular, 'utf8', () => {});
+
+        await expect(transport._flush()).rejects.toThrow(TypeError);
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
+
+      it('rejects BigInt values immediately without fetching', async () => {
+        transport._transform({ msg: 'big', n: 10n } as any, 'utf8', () => {});
+
+        await expect(transport._flush()).rejects.toThrow(TypeError);
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
+
+      it('sends the identical body on every retry after a network failure', async () => {
+        let calls = 0;
+        const toJSON = vi.fn(() => ({ msg: 'stateful', call: ++calls }));
+        transport._transform({ toJSON } as any, 'utf8', () => {});
+        fetchMock.mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce({ ok: true });
+
+        const flushPromise = transport._flush();
+        await vi.advanceTimersByTimeAsync(defaultOptions.retryOptions.retryDelay);
+        await flushPromise;
+
+        expect(toJSON).toHaveBeenCalledTimes(1);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(fetchMock.mock.calls[1][1].body).toBe(fetchMock.mock.calls[0][1].body);
+      });
+    });
+
     it('should retry on HTTP errors', async () => {
       fetchMock
         .mockImplementationOnce(() =>

@@ -85,7 +85,9 @@ describe('TrailingAssistantGuard', () => {
   it('does not append a message when structured output has no schema', () => {
     const guard = new TrailingAssistantGuard();
 
-    const result = guard.processInputStep(makeArgs({ structuredOutput: undefined }));
+    const result = guard.processInputStep(
+      makeArgs({ structuredOutput: {} as ProcessInputStepArgs['structuredOutput'] }),
+    );
 
     expect(result).toBeUndefined();
   });

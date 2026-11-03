@@ -28,6 +28,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
   const handleConditionChange = (index: number, condition: Rule | RuleGroup) => {
     onChange({
       ...group,
+      // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built core declarations distinguish the recursive group's depth from its children.
       conditions: group.conditions.map((c, i) => (i === index ? (condition as Rule | RuleGroupDepth1) : c)),
     });
   };

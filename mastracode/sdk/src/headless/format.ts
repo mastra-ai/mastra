@@ -81,6 +81,20 @@ function serializeError(err: Error): { name: string; message: string; stack?: st
 }
 
 /**
+ * Event types left out of `--output jsonl`. `display_state_changed` carries a
+ * full snapshot of the session's UI state and is re-sent after almost every
+ * other event, so each line repeats the whole conversation, including large
+ * tool results and shell output. A long run writes gigabytes of these lines,
+ * and the stream's other events already carry everything they contain.
+ */
+const JSONL_EXCLUDED_EVENT_TYPES = new Set<AgentControllerEvent['type']>(['display_state_changed']);
+
+/** Whether `--output jsonl` writes this event. Only `display_state_changed` is skipped. */
+export function isJsonlEvent(event: AgentControllerEvent): boolean {
+  return !JSONL_EXCLUDED_EVENT_TYPES.has(event.type);
+}
+
+/**
  * JSONL (stream-json) formatter — returns a plain object to be `JSON.stringify`'d
  * as one line per event by the sink. `Error` instances are normalized so their
  * `name`/`message`/`stack` survive serialization (`JSON.stringify` turns a raw

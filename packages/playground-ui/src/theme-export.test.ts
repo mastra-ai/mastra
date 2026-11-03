@@ -350,6 +350,18 @@ describe('theme.css export', () => {
     expect(declared.toSorted()).toEqual([...TextRoles].toSorted());
   });
 
+  it('keeps display-lg a complete fixed-size role without changing display', () => {
+    const variables = parseVariables(themeCss);
+    expect(variables.get('text-display-lg')).toBe('1.75rem');
+    expect(variables.get('text-display-lg--line-height')).toBe('127%');
+    expect(variables.get('text-display-lg--font-weight')).toBe('500');
+    expect(variables.get('text-display-lg--letter-spacing')).toBe('-0.01em');
+    expect(variables.get('text-display')).toBe('1.375rem');
+    expect(variables.get('text-display--line-height')).toBe('127%');
+    expect(variables.get('text-display--font-weight')).toBe('500');
+    expect(variables.get('text-display--letter-spacing')).toBe('-0.01em');
+  });
+
   it('generates the field and dialog fill utilities', async () => {
     const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
     const output = compiler.build(['bg-field', 'bg-field-disabled', 'bg-dialog']);
@@ -578,11 +590,11 @@ describe('theme.css export', () => {
   it('resolves chromatic roles to opaque ramp values in both themes', () => {
     const { darkVariables, lightVariables } = getThemeVariables(themeCss);
     const roles =
-      /^(?:destructive|warning|success|info)-(?:subtle|edge|indicator|subtle-foreground)$|^product-|^chart-(?:blue|blue-deep|amber|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)/;
+      /^(?:destructive|warning|success|info)-(?:subtle|edge|indicator|subtle-foreground)$|^product-|^chart-(?:blue|blue-deep|amber|green|purple|orange|pink|red|sequential-[1-5])$|^span-(?!type-)|^syntax-(?:string|keyword|literal|name|link)$/;
 
     for (const variables of [darkVariables, lightVariables]) {
       const tokens = [...variables.keys()].filter(name => roles.test(name));
-      expect(tokens.length).toBe(58);
+      expect(tokens.length).toBe(63);
       for (const token of tokens) {
         const value = resolveToken(token, variables);
         expect(value).toMatch(/^oklch\(/);
@@ -591,6 +603,7 @@ describe('theme.css export', () => {
     }
     expect(resolveToken('success-subtle', darkVariables)).not.toBe(resolveToken('success-subtle', lightVariables));
     expect(resolveToken('chart-blue', darkVariables)).not.toBe(resolveToken('chart-blue', lightVariables));
+    expect(resolveToken('syntax-string', darkVariables)).not.toBe(resolveToken('syntax-string', lightVariables));
   });
 
   it('keeps the brand green indicator readable as text on light surfaces', () => {
@@ -629,5 +642,49 @@ describe('theme.css export', () => {
       expect(existsSync(resolve(pkgRoot, layer))).toBe(true);
       expect(pkg.files.some((entry: string) => layer.startsWith(`${entry}/`) || layer === entry)).toBe(true);
     }
+  });
+
+  it('ships a sources entry that points a consumer Tailwind build at the compiled components', async () => {
+    expect(pkg.exports['./sources.css']).toBe('./sources.css');
+    expect(pkg.files).toContain('sources.css');
+
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './sources.css';", pkgRoot);
+    const scannedPatterns = compiler.sources.map(source => resolve(source.base, source.pattern));
+
+    expect(scannedPatterns).toContain(resolve(pkgRoot, 'dist/**/*.js'));
+    expect(pkg.files).toContain('dist');
+  });
+
+  // One file feeds both the library build (`src/index.css`) and an app compiling its own
+  // sheet, so a rule can only land in both. It must not scan `dist` itself: the library
+  // build would then watch its own output. The plugin and the animation sheet resolve
+  // from this package's dependencies, which is what an app's Tailwind sees in node_modules.
+  it('ships the components entry raw, shared with the library build, with every file it imports', async () => {
+    expect(pkg.exports['./components.css']).toBe('./components.css');
+    expect(pkg.files).toContain('components.css');
+    expect(productionCss.trim().split('\n')).toEqual(["@import 'tailwindcss';", "@import '../components.css';"]);
+
+    const componentsEntry = readFileSync(resolve(pkgRoot, 'components.css'), 'utf8');
+    const imports = [...componentsEntry.matchAll(/@import\s+'\.\/([^']+)';/g)].map(([, path = '']) => path);
+
+    expect(imports).toContain('theme.css');
+    expect(imports).not.toContain('sources.css');
+    for (const path of imports) {
+      expect(existsSync(resolve(pkgRoot, path))).toBe(true);
+      expect(pkg.files.some((entry: string) => path.startsWith(`${entry}/`) || path === entry)).toBe(true);
+    }
+    for (const dependency of ['@tailwindcss/typography', 'tw-animate-css']) {
+      expect(pkg.dependencies[dependency]).toBeDefined();
+    }
+
+    const compiler = await compileStylesheet("@import 'tailwindcss'; @import './components.css';", pkgRoot);
+    const output = compiler.build(['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field', 'dark:invert']);
+
+    expect(compiler.sources).toEqual([]);
+    for (const utility of ['shadow-raised', 'state-layer', 'prose', 'animate-in', 'bg-field']) {
+      expect(output).toContain(`.${utility} {`);
+    }
+    expect(output).toContain('.dark\\:invert:is(.dark *)');
+    expect(output).toContain('--syntax-string: var(--green-300)');
   });
 });

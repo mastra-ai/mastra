@@ -1,5 +1,7 @@
-import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { autoApprovedExitTool } from '../boards/phase-automation.js';
+import { toBoardSource } from '../boards/project-boards.js';
+import type { ProjectBoardSource } from '../boards/project-boards.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
 import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -17,12 +19,7 @@ import type {
   FactoryStageRuleContext,
   FactoryTransitionResult,
 } from './types.js';
-import {
-  externallyAuthoredWorkItem,
-  factoryRuleSourceForWorkItem,
-  isFactoryRuleStage,
-  workItemSource,
-} from './types.js';
+import { factoryRuleSourceForWorkItem, isFactoryRuleStage, workItemSource } from './types.js';
 import {
   MAX_FACTORY_RULE_CAUSAL_DEPTH,
   assertFactoryDecisionTarget,
@@ -66,7 +63,8 @@ export interface FactoryTransitionRequest {
 export interface FactoryTransitionServiceOptions {
   configVersion: string;
   storage: WorkItemsStorage;
-  boards?: BoardRegistry;
+  /** A fixed registry, or the per-project boards; each transition loads its project's boards. */
+  boards?: BoardRegistry | ProjectBoardSource;
   /** Every commit, accepted or rejected, lands here as `stage_moved` / `transition_rejected` under the request's actor. */
   audit?: AuditRecorder;
   timeoutMs?: number;
@@ -86,6 +84,18 @@ export interface FactoryTransitionServiceOptions {
     /** The actor that committed this terminal transition. Lets cleanup leave
      * the seat that drove its own transition (an agent tool call) untouched. */
     actor: FactoryRuleActor;
+  }) => Promise<void> | void;
+  /**
+   * Called after a transition commits a stage change, e.g. to tell the item's
+   * followers. Not awaited, and failures are logged: a notification must never
+   * fail or delay the committed transition.
+   */
+  onTransitionCommitted?: (args: {
+    orgId: string;
+    factoryProjectId: string;
+    workItemId: string;
+    fromStage: string | undefined;
+    toStage: string;
   }) => Promise<void> | void;
   /** Upper bound on how long a committed transition waits for
    * `onTerminalStage` before returning (default 30s). The cleanup continues
@@ -107,6 +117,8 @@ export interface FactoryTransitionServiceOptions {
    * a plan without explicit approval is a plan a person must review.
    */
   autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
+  /** Resolves whether a project self-reviews Work items before the change request opens. Unset means off. */
+  selfReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
 
 function rejection(
@@ -187,8 +199,10 @@ function startsRun(decision: FactoryCommitDecision): decision is RunStartDecisio
 }
 
 // Answering a recorded run start, or the role's own mid-run agent, with a run would start a second one.
+// A run that starts after its own agent's move is queued onto that agent's run instead.
 function runAlreadyUnderway(request: FactoryTransitionRequest, decision: RunStartDecision): boolean {
   if (request.cause === 'run_start') return true;
+  if (decision.type === 'invokeSkill' && decision.startsAfterOwnMove === true) return false;
   return request.actor.type === 'agent' && request.actor.role === decision.role;
 }
 
@@ -225,24 +239,28 @@ async function withRuleTimeout<T>(operation: Promise<T>, timeoutMs: number): Pro
 
 export class FactoryTransitionService {
   readonly #configVersion: string;
-  readonly #boards: BoardRegistry;
+  readonly #boards: ProjectBoardSource;
   readonly #storage: WorkItemsStorage;
   readonly #timeoutMs: number;
   readonly #onTerminalStage: FactoryTransitionServiceOptions['onTerminalStage'];
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
+  readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
   readonly #autoApprovePlans: FactoryTransitionServiceOptions['autoApprovePlans'];
+  readonly #selfReviewEnabled: FactoryTransitionServiceOptions['selfReviewEnabled'];
   readonly #audit: AuditRecorder | undefined;
 
   constructor(options: FactoryTransitionServiceOptions) {
     this.#configVersion = options.configVersion;
-    this.#boards = options.boards ?? createBoardRegistry();
+    this.#boards = toBoardSource(options.boards);
     this.#storage = options.storage;
     this.#audit = options.audit;
     this.#timeoutMs = options.timeoutMs ?? RULE_TIMEOUT_MS;
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
+    this.#onTransitionCommitted = options.onTransitionCommitted;
     this.#autoApprovePlans = options.autoApprovePlans;
+    this.#selfReviewEnabled = options.selfReviewEnabled;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
 
@@ -272,7 +290,30 @@ export class FactoryTransitionService {
     }
     const result = await this.#evaluateAndCommit(request, transitionId, item);
     await this.#recordTransition(request, item, result);
+    this.#notifyCommitted(request, item, result);
     return result;
+  }
+
+  #notifyCommitted(request: FactoryTransitionRequest, item: WorkItemRow, result: FactoryTransitionResult): void {
+    const onTransitionCommitted = this.#onTransitionCommitted;
+    if (!onTransitionCommitted || result.status !== 'accepted') return;
+    // Board-neutral: `currentStage` only knows the built-in rule stages.
+    const fromStage = item.stages.length === 1 ? item.stages[0] : undefined;
+    if (result.stage === fromStage) return;
+    // Inside the chain so a synchronous throw is isolated the same way an async rejection is.
+    void Promise.resolve()
+      .then(() =>
+        onTransitionCommitted({
+          orgId: request.orgId,
+          factoryProjectId: request.factoryProjectId,
+          workItemId: item.id,
+          fromStage,
+          toStage: result.stage,
+        }),
+      )
+      .catch(error => {
+        console.warn(`[factory] stage notification failed for work item ${item.id}:`, error);
+      });
   }
 
   /** A rejection can outlive its work item: the row still names the id the caller asked for. */
@@ -324,6 +365,7 @@ export class FactoryTransitionService {
     transitionId: string,
     item: WorkItemRow,
   ): Promise<FactoryTransitionResult> {
+    const boards = await this.#boards.load(request);
     if (request.causalChain && request.causalChain.length > MAX_FACTORY_RULE_CAUSAL_DEPTH) {
       return this.#commitRejection(
         request,
@@ -336,7 +378,7 @@ export class FactoryTransitionService {
     const source = factoryRuleSourceForWorkItem(itemSource);
     const isPullRequest = source === 'pullRequest' || source === 'gitlabPullRequest';
     const legacyBoard = isPullRequest ? 'review' : 'work';
-    if (item.board === null && !this.#boards.has(legacyBoard)) {
+    if (item.board === null && !boards.has(legacyBoard)) {
       return this.#commitRejection(
         request,
         transitionId,
@@ -361,7 +403,7 @@ export class FactoryTransitionService {
         'The work item does not belong to the requested board.',
       );
     }
-    const board = this.#boards.get(request.board);
+    const board = boards.get(request.board);
     if (!board) {
       return this.#commitRejection(
         request,
@@ -392,7 +434,7 @@ export class FactoryTransitionService {
         request,
         transitionId,
         'invalid_transition',
-        `The ${board.title} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
+        `The ${board.name} board does not allow moving from ${fromStage} to ${request.stage}. ${nextStagesReason}`,
       );
     }
 
@@ -437,9 +479,12 @@ export class FactoryTransitionService {
         (async () => {
           // Resolve the project switch inside the timed block so a resolver rejection
           // surfaces as a committed rule_error and a slow lookup is bounded.
-          const plansAutoApproved = this.#autoApprovePlans
-            ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-            : false;
+          // A phase whose submit_plan exit tool is auto-approved for this card approves its plans too.
+          const plansAutoApproved =
+            autoApprovedExitTool(boards, item) === 'submit_plan' ||
+            (this.#autoApprovePlans
+              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+              : false);
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
               immutablePolicySnapshot({
@@ -468,22 +513,12 @@ export class FactoryTransitionService {
           if (policy?.accept && !isHumanTransition(request)) {
             throw new Error('Board policy requested unauthorized acceptance.');
           }
-          // External content can steer a bound agent; board allowance cannot bypass this guard.
-          if (
-            request.actor.type === 'agent' &&
-            !board.isWorking(fromStage) &&
-            entersWorking &&
-            externallyAuthoredWorkItem(item)
-          ) {
-            return {
-              outcome: 'rejected' as const,
-              code: 'approval_required',
-              reason:
-                'This card comes from outside the write-access circle; a person must resume it from the Factory board.',
-            };
-          }
+          const selfReviewEnabled =
+            request.board === 'work' && this.#selfReviewEnabled
+              ? await this.#selfReviewEnabled({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+              : false;
           const decisions: FactoryCommitDecision[] = [];
-          for (const rule of resolveFactoryStageRules(this.#boards, {
+          for (const rule of resolveFactoryStageRules(boards, {
             board: request.board,
             source,
             fromStage,
@@ -493,6 +528,7 @@ export class FactoryTransitionService {
           })) {
             const context: FactoryStageRuleContext = Object.freeze({
               ...contextBase,
+              selfReviewEnabled,
               stage: rule.phase === 'exit' ? fromStage : request.stage,
             });
             const raw = await rule.handler(context);
@@ -501,7 +537,7 @@ export class FactoryTransitionService {
             if (decision.type === 'reject') {
               return { outcome: 'rejected' as const, code: decision.code, reason: decision.reason };
             }
-            assertFactoryDecisionTarget(decision, this.#boards, itemBoard);
+            assertFactoryDecisionTarget(decision, boards, itemBoard);
             if (startsRun(decision) && runAlreadyUnderway(request, decision)) continue;
             decisions.push(decision);
           }
@@ -546,6 +582,7 @@ export class FactoryTransitionService {
       evaluation.outcome === 'accepted'
         ? { ...consentEffect(request, entersWorking, humanMove), ...evaluation.intents }
         : {},
+      boards,
     );
   }
 
@@ -555,11 +592,13 @@ export class FactoryTransitionService {
     code: FactoryRuleRejectionCode,
     reason: string,
   ): Promise<FactoryTransitionResult> {
-    return this.#commit(request, transitionId, {
-      outcome: 'rejected',
-      code,
-      reason: reason.slice(0, MAX_REJECTION_REASON),
-    });
+    return this.#commit(
+      request,
+      transitionId,
+      { outcome: 'rejected', code, reason: reason.slice(0, MAX_REJECTION_REASON) },
+      {},
+      undefined,
+    );
   }
 
   async #commit(
@@ -568,7 +607,9 @@ export class FactoryTransitionService {
     evaluation:
       | { outcome: 'accepted'; decisions: Record<string, unknown>[] }
       | { outcome: 'rejected'; code: string; reason: string },
-    options: TransitionConsentOptions = {},
+    options: TransitionConsentOptions,
+    // The registry the move was evaluated against; rejected moves never release resources.
+    boards: BoardRegistry | undefined,
   ): Promise<FactoryTransitionResult> {
     const committed = await this.#storage.commitTransition({
       autonomy: options.autonomy,
@@ -617,7 +658,7 @@ export class FactoryTransitionService {
     if (
       this.#onTerminalStage &&
       result.status === 'accepted' &&
-      this.#boards.get(request.board)?.isTerminal(result.stage) === true
+      boards?.get(request.board)?.isTerminal(result.stage) === true
     ) {
       let timer: ReturnType<typeof setTimeout> | undefined;
       try {

@@ -14,13 +14,13 @@
   "packageManager": "pnpm@11.3.0",
   "dependencies": {
     "@ai-sdk/openai": "^3.0.37",
-    "@mastra/core": "commonjs-e2e-test",
-    "@mastra/loggers": "commonjs-e2e-test",
-    "zod": "4.3.6"
+    "@mastra/core": "e2e-test",
+    "@mastra/loggers": "e2e-test",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "22.19.15",
-    "mastra": "commonjs-e2e-test",
+    "mastra": "e2e-test",
     "typescript": "^5.9.3"
   }
 }

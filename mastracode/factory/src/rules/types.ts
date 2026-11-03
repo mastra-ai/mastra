@@ -67,17 +67,16 @@ export function workItemSource(source: ExternalWorkItemSource | null): WorkItemS
   return source.type === 'pull-request' ? 'github-pr' : 'github-issue';
 }
 
+/** The card's author is inside the write-access circle, or the card is Factory's own PR. */
+export function authorTrusted(metadata: Record<string, unknown> | null | undefined): boolean {
+  return metadata?.authorTrusted === true || metadata?.factoryAuthored === true;
+}
+
 // Authored outside the write-access circle: a missing trust stamp fails closed until
 // the reconcile sweep backfills it, and Factory's own PRs pass through `factoryAuthored`.
 export function externallyAuthored(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
   if (!['github-pr', 'github-issue', 'gitlab-pr', 'gitlab-issue'].includes(item.source)) return false;
-  if (item.metadata?.factoryAuthored === true) return false;
-  return item.metadata?.authorTrusted !== true;
-}
-
-// The board mark claims only what GitHub answered: a missing stamp is silence, not an outside contribution.
-export function knownExternalAuthor(item: { source: string; metadata: Record<string, unknown> | null }): boolean {
-  return externallyAuthored(item) && item.metadata?.authorTrusted === false;
+  return !authorTrusted(item.metadata);
 }
 
 export function externallyAuthoredWorkItem(item: {
@@ -244,8 +243,12 @@ export interface FactoryRuleCausalEntry {
 export interface FactoryRulePhaseContext {
   id: string;
   kind: 'resting' | 'working' | 'terminal';
-  /** Seat carrying a working phase; absent for resting and terminal phases. */
+  /** Session context a working phase runs in; absent for resting and terminal phases. */
+  context?: string;
+  /** @deprecated Use `context`. */
   role?: string;
+  /** Phases the card may move to from here. */
+  nextPhases: readonly string[];
   /** Outcome names the phase declares, e.g. `approved` or `canceled`; empty when it declares none. */
   outcomes: readonly string[];
 }
@@ -270,6 +273,8 @@ export interface FactoryStageRuleContext extends FactoryBoundRuleContext {
   stage: FactoryRuleStage;
   fromStage: FactoryRuleStage;
   toStage: FactoryRuleStage;
+  /** Project switch: Work items get an independent self-review before the change request opens. Unset means off. */
+  selfReviewEnabled?: boolean;
 }
 
 export interface FactoryToolResultRuleContext extends FactoryBoundRuleContext {
@@ -353,7 +358,10 @@ export interface FactoryGithubRuleContext extends FactoryRuleContextBase {
   reviewRequest?: { reviewer: string; factoryReviewer: boolean };
   /** Present when a PR comment uses Factory's exact review command. */
   reviewCommand?: { command: 'review' | 're-review'; target: string };
-  /** Present on `pullRequestReviewSubmitted`: the review that was just posted. */
+  /**
+   * Present on `pullRequestReviewSubmitted`: the review that was just posted, or a
+   * request-changes review whose body was edited to a new Factory verdict.
+   */
   review?: { id: number; state: string; url: string; author?: string; body?: string };
 }
 
@@ -587,13 +595,6 @@ export interface FactoryUpsertLinkedWorkItemDecision extends FactoryCommitDecisi
   board: FactoryRuleBoard;
   source: WorkItemSource;
   sourceKey: string;
-  /**
-   * Org-wide ownership key for the external record, when one Factory at a time
-   * may hold a live card for it (a stable Linear issue id, for instance). The
-   * store enforces it with a unique index, so a second project's materialization
-   * is refused rather than duplicated.
-   */
-  claimKey?: string;
   title: string;
   url: string | null;
   stage: FactoryRuleStage;
@@ -618,6 +619,13 @@ interface FactoryInvokeSkillDecisionBase extends FactoryCommitDecisionBase {
   arguments?: string;
   precedingMessage?: string;
   cancelInFlight?: boolean;
+  /**
+   * Start this run even when the card was moved by the agent already running in
+   * this role's session. The prompt is queued onto that agent's run, so a phase
+   * that shares its context with the one before it still gets its own work.
+   * Without it, an agent's own move into a phase of its role starts nothing.
+   */
+  startsAfterOwnMove?: boolean;
 }
 
 /**

@@ -1,7 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import type { WorkflowsStorage, WorkflowRun, WorkflowRunHeader } from '@mastra/core/storage';
 import { getSnapshotMemoryInfo, isRunFenceConflictError, summarizeStepResult } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
-import { randomUUID } from 'node:crypto';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createSampleSuspendedSnapshotWithThread } from './data';
 

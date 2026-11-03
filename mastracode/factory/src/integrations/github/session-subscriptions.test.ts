@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GithubIntegration } from './integration.js';
 
 const mocks = vi.hoisted(() => ({
-  subscribe: vi.fn(async (_input: { sessionScope: string }) => ({ created: true })),
-  unsubscribe: vi.fn(async (_input: { sessionScope: string }) => ({ removed: true })),
+  subscribe: vi.fn(async (_input: { sessionId: string }) => ({ created: true })),
+  unsubscribe: vi.fn(async (_input: { sessionId: string }) => ({ removed: true })),
   getPullRequest: vi.fn(async ({ repo }: { owner: string; repo: string; pull_number: number }) => ({
     data: { base: { repo: { id: repo === 'docs' ? 98 : 99 } }, head: { ref: 'factory/issue-1' } },
   })),
@@ -59,7 +59,7 @@ const connection = {
 };
 const sessionRow = {
   id: 'row-1',
-  sessionId: 'resource-1',
+  sessionId: 'session-1',
   orgId: 'org-1',
   factoryProjectId: 'resource-1',
   projectRepositoryId: 'project-repository-1',
@@ -70,7 +70,11 @@ const githubStub = {
   integrationStorage,
   sourceControlStorage: {
     integrationId: 'github',
-    sessions: { getBySessionId: vi.fn(async () => storageState.session) },
+    sessions: {
+      getBySessionId: vi.fn(async (sessionId: string) =>
+        storageState.session?.sessionId === sessionId ? storageState.session : null,
+      ),
+    },
     sessionRepositories: { upsert: mocks.upsertSessionRepository },
     projectRepositories: {
       get: vi.fn(async ({ id }: { id: string }) => storageState.links.find(link => link.id === id) ?? null),
@@ -105,20 +109,21 @@ import {
 import { registerGithubPatKind, registerGithubRefreshTarget, registerGithubTokenInjector } from './token-refresh.js';
 
 function authenticatedRequestContext(
-  scope = '/worktrees/a',
   state: { factoryProjectId?: string; projectRepositoryId?: string } = {
     factoryProjectId: 'resource-1',
     projectRepositoryId: 'project-repository-1',
   },
   threadId: string | undefined = 'thread-1',
+  sessionId = 'session-1',
 ) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+  // The session runs under its Factory resource; only its session id names it.
   requestContext.set('controller', {
+    sessionId,
     resourceId: 'resource-1',
     threadId,
-    scope,
-    session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
+    session: { id: sessionId, ownerId: 'user-1', modeId: 'build' },
     getState: () => state,
   });
   return requestContext;
@@ -129,7 +134,7 @@ function refreshableRequestContext(
   inject: ((token: string) => void) | null = vi.fn(),
   state?: { factoryProjectId?: string; projectRepositoryId?: string },
 ) {
-  const requestContext = authenticatedRequestContext('/worktrees/a', state);
+  const requestContext = authenticatedRequestContext(state);
   registerGithubRefreshTarget(requestContext, { orgId: 'org-1', repositoryId: 'repository-1' });
   if (inject) registerGithubTokenInjector(requestContext, inject);
   return requestContext;
@@ -234,7 +239,7 @@ describe('GitHub subscription entry points', () => {
   });
 
   it('does not expose refresh to chat-only or non-GitHub sessions', () => {
-    const requestContext = authenticatedRequestContext('/worktrees/a', {});
+    const requestContext = authenticatedRequestContext({});
     registerGithubTokenInjector(requestContext, vi.fn());
     expect(createGithubSubscriptionTools(requestContext, githubStub)).toEqual({});
   });
@@ -331,9 +336,9 @@ describe('GitHub subscription entry points', () => {
   it('silently skips auto-subscription outside repository sessions', async () => {
     const requestContext = new RequestContext();
     requestContext.set('controller', {
+      sessionId: 'session-1',
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      scope: '/worktrees/a',
       session: { id: 'session-1', ownerId: 'user-1', modeId: 'build' },
       getState: () => ({}),
     });
@@ -351,8 +356,8 @@ describe('GitHub subscription entry points', () => {
     expect(mocks.subscribe).not.toHaveBeenCalled();
   });
 
-  it('subscribes the exact scoped session after verifying the active-project PR', async () => {
-    const requestContext = authenticatedRequestContext('/worktrees/a');
+  it('subscribes the exact session after verifying the active-project PR', async () => {
+    const requestContext = authenticatedRequestContext();
 
     await subscribeCurrentSessionToPullRequest(requestContext, 123, 'auto-gh-pr-create', githubStub);
     await subscribeCurrentSessionToPullRequest(requestContext, 123, 'auto-gh-pr-create', githubStub);
@@ -363,8 +368,8 @@ describe('GitHub subscription entry points', () => {
       expect.objectContaining({
         changeRequestId: '123',
         resourceId: 'resource-1',
+        sessionId: 'session-1',
         threadId: 'thread-1',
-        sessionScope: '/worktrees/a',
         source: 'auto-gh-pr-create',
       }),
       integrationStorage,
@@ -400,7 +405,7 @@ describe('GitHub subscription entry points', () => {
 
   it('exposes the subscription tools to a session that only carries factoryProjectId', () => {
     const tools = createGithubSubscriptionTools(
-      authenticatedRequestContext('/worktrees/a', { factoryProjectId: 'resource-1' }),
+      authenticatedRequestContext({ factoryProjectId: 'resource-1' }),
       githubStub,
     );
     expect(Object.keys(tools)).toEqual([
@@ -412,7 +417,7 @@ describe('GitHub subscription entry points', () => {
   });
 
   it('auto-subscribes a gh pr create URL in another environment repository and records the row', async () => {
-    const requestContext = authenticatedRequestContext('/worktrees/a', { factoryProjectId: 'resource-1' });
+    const requestContext = authenticatedRequestContext({ factoryProjectId: 'resource-1' });
     await expect(
       subscribeCurrentSessionToPullRequest(
         requestContext,
@@ -437,7 +442,7 @@ describe('GitHub subscription entry points', () => {
     // No `branch`: an existing row keeps what the session's push wrote; a
     // first row takes the pull request's head ref.
     expect(mocks.upsertSessionRepository).toHaveBeenCalledWith({
-      sessionId: 'resource-1',
+      sessionId: 'session-1',
       projectRepositoryId: 'project-repository-2',
       changeRequestId: '7',
       changeRequestUrl: 'https://github.com/mastra-ai/docs/pull/7',
@@ -446,7 +451,7 @@ describe('GitHub subscription entry points', () => {
   });
 
   it('subscribes to an unrelated pull request without touching the session repository row', async () => {
-    const requestContext = authenticatedRequestContext('/worktrees/a', { factoryProjectId: 'resource-1' });
+    const requestContext = authenticatedRequestContext({ factoryProjectId: 'resource-1' });
     mocks.getPullRequest.mockResolvedValueOnce({
       data: { base: { repo: { id: 98 } }, head: { ref: 'someone/else' } },
     });
@@ -521,21 +526,20 @@ describe('GitHub subscription entry points', () => {
     expect(mocks.upsertSessionRepository).not.toHaveBeenCalled();
   });
 
-  it('keeps parallel worktree scopes isolated', async () => {
+  it('keeps sessions sharing a Factory resource apart', async () => {
+    const url = 'https://github.com/mastra-ai/mastra/pull/123';
+    await subscribeCurrentSessionToPullRequest(authenticatedRequestContext(), url, 'explicit-tool', githubStub);
     await subscribeCurrentSessionToPullRequest(
-      authenticatedRequestContext('/worktrees/a'),
-      123,
-      'explicit-tool',
-      githubStub,
-    );
-    await subscribeCurrentSessionToPullRequest(
-      authenticatedRequestContext('/worktrees/b'),
-      123,
+      authenticatedRequestContext(undefined, 'thread-2', 'session-2'),
+      url,
       'explicit-tool',
       githubStub,
     );
 
-    expect(mocks.subscribe.mock.calls.map(([input]) => input.sessionScope)).toEqual(['/worktrees/a', '/worktrees/b']);
+    expect(mocks.subscribe.mock.calls.map(([input]) => [input.sessionId, input.threadId])).toEqual([
+      ['session-1', 'thread-1'],
+      ['session-2', 'thread-2'],
+    ]);
   });
 
   it('upserts the Factory triage handoff through the active installation and repository', async () => {
@@ -600,9 +604,9 @@ describe('GitHub subscription entry points', () => {
     expect(mocks.upsertTriageComment).toHaveBeenCalledTimes(2);
   });
 
-  it('unsubscribes only the current scoped thread target', async () => {
+  it('unsubscribes only the current session thread target', async () => {
     const number = await unsubscribeCurrentSessionFromPullRequest(
-      authenticatedRequestContext('/worktrees/a'),
+      authenticatedRequestContext(),
       'https://github.com/mastra-ai/mastra/pull/123',
       githubStub,
     );
@@ -612,8 +616,8 @@ describe('GitHub subscription entry points', () => {
       expect.objectContaining({
         changeRequestId: '123',
         resourceId: 'resource-1',
+        sessionId: 'session-1',
         threadId: 'thread-1',
-        sessionScope: '/worktrees/a',
       }),
       integrationStorage,
     );
