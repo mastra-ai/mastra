@@ -62,7 +62,7 @@ Avoid switching embedders on a store that already has embedded content. Knowledg
 
 If embedding or the vector write fails when a page or note is written, Knowledge tries again after about half a second, 2 seconds and 7.5 seconds. That covers a database that scales to zero and takes a few seconds to wake. Errors the provider marks as not retryable, such as a bad API key, aren't tried again.
 
-If every attempt fails, the write still succeeds and Mastra logs a warning. That page or note stays keyword-only until it's written again with a change. An `upsertPage()` call that comes back `unchanged` writes nothing, so it doesn't embed the page either.
+If every attempt fails, the write still succeeds and Mastra logs a warning. A new page or note stays keyword-only. An updated one keeps its previous vectors, so meaning search matches its old content. Both last until it's written again with a change. An `upsertPage()` call that comes back `unchanged` writes nothing, so it doesn't embed the page either.
 
 If the embedder or vector store fails during a search, the search returns keyword results and logs a warning.
 
