@@ -734,7 +734,7 @@ describe('Mastra Gateway routes with a tenant', () => {
     expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
   });
 
-  it('keeps the credential while Mastra refuses to revoke its key, so no live key is orphaned', async () => {
+  it('still removes the credential when Mastra refuses to revoke its key', async () => {
     await seed.credentials.setCredential({ orgId: 'org1' }, 'mastra-gateway', {
       type: 'api_key',
       key: 'msk_factory',
@@ -744,11 +744,9 @@ describe('Mastra Gateway routes with a tenant', () => {
 
     const res = await buildApp(platform).request('/web/config/providers/mastra/key?scope=org', { method: 'DELETE' });
 
-    expect(res.status).toBe(403);
-    expect((await res.json()).error).toBe('mastra_org_write_required');
-    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toMatchObject({
-      keyId: 'key_1',
-    });
+    expect(res.status).toBe(200);
+    expect(platform.requests).toContainEqual({ method: 'DELETE', path: `${KEYS}/key_1` });
+    expect(await seed.credentials.getCredential({ orgId: 'org1' }, 'mastra-gateway')).toBeUndefined();
   });
 
   it('reports the remaining gateway credits and where to add more', async () => {

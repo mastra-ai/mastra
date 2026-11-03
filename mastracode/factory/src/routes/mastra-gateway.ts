@@ -133,15 +133,9 @@ export async function revokeGatewayKey(auth: RouteAuth, c: Context, orgId: strin
   const res = await platformFetch(auth, c, `${GATEWAY_KEYS_PATH}/${encodeURIComponent(keyId)}`, {
     method: 'DELETE',
   });
-  if (res.ok || res.status === 404) return;
-  if (res.status === 403) {
-    throw new MastraGatewayError(
-      'mastra_org_write_required',
-      403,
-      'Your Mastra role cannot revoke gateway keys for this organization. Ask an admin to remove it.',
-    );
+  if (!res.ok && res.status !== 404) {
+    throw platformUnavailable(`Mastra answered ${res.status} when revoking gateway key ${keyId}.`);
   }
-  throw platformUnavailable('Could not revoke the Mastra Gateway key. Try again.');
 }
 
 interface CustomerBalance {
