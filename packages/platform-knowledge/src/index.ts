@@ -72,16 +72,15 @@ class RemoteKnowledgeStorage extends KnowledgeStorage {
 }
 
 export class PlatformKnowledge extends Knowledge {
-  constructor(options: PlatformKnowledgeOptions = { scopes: {} }) {
+  constructor(options: PlatformKnowledgeOptions = {}) {
     const token = options.accessToken ?? process.env.MASTRA_PLATFORM_ACCESS_TOKEN ?? process.env.MASTRA_PLATFORM_SECRET_KEY;
-    const projectId = options.projectId ?? process.env.MASTRA_PROJECT_ID;
     const instanceId = options.instanceId ?? process.env.MASTRA_KNOWLEDGE_INSTANCE_ID;
     const apiUrl = options.apiUrl ?? process.env.MASTRA_PLATFORM_API_URL;
-    if (!token || !projectId || !instanceId || !apiUrl) {
-      throw new Error('PlatformKnowledge requires a Platform access token, project ID, Knowledge instance ID, and API URL');
+    if (!token || !instanceId || !apiUrl) {
+      throw new Error('PlatformKnowledge requires a Platform access token, Knowledge instance ID, and API URL');
     }
     const { accessToken: _accessToken, projectId: _projectId, instanceId: _instanceId, apiUrl: _apiUrl, ...config } = options;
-    const endpoint = `${apiUrl.replace(/\/$/, '')}/v1/knowledge/${encodeURIComponent(projectId)}/${encodeURIComponent(instanceId)}`;
+    const endpoint = `${apiUrl.replace(/\/$/, '')}/v1/knowledge/${encodeURIComponent(instanceId)}`;
     const storage = new MastraCompositeStore({
       id: `platform-knowledge-${instanceId}`,
       domains: { knowledge: new RemoteKnowledgeStorage(endpoint, token) },

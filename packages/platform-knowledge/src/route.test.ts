@@ -29,19 +29,13 @@ it('uses the project-scoped operation route with bearer auth', async () => {
   const store = await knowledge.getStorage();
   expect(await store.listPages({ read: 'all' })).toEqual({ pages: [] });
   expect(requests).toEqual([{
-    url: '/v1/knowledge/project%2Fone/instance%20two/operations/listPages',
+    url: '/v1/knowledge/instance%20two/operations/listPages',
     authorization: 'Bearer token',
     body: JSON.stringify({ input: { read: 'all' } }),
   }]);
 });
 
-it('requires a project selector', () => {
-  const previous = process.env.MASTRA_PROJECT_ID;
-  delete process.env.MASTRA_PROJECT_ID;
-  try {
-    expect(() => new PlatformKnowledge({ apiUrl: 'http://localhost', instanceId: 'instance', accessToken: 'token' }))
-      .toThrow('project ID');
-  } finally {
-    if (previous !== undefined) process.env.MASTRA_PROJECT_ID = previous;
-  }
+it('allows the project to be derived from the instance and credential', () => {
+  expect(() => new PlatformKnowledge({ apiUrl: 'http://localhost', instanceId: 'instance', accessToken: 'token' }))
+    .not.toThrow();
 });
