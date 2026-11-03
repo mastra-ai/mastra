@@ -221,6 +221,18 @@ describe('KnowledgePageExplorer search', () => {
     expect(pressed('Page')).toBe('true');
   });
 
+  it('leaves a scope focus the result falls outside of, whether it focuses or opens', async () => {
+    for (const initialView of ['graph', 'page'] as const) {
+      const { unmount } = renderWithProviders(<SearchHost initialView={initialView} />);
+      await screen.findAllByTestId('knowledge-page-node');
+      fireEvent.click(within(tree()).getByText('Support team'));
+      expect(screen.getByTestId('knowledge-scope-focus')).toBeTruthy();
+      search('Roadmap');
+      expect(screen.queryByTestId('knowledge-scope-focus')).toBeNull();
+      unmount();
+    }
+  });
+
   it('in page view, opens the result as a page, as before', () => {
     renderWithProviders(<SearchHost initialView="page" />);
     search('Roadmap');

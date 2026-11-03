@@ -832,22 +832,20 @@ export function KnowledgePageExplorer({
     else openPage(page.id);
   };
   // Pages reached from outside the tree (search, links, mentions) clear a focus they fall outside of.
-  const openAnywhere = (pageId: string) => {
+  const leaveScopeFocusFor = (pageId: string) => {
     if (focusScopeId && !withinScope([...lazy.pages, ...drawn.pages], focusScopeId).some(page => page.id === pageId)) {
       setFocusScopeId(null);
     }
+  };
+  const openAnywhere = (pageId: string) => {
+    leaveScopeFocusFor(pageId);
     openPage(pageId);
   };
   // From search: in the graph, a first pick frames the page there and a second pick of the focused page opens
   // it, like the tree. A fixed graph that lacks the page has nothing to frame, so it opens as a page.
   const selectFromSearch = (pageId: string) => {
     if (view === 'graph' && (lazyMode || pagesById.has(pageId)) && pageId !== selectedPageId) {
-      if (
-        focusScopeId &&
-        !withinScope([...lazy.pages, ...drawn.pages], focusScopeId).some(page => page.id === pageId)
-      ) {
-        setFocusScopeId(null);
-      }
+      leaveScopeFocusFor(pageId);
       onSelect(pageId);
     } else openAnywhere(pageId);
   };
