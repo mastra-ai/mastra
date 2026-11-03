@@ -721,12 +721,19 @@ export class MongoKnowledgePages implements KnowledgePageStore {
 
   async listChildScopes(input: {
     parentId: string | null;
+    read?: KnowledgeReadScope;
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
     const core = await loadPagesCore();
     const limit = clampLimit(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
-    const filter: Filter<Document> = { isScope: true, parentId: input.parentId, ...live };
+    const readable = input.read ? await this.#readable(input.read) : null;
+    const filter: Filter<Document> = {
+      isScope: true,
+      parentId: input.parentId,
+      ...live,
+      ...this.#inScopes('id', readable),
+    };
     if (input.cursor) {
       const [position, id] = decodeCursor(input.cursor);
       filter.$or = [{ position: { $gt: position } }, { position, id: { $gt: id } }];
@@ -1270,6 +1277,23 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       .limit(limit + 1)
       .toArray();
     return this.#noteOutput(rows, limit);
+  }
+
+  async countChildScopes(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (!ids.length) return counts;
+    const readable = await this.#readable(input.read);
+    const rows = await (
+      await this.#c('pages')
+    )
+      .aggregate([
+        { $match: { parentId: { $in: ids }, isScope: true, ...live, ...this.#inScopes('id', readable) } },
+        { $group: { _id: '$parentId', count: { $sum: 1 } } },
+      ])
+      .toArray();
+    for (const row of rows) counts[row._id as string] = row.count as number;
+    return counts;
   }
 
   async countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {

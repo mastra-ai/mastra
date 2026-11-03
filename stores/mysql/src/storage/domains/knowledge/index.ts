@@ -163,6 +163,12 @@ export class KnowledgeMySQL extends KnowledgeStorage {
     return this.#pages.listChildScopes(input);
   }
 
+  override countChildScopes(
+    input: Parameters<KnowledgePageStore['countChildScopes']>[0],
+  ): ReturnType<KnowledgePageStore['countChildScopes']> {
+    return this.#pages.countChildScopes(input);
+  }
+
   override getPage(input: Parameters<KnowledgePageStore['getPage']>[0]): ReturnType<KnowledgePageStore['getPage']> {
     return this.#pages.getPage(input);
   }

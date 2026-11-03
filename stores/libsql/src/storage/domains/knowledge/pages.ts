@@ -564,6 +564,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
 
   async listChildScopes(input: {
     parentId: string | null;
+    read?: KnowledgeReadScope;
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
@@ -571,6 +572,12 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     const limit = limitOf(input.limit, core.MAX_KNOWLEDGE_PAGE_LIST_LIMIT);
     const cursor = decodeCursor(input.cursor, 2);
     const args: InValue[] = [input.parentId];
+    let filter = '';
+    if (input.read) {
+      const readable = readableScopes(input.read);
+      filter = ` AND id IN (${readable.sql})`;
+      args.push(...readable.args);
+    }
     let after = '';
     if (cursor) {
       after = ` AND (position > ? OR (position = ? AND id > ?))`;
@@ -579,7 +586,7 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
     args.push(limit + 1);
     const rows = await this.#query(
       this.#read,
-      `SELECT * FROM "${T.pages}" WHERE isScope = 1 AND parentId IS ?${after} ORDER BY position, id LIMIT ?`,
+      `SELECT * FROM "${T.pages}" WHERE isScope = 1 AND parentId IS ?${filter}${after} ORDER BY position, id LIMIT ?`,
       args,
     );
     return this.#pageOutput(rows, limit, row => [String(row.position), String(row.id)]);
@@ -1068,6 +1075,20 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
       args,
     );
     return this.#noteOutput(rows, limit);
+  }
+
+  async countChildScopes(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (ids.length === 0) return counts;
+    const readable = readableScopes(input.read);
+    const rows = await this.#query(
+      this.#read,
+      `SELECT parentId, COUNT(*) AS total FROM "${T.pages}" WHERE parentId IN (SELECT value FROM json_each(?)) AND isScope = 1 AND id IN (${readable.sql}) GROUP BY parentId`,
+      [jsonList(ids), ...readable.args],
+    );
+    for (const row of rows) counts[String(row.parentId)] = Number(row.total);
+    return counts;
   }
 
   async countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {

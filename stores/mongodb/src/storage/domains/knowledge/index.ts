@@ -85,6 +85,12 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return this.#pages.listChildScopes(input);
   }
 
+  override countChildScopes(
+    input: Parameters<KnowledgePageStore['countChildScopes']>[0],
+  ): ReturnType<KnowledgePageStore['countChildScopes']> {
+    return this.#pages.countChildScopes(input);
+  }
+
   override getPages(input: Parameters<KnowledgePageStore['getPages']>[0]): ReturnType<KnowledgePageStore['getPages']> {
     return this.#pages.getPages(input);
   }

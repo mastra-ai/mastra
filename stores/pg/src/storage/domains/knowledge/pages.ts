@@ -759,6 +759,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
 
   async listChildScopes(input: {
     parentId: string | null;
+    read?: KnowledgeReadScope;
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput> {
@@ -767,6 +768,9 @@ export class PgKnowledgePages implements KnowledgePageStore {
     const params = new Params();
     const where = [`"isScope"`, `"deletedAt" IS NULL`];
     where.push(input.parentId === null ? `"parentId" IS NULL` : `"parentId" = ${params.add(input.parentId)}`);
+    if (input.read && input.read !== 'all') {
+      where.push(`"id" IN (${new ReadFilter(input.read, params, this.#pages).readableIds()})`);
+    }
     if (input.cursor) {
       const [position, id] = decodeCursor(input.cursor, 2);
       where.push(`("position", "id") > (${params.add(position)}, ${params.add(id)})`);
@@ -1236,6 +1240,23 @@ export class PgKnowledgePages implements KnowledgePageStore {
       params.values,
     );
     return this.#noteOutput(rows, limit);
+  }
+
+  async countChildScopes(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
+    const ids = [...new Set(input.parentIds)];
+    const counts: Record<string, number> = Object.fromEntries(ids.map(id => [id, 0]));
+    if (!ids.length) return counts;
+    const params = new Params();
+    const filter = new ReadFilter(input.read, params, this.#pages);
+    const rows = await this.#rows(
+      this.#client,
+      `SELECT s."parentId" AS "parentId", count(*)::int AS "count" FROM ${this.#pages} s
+       WHERE s."parentId" = ANY(${params.add(ids)}::text[]) AND s."isScope" AND s."deletedAt" IS NULL AND ${filter.readable('s')}
+       GROUP BY s."parentId"`,
+      params.values,
+    );
+    for (const row of rows) counts[row.parentId as string] = Number(row.count);
+    return counts;
   }
 
   async countChildPages(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>> {
