@@ -177,6 +177,7 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
   let assistantTurns = 0;
   let activeAssistantMessageId: string | undefined;
   let settled = false;
+  let agentStarts = 0;
   let unsubscribe: (() => void) | undefined;
   let resolveResult!: (r: RunMCResult) => void;
 
@@ -207,6 +208,52 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
   function fail(message: string, name = 'Error'): void {
     if (!acc.error) acc.error = { name, message };
     finish('error');
+  }
+
+  function failUnresolvedSuspension(toolName?: string): void {
+    fail(`Run ended with an unresolved ${toolName ? `${toolName} suspension` : 'tool suspension'}.`);
+  }
+
+  /**
+   * Ask the policy for the next parked tool. The session starts a fresh
+   * run for it, so this run stays open until that run ends. Returns false when
+   * nothing is left to resume.
+   */
+  function resumeNextSuspension(): boolean {
+    const next = session.displayState.get().pendingSuspensions.values().next();
+    if (next.done) return false;
+    const { toolCallId, toolName } = next.value;
+    let outcome: ReturnType<ResolutionPolicy['onSuspension']>;
+    try {
+      outcome = policy.onSuspension({ type: 'tool_suspended', ...next.value });
+    } catch (err) {
+      fail(`Resolution policy failed: ${(err as Error).message}`);
+      return true;
+    }
+    if ('abort' in outcome) {
+      abort();
+      // This run has already ended suspended, so no further agent_end is due.
+      finish('aborted');
+      return true;
+    }
+    const { resumeData } = outcome;
+    // The session clears the ending run's state right after emitting
+    // agent_end, so resume on a later task, as an interactive client would.
+    setTimeout(() => {
+      if (settled) return;
+      if (timedOut) return finish('timeout');
+      if (aborted) return finish('aborted');
+      const startsBeforeResume = agentStarts;
+      session.respondToToolSuspension({ toolCallId, resumeData }).then(
+        () => {
+          // The session returns without starting a run when the suspension is
+          // no longer parked; nothing else would end this run then.
+          if (!settled && agentStarts === startsBeforeResume) failUnresolvedSuspension(toolName);
+        },
+        (err: unknown) => fail(`Failed to resume ${toolName}: ${(err as Error).message}`),
+      );
+    }, 0);
+    return true;
   }
 
   function abort(): void {
@@ -241,6 +288,7 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
     // --- Subscribe ---
     unsubscribe = session.subscribe(event => {
       if (settled) return;
+      if (event.type === 'agent_start') agentStarts += 1;
       if (goal) armTimeout();
 
       if (event.type === 'tool_approval_required') {
@@ -255,24 +303,6 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
           decision: decision === 'approve' ? 'approve' : 'decline',
           toolCallId: event.toolCallId,
         });
-        queue.push(event);
-        return;
-      }
-
-      if (event.type === 'tool_suspended') {
-        let outcome: ReturnType<ResolutionPolicy['onSuspension']>;
-        try {
-          outcome = policy.onSuspension(event);
-        } catch (err) {
-          fail(`Resolution policy failed: ${(err as Error).message}`);
-          return;
-        }
-        if ('abort' in outcome) {
-          queue.push(event);
-          abort();
-          return;
-        }
-        void session.respondToToolSuspension({ toolCallId: event.toolCallId, resumeData: outcome.resumeData });
         queue.push(event);
         return;
       }
@@ -315,6 +345,12 @@ export function runMC<TState extends Record<string, unknown>>(options: RunMCOpti
 
       if (event.type === 'agent_end') {
         acc.finishReason = event.reason;
+        // A suspended run is parked, not finished: nothing more arrives until a
+        // parked tool is answered, including goal evaluations.
+        if (event.reason === 'suspended' && !timedOut && !aborted) {
+          if (!resumeNextSuspension()) failUnresolvedSuspension();
+          return;
+        }
         // Goal evaluations can arrive after the agent stream ends, so goal runs
         // remain active until a terminal goal_evaluation is emitted.
         if (goal) return;

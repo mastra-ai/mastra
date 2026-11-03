@@ -468,12 +468,12 @@ export function createStorageTests(ctx: WorkflowTestContext, registry?: Workflow
         const resourceId = 'user-loop-456';
 
         const storage = ctx.getStorage?.();
-        const workflowsStore = storage ? await (storage as any).getStore('workflows') : undefined;
+        const workflowsStore = storage ? await storage.getStore('workflows') : undefined;
         expect(workflowsStore).toBeDefined();
         // Storage v2 runs write through the checkpoint/append methods; every other run writes whole snapshots.
         const spies = (
           ['persistWorkflowSnapshot', 'writeWorkflowRunCheckpoint', 'appendWorkflowRunEntries'] as const
-        ).map(method => vi.spyOn(workflowsStore, method));
+        ).map(method => vi.spyOn(workflowsStore!, method));
 
         await execute(workflow, { value: 0 }, { runId, resourceId });
 

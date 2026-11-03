@@ -1,8 +1,10 @@
 export {
   BoardDefinitionError,
   createBoardRegistry,
+  DEFAULT_PHASE_CONTEXT,
   defaultBoards,
   defineBoard,
+  FACTORY_AGENT_ID,
   reviewBoard,
   workBoard,
 } from './boards/index.js';
@@ -10,7 +12,10 @@ export type {
   BoardDefinition,
   BoardEventIntegration,
   BoardEventRules,
+  BoardPhase,
   BoardPhaseDefinition,
+  BoardPhaseExitTool,
+  BoardPhaseRunner,
   BoardRegistry,
   BoardSourceClosed,
   BoardTransition,
@@ -21,6 +26,7 @@ export type {
   ReviewBoardPhase,
   WorkBoardPhase,
 } from './boards/index.js';
+export type { RuleCondition, RuleGroup, RuleOperator } from './rules/rule-group.js';
 export { MastraFactory } from './factory.js';
 export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type {

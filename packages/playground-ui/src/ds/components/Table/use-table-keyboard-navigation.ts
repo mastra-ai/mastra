@@ -93,7 +93,7 @@ export function useTableKeyboardNavigation({
 
   const getKeyboardProps = useCallback(() => {
     if (global) return null;
-    return { onKeyDown: handleKeyDown as (e: React.KeyboardEvent) => void, tabIndex: 0 };
+    return { onKeyDown: handleKeyDown, tabIndex: 0 };
   }, [global, handleKeyDown]);
 
   return {

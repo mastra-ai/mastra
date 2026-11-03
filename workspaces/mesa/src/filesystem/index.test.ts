@@ -1,9 +1,12 @@
 import {
+  createWorkspaceTools,
   DirectoryNotEmptyError,
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
   StaleFileError,
+  Workspace,
+  WORKSPACE_TOOLS,
   WorkspaceReadOnlyError,
 } from '@mastra/core/workspace';
 import type { MesaFileSystem } from '@mesadev/sdk';
@@ -452,6 +455,52 @@ describe('MesaFilesystem', () => {
         size: 12,
         createdAt: new Date('2025-06-01T00:00:00.000Z'),
         modifiedAt: new Date('2025-06-01T00:00:00.000Z'),
+        mimeType: 'text/plain',
+      });
+    });
+
+    // read_file picks media, binary or text from stat().mimeType, so without one
+    // a PNG or PDF came back as garbled UTF-8 (#28453).
+    it('stat reports a MIME type for files and none for directories', async () => {
+      const { fs, mesaFs } = createFs();
+      mesaFs.stat
+        .mockResolvedValueOnce(createStat())
+        .mockResolvedValueOnce(createStat())
+        .mockResolvedValueOnce(createStat({ isFile: false, isDirectory: true, size: 0 }));
+
+      expect(await fs.stat('/docs/page.png')).toMatchObject({ type: 'file', mimeType: 'image/png' });
+      expect(await fs.stat('/docs/doc.pdf')).toMatchObject({ type: 'file', mimeType: 'application/pdf' });
+      const dir = await fs.stat('/docs/album.png');
+      expect(dir.type).toBe('directory');
+      expect(dir.mimeType).toBeUndefined();
+    });
+
+    it('takes the MIME type of a symlink from its own name, like LocalFilesystem', async () => {
+      const { fs, mesaFs } = createFs();
+      // Mesa's stat follows the link (to /docs/pic.bin) and reports the target.
+      mesaFs.stat.mockResolvedValueOnce(createStat({ size: 12 }));
+
+      expect(await fs.stat('/docs/piclink.png')).toMatchObject({ type: 'file', mimeType: 'image/png' });
+      expect(mesaFs.stat).toHaveBeenCalledWith('/docs/piclink.png');
+      expect(mesaFs.lstat).not.toHaveBeenCalled();
+    });
+
+    it('lets read_file return a PNG as native media the model can view', async () => {
+      const { fs, mesaFs } = createFs();
+      const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d]);
+      mesaFs.stat.mockResolvedValue(createStat({ size: png.length }));
+      mesaFs.readFileBuffer.mockResolvedValue(new Uint8Array(png));
+      const workspace = new Workspace({ filesystem: fs });
+      const tool = (await createWorkspaceTools(workspace))[WORKSPACE_TOOLS.FILESYSTEM.READ_FILE];
+
+      const result = await tool.execute({ path: '/docs/page.png' }, { workspace });
+
+      expect(tool.toModelOutput?.(result)).toEqual({
+        type: 'content',
+        value: [
+          { type: 'text', text: '/docs/page.png (12 bytes, image/png)' },
+          { type: 'media', data: png.toString('base64'), mediaType: 'image/png' },
+        ],
       });
     });
   });

@@ -33,12 +33,12 @@ export function ExperimentHeaderActions({ experiment, onDeleteClick }: Experimen
           <DropdownMenu.Content align="end" className="w-48">
             {canRename && (
               <DropdownMenu.Item onSelect={() => setRenameOpen(true)}>
-                <Pencil /> Rename Experiment
+                <Pencil /> Rename experiment
               </DropdownMenu.Item>
             )}
             {onDeleteClick && (
               <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
-                <Trash2 /> Delete Experiment
+                <Trash2 /> Delete experiment
               </DropdownMenu.Item>
             )}
           </DropdownMenu.Content>

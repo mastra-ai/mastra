@@ -38,6 +38,23 @@ function authJson(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
 }
 
+/**
+ * Best-effort extraction of the `tid` (tenant id) claim from a Microsoft
+ * access token. Used to default `appTenantId` for single-tenant bot
+ * provisioning when the caller did not supply one. Returns `undefined` for
+ * opaque or malformed tokens — never throws.
+ */
+export function decodeTenantId(accessToken: string): string | undefined {
+  const parts = accessToken.split('.');
+  if (parts.length < 2) return undefined;
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1]!, 'base64url').toString('utf8')) as { tid?: unknown };
+    return typeof payload.tid === 'string' && payload.tid.length > 0 ? payload.tid : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // =============================================================================
 // Microsoft Graph — Entra application provisioning
 // =============================================================================
@@ -136,6 +153,12 @@ export interface TeamsBotRegistration {
   iconUrl: string;
   messagingEndpoint: string;
   callingEndpoint: string;
+  /**
+   * Whether the bot's Entra application is single-tenant (`AzureADMyOrg`).
+   * Microsoft deprecated new multitenant bot registrations (July 2025); the
+   * Dev Portal rejects registrations for multitenant apps with HTTP 400.
+   */
+  isSingleTenant?: boolean;
 }
 
 /** Register a bot with the Teams Developer Portal. */

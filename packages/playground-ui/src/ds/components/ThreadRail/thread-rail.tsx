@@ -316,7 +316,7 @@ function ThreadRailPreview({
     ref: previewSizerRef,
     heightStyle: previewHeightStyle,
     measure: measurePreviewHeight,
-  } = useMeasuredAutoHeight<HTMLDivElement>();
+  } = useMeasuredAutoHeight();
   const containerVisible = phase === 'visible' || (phase === 'entering' && Boolean(previousTurn));
   // Entering and exiting share the same off-screen resting style.
   const hiddenLayerClassName = 'scale-95 opacity-0 blur-xs';

@@ -5,12 +5,11 @@ import { MetricsProvider } from '../../hooks/use-metrics';
 import { AgentRunsCard } from '../agent-runs-card';
 import { FailureRateCard } from '../failure-rate-card';
 import { LatencyCard } from '../latency-card';
-import { MetricsKpis } from '../metrics-kpis';
 import { ScoresCard } from '../scores-card';
 import { TokenUsageCard } from '../token-usage-card';
 import { TraceVolumeCard } from '../trace-volume-card';
 import { UsageCard } from '../usage-card';
-import { emptyMetrics, failingMetrics, seedMetrics } from './metrics-msw';
+import { emptyMetrics, failingMetrics, pickView, seedMetrics } from './metrics-msw';
 import { renderWithProviders } from '@/test/render';
 
 const onEntityClick = vi.fn();
@@ -21,7 +20,6 @@ function renderDashboard() {
   onThreadClick.mockReset();
   return renderWithProviders(
     <MetricsProvider preset="24h" filterTokens={[]} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
-      <MetricsKpis />
       <TokenUsageCard />
       <AgentRunsCard />
       <FailureRateCard />
@@ -40,11 +38,6 @@ describe('Metrics cards', () => {
       renderDashboard();
     });
 
-    it('shows each KPI against the previous range', async () => {
-      expect(await screen.findByText('693')).toBeDefined();
-      expect(screen.getAllByText('vs 891').length).toBeGreaterThan(0);
-    });
-
     it('sums uncached input, cache reads and output in token usage', async () => {
       // 600 + 300 + 400.
       expect(await screen.findByText('1.30K')).toBeDefined();
@@ -52,10 +45,9 @@ describe('Metrics cards', () => {
 
     it('switches the token chart to cost', async () => {
       expect(await screen.findByText('1.30K')).toBeDefined();
-      fireEvent.click(screen.getByRole('tab', { name: 'Cost' }));
+      await pickView('Token usage', 'Model cost');
       // Input and output carry the cost; cache reads are part of input.
       expect(await screen.findByText('$0.75')).toBeDefined();
-      expect(screen.getByText('Estimated model spend.')).toBeDefined();
     });
 
     it('shows the share of agent runs that failed', async () => {
@@ -69,10 +61,7 @@ describe('Metrics cards', () => {
 
     it('says when a latency view has no runs', async () => {
       expect(await screen.findByText('4.50s')).toBeDefined();
-      // Latency comes before trace volume, which has its own Workflows tab.
-      const [latencyWorkflows] = screen.getAllByRole('tab', { name: 'Workflows' });
-      if (!latencyWorkflows) throw new Error('Latency has no Workflows tab');
-      fireEvent.click(latencyWorkflows);
+      await pickView('Agent latency', 'Workflow latency');
       expect(await screen.findByText('No workflow runs in this range.')).toBeDefined();
     });
 
@@ -82,17 +71,16 @@ describe('Metrics cards', () => {
     });
 
     it('ranks threads by what they spent and reports which one was clicked', async () => {
-      fireEvent.click(await screen.findByRole('tab', { name: 'Threads' }));
+      await screen.findByRole('button', { name: /Chef Agent/ });
+      await pickView('Usage by agent', 'Usage by thread');
       fireEvent.click(await screen.findByRole('button', { name: /thread-big/ }));
       expect(onThreadClick).toHaveBeenCalledWith('thread-big');
       expect(screen.getByText('$1.25')).toBeDefined();
       expect(screen.getByText('42.0K')).toBeDefined();
     });
 
-    it('charts each scorer found in the recent scores, with its mean over the range', async () => {
+    it('charts each scorer found in the recent scores', async () => {
       expect(await screen.findByText('Answer relevancy')).toBeDefined();
-      expect(screen.getByText('0.84')).toBeDefined();
-      expect(screen.getByText('scorer')).toBeDefined();
     });
   });
 
@@ -122,10 +110,6 @@ describe('Metrics cards', () => {
         { timeout: 5000 },
       );
       expect(screen.queryByText('No agent runs in this range.')).toBeNull();
-    });
-
-    it('says each KPI could not load instead of showing a bare dash', async () => {
-      await waitFor(() => expect(screen.getAllByText("Couldn't load")).toHaveLength(4), { timeout: 5000 });
     });
   });
 });

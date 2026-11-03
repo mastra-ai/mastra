@@ -4,7 +4,8 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { TraceThreadPanel, type TraceThreadPanelProps } from '../trace-thread-panel';
+import { TraceThreadPanel } from '../trace-thread-panel';
+import type { TraceThreadPanelProps } from '../trace-thread-panel';
 import {
   queryPageFromList,
   THREAD_ID,
@@ -113,6 +114,17 @@ describe('TraceThreadPanel', () => {
 
       fireEvent.click(await screen.findByRole('button', { name: 'Back to trace' }));
       expect(onClose).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('when the host names the close button, then clicking it calls onClose', async () => {
+      installHandlers();
+      const onClose = vi.fn();
+      const { queryClient } = renderPanel({ onClose, closeLabel: 'Close' });
+
+      fireEvent.click(await screen.findByRole('button', { name: 'Close' }));
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(screen.queryByRole('button', { name: 'Back to trace' })).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
 

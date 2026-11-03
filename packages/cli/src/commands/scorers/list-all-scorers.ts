@@ -43,16 +43,13 @@ function formatTable(scorers: ScorerTemplate[]): string {
 export function listAllScorers(): void {
   p.intro(color.inverse(' Available Scorers '));
 
-  const groupedScorers = AVAILABLE_SCORERS.reduce(
-    (acc, scorer) => {
-      if (!acc[scorer.category]) {
-        acc[scorer.category] = [];
-      }
-      acc[scorer.category]!.push(scorer);
-      return acc;
-    },
-    {} as Record<string, ScorerTemplate[]>,
-  );
+  const groupedScorers = AVAILABLE_SCORERS.reduce<Record<string, ScorerTemplate[]>>((acc, scorer) => {
+    if (!acc[scorer.category]) {
+      acc[scorer.category] = [];
+    }
+    acc[scorer.category]!.push(scorer);
+    return acc;
+  }, {});
 
   for (const [category, scorers] of Object.entries(groupedScorers)) {
     p.log.info(`${color.bold(color.cyan(formatCategoryName(category)))} Scorers:`);

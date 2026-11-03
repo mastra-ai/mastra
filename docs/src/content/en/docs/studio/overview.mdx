@@ -40,6 +40,8 @@ When you're ready to share Studio with your team, you can deploy it to productio
 
 Chat with your agent directly, switch [models](/models), and tweak settings like temperature and top-p to understand how they affect the output.
 
+Model pickers show newer releases first within each provider when the catalog includes release dates. Models with the same release date, or without a release date, use alphabetical order. Models without dates appear after dated models.
+
 When you interact with your agent, you can follow its reasoning and view tool call outputs. You can also [observe](#observability) traces and logs to see how responses are generated.
 
 For a markdown table in a response, select **Copy table as markdown** above the table to copy it without the surrounding message. The copied table preserves markdown formatting and includes any link and footnote definitions it uses. To download the table as CSV, open the arrow beside the copy button and select **Download CSV**. Both actions become available once the text segment containing the table finishes streaming and displaying. The agent may still be running tools or writing later segments.
@@ -53,6 +55,14 @@ You can send a follow-up message in the same thread during an agent response str
 Use [Editor](/docs/studio/editor) to let non-technical team members iterate on agents and version every change, plus run experiments without redeploying.
 
 Use [Agent Builder](https://agent-builder.mastra.ai) to create and manage fully stored agents through a separate browser-based interface.
+
+#### Models panel
+
+Open an agent's **Models** panel to view its primary model and fallback models in priority order. For static model lists, you can reorder models, enable or disable fallbacks, and change the provider or model. The panel stays synchronized when Studio refetches the agent.
+
+These edits change the running server's in-memory agent and are lost when the server restarts. Persistent model-list editing is tracked in [GitHub issue #27089](https://github.com/mastra-ai/mastra/issues/27089).
+
+Function-valued model lists can vary by request context, so Studio displays them as read-only. Change a dynamic model list in code instead.
 
 ### Workflows
 

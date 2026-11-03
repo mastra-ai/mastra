@@ -22,7 +22,7 @@ interface Captured {
 
 const captureBody = async (request: Request): Promise<CapturedBody> => {
   const body: unknown = await request.json();
-  return body && typeof body === 'object' ? (body as CapturedBody) : {};
+  return body && typeof body === 'object' ? body : {};
 };
 
 /** Streams a single assistant text delta then a `finish` event and closes. */

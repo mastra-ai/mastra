@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { createTool } from '../../../../tools';
 import { createWorkflow } from '../../../../workflows/create';
 import { createStep } from '../../../../workflows/workflow';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
@@ -85,6 +86,62 @@ describeForAllEngines('AIMock loop scenario: workflow as tool', engine => {
 
     // Output text comes from the second turn
     expect(requests.length).toBe(2);
+  });
+
+  it('streams progress from a workflow step tool to the agent caller (#28564)', async () => {
+    const progressTool = createTool({
+      id: 'progress-tool',
+      description: 'Reports research progress',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ findings: z.string() }),
+      execute: async ({ topic }, context) => {
+        await context.writer?.custom({ type: 'data-progress', data: { topic } });
+        return { findings: `Research on ${topic} complete` };
+      },
+    });
+    const workflow = createWorkflow({
+      id: 'research-workflow-progress',
+      description: 'Researches a topic',
+      inputSchema: z.object({ topic: z.string() }),
+      outputSchema: z.object({ findings: z.string() }),
+    })
+      .then(createStep(progressTool))
+      .commit();
+
+    const { output, chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Research quantum computing',
+      workflows: { researchWorkflow: workflow },
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [
+              {
+                id: 'call_research',
+                name: 'workflow-researchWorkflow',
+                arguments: { inputData: { topic: 'quantum computing' } },
+              },
+            ],
+          },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Research complete.' });
+      },
+    });
+
+    expect(await output.text).toContain('Research complete');
+    expect(JSON.stringify(requests[1]?.body?.messages)).toContain('Research on quantum computing complete');
+    expect(chunks).toContainEqual(
+      expect.objectContaining({
+        type: 'tool-output',
+        payload: expect.objectContaining({
+          toolName: 'workflow-researchWorkflow',
+          output: expect.objectContaining({ type: 'data-progress', data: { topic: 'quantum computing' } }),
+        }),
+      }),
+    );
   });
 
   it('workflow tool input schema is correctly exposed to model', async () => {

@@ -1469,6 +1469,39 @@ describe('TokenCounter', () => {
     });
   });
 
+  describe('persisted object-valued errorText', () => {
+    const structuredError = { code: 'TOOL_FAILED', details: 'example detail '.repeat(100) };
+
+    // Persisted rows come back from storage as plain JSON, so an object errorText survives the round trip.
+    function persistedFailedToolMessage(state: 'result' | 'output-error', errorText: unknown) {
+      return JSON.parse(
+        JSON.stringify(
+          createToolInvocationMessage(state, {
+            isError: true,
+            ...(state === 'result' ? { result: '' } : {}),
+            errorText,
+          }),
+        ),
+      );
+    }
+
+    it.each(['result', 'output-error'] as const)(
+      'counts an object errorText in state %s like its serialized string and leaves the invocation unchanged',
+      async state => {
+        const control = await new TokenCounter().countMessagesAsync([
+          persistedFailedToolMessage(state, JSON.stringify(structuredError, null, 2)),
+        ]);
+
+        const message = persistedFailedToolMessage(state, structuredError);
+        const storedInvocation = structuredClone(message.content.parts[0].toolInvocation);
+
+        await expect(new TokenCounter().countMessagesAsync([message])).resolves.toBe(control);
+        expect(message.content.parts[0].toolInvocation).toEqual(storedInvocation);
+        expect(message.content.parts[0].toolInvocation.errorText).toEqual(structuredError);
+      },
+    );
+  });
+
   describe('pending approvals (approval-requested / approval-responded)', () => {
     // Regression: a conversation that waits for approval persists as state 'approval-requested',
     // and the reply to it persists as 'approval-responded'. The counter did not handle either

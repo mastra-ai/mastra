@@ -21,7 +21,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Binary byte size: `512 B`, `1.5 KB`, `125 MB`. Values under 10 keep one decimal. Returns `undefined` for negative or non-finite input. Import from `@mastra/playground-ui/utils/number`.',
+          'Byte sizes use binary 1024-based conversions, not decimal SI units. Byte-only calls keep their existing automatic formatting. With a source `unit`, values stay in that unit unless `autoScale: true`. Returns `undefined` for negative, non-finite, or missing input. Import from `@mastra/playground-ui/utils/number`.',
       },
     },
   },
@@ -31,3 +31,19 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+export const SourceUnits: Story = {
+  name: 'Source units',
+  args: {
+    examples: [
+      ["formatBytes(0.5, { unit: 'GB' })", formatBytes(0.5, { unit: 'GB' })],
+      ["formatBytes(0.5, { unit: 'GB', autoScale: false })", formatBytes(0.5, { unit: 'GB', autoScale: false })],
+      ["formatBytes(0.5, { unit: 'GB', autoScale: true })", formatBytes(0.5, { unit: 'GB', autoScale: true })],
+      ["formatBytes(2048, { unit: 'GB', autoScale: false })", formatBytes(2048, { unit: 'GB', autoScale: false })],
+      ["formatBytes(2048, { unit: 'GB', autoScale: true })", formatBytes(2048, { unit: 'GB', autoScale: true })],
+      ["formatBytes(1023.5, { unit: 'MB', autoScale: true })", formatBytes(1023.5, { unit: 'MB', autoScale: true })],
+      ["formatBytes(0, { unit: 'GB' })", formatBytes(0, { unit: 'GB' })],
+      ["formatBytes(0, { unit: 'GB', autoScale: true })", formatBytes(0, { unit: 'GB', autoScale: true })],
+    ],
+  },
+};

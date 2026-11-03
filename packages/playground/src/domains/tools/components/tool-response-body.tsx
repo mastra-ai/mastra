@@ -1,4 +1,5 @@
 import { Code } from '@mastra/playground-ui/components/Code';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { SendIcon } from 'lucide-react';
@@ -27,5 +28,20 @@ export function ToolResponseBody({ isRunning, lastRun }: ToolResponseBodyProps) 
     );
   }
 
-  return <Code code={getRunCode(lastRun)} lang="json" className="overflow-x-auto p-4 text-caption whitespace-pre" />;
+  if (lastRun.status === 'error') {
+    return <Code code={getRunCode(lastRun)} className="overflow-x-auto p-4 text-caption whitespace-pre" />;
+  }
+
+  return (
+    <CodeEditor
+      value={getRunCode(lastRun)}
+      language="json"
+      editable={false}
+      lineNumbers={false}
+      showCopyButton={false}
+      variant="embedded"
+      aria-label="Tool response"
+      className="p-4"
+    />
+  );
 }

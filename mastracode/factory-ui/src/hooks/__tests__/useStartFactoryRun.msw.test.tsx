@@ -6,7 +6,8 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import { useStartFactoryRun, type StartFactoryRunWorkItem } from '../useStartFactoryRun';
+import { useStartFactoryRun } from '../useStartFactoryRun';
+import type { StartFactoryRunWorkItem } from '../useStartFactoryRun';
 
 const FACTORY_ID = 'fp-1';
 

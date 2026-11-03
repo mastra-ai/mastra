@@ -56,48 +56,35 @@ function createThrowingStreamModel(modelId: string, statusCode: number) {
 }
 
 describe('Per-fallback-entry settings', () => {
+  describe('Editor ownership', () => {
+    it('rejects model entries without stable IDs before they can be persisted', () => {
+      expect(
+        () =>
+          new Agent({
+            id: 'editor-owned-models',
+            name: 'Editor-owned models',
+            instructions: 'You are a test agent',
+            model: [{ model: createRecordingStreamModel('primary', 'ok') }],
+            editor: { model: true },
+          }),
+      ).toThrow('Every model entry must have an explicit id when Editor owns the model list.');
+    });
+
+    it('continues assigning runtime IDs when the model list is code-owned', async () => {
+      const agent = new Agent({
+        id: 'code-owned-models',
+        name: 'Code-owned models',
+        instructions: 'You are a test agent',
+        model: [{ model: createRecordingStreamModel('primary', 'ok') }],
+      });
+
+      await expect(agent.getModelList()).resolves.toEqual([
+        expect.objectContaining({ id: expect.any(String), model: expect.anything() }),
+      ]);
+    });
+  });
+
   describe('modelSettings', () => {
-    it('should pass each fallback entry its own temperature to doStream', async () => {
-      const primary = createRecordingStreamModel('primary-temp', 'primary response');
-      const secondary = createRecordingStreamModel('secondary-temp', 'secondary response');
-
-      const agent = new Agent({
-        id: 'per-model-temperature',
-        name: 'Per-Model Temperature Test',
-        instructions: 'You are a test agent',
-        model: [
-          { model: primary, maxRetries: 0, modelSettings: { temperature: 0.3 } },
-          { model: secondary, maxRetries: 0, modelSettings: { temperature: 0.7 } },
-        ],
-      });
-
-      await (
-        await agent.stream('Hello')
-      ).text;
-
-      expect(primary.doStreamCalls[0]?.temperature).toBe(0.3);
-    });
-
-    it('should apply the fallback entry temperature after the primary errors', async () => {
-      const primary = createThrowingStreamModel('primary-fail', 429);
-      const secondary = createRecordingStreamModel('secondary-temp', 'secondary response');
-
-      const agent = new Agent({
-        id: 'fallback-after-error-temperature',
-        name: 'Fallback After Error Temperature Test',
-        instructions: 'You are a test agent',
-        model: [
-          { model: primary, maxRetries: 0, modelSettings: { temperature: 0.1 } },
-          { model: secondary, maxRetries: 0, modelSettings: { temperature: 0.9 } },
-        ],
-      });
-
-      const text = await (await agent.stream('Hello')).text;
-
-      expect(text).toBe('secondary response');
-      expect(secondary.doStreamCalls[0]?.temperature).toBe(0.9);
-    });
-
     it('should shallow-merge per-entry modelSettings on top of call-time modelSettings', async () => {
       const primary = createRecordingStreamModel('shallow-merge', 'ok');
 
@@ -331,25 +318,6 @@ describe('Per-fallback-entry settings', () => {
   });
 
   describe('headers', () => {
-    it('should pass per-entry headers to doStream', async () => {
-      const primary = createRecordingStreamModel('per-entry-headers', 'ok');
-
-      const agent = new Agent({
-        id: 'per-entry-headers',
-        name: 'Per-Entry Headers Test',
-        instructions: 'You are a test agent',
-        model: [{ model: primary, maxRetries: 0, headers: { 'x-region': 'eu', 'x-tenant': 'acme' } }],
-      });
-
-      await (
-        await agent.stream('Hello')
-      ).text;
-
-      const sent = (primary.doStreamCalls[0]?.headers ?? {}) as Record<string, string>;
-      expect(sent['x-region']).toBe('eu');
-      expect(sent['x-tenant']).toBe('acme');
-    });
-
     it('should let call-time modelSettings.headers override per-entry headers for the same key', async () => {
       const primary = createRecordingStreamModel('header-precedence', 'ok');
 

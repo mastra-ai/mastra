@@ -19,6 +19,15 @@ export interface RedisClient {
 
 export interface RedisServerCacheOptions {
   keyPrefix?: string;
+  /**
+   * Lifetime of cached values in seconds, refreshed on every write. Defaults to
+   * 300. `0` means no expiry.
+   *
+   * A cache list and its index counter always share this TTL: if the counter
+   * outlived the list, index allocation would restart at 0 while subscribers
+   * still expect the previous numbering, and every new frame would be dropped
+   * as a duplicate.
+   */
   ttlSeconds?: number;
   /**
    * Run a Lua script with the given KEYS and ARGV. Defaults to the ioredis
@@ -68,11 +77,12 @@ const defaultEvalScript = (client: RedisClient, script: string, keys: string[], 
 };
 
 /**
- * Atomic "allocate index + append + refresh TTLs" used by `listPushIndexed`.
+ * Atomic "allocate index + append + refresh TTL" used by `listPushIndexed`.
  *
  * KEYS[1] = list key, KEYS[2] = counter key
  * ARGV[1] = JSON-serialized object WITHOUT an `index` property
- * ARGV[2] = TTL in seconds (0 = no expiry)
+ * ARGV[2] = TTL in seconds (0 = no expiry), applied to BOTH keys
+
  *
  * The index is spliced into the JSON text as the first property rather than
  * decoded/re-encoded with cjson, which would silently alter large integers
@@ -224,12 +234,19 @@ export class RedisServerCache extends MastraServerCache {
 
   /**
    * Single round-trip index allocation + list append + TTL refresh via Lua.
-   * This is the durable stream per-chunk hot path (issue #22477): the composed
-   * default costs four awaited commands (INCR, EXPIRE, RPUSH, EXPIRE).
+   * This is the durable stream per-chunk hot path (issue #22477).
    */
-  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
+    // A cache without expiry stays that way; otherwise `ttlMs` can only raise
+    // the default.
+    const ttlSeconds = this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0;
     if (this.scriptingDisabled) {
-      return super.listPushIndexed(listKey, counterKey, value);
+      return this.composedPushIndexed(listKey, counterKey, value, ttlSeconds);
     }
 
     const { index: _ignored, ...body } = value;
@@ -238,7 +255,7 @@ export class RedisServerCache extends MastraServerCache {
         this.client,
         LIST_PUSH_INDEXED_SCRIPT,
         [this.getKey(listKey), this.getKey(counterKey)],
-        [this.serialize(body), String(this.ttlSeconds)],
+        [this.serialize(body), String(ttlSeconds)],
       );
       return Number(result);
     } catch (error) {
@@ -251,10 +268,31 @@ export class RedisServerCache extends MastraServerCache {
         this.logger.warn(
           '[RedisServerCache] listPushIndexed script rejected with CROSSSLOT; falling back to increment + listPush',
         );
-        return super.listPushIndexed(listKey, counterKey, value);
+        return this.composedPushIndexed(listKey, counterKey, value, ttlSeconds);
       }
       throw error;
     }
+  }
+
+  /**
+   * `INCR` then `RPUSH`, each followed by the same `EXPIRE` the script applies.
+   * Not atomic: concurrent writers can interleave, so a list position may not
+   * match its index (Redis Cluster atomicity is tracked in COR-1491).
+   */
+  private async composedPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlSeconds: number,
+  ): Promise<number> {
+    const fullCounterKey = this.getKey(counterKey);
+    const index = (await this.client.incr(fullCounterKey)) - 1;
+    if (ttlSeconds > 0) await this.client.expire(fullCounterKey, ttlSeconds);
+
+    const fullListKey = this.getKey(listKey);
+    await this.pushToList(this.client, fullListKey, this.serialize({ ...value, index }));
+    if (ttlSeconds > 0) await this.client.expire(fullListKey, ttlSeconds);
+    return index;
   }
 }
 

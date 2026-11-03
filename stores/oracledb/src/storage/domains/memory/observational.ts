@@ -1,8 +1,5 @@
-import {
-  maxObservationCursor,
-  planReflectionGenerationText,
-  type UpdateActiveObservationsResult,
-} from '@internal/core/memory';
+import { maxObservationCursor, planReflectionGenerationText } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult } from '@internal/core/memory';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {

@@ -247,6 +247,30 @@ export const FloatingOverlayModes: Story = {
   },
 };
 
+const sizeOptions = [
+  { size: 'md', label: 'Medium', description: 'The default width: 32rem for floating drawers.' },
+  { size: 'lg', label: 'Large', description: '42rem, for side panels with code blocks or wide forms.' },
+  { size: 'xl', label: 'Extra large', description: '56rem, for detail views that need the room.' },
+] as const;
+
+export const Sizes: Story = {
+  render: () => (
+    <WorkspaceSurface>
+      {sizeOptions.map(({ size, label, description }) => (
+        <Drawer key={size} side="right" variant="floating" size={size}>
+          <DrawerTrigger asChild>
+            <Button>{label}</Button>
+          </DrawerTrigger>
+          <RepositoryPanel title={label} description={description} />
+        </Drawer>
+      ))}
+    </WorkspaceSurface>
+  ),
+  parameters: {
+    layout: 'fullscreen',
+  },
+};
+
 function ControlledExample() {
   const [open, setOpen] = React.useState(false);
 

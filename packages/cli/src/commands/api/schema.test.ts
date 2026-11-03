@@ -86,6 +86,12 @@ describe('buildCommandExamples', () => {
     expect(commands('datasetCreate')).toEqual(['mastra api dataset create \'{"name":"weather-eval"}\'']);
     expect(commands('experimentRun')).toEqual(['mastra api experiment run dataset_123 \'{"name":"baseline"}\'']);
   });
+
+  it('includes required path IDs in generated list examples', () => {
+    expect(commands('workflowRunList')).toEqual([
+      'mastra api workflow run list workflowId_123 \'{"page":0,"perPage":50}\'',
+    ]);
+  });
 });
 
 describe('getCommandSchema', () => {

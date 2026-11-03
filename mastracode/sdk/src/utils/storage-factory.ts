@@ -8,7 +8,6 @@
 import type { MastraCompositeStore, RetentionConfig } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
-import { PostgresStore } from '@mastra/pg';
 
 import type { StorageConfig, PgStorageConfig } from './project.js';
 import { getDatabasePath, getVectorDatabasePath } from './project.js';
@@ -89,6 +88,8 @@ async function createPgStorage(config: PgStorageConfig): Promise<StorageResult> 
     };
   }
 
+  // Only Postgres users pay for loading the pg driver.
+  const { PostgresStore } = await import('@mastra/pg');
   const base = {
     id: 'mastra-code-storage' as const,
     retention: DEFAULT_RETENTION,

@@ -25,8 +25,8 @@ test.describe('code-mode agent override', () => {
       await expect(saveToFilesystemButton).toBeVisible();
       await expect(page.getByRole('button', { name: /Open PR/i })).toHaveCount(0);
 
-      // Save New Version / Publish belong to the db-mode stored-agent flow and must NOT appear.
-      await expect(page.getByRole('button', { name: /^Save New Version$/i })).toHaveCount(0);
+      // Save new version / Publish belong to the db-mode stored-agent flow and must NOT appear.
+      await expect(page.getByRole('button', { name: /^Save new version$/i })).toHaveCount(0);
       await expect(page.getByRole('button', { name: /^Publish$/i })).toHaveCount(0);
 
       const getVersionCount = async () => {
@@ -112,9 +112,9 @@ test.describe('code-mode agent override', () => {
       await expect(page.getByRole('button', { name: /Save to filesystem/i })).toHaveCount(0);
       await expect(page.getByRole('button', { name: /Open PR/i })).toHaveCount(0);
 
-      // Save New Version / Publish belong to the stored-agent flow and are also
+      // Save new version / Publish belong to the stored-agent flow and are also
       // inappropriate here — this is still a code agent, just an immutable one.
-      await expect(page.getByRole('button', { name: /^Save New Version$/i })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /^Save new version$/i })).toHaveCount(0);
       await expect(page.getByRole('button', { name: /^Publish$/i })).toHaveCount(0);
 
       // The user-facing Editor tab must be read-only and hide block-level edit controls.
@@ -125,7 +125,7 @@ test.describe('code-mode agent override', () => {
 
       // Tools tab must hide add/remove controls — tools are code-owned for editor: false agents.
       await page.getByRole('tab', { name: /^Tools$/i }).click();
-      await expect(page.getByRole('button', { name: /Add Tools/i })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /Add tools/i })).toHaveCount(0);
       await expect(page.getByLabel(/^Remove /)).toHaveCount(0);
     });
   });

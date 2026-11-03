@@ -138,6 +138,9 @@ describe('WorkflowsInMemory v1 methods on storage v2 runs', () => {
     });
     expect(await store.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'v2-run', storageVersion: 1 })).toBeNull();
     expect(await store.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'v1-run', storageVersion: 2 })).toBeNull();
+    expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'v1-run' })).toBe('success');
+    expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'v2-run' })).toBe('suspended');
+    expect(await store.loadWorkflowRunStatus({ workflowName: 'wf', runId: 'nope' })).toBeNull();
 
     const v2 = await store.getWorkflowRunById({ runId: 'v2-run', workflowName: 'wf' });
     expect(v2).toMatchObject({ runId: 'v2-run', workflowName: 'wf', resourceId: 'res', storageVersion: 2 });
@@ -423,6 +426,62 @@ describe('WorkflowsInMemory storage v2 methods', () => {
     expect((await store.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'v1' }))!.status).toBe('running');
   });
 
+  it('writes a checkpoint or an append only when the stored status matches expectedStatus', async () => {
+    const { store } = setup();
+    const notCanceled = ['running', 'success'] as const;
+    // A run that isn't stored yet is always written.
+    expect(
+      await store.writeWorkflowRunCheckpoint({
+        ...run,
+        header: makeHeader('r1'),
+        steps: { a: ok(1) },
+        state: { n: 1 },
+        expectedStatus: [...notCanceled],
+      }),
+    ).toEqual({ lastSeq: 2 });
+    expect(
+      await store.appendWorkflowRunEntries({
+        ...run,
+        header: makeHeader('r1'),
+        steps: { b: ok(2) },
+        expectedStatus: [...notCanceled],
+      }),
+    ).toEqual({ lastSeq: 3 });
+
+    await store.updateWorkflowRunHeader({ ...run, opts: { status: 'canceled' } });
+    const stored = await store.loadWorkflowRun({ ...run, successfulSteps: 'full' });
+
+    expect(
+      await store.appendWorkflowRunEntries({
+        ...run,
+        header: makeHeader('r1', { status: 'success' }),
+        steps: { c: ok(3) },
+        state: { n: 2 },
+        expectedStatus: [...notCanceled],
+      }),
+    ).toBeNull();
+    expect(
+      await store.writeWorkflowRunCheckpoint({
+        ...run,
+        header: makeHeader('r1'),
+        steps: {},
+        state: {},
+        expectedStatus: [...notCanceled],
+      }),
+    ).toBeNull();
+    expect(await store.loadWorkflowRun({ ...run, successfulSteps: 'full' })).toEqual(stored);
+    expect(await store.loadWorkflowRunHeader(run)).toMatchObject({ header: { status: 'canceled' }, lastSeq: 3 });
+
+    // Without a guard, the write lands on the canceled run.
+    expect(
+      await store.appendWorkflowRunEntries({
+        ...run,
+        header: makeHeader('r1', { status: 'canceled' }),
+        steps: { c: ok(3) },
+      }),
+    ).toEqual({ lastSeq: 4 });
+  });
+
   it('clones on write and on read', async () => {
     const { store } = setup();
     const a = ok({ list: [1] });
@@ -505,6 +564,50 @@ describe('WorkflowsInMemory storage v2 methods', () => {
         id: 'STORAGE_RUN_JOURNAL_NOT_SUPPORTED',
       });
     }
+  });
+});
+
+describe('WorkflowsInMemory storage v2 step patches', () => {
+  const run = { workflowName: 'wf', runId: 'r1' };
+  const header = makeHeader('r1');
+  const progress = (k: number, output: unknown) => ({
+    op: 'set' as const,
+    path: ['metadata', 'foreachProgress', String(k)],
+    value: { output },
+  });
+  const running = (done: Record<number, { output: unknown }>) =>
+    ({ status: 'running', payload: [1, 2, 3], startedAt: 1, metadata: { foreachProgress: done } }) as any;
+  const steps = async (store: WorkflowsInMemory) =>
+    (await store.loadWorkflowRun({ ...run, successfulSteps: 'full' }))!.steps;
+
+  it('rebuilds a step from its latest full entry and the patches after it, on every read', async () => {
+    const { store } = setup();
+    await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { a: ok(1), each: running({}) }, state: {} });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { each: [progress(0, 10)] } });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { each: [progress(1, 20)] } });
+    const each = running({ 0: { output: 10 }, 1: { output: 20 } });
+
+    expect(await steps(store)).toEqual({ a: ok(1), each });
+    expect(await store.loadWorkflowRunSteps({ ...run, stepIds: ['each'] })).toEqual({ each });
+    expect((await store.loadWorkflowSnapshot(run))!.context).toEqual({ a: ok(1), each });
+    // A patched result is a copy: editing it doesn't reach the store.
+    const edited: any = await steps(store);
+    edited.each.metadata.foreachProgress[2] = { output: 30 };
+    expect(await steps(store)).toEqual({ a: ok(1), each });
+  });
+
+  it('applies only the patches after the latest full entry, and a checkpoint drops them', async () => {
+    const { db, store } = setup();
+    await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { stray: [progress(0, 1)] } });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: { each: running({}) } });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { each: [progress(0, 10)] } });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: { each: running({ 5: { output: 50 } }) } });
+    await store.appendWorkflowRunEntries({ ...run, header, steps: {}, stepPatches: { each: [progress(6, 60)] } });
+    expect(await steps(store)).toEqual({ each: running({ 5: { output: 50 }, 6: { output: 60 } }) });
+
+    await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { each: running({}) }, state: {} });
+    expect(db.workflowRunEntries.get('wf-r1')!.map(e => e.kind)).toEqual(['step', 'state']);
+    expect(await steps(store)).toEqual({ each: running({}) });
   });
 });
 

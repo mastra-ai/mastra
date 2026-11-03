@@ -19,7 +19,7 @@ export const WorkspaceNotSupported = () => (
 
         icon={<ExternalLinkIcon />}
       >
-        Workspaces Documentation
+        Workspaces documentation
       </Button>
     }
     variant="fill"

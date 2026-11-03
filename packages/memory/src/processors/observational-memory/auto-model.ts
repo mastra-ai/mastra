@@ -18,6 +18,11 @@ const ROUTE_PREFIX = 'mastra/';
 export interface ResolveAutoModelIdOptions {
   /** Per-provider low-cost model overrides, e.g. `{ google: 'google/gemini-3.5-flash' }`. */
   autoModels?: Record<string, string>;
+  /**
+   * Whether this caller can authenticate with a provider. Replaces the
+   * `GOOGLE_GENERATIVE_AI_API_KEY` check that decides whether Gemini is preferred.
+   */
+  canUseProvider?: (providerId: string) => boolean;
 }
 
 function hasGoogleGenerativeAIKey(): boolean {
@@ -27,7 +32,8 @@ function hasGoogleGenerativeAIKey(): boolean {
 /**
  * Resolve the concrete model ID `'auto'` selects for a main model ID.
  *
- * Order: Gemini when `GOOGLE_GENERATIVE_AI_API_KEY` is set; else the main provider's low-cost
+ * Order: Gemini when Google is usable (`canUseProvider('google')`, or `GOOGLE_GENERATIVE_AI_API_KEY`
+ * when no check is given); else the main provider's low-cost
  * model (keeping a `mastra/` gateway prefix); else the main model ID itself. Returns `undefined`
  * only when there is no Google key and no main model ID.
  */
@@ -36,7 +42,8 @@ export function resolveAutoModelId(
   options?: ResolveAutoModelIdOptions,
 ): string | undefined {
   const models = { ...AUTO_MODEL_BY_PROVIDER, ...options?.autoModels };
-  if (hasGoogleGenerativeAIKey() && models.google) {
+  const googleUsable = options?.canUseProvider ? options.canUseProvider('google') : hasGoogleGenerativeAIKey();
+  if (googleUsable && models.google) {
     return models.google;
   }
   if (!mainModelId) {

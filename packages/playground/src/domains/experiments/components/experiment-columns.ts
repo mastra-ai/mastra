@@ -5,7 +5,9 @@ export const EXPERIMENT_NAME_COLUMN = 'minmax(9rem,1fr)';
 // description is truncated to a single line; cap it so it never crowds the metric columns
 export const EXPERIMENT_DESCRIPTION_COLUMN = 'minmax(8rem,16rem)';
 export const EXPERIMENT_DATASET_COLUMN = '1fr';
-export const EXPERIMENT_DETAIL_COLUMNS = 'auto auto auto auto auto auto auto';
+export const EXPERIMENT_DETAIL_COLUMNS = 'auto auto auto auto auto auto auto auto';
+// avg duration, tokens and cost: only shown when the observability store serves metrics
+export const EXPERIMENT_USAGE_COLUMNS = 'auto auto auto';
 
 export const experimentColumnLabels = {
   experiment: 'Experiment',
@@ -16,6 +18,10 @@ export const experimentColumnLabels = {
   items: 'Items',
   succeeded: 'Processed',
   failed: 'Errored',
+  duration: 'Duration',
+  avgDuration: 'Avg duration',
+  tokens: 'Tokens',
+  cost: 'Cost',
   review: 'Review',
   date: 'Date',
 };

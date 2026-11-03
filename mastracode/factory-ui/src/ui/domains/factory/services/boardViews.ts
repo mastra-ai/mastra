@@ -1,17 +1,23 @@
 /**
- * Board view persistence: the filters, sort and saved view last used on each board, so links that
+ * Board view persistence: the filters, sort, layout and saved view last used on each board, so links that
  * open a board fresh (sidebar, factory switcher, factory landing) bring them back. The URL stays
  * the source of truth; a board never rewrites it on its own.
  */
 
 import { boardPath } from '../boardCatalog';
-import { BOARD_FILTER_QUERY } from '../boardFilters';
+import { BOARD_FILTER_FIELDS } from '../boardFilters';
+import { BOARD_LAYOUT_QUERY } from '../boardLayout';
 import { BOARD_VIEW_QUERY } from '../boardSavedViews';
 import { BOARD_SORT_QUERY } from '../boardSort';
 
 const BOARD_VIEWS_KEY = 'mastracode.boardViews';
 const MAX_BOARDS = 50;
-const BOARD_VIEW_PARAMS: readonly string[] = [...Object.values(BOARD_FILTER_QUERY), BOARD_SORT_QUERY, BOARD_VIEW_QUERY];
+const BOARD_VIEW_PARAMS: readonly string[] = [
+  ...BOARD_FILTER_FIELDS,
+  BOARD_SORT_QUERY,
+  BOARD_LAYOUT_QUERY,
+  BOARD_VIEW_QUERY,
+];
 
 const boardScope = (factoryId: string, boardId: string) => `${factoryId}:${boardId}`;
 

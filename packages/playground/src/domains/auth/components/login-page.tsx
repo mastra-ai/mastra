@@ -5,7 +5,6 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useSSOLogin, useAuthCapabilities, useCredentialsLogin, useCredentialsSignUp } from '@mastra/react/hooks/auth';
-import type { SSOConfig } from '@mastra/react/hooks/auth';
 import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { LoginLayout } from './login-layout';
@@ -66,7 +65,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   const { login } = capabilities;
   const hasSSO = login.type === 'sso' || login.type === 'both';
   const hasCredentials = login.type === 'credentials' || login.type === 'both';
-  const sso = login.sso as SSOConfig | undefined;
+  const sso = login.sso;
   const signUpEnabled = login.signUpEnabled !== false; // defaults to true
 
   const isSignIn = mode === 'signin' || !signUpEnabled; // force signin mode if signup disabled

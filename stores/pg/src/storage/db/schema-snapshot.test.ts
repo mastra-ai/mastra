@@ -337,7 +337,50 @@ describe('init catalog snapshot', () => {
     await admin(`ALTER TABLE "${schema}".mastra_threads DROP COLUMN "createdAtZ"`);
 
     // A snapshot that outlived init() would still report the column present.
-    expect(await db.hasColumn('mastra_threads', 'createdAtZ')).toBe(false);
+    // A fresh PgDB keeps the per-instance column cache out of the picture.
+    const freshDb = new PgDB({ client: store.db, schemaName: schema });
+    expect(await freshDb.hasColumn('mastra_threads', 'createdAtZ')).toBe(false);
+  }, 60000);
+
+  it('answers repeated hasColumn checks outside init from the column cache', async () => {
+    const schema = uniqueSchema('has_column_cache');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const store = await newStore(schema);
+    await store.init();
+    const workflows = (await store.getStore('workflows'))!;
+    const list = () =>
+      workflows.listWorkflowRuns({ workflowName: 'wf', status: 'running', resourceId: 'res-1', perPage: 0, page: 0 });
+
+    await list();
+    const statements = await captureStatements(async () => {
+      for (let i = 0; i < 10; i++) await list();
+    });
+
+    expect(count(statements, /COUNT\(\*\)/i)).toBe(10);
+    expect(count(statements, INFORMATION_SCHEMA_COLUMN_PROBE)).toBe(0);
+
+    // A cached positive is dropped when the store's own DDL removes the table.
+    const db = new PgDB({ client: store.db, schemaName: schema });
+    expect(await db.hasColumn('mastra_threads', 'resourceId')).toBe(true);
+    await db.dropTable({ tableName: 'mastra_threads' as TABLE_NAMES });
+    expect(await db.hasColumn('mastra_threads', 'resourceId')).toBe(false);
+  }, 60000);
+
+  it('resolves case-variant columns to the exact-case match outside init', async () => {
+    const schema = uniqueSchema('case_variant');
+    await admin(`CREATE SCHEMA "${schema}"`);
+    await admin(`CREATE TABLE "${schema}".case_variant (resourceid TEXT, "resourceId" JSONB, other TEXT)`);
+
+    const store = await newStore(schema);
+    await store.init();
+    const db = new PgDB({ client: store.db, schemaName: schema });
+
+    expect(await db.hasColumn('case_variant', 'resourceId')).toBe(true);
+    expect(await db.getColumnType('case_variant', 'resourceId')).toBe('jsonb');
+    expect(await db.getColumnType('case_variant', 'resourceid')).toBe('text');
+    // Lowercase fallback still applies when only the folded name exists.
+    expect(await db.getColumnType('case_variant', 'Other')).toBe('text');
   }, 60000);
 
   it('migrates a legacy flat agents schema with the snapshot live', async () => {
@@ -389,6 +432,23 @@ describe('init catalog snapshot', () => {
     expect(versions).toHaveLength(1);
     expect(versions[0].agentId).toBe('legacy-agent-1');
     expect(versions[0].name).toBe('Legacy Agent');
+  }, 60000);
+
+  it('adds modelList to existing agent version tables', async () => {
+    const schema = uniqueSchema('agent_versions_model_list');
+    await admin(`CREATE SCHEMA "${schema}"`);
+
+    const first = await newStore(schema);
+    await first.init();
+    await first.close();
+
+    await admin(`ALTER TABLE "${schema}".mastra_agent_versions DROP COLUMN "modelList"`);
+
+    const second = await newStore(schema);
+    await second.init();
+
+    const versionColumns = await columnsIn(schema, 'mastra_agent_versions');
+    expect(versionColumns.has('modelList')).toBe(true);
   }, 60000);
 
   it('migrates a snapshot-column agent_versions schema with the snapshot live', async () => {

@@ -26,17 +26,18 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
     experimentStatus: experiment.status,
     queryOptions: { enabled: Boolean(experiment.id) },
   });
-  const isActive = experiment.status === 'running' || experiment.status === 'pending';
   const experimentRefs = useMemo(
     () => [{ id: experiment.id, status: experiment.status }],
     [experiment.id, experiment.status],
   );
-  const { data: usageById, isLoading: isUsageLoading } = useExperimentsItemUsage({
+  const { data: usageById, isLoading: isUsageQueryLoading } = useExperimentsItemUsage({
     experiments: experimentRefs,
     supportsMetrics: metrics?.isEnabled ?? false,
   });
+  // Usage is only fetched once the run finishes, so an in-progress run reads as loading rather than empty.
+  const isUsageLoading = experiment.status === 'running' || experiment.status === 'pending' || isUsageQueryLoading;
 
-  // Averages every score fetched so far, so a running experiment reflects only the items scored up to now.
+  // Averages every score of the run, across all scorers.
   const avgScore = useMemo(() => {
     if (!scoresByItemId) return undefined;
     const scores = Object.values(scoresByItemId).flat();
@@ -46,25 +47,23 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
 
   const startedAt = experiment.startedAt ?? experiment.createdAt;
   const duration = (() => {
-    if (isActive) return 'Running…';
     if (!experiment.startedAt || !experiment.completedAt) return '—';
     const ms = new Date(experiment.completedAt).getTime() - new Date(experiment.startedAt).getTime();
     return formatDuration(ms) ?? '—';
   })();
 
-  const soFar = isActive ? ' so far' : '';
   // Same per-item breakdown as the results rows (shared query), so the totals match the rows and split input/output.
   const usage = usageById[experiment.id]?.summary;
   const tokens = totalTokens(usage);
   const tokensDetail =
     usage?.inputTokens === undefined && usage?.outputTokens === undefined
-      ? `input + output${soFar}`
-      : `${formatTokenCount(usage.inputTokens ?? 0)} in · ${formatTokenCount(usage.outputTokens ?? 0)} out${soFar}`;
+      ? 'input + output'
+      : `${formatTokenCount(usage.inputTokens ?? 0)} in · ${formatTokenCount(usage.outputTokens ?? 0)} out`;
   const avgItemDuration = metrics?.isEnabled ? metrics.data?.avgAgentDurationMs : undefined;
   const formattedAvgItemDuration = avgItemDuration == null ? undefined : formatDuration(Math.round(avgItemDuration));
 
   const runDurationDetail = (() => {
-    if (formattedAvgItemDuration) return `${formattedAvgItemDuration} avg per item${soFar}`;
+    if (formattedAvgItemDuration) return `${formattedAvgItemDuration} avg per item`;
     return startedAt ? `started ${formatDate(new Date(startedAt), 'date-time')}` : 'not started';
   })();
 
@@ -75,7 +74,7 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
           label="Total cost"
           icon={CoinsIcon}
           value={usage?.estimatedCost === undefined ? '—' : formatCostValue(usage.estimatedCost, usage.costUnit)}
-          detail={`estimated${soFar}`}
+          detail="estimated"
           isLoading={isUsageLoading}
         />
       )}
@@ -93,8 +92,8 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
         label="Avg score"
         icon={GaugeIcon}
         value={avgScore == null ? '—' : avgScore.toFixed(3)}
-        detail={avgScore != null ? `across all scorers${soFar}` : isActive ? 'waiting for scores' : 'no scores'}
-        isLoading={avgScore === undefined && !isActive}
+        detail={avgScore == null ? 'no scores' : 'across all scorers'}
+        isLoading={avgScore === undefined}
       />
     </MetricsCardGroup>
   );

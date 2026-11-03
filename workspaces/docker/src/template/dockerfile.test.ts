@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { type DockerTemplateDefinition, synthesizeDockerfile, templateIdentity, templateImageTag } from './dockerfile';
+import { synthesizeDockerfile, templateIdentity, templateImageTag } from './dockerfile';
+import type { DockerTemplateDefinition } from './dockerfile';
 
 function def(overrides: Partial<DockerTemplateDefinition> = {}): DockerTemplateDefinition {
   return {

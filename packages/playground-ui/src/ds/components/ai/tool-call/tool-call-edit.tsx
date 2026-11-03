@@ -1,5 +1,5 @@
 import type { ToolEdit } from './tool-presentation';
-import { tokenStyle, useHighlight } from '@/ds/components/Code';
+import { useHighlight } from '@/ds/components/Code';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { languageForPath } from '@/ds/components/CodeEditor/highlight';
 import { truncateString } from '@/lib/truncate-string';
@@ -32,7 +32,7 @@ function DiffSide({ lines, side, lang }: { lines: string[]; side: keyof typeof D
           <span className={cn('w-5 shrink-0 text-center opacity-70 select-none', gutter)}>{sign}</span>
           <span className="flex-1 pr-2.5 text-foreground">
             {tokens?.[index]?.map((token, tokenIndex) => (
-              <span key={tokenIndex} className="shiki-token" style={tokenStyle(token)}>
+              <span key={tokenIndex} className={token.className}>
                 {token.content}
               </span>
             )) ?? line}

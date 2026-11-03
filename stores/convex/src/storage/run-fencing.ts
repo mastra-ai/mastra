@@ -190,3 +190,19 @@ export async function retireRunFence(client: ConvexAdminClient, fence: RunFence)
   });
   return applied;
 }
+
+/** Deletes up to `limit` claims whose epoch-ms `column` is older than `cutoff`. Returns how many were deleted. */
+export async function pruneRunClaims(
+  client: ConvexAdminClient,
+  tableName: RunClaimTable,
+  column: 'updatedAt' | 'retiredAt',
+  cutoff: number,
+  limit: number,
+): Promise<number> {
+  const { result } = await callRunClaim<number>(
+    client,
+    { op: 'pruneRunClaims', tableName, column, cutoff, limit },
+    'prune',
+  );
+  return result;
+}

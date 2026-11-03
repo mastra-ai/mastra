@@ -168,21 +168,20 @@ export function createDynamicTools(
       });
     }
 
+    // Async only when a Tavily/Parallel key is set; otherwise the tool list stays synchronous.
     const configuredWebTools = createConfiguredWebTools();
-    if (configuredWebTools) {
-      Object.assign(tools, configuredWebTools);
-    } else if (isAnthropicModel) {
-      const anthropic = createAnthropic({});
-      tools.web_search = anthropic.tools.webSearch_20250305();
-    } else if (isOpenAIModel) {
-      const openai = createOpenAI({});
-      tools.web_search = openai.tools.webSearch();
+    if (!configuredWebTools) {
+      if (isAnthropicModel) {
+        const anthropic = createAnthropic({});
+        tools.web_search = anthropic.tools.webSearch_20250305();
+      } else if (isOpenAIModel) {
+        const openai = createOpenAI({});
+        tools.web_search = openai.tools.webSearch();
+      }
     }
 
-    if (mcpManager) {
-      const mcpTools = mcpManager.getTools();
-      Object.assign(tools, mcpTools);
-    }
+    const mcpTools = mcpManager?.getTools();
+    if (mcpTools) Object.assign(tools, mcpTools);
 
     const finish = (resolvedExtra: Record<string, ToolLike | undefined> | undefined) => {
       if (resolvedExtra) {
@@ -221,15 +220,26 @@ export function createDynamicTools(
       return tools as ToolsInput;
     };
 
-    if (typeof extraTools === 'function') {
-      const resolved = extraTools({ requestContext });
-      // Stay synchronous for sync providers; only go async when the provider does.
-      if (resolved && typeof (resolved as PromiseLike<unknown>).then === 'function') {
-        return Promise.resolve(resolved).then(finish);
+    const resolveExtra = (): ToolsInput | Promise<ToolsInput> => {
+      if (typeof extraTools === 'function') {
+        const resolved = extraTools({ requestContext });
+        // Stay synchronous for sync providers; only go async when the provider does.
+        if (resolved && typeof (resolved as PromiseLike<unknown>).then === 'function') {
+          return Promise.resolve(resolved).then(finish);
+        }
+        return finish(resolved as Record<string, ToolLike | undefined>);
       }
-      return finish(resolved as Record<string, ToolLike | undefined>);
+      return finish(extraTools);
+    };
+
+    if (configuredWebTools) {
+      return configuredWebTools.then(webTools => {
+        // MCP tools keep precedence over the web tools, as when both were assigned in order.
+        Object.assign(tools, webTools, mcpTools);
+        return resolveExtra();
+      });
     }
 
-    return finish(extraTools);
+    return resolveExtra();
   };
 }

@@ -10,22 +10,7 @@ import type { LinearIssue } from './services/linear';
 import type { WorkItem, WorkItemSource } from './services/workItems';
 import type { BoardStageId } from './stages';
 
-/**
- * Candidate feeds the Intake swimlane can browse. Only one paginated list is
- * shown at a time; a pill switcher inside the column picks the active feed
- * when more than one is available.
- */
-export const INTAKE_SOURCES = [
-  { id: 'github', label: 'Issues' },
-  { id: 'github-prs', label: 'PRs' },
-  { id: 'gitlab-prs', label: 'MRs' },
-  { id: 'gitlab', label: 'GitLab' },
-  { id: 'linear', label: 'Linear' },
-  { id: 'jira', label: 'Jira' },
-  { id: 'incidentio', label: 'incident.io' },
-] as const;
-
-export type IntakeSource = (typeof INTAKE_SOURCES)[number]['id'];
+export type IntakeSource = 'github' | 'github-prs' | 'gitlab-prs' | 'gitlab' | 'linear' | 'jira' | 'incidentio';
 
 /** What a candidate feed exposes to the column rendering it. */
 export interface IntakeFeed {
@@ -36,6 +21,8 @@ export interface IntakeFeed {
   isFetchingNextPage?: boolean;
   fetchNextPage: () => unknown;
   refetch: () => unknown;
+  /** Retries only the failed provider in a combined feed. */
+  retryFailed?: () => unknown;
 }
 
 /** A live GitHub/Linear issue or PR that has not been materialized as a work item. */

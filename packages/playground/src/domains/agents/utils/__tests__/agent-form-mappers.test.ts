@@ -524,7 +524,7 @@ describe('observational memory round-trip', () => {
     };
 
     const api = buildObservationalMemoryForApi(form);
-    const parsed = parseObservationalMemoryFromApi(api as any)!;
+    const parsed = parseObservationalMemoryFromApi(api)!;
 
     expect(parsed.enabled).toBe(true);
     expect(parsed.model).toEqual(form.model);
@@ -539,7 +539,7 @@ describe('observational memory round-trip', () => {
   it('build → parse round-trips boolean true', () => {
     const api = buildObservationalMemoryForApi({ enabled: true });
     expect(api).toBe(true);
-    const parsed = parseObservationalMemoryFromApi(api as any)!;
+    const parsed = parseObservationalMemoryFromApi(api)!;
     expect(parsed.enabled).toBe(true);
   });
 });

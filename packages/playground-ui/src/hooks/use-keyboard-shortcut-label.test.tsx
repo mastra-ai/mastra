@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import { useIsApplePlatform, useKeyboardShortcutLabel } from './use-keyboard-shortcut-label';
 
-const setNavigatorValue = <T,>(property: keyof Navigator | 'userAgentData', value: T) => {
+const setNavigatorValue = (property: keyof Navigator | 'userAgentData', value: unknown) => {
   Object.defineProperty(window.navigator, property, {
     configurable: true,
     value,

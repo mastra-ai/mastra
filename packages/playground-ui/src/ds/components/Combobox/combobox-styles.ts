@@ -79,7 +79,6 @@ export const comboboxStyles = {
   root: 'flex flex-col gap-1.5',
 
   /** Chevron icon in trigger — decorative icon token shared by every field. */
-  chevron: 'ml-2 h-4 w-4 shrink-0 text-muted-foreground',
 
   /** Placeholder text color */
   placeholder: 'text-muted-foreground',
@@ -109,7 +108,7 @@ export const comboboxStyles = {
   // `empty:p-0` — Empty renders outside the List, so an empty List must not leave its padding behind.
   list: 'p-1 empty:p-0',
 
-  /** Scroll container around the List; hosts the fluid highlight so it scrolls with the rows. */
+  /** Scroll container around the List. */
   listScroller: 'max-h-dropdown overflow-y-auto overflow-x-hidden',
 
   /** Option item base — rounded-lg sits concentrically inside rounded-xl + p-1. */

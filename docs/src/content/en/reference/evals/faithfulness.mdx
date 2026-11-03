@@ -43,7 +43,8 @@ The `createFaithfulnessScorer()` function accepts a single options object with t
             type: 'number',
             required: false,
             defaultValue: '1',
-            description: 'The maximum score value. The final score will be normalized to this scale.',
+            description:
+              'The maximum score value. The final score will be normalized to this scale. A value of 0 falls back to 1 (the implementation uses `scale || 1`).',
           },
         ],
       },
@@ -87,7 +88,7 @@ This function returns an instance of the MastraScorer class. The `.run()` method
     name: 'score',
     type: 'number',
     description:
-      'A score between 0 and the configured scale, representing the proportion of claims that are supported by the context.',
+      'A score between 0 and the effective scale, representing the proportion of claims that are supported by the context. The effective scale is `scale || 1`, so an unset or `0` scale means `1`.',
   },
   {
     name: 'reason',
@@ -119,13 +120,13 @@ The scorer evaluates faithfulness through claim verification against provided co
 1. Calculates faithfulness score:
    - Counts supported claims
    - Divides by total claims
-   - Scales to configured range
+   - Scales to the effective range
 
-Final score: `(supported_claims / total_claims) * scale`
+Final score: `(supported_claims / total_claims) * effective_scale`, where `effective_scale` is `scale || 1`
 
 ### Score interpretation
 
-A faithfulness score between 0 and the configured scale (default 1). With the default scale:
+A faithfulness score between 0 and the effective scale (default 1). With the default scale:
 
 - **1.0**: All claims are accurate and directly supported by the context.
 - **0.7 to 0.9**: Most claims are correct, with minor additions or omissions.

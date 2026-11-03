@@ -13,8 +13,11 @@ import { DataListTopCell, DataListTopCellWithTooltip } from '../data-list-top-ce
 import {
   TracesDataListNameCell,
   TracesDataListInputCell,
+  TracesDataListOutputCell,
   TracesDataListTypeCell,
   TracesDataListStatusCell,
+  TracesDataListOutcomeCell,
+  TracesDataListStopReasonCell,
 } from './traces-data-list-cells';
 
 // oxlint-disable-next-line react/only-export-components -- compound component root, same pattern as ScoresDataList
@@ -37,7 +40,10 @@ export const TracesDataList = Object.assign(TracesDataListRoot, {
   CreatedCell: DataListCreatedCell,
   NameCell: TracesDataListNameCell,
   InputCell: TracesDataListInputCell,
+  OutputCell: TracesDataListOutputCell,
   TypeCell: TracesDataListTypeCell,
   StatusCell: TracesDataListStatusCell,
+  OutcomeCell: TracesDataListOutcomeCell,
+  StopReasonCell: TracesDataListStopReasonCell,
   NextPageLoading: DataListNextPageLoading,
 });

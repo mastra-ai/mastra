@@ -23,8 +23,8 @@ export interface WorkflowComboboxProps {
 export function WorkflowCombobox({
   value,
   onValueChange,
-  placeholder = 'Select a workflow...',
-  searchPlaceholder = 'Search workflows...',
+  placeholder = 'Select a workflow',
+  searchPlaceholder = 'Search workflows',
   emptyText = 'No workflows found.',
   className,
   disabled = false,

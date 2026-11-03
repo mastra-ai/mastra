@@ -304,6 +304,118 @@ describe('RunJournal state writes', () => {
   });
 });
 
+describe('RunJournal step patches', () => {
+  const run = { workflowName: 'wf', runId: 'r' };
+  const kb = (i: number) => String(i % 10).repeat(1024);
+
+  /** A journal on the in-memory store, how each append sent step `each`, and the stored `each`. */
+  function setup() {
+    const memory = new WorkflowsInMemory({ db: new InMemoryDB() });
+    const append = vi.spyOn(memory, 'appendWorkflowRunEntries');
+    const journal = new RunJournal({ store: memory, ...run });
+    const sent = () =>
+      append.mock.calls.map(([args]) => (args.stepPatches?.each ? 'patch' : args.steps.each ? 'full' : 'none'));
+    const storedEach = async () => (await memory.loadWorkflowRunSteps({ ...run, stepIds: ['each'] })).each;
+    return { memory, append, journal, sent, storedEach };
+  }
+
+  /** A running foreach's result after the items in `done` finished. */
+  const foreachResult = (payload: unknown[], done: number) => ({
+    status: 'running',
+    payload,
+    startedAt: 1,
+    metadata: { foreachProgress: Object.fromEntries(Array.from({ length: done }, (_, k) => [k, { output: k }])) },
+  });
+
+  it('writes a rewritten running result as patches once written twice, and reads it back whole', async () => {
+    const { append, journal, sent, storedEach } = setup();
+    const payload = Array.from({ length: 32 }, (_, i) => kb(i));
+    const context: Record<string, unknown> = { input: {}, each: foreachResult(payload, 0) };
+    await journal.write({ snapshot: snapshot(context) });
+
+    for (let done = 1; done <= 32; done++) {
+      context.each = foreachResult(payload, done);
+      await journal.write({ snapshot: snapshot(context) });
+      expect(await storedEach()).toEqual(context.each);
+    }
+    expect(sent()).toEqual(['full', ...Array(31).fill('patch')]);
+    // The payload goes out once; each finished item adds only its own progress entry.
+    const sentBytes = append.mock.calls.reduce(
+      (sum, [args]) => sum + JSON.stringify(args.steps).length + JSON.stringify(args.stepPatches ?? {}).length,
+      0,
+    );
+    expect(sentBytes).toBeLessThan(1.2 * JSON.stringify(context.each).length);
+  });
+
+  it('writes a step in full when it succeeds or holds a value JSON would change', async () => {
+    const { journal, sent, storedEach } = setup();
+    const context: Record<string, unknown> = { each: foreachResult([1], 0) };
+    await journal.write({ snapshot: snapshot(context) });
+    for (let done = 1; done <= 2; done++) {
+      context.each = foreachResult([1], done);
+      await journal.write({ snapshot: snapshot(context) });
+    }
+    context.each = { ...foreachResult([1], 3), at: new Date(0) };
+    await journal.write({ snapshot: snapshot(context) });
+    expect(await storedEach()).toEqual(context.each);
+    context.each = { status: 'success', payload: [1], output: [0, 1, 2], startedAt: 1, endedAt: 2 };
+    await journal.write({ snapshot: snapshot(context) });
+
+    expect(sent()).toEqual(['full', 'patch', 'full', 'full']);
+    expect(await storedEach()).toEqual(context.each);
+  });
+
+  it('writes a step in full again once its patches since the last full write outgrow it', async () => {
+    const { journal, sent, storedEach } = setup();
+    const result = (i: number) => ({ status: 'running', payload: { a: kb(i), b: kb(0), c: kb(0) } });
+    const context: Record<string, unknown> = { each: result(0) };
+    await journal.write({ snapshot: snapshot(context) });
+
+    for (let i = 1; i <= 10; i++) {
+      context.each = result(i);
+      await journal.write({ snapshot: snapshot(context) });
+      expect(await storedEach()).toEqual(context.each);
+    }
+    // Each overwrite is about a third of the result, so every third write starts over.
+    expect(sent()).toEqual(['full', 'patch', 'patch', 'full', 'patch', 'patch', 'full', 'patch', 'patch', 'full']);
+  });
+
+  it('sends nothing for a rewritten result that holds the same JSON', async () => {
+    const { append, journal, storedEach } = setup();
+    const context: Record<string, unknown> = { each: foreachResult([1], 0) };
+    await journal.write({ snapshot: snapshot(context) });
+    context.each = foreachResult([1], 1);
+    await journal.write({ snapshot: snapshot(context), stepIds: ['each'] });
+
+    context.each = foreachResult([1], 1);
+    await journal.write({ snapshot: snapshot(context), stepIds: ['each'] });
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(await storedEach()).toEqual(context.each);
+  });
+
+  it('writes in full after a failed write, which the store may hold', async () => {
+    const { memory, append, journal, sent, storedEach } = setup();
+    const context: Record<string, unknown> = { each: foreachResult([1], 0) };
+    await journal.write({ snapshot: snapshot(context) });
+    context.each = foreachResult([1], 0);
+    await journal.write({ snapshot: snapshot(context) });
+
+    // Stored, but the store reports a failure (a timeout after the commit).
+    const commit = WorkflowsInMemory.prototype.appendWorkflowRunEntries.bind(memory);
+    append.mockImplementationOnce(async args => {
+      await commit(args);
+      throw new Error('timed out');
+    });
+    context.each = { ...foreachResult([1], 0), status: 'suspended', suspendPayload: { reason: 'wait' } };
+    await expect(journal.write({ snapshot: snapshot(context) })).rejects.toThrow('timed out');
+
+    context.each = foreachResult([1], 1);
+    await journal.write({ snapshot: snapshot(context) });
+    expect(sent()).toEqual(['full', 'patch', 'full']);
+    expect(await storedEach()).toEqual(context.each);
+  });
+});
+
 describe('RunJournal.evict', () => {
   it('replaces written successful results with stubs that keep the summary', async () => {
     const { store } = fakeStore();

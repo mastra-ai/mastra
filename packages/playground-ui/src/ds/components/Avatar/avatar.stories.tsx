@@ -54,7 +54,7 @@ export const Basic: Story = {
 export const Sizes: Story = {
   render: () => (
     <div className="flex items-center gap-6">
-      {(['xs', 'sm', 'control', 'md', 'lg'] as const).map(size => (
+      {(['xs', 'inline', 'sm', 'control', 'md', 'lg'] as const).map(size => (
         <Avatar key={size} size={size}>
           <Avatar.Image src={people.alex.src} alt={`${people.alex.name}, ${size}`} />
           <Avatar.Fallback>{people.alex.initials}</Avatar.Fallback>

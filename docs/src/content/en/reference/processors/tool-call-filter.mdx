@@ -119,7 +119,7 @@ const filter = new ToolCallFilter({
 
 ## Preserve compact model output
 
-Set `preserveModelOutput: true` to retain compact `toModelOutput` history for tool results that the filter removes. The removed tool call and result are replaced with a single text part in the prompt, so the model still sees the output while the raw tool arguments are dropped.
+Set `preserveModelOutput: true` to retain compact `toModelOutput` history for tool results that the filter removes. Replacing the removed tool call and result with a single text part in the prompt lets the model see the output without the raw tool arguments.
 
 Tool results without model output that can be represented as text are removed entirely.
 
