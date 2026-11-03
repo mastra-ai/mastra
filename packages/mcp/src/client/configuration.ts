@@ -1240,7 +1240,7 @@ To fix this you have three different options:
         errorDetails[serverName] = error;
         continue;
       }
-      for (const [toolName, toolConfig] of Object.entries(value)) {
+      for (const [toolName, toolConfig] of Object.entries(modelVisibleTools(value))) {
         connectedTools[`${serverName}_${toolName}`] = toolConfig;
       }
     }
@@ -1328,7 +1328,7 @@ To fix this you have three different options:
         errorDetails[serverName] = error;
         continue;
       }
-      connectedToolsets[serverName] = value;
+      connectedToolsets[serverName] = modelVisibleTools(value);
     }
 
     const result = { toolsets: connectedToolsets, errors, errorDetails };
@@ -1853,4 +1853,19 @@ To fix this you have three different options:
 
     return {};
   }
+}
+
+/**
+ * Drops tools an MCP App server declared for its apps only (`_meta.ui.visibility` without
+ * `'model'`): per the MCP Apps spec, hosts must not hand those to the model. They stay callable
+ * by the app through the server.
+ */
+function modelVisibleTools(tools: Record<string, Tool<any, any, any, any>>): Record<string, Tool<any, any, any, any>> {
+  return Object.fromEntries(
+    Object.entries(tools).filter(([, tool]) => {
+      const ui = tool.mcp?._meta?.ui;
+      const visibility = ui && typeof ui === 'object' && 'visibility' in ui ? ui.visibility : undefined;
+      return !Array.isArray(visibility) || visibility.includes('model');
+    }),
+  );
 }

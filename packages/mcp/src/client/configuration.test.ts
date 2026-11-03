@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { createTool } from '@mastra/core/tools';
 import { CLIENT_INFO_META_KEY } from '@modelcontextprotocol/server';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 import { serveHTTP } from '../server/__tests__/harness.mock';
 import { MCPServer } from '../server/server';
 import { InternalMastraMCPClient } from './client';
@@ -857,3 +859,46 @@ async function recordingLegacyServer() {
     },
   };
 }
+
+describe('MCPClient app-only tools', () => {
+  const echo = (id: string, visibility?: Array<'model' | 'app'>) =>
+    createTool({
+      id,
+      description: id,
+      inputSchema: z.object({}),
+      execute: async () => ({ ok: true }),
+      ...(visibility ? { mcp: { _meta: { ui: { visibility } } } } : {}),
+    });
+
+  async function connectToAppServer() {
+    const served = await serveHTTP(
+      new MCPServer({
+        name: 'Apps',
+        version: '1.0.0',
+        tools: {
+          plain: echo('plain'),
+          shared: echo('shared', ['model', 'app']),
+          appOnly: echo('appOnly', ['app']),
+        },
+      }),
+    );
+    const client = new MCPClient({ id: `app-only-${++clientId}`, servers: { apps: { url: served.url } } });
+    return {
+      client,
+      close: async () => {
+        await client.disconnect();
+        await served.close();
+      },
+    };
+  }
+
+  it('keeps tools meant only for MCP Apps away from agents', async () => {
+    const { client, close } = await connectToAppServer();
+    try {
+      expect(Object.keys(await client.listTools()).sort()).toEqual(['apps_plain', 'apps_shared']);
+      expect(Object.keys((await client.listToolsets()).apps ?? {}).sort()).toEqual(['plain', 'shared']);
+    } finally {
+      await close();
+    }
+  });
+});
