@@ -5,6 +5,7 @@ import { isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../li
 import { bodyLinkEdges, bodyLinkRefs, knowledgePageRefIndex } from '../lib/pageRefs';
 import { childCountLabel } from '../lib/pageTree';
 import { mentionPopupPlacement } from '../lib/popupPlacement';
+import { useStableWhile } from '../lib/useStableWhile';
 
 import type {
   KnowledgePageActivityPayload,
@@ -497,6 +498,26 @@ function SearchBox({ source, onSelect }: { source: KnowledgeExplorerSource; onSe
   );
 }
 
+type LevelResult = {
+  pages: KnowledgePagePayload[];
+  loaded: ReadonlySet<string>;
+  failed: ReadonlySet<string>;
+  nextCursor: ReadonlyMap<string, string>;
+};
+
+function sameLevels(a: LevelResult, b: LevelResult) {
+  const sameSet = (x: ReadonlySet<string>, y: ReadonlySet<string>) =>
+    x.size === y.size && [...x].every(id => y.has(id));
+  return (
+    a.pages.length === b.pages.length &&
+    a.pages.every((page, index) => page === b.pages[index]) &&
+    sameSet(a.loaded, b.loaded) &&
+    sameSet(a.failed, b.failed) &&
+    a.nextCursor.size === b.nextCursor.size &&
+    [...a.nextCursor].every(([id, cursor]) => b.nextCursor.get(id) === cursor)
+  );
+}
+
 /**
  * The tree loaded a level at a time through `useTreeLevels`: the root scopes, then each level as it is
  * opened, plus the path to the selected page. Unloaded pages keep a chevron until opened.
@@ -521,7 +542,7 @@ function useLazyTree(
   }, [expanded, more, graphOpened]);
   const levels = (source.useTreeLevels ?? noTreeLevels)(requests);
 
-  const { pages, loaded, failed, nextCursor } = useMemo(() => {
+  const built = useMemo(() => {
     const failedIds = new Set<string>();
     const byId = new Map<string, KnowledgePagePayload>();
     const loadedIds = new Set<string>();
@@ -543,6 +564,9 @@ function useLazyTree(
     }
     return { pages: [...byId.values()], loaded: loadedIds, failed: failedIds, nextCursor: next };
   }, [levels, requests, selected]);
+  // `levels` is a new array every render, so what is built from it is too: keep the previous result while
+  // its pages are the same objects, or every render (a hover's, say) would lay the whole graph out again.
+  const { pages, loaded, failed, nextCursor } = useStableWhile(built, sameLevels);
 
   // With the whole graph loaded, its structure is complete: only pages with children get a chevron.
   const graphParents = useMemo(
