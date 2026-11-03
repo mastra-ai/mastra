@@ -57,7 +57,7 @@ They mount under your configured API prefix (`/api/knowledge` by default) and ar
 
 On narrow screens the tree and graph share one panel, with a toggle between them that keeps the selected page.
 
-When an agent writes, the tree, graph and open page update as it happens, without a reload.
+When an agent writes, the tree, graph and open page update as it happens, without a reload. Studio follows writes made through the Knowledge instance registered with Mastra. Writes from another process or another instance on the same storage show up after a reload.
 
 ![Studio's Knowledge page: the page tree of a website scope on the left, and the graph of the same pages on the right, grouped around the scope with each branch in its own color.](/img/knowledge/studio-tree-and-graph.png)
 
