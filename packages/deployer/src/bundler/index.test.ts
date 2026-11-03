@@ -34,6 +34,10 @@ class TestBundler extends Bundler {
   bundlerOptionsForTest(entryFile: string, outputDirectory: string) {
     return this.getUserBundlerOptions(entryFile, outputDirectory);
   }
+
+  spyOnLoggerWarn() {
+    return vi.spyOn(this.logger, 'warn').mockImplementation(() => {});
+  }
 }
 
 const constraints = ({
@@ -140,6 +144,46 @@ export const mastra = new Mastra({ bundler: { sourcemap: true, externals: ['pg']
       sourcemap: true,
       externals: ['pg'],
     });
+  });
+
+  const writeMastraEntry = async (bundlerConfig: string | undefined) => {
+    const mastraDir = await mkdtemp(join(tmpdir(), 'mastra-bundler-transpile-packages-'));
+    tempDirs.push(mastraDir);
+    const entryFile = join(mastraDir, 'index.ts');
+    await writeFile(
+      entryFile,
+      `class Mastra { constructor(config) { this.config = config; } }
+export const mastra = new Mastra({${bundlerConfig ? ` bundler: ${bundlerConfig} ` : ''}});
+`,
+    );
+    return { entryFile, outputDirectory: join(mastraDir, '.mastra') };
+  };
+
+  it('warns once that a non-empty transpilePackages is deprecated', async () => {
+    const { entryFile, outputDirectory } = await writeMastraEntry(`{ transpilePackages: ['@my-org/utils'] }`);
+    const bundler = new TestBundler('Test');
+    const warn = bundler.spyOnLoggerWarn();
+
+    await bundler.bundlerOptionsForTest(entryFile, outputDirectory);
+    await bundler.bundlerOptionsForTest(entryFile, outputDirectory);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(
+      '`bundler.transpilePackages` is deprecated and has no effect: TypeScript in dependencies and workspace packages is transpiled automatically. Remove it from your Mastra config.',
+    );
+  });
+
+  it.each([
+    ['no bundler config', undefined],
+    ['an empty transpilePackages', `{ transpilePackages: [] }`],
+  ])('does not warn about transpilePackages with %s', async (_, bundlerConfig) => {
+    const { entryFile, outputDirectory } = await writeMastraEntry(bundlerConfig);
+    const bundler = new TestBundler('Test');
+    const warn = bundler.spyOnLoggerWarn();
+
+    await bundler.bundlerOptionsForTest(entryFile, outputDirectory);
+
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 

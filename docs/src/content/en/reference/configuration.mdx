@@ -704,7 +704,7 @@ const mastra = new Mastra({
 **Type:** `boolean | string[]`\
 **Default:** `true`
 
-When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rollup](https://rollupjs.org/configuration-options/#external)) has trouble bundling packages.
+When `mastra build` is run, Mastra bundles your project into the `.mastra/output` directory. This option controls which packages are excluded from the bundle (marked as "external") and installed separately through a package manager. This is useful when the internal Mastra bundler ([Rolldown](https://rolldown.rs/reference/InputOptions.external)) has trouble bundling packages.
 
 By default, `mastra build` sets this option to `true`.
 
@@ -762,26 +762,15 @@ export const mastra = new Mastra({
 
 ### bundler.transpilePackages
 
-**Type:** `string[]`\
-**Default:** `[]`
+**Type:** `string[]`
 
-List of packages whose source code should be transpiled through esbuild during the build process. Use this for dependencies that contain TypeScript or other code that needs compilation before bundling.
+:::warning[Deprecated]
 
-You only need this option if you're importing uncompiled source code directly. If your packages are already compiled to CommonJS or ESM, they don't need to be listed here.
+This option has no effect. `mastra build` and `mastra dev` transpile TypeScript in dependencies and workspace packages automatically. Remove `transpilePackages` from your config. Mastra logs a warning while the option is set.
 
-Mastra automatically detects workspace packages in monorepo setups and adds them to this list, so you typically only need to specify external packages that require transpilation.
+:::
 
-Mastra also resolves `tsconfig.json` `baseUrl` and `paths` aliases during build. This includes ESM-style imports such as `~/utils/logger.js` that point to TypeScript source files.
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-
-export const mastra = new Mastra({
-  bundler: {
-    transpilePackages: ['@my-org/shared-utils'],
-  },
-})
-```
+Mastra also resolves `tsconfig.json` `baseUrl` and `paths` aliases during build, without any bundler option. This includes ESM-style imports such as `~/utils/logger.js` that point to TypeScript source files.
 
 ### bundler.pnpmWorkspaceSettings
 

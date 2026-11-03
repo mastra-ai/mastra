@@ -40,7 +40,9 @@ export type BundlerConfig = {
   minify?: boolean;
   /**
    * Packages requiring TypeScript/modern JS transpilation during bundling.
-   * Automatically includes workspace packages.
+   *
+   * @deprecated TypeScript in dependencies and workspace packages is transpiled automatically,
+   * so this option has no effect. Remove it from your config.
    */
   transpilePackages?: string[];
   /**

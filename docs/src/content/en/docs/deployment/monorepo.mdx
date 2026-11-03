@@ -95,21 +95,9 @@ Your package's `build` script should run `mastra build`:
 When your Mastra application imports from other workspace packages, Mastra handles this automatically:
 
 - If the package is pre-compiled (e.g., built with `tsc` or `tsdown`), Mastra imports the compiled JavaScript
-- If the package contains uncompiled TypeScript, Mastra transpiles it during the build
+- If the package contains uncompiled TypeScript, Mastra transpiles it during the build, with no extra configuration
 
-For most setups, this works without configuration. If you encounter issues with workspace package imports, add the package to [`transpilePackages`](/reference/configuration#bundlertranspilepackages):
-
-```typescript title="src/mastra/index.ts"
-import { Mastra } from '@mastra/core'
-
-export const mastra = new Mastra({
-  bundler: {
-    transpilePackages: ['@my-org/utils'],
-  },
-})
-```
-
-Keep `bundler` as a direct property in the object passed to `new Mastra()`. See [build-time configuration](/docs/deployment/mastra-server#build-time-configuration) for the supported entry-file shape.
+If you set [bundler options](/reference/configuration#bundler-options), keep `bundler` as a direct property in the object passed to `new Mastra()`. See [build-time configuration](/docs/deployment/mastra-server#build-time-configuration) for the supported entry-file shape.
 
 ## Environment variables
 
@@ -152,13 +140,10 @@ If Mastra can't resolve a workspace package, ensure:
 
 ### TypeScript errors from workspace packages
 
-If you see type errors from uncompiled workspace packages, either:
-
-- Build the package first (recommended for faster Mastra builds)
-- Add the package to [`transpilePackages`](/reference/configuration#bundlertranspilepackages) in your Mastra config
+`mastra build` and `mastra dev` remove TypeScript types from workspace packages without type-checking them, so type errors don't stop the build. To catch them, run `tsc --noEmit` or your monorepo's type-check task before building.
 
 ## Related
 
 - [Deploy a Mastra Server](/docs/deployment/mastra-server): Core build and deployment guide
-- [Configuration Reference](/reference/configuration): `bundler.transpilePackages` and other options
+- [Configuration Reference](/reference/configuration#bundler-options): `bundler.externals` and other bundler options
 - [CLI Reference](/reference/cli/mastra): Build command flags

@@ -131,7 +131,6 @@ describe('BuildBundler', () => {
       vi.spyOn(Bundler.prototype as any, 'getUserBundlerOptions').mockResolvedValueOnce({
         externals: [],
         sourcemap: false,
-        transpilePackages: [],
         [IS_DEFAULT]: true,
       });
       const { BuildBundler } = await import('./BuildBundler');

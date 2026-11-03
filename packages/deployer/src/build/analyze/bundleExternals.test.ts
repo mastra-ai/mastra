@@ -512,12 +512,11 @@ describe('bundleExternals', () => {
       ],
     ]);
 
-    // Test with custom externals and transpilePackages
+    // Test with custom externals and dev mode
     const result = await bundleExternals(depsToOptimize, testDir, {
       projectRoot: testDir,
       bundlerOptions: {
         ...normalizeExternals(['custom-external']),
-        transpilePackages: ['some-package'],
         isDev: true,
       },
     });
@@ -553,7 +552,6 @@ describe('bundleExternals', () => {
       bundlerOptions: {
         ...normalizeExternals(['some-external']),
         isDev: false,
-        transpilePackages: ['some-package'],
       },
     });
 
@@ -774,7 +772,6 @@ describe('bundleExternals', () => {
       {
         bundlerOptions: {
           ...normalizeExternals(['test']),
-          transpilePackages: ['pkg'],
           isDev: false,
         },
       },

@@ -129,7 +129,7 @@ export function createVirtualDependencies(
 /**
  * Configures the Rolldown plugins for bundling external dependencies.
  *
- * TypeScript in workspace packages (and `transpilePackages`) is handled by Rolldown's built-in transform, and
+ * TypeScript in workspace packages and dependencies is handled by Rolldown's built-in transform, and
  * CommonJS/JSON natively, so only resolution concerns are left as plugins.
  */
 function getInputPlugins(
@@ -399,7 +399,6 @@ export async function bundleExternals(
   options: {
     bundlerOptions: NormalizedExternals & {
       isDev?: boolean;
-      transpilePackages?: string[];
       alias?: Record<string, string>;
     };
     projectRoot?: string;
@@ -415,7 +414,6 @@ export async function bundleExternals(
     bundlerOptions,
     platform = 'node',
   } = options;
-  // `transpilePackages` needs no handling anymore: Rolldown transpiles TypeScript in every module.
   const { externalsPreset, mergedExternals, isDev = false, alias = {} } = bundlerOptions;
 
   /**

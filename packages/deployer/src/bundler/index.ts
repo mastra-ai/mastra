@@ -381,12 +381,15 @@ export abstract class Bundler extends MastraBase implements IBundler {
     const defaultBundlerOptions: BundlerConfig = {
       externals: [],
       sourcemap: false,
-      transpilePackages: [],
       [IS_DEFAULT]: true,
     } as const;
 
     try {
       const bundlerOptions = await getBundlerOptions(this.configEntryFile ?? mastraEntryFile, outputDirectory);
+
+      if (bundlerOptions) {
+        this.warnDeprecatedBundlerOptions(bundlerOptions);
+      }
 
       return bundlerOptions ?? defaultBundlerOptions;
     } catch (error) {
@@ -394,6 +397,19 @@ export abstract class Bundler extends MastraBase implements IBundler {
     }
 
     return defaultBundlerOptions;
+  }
+
+  private warnedTranspilePackages = false;
+
+  private warnDeprecatedBundlerOptions(bundlerOptions: BundlerConfig) {
+    if (this.warnedTranspilePackages || !bundlerOptions.transpilePackages?.length) {
+      return;
+    }
+
+    this.warnedTranspilePackages = true;
+    this.logger.warn(
+      '`bundler.transpilePackages` is deprecated and has no effect: TypeScript in dependencies and workspace packages is transpiled automatically. Remove it from your Mastra config.',
+    );
   }
 
   protected async analyze(entry: string | string[], mastraFile: string, outputDirectory: string) {

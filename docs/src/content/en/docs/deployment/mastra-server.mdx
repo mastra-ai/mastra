@@ -128,7 +128,7 @@ The build follows these steps:
 1. **Locates entry file**: Finds `index.ts` or `index.js` in your Mastra directory.
 1. **Discovers tools**: Scans for tool files matching `{mastraDir}/tools/**/*.{js,ts}`, excluding test files.
 1. **Analyzes dependencies**: Determines which packages to bundle vs. install externally.
-1. **Bundles code**: Uses Rollup with tree-shaking and optional source maps.
+1. **Bundles code**: Uses Rolldown with tree-shaking and optional source maps.
 1. **Generates server**: Creates a Hono-based HTTP server as `index.mjs`.
 1. **Installs dependencies**: Runs `npm install` in the output directory.
 1. **Copies assets**: Copies `public` folder and `.npmrc` if present.
