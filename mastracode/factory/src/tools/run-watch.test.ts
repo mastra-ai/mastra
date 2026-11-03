@@ -2,6 +2,7 @@ import type { AgentControllerEvent } from '@mastra/core/agent-controller';
 import { InMemoryNotificationsStorage } from '@mastra/core/notifications';
 import { describe, expect, it, vi } from 'vitest';
 
+import { createProviderWorkItemForTests } from '../storage/test-utils.js';
 import { createSessionApprovalNotifier, createSessionRunEndReporter } from './reports.js';
 import { observeSessionRunReports } from './run-watch.js';
 
@@ -344,7 +345,13 @@ describe('createSessionRunEndReporter for the run that finishes its card', () =>
             revokedAt,
           }) as never,
         listWorkItemSubscribers: async () => [{ sessionId: 'follower', threadId: 'follower-thread' }] as never,
-        getForProject: async () => ({ title: 'Fix it', externalSource: null, metadata: {} }) as never,
+        getForProject: async () =>
+          ({
+            title: 'Fix it',
+            externalSource: null,
+            metadata: {},
+            workItem: createProviderWorkItemForTests({ id: 'item-1', title: 'Fix it', source: null, metadata: null }),
+          }) as never,
       },
       reporting: async () => ({ deliver, notifications: { listNotifications: async () => [] } as never }),
     });
@@ -400,7 +407,13 @@ describe('createSessionApprovalNotifier', () => {
             { sessionId: 'follower', threadId: 'follower-thread' },
             { sessionId: 'worker', threadId: 'worker-thread' },
           ] as never,
-        getForProject: async () => ({ title: 'Fix it', externalSource: null, metadata: {} }) as never,
+        getForProject: async () =>
+          ({
+            title: 'Fix it',
+            externalSource: null,
+            metadata: {},
+            workItem: createProviderWorkItemForTests({ id: 'item-1', title: 'Fix it', source: null, metadata: null }),
+          }) as never,
       },
       reporting: async () => ({ deliver, notifications: {} as never }),
     });

@@ -65,6 +65,7 @@ function render(options: {
   mentionedBy?: KnowledgeNotePayload[];
   reachable: Record<string, KnowledgePagePayload>;
   requested?: string[][];
+  linksIn?: string[];
 }) {
   const focus = options.wardPage ?? ward;
   const detail: KnowledgeExplorerPageDetail = {
@@ -77,6 +78,19 @@ function render(options: {
   const source: KnowledgeExplorerSource = {
     usePage: pageId => (pageId === focus.id ? ok(detail) : idle),
     useSearch: () => ({ data: { results: [] } }),
+    usePageLinks: pageId =>
+      pageId === focus.id && options.linksIn
+        ? ok({
+            edges: options.linksIn.map(from => ({
+              fromPageId: from,
+              toPageId: focus.id,
+              kind: 'body' as const,
+              count: 1,
+            })),
+            pages: [],
+            truncated: false,
+          })
+        : idle,
     useLinkedPages: keys => {
       options.requested?.push(keys);
       return keys.map(key => {
@@ -130,6 +144,21 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     const last = requested[requested.length - 1] ?? [];
     expect(last.sort()).toEqual(
       ['note-source', 'note-target', 'site:mastra#blog/far-out-post', 'site:mastra#blog/other-post'].sort(),
+    );
+  });
+
+  it('does not fetch a [[Name]] link, which the page route cannot resolve, but still fetches a page id or scope ref', () => {
+    const requested: string[][] = [];
+    render({
+      wardPage: page('ward', 'authors', {
+        body: 'See [[Pricing]], [[01M6DDVVE4E0CKBVC6KCDCPTDF]] and [[site:mastra#blog/far-out-post]].',
+      }),
+      reachable,
+      requested,
+    });
+    expect(requested.flat()).not.toContain('Pricing');
+    expect((requested[requested.length - 1] ?? []).sort()).toEqual(
+      ['01M6DDVVE4E0CKBVC6KCDCPTDF', 'site:mastra#blog/far-out-post'].sort(),
     );
   });
 
@@ -229,13 +258,14 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
   });
 
   it(`draws at most ${FOCUS_LINK_CAP} links each way and counts the rest as more`, () => {
-    const many = Array.from({ length: FOCUS_LINK_CAP + 5 }, (_, index) => `ref-${index}`);
+    const many = Array.from({ length: FOCUS_LINK_CAP + 5 }, (_, index) => `site:mastra#blog/ref-${index}`);
     const heavy = page('ward', 'authors', { body: many.map(ref => `[[${ref}]]`).join(' ') });
     const requested: string[][] = [];
     const reachableMany = Object.fromEntries(many.map(ref => [ref, page(`id-${ref}`, 'blog')]));
-    render({ wardPage: heavy, reachable: reachableMany, requested });
+    const { container } = render({ wardPage: heavy, reachable: reachableMany, requested });
     expect((requested[requested.length - 1] ?? []).length).toBe(FOCUS_LINK_CAP + 5);
-    expect(screen.getByText(/\+5 more links of this page not drawn \(0 in, 5 out\)/)).toBeTruthy();
+    expect(screen.queryByTestId('knowledge-graph-more-links')).toBeNull();
+    expect(container.textContent ?? '').not.toMatch(/more links of this page not drawn/);
   });
 
   it('counts a page linked by both a note and the body once, not once per kind', () => {
@@ -257,5 +287,22 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     });
     expect(drawnIds(container)).toEqual(expect.arrayContaining(targets.map(t => t.id)));
     expect(container.textContent ?? '').not.toMatch(/not drawn/);
+  });
+
+  it('draws pages whose bodies link to the focus when the host lists its links', () => {
+    const { container } = render({
+      reachable: { 'body-author': page('body-author', 'blog') },
+      linksIn: ['body-author'],
+    });
+    expect(drawnIds(container)).toContain('body-author');
+    expect(edgeIds(container).some(id => id.includes('body-author') && id.includes('ward'))).toBe(true);
+  });
+  it('draws a body that links in as one link line, not a mention as well', () => {
+    const { container } = render({
+      reachable: { 'body-author': page('body-author', 'blog') },
+      linksIn: ['body-author'],
+    });
+    const lines = edgeIds(container).filter(id => id.includes('body-author') && id.includes('ward'));
+    expect(lines).toEqual(['link:body-author->ward']);
   });
 });

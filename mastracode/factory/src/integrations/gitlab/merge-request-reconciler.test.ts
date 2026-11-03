@@ -231,13 +231,7 @@ describe('GitLab merge-request reconciler', () => {
         decision: { type: 'transition', board: 'review', stage: expectedStage },
       });
       const [item] = await seeded.seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-      expect(item?.metadata).toMatchObject({
-        author: 'maintainer',
-        authorTrusted: false,
-        state: 'closed',
-        merged,
-        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: merged ? 'merged' : 'closed',
-      });
+      expect((item)).toMatchObject({ metadata: {authorTrusted: false, [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: merged ? 'merged' : 'closed'}, workItem: { metadata: {author: 'maintainer', state: 'closed', merged} } });
     },
   );
 
@@ -260,11 +254,7 @@ describe('GitLab merge-request reconciler', () => {
       expect(decisions[0]).toMatchObject({ decision: { type: 'transition', board: 'review', stage: replayedStage } });
       const [item] = await seeded.seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
       expect(item?.stages).toEqual([initialStage]);
-      expect(item?.metadata).toMatchObject({
-        state: 'closed',
-        merged,
-        [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: merged ? 'merged' : 'closed',
-      });
+      expect((item)).toMatchObject({ metadata: {[FACTORY_PULL_REQUEST_RECONCILIATION_KEY]: merged ? 'merged' : 'closed'}, workItem: { metadata: {state: 'closed', merged} } });
 
       // The stamped card is settled: no further fetch, replay, or write.
       await expect(reconcile()).resolves.toMatchObject({ checked: 0, closed: 0, updated: 0, failed: 0 });
@@ -317,7 +307,7 @@ describe('GitLab merge-request reconciler', () => {
 
     await expect(reconcile()).resolves.toMatchObject({ checked: 1, closed: 0, updated: 1, failed: 0 });
     const [item] = await seeded.seeded.workItems.list({ orgId: project.orgId, factoryProjectId: project.id });
-    expect(item?.metadata).toMatchObject({ state: 'open' });
+    expect((item)).toMatchObject({ workItem: { metadata: {state: 'open'} } });
     expect(item?.metadata).not.toHaveProperty(FACTORY_PULL_REQUEST_RECONCILIATION_KEY);
 
     await expect(reconcile()).resolves.toMatchObject({ checked: 1, updated: 0 });

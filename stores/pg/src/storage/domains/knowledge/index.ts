@@ -115,6 +115,7 @@ export class KnowledgePG extends KnowledgeStorage {
       schemaVersion: KNOWLEDGE_PAGES_SCHEMA_VERSION,
       supportsSchemaInspection: true,
       supportsExplicitReset: true,
+      supportsPinKinds: true,
     } as const;
   }
 

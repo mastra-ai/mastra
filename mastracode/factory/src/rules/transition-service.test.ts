@@ -750,7 +750,7 @@ describe('FactoryTransitionService', () => {
     const item = await createItem(storage, { stages: ['planning'], metadata: { authorTrusted: true } });
     const onAccepted = vi.fn();
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage, onAccepted });
-    await seed.storage.ops.updateMany('work_items', { id: item.id }, { accepted_at: new Date() });
+    await seed.storage.ops.updateMany('factory_board_items', { id: item.id }, { accepted_at: new Date() });
 
     const executed = await service.transition({
       ...request(item, { stage: 'execute' }),
@@ -919,7 +919,9 @@ describe('FactoryTransitionService', () => {
 
     await service.transition(request(item, { stage: 'execute' }));
 
-    expect(rule.mock.calls[0]?.[0]).toMatchObject({ item: { metadata: { author: 'octocat' } } });
+    expect(rule.mock.calls[0]?.[0]).toMatchObject({
+      item: { workItem: expect.objectContaining({ metadata: expect.objectContaining({ author: 'octocat' }) }) },
+    });
   });
 
   it('invokes onTerminalStage only after a transition commits into a terminal stage', async () => {
@@ -1598,7 +1600,12 @@ describe('FactoryTransitionService', () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
-    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-2', patch: { title: 'Changed concurrently' } });
+    await storage.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-2',
+      patch: { metadata: { reviewVerdict: 'approved' } },
+    });
 
     const result = await service.transition(request(item));
 
@@ -2709,7 +2716,7 @@ describe.each(postgresUrl ? (['libsql', 'pg'] as const) : (['libsql'] as const))
       const flow: Record<string, readonly string[]> = {
         intake: ['triage', 'planning', 'pr-review', 'done', 'canceled'],
         triage: ['intake', 'planning', 'done', 'canceled'],
-        planning: ['execute', 'intake', 'done', 'canceled'],
+        planning: ['execute', 'triage', 'intake', 'done', 'canceled'],
         execute: ['review', 'planning', 'done', 'canceled'],
         review: ['execute', 'intake', 'done', 'canceled'],
         'pr-review': ['intake', 'done', 'canceled'],
