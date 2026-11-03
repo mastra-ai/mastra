@@ -41,8 +41,9 @@ import type {
   WorkspaceRenderedListing,
   WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
+import type { MastraGatewayCredits } from '@mastra/factory/routes/mastra-gateway';
 
-export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse, MastraGatewayCredits };
 export type {
   ArtifactEntry,
   ArtifactListing,
@@ -164,21 +165,6 @@ export interface OkResponse {
 export interface SaveProviderKeyResponse {
   ok: true;
   provider?: ProviderInfo;
-}
-
-export interface ConnectMastraGatewayResponse {
-  ok: true;
-  provider?: ProviderInfo;
-  /** The gateway model a Factory starts on. */
-  defaultModelId: string;
-}
-
-export interface MastraGatewayCredits {
-  /** Remaining credits in dollars. */
-  remaining: number;
-  unlimited: boolean;
-  /** Platform page where the organization adds credits. */
-  addCreditsUrl: string;
 }
 
 export interface OAuthStartResponse {

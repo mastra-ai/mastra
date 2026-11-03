@@ -2,7 +2,6 @@ import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../api/types';
 import {
-  MASTRA_GATEWAY_PROVIDER,
   useCancelProviderOAuth,
   useConnectMastraGateway,
   useOrgKeyAdminQuery,
@@ -137,10 +136,8 @@ export function useProviderConnection({
   };
   const providers = (providersQuery.data ?? []).toSorted(byConfiguredThenName);
   const provider = providers.find(candidate => candidate.provider === selection?.providerId);
-  const gatewayProvider = authEnabled
-    ? providers.find(candidate => candidate.provider === MASTRA_GATEWAY_PROVIDER)
-    : undefined;
-  const providerChoices = providers.filter(candidate => candidate.provider !== MASTRA_GATEWAY_PROVIDER);
+  const gatewayProvider = providers.find(candidate => candidate.connectWithMastraAccount);
+  const providerChoices = providers.filter(candidate => candidate !== gatewayProvider);
 
   const select = (nextSelection: typeof selection) => {
     setSelection(nextSelection);

@@ -15,11 +15,7 @@ import { Box } from 'lucide-react';
 import { useState } from 'react';
 
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
-import {
-  MASTRA_GATEWAY_PROVIDER,
-  useConnectMastraGateway,
-  useStartProviderOAuth,
-} from '../../../../../../hooks/use-providers';
+import { useConnectMastraGateway, useStartProviderOAuth } from '../../../../../../hooks/use-providers';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
 import {
   CREDENTIAL_LABEL,
@@ -44,7 +40,7 @@ function matchesSearch(provider: ProviderInfo, query: string): boolean {
 }
 
 function isGateway(provider: ProviderInfo): boolean {
-  return provider.provider === MASTRA_GATEWAY_PROVIDER;
+  return provider.connectWithMastraAccount === true;
 }
 
 function takesApiKey(provider: ProviderInfo): boolean {
@@ -95,7 +91,7 @@ export function AddProviderDrawer({
   const startingProvider = startOAuthMutation.isPending
     ? startOAuthMutation.variables.provider
     : connectGatewayMutation.isPending
-      ? MASTRA_GATEWAY_PROVIDER
+      ? providers.find(isGateway)?.provider
       : undefined;
 
   const signIn = (provider: ProviderInfo) => {

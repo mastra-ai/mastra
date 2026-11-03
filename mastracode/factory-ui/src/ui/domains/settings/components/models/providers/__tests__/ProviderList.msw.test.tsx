@@ -60,15 +60,15 @@ describe('ProviderList', () => {
         HttpResponse.json({
           providers: [
             connected
-              ? { provider: 'mastra', source: 'stored-user', userCredential: 'api_key' }
-              : { provider: 'mastra', source: 'none' },
+              ? { provider: 'mastra', source: 'stored-user', userCredential: 'api_key', connectWithMastraAccount: true }
+              : { provider: 'mastra', source: 'none', connectWithMastraAccount: true },
             { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
           ],
         }),
       ),
       http.post(`${PROVIDERS_URL}/mastra/connect`, () => {
         connected = true;
-        return HttpResponse.json({ ok: true, defaultModelId: 'mastra/anthropic/claude-fable-5' });
+        return HttpResponse.json({ ok: true });
       }),
       http.get(`${PROVIDERS_URL}/mastra/credits`, () =>
         HttpResponse.json({

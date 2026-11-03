@@ -10,7 +10,6 @@ import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { SharedCredentialNotice } from '../../../settings/components/SharedCredentialNotice';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { useProviderModels } from '../../hooks/useProviderModels';
-import { MASTRA_GATEWAY_PROVIDER } from '../../../../../hooks/use-providers';
 import { MastraGatewayCreditsNotice } from '../MastraGatewayCreditsNotice';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
@@ -55,7 +54,7 @@ export function CreateFactoryModelRows({
       {error && <CreateFactoryPaletteAlert>{error}</CreateFactoryPaletteAlert>}
       <div className="flex flex-col gap-2 px-3 pt-2">
         <SharedCredentialNotice modelId={catalog.suggestedModelId} />
-        {provider.provider === MASTRA_GATEWAY_PROVIDER && <MastraGatewayCreditsNotice />}
+        {provider.connectWithMastraAccount && <MastraGatewayCreditsNotice />}
       </div>
       {models.length > 0 ? (
         <CommandGroup heading={`${providerDisplayName(provider.provider)} models`}>

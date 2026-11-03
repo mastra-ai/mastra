@@ -4,8 +4,8 @@ import { useMastraGatewayCreditsQuery } from '../../../../hooks/use-providers';
 
 /** Warns when the organization has no Mastra Gateway credits left, with a link to add some. */
 export function MastraGatewayCreditsNotice() {
-  const { data: credits } = useMastraGatewayCreditsQuery({ enabled: true });
-  if (!credits || credits.unlimited || credits.remaining > 0) return null;
+  const { data: credits } = useMastraGatewayCreditsQuery();
+  if (!credits || credits.unlimited || credits.remaining !== 0) return null;
   return (
     <Notice
       variant="warning"
