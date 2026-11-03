@@ -8,7 +8,7 @@ export { fastModePrompt } from './fast.js';
 
 import { buildBasePrompt } from '@mastra/core/coding-agent';
 import type { PromptContext as BasePromptContext } from '@mastra/core/coding-agent';
-import type { RequestContext } from '@mastra/core/request-context';
+import type { RequestContextReader } from '../../auth/account-routing-context.js';
 import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
 import { MC_TOOLS } from '../../tool-names.js';
 import { hasParallelKey, hasTavilyKey } from '../../tools/index.js';
@@ -29,7 +29,7 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   hasSubconscious?: boolean;
   hostInstructions?: string;
   /** Request whose credentials decide the model's transport, and so its web search tool. */
-  requestContext?: RequestContext;
+  requestContext?: RequestContextReader;
   /** Controller built-in tools removed via `disableBuiltinTools`; treated as denied. */
   disabledBuiltinTools?: readonly string[];
   /** Resolved in `buildFullPromptSections`; false when `submit_plan` is denied or disabled. */

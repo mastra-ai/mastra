@@ -4,6 +4,7 @@ import { ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { GatewayLanguageModel, IdentifiedModelConfig, MastraModelGatewayInterface } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
 import { getRequestAccountSelection, isRequestAccountRoutingExhausted } from '../auth/account-routing-context.js';
+import type { RequestContextReader } from '../auth/account-routing-context.js';
 import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
 import type { CredentialStore, OAuthAccountRecord } from '../auth/types.js';
 import { MODEL_ROUTE_MAX_ENTRIES } from '../constants.js';
@@ -78,7 +79,7 @@ function accountCredential(account: OAuthAccountRecord) {
 
 export function createRequestScopedCredentialStore(
   base: CredentialStore,
-  requestContext?: RequestContext,
+  requestContext?: RequestContextReader,
 ): CredentialStore {
   const selectedId = (providerId: string) => getRequestAccountSelection(requestContext, providerId);
   const selectedAccount = (providerId: string) => {
@@ -326,7 +327,7 @@ const NATIVE_OAUTH_CREDENTIAL_IDS = { anthropic: 'anthropic', openai: 'openai-co
 
 export function resolveProviderWebSearchRoute(
   modelId: string | undefined,
-  options?: { requestContext?: RequestContext },
+  options?: { requestContext?: RequestContextReader },
 ): ProviderWebSearchRoute | undefined {
   if (!modelId) return undefined;
   const normalizedInput = normalizeLegacyModelId(modelId);
