@@ -11,8 +11,6 @@ interface FitInput {
   bounds: { x: number; y: number; width: number; height: number };
   width: number;
   height: number;
-  /** A refocus on a page, not a fit of the whole graph. */
-  focus: boolean;
   /** Fit view on a focus with an outer ring of linked pages: frame all of it, below the readable floor if need be. */
   ring?: boolean;
   /** The focus (or the layout's centre): what stays centred when a floor stops the fit. */
@@ -23,9 +21,9 @@ interface FitInput {
  * The viewport that frames `bounds`. Zoom stops at the readable floor, so what is cropped is the edge, not
  * the page being looked at; only Fit view, with an outer ring, goes lower so the whole ring shows.
  */
-export function fitViewport({ bounds, width, height, focus, ring, anchor }: FitInput): Viewport {
+export function fitViewport({ bounds, width, height, ring, anchor }: FitInput): Viewport {
   const floor = ring ? RING_MIN_ZOOM : READABLE_MIN_ZOOM;
-  const viewport = getViewportForBounds(bounds, width, height, floor, focus ? 1.5 : 2, focus ? 0.3 : 0.1);
+  const viewport = getViewportForBounds(bounds, width, height, floor, 2, 0.1);
   if (anchor && viewport.zoom <= floor) {
     const cx = anchor.position.x + (anchor.width ?? 0) / 2;
     const cy = anchor.position.y + (anchor.height ?? 0) / 2;
@@ -34,5 +32,71 @@ export function fitViewport({ bounds, width, height, focus, ring, anchor }: FitI
   return viewport;
 }
 
+/** Margin around the drawn nodes on the first view, as a share of the pane. */
+export const INITIAL_FIT_PADDING = 0.05;
+/** The first view never zooms in past the pages' own size, however few there are. */
+export const INITIAL_FIT_MAX_ZOOM = 1;
+/** How long after the first view the graph keeps refitting as pages arrive, unless the user acts first. */
+export const INITIAL_SETTLE_MS = 3000;
+
+type Rect = { x: number; y: number; width: number; height: number };
+
+/**
+ * The first view of a graph: every drawn node in the pane with a small margin, never zoomed in past what
+ * fits, and clear of `legend` (the box, in pane pixels, an overlay covers at the top left). When the plain
+ * fit would put a node under the legend, the pane is fitted again beside it or below it, whichever keeps
+ * the pages larger.
+ */
+export function fitAllViewport({
+  bounds,
+  nodes,
+  width,
+  height,
+  legend,
+}: {
+  bounds: Rect;
+  nodes: Rect[];
+  width: number;
+  height: number;
+  legend?: { right: number; bottom: number };
+}): Viewport {
+  const fitIn = (left: number, top: number): Viewport => {
+    const view = getViewportForBounds(
+      bounds,
+      width - left,
+      height - top,
+      RING_MIN_ZOOM,
+      INITIAL_FIT_MAX_ZOOM,
+      INITIAL_FIT_PADDING,
+    );
+    return { zoom: view.zoom, x: view.x + left, y: view.y + top };
+  };
+  const plain = fitIn(0, 0);
+  if (!legend) return plain;
+  const covered = nodes.some(node => {
+    const left = node.x * plain.zoom + plain.x;
+    const top = node.y * plain.zoom + plain.y;
+    return left < legend.right && top < legend.bottom;
+  });
+  if (!covered) return plain;
+  const beside = fitIn(legend.right, 0);
+  const below = fitIn(0, legend.bottom);
+  return beside.zoom >= below.zoom ? beside : below;
+}
+
 /** How long a view change animates: the same as the layout's own transition, and none under reduced motion. */
 export const fitDuration = (motion: boolean) => (motion ? KNOWLEDGE_GRAPH_TRANSITION_MS : 0);
+
+/** How close to the pane's edge a refocused page may sit before the view moves to bring it in. */
+export const NUDGE_PADDING = 24;
+
+/**
+ * How far to move the view along one axis so a page at `start` (screen position) of `size` stays inside a
+ * pane of `extent`, with padding. Zero when it already is; centred when it can't fit with the padding.
+ */
+export function nudgeAxis(start: number, size: number, extent: number): number {
+  if (size + NUDGE_PADDING * 2 > extent) return extent / 2 - (start + size / 2);
+  if (start < NUDGE_PADDING) return NUDGE_PADDING - start;
+  const overflow = start + size - (extent - NUDGE_PADDING);
+  return overflow > 0 ? -overflow : 0;
+}

@@ -35,6 +35,7 @@ import type { KnowledgePageRefs } from './page-refs';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
 import type { KnowledgeRunContext } from './run';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
+import { knowledgeEmbedFailedWarning } from './semantic';
 import type { KnowledgeSemanticIndex } from './semantic';
 
 /** What the page tools need from their Knowledge. @internal */
@@ -52,8 +53,6 @@ function maxTokensOf(host: KnowledgePageToolHost): number {
   return host.maxTokens ?? KNOWLEDGE_READ_BODY_TOKENS;
 }
 
-const EMBED_FAILED =
-  'Knowledge semantic index update failed; the content stays findable by keyword search and is embedded again the next time it changes';
 /** Search re-reads every vector hit, so a vector left behind by a removed page or note never surfaces. */
 const UNEMBED_FAILED =
   'Knowledge semantic index removal failed; the removed content may keep its vectors, but search skips content that no longer exists';
@@ -62,14 +61,22 @@ const UNEMBED_FAILED =
 async function embed(
   host: KnowledgePageToolHost,
   work: (index: KnowledgeSemanticIndex) => Promise<void>,
-  failure = EMBED_FAILED,
+  failure: string | (() => Promise<string>),
 ) {
   if (!host.semantic) return;
   try {
     await work(host.semantic);
   } catch (error) {
-    host.warn?.(`${failure}: ${String(error)}`);
+    host.warn?.(`${typeof failure === 'string' ? failure : await failure()}: ${String(error)}`);
   }
+}
+
+/** The embed-failure warning for `page`, naming its ref; only looked up when every try failed. */
+function pageEmbedFailed(storage: KnowledgeStorage, page: KnowledgePage): () => Promise<string> {
+  return async () => {
+    const { refs } = await knowledgePageRefs(storage, 'all', [page]).catch(() => ({ refs: new Map<string, string>() }));
+    return knowledgeEmbedFailedWarning(`page "${refs.get(page.id) ?? page.id}"`);
+  };
 }
 
 /** Reciprocal-rank constant: results ranked well by either list rise; neither list's scores need comparing. */
@@ -103,8 +110,11 @@ function limitOf(limit: number | undefined): number {
   return Math.min(Math.max(limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 }
 
-async function start(host: KnowledgePageToolHost, context: unknown): Promise<KnowledgeRun> {
-  return KnowledgeRun.start(host.runtime, await host.getStorage(), context as KnowledgeRunContext | undefined);
+/** A read run creates no scope pages; a write run materializes (and late-links) the scopes it holds. */
+async function start(host: KnowledgePageToolHost, context: unknown, write = false): Promise<KnowledgeRun> {
+  return KnowledgeRun.start(host.runtime, await host.getStorage(), context as KnowledgeRunContext | undefined, {
+    write,
+  });
 }
 
 /** Full refs and scope addresses for pages a response shows. */
@@ -1184,7 +1194,7 @@ function pageTool(host: KnowledgePageToolHost) {
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const args = input as PageInput;
-      const run = await start(host, context);
+      const run = await start(host, context, true);
       const { storage, provenance } = run;
       const done = async (page: KnowledgePage) => ({
         page: { ...pageSummary(page, await pageRefs(run, [page])), version: page.version },
@@ -1213,7 +1223,7 @@ function pageTool(host: KnowledgePageToolHost) {
             body: writtenBody(args, page, maxTokensOf(host)),
             provenance,
           });
-          await embed(host, index => index.indexPage(updated));
+          await embed(host, index => index.indexPage(updated), pageEmbedFailed(storage, updated));
           await updateKnowledgeLinks(host.warn, async () => {
             if (args.body !== undefined) await syncKnowledgePageBodyLinks(storage, updated);
             // Only the name can change a page's ref keys here; its id, path and address stay.
@@ -1235,7 +1245,7 @@ function pageTool(host: KnowledgePageToolHost) {
           body: args.body,
           provenance,
         });
-        await embed(host, index => index.indexPage(created));
+        await embed(host, index => index.indexPage(created), pageEmbedFailed(storage, created));
         await updateKnowledgeLinks(host.warn, async () => {
           await syncKnowledgePageBodyLinks(storage, created);
           await refreshKnowledgeLinksTo(storage, [created]);
@@ -1371,7 +1381,7 @@ function noteTool(host: KnowledgePageToolHost) {
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const args = input as NoteInput;
-      const run = await start(host, context);
+      const run = await start(host, context, true);
       const { storage, provenance } = run;
       const stamps = async (action: string) => {
         if (!args.scope?.length) throw new Error(`${action} needs scope: the stamp scopes.`);
@@ -1395,7 +1405,7 @@ function noteTool(host: KnowledgePageToolHost) {
           mentions: await resolveMentions(run, args.text),
           provenance,
         });
-        await embed(host, index => index.indexNote(note));
+        await embed(host, index => index.indexNote(note), knowledgeEmbedFailedWarning(`note ${note.id}`));
         return { note: noteSummary(note, await noteMentions(run, note)), page: page.id };
       }
 
@@ -1466,7 +1476,7 @@ function pinTool(host: KnowledgePageToolHost, onChange?: (context: unknown) => v
           'This Knowledge storage adapter predates listing pins. Upgrade the storage package to pin a page listing.',
         );
       }
-      const run = await start(host, context);
+      const run = await start(host, context, true);
       const page = await run.page(ref, 'editor');
       const what = kind === 'list' ? 'a page listing' : 'a page';
       await run.require(await run.scopeOf(page), 'editor', op === 'pin' ? `Pinning ${what}` : `Unpinning ${what}`);

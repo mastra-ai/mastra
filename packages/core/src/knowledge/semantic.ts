@@ -21,6 +21,21 @@ const OVERFETCH = 4;
 export const KNOWLEDGE_MAX_PAGE_CHUNKS = 100;
 
 /**
+ * The warning for content left out of the semantic index after every try failed, naming it (`page
+ * "docs:acme#guides"`, `note <id>`) so it can be rewritten.
+ * @internal
+ */
+export function knowledgeEmbedFailedWarning(subject: string): string {
+  return `Knowledge couldn't embed ${subject} after retrying; it is findable by keyword search only until it is rewritten`;
+}
+
+/** Whether an error says trying again can't help, like an input over the embedder's limit. */
+function notRetryable(error: unknown): boolean {
+  const e = error as { isRetryable?: boolean; lastError?: { isRetryable?: boolean } } | undefined;
+  return e?.isRetryable === false || e?.lastError?.isRetryable === false;
+}
+
+/**
  * Vector ids for a page's chunks: the first keeps the plain `page:<id>` every page had before
  * chunking, the rest are `page:<id>#<n>`.
  */
@@ -43,6 +58,12 @@ export type KnowledgeSemanticCandidate = { kind: 'page' | 'note'; id: string };
  * @internal
  */
 export class KnowledgeSemanticIndex {
+  /**
+   * Waits between tries of an embed or vector write that fails, about 10s in all: long enough for a
+   * scale-to-zero database (Neon, Lakebase) to wake, short enough not to hold a write up for long.
+   */
+  static retryDelaysMs: readonly number[] = [500, 2_000, 7_500];
+
   constructor(
     private readonly vector: MastraVector,
     private readonly embedder: MastraEmbeddingModel<string>,
@@ -60,15 +81,19 @@ export class KnowledgeSemanticIndex {
     const ids = pageChunkIds(page.id, 0, chunks.length);
     const pMap = (await import('p-map')).default;
     const parallel = 'supportsParallelCalls' in this.embedder ? await this.embedder.supportsParallelCalls : true;
-    const embeddings = await pMap(chunks, chunk => this.#embed([head, chunk].filter(Boolean).join('\n')), {
-      concurrency: parallel ? EMBED_CONCURRENCY : 1,
-    });
-    await this.#store(
-      ids,
-      embeddings,
-      ids.map((_, chunk) => ({ kind: 'page', pageId: page.id, chunk })),
-      // A shorter rewrite leaves the old tail chunks behind; drop them.
-      pageChunkIds(page.id, chunks.length),
+    const embeddings = await pMap(
+      chunks,
+      chunk => this.#retry(() => this.#embed([head, chunk].filter(Boolean).join('\n'))),
+      { concurrency: parallel ? EMBED_CONCURRENCY : 1 },
+    );
+    await this.#retry(() =>
+      this.#store(
+        ids,
+        embeddings,
+        ids.map((_, chunk) => ({ kind: 'page', pageId: page.id, chunk })),
+        // A shorter rewrite leaves the old tail chunks behind; drop them.
+        pageChunkIds(page.id, chunks.length),
+      ),
     );
   }
 
@@ -79,7 +104,8 @@ export class KnowledgeSemanticIndex {
 
   async indexNote(note: KnowledgeNote): Promise<void> {
     if (note.deletedAt) return this.remove([`note:${note.id}`]);
-    await this.#store([`note:${note.id}`], [await this.#embed(note.text)], [{ kind: 'note', noteId: note.id }]);
+    const embedding = await this.#retry(() => this.#embed(note.text));
+    await this.#retry(() => this.#store([`note:${note.id}`], [embedding], [{ kind: 'note', noteId: note.id }]));
   }
 
   async remove(ids: string[]): Promise<void> {
@@ -119,6 +145,19 @@ export class KnowledgeSemanticIndex {
       }
       if (results.length < topK || topK >= MAX_TOP_K || seen.size >= MAX_CANDIDATES) return accepted;
     }
+  }
+
+  /** Tries `work` again after each of `retryDelaysMs` while it fails with an error that may pass. */
+  async #retry<T>(work: () => Promise<T>): Promise<T> {
+    for (const delay of KnowledgeSemanticIndex.retryDelaysMs) {
+      try {
+        return await work();
+      } catch (error) {
+        if (notRetryable(error)) throw error;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    return work();
   }
 
   /** Through the SDK's `embed`, so `maxRetries`, `headers`, `providerOptions` and `telemetry` mean what they do elsewhere. */
