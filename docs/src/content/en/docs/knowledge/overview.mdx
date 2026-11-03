@@ -17,7 +17,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-Knowledge holds **pages** and **notes** that agents read and write across conversations. A page is a topic with a name, a short description and a markdown body. A note is a short, attributed fact added to a page. Pages live in **scopes**, such as `org:acme` or `team:acme:support`, and nest inside each other like folders. The scope types you declare decide who can read and write each scope. The model never picks its own identity or what it can reach.
+Knowledge holds **pages** and **notes** that agents read and write across conversations. A page is a topic with a name, a short description and a markdown body. A note is a short, attributed fact added to a page. Pages live in **scopes**, such as `org:acme` or `team:acme:support`, and nest inside each other like folders. The scope types you declare decide who can read and write each scope.
 
 Agents use Knowledge through tools: they browse a scope's pages, search, read a long page a section at a time, write pages and add notes. With [pinned context](/docs/knowledge/pinned-context), a page you choose is in the agent's context every turn, and an edit to it reaches running agents on their next turn.
 
