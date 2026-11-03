@@ -621,6 +621,10 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(factoryWorkItem, 'starters', FACTORY_API_ROUTE_CATALOG.workItemStarters, {
+    description: 'Count the Factory work items each new-session starter prompt would pick up',
+    routePlacement: 'origin',
+  });
   addAction(factoryWorkItem, 'sources', FACTORY_API_ROUTE_CATALOG.workItemSources, {
     description: 'List the external sources Factory work items were created from',
     routePlacement: 'origin',
