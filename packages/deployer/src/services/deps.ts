@@ -176,6 +176,8 @@ interface InstallOptions extends ArchitectureOptions {
   patchedDependencies?: Record<string, string>;
   /** Source settings that change which packages get installed, already checked to work outside the source workspace. */
   pnpmResolutionSettings?: Record<string, unknown>;
+  /** The `pnpm` field of the source root package.json, set only when the project runs pnpm 10 or older. */
+  pnpmManifestSettings?: Record<string, unknown>;
 }
 
 const PNPM_PATCHES_DIR = 'pnpm-patches';
@@ -324,6 +326,11 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
   const lines = source.split(/\r?\n/);
   const customBlocks = serializePnpmWorkspaceSettings(options.pnpmWorkspaceSettings);
   const blocks: string[] = [];
+  const copiedKeys = new Set<string>();
+  const shouldCopy = (key: string) =>
+    PNPM_CONFIG_KEYS_TO_COPY.has(key) &&
+    options.pnpmWorkspaceSettings?.[key] === undefined &&
+    !(key === 'supportedArchitectures' && hasArchitecture);
 
   for (let index = 0; index < lines.length;) {
     const key = getTopLevelYamlKey(lines[index] ?? '');
@@ -338,11 +345,7 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
       index += 1;
     }
 
-    if (
-      !PNPM_CONFIG_KEYS_TO_COPY.has(key) ||
-      options.pnpmWorkspaceSettings?.[key] !== undefined ||
-      (key === 'supportedArchitectures' && hasArchitecture)
-    ) {
+    if (!shouldCopy(key)) {
       continue;
     }
 
@@ -350,7 +353,16 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
     if (block) {
       validatePnpmBuildApprovals(key, block);
       blocks.push(block);
+      copiedKeys.add(key);
     }
+  }
+
+  // pnpm 10 also reads these keys from the `pnpm` field of package.json. The workspace file wins when both set one.
+  for (const [key, value] of Object.entries(options.pnpmManifestSettings ?? {})) {
+    if (copiedKeys.has(key) || !shouldCopy(key) || value === undefined) continue;
+    const block = stringify({ [key]: value }).trimEnd();
+    validatePnpmBuildApprovals(key, block);
+    blocks.push(block);
   }
 
   if (hasArchitecture) {
@@ -518,14 +530,18 @@ function resolvePackageExtension(
  * Reads the source settings that change which packages get installed. They are copied from the source
  * workspace only and stay out of `bundler.pnpmWorkspaceSettings`, which accepts install-policy keys only.
  */
-function getPnpmResolutionSettings(sourceWorkspaceYaml: string, warn: (message: string) => void) {
-  let workspace: unknown;
+function getPnpmResolutionSettings(
+  sourceWorkspaceYaml: string,
+  manifestSettings: Record<string, unknown>,
+  warn: (message: string) => void,
+) {
+  let parsed: unknown;
   try {
-    workspace = parse(sourceWorkspaceYaml);
+    parsed = parse(sourceWorkspaceYaml);
   } catch {
-    return {};
+    parsed = {};
   }
-  if (!isRecord(workspace)) return {};
+  const workspace = { ...manifestSettings, ...(isRecord(parsed) ? parsed : {}) };
 
   const settings: Record<string, unknown> = {};
 
@@ -672,18 +688,55 @@ export class Deps extends MastraBase {
     const warn = (message: string) => this.logger.warn(message);
     const sourceOverrides =
       this.lockFile?.packageManager === 'pnpm' ? await readPnpmLockfileOverrides(this.lockFile.path, warn) : {};
+    const pnpmManifestSettings = await this.readPnpm10ManifestSettings(
+      this.lockFile
+        ? path.dirname(this.lockFile.path)
+        : sourceWorkspaceYamlPath && path.dirname(sourceWorkspaceYamlPath),
+    );
 
     await fsPromises.writeFile(
       path.join(dir, 'pnpm-workspace.yaml'),
       copyPnpmWorkspaceSettings(sourceWorkspaceYaml, {
         ...options,
         patchedDependencies,
-        pnpmResolutionSettings: getPnpmResolutionSettings(sourceWorkspaceYaml, warn),
+        pnpmManifestSettings,
+        pnpmResolutionSettings: getPnpmResolutionSettings(sourceWorkspaceYaml, pnpmManifestSettings, warn),
         // Packed workspace tarballs must win over any source override for the same package.
         pnpmOverrides: { ...sourceOverrides, ...options.pnpmOverrides },
       }),
       'utf-8',
     );
+  }
+
+  /**
+   * Returns the `pnpm` field of the workspace root package.json when the project declares pnpm 10 or older.
+   * pnpm 11 stopped reading that field, so copying it for a newer or unknown pnpm could approve build scripts
+   * the project's own install never ran.
+   */
+  private async readPnpm10ManifestSettings(rootDir: string | null | undefined): Promise<Record<string, unknown>> {
+    if (!rootDir) return {};
+
+    let manifest: unknown;
+    try {
+      manifest = await readJSON(path.join(rootDir, 'package.json'));
+    } catch {
+      return {};
+    }
+    if (!isRecord(manifest) || !isRecord(manifest.pnpm) || Object.keys(manifest.pnpm).length === 0) return {};
+
+    const pnpmMajor = /^pnpm@(\d+)\./.exec(String(manifest.packageManager ?? ''))?.[1];
+    if (pnpmMajor && Number(pnpmMajor) <= 10) {
+      return manifest.pnpm;
+    }
+    const skippedKeys = Object.keys(manifest.pnpm).filter(
+      key => PNPM_CONFIG_KEYS_TO_COPY.has(key) || key === 'packageExtensions' || key === 'ignoredOptionalDependencies',
+    );
+    if (!pnpmMajor && skippedKeys.length > 0) {
+      this.logger.warn(
+        `Not copying ${skippedKeys.join(', ')} from the "pnpm" field of package.json into the build output because the pnpm version is unknown. Set "packageManager" to the pnpm version you use, or move these settings to pnpm-workspace.yaml.`,
+      );
+    }
+    return {};
   }
 
   /**

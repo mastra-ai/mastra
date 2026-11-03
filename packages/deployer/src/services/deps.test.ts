@@ -270,6 +270,32 @@ packageExtensions:
     });
   });
 
+  // pnpm 11 stopped reading the `pnpm` field, so copying it for a newer pnpm would approve builds the project never ran.
+  it.each([
+    ['pnpm@10.34.6', true],
+    ['pnpm@12.15.0', false],
+  ])(
+    'copies build approvals from the package.json pnpm field only for pnpm 10 (%s)',
+    async (packageManager, copied) => {
+      const extensions = { 'debug@4': { dependencies: { 'has-flag': '4.0.0' } } };
+      await writeFile(
+        join(sourceRoot, 'package.json'),
+        JSON.stringify({
+          name: 'source',
+          packageManager,
+          pnpm: { onlyBuiltDependencies: ['esbuild'], packageExtensions: extensions },
+        }),
+      );
+
+      await new DepsService(sourceRoot).install({ dir: outputDir });
+
+      const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+      expect(workspace.minimumReleaseAge).toBe(1440);
+      expect(workspace.onlyBuiltDependencies).toEqual(copied ? ['esbuild'] : undefined);
+      expect(workspace.packageExtensions).toEqual(copied ? extensions : undefined);
+    },
+  );
+
   it('preserves existing behavior when custom settings are omitted', async () => {
     await new DepsService(sourceRoot).install({ dir: outputDir });
     expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({
