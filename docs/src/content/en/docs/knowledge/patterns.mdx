@@ -13,7 +13,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 :::
 
-These ten patterns show what you can build with Knowledge. Each one says who the agents are, which scopes hold what, and the config or tool calls that make it work. Scope kinds such as `tenant:`, `repo:` or `handbook:` are names each config chooses. Knowledge has no built-in kinds. Only `resource:` and `thread:` come from Memory, and [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) declares them plus a tenant scope.
+These nine patterns show what you can build with Knowledge. Each one says who the agents are, which scopes hold what, and the config or tool calls that make it work. Scope kinds such as `tenant:`, `repo:` or `handbook:` are names each config chooses. Knowledge has no built-in kinds. Only `resource:` and `thread:` come from Memory, and [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) declares them plus a tenant scope.
 
 :::warning
 
@@ -204,22 +204,6 @@ Research, planning and coding agents on one initiative share a scope. Research w
 ```
 
 None of the agents talk to each other. They share pages, under the same access rules.
-
-## Show people what agents know
-
-Register the instance on `Mastra` and add the read-only Knowledge routes, and Studio shows the tree, a graph, each page with its notes, and agents' edits as they happen:
-
-```typescript
-import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter'
-
-export const mastra = new Mastra({
-  agents: { support },
-  knowledge: { company: knowledge },
-  server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
-})
-```
-
-The routes read every page as the instance owner, so put them behind your own auth and the `knowledge:read` permission. `knowledge.onChange()` gives your own code the same change events. They carry IDs, not content, so re-read a page under the user's scopes before you show it to them.
 
 ## Related
 

@@ -255,6 +255,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'knowledge/studio',
+              label: 'Studio',
+            },
+            {
+              type: 'doc',
               id: 'knowledge/patterns',
               label: 'Patterns',
             },
