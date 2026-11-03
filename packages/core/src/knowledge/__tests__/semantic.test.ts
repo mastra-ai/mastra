@@ -1,4 +1,5 @@
 import { APICallError } from '@internal/ai-sdk-v5';
+import { estimateTokenCount } from 'tokenx';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
@@ -63,7 +64,10 @@ class MemoryVector extends MastraVector {
   async deleteVector({ indexName, id }: DeleteVectorParams): Promise<void> {
     this.indexes.get(indexName)?.rows.delete(id);
   }
+  /** Set to make deleteVectors throw, like Astra, which can't delete by id list. */
+  failDeletes = false;
   async deleteVectors({ indexName, ids }: DeleteVectorsParams): Promise<void> {
+    if (this.failDeletes) throw new Error('deleteVectors is not supported');
     for (const id of ids ?? []) this.indexes.get(indexName)?.rows.delete(id);
   }
   ids(): string[] {
@@ -85,7 +89,14 @@ const CONCEPTS: Record<string, number> = {
   vacation: 2,
   leave: 2,
 };
-type EmbedderState = { fail: boolean; calls: number; transient?: number; options?: Record<string, unknown>[] };
+type EmbedderState = {
+  fail: boolean;
+  calls: number;
+  transient?: number;
+  options?: Record<string, unknown>[];
+  /** Refuses any input over this many estimated tokens, like a real embedder's input limit. */
+  maxTokens?: number;
+};
 function conceptEmbedder(state: EmbedderState): MastraEmbeddingModel<string> {
   return {
     specificationVersion: 'v2',
@@ -97,6 +108,15 @@ function conceptEmbedder(state: EmbedderState): MastraEmbeddingModel<string> {
       state.calls++;
       state.options?.push(options);
       if (state.fail) throw new Error('embedder down');
+      if (state.maxTokens && values.some(text => estimateTokenCount(text) > state.maxTokens!)) {
+        throw new APICallError({
+          message: 'input too long',
+          url: 'x',
+          requestBodyValues: {},
+          statusCode: 400,
+          isRetryable: false,
+        });
+      }
       if (state.transient && state.transient-- > 0) {
         throw new APICallError({
           message: 'rate limited',
@@ -332,6 +352,91 @@ describe('Knowledge semantic search', () => {
     await store.deletePage({ id: page.id, expectedVersion: page.version, deletedBy: 'host' });
     expect(vector.ids()).toContain(`page:${page.id}`);
     expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual([]);
+  });
+
+  /** About 5,000 estimated tokens of filler, with `fact` as one paragraph near the end. */
+  const longBody = (fact: string) =>
+    Array.from({ length: 24 }, (_, i) =>
+      i === 20 ? fact : `## Part ${i}\n\n${'Lorem ipsum dolor sit amet consectetur adipiscing elit. '.repeat(25)}`,
+    ).join('\n\n');
+  const chunkIds = (pageId: string) => vector.ids().filter(id => id.startsWith(`page:${pageId}`));
+
+  it('embeds a page too long for the embedder as chunks, and finds it once by meaning', async () => {
+    embedder.maxTokens = 3_000;
+    const body = longBody('Reimbursement goes back to the original card.');
+    expect(estimateTokenCount(body)).toBeGreaterThan(4_000);
+    const { page } = await acme()('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Handbook', body });
+    await acme()('knowledge_page', { op: 'write', scope: 'org:acme', name: 'Courier contacts', body: 'Shipping.' });
+
+    expect(warnings).toEqual([]);
+    const ids = chunkIds(page.id);
+    expect(ids.length).toBeGreaterThan(1);
+    expect(ids).toContain(`page:${page.id}`);
+    expect(ids).toContain(`page:${page.id}#1`);
+
+    const result = await acme()('knowledge_search', { query: 'money' });
+    expect(titles(result)).toEqual(['Handbook', 'Courier contacts']);
+    // The same hit as an unchunked page: one result, page summary only.
+    expect(Object.keys(result.results[0]).sort()).toEqual(Object.keys(result.results[1]).sort());
+  });
+
+  it('a host upsertPage of a page too long for the embedder is searchable by meaning', async () => {
+    embedder.maxTokens = 3_000;
+    const result = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'guides/handbook',
+      name: 'Handbook',
+      body: longBody('Reimbursement goes back to the original card.'),
+    });
+    expect(result.status).toBe('created');
+    expect(warnings).toEqual([]);
+    expect(titles(await acme()('knowledge_search', { query: 'refund' }))).toContain('Handbook');
+  });
+
+  it('a shorter rewrite drops the old chunks, and deleting the page drops them all', async () => {
+    embedder.maxTokens = 3_000;
+    // A long body can only be replaced whole by the host; the tool edits it part by part.
+    const write = (body: string) =>
+      knowledge.upsertPage({ scope: 'org:acme', path: 'handbook', name: 'Handbook', body });
+    const { page } = await write(longBody('Reimbursement goes back to the original card.'));
+    expect(chunkIds(page.id).length).toBeGreaterThan(1);
+
+    await write('Courier pickups at 3pm.');
+    expect(chunkIds(page.id)).toEqual([`page:${page.id}`]);
+    expect(titles(await acme()('knowledge_search', { query: 'money' }))).toEqual(['Handbook']);
+    expect(titles(await acme()('knowledge_search', { query: 'delivery' }))[0]).toBe('Handbook');
+
+    await write(longBody('Holiday calendar.'));
+    expect(chunkIds(page.id).length).toBeGreaterThan(1);
+    await knowledge.removePage({ scope: 'org:acme', path: 'handbook' });
+    expect(chunkIds(page.id)).toEqual([]);
+  });
+
+  it('a rewrite still embeds the new body when the store cannot delete old chunks', async () => {
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'a', name: 'A', body: 'Courier pickups at 3pm.' });
+    vector.failDeletes = true;
+    await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'a',
+      name: 'A',
+      body: 'Reimbursement goes back to the card.',
+    });
+    expect(warnings).toEqual([]);
+    expect(titles(await acme()('knowledge_search', { query: 'money' }))).toEqual(['A']);
+  });
+
+  it('a long name does not crowd the body out of its chunks', async () => {
+    embedder.maxTokens = 3_000;
+    const name = 'Handbook '.repeat(2_000);
+    const { page } = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'handbook',
+      name,
+      body: longBody('Reimbursement goes back to the original card.'),
+    });
+    expect(warnings).toEqual([]);
+    expect(chunkIds(page.id).length).toBeGreaterThan(1);
+    expect(chunkIds(page.id).length).toBeLessThan(10);
   });
 
   it('needs both vector and embedder; reindex without them throws', async () => {

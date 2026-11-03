@@ -1,17 +1,41 @@
+import { estimateTokenCount, sliceByTokens } from 'tokenx';
 import type { KnowledgeNote, KnowledgePage, KnowledgeStorage } from '../storage/domains/knowledge';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import { embedV1, embedV2, embedV3, embedV4 } from '../vector/embed';
+import { knowledgeBodyChunks, KNOWLEDGE_EMBED_CHUNK_TOKENS } from './page-body';
 
-/** How far one semantic search over-fetches before it stops refilling. */
+/** How many distinct pages and notes one semantic search looks at before it stops refilling. */
 const MAX_CANDIDATES = 1000;
+/** Largest vector query one search sends (Pinecone's topK ceiling); chunks share it with whole pages. */
+const MAX_TOP_K = 10_000;
+/** Most of a chunk the page's name and description may take, so a long name can't crowd out the body. */
+const MAX_HEAD_TOKENS = 500;
 const OVERFETCH = 4;
 const REINDEX_PAGE = 100;
+/**
+ * Most chunks one page is embedded as (about 200k estimated tokens of body). Past it the rest of
+ * the body is found by keyword search only. Bounded so a rewrite can drop the old chunks by id,
+ * which every vector store supports, without knowing how many there were.
+ */
+export const KNOWLEDGE_MAX_PAGE_CHUNKS = 100;
+
+/**
+ * Vector ids for a page's chunks: the first keeps the plain `page:<id>` every page had before
+ * chunking, the rest are `page:<id>#<n>`.
+ */
+function pageChunkIds(pageId: string, from = 0, to = KNOWLEDGE_MAX_PAGE_CHUNKS): string[] {
+  const ids: string[] = [];
+  for (let n = from; n < to; n++) ids.push(n === 0 ? `page:${pageId}` : `page:${pageId}#${n}`);
+  return ids;
+}
 
 /** A vector hit, before the caller checks the run can read it. @internal */
 export type KnowledgeSemanticCandidate = { kind: 'page' | 'note'; id: string };
 
 /**
- * Embeds ordinary pages (name, description, body) and notes into one vector index. The index holds
+ * Embeds ordinary pages (name, description, body) and notes into one vector index. A page too long
+ * to embed whole goes in as chunks, each led by the page's name and description; search counts a
+ * page once, at its best chunk. The index holds
  * ids only: every hit is re-read through the store with the run's read scope before it counts, so a
  * stale or foreign vector can never surface content, and access filtering happens before ranking.
  * Writes index after the store commits; a failed embed only costs recall until `reindex()`.
@@ -25,14 +49,33 @@ export class KnowledgeSemanticIndex {
   ) {}
 
   async indexPage(page: KnowledgePage): Promise<void> {
-    if (page.isScope || page.deletedAt) return this.remove([`page:${page.id}`]);
-    const text = [page.name, page.description, page.body].filter(Boolean).join('\n');
-    await this.#upsert(`page:${page.id}`, text, { kind: 'page', pageId: page.id });
+    if (page.isScope || page.deletedAt) return this.removePage(page.id);
+    const head = sliceByTokens([page.name, page.description].filter(Boolean).join('\n'), 0, MAX_HEAD_TOKENS);
+    const room = Math.max(
+      KNOWLEDGE_EMBED_CHUNK_TOKENS - estimateTokenCount(head) - 1,
+      KNOWLEDGE_EMBED_CHUNK_TOKENS / 2,
+    );
+    const chunks = page.body ? knowledgeBodyChunks(page.body, room).slice(0, KNOWLEDGE_MAX_PAGE_CHUNKS) : [''];
+    const ids = pageChunkIds(page.id, 0, chunks.length);
+    const embeddings: number[][] = [];
+    for (const chunk of chunks) embeddings.push(await this.#embed([head, chunk].filter(Boolean).join('\n')));
+    await this.#store(
+      ids,
+      embeddings,
+      ids.map((_, chunk) => ({ kind: 'page', pageId: page.id, chunk })),
+      // A shorter rewrite leaves the old tail chunks behind; drop them.
+      pageChunkIds(page.id, chunks.length),
+    );
+  }
+
+  /** Drops every chunk of a page from the index. */
+  async removePage(pageId: string): Promise<void> {
+    await this.remove(pageChunkIds(pageId));
   }
 
   async indexNote(note: KnowledgeNote): Promise<void> {
     if (note.deletedAt) return this.remove([`note:${note.id}`]);
-    await this.#upsert(`note:${note.id}`, note.text, { kind: 'note', noteId: note.id });
+    await this.#store([`note:${note.id}`], [await this.#embed(note.text)], [{ kind: 'note', noteId: note.id }]);
   }
 
   async remove(ids: string[]): Promise<void> {
@@ -55,19 +98,21 @@ export class KnowledgeSemanticIndex {
 
     const accepted: T[] = [];
     const seen = new Set<string>();
-    for (let topK = limit * OVERFETCH; ; topK = Math.min(topK * OVERFETCH, MAX_CANDIDATES)) {
+    for (let topK = limit * OVERFETCH; ; topK = Math.min(topK * OVERFETCH, MAX_TOP_K)) {
       const results = await this.vector.query({ indexName, queryVector: embedding, topK });
       for (const result of results) {
-        if (seen.has(result.id)) continue;
-        seen.add(result.id);
-        const colon = result.id.indexOf(':');
-        const kind = result.id.slice(0, colon);
+        // A page's chunks share one candidate, ranked at the best of them (the first to come back).
+        const candidate = result.id.replace(/#\d+$/, '');
+        if (seen.has(candidate)) continue;
+        seen.add(candidate);
+        const colon = candidate.indexOf(':');
+        const kind = candidate.slice(0, colon);
         if (kind !== 'page' && kind !== 'note') continue;
-        const hit = await accept({ kind, id: result.id.slice(colon + 1) });
+        const hit = await accept({ kind, id: candidate.slice(colon + 1) });
         if (hit !== null) accepted.push(hit);
         if (accepted.length >= limit) return accepted;
       }
-      if (results.length < topK || topK >= MAX_CANDIDATES) return accepted;
+      if (results.length < topK || topK >= MAX_TOP_K || seen.size >= MAX_CANDIDATES) return accepted;
     }
   }
 
@@ -131,15 +176,24 @@ export class KnowledgeSemanticIndex {
     return embedding;
   }
 
-  async #upsert(id: string, text: string, metadata: Record<string, string>): Promise<void> {
-    const embedding = await this.#embed(text);
-    const indexName = this.#indexName(embedding.length);
+  async #store(
+    ids: string[],
+    embeddings: number[][],
+    metadata: Array<Record<string, string | number>>,
+    stale: string[] = [],
+  ): Promise<void> {
+    const indexName = this.#indexName(embeddings[0]!.length);
     const indexes = await this.#indexes();
-    if (!indexes.includes(indexName)) await this.vector.createIndex({ indexName, dimension: embedding.length });
+    if (!indexes.includes(indexName)) await this.vector.createIndex({ indexName, dimension: embeddings[0]!.length });
     // A changed embedder dimension leaves the old copy in another index; drop it there.
     for (const other of indexes)
-      if (other !== indexName) await this.vector.deleteVectors({ indexName: other, ids: [id] });
-    await this.vector.upsert({ indexName, ids: [id], vectors: [embedding], metadata: [metadata] });
+      if (other !== indexName) await this.vector.deleteVectors({ indexName: other, ids: [...ids, ...stale] });
+    await this.vector.upsert({ indexName, ids, vectors: embeddings, metadata });
+    // Best effort, after the new vectors are in: some stores (Astra) can't delete by id, and a stale
+    // tail chunk only points search at the same page, which is re-read before it counts.
+    if (stale.length && indexes.includes(indexName)) {
+      await this.vector.deleteVectors({ indexName, ids: stale }).catch(() => {});
+    }
   }
 
   async #indexes(): Promise<string[]> {
