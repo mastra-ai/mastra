@@ -37,7 +37,43 @@ const knowledge = new Knowledge({
 })
 ```
 
-`tools: { write: true }` turns on writing alone. To let agents pin pages, add `pinnedContext: true`. See [Pinned context](/docs/knowledge/pinned-context).
+To let agents pin pages, add `pinnedContext: true`. See [Pinned context](/docs/knowledge/pinned-context).
+
+## Give the tools to an agent
+
+Attach the instance with the `knowledge` option. The agent gets the tools you turned on, and their usage instructions:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { knowledge } from '../knowledge'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  instructions: 'Help customers with their orders.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge,
+})
+```
+
+To add the tools to an agent directly, alongside its other tools, use `createTools()`. Pass the same options to `getInstructions()` and add its result to the agent's instructions:
+
+```typescript title="src/mastra/agents/docs-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { knowledge } from '../knowledge'
+
+export const docsAgent = new Agent({
+  id: 'docs-agent',
+  name: 'Docs agent',
+  instructions: `Answer from the company docs.\n\n${knowledge.getInstructions({ write: false })}`,
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: {
+    ...knowledge.createTools({ write: false }),
+  },
+})
+```
+
+Each option overrides the matching setting on the instance, so `{ write: false }` gives this agent only the read tools. Access works the same either way: each call is checked against the run's scopes.
 
 ## What an agent can reach
 
@@ -70,7 +106,7 @@ With the write tools, an agent creates and changes pages in the scopes where its
 
 Turning on a tool doesn't grant access. Each call is checked against the roles the run holds in the scopes it touches: reading needs `viewer`, creating pages and adding notes needs `contributor`, editing needs `editor`, and deleting needs `owner`. A refused call comes back to the model as the tool result, not as an exception in your code. See [what each operation needs](/reference/knowledge/knowledge-tools#what-each-operation-needs).
 
-Knowledge also adds short usage instructions for the tools it turns on, so you don't need to explain them in your agent's instructions. See [Tool instructions](/reference/knowledge/tool-instructions) to change them. To give the tools to an agent without attaching the instance, use [`createTools()`](/reference/knowledge/knowledge-class#createtools).
+An attached instance also adds short usage instructions for the tools it turns on, so you don't need to explain them in your agent's instructions. See [Tool instructions](/reference/knowledge/tool-instructions) to change them.
 
 ## Related
 
