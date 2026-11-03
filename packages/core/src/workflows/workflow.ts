@@ -3527,7 +3527,24 @@ export class Workflow<
       return { runs: [], total: 0 };
     }
 
-    return workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+    const result = await workflowsStore.listWorkflowRuns({ workflowName: this.id, ...(args ?? {}) });
+    return {
+      ...result,
+      runs: result.runs.map(run => {
+        let snapshot = run.snapshot;
+        if (typeof snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(snapshot) as WorkflowRunState;
+          } catch {
+            return run;
+          }
+        }
+        if (!snapshot?.requestContext || !('mastra__durableSegments' in snapshot.requestContext)) return run;
+        const { mastra__durableSegments: _segments, ...requestContext } = snapshot.requestContext;
+        const projected = { ...snapshot, requestContext };
+        return { ...run, snapshot: typeof run.snapshot === 'string' ? JSON.stringify(projected) : projected };
+      }),
+    };
   }
 
   public async listActiveWorkflowRuns() {

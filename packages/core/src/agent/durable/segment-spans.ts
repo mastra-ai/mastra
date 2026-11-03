@@ -146,8 +146,13 @@ class LayeredRequestContext extends RequestContext<unknown> {
     return this.deleteRaw(key);
   }
   override clear(): void {
-    this.backing.clear();
-    this.ownValues.clear();
+    // A user clear must not discard the active segment. Claims keep ordinary clear semantics.
+    for (const key of this.backing.keys()) {
+      if (key !== MASTRA_DURABLE_SEGMENTS_KEY) this.backing.deleteRaw(key);
+    }
+    for (const key of this.ownValues.keys()) {
+      if (key !== MASTRA_DURABLE_SEGMENTS_KEY) this.ownValues.delete(key);
+    }
   }
   override keys(): IterableIterator<string> {
     return [...this.visibleEntries()].map(([key]) => key)[Symbol.iterator]();
