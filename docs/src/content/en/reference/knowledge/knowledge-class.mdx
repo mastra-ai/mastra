@@ -83,7 +83,7 @@ export const knowledge = new Knowledge({
     name: 'pinnedContext',
     type: 'boolean | { maxPins?: number; maxTokens?: number }',
     description:
-      'Pinned pages delivered to an attached agent every turn, plus the `knowledge_pin` tool. Needs Memory. `maxPins` defaults to 20 and `maxTokens` to 500; `maxTokens` above 2000 throws. Off by default. See [Pinned context](/docs/knowledge/pinned-context).',
+      'Pinned pages delivered to an attached agent every turn, plus the `knowledge_pin` tool. Needs Memory. `maxPins` defaults to 20 and `maxTokens` to 500, with no maximum. Off by default. See [Pinned context](/docs/knowledge/pinned-context).',
     isOptional: true,
     defaultValue: 'false',
   },

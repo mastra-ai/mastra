@@ -26,14 +26,14 @@ Text limits are counted in tokens. Counts are estimates, so treat the numbers as
 | Notes, and notes mentioning the page, kept in a whole `knowledge_read` | 1,000 tokens per list |
 | `knowledge_list` entries | 50 by default, up to 100, and about 1,000 tokens by default; 3 levels deep |
 | Embedding chunks per page, for search by meaning | 100, of about 2,000 tokens each |
-| Pinned context per turn | 500 tokens by default, up to 2000 |
+| Pinned context per turn | 500 tokens by default, no maximum |
 | Pinned pages per turn | 20 by default |
 
 A write over a limit fails, and the model gets the error as the tool result. Tool schemas don't show the token limits, because a schema can't count tokens.
 
 Page bodies have no token limit. `knowledge_read` returns a long body in parts, and an agent [edits it one part at a time](/reference/knowledge/knowledge-tools#knowledge_page) by line `range`. Pinned page bodies are cut to fit the pinned-context budget. See [what a run receives](/docs/knowledge/pinned-context#what-a-run-receives).
 
-Change the read cap with `tools: { read: { maxTokens } }`. See [`tools`](/reference/knowledge/knowledge-class#constructor-options). Change the pin limits with `pinnedContext: { maxPins, maxTokens }` on `Knowledge`. A `maxTokens` above 2000 throws when you construct it.
+Change the read cap with `tools: { read: { maxTokens } }`. See [`tools`](/reference/knowledge/knowledge-class#constructor-options). Change the pin limits with `pinnedContext: { maxPins, maxTokens }` on `Knowledge`.
 
 ## Related
 

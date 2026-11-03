@@ -35,7 +35,7 @@ export const knowledge = new Knowledge({
 })
 ```
 
-`pinnedContext: true` uses the defaults: at most 20 pinned pages and 500 tokens per turn. `maxTokens` can go up to 2000. A higher value throws `Knowledge pinnedContext.maxTokens is at most 2000.` when the instance is created.
+`pinnedContext: true` uses the defaults: at most 20 pinned pages and 500 tokens per turn. Raise `maxTokens` for models with large context windows, for example `pinnedContext: { maxTokens: 8000 }`. The whole budget can be spent on every turn.
 
 `pinnedContext` adds the `knowledge_pin` tool and delivers pinned pages to the agent as a [state signal](/docs/signals/state-signals). The first turn gets the whole set, and later turns get only what changed, so an edit to a pinned page reaches running agents on their next step and the prompt cache stays warm. The signal rides on the agent's Memory thread, so pins need Memory on the agent. An agent with `pinnedContext` and no Memory logs a warning once and gets no pinned pages. Its `knowledge_pin` calls still store the pin for agents that do have Memory.
 
