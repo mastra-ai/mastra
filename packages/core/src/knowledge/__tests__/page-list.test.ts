@@ -134,7 +134,7 @@ describe('knowledge_list', () => {
   it('leaves out unreadable child scopes even when a store ignores read', async () => {
     const { call, storage } = await site();
     for (const team of ['team:acme:secret', 'team:acme:other']) {
-      await call([...ORG, 'docs:acme', team], 'knowledge_read', { page: team });
+      await call([...ORG, 'docs:acme', team], 'knowledge_page', { op: 'write', page: team, body: 'Team notes.' });
     }
     const store = (await storage.getStore('knowledge'))!;
     const list = store.listChildScopes.bind(store);
