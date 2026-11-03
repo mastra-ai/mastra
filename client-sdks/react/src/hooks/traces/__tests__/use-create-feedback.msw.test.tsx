@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraReactProvider } from '../../../mastra-react-provider';
 import { server } from '../../../test/msw-server';
@@ -25,6 +25,7 @@ const makeWrapper = () => {
   );
 };
 
+beforeEach(() => server.use(http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json({ id: 'reviewer' }))));
 afterEach(() => cleanup());
 
 describe('useCreateFeedback', () => {
@@ -43,7 +44,11 @@ describe('useCreateFeedback', () => {
       await result.current.mutateAsync({ text: 'looks good' });
 
       expect(onPost).toHaveBeenCalledWith({
+        contextMode: 'resolve',
         feedback: {
+          feedbackId: expect.any(String),
+          timestamp: expect.any(String),
+          feedbackUserId: 'reviewer',
           traceId: TRACE_ID,
           feedbackType: 'comment',
           feedbackSource: 'user',
@@ -71,8 +76,29 @@ describe('useCreateFeedback', () => {
       await result.current.mutateAsync({ text: 'span comment' });
 
       expect(onPost).toHaveBeenCalledWith({
-        feedback: expect.objectContaining({ traceId: TRACE_ID, spanId: SPAN_ID }),
+        contextMode: 'resolve',
+        feedback: expect.objectContaining({ traceId: TRACE_ID, spanId: SPAN_ID, feedbackUserId: 'reviewer' }),
       });
+    });
+  });
+
+  describe('when no current user is available', () => {
+    it('sends a null author when no current user is available', async () => {
+      const onPost = vi.fn<(body: Record<string, unknown>) => void>();
+      server.use(
+        http.get(`${BASE_URL}/api/auth/me`, () => HttpResponse.json(null)),
+        http.post(FEEDBACK_URL, async ({ request }) => {
+          onPost((await request.json()) as Record<string, unknown>);
+          return HttpResponse.json({ success: true });
+        }),
+      );
+      const { result } = renderHook(() => useCreateFeedback({ traceId: TRACE_ID }), { wrapper: makeWrapper() });
+      await result.current.mutateAsync({ text: 'anonymous feedback' });
+      expect(onPost).toHaveBeenCalledWith({
+        contextMode: 'resolve',
+        feedback: expect.objectContaining({ feedbackUserId: null }),
+      });
+      expect(onPost.mock.calls[0][0].feedback).not.toHaveProperty('userId');
     });
   });
 

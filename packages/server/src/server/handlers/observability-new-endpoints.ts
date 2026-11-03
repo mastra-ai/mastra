@@ -134,6 +134,7 @@ import {
   withDiscoveryFallback,
 } from './observability-shared';
 import type { RouteDetails } from './observability-shared';
+import { resolveSignalContext } from './observability-signal-context';
 
 function createNewRoute<
   TPathSchema extends z.ZodTypeAny | undefined = undefined,
@@ -1196,12 +1197,17 @@ export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
 export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
   bodySchema: createScoreBodySchema,
   responseSchema: createScoreResponseSchema,
-  handler: async ({ mastra, score }) => {
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, requestContext, score, contextMode }) => {
     const observabilityStore = await getObservabilityStore(mastra);
-    await observabilityStore.createScore({
-      score: { ...score, scoreId: score.scoreId ?? generateSignalId(), timestamp: new Date() },
-    });
-    return { success: true };
+    const context = await resolveSignalContext(observabilityStore, requestContext, score, contextMode);
+    const scoreId = score.scoreId ?? generateSignalId();
+    const timestamp = score.timestamp === undefined ? new Date() : new Date(score.timestamp);
+    await observabilityStore.createScore({ score: { ...score, ...context, scoreId, timestamp } });
+    return {
+      success: true,
+      data: { scoreId, traceId: score.traceId, spanId: score.spanId ?? null, timestamp: timestamp.toISOString() },
+    };
   },
 });
 
@@ -1313,22 +1319,36 @@ export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
 export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
   bodySchema: createFeedbackBodySchema,
   responseSchema: createFeedbackResponseSchema,
-  handler: async ({ mastra, requestContext, feedback }) => {
+  preserveHttpExceptions: true,
+  handler: async ({ mastra, requestContext, feedback, contextMode }) => {
     const user = requestContext.get(MASTRA_USER_KEY);
     const authenticatedId = user && typeof user === 'object' && 'id' in user ? user.id : undefined;
     const observabilityStore = await getObservabilityStore(mastra);
+    const context = await resolveSignalContext(observabilityStore, requestContext, feedback, contextMode);
+    const feedbackId = feedback.feedbackId ?? generateSignalId();
+    const timestamp = feedback.timestamp === undefined ? new Date() : new Date(feedback.timestamp);
     await observabilityStore.createFeedback({
       feedback: {
         ...feedback,
-        ...(typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
-          ? { feedbackUserId: authenticatedId }
-          : {}),
-        feedbackId: feedback.feedbackId ?? generateSignalId(),
-        timestamp: new Date(),
+        ...context,
+        feedbackUserId:
+          typeof authenticatedId === 'string' && authenticatedId.trim().length > 0
+            ? authenticatedId
+            : (feedback.feedbackUserId ?? null),
+        feedbackId,
+        timestamp,
         reviewStatus: feedback.reviewStatus ?? 'needs-review',
       },
     });
-    return { success: true };
+    return {
+      success: true,
+      data: {
+        feedbackId,
+        traceId: feedback.traceId,
+        spanId: feedback.spanId ?? null,
+        timestamp: timestamp.toISOString(),
+      },
+    };
   },
 });
 
