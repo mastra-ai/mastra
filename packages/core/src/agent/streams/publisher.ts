@@ -48,8 +48,6 @@ export interface CreateAgentStreamPublisherOptions {
   abortSignal?: AbortSignal;
   /** Called once when the run stops publishing (finished, failed, or suspended). */
   onEnd?: () => void;
-  /** Called once the finished run's topic is cleared, i.e. when its replay history is gone. */
-  onCleared?: () => void;
   /**
    * Where to keep the run's shared ownership record (see `run-records.ts`).
    * It is written before the first event, marked `suspended` or `finished`
@@ -76,7 +74,6 @@ export function createAgentStreamPublisher({
   logger,
   abortSignal: callerSignal,
   onEnd,
-  onCleared,
   record,
 }: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
   const controller = new AbortController();
@@ -140,7 +137,6 @@ export function createAgentStreamPublisher({
     const timer = scheduleStreamCleanup(cleanupTimeoutMs, () => {
       void pubsub.clearTopic(AGENT_STREAM_TOPIC(runId)).catch(() => {});
       if (record) void deleteAgentRunRecord(record.cache, record.agentId, runId).catch(() => {});
-      onCleared?.();
     });
     timer?.unref?.();
   };
