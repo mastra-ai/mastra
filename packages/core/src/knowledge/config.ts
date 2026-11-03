@@ -20,7 +20,8 @@ export interface KnowledgeConfig {
   /**
    * Vector store and embedder for semantic search. With both, `knowledge_search` blends keyword and
    * semantic results, and page and note writes made through the tools are embedded. Without them,
-   * search is keyword only. Content written straight to the store is embedded by `reindex()`.
+   * search is keyword only. Writes through `upsertPage`, `removePage` and the note methods are embedded
+   * too; content written straight to the store is not.
    */
   vector?: MastraVector;
   embedder?: MastraEmbeddingModel<string>;

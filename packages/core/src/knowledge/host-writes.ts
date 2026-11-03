@@ -94,7 +94,9 @@ async function embed(host: KnowledgeHostWriter, work: (index: KnowledgeSemanticI
   try {
     await work(host.semantic);
   } catch (error) {
-    host.warn(`Knowledge semantic index update failed; run knowledge.reindex() to repair: ${String(error)}`);
+    host.warn(
+      `Knowledge semantic index update failed; the content stays findable by keyword search and is embedded again the next time it changes: ${String(error)}`,
+    );
   }
 }
 

@@ -283,7 +283,7 @@ describe('Knowledge semantic search', () => {
     expect(vector.ids()).not.toContain(`page:${other.id}`);
   });
 
-  it('a failed embed keeps the write, warns, and reindex() repairs it; a failed search falls back to keywords', async () => {
+  it('a failed embed keeps the write, warns, and the next change embeds it; a failed search falls back to keywords', async () => {
     embedder.fail = true;
     const created = await acme()('knowledge_page', {
       op: 'write',
@@ -292,7 +292,10 @@ describe('Knowledge semantic search', () => {
       body: 'Refunds within 30 days.',
     });
     expect(created.page.name).toBe('Refund policy');
-    expect(warnings.some(w => w.includes('run knowledge.reindex()'))).toBe(true);
+    expect(
+      warnings.some(w => w.includes('stays findable by keyword search and is embedded again the next time it changes')),
+    ).toBe(true);
+    expect(warnings.some(w => w.includes('reindex'))).toBe(false);
 
     expect(titles(await acme()('knowledge_search', { query: 'refund' }))).toEqual(['Refund policy']);
     expect(warnings.some(w => w.includes('returning keyword results only'))).toBe(true);
@@ -300,26 +303,58 @@ describe('Knowledge semantic search', () => {
     embedder.fail = false;
     expect(vector.ids()).toEqual([]);
     expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual([]);
-    // Scope pages are not embedded; the one ordinary page is.
-    expect(await knowledge.reindex()).toBe(1);
+
+    await acme()('knowledge_page', { op: 'write', page: created.page.id, body: 'Refunds within 60 days.' });
+    expect(vector.ids()).toEqual([`page:${created.page.id}`]);
     expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual(['Refund policy']);
   });
 
-  it('reindex() repairs notes written on scope pages, which listPages leaves out', async () => {
+  it('a host upsertPage whose embed failed is embedded when the page next changes', async () => {
     embedder.fail = true;
-    await acme()('knowledge_note', {
-      op: 'add',
-      page: 'org:acme',
-      scope: ['org:acme'],
-      text: 'Vacation requests go to HR.',
+    const first = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'refunds',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
     });
-    expect(vector.ids()).toEqual([]);
+    expect(first.status).toBe('created');
+    expect(warnings.some(w => w.includes('embedded again the next time it changes'))).toBe(true);
     embedder.fail = false;
 
-    expect(await knowledge.reindex()).toBe(1);
-    expect(titles(await acme()('knowledge_search', { query: 'holiday' }))).toEqual([
-      'note:Vacation requests go to HR.',
-    ]);
+    // Re-sending the same content writes nothing, so nothing is embedded either.
+    const same = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'refunds',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    expect(same.status).toBe('unchanged');
+    expect(vector.ids()).toEqual([]);
+
+    const changed = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'refunds',
+      name: 'Refund policy',
+      body: 'Refunds within 60 days.',
+    });
+    expect(changed.status).toBe('updated');
+    expect(vector.ids()).toEqual([`page:${first.page.id}`]);
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual(['Refund policy']);
+  });
+
+  it('a note whose embed failed is embedded when it is next changed', async () => {
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'ops', name: 'Ops', body: 'misc' });
+    const pages = vector.ids();
+    embedder.fail = true;
+    const note = await knowledge.addNote({ scope: 'org:acme', path: 'ops', text: 'Vacation requests go to HR.' });
+    expect(vector.ids()).toEqual(pages);
+    embedder.fail = false;
+
+    const updated = await knowledge.updateNote({ id: note.id, text: 'Vacation requests go to HR by Friday.' });
+    expect(vector.ids()).toEqual([...pages, `note:${updated.id}`]);
+    expect(titles(await acme()('knowledge_search', { query: 'holiday' }))[0]).toBe(
+      'note:Vacation requests go to HR by Friday.',
+    );
   });
 
   it('embeds through the SDK: maxRetries retries transient failures, headers and providerOptions reach the model', async () => {
@@ -439,8 +474,7 @@ describe('Knowledge semantic search', () => {
     expect(chunkIds(page.id).length).toBeLessThan(10);
   });
 
-  it('needs both vector and embedder; reindex without them throws', async () => {
+  it('needs both vector and embedder', () => {
     expect(() => new Knowledge({ scopes: {}, vector })).toThrow(/needs both `vector` and `embedder`/);
-    await expect(new Knowledge({ scopes: {}, storage: new InMemoryStore() }).reindex()).rejects.toThrow(/no `vector`/);
   });
 });

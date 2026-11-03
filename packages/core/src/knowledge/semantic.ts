@@ -1,5 +1,5 @@
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
-import type { KnowledgeNote, KnowledgePage, KnowledgeStorage } from '../storage/domains/knowledge';
+import type { KnowledgeNote, KnowledgePage } from '../storage/domains/knowledge';
 import type { MastraEmbeddingModel, MastraEmbeddingOptions, MastraVector } from '../vector';
 import { embedV1, embedV2, embedV3, embedV4 } from '../vector/embed';
 import { knowledgeBodyChunks, KNOWLEDGE_EMBED_CHUNK_TOKENS } from './page-body';
@@ -11,7 +11,6 @@ const MAX_TOP_K = 10_000;
 /** Most of a chunk the page's name and description may take, so a long name can't crowd out the body. */
 const MAX_HEAD_TOKENS = 500;
 const OVERFETCH = 4;
-const REINDEX_PAGE = 100;
 /**
  * Most chunks one page is embedded as (about 200k estimated tokens of body). Past it the rest of
  * the body is found by keyword search only. Bounded so a rewrite can drop the old chunks by id,
@@ -38,7 +37,7 @@ export type KnowledgeSemanticCandidate = { kind: 'page' | 'note'; id: string };
  * page once, at its best chunk. The index holds
  * ids only: every hit is re-read through the store with the run's read scope before it counts, so a
  * stale or foreign vector can never surface content, and access filtering happens before ranking.
- * Writes index after the store commits; a failed embed only costs recall until `reindex()`.
+ * Writes index after the store commits; a failed embed only costs recall until the content next changes.
  * @internal
  */
 export class KnowledgeSemanticIndex {
@@ -114,52 +113,6 @@ export class KnowledgeSemanticIndex {
       }
       if (results.length < topK || topK >= MAX_TOP_K || seen.size >= MAX_CANDIDATES) return accepted;
     }
-  }
-
-  /**
-   * Re-embeds every live ordinary page and every live note in the store, including notes on scope
-   * pages (scope pages themselves aren't embedded). Returns how many were indexed.
-   */
-  async reindex(storage: KnowledgeStorage): Promise<number> {
-    let count = 0;
-    const indexNotesOn = async (pageId: string) => {
-      let cursor: string | undefined;
-      do {
-        const { notes, nextCursor } = await storage.listNotes({ pageId, read: 'all', cursor, limit: REINDEX_PAGE });
-        for (const note of notes) {
-          await this.indexNote(note);
-          count++;
-        }
-        cursor = nextCursor;
-      } while (cursor);
-    };
-
-    // listPages leaves scope pages out, so walk the scope tree for the notes written on them.
-    const scopeParents: Array<string | null> = [null];
-    while (scopeParents.length) {
-      const parentId = scopeParents.pop()!;
-      let cursor: string | undefined;
-      do {
-        const { pages, nextCursor } = await storage.listChildScopes({ parentId, cursor, limit: REINDEX_PAGE });
-        for (const scope of pages) {
-          await indexNotesOn(scope.id);
-          scopeParents.push(scope.id);
-        }
-        cursor = nextCursor;
-      } while (cursor);
-    }
-
-    let cursor: string | undefined;
-    do {
-      const { pages, nextCursor } = await storage.listPages({ read: 'all', cursor, limit: REINDEX_PAGE });
-      for (const page of pages) {
-        await this.indexPage(page);
-        count++;
-        await indexNotesOn(page.id);
-      }
-      cursor = nextCursor;
-    } while (cursor);
-    return count;
   }
 
   /** Through the SDK's `embed`, so `maxRetries`, `headers`, `providerOptions` and `telemetry` mean what they do elsewhere. */
