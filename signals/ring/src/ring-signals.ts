@@ -194,7 +194,12 @@ export class RingSignals extends SignalProvider<'ring-signals'> {
       return { status: 401, body: { error: 'invalid signature' } };
     }
 
-    const event = JSON.parse(rawBody) as RingWebhookEvent;
+    let event: RingWebhookEvent;
+    try {
+      event = JSON.parse(rawBody) as RingWebhookEvent;
+    } catch {
+      return { status: 400, body: { error: 'invalid JSON body' } };
+    }
     await this.#handleAccountEvent(event);
     const notification = this.#events[event.data.type as RingEventType];
 
@@ -441,20 +446,22 @@ export class RingSignals extends SignalProvider<'ring-signals'> {
 
   /**
    * Writes the media as a `file` chunk. Mastra's channel layer posts `file` chunks as attachments
-   * on every channel platform; other surfaces can ignore them.
+   * on every channel platform; other surfaces can ignore them. Returns whether a chunk was written.
    */
   async #attachFile(
     writer: { custom: (chunk: any) => Promise<void> } | undefined,
     data: Buffer,
     mimeType: string,
     filename: string,
-  ): Promise<void> {
-    await writer?.custom({
+  ): Promise<boolean> {
+    if (!writer?.custom) return false;
+    await writer.custom({
       type: 'file',
       runId: this.id,
       from: 'AGENT',
       payload: { data: data.toString('base64'), mimeType, filename },
     });
+    return true;
   }
 
   /**
@@ -489,10 +496,11 @@ export class RingSignals extends SignalProvider<'ring-signals'> {
         if (!image) {
           throw new Error('Ring has no image for this device in the last 24 hours.');
         }
-        const { attached, platform } = await this.#shouldAttach('snapshot', context?.agent?.threadId, image.length);
-        if (attached) {
-          await this.#attachFile(context?.writer, image, 'image/jpeg', `snapshot-${timestamp}.jpg`);
-        }
+        const attachment = await this.#shouldAttach('snapshot', context?.agent?.threadId, image.length);
+        const { platform } = attachment;
+        const attached =
+          attachment.attached &&
+          (await this.#attachFile(context?.writer, image, 'image/jpeg', `snapshot-${timestamp}.jpg`));
         const url = this.#mediaUrl('snapshot', deviceId, timestamp);
         const mediaId = `snapshot:${deviceId}:${timestamp}`;
         if (this.#visibleToModel('snapshot')) {
@@ -529,10 +537,10 @@ export class RingSignals extends SignalProvider<'ring-signals'> {
         if (!clip) {
           throw new Error('Ring has no recording for this event.');
         }
-        const { attached, platform } = await this.#shouldAttach('clip', context?.agent?.threadId, clip.length);
-        if (attached) {
-          await this.#attachFile(context?.writer, clip, 'video/mp4', `clip-${timestamp}.mp4`);
-        }
+        const attachment = await this.#shouldAttach('clip', context?.agent?.threadId, clip.length);
+        const { platform } = attachment;
+        const attached =
+          attachment.attached && (await this.#attachFile(context?.writer, clip, 'video/mp4', `clip-${timestamp}.mp4`));
         const url = this.#mediaUrl('clip', deviceId, timestamp);
         const mediaId = `clip:${deviceId}:${timestamp}`;
         if (this.#visibleToModel('clip')) {
@@ -599,7 +607,7 @@ export class RingSignals extends SignalProvider<'ring-signals'> {
   async #completeLink(nonce: string, time: string): Promise<string | undefined> {
     this.#assertConfigured();
     if (!nonce || !time) return 'missing nonce or time';
-    if (Date.now() - Number(time) > LINK_WINDOW_MS) return 'link request expired';
+    if (!(Math.abs(Date.now() - Number(time)) <= LINK_WINDOW_MS)) return 'link request expired';
 
     const pending = (await this.#listInstallations('pending')).map(installation => this.#readAccount(installation));
     if (pending.length === 0) return 'no account saved by the token exchange';

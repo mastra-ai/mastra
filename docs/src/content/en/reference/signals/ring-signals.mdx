@@ -385,6 +385,8 @@ Both tools return the same shape:
 
 These routes are added to the Mastra server when the agent is registered. They don't use Mastra authentication. Webhooks are verified with Ring's signature, account links with Ring's link nonce, and media links with their signature and expiry time.
 
+Each instance needs its own `routePrefix`. When two instances use the same prefix, Mastra registers only the first instance's routes and logs a warning. The second instance gets no Ring events.
+
 | Route | Purpose |
 | - | - |
 | `GET <routePrefix>/link` | Account Link URL. Finishes linking and shows the result. |

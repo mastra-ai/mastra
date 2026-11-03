@@ -100,6 +100,8 @@ The routes Ring needs are added automatically to your Mastra server under `/ring
 
 Ring calls these routes without Mastra authentication. Webhooks are verified with Ring's signature, and account links with Ring's link nonce.
 
+Each `RingSignals` instance adds its own routes. If you add `RingSignals` to more than one agent, give each instance its own `routePrefix` and its own Ring developer app. When two instances use the same prefix, Mastra only registers the first instance's routes, and the second agent gets no Ring events.
+
 1. Open your developer app's **Account linking** settings and enter the four URLs from the table.
 1. Under **Connect**, select **Connect Ring account** and sign in with the Ring account that owns the device. Private developer apps are only available to accounts you connect here.
 

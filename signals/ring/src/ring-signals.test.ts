@@ -239,6 +239,20 @@ describe('RingSignals', () => {
       expect(notifications.mock.calls[0]![0].attributes).not.toHaveProperty('nested');
     });
 
+    it('rejects a signed webhook whose body is not JSON', async () => {
+      const { app, notifications } = setup();
+      const body = 'not json';
+
+      const response = await app.request('/ring/webhook', {
+        method: 'POST',
+        headers: { 'X-Signature': computeWebhookSignature(HMAC_KEY, body) },
+        body,
+      });
+
+      expect(response.status).toBe(400);
+      expect(notifications).not.toHaveBeenCalled();
+    });
+
     it('fails webhooks when credentials are missing', async () => {
       const { postWebhook } = setup({ hmacKey: '' });
 
@@ -281,6 +295,19 @@ describe('RingSignals', () => {
       expect(await response.text()).toBe('Ring account link failed: nonce mismatch');
       const channels = (await storage.getStore('channels')) as ChannelsStorage;
       expect((await channels.listInstallations('ring')).map(installation => installation.status)).toEqual(['pending']);
+    });
+
+    it('rejects a link request dated more than 10 minutes in the future', async () => {
+      const { app } = setup();
+      await app.request('/ring/token', { method: 'POST', body: new URLSearchParams({ code: 'auth-code' }) });
+      const time = String(Date.now() + 11 * 60_000);
+
+      const response = await app.request(
+        `/ring/link?nonce=${computeLinkNonce(HMAC_KEY, time, ACCOUNT_ID)}&time=${time}`,
+      );
+
+      expect(response.status).toBe(400);
+      expect(await response.text()).toBe('Ring account link failed: link request expired');
     });
 
     it('removes stored tokens when the app is unlinked in Ring', async () => {
@@ -349,6 +376,107 @@ describe('RingSignals', () => {
 
       expect(media.status).toBe(403);
       expect(await media.text()).toBe('Link expired');
+    });
+
+    describe('attachments', () => {
+      async function channelThread(storage: InMemoryStore, platform = 'slack') {
+        const memory = await storage.getStore('memory');
+        await memory!.saveThread({
+          thread: {
+            id: 'chat-thread',
+            resourceId: 'owner',
+            title: 'Chat',
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            metadata: { channel_platform: platform },
+          },
+        });
+      }
+
+      function toolContext(writer?: { custom: (chunk: any) => Promise<void> }) {
+        return { agent: { threadId: 'chat-thread' }, ...(writer ? { writer } : {}) } as any;
+      }
+
+      function modelOutput(tool: any, result: unknown) {
+        return tool.toModelOutput(result) as {
+          value: Array<{ type: string; text?: string; data?: string; mediaType?: string }>;
+        };
+      }
+
+      it('attaches a snapshot on a channel thread and gives the model the image', async () => {
+        const { ring, linkAccount, storage } = setup();
+        await linkAccount();
+        await channelThread(storage);
+        const writer = { custom: vi.fn(async () => {}) };
+        const tool = ring.getTools().ring_snapshot!;
+
+        const result = await tool.execute!({ deviceId: DEVICE_ID, timestamp: 1 }, toolContext(writer));
+
+        expect(result).toMatchObject({ attached: true, shareLink: false });
+        expect(writer.custom).toHaveBeenCalledTimes(1);
+        const [chunk] = writer.custom.mock.calls[0] as unknown as [any];
+        expect(chunk).toMatchObject({ type: 'file', payload: { mimeType: 'image/jpeg', filename: 'snapshot-1.jpg' } });
+        expect(Buffer.from(chunk.payload.data, 'base64')).toEqual(SNAPSHOT_BYTES);
+
+        const output = modelOutput(tool, result);
+        expect(output.value[0]!.text).toContain('sent to the user as an attachment');
+        expect(output.value[1]).toEqual({
+          type: 'image-data',
+          data: SNAPSHOT_BYTES.toString('base64'),
+          mediaType: 'image/jpeg',
+        });
+      });
+
+      it('tells the model to share a link when there is no writer to attach with', async () => {
+        const { ring, linkAccount, storage } = setup();
+        await linkAccount();
+        await channelThread(storage);
+        const tool = ring.getTools().ring_snapshot!;
+
+        const result = await tool.execute!({ deviceId: DEVICE_ID, timestamp: 1 }, toolContext());
+
+        expect(result).toMatchObject({ attached: false, shareLink: true });
+        const text = modelOutput(tool, result).value[0]!.text!;
+        expect(text).toContain('[View snapshot](https://agent.example.com/ring/media/snapshot/');
+        expect(text).not.toContain('sent to the user as an attachment');
+      });
+
+      it("doesn't attach on a platform missing from the attachment list", async () => {
+        const { ring, linkAccount, storage } = setup({ tools: { snapshot: { attachment: ['imessage'] } } });
+        await linkAccount();
+        await channelThread(storage, 'slack');
+        const writer = { custom: vi.fn(async () => {}) };
+
+        const result = await ring.getTools().ring_snapshot!.execute!(
+          { deviceId: DEVICE_ID, timestamp: 1 },
+          toolContext(writer),
+        );
+
+        expect(result).toMatchObject({ attached: false, shareLink: true });
+        expect(writer.custom).not.toHaveBeenCalled();
+      });
+
+      it("doesn't attach a clip over maxAttachmentBytes, and gives the model the video", async () => {
+        const { ring, linkAccount, storage } = setup({
+          tools: { clip: { maxAttachmentBytes: CLIP_BYTES.length - 1, visibleToModel: true } },
+        });
+        await linkAccount();
+        await channelThread(storage);
+        const writer = { custom: vi.fn(async () => {}) };
+        const tool = ring.getTools().ring_clip!;
+
+        const result = await tool.execute!({ deviceId: DEVICE_ID, timestamp: 1 }, toolContext(writer));
+
+        expect(result).toMatchObject({ attached: false, shareLink: true });
+        expect(writer.custom).not.toHaveBeenCalled();
+        const output = modelOutput(tool, result);
+        expect(output.value[0]!.text).toContain('[Watch clip](https://agent.example.com/ring/media/clip/');
+        expect(output.value[1]).toEqual({
+          type: 'file-data',
+          data: CLIP_BYTES.toString('base64'),
+          mediaType: 'video/mp4',
+        });
+      });
     });
 
     it('fails a snapshot when no Ring account is linked, and succeeds once one is', async () => {
