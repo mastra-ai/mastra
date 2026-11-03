@@ -1,6 +1,7 @@
 import type { DashboardWidget, DashboardWidgetView } from '@mastra/client-js';
 import type { ComponentType } from 'react';
 import type { z } from 'zod/v4';
+import type { ChartCardProps } from '../metrics/components/chart-card';
 import type { DashboardScope, OnDashboardDrilldown } from './lib/definition';
 
 /** A view whose options passed its kind's schema. */
@@ -12,6 +13,18 @@ export type WidgetKindProps<Options> = {
   views: [ResolvedView<Options>, ...ResolvedView<Options>[]];
   scope: DashboardScope;
   onDrilldown?: OnDashboardDrilldown;
+  /** Where a chart card expands to; see `DashboardExpand`. */
+  expand?: DashboardExpand;
+};
+
+/**
+ * Where a chart widget expands to (a host's query page), as the Gateway Overview's cards do: the card
+ * shows its title with an expand icon linking there, in place of its views menu, on its first view.
+ * `href` returns `undefined` for a widget with nowhere to go; that card keeps its menu.
+ */
+export type DashboardExpand = {
+  href: (widget: DashboardWidget) => string | undefined;
+  LinkComponent: NonNullable<ChartCardProps['LinkComponent']>;
 };
 
 /**
