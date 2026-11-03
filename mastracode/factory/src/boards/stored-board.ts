@@ -1,9 +1,11 @@
+import { createHash } from 'node:crypto';
+
 import { z } from 'zod';
 
 import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import type { StoredBoardInput, StoredPhaseInput } from '../storage/domains/boards/base.js';
-import { BoardDefinitionError, compileBoardDefinition } from './define-board.js';
-import type { BoardPhase, BoardPhaseDefinition } from './define-board.js';
+import { BoardDefinitionError, compileBoardDefinition, declarationOf, DEFAULT_PHASE_CONTEXT } from './define-board.js';
+import type { AnyBoardConfig, BoardPhase, BoardPhaseDefinition } from './define-board.js';
 import type { InstalledBoard } from './registry.js';
 
 const storedRunnerSchema = z
@@ -77,10 +79,21 @@ function storedNextPhases(phase: StoredPhaseInput, phases: readonly StoredPhaseI
 /**
  * Compiles a stored board through the same validator as `defineBoard()`. Its first phase is where
  * cards start.
+ *
+ * With `code`, the board is a project's edit of that code board: its fields come from the stored
+ * definition and its behaviour from the code declaration, by phase key (`onEnter`, `onExit`,
+ * `outcomes`) and for the board (`tools`, `events`, `sourceClosed`, `transitionPolicy`). The board
+ * is rebuilt from the declaration, so the stored runner reaches the declared handlers. An edit code
+ * behaviour can't honour ({@link codeBehaviourConflicts}) is refused.
  */
-export function compileStoredBoard(board: StoredBoardInput): InstalledBoard {
+export function compileStoredBoard(board: StoredBoardInput, code?: InstalledBoard): InstalledBoard {
   const [initial] = board.phases;
   if (!initial) throw new BoardDefinitionError('A board must define at least one phase.');
+  if (code) {
+    const conflicts = codeBehaviourConflicts(board, code);
+    if (conflicts.length > 0) throw new BoardDefinitionError(conflicts.join(' '));
+  }
+  const declaration: AnyBoardConfig | undefined = code ? (declarationOf(code) ?? code) : undefined;
   const phases: Record<string, BoardPhaseDefinition<string>> = {};
   for (const phase of board.phases) {
     if (Object.hasOwn(phases, phase.key)) {
@@ -88,6 +101,8 @@ export function compileStoredBoard(board: StoredBoardInput): InstalledBoard {
     }
     const runner = phase.runner ? withoutUndefined(phase.runner) : undefined;
     const exitTool = phase.exitTool ? withoutUndefined(phase.exitTool) : undefined;
+    const declared =
+      declaration && Object.hasOwn(declaration.phases, phase.key) ? declaration.phases[phase.key] : undefined;
     phases[phase.key] = withoutUndefined({
       name: phase.name,
       description: phase.description ?? undefined,
@@ -97,15 +112,102 @@ export function compileStoredBoard(board: StoredBoardInput): InstalledBoard {
       autoStart: phase.autoStart ? true : undefined,
       autoStartWhen: phase.autoStartWhen ?? undefined,
       exitTool,
+      outcomes: declared?.outcomes,
+      onEnter: declared?.onEnter,
+      onExit: declared?.onExit,
     }) as BoardPhaseDefinition<string>;
   }
-  return compileBoardDefinition({
-    id: board.key,
-    name: board.name,
-    ...(board.description != null ? { description: board.description } : {}),
-    initialPhase: initial.key,
-    phases,
-  });
+  return compileBoardDefinition(
+    {
+      id: board.key,
+      name: board.name,
+      ...(board.description != null ? { description: board.description } : {}),
+      initialPhase: initial.key,
+      phases,
+      ...(declaration?.tools ? { tools: declaration.tools } : {}),
+      ...(declaration?.events ? { events: declaration.events } : {}),
+      ...(declaration?.transitionPolicy ? { transitionPolicy: declaration.transitionPolicy } : {}),
+      ...(declaration?.sourceClosed ? { sourceClosed: declaration.sourceClosed } : {}),
+    },
+    code,
+  );
+}
+
+function hasHandlers(phase: BoardPhaseDefinition<string> | undefined): boolean {
+  return Object.keys(phase?.onEnter ?? {}).length > 0 || Object.keys(phase?.onExit ?? {}).length > 0;
+}
+
+/**
+ * Why a stored definition of a code board's key can't run with that board's code behaviour, one
+ * reason per locked change; empty when it can. Code handlers and checks name the board's phases,
+ * its first phase, the context and skill of phases with handlers, and their exit tools, so those
+ * stay as code declares them. Names, descriptions, `nextPhases`, start and approval conditions,
+ * runner instructions and new phases are free.
+ */
+export function codeBehaviourConflicts(board: StoredBoardInput, code: InstalledBoard): string[] {
+  const declaration: AnyBoardConfig = declarationOf(code) ?? code;
+  const stored = new Map(board.phases.map(phase => [phase.key, phase]));
+  const conflicts: string[] = [];
+  if (board.phases[0]?.key !== code.initialPhase) {
+    conflicts.push(`Cards on board "${code.id}" start in "${code.initialPhase}"; keep it the first phase.`);
+  }
+  for (const [key, phase] of Object.entries(code.phases) as [string, BoardPhase<string>][]) {
+    const edited = stored.get(key);
+    const label = `Phase "${key}"`;
+    if (!edited) {
+      conflicts.push(`${label} has code behaviour on board "${code.id}"; it can't be removed.`);
+      continue;
+    }
+    if (edited.kind !== phase.kind) {
+      conflicts.push(`${label} must stay ${phase.kind}; its code behaviour depends on it.`);
+      continue;
+    }
+    if (phase.kind === 'working') {
+      if (hasHandlers(declaration.phases[key])) {
+        const context = edited.runner?.context ?? DEFAULT_PHASE_CONTEXT;
+        if (context !== phase.runner.context) {
+          conflicts.push(
+            `${label} runs its code handlers in the "${phase.runner.context}" context; keep runner.context.`,
+          );
+        }
+        if (edited.runner?.skill !== phase.runner.skill) {
+          conflicts.push(
+            phase.runner.skill
+              ? `${label} code handlers run with skill "${phase.runner.skill}"; keep runner.skill.`
+              : `${label} code handlers choose the skill; leave runner.skill unset.`,
+          );
+        }
+      }
+      if (phase.exitTool && edited.exitTool?.id !== phase.exitTool.id) {
+        conflicts.push(`${label} code behaviour waits for exit tool "${phase.exitTool.id}"; keep exitTool.id.`);
+      }
+    }
+    const nextPhases = storedNextPhases(edited, board.phases);
+    for (const [outcome, target] of Object.entries(phase.outcomes ?? {})) {
+      if (!nextPhases.includes(target)) {
+        conflicts.push(`${label} outcome "${outcome}" moves cards to "${target}"; keep it in nextPhases.`);
+      }
+    }
+  }
+  return conflicts;
+}
+
+/** A fingerprint of a code board's storable definition; it changes when the code default does. */
+export function codeBoardHash(board: InstalledBoard): string {
+  return createHash('sha256')
+    .update(canonicalJson(boardDefinitionOf(board)))
+    .digest('hex');
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value)
+      .filter(([, entry]) => entry !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([key, entry]) => `${JSON.stringify(key)}:${canonicalJson(entry)}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
 }
 
 /**
