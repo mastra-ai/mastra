@@ -240,6 +240,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     board: { type: 'text', nullable: true },
     external_source: { type: 'json', nullable: true },
     source_key: { type: 'text', nullable: true },
+    // Retained for existing tables; claims no longer govern work-item identity.
     claim_key: { type: 'text', nullable: true },
     parent_work_item_id: { type: 'text', nullable: true },
     title: { type: 'text' },
@@ -249,6 +250,7 @@ export const WORK_ITEMS_SCHEMA: CollectionSchema = {
     metadata: { type: 'json', nullable: true },
     triage_type: { type: 'text', nullable: true },
     autonomy_armed_at: { type: 'timestamp', nullable: true },
+    // Retired hands-off plan grant: plans are approved per board (`exitTool`).
     plans_preapproved_at: { type: 'timestamp', nullable: true },
     accepted_at: { type: 'timestamp', nullable: true },
     comment_count: { type: 'integer', default: 0 },

@@ -21,4 +21,6 @@ function providerUrl(card: Card) {
 }
 ```
 
+**Removed `feedActivityAt` from public cards and API responses.** Card lists still expose `commentCount`; the feed activity clock is internal storage state and is no longer part of the card contract.
+
 Factory copies existing cards automatically at startup. Inspect reported skipped IDs before rollout. The old `work_items` table is left unchanged, but writes after cutover are not copied back: rolling back to an older build loses visibility of those writes. `MASTRA_FACTORY_WORK_ITEM_SPLIT=dry-run` is supported only before cutover and refuses startup when migrated board items already exist.

@@ -440,11 +440,13 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
 
   it('keeps process consent revisioned and cached separately from provider refreshes', async () => {
     const { storage, workItems, scope, item, sync } = await setup();
-    expect((await workItems.list(scope))[0]!.plansPreapprovedAt).toBeNull();
-    const granted = await workItems.update({ ...scope, id: item.id, patch: { plansPreapproved: true } });
-    expect(granted!.item.plansPreapprovedAt).toBeInstanceOf(Date);
+    const granted = await workItems.update({
+      ...scope,
+      id: item.id,
+      patch: { metadata: { reviewVerdict: 'approved' } },
+    });
     expect(granted!.item.revision).toBe(item.revision + 1);
-    expect((await workItems.list(scope))[0]!.plansPreapprovedAt).toEqual(granted!.item.plansPreapprovedAt);
+    expect((await workItems.list(scope))[0]!.metadata).toMatchObject({ reviewVerdict: 'approved' });
     const transition = (expectedRevision: number) =>
       workItems.commitTransition({
         ...scope,
@@ -469,20 +471,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     expect(consented.autonomyArmedAt).toBeInstanceOf(Date);
 
     await sync();
-    await workItems.update({ ...scope, id: item.id, patch: { plansPreapproved: true } });
     const refreshed = (await workItems.list(scope))[0]!;
     expect(refreshed).toMatchObject({
       triageType: consented.triageType,
       acceptedAt: consented.acceptedAt,
       autonomyArmedAt: consented.autonomyArmedAt,
-      plansPreapprovedAt: consented.plansPreapprovedAt,
+      metadata: { reviewVerdict: 'approved' },
       revision: consented.revision,
     });
+    expect(refreshed).not.toHaveProperty('plansPreapprovedAt');
     expect(await storage.ops.findOne('factory_board_items', { id: item.id })).toMatchObject({
       triage_type: consented.triageType,
       accepted_at: consented.acceptedAt,
       autonomy_armed_at: consented.autonomyArmedAt,
-      plans_preapproved_at: consented.plansPreapprovedAt,
+      plans_preapproved_at: null,
     });
   });
 
