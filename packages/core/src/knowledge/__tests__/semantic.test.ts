@@ -309,6 +309,32 @@ describe('Knowledge semantic search', () => {
     expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual(['Refund policy']);
   });
 
+  it('a failed vector removal warns that old vectors may remain, and search skips the removed page', async () => {
+    const { page: mine } = await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'resource:u-acme',
+      name: 'Mine',
+      body: 'x',
+    });
+    const { page } = await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'resource:u-acme',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    vector.failDeletes = true;
+    await acme()('knowledge_page', { op: 'merge', page: page.id, into: mine.id });
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'old', name: 'Old desk', body: 'x' });
+    await knowledge.removePage({ scope: 'org:acme', path: 'old' });
+
+    const removals = warnings.filter(w => w.includes('removal failed'));
+    expect(removals).toHaveLength(2);
+    expect(removals.every(w => w.includes('search skips content that no longer exists'))).toBe(true);
+    expect(warnings.some(w => w.includes('embedded again the next time it changes'))).toBe(false);
+    expect(vector.ids()).toContain(`page:${page.id}`);
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).not.toContain('Refund policy');
+  });
+
   it('a host upsertPage whose embed failed is embedded when the page next changes', async () => {
     embedder.fail = true;
     const first = await knowledge.upsertPage({
@@ -386,7 +412,7 @@ describe('Knowledge semantic search', () => {
     });
     await store.deletePage({ id: page.id, expectedVersion: page.version, deletedBy: 'host' });
     expect(vector.ids()).toContain(`page:${page.id}`);
-    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).toEqual([]);
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).not.toContain('Refund policy');
   });
 
   /** About 5,000 estimated tokens of filler, with `fact` as one paragraph near the end. */
