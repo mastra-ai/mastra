@@ -599,7 +599,7 @@ export class GitLabRules {
         // self-review and merge request.
         ownedByCard:
           home?.reason !== 'closes' &&
-          (trackedItem !== attachedItem ||
+          (trackedItem.id !== attachedItem?.id ||
             (headBranch !== '' &&
               Object.values(trackedItem.sessions).some(session => session.branch === headBranch))),
       });
@@ -651,7 +651,7 @@ export class GitLabRules {
           patch.pullRequestHeadAt = input.eventAt ?? null;
         }
         patch.openPullRequestNumber = input.mergeRequestIid;
-      } else if (recorded === input.mergeRequestIid) {
+      } else if (settling && recorded === input.mergeRequestIid) {
         // With several merge requests on the card, the newest one still open is the one out next.
         patch.openPullRequestNumber = newestOpenPullRequestNumber(item, input.mergeRequestIid);
         if (input.event === 'mergeRequestMerged' && typeof item.metadata?.reviewVerdict === 'string') {
