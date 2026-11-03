@@ -111,43 +111,50 @@ export function createDurableLLMMappingStep() {
       // updates. A fresh instance here would orphan those references.
       const registryEntry = getRunRegistryEntry(_runId, mastra as Mastra | undefined);
       const terminalBackgroundParts = new Map<string, { restore: (list: MessageList) => void; taskId: string }>();
-      for (const message of registryEntry?.messageList?.get.all.db() ?? []) {
-        for (const part of message.content.parts) {
-          if (part.type !== 'tool-invocation') continue;
-          const backgroundTask = part.providerMetadata?.mastra?.backgroundTask;
-          if (
-            backgroundTask &&
-            typeof backgroundTask === 'object' &&
-            'taskId' in backgroundTask &&
-            (backgroundTask.status === 'completed' || backgroundTask.status === 'failed') &&
-            toolResults.some(
-              result =>
-                result.toolCallId === part.toolInvocation.toolCallId &&
-                (
-                  result.providerMetadata as
-                    | { mastra?: { backgroundTask?: { taskId?: string; status?: string } } }
-                    | undefined
-                )?.mastra?.backgroundTask?.taskId === backgroundTask.taskId &&
-                (result.providerMetadata as { mastra?: { backgroundTask?: { status?: string } } } | undefined)?.mastra
-                  ?.backgroundTask?.status === 'running',
-            )
-          ) {
-            terminalBackgroundParts.set(part.toolInvocation.toolCallId, {
-              restore: list => {
-                list.updateToolInvocation(part, { mode: 'stream' });
-              },
-              taskId: backgroundTask.taskId as string,
-            });
+      const captureTerminalBackgroundParts = () => {
+        for (const message of registryEntry?.messageList?.get.all.db() ?? []) {
+          for (const part of message.content.parts) {
+            if (part.type !== 'tool-invocation') continue;
+            const backgroundTask = part.providerMetadata?.mastra?.backgroundTask;
+            if (
+              backgroundTask &&
+              typeof backgroundTask === 'object' &&
+              'taskId' in backgroundTask &&
+              (backgroundTask.status === 'completed' || backgroundTask.status === 'failed') &&
+              toolResults.some(
+                result =>
+                  result.toolCallId === part.toolInvocation.toolCallId &&
+                  (
+                    result.providerMetadata as
+                      | { mastra?: { backgroundTask?: { taskId?: string; status?: string } } }
+                      | undefined
+                  )?.mastra?.backgroundTask?.taskId === backgroundTask.taskId &&
+                  (result.providerMetadata as { mastra?: { backgroundTask?: { status?: string } } } | undefined)?.mastra
+                    ?.backgroundTask?.status === 'running',
+              )
+            ) {
+              terminalBackgroundParts.set(part.toolInvocation.toolCallId, {
+                restore: list => {
+                  list.updateToolInvocation(part, { mode: 'stream' });
+                },
+                taskId: backgroundTask.taskId as string,
+              });
+            }
           }
         }
-      }
+      };
+      captureTerminalBackgroundParts();
+      const snapshot = await readMessageListState(params, llmOutput);
+      // Hydration may yield while a background task completes. Capture the live
+      // terminal part again before deserializing the older workflow snapshot.
+      captureTerminalBackgroundParts();
       const messageList = (
         registryEntry?.messageList ??
         new MessageList({
           threadId: state.threadId,
           resourceId: state.resourceId,
         })
-      ).deserialize(await readMessageListState(params, llmOutput));
+      ).deserialize(snapshot);
       for (const { restore } of terminalBackgroundParts.values()) {
         restore(messageList);
       }
@@ -220,10 +227,10 @@ export function createDurableLLMMappingStep() {
               | { mastra?: { backgroundTask?: { taskId?: string; status?: string } } }
               | undefined
           )?.mastra?.backgroundTask;
-          if (
-            backgroundTask?.status === 'running' &&
-            terminalBackgroundParts.get(toolResult.toolCallId)?.taskId === backgroundTask.taskId
-          ) {
+          captureTerminalBackgroundParts();
+          const terminalPart = terminalBackgroundParts.get(toolResult.toolCallId);
+          if (backgroundTask?.status === 'running' && terminalPart && terminalPart.taskId === backgroundTask.taskId) {
+            terminalPart.restore(messageList);
             continue;
           }
           if (toolResult.mappingError) {
@@ -323,6 +330,14 @@ export function createDurableLLMMappingStep() {
               providerMetadata,
               toolResult.transformMetadata,
             ) as Record<string, unknown> | undefined;
+          }
+
+          // A mapper may have yielded while a background result settled.
+          captureTerminalBackgroundParts();
+          const settledPart = terminalBackgroundParts.get(toolResult.toolCallId);
+          if (backgroundTask?.status === 'running' && settledPart && settledPart.taskId === backgroundTask.taskId) {
+            settledPart.restore(messageList);
+            continue;
           }
 
           // A tool error must be recorded as `output-error` with the message in
