@@ -343,7 +343,7 @@ describe('compileKnowledgeScopes: pinnedContext', () => {
   });
 
   it('refuses a pin that is a name or has no key, and one on an undeclared type', () => {
-    for (const ref of ['Refund Policy', 'policy:$orgId#', '#refund', 'policy:$orgId#a#b', 'policy:$orgId#a//b']) {
+    for (const ref of ['Refund Policy', 'policy:$orgId#', '#refund', 'policy:$orgId#a#b', 'policy:$orgId#/']) {
       expect(() => compileKnowledgeScopes({ ...policy, 'role:$orgId:$role': { pinnedContext: [ref] } })).toThrow(
         /must be "<scope>#<key>\[\/<key>…\]"/,
       );

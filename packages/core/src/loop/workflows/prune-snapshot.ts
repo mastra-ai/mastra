@@ -398,7 +398,7 @@ function getActiveStepIds(snapshot: WorkflowRunState): Set<string> {
 }
 
 /**
- * Steps that read an earlier step's result directly (`getStepResult`) instead
+ * Steps that read an earlier step's result directly (`getStepResultAsync`) instead
  * of receiving it as input, keyed by reader step id. Workflow-specific, so the
  * workflow that owns the steps declares them.
  */
