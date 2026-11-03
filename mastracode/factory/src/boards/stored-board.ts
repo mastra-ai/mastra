@@ -209,7 +209,11 @@ export function mergeCodeBehaviour(row: StoredBoardInput, code: InstalledBoard):
       problems.push(`Board "${row.key}" doesn't move cards when their source closes: ${missingPhases(closedMissing)}`);
     } else if (closedOpen.length > 0) {
       problems.push(
-        `Board "${row.key}" doesn't move cards when their source closes: ${closedOpen.map(key => `phase "${key}"`).join(' and ')} isn't terminal.`,
+        `Board "${row.key}" doesn't move cards when their source closes: ${
+          closedOpen.length === 1
+            ? `phase "${closedOpen[0]}" isn't terminal.`
+            : `phases ${closedOpen.map(key => `"${key}"`).join(', ')} aren't terminal.`
+        }`,
       );
     } else board.sourceClosed = sourceClosed;
   }
