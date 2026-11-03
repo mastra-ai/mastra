@@ -8,6 +8,7 @@ import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent, DurableStepIds, globalRunRegistry } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
+import type { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { describe, expect, it } from 'vitest';
@@ -17,6 +18,7 @@ import { TestExporter } from './exporters';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 const CARRIER_KEY = 'mastra__durableSegments';
+const CLAIM_KEY = 'mastra__durableExecutions';
 
 function observability(exporter: TestExporter) {
   return new Observability({ configs: { test: { serviceName: 'resumed-segment', exporters: [exporter] } } });
@@ -100,6 +102,120 @@ describe('a resumed segment keeps its span pair private to the engine', () => {
         await mastra.shutdown();
       }
     }, 30_000);
+  }
+});
+
+describe('a resumed segment keeps the engine keys out of processors', () => {
+  const PROCESSOR_SURFACES = ['processInputStep', 'processOutputStep', 'processOutputResult'] as const;
+  for (const engine of ['durable', 'evented'] as const) {
+    for (const cold of [false, true]) {
+      it(`${engine} ${cold ? 'cold' : 'warm'}: processors see neither the segment carrier nor the execution claim`, async () => {
+        let calls = 0;
+        const model = new MockLanguageModelV2({
+          doStream: async () => ({
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              ...(++calls === 1
+                ? [{ type: 'tool-call', toolCallId: 'call-1', toolName: 'inspect', input: '{}' }]
+                : [
+                    { type: 'text-start', id: 't' },
+                    { type: 'text-delta', id: 't', delta: 'done' },
+                    { type: 'text-end', id: 't' },
+                  ]),
+              { type: 'finish', finishReason: calls === 1 ? 'tool-calls' : 'stop', usage },
+            ] as any[]),
+          }),
+        });
+        const seen: Record<string, string[][]> = {};
+        const record = (surface: string, requestContext: RequestContext | undefined) => {
+          if (!requestContext) return;
+          (seen[surface] ??= []).push([...requestContext.entries()].map(([key]) => key));
+        };
+        const storage = new InMemoryStore();
+        const exporter = new TestExporter({ validateLifecycle: false, logMetricsOnFlush: false });
+        const build = () => {
+          const agent = new Agent({
+            id: `processor-keys-${engine}`,
+            name: 'processor keys',
+            instructions: ({ requestContext }) => {
+              record('instructions', requestContext);
+              return 'Use tools.';
+            },
+            model,
+            inputProcessors: [
+              {
+                id: 'record-input',
+                processInputStep: async ({ requestContext, messageList }: any) => {
+                  record('processInputStep', requestContext);
+                  return messageList;
+                },
+              } as any,
+            ],
+            outputProcessors: [
+              {
+                id: 'record-output',
+                processOutputStep: async ({ requestContext, messages }: any) => {
+                  record('processOutputStep', requestContext);
+                  return messages;
+                },
+                processOutputResult: async ({ requestContext, messages }: any) => {
+                  record('processOutputResult', requestContext);
+                  return messages;
+                },
+              } as any,
+            ],
+            tools: {
+              inspect: createTool({
+                id: 'inspect',
+                description: 'Records the request context it ran with',
+                inputSchema: z.object({}),
+                requireApproval: true,
+                execute: async (_input, context) => {
+                  record('tool', context!.requestContext);
+                  return { ok: true };
+                },
+              }),
+            },
+          });
+          const runner = engine === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
+          const mastra = new Mastra({
+            agents: { runner },
+            storage,
+            logger: false,
+            observability: observability(exporter),
+          });
+          return { runner, mastra };
+        };
+        let { runner, mastra } = build();
+        try {
+          const first = await runner.generate('Inspect.', { maxSteps: 5 });
+          expect(first.finishReason).toBe('suspended');
+          if (cold) {
+            await mastra.shutdown();
+            globalRunRegistry.clear();
+            ({ runner, mastra } = build());
+          }
+          const before = Object.fromEntries(Object.entries(seen).map(([surface, list]) => [surface, list.length]));
+          const resumed = await runner.resumeGenerate(
+            first.runId,
+            { approved: true },
+            { toolCallId: 'call-1', maxSteps: 5 },
+          );
+          expect(resumed.finishReason).toBe('stop');
+
+          for (const [surface, list] of Object.entries(seen)) {
+            for (const keys of list) expect(keys, `${surface} never sees the carrier`).not.toContain(CARRIER_KEY);
+          }
+          for (const surface of PROCESSOR_SURFACES) {
+            const afterResume = (seen[surface] ?? []).slice(before[surface] ?? 0);
+            expect(afterResume.length, `${surface} ran on the resumed segment`).toBeGreaterThan(0);
+            for (const keys of afterResume) expect(keys, `${surface} never sees the claim`).not.toContain(CLAIM_KEY);
+          }
+        } finally {
+          await mastra.shutdown();
+        }
+      }, 30_000);
+    }
   }
 });
 
