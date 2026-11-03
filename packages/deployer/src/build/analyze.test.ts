@@ -332,6 +332,121 @@ describe('external dependency versions', () => {
   }, 15000);
 });
 
+describe('repeated analysis in one process', () => {
+  // `mastra dev` analyzes again in the same process after a restart; package lookups must not leak across analyses.
+  it('picks up a dependency installed or upgraded since the previous analysis', async () => {
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await mkdtemp(join(tempRoot, 'mastra-reanalyze-'));
+    tempDirs.push(tempDir);
+
+    const entryFile = join(tempDir, 'index.ts');
+    const outputDir = join(tempDir, '.mastra', '.build');
+    const externalPackageDir = join(tempDir, 'node_modules', 'late-external');
+    await mkdir(outputDir, { recursive: true });
+    await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'reanalyze-app', type: 'module' }));
+    await writeFile(entryFile, `import { value } from 'late-external';\nexport const result = value;`);
+
+    const analyze = () =>
+      analyzeBundle(
+        [entryFile],
+        entryFile,
+        {
+          outputDir,
+          projectRoot: tempDir,
+          platform: 'node',
+          isDev: true,
+          bundlerOptions: { externals: ['late-external'], enableSourcemap: false },
+        },
+        noopLogger,
+      );
+    const installExternal = async (version: string) => {
+      await mkdir(externalPackageDir, { recursive: true });
+      await writeFile(
+        join(externalPackageDir, 'package.json'),
+        JSON.stringify({ name: 'late-external', version, type: 'module', main: './index.js' }),
+      );
+      await writeFile(join(externalPackageDir, 'index.js'), `export const value = ${JSON.stringify(version)};`);
+    };
+
+    const originalCwd = process.cwd();
+    process.chdir(tempDir);
+    try {
+      expect((await analyze()).externalDependencies.get('late-external')?.version).toBeUndefined();
+
+      await installExternal('1.0.0');
+      expect((await analyze()).externalDependencies.get('late-external')?.version).toBe('1.0.0');
+
+      await installExternal('2.0.0');
+      expect((await analyze()).externalDependencies.get('late-external')?.version).toBe('2.0.0');
+    } finally {
+      process.chdir(originalCwd);
+    }
+  }, 30000);
+});
+
+describe('bundle validation', () => {
+  // Bundled dependencies are validated in parallel child processes. When several fail, the reported error must not
+  // depend on which child finishes first.
+  it('reports the same failing dependency regardless of which validation finishes first', async () => {
+    const analyzeWithBrokenDependencies = async (delays: { alpha: number; beta: number }) => {
+      await mkdir(tempRoot, { recursive: true });
+      const tempDir = await mkdtemp(join(tempRoot, 'mastra-validation-order-'));
+      tempDirs.push(tempDir);
+
+      const entryFile = join(tempDir, 'index.ts');
+      const outputDir = join(tempDir, '.mastra', '.build');
+      await mkdir(outputDir, { recursive: true });
+      await writeFile(join(tempDir, 'package.json'), JSON.stringify({ name: 'validation-order-app', type: 'module' }));
+      for (const [name, delay] of Object.entries(delays)) {
+        const packageDir = join(tempDir, 'node_modules', name);
+        await mkdir(packageDir, { recursive: true });
+        await writeFile(
+          join(packageDir, 'package.json'),
+          JSON.stringify({ name, version: '1.0.0', type: 'module', main: './index.js' }),
+        );
+        // Fails while the bundled module is evaluated, after `delay` ms.
+        await writeFile(
+          join(packageDir, 'index.js'),
+          `Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ${delay});\nexport const ${name} = globalThis.missing.${name};`,
+        );
+      }
+      await writeFile(
+        entryFile,
+        `import { alpha } from 'alpha';\nimport { beta } from 'beta';\nexport const values = [alpha, beta];`,
+      );
+
+      const originalCwd = process.cwd();
+      process.chdir(tempDir);
+      try {
+        const error = await analyzeBundle(
+          [entryFile],
+          entryFile,
+          {
+            outputDir,
+            projectRoot: tempDir,
+            platform: 'node',
+            bundlerOptions: { externals: [], enableSourcemap: false },
+          },
+          noopLogger,
+        ).then(
+          () => undefined,
+          (err: unknown) => err,
+        );
+        expect(error).toBeInstanceOf(Error);
+        return (error as Error).message.match(/bundle "(alpha|beta)"/)?.[1];
+      } finally {
+        process.chdir(originalCwd);
+      }
+    };
+
+    const whenAlphaIsSlow = await analyzeWithBrokenDependencies({ alpha: 1500, beta: 0 });
+    const whenBetaIsSlow = await analyzeWithBrokenDependencies({ alpha: 0, beta: 1500 });
+
+    expect(whenAlphaIsSlow).toMatch(/^(alpha|beta)$/);
+    expect(whenBetaIsSlow).toBe(whenAlphaIsSlow);
+  }, 30000);
+});
+
 describe('protocol imports', () => {
   it('should exclude protocol imports from externalDependencies', async () => {
     await mkdir(tempRoot, { recursive: true });

@@ -179,27 +179,66 @@ function toParentDirectoryUrl(parentPath: string): string {
   return pathToFileURL(`${fsPath}${sep}`).href;
 }
 
+type PackageMetadata = { rootPath: string | null; version?: string; packageSpec?: string };
+
+/**
+ * Memoized package lookups, including failed ones. A failed lookup falls through to local-pkg, which costs several
+ * milliseconds, and analysis repeats the same lookups for every importer and subpath.
+ *
+ * Create one per build: `mastra dev` is long-running and installs can change between rebuilds.
+ */
+export type PackageLookupCache = {
+  rootPaths: Map<string, Promise<string | null>>;
+  metadata: Map<string, Promise<PackageMetadata>>;
+};
+
+export function createPackageLookupCache(): PackageLookupCache {
+  return { rootPaths: new Map(), metadata: new Map() };
+}
+
+function memoize<T>(cache: Map<string, Promise<T>> | undefined, key: string, load: () => Promise<T>): Promise<T> {
+  if (!cache) {
+    return load();
+  }
+  let result = cache.get(key);
+  if (!result) {
+    result = load();
+    cache.set(key, result);
+  }
+  return result;
+}
+
+// Lookups without a parent path resolve from the cwd.
+function lookupKey(packageName: string, baseUrl: string | undefined) {
+  return `${packageName}\0${baseUrl ?? `cwd:${process.cwd()}`}`;
+}
+
+async function resolvePackageRootPath(packageName: string, baseUrl: string | undefined): Promise<string | null> {
+  try {
+    const pkg = await getPackageInfo(packageName, baseUrl ? { paths: [baseUrl] } : undefined);
+    return pkg?.rootPath ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function getPackageRootPathFromBase(
+  packageName: string,
+  baseUrl: string | undefined,
+  cache: PackageLookupCache | undefined,
+): Promise<string | null> {
+  return memoize(cache?.rootPaths, lookupKey(packageName, baseUrl), () => resolvePackageRootPath(packageName, baseUrl));
+}
+
 /**
  * Get package root path
  */
-export async function getPackageRootPath(packageName: string, parentPath?: string): Promise<string | null> {
-  let rootPath: string | null;
-
-  try {
-    let options: { paths?: string[] } | undefined = undefined;
-    if (parentPath) {
-      options = {
-        paths: [toParentDirectoryUrl(parentPath)],
-      };
-    }
-
-    const pkg = await getPackageInfo(packageName, options);
-    rootPath = pkg?.rootPath ?? null;
-  } catch {
-    rootPath = null;
-  }
-
-  return rootPath;
+export async function getPackageRootPath(
+  packageName: string,
+  parentPath?: string,
+  cache?: PackageLookupCache,
+): Promise<string | null> {
+  return getPackageRootPathFromBase(packageName, parentPath ? toParentDirectoryUrl(parentPath) : undefined, cache);
 }
 
 async function readPackageMetadata(
@@ -224,13 +263,25 @@ async function readPackageMetadata(
 export async function getPackageMetadata(
   packageName: string,
   parentPath?: string,
-): Promise<{ rootPath: string | null; version?: string; packageSpec?: string }> {
+  cache?: PackageLookupCache,
+): Promise<PackageMetadata> {
+  const baseUrl = parentPath ? toParentDirectoryUrl(parentPath) : undefined;
+  return memoize(cache?.metadata, lookupKey(packageName, baseUrl), () =>
+    resolvePackageMetadata(packageName, baseUrl, cache),
+  );
+}
+
+async function resolvePackageMetadata(
+  packageName: string,
+  baseUrl: string | undefined,
+  cache: PackageLookupCache | undefined,
+): Promise<PackageMetadata> {
   const requestedPackageName = getPackageName(packageName);
   const packageNames = [...new Set([packageName, requestedPackageName].filter(Boolean) as string[])];
   let firstRootPath: string | null = null;
 
   for (const name of packageNames) {
-    const rootPath = await getPackageRootPath(name, parentPath);
+    const rootPath = await getPackageRootPathFromBase(name, baseUrl, cache);
     firstRootPath ??= rootPath;
     if (!rootPath) {
       continue;

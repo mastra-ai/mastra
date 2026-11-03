@@ -6,6 +6,7 @@ import type { Plugin, SourceMap } from 'rolldown';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import { mastraInternalAliasPlugin, mastraToolsAliasPlugin } from '../bundler';
 import { getPackageMetadata, getPackageRootPath } from '../package-info';
+import type { PackageLookupCache } from '../package-info';
 import { moduleAlias } from '../plugins/module-alias';
 import { removeDeployer } from '../plugins/remove-deployer';
 import { tsConfigPaths } from '../plugins/tsconfig-paths';
@@ -92,6 +93,7 @@ async function captureDependenciesToOptimize(
     env,
     analyzeCache,
     activeEntries,
+    packageLookupCache,
     externals,
     externalsPreset,
     alias,
@@ -105,6 +107,7 @@ async function captureDependenciesToOptimize(
     analyzeCache?: Map<string, AnalyzeEntryResult>;
     /** Resolved entries currently being analyzed in this recursion path */
     activeEntries: Set<string>;
+    packageLookupCache?: PackageLookupCache;
     externals: string[];
     externalsPreset: boolean;
     alias: Record<string, string>;
@@ -121,7 +124,7 @@ async function captureDependenciesToOptimize(
 
   let entryRootPath = projectRoot;
   if (!output.facadeModuleId.startsWith(VIRTUAL_PREFIX)) {
-    entryRootPath = (await getPackageRootPath(output.facadeModuleId)) || projectRoot;
+    entryRootPath = (await getPackageRootPath(output.facadeModuleId, undefined, packageLookupCache)) || projectRoot;
   }
 
   for (const [dependency, bindings] of Object.entries(output.importedBindings)) {
@@ -137,7 +140,7 @@ async function captureDependenciesToOptimize(
     let packageSpec: string | undefined;
 
     if (pkgName) {
-      const metadata = await getPackageMetadata(dependency, entryRootPath);
+      const metadata = await getPackageMetadata(dependency, entryRootPath, packageLookupCache);
       rootPath = metadata.rootPath;
       version = metadata.version;
       packageSpec = metadata.packageSpec;
@@ -200,6 +203,7 @@ async function captureDependenciesToOptimize(
         shouldCheckTransitiveDependencies: true,
         analyzeCache,
         activeEntries,
+        packageLookupCache,
         externals,
         externalsPreset,
         alias,
@@ -250,7 +254,7 @@ async function captureDependenciesToOptimize(
         let rootPath: string | null = null;
 
         if (pkgName) {
-          const metadata = await getPackageMetadata(dynamicImport, entryRootPath);
+          const metadata = await getPackageMetadata(dynamicImport, entryRootPath, packageLookupCache);
           rootPath = metadata.rootPath;
           version = metadata.version;
           packageSpec = metadata.packageSpec;
@@ -311,6 +315,7 @@ export async function analyzeEntry(
     shouldCheckTransitiveDependencies = false,
     analyzeCache,
     activeEntries: providedActiveEntries,
+    packageLookupCache,
     externals = [],
     externalsPreset = false,
     alias = {},
@@ -326,6 +331,8 @@ export async function analyzeEntry(
     analyzeCache?: Map<string, AnalyzeEntryResult>;
     /** Resolved entries currently being analyzed in this recursion path */
     activeEntries?: Set<string>;
+    /** Package lookups memoized for the current build */
+    packageLookupCache?: PackageLookupCache;
     /** Dependencies that must remain external during analysis */
     externals?: string[];
     /** Whether all non-workspace dependencies must remain external during analysis */
@@ -393,6 +400,7 @@ export async function analyzeEntry(
       env,
       analyzeCache: effectiveAnalyzeCache,
       activeEntries,
+      packageLookupCache,
       externals,
       externalsPreset,
       alias,

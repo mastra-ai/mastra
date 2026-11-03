@@ -135,6 +135,63 @@ describe('extractImportedBindings', () => {
 
       expect(importedBindings).toEqual({ nested: ['default'] });
     });
+
+    it('ignores member calls and other identifiers ending in `require`', () => {
+      const { importedBindings } = extractImportedBindings(
+        [
+          `obj.require("member");`,
+          `obj?.require("optional");`,
+          `obj\n  .__require("chained");`,
+          `$require("dollar");`,
+          `my_require("underscore");`,
+          `myRequire("camel");`,
+        ].join('\n'),
+        new Set(['member', 'optional', 'chained', 'dollar', 'underscore', 'camel']),
+      );
+
+      expect(importedBindings).toEqual({});
+    });
+
+    it('accepts every string quote style and whitespace inside the call', () => {
+      const { importedBindings } = extractImportedBindings(
+        [
+          `__require('single');`,
+          `__require("double");`,
+          'require(`template`);',
+          `require (\n  "spaced"\n);`,
+          `__require("mismatched'");`,
+        ].join('\n'),
+        new Set(['single', 'double', 'template', 'spaced', 'mismatched']),
+      );
+
+      expect(importedBindings).toEqual({
+        single: ['default'],
+        double: ['default'],
+        template: ['default'],
+        spaced: ['default'],
+      });
+    });
+
+    it('matches ids with regex metacharacters literally', () => {
+      const required = new Set(['@scope/pkg.js', 'a+b', 'c|d', 'e(f)']);
+      const { importedBindings } = extractImportedBindings(
+        [
+          `__require("@scope/pkgXjs");`,
+          `__require("aab");`,
+          `__require("c");`,
+          `__require("d");`,
+          `__require("ef");`,
+          `__require("@scope/pkg.js/sub");`,
+        ].join('\n'),
+        required,
+      );
+      expect(importedBindings).toEqual({});
+
+      expect(
+        extractImportedBindings([...required].map(id => `__require(${JSON.stringify(id)});`).join('\n'), required)
+          .importedBindings,
+      ).toEqual({ '@scope/pkg.js': ['default'], 'a+b': ['default'], 'c|d': ['default'], 'e(f)': ['default'] });
+    });
   });
 
   it('throws on code that does not parse', () => {

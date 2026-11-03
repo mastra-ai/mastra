@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
+import { availableParallelism } from 'node:os';
 import { basename, isAbsolute, join, relative } from 'node:path';
 import { transformSync } from '@babel/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@internal/core/error';
@@ -15,7 +16,8 @@ import { DEPS_TO_IGNORE } from './analyze/constants';
 import { normalizeExternals } from './analyze/externals';
 import { checkMastraConfigExport } from './analyzeEntryProjectType';
 import { detectPinoTransports } from './babel/detect-pino-transports';
-import { getPackageMetadata } from './package-info';
+import { createPackageLookupCache, getPackageMetadata } from './package-info';
+import type { PackageLookupCache } from './package-info';
 import type { DependencyMetadata, ExternalDependencyInfo, InternalBundlerOptions } from './types';
 import {
   getPackageName,
@@ -46,6 +48,7 @@ async function resolveDependencyInfo(
   dep: string,
   existing: ExternalDependencyInfo | undefined,
   parentPaths: string[],
+  packageLookupCache: PackageLookupCache,
 ): Promise<ExternalDependencyInfo> {
   if (existing?.version || existing?.packageSpec) {
     return existing;
@@ -56,7 +59,7 @@ async function resolveDependencyInfo(
 
   for (const parentPath of parentPaths) {
     for (const name of packageNames) {
-      const metadata = await getPackageMetadata(name, parentPath);
+      const metadata = await getPackageMetadata(name, parentPath, packageLookupCache);
       if (metadata.version || metadata.packageSpec) {
         return preferDependencyInfo(existing, metadata);
       }
@@ -64,7 +67,7 @@ async function resolveDependencyInfo(
   }
 
   for (const name of packageNames) {
-    const metadata = await getPackageMetadata(name);
+    const metadata = await getPackageMetadata(name, undefined, packageLookupCache);
     if (metadata.version || metadata.packageSpec) {
       return preferDependencyInfo(existing, metadata);
     }
@@ -269,6 +272,45 @@ async function validateFile(
   }
 }
 
+// Each validation spawns a Node process; leave a core for the main process.
+const VALIDATION_CONCURRENCY = Math.max(1, Math.min(4, availableParallelism() - 1));
+
+/**
+ * Runs `task` for each item with at most `concurrency` tasks in flight. When tasks fail, rejects with the error of the
+ * first failing item in input order, the same error a sequential loop would throw. Items after a known failure are not
+ * started.
+ */
+async function forEachWithFirstErrorInOrder<T>(
+  items: readonly T[],
+  concurrency: number,
+  task: (item: T) => Promise<void>,
+): Promise<void> {
+  let nextIndex = 0;
+  let failedIndex = Infinity;
+  let failure: unknown;
+
+  async function worker() {
+    // Items start in input order, so once item `failedIndex` failed, every earlier item has already started.
+    while (nextIndex < items.length && nextIndex < failedIndex) {
+      const index = nextIndex++;
+      try {
+        await task(items[index]!);
+      } catch (error) {
+        if (index < failedIndex) {
+          failedIndex = index;
+          failure = error;
+        }
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, items.length) }, worker));
+
+  if (failedIndex !== Infinity) {
+    throw failure;
+  }
+}
+
 /**
  * Validates the bundled output by attempting to import each generated module.
  * Tracks external dependencies that couldn't be bundled.
@@ -290,6 +332,7 @@ async function validateOutput(
     projectRoot,
     workspaceMap,
     depsVersionInfo,
+    packageLookupCache,
   }: {
     output: (OutputChunk | OutputAsset)[];
     reverseVirtualReferenceMap: Map<string, string>;
@@ -299,6 +342,7 @@ async function validateOutput(
     projectRoot: string;
     workspaceMap: Map<string, WorkspacePackageInfo>;
     depsVersionInfo: Map<string, ExternalDependencyInfo>;
+    packageLookupCache: PackageLookupCache;
   },
   logger: IMastraLogger,
 ) {
@@ -329,6 +373,7 @@ async function validateOutput(
           dep,
           versionInfo,
           importerParentPaths(importerId, externalMetadataParentPaths),
+          packageLookupCache,
         );
         result.externalDependencies.set(
           pkgName,
@@ -346,17 +391,16 @@ async function validateOutput(
 
   const stubbedExternals = [...new Set([...mergedExternals, ...DEPS_TO_IGNORE, ...result.externalDependencies.keys()])];
 
-  for (const file of output) {
-    if (file.type === 'asset') {
-      continue;
-    }
-
-    logger.debug('Validating module', { fileName: file.fileName });
+  const chunks = output.filter((file): file is OutputChunk => file.type === 'chunk');
+  for (const file of chunks) {
     if (file.isEntry && reverseVirtualReferenceMap.has(file.name)) {
       result.dependencies.set(reverseVirtualReferenceMap.get(file.name)!, file.fileName);
     }
+  }
 
-    // validate if the chunk is actually valid, a failsafe to make sure bundling didn't make any mistakes
+  // validate if the chunks are actually valid, a failsafe to make sure bundling didn't make any mistakes
+  await forEachWithFirstErrorInOrder(chunks, VALIDATION_CONCURRENCY, async file => {
+    logger.debug('Validating module', { fileName: file.fileName });
     await validateFile(projectRoot, file, {
       binaryMapData,
       moduleResolveMapLocation: join(outputDir, 'module-resolve-map.json'),
@@ -364,7 +408,7 @@ async function validateOutput(
       workspaceMap,
       stubbedExternals,
     });
-  }
+  });
 
   return result;
 }
@@ -430,6 +474,8 @@ export async function analyzeBundle(
   // Shared cache prevents re-analyzing the same workspace package across entries and recursive calls.
   const analyzeCache = new Map<string, Awaited<ReturnType<typeof analyzeEntry>>>();
   const activeAnalyzeEntries = new Set<string>();
+  // Scoped to this call so a long-running `mastra dev` sees installs that changed since the last analysis.
+  const packageLookupCache = createPackageLookupCache();
   for (const entry of entries) {
     const isVirtualFile = entry.includes('\n') || !existsSync(entry);
     const analyzeResult = await analyzeEntry({ entry, isVirtualFile }, mastraEntry, {
@@ -441,6 +487,7 @@ export async function analyzeBundle(
       shouldCheckTransitiveDependencies: true,
       analyzeCache,
       activeEntries: activeAnalyzeEntries,
+      packageLookupCache,
       externals: mergedExternals,
       externalsPreset,
       alias: bundlerOptions?.alias,
@@ -590,6 +637,7 @@ export async function analyzeBundle(
             projectRoot,
             ...Array.from(workspaceMap.values()).map(pkgInfo => pkgInfo.location),
           ]),
+          packageLookupCache,
         );
         allUsedExternals.set(pkgName, preferDependencyInfo(allUsedExternals.get(pkgName), dependencyInfo));
       }
@@ -606,6 +654,7 @@ export async function analyzeBundle(
       projectRoot: workspaceRoot || projectRoot,
       workspaceMap,
       depsVersionInfo,
+      packageLookupCache,
     },
     logger,
   );
@@ -641,19 +690,28 @@ export async function analyzeBundle(
   // where the package isn't resolvable from the entry's own location).
   for (const [dep, info] of mergedExternalDeps) {
     if (!info.version && !info.packageSpec) {
-      mergedExternalDeps.set(dep, await resolveDependencyInfo(dep, info, externalMetadataParentPaths));
+      mergedExternalDeps.set(
+        dep,
+        await resolveDependencyInfo(dep, info, externalMetadataParentPaths, packageLookupCache),
+      );
     }
   }
 
   // Add pino transports and user dynamic packages
   for (const transport of detectedPinoTransports) {
     if (!mergedExternalDeps.has(transport)) {
-      mergedExternalDeps.set(transport, await resolveDependencyInfo(transport, undefined, externalMetadataParentPaths));
+      mergedExternalDeps.set(
+        transport,
+        await resolveDependencyInfo(transport, undefined, externalMetadataParentPaths, packageLookupCache),
+      );
     }
   }
   for (const pkg of userDynamicPackages) {
     if (!mergedExternalDeps.has(pkg)) {
-      mergedExternalDeps.set(pkg, await resolveDependencyInfo(pkg, undefined, externalMetadataParentPaths));
+      mergedExternalDeps.set(
+        pkg,
+        await resolveDependencyInfo(pkg, undefined, externalMetadataParentPaths, packageLookupCache),
+      );
     }
   }
 

@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, relative } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getPackageMetadata, getPackageRootPath } from './package-info';
+import { createPackageLookupCache, getPackageMetadata, getPackageRootPath } from './package-info';
 
 const tempDirs: string[] = [];
 
@@ -311,5 +311,64 @@ describe('getPackageMetadata', () => {
       version: '0.1.0',
       packageSpec: undefined,
     });
+  });
+});
+
+describe('package lookup cache', () => {
+  async function createApp(prefix: string) {
+    const tempRoot = join(process.cwd(), '.tmp');
+    await mkdir(tempRoot, { recursive: true });
+    const tempDir = await realpath(await mkdtemp(join(tempRoot, prefix)));
+    tempDirs.push(tempDir);
+    return tempDir;
+  }
+
+  async function install(dir: string, name: string, version: string) {
+    const packageDir = join(dir, 'node_modules', name);
+    await mkdir(packageDir, { recursive: true });
+    await writeFile(join(packageDir, 'package.json'), JSON.stringify({ name, version }));
+    await writeFile(join(packageDir, 'index.js'), 'export default 1;');
+    return packageDir;
+  }
+
+  it('remembers a failed lookup for the rest of the build and retries it in the next build', async () => {
+    const appDir = await createApp('lookup-cache-failure-');
+    const build = createPackageLookupCache();
+
+    await expect(getPackageMetadata('late-pkg', appDir, build)).resolves.toEqual({ rootPath: null });
+    await expect(getPackageRootPath('late-pkg', appDir, build)).resolves.toBeNull();
+
+    const packageDir = await install(appDir, 'late-pkg', '1.2.3');
+
+    await expect(getPackageMetadata('late-pkg', appDir, build)).resolves.toEqual({ rootPath: null });
+    await expect(getPackageRootPath('late-pkg', appDir, build)).resolves.toBeNull();
+
+    const nextBuild = createPackageLookupCache();
+    await expect(getPackageMetadata('late-pkg', appDir, nextBuild)).resolves.toEqual({
+      rootPath: packageDir,
+      version: '1.2.3',
+      packageSpec: undefined,
+    });
+    await expect(getPackageRootPath('late-pkg', appDir, nextBuild)).resolves.toBe(packageDir);
+  });
+
+  it('resolves the copy installed for each importer within one build', async () => {
+    const tempDir = await createApp('lookup-cache-importers-');
+    const appDir = join(tempDir, 'apps', 'app');
+    const libDir = join(tempDir, 'packages', 'lib');
+    const appCopy = await install(appDir, 'shared-pkg', '1.0.0');
+    const libCopy = await install(libDir, 'shared-pkg', '2.0.0');
+    const build = createPackageLookupCache();
+
+    await expect(getPackageMetadata('shared-pkg', join(appDir, 'index.js'), build)).resolves.toMatchObject({
+      rootPath: appCopy,
+      version: '1.0.0',
+    });
+    await expect(getPackageMetadata('shared-pkg', join(libDir, 'index.js'), build)).resolves.toMatchObject({
+      rootPath: libCopy,
+      version: '2.0.0',
+    });
+    await expect(getPackageRootPath('shared-pkg', appDir, build)).resolves.toBe(appCopy);
+    await expect(getPackageRootPath('shared-pkg', libDir, build)).resolves.toBe(libCopy);
   });
 });

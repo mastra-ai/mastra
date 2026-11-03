@@ -1,31 +1,32 @@
 import { parseSync } from 'rolldown/utils';
 
-type AstNode = { type?: unknown; [key: string]: unknown };
-
-function walk(node: unknown, visit: (node: AstNode) => void) {
-  if (!node || typeof node !== 'object') {
-    return;
-  }
-  if (Array.isArray(node)) {
-    for (const child of node) {
-      walk(child, visit);
-    }
-    return;
-  }
-
-  const astNode = node as AstNode;
-  if (typeof astNode.type === 'string') {
-    visit(astNode);
-  }
-  for (const key in astNode) {
-    if (key !== 'parent') {
-      walk(astNode[key], visit);
-    }
-  }
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-function isStringLiteral(node: unknown): node is { value: string } {
-  return !!node && (node as AstNode).type === 'Literal' && typeof (node as { value?: unknown }).value === 'string';
+/**
+ * Returns the ids that appear as the single string argument of a plain `__require()`/`require()` call. Member calls
+ * like `module.require('x')` and other identifiers ending in `require` don't count.
+ *
+ * Scans the text instead of the AST: building the ESTree of a multi-MB chunk only to find these calls cost hundreds of
+ * milliseconds per build. Unlike the AST, the scan also matches calls inside comments and strings; the ids come from
+ * `require()` calls Rolldown resolved, so such a match can only keep a dependency that was otherwise dropped.
+ */
+function findRequiredIds(code: string, ids: ReadonlySet<string>): Set<string> {
+  const found = new Set<string>();
+  if (!ids.size || !code.includes('require')) {
+    return found;
+  }
+
+  const alternatives = [...ids].map(escapeRegExp).join('|');
+  const requireCall = new RegExp(
+    `(?<![\\w$]|\\.\\s*)(?:__require|require)\\s*\\(\\s*(["'\`])(${alternatives})\\1\\s*\\)`,
+    'g',
+  );
+  for (const match of code.matchAll(requireCall)) {
+    found.add(match[2]!);
+  }
+  return found;
 }
 
 /**
@@ -54,7 +55,8 @@ export function extractImportedBindings(
     }
   };
 
-  const { module, program, errors } = parseSync('analyze.mjs', code, { sourceType: 'module', lang: 'js' });
+  // Only read `module` and `errors`: the result serializes the ESTree `program` lazily, on first access.
+  const { module, errors } = parseSync('analyze.mjs', code, { sourceType: 'module', lang: 'js' });
   if (errors.length) {
     throw new Error(`Failed to parse analyzed entry: ${errors[0]!.message}`);
   }
@@ -90,21 +92,8 @@ export function extractImportedBindings(
     }
   }
 
-  if (requiredExternals.size) {
-    walk(program, node => {
-      if (node.type !== 'CallExpression') {
-        return;
-      }
-      const callee = node.callee as AstNode | undefined;
-      const args = node.arguments as unknown[] | undefined;
-      if (callee?.type !== 'Identifier' || args?.length !== 1 || !isStringLiteral(args[0])) {
-        return;
-      }
-      const calleeName = (callee as { name?: string }).name;
-      if ((calleeName === '__require' || calleeName === 'require') && requiredExternals.has(args[0].value)) {
-        add(args[0].value, 'default');
-      }
-    });
+  for (const id of findRequiredIds(code, requiredExternals)) {
+    add(id, 'default');
   }
 
   return {
