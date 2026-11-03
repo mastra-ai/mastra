@@ -538,29 +538,39 @@ describe('KnowledgePageGraph', () => {
         expect(legend.getByTestId('knowledge-legend-dot').textContent).toBe('Page in another branch');
       });
 
-      it('draws links both ways between two pages side by side, not on one path', () => {
+      it('draws links both ways on one path, the dashed way in over the solid way out', () => {
         renderGraph({
           pages: linked,
           knownLinks: [
             { kind: 'link', source: 'ticket', target: 'faq', count: 1 },
             { kind: 'link', source: 'faq', target: 'ticket', count: 1 },
-            { kind: 'link', source: 'faq', target: 'other', count: 1 },
           ],
         });
         fireEvent.mouseEnter(dot('ticket'));
-        const paths = [...document.querySelectorAll('.react-flow__edge-path')].map(el => el.getAttribute('d'));
-        const ids = [...document.querySelectorAll('[data-id^="link:"]')].map(el => el.getAttribute('data-id'));
-        expect(ids).toEqual(expect.arrayContaining(['link:ticket->faq', 'link:faq->ticket']));
-        const pathOf = (id: string) =>
-          document.querySelector(`[data-id="${id}"] .react-flow__edge-path`)?.getAttribute('d');
-        const coords = (id: string) => (pathOf(id)?.match(/-?\d+(\.\d+)?/g) ?? []).map(Number);
-        const [x1 = 0, y1 = 0, x2 = 0, y2 = 0] = coords('link:ticket->faq');
-        const [bx = 0, by = 0] = coords('link:faq->ticket');
-        // How far the way back starts from the way out's line: apart, not on it.
+        const edge = (id: string) => document.querySelector<SVGElement>(`.react-flow__edge[data-id="${id}"]`);
+        const out = edge('link:ticket->faq');
+        const into = edge('link:faq->ticket');
+        expect(out).toBeTruthy();
+        expect(into).toBeTruthy();
+        const coords = (el: SVGElement | null) =>
+          (
+            el
+              ?.querySelector('.react-flow__edge-path')
+              ?.getAttribute('d')
+              ?.match(/-?\d+(\.\d+)?/g) ?? []
+          ).map(Number);
+        const [x1 = 0, y1 = 0, x2 = 0, y2 = 0] = coords(out);
+        const [bx = 0, by = 0, ex = 0, ey = 0] = coords(into);
+        // Both lines run between the same two points, one way each: no sideways offset.
         const apart = Math.abs((x2 - x1) * (y1 - by) - (x1 - bx) * (y2 - y1)) / Math.hypot(x2 - x1, y2 - y1);
-        expect(apart).toBeGreaterThanOrEqual(8);
-        expect(apart).toBeLessThanOrEqual(12);
-        expect(new Set(paths).size).toBe(paths.length);
+        expect(apart).toBeCloseTo(0, 5);
+        expect(Math.hypot(bx - x2, by - y2)).toBeCloseTo(0, 5);
+        expect(Math.hypot(ex - x1, ey - y1)).toBeCloseTo(0, 5);
+        // The way in is the dashed one, and it sits above the way out.
+        expect(into?.querySelector<SVGElement>('.react-flow__edge-path')?.style.strokeDasharray).toBeTruthy();
+        expect(out?.querySelector<SVGElement>('.react-flow__edge-path')?.style.strokeDasharray).toBeFalsy();
+        const layer = (el: SVGElement | null) => Number(el?.style.zIndex || el?.parentElement?.style.zIndex || 0);
+        expect(layer(into)).toBeGreaterThan(layer(out));
       });
 
       it('explains the line styles drawn while hovering it, and only those', () => {

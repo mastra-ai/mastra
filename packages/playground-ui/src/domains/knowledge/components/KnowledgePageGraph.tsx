@@ -20,8 +20,6 @@ import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { CSSProperties } from 'react';
 
 import { fitWords } from '../lib/circleText';
-import { edgeOffsets, rimToRim } from '../lib/edgeOffsets';
-import type { Circle, EdgeOffset } from '../lib/edgeOffsets';
 import { fitTargets } from '../lib/fitTargets';
 import { fitDuration, fitViewport } from '../lib/fitViewport';
 import {
@@ -551,11 +549,31 @@ interface LegendBranch {
   scope: boolean;
 }
 
-type RimEdgeData = PageFlowEdge['data'] & { from: Circle; to: Circle; offset: EdgeOffset };
+type RimEdgeData = PageFlowEdge['data'] & { from: Circle; to: Circle };
+interface Circle {
+  x: number;
+  y: number;
+  r: number;
+}
+
+/** A straight line from one circle's rim to the other's, so lines never loop or hide behind circles. */
+function rimToRim(from: Circle, to: Circle, gap = 3) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+  const ux = dx / length;
+  const uy = dy / length;
+  return {
+    x1: from.x + ux * (from.r + gap),
+    y1: from.y + uy * (from.r + gap),
+    x2: to.x - ux * (to.r + gap),
+    y2: to.y - uy * (to.r + gap),
+  };
+}
 
 function RimEdgeComponent({ id, data, style, markerEnd }: EdgeProps<Edge<RimEdgeData>>) {
   if (!data) return null;
-  const { x1, y1, x2, y2 } = rimToRim(data.from, data.to, data.offset);
+  const { x1, y1, x2, y2 } = rimToRim(data.from, data.to);
   const mention = data.kind === 'mention';
   const path = `M ${x1} ${y1} L ${x2} ${y2}`;
   return (
@@ -1175,9 +1193,7 @@ function KnowledgePageGraphInner({
       const center = laidOut.positions.get(id) ?? { x: 0, y: 0 };
       return { ...center, r: (sizes.get(id) ?? 0) / 2 };
     };
-    const allEdges = [...laidOut.edges, ...hoverExtra];
-    const offsets = edgeOffsets(allEdges);
-    const flowEdges = allEdges.map((edge): Edge<RimEdgeData> => {
+    const flowEdges = [...laidOut.edges, ...hoverExtra].map((edge): Edge<RimEdgeData> => {
       const mention = edge.data?.kind === 'mention';
       const grant = edge.data?.kind === 'grant';
       const link = edge.data?.kind === 'link';
@@ -1205,8 +1221,9 @@ function KnowledgePageGraphInner({
           ...(edge.data?.role ? { role: edge.data.role } : {}),
           from: circle(edge.source),
           to: circle(edge.target),
-          offset: offsets.get(edge.id) ?? { offset: 0, reversed: false },
         },
+        // Into the focus is dashed: drawn over the solid way out, so the green shows between the dashes.
+        ...(direction === 'in' ? { zIndex: 1 } : {}),
         ...(mention && onMentionSelect ? { className: 'cursor-pointer' } : {}),
         style: direction
           ? { ...DIRECTION_EDGE_STYLE[direction], strokeWidth: mention ? 2 : 1.5 }
