@@ -3,7 +3,7 @@ import type { FactoryCommitDecision } from '../rules/types.js';
 import type { Card } from '../storage/domains/work-items/base.js';
 import { cardRuleFacts } from './card-facts.js';
 import type { BoardRegistry } from './registry.js';
-import { boardForWorkItem } from './semantics.js';
+import { boardForWorkItem, pullRequestReviewPhase } from './semantics.js';
 
 type PhaseCard = Pick<Card, 'board' | 'externalSource' | 'stages' | 'title' | 'metadata' | 'workItem'>;
 
@@ -16,9 +16,14 @@ export function startsInAutoPhase(boards: BoardRegistry, item: PhaseCard, decisi
     return boards.get(decision.board)?.startsAutomatically(decision.stage, cardRuleFacts(item)) === true;
   }
   if (decision.type !== 'invokeSkill' || item.stages.length !== 1) return false;
-  const board = boards.get(boardForWorkItem(item));
+  const boardKey = boardForWorkItem(item);
+  const board = boards.get(boardKey);
   const stage = item.stages[0]!;
-  return board?.roleForPhase(stage) === decision.role && board.startsAutomatically(stage, cardRuleFacts(item));
+  // A pull request's review phase runs the independent reviewer in its own `review` seat.
+  const ownRun =
+    board?.roleForPhase(stage) === decision.role ||
+    (decision.role === 'review' && stage === pullRequestReviewPhase(boardKey));
+  return ownRun && board!.startsAutomatically(stage, cardRuleFacts(item));
 }
 
 /** The exit tool of the card's phase when it is approved without a person for this card. */
