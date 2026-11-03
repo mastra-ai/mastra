@@ -7,13 +7,16 @@ import type { SubmitPlanResumeData } from '@mastra/core/tools';
 import type { BoardEventFacts } from '../boards/board-events.js';
 import {
   boardForWorkItem,
+  cardOwnsBranch,
   cardRuleFacts,
   isPullRequestCard,
   isTerminalWorkItem,
   resolvePhaseSemantics,
   PULL_REQUEST_REVIEW_PHASE,
+  pullRequestSources,
   reviewsPullRequest,
   workItemPhaseSemantics,
+  workStarted,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import {
@@ -47,6 +50,7 @@ import {
   externalSourceKey,
   FACTORY_RULE_MATERIALIZATION_KEY,
   WorkItemSourceConflictError,
+  WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
 import type {
   FactoryDeferredDecisionRecord,
@@ -1829,30 +1833,49 @@ export class FactoryDecisionDispatcher {
     if (this.#storage.legacyMode) return false;
     const target = decision.attachTo!;
     const boards = await this.#boards.load(record);
-    const card = await this.#storage.get({ orgId: record.orgId, id: target.workItemId });
-    if (
-      !card ||
-      card.factoryProjectId !== record.factoryProjectId ||
-      boardForWorkItem(card) !== 'work' ||
-      isTerminalWorkItem(boards, card) ||
-      isPullRequestCard({ source: workItemSource(card.externalSource) })
-    ) {
-      return false;
+    let attached: Card | undefined;
+    for (let attempt = 0; attempt < 3 && !attached; attempt++) {
+      const card = await this.#storage.get({ orgId: record.orgId, id: target.workItemId });
+      if (
+        !card ||
+        card.factoryProjectId !== record.factoryProjectId ||
+        boardForWorkItem(card) !== 'work' ||
+        isTerminalWorkItem(boards, card) ||
+        isPullRequestCard({ source: workItemSource(card.externalSource) })
+      ) {
+        return false;
+      }
+      // Someone else's pull request (one filed because it closes the issue) only joins a card
+      // nothing has worked on and no other such pull request sits on. Checked again here, against
+      // the card's revision, because work can start or another pull request can land between
+      // evaluating the delivery and filing it.
+      if (
+        target.review &&
+        (workStarted(card) ||
+          pullRequestSources(card).some(source => {
+            const head = source.metadata?.headBranch;
+            return !cardOwnsBranch(card, typeof head === 'string' ? head : undefined);
+          }))
+      ) {
+        return false;
+      }
+      try {
+        const result = await this.#storage.attachSource({
+          orgId: record.orgId,
+          id: card.id,
+          source: externalSourceForDecision(decision),
+          metadata: decision.metadata ?? null,
+          expectedRevision: card.revision,
+        });
+        if (!result) return false;
+        attached = result.item;
+      } catch (error) {
+        if (error instanceof WorkItemSourceConflictError) return false;
+        if (error instanceof WorkItemUpdateConflictError) continue;
+        throw error;
+      }
     }
-    let attached: Card;
-    try {
-      const result = await this.#storage.attachSource({
-        orgId: record.orgId,
-        id: card.id,
-        source: externalSourceForDecision(decision),
-        metadata: decision.metadata ?? null,
-      });
-      if (!result) return false;
-      attached = result.item;
-    } catch (error) {
-      if (error instanceof WorkItemSourceConflictError) return false;
-      throw error;
-    }
+    if (!attached) return false;
     const stage = attached.stages.length === 1 ? attached.stages[0] : undefined;
     if (!target.review || (stage !== 'intake' && stage !== 'canceled')) return true;
     const moved = await this.#transitionService.transition({

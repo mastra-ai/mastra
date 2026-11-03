@@ -177,8 +177,6 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // feedback — the builder is woken in place — until the merge closes it.
   if (context.item && context.pullRequestIntake !== true) {
     if (!authoringCard(context) || context.pullRequest.state !== 'open') return;
-    // Someone else's pull request only joins a card nobody is building, and never moves it here.
-    if (context.pullRequestHome?.reason === 'closes') return;
     if (!context.item.stages.includes('execute')) return;
     // Someone else's pull request attached to the issue does not mean this card's build is out.
     if (attachedPullRequest(context) && !context.pullRequest.factoryAuthored) return;

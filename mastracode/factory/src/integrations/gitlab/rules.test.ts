@@ -1596,6 +1596,20 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(card.workItem.sources[1]).toMatchObject({ state: 'merged' });
     });
 
+    it.each(['triage', 'planning', 'review'])(
+      "gives someone else's merge request its own card once the issue has been in %s",
+      async stage => {
+        const h = await harness();
+        const issue = await h.issueCard(stage);
+
+        await h.ingest(mergeRequest(17, 'Closes #42'));
+
+        const cards = await h.cards();
+        expect(cards).toHaveLength(2);
+        expect(sourceTypes(cards.find(card => card.id === issue.id)!)).toEqual(['issue']);
+      },
+    );
+
     it("gives someone else's merge request its own card when the issue has been in Building, even with no session left", async () => {
       const h = await harness();
       const issue = await h.issueCard('execute');
