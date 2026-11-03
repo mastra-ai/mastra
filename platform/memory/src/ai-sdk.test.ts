@@ -25,16 +25,12 @@ function fakeClient(
   const ids: string[][] = [];
   let observed = 0;
   const client = {
-    getContext: async () => ({ ...context, observedAt: null }),
+    getContext: async () => ({ ...context, observedAt: observed ? '2026-11-03T00:00:00.000Z' : null }),
     saveMessages: async (threadId: string, body: { resourceId: string; messages: { id?: string }[] }) => {
       ids.push(body.messages.map(m => m.id!));
       saved.push({ threadId, body: { ...body, messages: body.messages.map(({ id: _id, ...m }) => m) } });
+      if (shouldObserve && !observed) observed++;
       return { messages: [] };
-    },
-    getObservationStatus: async () => ({ shouldObserve }),
-    observe: async () => {
-      observed++;
-      return { observed: true, reflected: false, record: null };
     },
   } as unknown as PlatformMemoryClient;
   return { client, saved, ids, observedCount: () => observed };

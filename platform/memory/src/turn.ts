@@ -46,12 +46,12 @@ function turnMessages(
 export function createTurnMemory(client: PlatformMemoryClient, readOnly = false) {
   // Turn in flight per thread. After a mid-turn observation, later steps go into a new assistant
   // message so re-saving doesn't pull already-observed steps back into the unobserved tail.
-  const turns = new Map<string, { key: string; base: string; from: number; seq: number }>();
+  const turns = new Map<string, { key: string; base: string; from: number; seq: number; observedAt: string | null }>();
 
   function currentTurn(threadId: string, items: TurnItem[]) {
     const key = JSON.stringify(items.findLast(m => m.role === 'user') ?? null);
     let turn = turns.get(threadId);
-    if (turn?.key !== key) turns.set(threadId, (turn = { key, base: crypto.randomUUID(), from: 0, seq: 0 }));
+    if (turn?.key !== key) turns.set(threadId, (turn = { key, base: crypto.randomUUID(), from: 0, seq: 0, observedAt: null }));
     return turn;
   }
 
@@ -75,5 +75,14 @@ export function createTurnMemory(client: PlatformMemoryClient, readOnly = false)
     return true;
   }
 
-  return { save, beforeStep };
+  function noteContext(threadId: string, items: TurnItem[], observedAt: string | null) {
+    const turn = currentTurn(threadId, items);
+    if (observedAt && turn.observedAt !== observedAt && items.slice(turn.from).some(m => m.role === 'tool')) {
+      turn.from = items.length;
+      turn.seq++;
+    }
+    turn.observedAt = observedAt;
+  }
+
+  return { save, beforeStep, noteContext };
 }

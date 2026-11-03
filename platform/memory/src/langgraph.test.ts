@@ -38,16 +38,12 @@ function fakeClient(shouldObserve = false) {
         { role: 'user', content: 'I like tea' },
         { role: 'assistant', content: 'Noted.' },
       ],
-      observedAt: null,
+      observedAt: observed ? '2026-11-03T00:00:00.000Z' : null,
     }),
     saveMessages: async (_threadId: string, body: (typeof saved)[number]) => {
       saved.push(body);
+      if (shouldObserve && !observed) observed++;
       return { messages: [] };
-    },
-    getObservationStatus: async () => ({ shouldObserve }),
-    observe: async () => {
-      observed++;
-      return { observed: true, reflected: false, record: null };
     },
   } as unknown as PlatformMemoryClient;
   return { client, saved, observedCount: () => observed };

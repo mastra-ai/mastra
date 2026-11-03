@@ -168,6 +168,7 @@ export function platformMemoryMiddleware(options: PlatformMemoryMiddlewareOption
     async transformParams({ params }) {
       const saved = await turns.beforeStep(threadId, resourceId, toItems(params.prompt));
       const context = await client.getContext(threadId, resourceId);
+      turns.noteContext(threadId, toItems(params.prompt), context.observedAt);
       const system = params.prompt.filter(m => m.role === 'system');
       // Mid tool loop the turn so far is already saved, so memory returns it (observed or as the tail).
       const rest = saved ? [] : params.prompt.filter(m => m.role !== 'system');

@@ -117,6 +117,7 @@ export function withPlatformMemory(agent: Agent, options: PlatformMemoryPiOption
     const items = messages.slice(lead.length);
     const saved = await turns.beforeStep(threadId, resourceId, toItems(items));
     const context = await client.getContext(threadId, resourceId);
+    turns.noteContext(threadId, toItems(items), context.observedAt);
     // The current turn: the last run of user messages and everything after. Earlier turns come from memory.
     let first = items.findLastIndex(m => 'role' in m && m.role === 'user');
     while (first > 0 && 'role' in items[first - 1]! && items[first - 1]!.role === 'user') first--;
