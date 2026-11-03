@@ -5,6 +5,8 @@ import type { CreateSpanRecord, ObservabilityStorageStrategy, UpdateSpanRecord }
 /** Mixin interface that tracks how many times a buffered event has been retried. */
 export interface RetryCount {
   retryCount: number;
+  /** Epoch milliseconds before which a flush must not send this event again */
+  notBefore?: number;
 }
 
 /** A partial span update record keyed by trace and span ID. */
@@ -149,13 +151,18 @@ export class EventBuffer {
     return dropped;
   }
 
-  /** Re-add failed update events to the buffer, returning events that exceed max retries. */
-  reAddUpdates(events: BufferedEvent[]): BufferedEvent[] {
+  /**
+   * Re-add failed update events to the buffer, returning events that exceed max retries.
+   * With `backoff`, each kept event waits that many milliseconds for its new retry count
+   * before `take` hands it out again. Without it, the event is due at the next flush.
+   */
+  reAddUpdates(events: BufferedEvent[], backoff?: (retryCount: number) => number): BufferedEvent[] {
     const retryable: BufferedEvent[] = [];
     const dropped: BufferedEvent[] = [];
 
     for (const e of events) {
       if (++e.retryCount <= this.#maxRetries) {
+        e.notBefore = backoff ? Date.now() + backoff(e.retryCount) : undefined;
         retryable.push(e);
       } else {
         dropped.push(e);
@@ -168,6 +175,40 @@ export class EventBuffer {
     }
 
     return dropped;
+  }
+
+  /**
+   * Remove and return the events a flush should send now. An update still waiting out its
+   * retry delay stays buffered, unless `all` is set.
+   */
+  take({ all = false } = {}): { creates: BufferedEvent[]; updates: BufferedEvent[] } {
+    const now = Date.now();
+    const creates = this.#creates;
+    const updates: BufferedEvent[] = [];
+    const waiting: BufferedEvent[] = [];
+    for (const event of this.#updates) {
+      (all || (event.notBefore ?? 0) <= now ? updates : waiting).push(event);
+    }
+    this.#creates = [];
+    this.#updates = waiting;
+    this.#firstEventTime = undefined;
+    return { creates, updates };
+  }
+
+  /** Earliest time a buffered update becomes due again, if any is waiting out its retry delay. */
+  get nextRetryAt(): number | undefined {
+    let earliest: number | undefined;
+    for (const { notBefore } of this.#updates) {
+      if (notBefore !== undefined && (earliest === undefined || notBefore < earliest)) earliest = notBefore;
+    }
+    return earliest;
+  }
+
+  /** Whether a flush now would send anything: a create, or an update not waiting out a retry delay. */
+  get hasDueEvents(): boolean {
+    if (this.#creates.length > 0) return true;
+    const now = Date.now();
+    return this.#updates.some(event => (event.notBefore ?? 0) <= now);
   }
 
   /** Snapshot of buffered create events. */
