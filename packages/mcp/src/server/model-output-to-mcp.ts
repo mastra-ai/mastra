@@ -74,8 +74,9 @@ function partToBlock(part: unknown, toolName: string, index: number): ContentBlo
 }
 
 function mediaBlock(data: string, mimeType: string, toolName: string, index: number): ContentBlock {
-  if (mimeType.startsWith('image/')) return { type: 'image', data, mimeType };
-  if (mimeType.startsWith('audio/')) return { type: 'audio', data, mimeType };
+  const kind = mimeType.toLowerCase();
+  if (kind.startsWith('image/')) return { type: 'image', data, mimeType };
+  if (kind.startsWith('audio/')) return { type: 'audio', data, mimeType };
   return {
     type: 'resource',
     resource: { uri: `mastra://tool-output/${encodeURIComponent(toolName)}/${index}`, mimeType, blob: data },
@@ -99,14 +100,20 @@ function parseDataUri(value: string): { mediaType: string; data: string } | unde
 
 /** Decodes `%XX` escapes as raw octets (RFC 2397), not UTF-8 text. Returns `undefined` for a malformed escape. */
 function decodePercentEncoded(payload: string): Buffer | undefined {
-  if (/%(?![0-9a-f]{2})/i.test(payload)) return undefined;
-  return Buffer.concat(
-    payload
-      .split(/(%[0-9a-f]{2})/i)
-      .map(part =>
-        part.startsWith('%') ? Buffer.from([Number.parseInt(part.slice(1), 16)]) : Buffer.from(part, 'utf8'),
-      ),
-  );
+  const input = Buffer.from(payload, 'utf8');
+  const output = Buffer.alloc(input.length);
+  let length = 0;
+  for (let index = 0; index < input.length; index++) {
+    if (input[index] !== 0x25) {
+      output[length++] = input[index]!;
+      continue;
+    }
+    const hex = input.toString('latin1', index + 1, index + 3);
+    if (!/^[0-9a-f]{2}$/i.test(hex)) return undefined;
+    output[length++] = Number.parseInt(hex, 16);
+    index += 2;
+  }
+  return output.subarray(0, length);
 }
 
 function success(content: ContentBlock[]): McpToolContent {

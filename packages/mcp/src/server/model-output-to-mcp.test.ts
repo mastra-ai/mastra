@@ -148,6 +148,23 @@ describe('modelOutputToMcpContent', () => {
     ]);
   });
 
+  it('classifies media types case-insensitively and keeps them as given', () => {
+    const result = modelOutputToMcpContent(
+      {
+        type: 'content',
+        value: [
+          { type: 'media', data: PNG, mediaType: 'IMAGE/PNG' },
+          { type: 'media', data: PNG, mediaType: 'Audio/Wav' },
+        ],
+      },
+      't',
+    );
+    expect(result?.content).toEqual([
+      { type: 'image', data: PNG, mimeType: 'IMAGE/PNG' },
+      { type: 'audio', data: PNG, mimeType: 'Audio/Wav' },
+    ]);
+  });
+
   it('turns remote URLs into text blocks', () => {
     expect(
       modelOutputToMcpContent({ type: 'content', value: [{ type: 'image-url', url: 'https://x.dev/a.png' }] }, 't')
