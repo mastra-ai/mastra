@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { needsApproval } from './types.js';
 
 describe('needsApproval', () => {
-  const labeled = { metadata: { labels: ['bug', 'Status: Needs Approval'] } };
+  const labeled = { workItem: { labels: ['bug', 'Status: Needs Approval'] } };
 
   it('holds a labeled card while it rests in Intake or Triage', () => {
     expect(needsApproval({ ...labeled, stages: ['intake'] })).toBe(true);
@@ -17,8 +17,14 @@ describe('needsApproval', () => {
   });
 
   it('holds nothing without the label', () => {
-    expect(needsApproval({ metadata: { labels: ['bug'] }, stages: ['intake'] })).toBe(false);
-    expect(needsApproval({ metadata: null, stages: ['intake'] })).toBe(false);
+    expect(needsApproval({ workItem: { labels: ['bug'] }, stages: ['intake'] })).toBe(false);
+    expect(needsApproval({ workItem: { labels: [] }, stages: ['intake'] })).toBe(false);
+    const staleBoard = {
+      workItem: { labels: [] },
+      metadata: { labels: ['Status: Needs Approval'] },
+      stages: ['intake'],
+    };
+    expect(needsApproval(staleBoard)).toBe(false);
   });
 
   it('ignores a legacy acceptance stamp: the label and the lane decide', () => {
