@@ -85,7 +85,13 @@ import type { ClassifierStepOutput } from './entry-executors';
 import { withoutAuthToken } from './evented/helpers';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
-import { cancelNestedRun, nestedRunParentOf, nestedRunRecoveryAction, nestedRunStatusOf } from './nested-run-recovery';
+import {
+  cancelNestedRun,
+  createNestedRunParentStatusLookup,
+  nestedRunParentOf,
+  nestedRunRecoveryAction,
+  nestedRunStatusOf,
+} from './nested-run-recovery';
 import { copyState, toJsonState } from './nested-state';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
@@ -3568,6 +3574,9 @@ export class Workflow<
     }
     const activeRuns = await this.listActiveWorkflowRuns();
     const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    // One lookup per parent per sweep: a crashed foreach leaves one nested run per item, all under
+    // the same parent.
+    const parentStatusOf = createNestedRunParentStatusLookup({ store: workflowsStore });
     const runs: typeof activeRuns.runs = [];
     for (const runSnapshot of activeRuns.runs) {
       const parent = nestedRunParentOf(runSnapshot.snapshot);
@@ -3578,7 +3587,7 @@ export class Workflow<
       // Restarting a nested run standalone while its parent drives it runs the item twice, and
       // after the parent finished nothing collects the result, so the item runs a second time.
       try {
-        const parentStatus = (await workflowsStore?.loadWorkflowRunStatus(parent)) ?? null;
+        const parentStatus = await parentStatusOf(parent);
         const recovery = nestedRunRecoveryAction(parentStatus);
         if (recovery === 'restart') {
           runs.push(runSnapshot);

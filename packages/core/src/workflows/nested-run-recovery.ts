@@ -67,6 +67,31 @@ export function nestedRunStatusOf(snapshot: unknown): WorkflowRunStatus | undefi
 }
 
 /**
+ * Reads parent statuses for one recovery sweep. A crashed `.foreach()` leaves one nested run per
+ * item, all pointing at the same parent, so a sweep that reads per run pays the parent lookup once
+ * per leftover item. The cache is per sweep on purpose: within one sweep the parent's status can
+ * only change in the window the sweep already races, and each write it makes is guarded by its own
+ * compare-and-set.
+ */
+export function createNestedRunParentStatusLookup({
+  store,
+}: {
+  store?: WorkflowsStorage;
+}): (parent: { workflowName: string; runId: string }) => Promise<WorkflowRunStatus | null> {
+  const statuses = new Map<string, Promise<WorkflowRunStatus | null>>();
+  return parent => {
+    if (!store) return Promise.resolve(null);
+    const key = `${parent.workflowName}\u0000${parent.runId}`;
+    let status = statuses.get(key);
+    if (!status) {
+      status = store.loadWorkflowRunStatus(parent);
+      statuses.set(key, status);
+    }
+    return status;
+  };
+}
+
+/**
  * Marks a nested run `canceled` when its parent finished without it, so the sweep stops finding it
  * as an active run. Takes the run's ownership lease first: a live driver on another replica keeps
  * the run, and the write must not race it. The write is a compare-and-set on the status the sweep
