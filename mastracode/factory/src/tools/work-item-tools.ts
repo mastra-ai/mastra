@@ -22,7 +22,7 @@ import { resolveWorkItemRepository } from '../session/work-item-repository.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
 import type { CommentsDomain } from '../storage/domains/comments/domain.js';
 import { WorkItemRelationError } from '../storage/domains/work-items/base.js';
-import type { UpdateWorkItemInput, WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import type { UpdateWorkItemInput, Card, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryWorkItem } from '../work-items/create-work-item.js';
 import type { FactoryAuditEmit } from '../work-items/create-work-item.js';
 import {
@@ -69,7 +69,7 @@ const repositorySchema = z
 
 const decisionId = z.string().trim().uuid().describe('Decision id, from factory_list_attention or inspect.');
 
-function briefItem(item: WorkItemRow) {
+function briefItem(item: Card) {
   return {
     id: item.id,
     number: workItemNumber(item),
@@ -116,14 +116,17 @@ export function createFactoryWorkItemTools(
    * `metadata` would run in it (a card synced from an issue follows the
    * issue's repository, which a slug can't override).
    */
-  const requireRepository = async (slug: string, metadata: Record<string, unknown> | null = null) => {
+  const requireRepository = async (slug: string, item?: Pick<Card, 'metadata' | 'workItem'>) => {
     const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
     if (!sourceControl) throw new Error('This session has no source-control provider to look repositories up in.');
     const resolve = (repository?: string) =>
       resolveWorkItemRepository({
         sourceControl,
         ...project,
-        item: { metadata: repository ? { ...metadata, repository } : metadata },
+        item: {
+          metadata: repository ? { repository } : (item?.metadata ?? null),
+          workItem: item?.workItem ?? { metadata: null },
+        },
       });
     const resolution = await resolve(slug);
     if (resolution.status === 'resolved' && resolution.slug === slug) return;
@@ -139,7 +142,7 @@ export function createFactoryWorkItemTools(
         : `${slug} is not linked to this Factory, and it has no linked repositories.`,
     );
   };
-  const follow = (item: WorkItemRow, reason: 'created' | 'subscribed') =>
+  const follow = (item: Card, reason: 'created' | 'subscribed') =>
     deps.workItems.subscribeToWorkItem({
       ...project,
       workItemId: item.id,
@@ -271,20 +274,12 @@ export function createFactoryWorkItemTools(
             .nullable()
             .optional()
             .describe('Parent work item (id or #number), or null to detach it from its parent.'),
-          plansPreapproved: z
-            .literal(true)
-            .optional()
-            .describe(
-              "Pre-approve the item's plans, so its runs no longer stop for plan approval. Can't be undone here.",
-            ),
         })
         .strict()
         .refine(input => Object.keys(input).some(key => key !== 'workItem'), 'Pass at least one field to change.'),
-      execute: async ({ workItem, title, repository, parentWorkItem, plansPreapproved }) => {
-        // Pre-approval drops the plan-approval gate for good, so it is the person's call.
-        if (plansPreapproved) requirePerson(scope, 'pre-approve plans');
+      execute: async ({ workItem, title, repository, parentWorkItem }) => {
         const item = await requireItem(workItem);
-        if (repository) await requireRepository(repository, item.metadata);
+        if (repository) await requireRepository(repository, item);
         let parentWorkItemId: string | null | undefined;
         if (parentWorkItem === null) parentWorkItemId = null;
         else if (parentWorkItem !== undefined) parentWorkItemId = (await requireItem(parentWorkItem)).id;
@@ -292,7 +287,6 @@ export function createFactoryWorkItemTools(
           ...(title !== undefined ? { title } : {}),
           ...(repository ? { metadata: { repository } } : {}),
           ...(parentWorkItemId !== undefined ? { parentWorkItemId } : {}),
-          ...(plansPreapproved ? { plansPreapproved } : {}),
         };
         let updated: Awaited<ReturnType<WorkItemsStorage['update']>>;
         try {
@@ -306,7 +300,6 @@ export function createFactoryWorkItemTools(
           ...(title !== undefined ? ['title'] : []),
           ...(repository ? ['metadata'] : []),
           ...(parentWorkItemId !== undefined ? ['parentWorkItemId'] : []),
-          ...(plansPreapproved ? ['plansPreapproved'] : []),
         ];
         await audit({
           action: 'factory.work_item.updated',
@@ -320,7 +313,6 @@ export function createFactoryWorkItemTools(
           updated: fields.map(field => (field === 'metadata' ? 'repository' : field)),
           repository: typeof metadata.repository === 'string' ? metadata.repository : null,
           parentWorkItemId: updated.item.parentWorkItemId,
-          plansPreapproved: updated.item.plansPreapprovedAt !== null,
         };
       },
     }),

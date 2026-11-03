@@ -138,7 +138,6 @@ describe('custom-only board routing', () => {
         triageType: null,
         acceptedAt: null,
         commentCount: 0,
-        feedActivityAt: null,
         revision: 1,
         createdAt: now,
         updatedAt: now,

@@ -26,7 +26,8 @@ export interface KnowledgeBodySection {
 
 // A closing run of `#` only counts when whitespace comes before it, so `## Use C#` keeps its `#`.
 const HEADING = /^(#{1,6})[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/;
-const FENCE = /^[ \t]*(`{3,}|~{3,})(.*)$/;
+// CommonMark allows up to three spaces before a fence; four or more is an indented code line.
+const FENCE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 
 /**
  * Tracks fenced code line by line: returns the open fence after `line`, given the one open before
