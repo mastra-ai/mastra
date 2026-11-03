@@ -100,6 +100,8 @@ The routes Ring needs are added automatically to your Mastra server under `/ring
 
 Ring calls these routes without Mastra authentication. Webhooks are verified with Ring's signature, and account links with Ring's link nonce.
 
+The token route has no check of its own. It sends each code to Ring, and Ring rejects codes it didn't issue. To stop anyone from flooding it, add rate limiting for `/ring/token` in your server's middleware.
+
 Each `RingSignals` instance adds its own routes. If you add `RingSignals` to more than one agent, give each instance its own `routePrefix` and its own Ring developer app. When two instances use the same prefix, Mastra only registers the first instance's routes, and the second agent gets no Ring events.
 
 1. Open your developer app's **Account linking** settings and enter the four URLs from the table.

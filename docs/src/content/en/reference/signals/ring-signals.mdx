@@ -383,7 +383,7 @@ Both tools return the same shape:
 
 ## Routes
 
-These routes are added to the Mastra server when the agent is registered. They don't use Mastra authentication. Webhooks are verified with Ring's signature, account links with Ring's link nonce, and media links with their signature and expiry time.
+These routes are added to the Mastra server when the agent is registered. They don't use Mastra authentication. Webhooks are verified with Ring's signature, account links with Ring's link nonce, and media links with their signature and expiry time. The token route has no check of its own: it sends each code to Ring, and Ring rejects codes it didn't issue. Rate-limit `<routePrefix>/token` in your server's middleware.
 
 Each instance needs its own `routePrefix`. When two instances use the same prefix, Mastra registers only the first instance's routes and logs a warning. The second instance gets no Ring events.
 
