@@ -61,7 +61,7 @@ export function ComposerPreview({
           <ComposerInput
             ref={inputRef}
             aria-label="Message"
-            placeholder="Ask a question…"
+            placeholder="Ask a question"
             variant={variant}
             disabled={disabled}
             value={text}

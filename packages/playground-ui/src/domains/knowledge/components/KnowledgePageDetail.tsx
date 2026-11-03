@@ -1,8 +1,12 @@
 import { ChevronRight, Pin } from 'lucide-react';
-import { useEffect, useRef } from 'react';
-import type { ReactNode } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
+import type { Components, ExtraProps } from 'react-markdown';
 
+import { knowledgePageRefIndex } from '../lib/pageRefs';
+import type { KnowledgePageRefIndex } from '../lib/pageRefs';
 import { parseRecordSegments } from '../lib/recordText';
+import { KNOWLEDGE_REF_PROPERTY, remarkKnowledgeLinks } from '../lib/remarkKnowledgeLinks';
 import type {
   KnowledgeActivityAction,
   KnowledgePageActivityPayload,
@@ -102,6 +106,44 @@ function knowledgePagePath(page: KnowledgePagePayload, ancestors: KnowledgePageP
   return `${scope.address}#${keys.join('/')}`;
 }
 
+const BodyLinks = createContext<{
+  index: KnowledgePageRefIndex;
+  onPageClick: (page: KnowledgePagePayload) => void;
+} | null>(null);
+
+/**
+ * A `[[ref]]` from a page body: the page's name as a link when a loaded page answers to the ref, the ref
+ * itself in a quiet style when none does. Every other `<span>` the markdown makes passes through.
+ */
+function BodySpan({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
+  const links = useContext(BodyLinks);
+  const ref = node?.properties[KNOWLEDGE_REF_PROPERTY];
+  if (typeof ref !== 'string' || !links) return <span {...props} />;
+  const target = links.index.resolve(ref);
+  return target ? (
+    <button
+      type="button"
+      data-testid="knowledge-body-link"
+      title={ref}
+      className="rounded bg-badge-blue-subtle px-1 font-medium text-badge-blue-foreground hover:underline"
+      onClick={() => links.onPageClick(target)}
+    >
+      {target.name}
+    </button>
+  ) : (
+    <span
+      data-testid="knowledge-body-link-unresolved"
+      title="No loaded page has this address"
+      className="rounded border border-dashed border-border px-1 text-muted-foreground"
+    >
+      {ref}
+    </span>
+  );
+}
+
+const BODY_REMARK_PLUGINS = [remarkKnowledgeLinks];
+const BODY_COMPONENTS: Components = { span: BodySpan };
+
 function Section({ label, count, children }: { label: string; count?: number; children: ReactNode }) {
   return (
     <section aria-label={label} className="flex flex-col gap-3">
@@ -138,6 +180,15 @@ function PageLink({
   );
 }
 
+const refIndexes = new WeakMap<ReadonlyMap<string, KnowledgePagePayload>, KnowledgePageRefIndex>();
+
+/** One ref index per loaded-pages map, shared by every note drawn from it. */
+function loadedRefIndex(pagesById: ReadonlyMap<string, KnowledgePagePayload>): KnowledgePageRefIndex {
+  let index = refIndexes.get(pagesById);
+  if (!index) refIndexes.set(pagesById, (index = knowledgePageRefIndex(pagesById.values())));
+  return index;
+}
+
 /** One note: who wrote it and when, its text with `[[mentions]]` linked when the page is known, and the scopes it is stamped to. */
 export function KnowledgeNoteItem({
   note,
@@ -158,7 +209,12 @@ export function KnowledgeNoteItem({
   /** A tighter layout for popups. */
   compact?: boolean;
 }) {
-  const mentioned = note.mentions.map(id => pagesById.get(id)).filter(candidate => candidate !== undefined);
+  const refIndex = loadedRefIndex(pagesById);
+  // Only a page the server resolved the mention to is linked, however the ref is written.
+  const mentionTarget = (ref: string) => {
+    const target = refIndex.resolve(ref);
+    return target && note.mentions.includes(target.id) ? target : undefined;
+  };
   const scopeLabel = (id: string) => {
     const scopePage = pagesById.get(id);
     return scopePage?.address ?? scopePage?.name ?? id;
@@ -189,8 +245,7 @@ export function KnowledgeNoteItem({
         <p className="text-ui-md break-words text-foreground">
           {parseRecordSegments(note.text).map((segment, index) => {
             if (segment.type === 'text') return <span key={index}>{segment.value}</span>;
-            const name = segment.value.trim().toLocaleLowerCase();
-            const target = mentioned.find(candidate => candidate.name.trim().toLocaleLowerCase() === name);
+            const target = mentionTarget(segment.value);
             return target ? (
               <button
                 key={index}
@@ -272,6 +327,11 @@ export function KnowledgePageDetail({
   const path = knowledgePagePath(page, ancestors);
 
   const kind = page.isScope ? (page.displayLabel ?? 'Scope') : 'Page';
+  const refIndex = useMemo(
+    () => knowledgePageRefIndex([...pagesById.values(), ...ancestors, page]),
+    [pagesById, ancestors, page],
+  );
+  const bodyLinks = useMemo(() => ({ index: refIndex, onPageClick }), [refIndex, onPageClick]);
 
   return (
     <article aria-label={page.name} className="flex min-h-0 flex-col overflow-y-auto">
@@ -355,7 +415,11 @@ export function KnowledgePageDetail({
         <div className="flex min-w-0 flex-col gap-8">
           {page.body ? (
             <div data-testid="knowledge-page-body" className="max-w-3xl">
-              <MarkdownRenderer>{page.body}</MarkdownRenderer>
+              <BodyLinks.Provider value={bodyLinks}>
+                <MarkdownRenderer remarkPlugins={BODY_REMARK_PLUGINS} components={BODY_COMPONENTS}>
+                  {page.body}
+                </MarkdownRenderer>
+              </BodyLinks.Provider>
             </div>
           ) : (
             <Txt variant="body" tone="muted" className="italic">

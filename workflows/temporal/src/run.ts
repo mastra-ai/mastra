@@ -1,7 +1,8 @@
-import type { RequestContext } from '@mastra/core/di';
+import { RequestContext } from '@mastra/core/di';
 import { Run } from '@mastra/core/workflows';
-import type { Step, WorkflowResult, WorkflowRunStartOptions } from '@mastra/core/workflows';
-import type { Client } from '@temporalio/client';
+import type { Step, StepResult, WorkflowResult, WorkflowRunStartOptions } from '@mastra/core/workflows';
+import { CancelledFailure, WorkflowFailedError } from '@temporalio/client';
+import type { Client, WorkflowHandle } from '@temporalio/client';
 import type { WorkflowExecutionResult } from './transforms/temporal-workflow-runtime';
 import type { TemporalEngineType } from './types';
 import { toWorkflowType } from './utils';
@@ -59,19 +60,18 @@ export class TemporalRun<
   }
 
   async start(args: TemporalRunStartArgs<TState, TInput, TRequestContext> = {}) {
-    const input = await this._validateInput(args.inputData);
-    const initialState = await this._validateInitialState(args.initialState);
-    await this._validateRequestContext(args.requestContext as RequestContext<unknown> | undefined);
+    const { input, initialState, requestContext } = await this.#prepareStart(args);
 
+    let handle: WorkflowHandle;
     try {
-      const handle = await this.client.workflow.start(toWorkflowType(this.workflowId), {
+      handle = await this.client.workflow.start(toWorkflowType(this.workflowId), {
         taskQueue: this.taskQueue,
         workflowId: this.runId,
         args: [
           {
             inputData: input,
             initialState,
-            requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
+            requestContext: Object.fromEntries(requestContext.entries()),
             runId: this.runId,
             resourceId: this.resourceId,
             outputOptions: args.outputOptions,
@@ -82,6 +82,44 @@ export class TemporalRun<
           },
         ],
       });
+    } catch (error) {
+      // Temporal did not start this run, for example because its id is already in use, so the
+      // finish callbacks have no outcome to report.
+      return this.#failedResult(error, input, initialState);
+    }
+
+    const result = await this.#settle(handle, input, initialState);
+    await this.#invokeFinishCallbacks(result, input, requestContext);
+    return result;
+  }
+
+  // Lifecycle hooks are closures that cannot run in the Temporal workflow sandbox, so they run
+  // in the process that starts the run. onStart can change the state and request context, so
+  // the caller sends both to Temporal only after it runs.
+  async #prepareStart(args: TemporalRunStartArgs<TState, TInput, TRequestContext>) {
+    const input = await this._validateInput(args.inputData);
+    const initialState = (await this._validateInitialState(args.initialState)) ?? ({} as TState);
+    await this._validateRequestContext(args.requestContext as RequestContext<unknown> | undefined);
+
+    const requestContext = (args.requestContext ?? new RequestContext()) as RequestContext;
+    await this.executionEngine.invokeStartCallback({
+      runId: this.runId,
+      workflowId: this.workflowId,
+      resourceId: this.resourceId,
+      getInitData: () => input,
+      requestContext,
+      state: initialState as Record<string, any>,
+    });
+
+    return { input, initialState, requestContext };
+  }
+
+  async #settle(
+    handle: WorkflowHandle,
+    input: TInput | undefined,
+    initialState: TState | undefined,
+  ): Promise<WorkflowResult<TState, TInput, TOutput, TSteps>> {
+    try {
       const result = (await handle.result()) as WorkflowExecutionResult;
 
       return {
@@ -92,14 +130,47 @@ export class TemporalRun<
         steps: toStepResults(input, result),
       } as WorkflowResult<TState, TInput, TOutput, TSteps>;
     } catch (error) {
-      return {
-        status: 'failed',
-        input: input as TInput,
-        error: error instanceof Error ? error : new Error(String(error)),
-        state: initialState,
-        steps: {},
-      } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+      // Core reports a canceled run as `canceled` and does not call onError for it.
+      if (error instanceof WorkflowFailedError && error.cause instanceof CancelledFailure) {
+        return { status: 'canceled', input, state: initialState, steps: {} } as unknown as WorkflowResult<
+          TState,
+          TInput,
+          TOutput,
+          TSteps
+        >;
+      }
+
+      return this.#failedResult(error, input, initialState);
     }
+  }
+
+  #failedResult(error: unknown, input: TInput | undefined, initialState: TState | undefined) {
+    return {
+      status: 'failed',
+      input: input as TInput,
+      error: error instanceof Error ? error : new Error(String(error)),
+      state: initialState,
+      steps: {},
+    } as WorkflowResult<TState, TInput, TOutput, TSteps>;
+  }
+
+  #invokeFinishCallbacks(
+    result: WorkflowResult<TState, TInput, TOutput, TSteps>,
+    input: TInput | undefined,
+    requestContext: RequestContext,
+  ) {
+    return this.executionEngine.invokeLifecycleCallbacks({
+      status: result.status,
+      result: result.status === 'success' ? result.result : undefined,
+      error: result.status === 'failed' ? result.error : undefined,
+      steps: result.steps as Record<string, StepResult<any, any, any, any>>,
+      runId: this.runId,
+      workflowId: this.workflowId,
+      resourceId: this.resourceId,
+      input,
+      requestContext,
+      state: (result.state ?? {}) as Record<string, any>,
+    });
   }
 
   async cancel() {
@@ -150,27 +221,36 @@ export class TemporalRun<
   }
 
   async startAsync(args: TemporalRunStartArgs<TState, TInput, TRequestContext> = {}) {
-    const input = await this._validateInput(args.inputData);
-    const initialState = await this._validateInitialState(args.initialState);
-    await this._validateRequestContext(args.requestContext as RequestContext<unknown> | undefined);
+    const { input, initialState, requestContext } = await this.#prepareStart(args);
+    const { onFinish, onError } = this.executionEngine.options;
+    const hasFinishCallbacks = Boolean(onFinish || onError);
 
-    await this.client.workflow.start(toWorkflowType(this.workflowId), {
+    const handle = await this.client.workflow.start(toWorkflowType(this.workflowId), {
       taskQueue: this.taskQueue,
       workflowId: this.runId,
       args: [
         {
           inputData: input,
           initialState,
-          requestContext: args.requestContext ? Object.fromEntries(args.requestContext.entries()) : {},
+          requestContext: Object.fromEntries(requestContext.entries()),
           runId: this.runId,
           resourceId: this.resourceId,
           outputOptions: args.outputOptions,
           tracingOptions: args.tracingOptions,
           perStep: args.perStep,
+          ...(hasFinishCallbacks && { recordStepMeta: true }),
           validateInputs: this.validateInputs,
         },
       ],
     });
+
+    // Best-effort, as with core startAsync(): the callbacks are lost if this process exits
+    // before the workflow finishes (#24587).
+    if (hasFinishCallbacks) {
+      void this.#settle(handle, input, initialState).then(result =>
+        this.#invokeFinishCallbacks(result, input, requestContext),
+      );
+    }
 
     return { runId: this.runId };
   }

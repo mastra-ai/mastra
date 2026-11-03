@@ -195,18 +195,19 @@ describe('board person filters', () => {
     expect(workItemMatchesPeople(item, activityPage, withPeopleFolded(stored, hubot), hubot)).toBe(true);
   });
 
-  it('offers Review requested only on review boards and ignores the retired relevance parameter', () => {
-    const work = picks(
-      [
-        ['reviewer', 'github:monalisa'],
-        ['relevance', 'assigned'],
-        ['teammate', 'github:octocat'],
-      ],
-      'work',
-    );
+  it('offers Review requested only on boards holding pull requests and ignores the retired relevance parameter', () => {
+    const params: [string, string][] = [
+      ['reviewer', 'github:monalisa'],
+      ['relevance', 'assigned'],
+      ['teammate', 'github:octocat'],
+    ];
+    const custom = picks(params, 'delivery');
 
-    expect(work.reviewer.size).toBe(0);
-    expect(workItemMatchesPeople(item, activityPage, work, asIs)).toBe(true);
+    expect(custom.reviewer.size).toBe(0);
+    expect(workItemMatchesPeople(item, activityPage, custom, asIs)).toBe(true);
+    // Pull requests are reviewed on Work, so Work filters by requested reviewer.
+    expect(picks(params, 'work').reviewer).toEqual(new Set(['github:monalisa']));
+    expect(picks(params, 'review').reviewer).toEqual(new Set(['github:monalisa']));
   });
 
   it('filters intake candidates by GitHub, GitLab, Linear, Jira, and incident.io provider metadata', () => {

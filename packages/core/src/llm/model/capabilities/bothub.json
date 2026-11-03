@@ -19,12 +19,6 @@
     "muse-spark-1.3-contributor"
   ],
   "reasoning": {
-    "deepseek-v4-pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
     "nemotron-3-ultra-550b-a55b:free": [
       {
         "type": "effort",
@@ -43,6 +37,18 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "muse-spark-1.3-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
     "gemma-4-31b-it:free": [
       {
         "type": "toggle"
@@ -58,12 +64,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "muse-spark-1.3-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ]
   }

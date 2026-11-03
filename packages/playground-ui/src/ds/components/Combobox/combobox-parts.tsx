@@ -6,7 +6,7 @@ import { Check, ChevronDown, Search, X } from 'lucide-react';
 import * as React from 'react';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { ButtonChevron, ButtonIcon, TriggerChevron, isIconButtonSize } from '@/ds/components/Button/Button';
+import { ButtonChevron, ButtonIcon, isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
@@ -149,7 +149,7 @@ function ComboboxTrigger({
           <span className="min-w-0 flex-1 truncate text-left">{children}</span>
         </>
       )}
-      {showChevron && (iconOnly ? <TriggerChevron /> : <ButtonChevron size={size} />)}
+      {showChevron && <ButtonChevron size={size} />}
     </BaseCombobox.Trigger>
   );
 }
