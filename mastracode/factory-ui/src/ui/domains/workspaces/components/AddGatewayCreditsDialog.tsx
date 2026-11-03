@@ -166,7 +166,7 @@ function PurchaseForm({
               size="sm"
               render={<a href={credits.addCreditsUrl} target="_blank" rel="noreferrer" />}
             >
-              Add credits on Mastra instead
+              Open credits on Mastra
             </Button>
           </div>
         )}

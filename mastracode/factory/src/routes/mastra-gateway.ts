@@ -222,18 +222,27 @@ export async function purchaseGatewayCredits(
   amount: number,
 ): Promise<GatewayCreditPurchase> {
   await platformMember(auth, c, orgId);
-  const failure = 'Could not add Mastra Gateway credits. Try again.';
-  const pool = (await billingCustomer(auth, c, failure))?.creditPool;
-  const res = await platformFetch(auth, c, '/billing/attach', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      planId: pool?.topupPlanId ?? STARTER_TOPUP_PLAN,
-      featureQuantities: [{ featureId: pool?.featureId ?? STARTER_CREDIT_POOL, quantity: amount }],
-      successUrl: `${addCreditsUrl(orgId)}?credits_added=1`,
-      redirectMode: 'if_required',
-    }),
-  });
+  const pool = (await billingCustomer(auth, c, 'Could not add Mastra Gateway credits. Try again.'))?.creditPool;
+  const unconfirmed =
+    'Mastra did not confirm the purchase, and the payment may have gone through. Check your balance before you try again.';
+  let res: Response;
+  try {
+    res = await platformFetch(auth, c, '/billing/attach', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        planId: pool?.topupPlanId ?? STARTER_TOPUP_PLAN,
+        featureQuantities: [{ featureId: pool?.featureId ?? STARTER_CREDIT_POOL, quantity: amount }],
+        successUrl: `${addCreditsUrl(orgId)}?credits_added=1`,
+        redirectMode: 'if_required',
+      }),
+    });
+  } catch (error) {
+    if (error instanceof MastraGatewayError && error.code === 'mastra_platform_unavailable') {
+      throw platformUnavailable(unconfirmed);
+    }
+    throw error;
+  }
   if (res.status === 403) {
     throw new MastraGatewayError(
       'mastra_billing_admin_required',
@@ -250,8 +259,8 @@ export async function purchaseGatewayCredits(
       typeof detail === 'string' && detail ? detail : 'Mastra could not add the credits.',
     );
   }
-  if (!res.ok) throw platformUnavailable(failure);
-  const result = (await readJson(res, failure)) as {
+  if (!res.ok) throw platformUnavailable(unconfirmed);
+  const result = (await readJson(res, unconfirmed)) as {
     paymentUrl?: unknown;
     requiredAction?: unknown;
     invoice?: { hostedInvoiceUrl?: unknown } | null;

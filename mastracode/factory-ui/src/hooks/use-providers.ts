@@ -106,7 +106,8 @@ export function useMastraGatewayCreditsQuery({ enabled = true }: { enabled?: boo
 
 /**
  * Buy gateway credits. A purchase Mastra settled on the saved card counts in the
- * balance at once, and its toast outlives the notice it hides.
+ * balance at once, and its toast outlives the notice it hides. A failed purchase
+ * may still have charged, so the balance is read again.
  */
 export function useAddGatewayCredits() {
   const { client } = useApiConfig();
@@ -123,6 +124,7 @@ export function useAddGatewayCredits() {
         credits ? { ...credits, remaining: (credits.remaining ?? 0) + amount } : credits,
       );
     },
+    onError: () => queryClient.invalidateQueries({ queryKey: queryKeys.mastraGatewayCredits() }),
   });
 }
 

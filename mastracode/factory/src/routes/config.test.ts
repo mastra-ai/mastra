@@ -890,6 +890,24 @@ describe('Mastra Gateway routes with a tenant', () => {
     });
   });
 
+  it('warns that the payment may have gone through when Mastra does not answer the purchase', async () => {
+    const platform = fakePlatform({
+      'GET /billing/customer': teamsCustomer,
+      'POST /billing/attach': () => {
+        throw new DOMException('The operation timed out.', 'TimeoutError');
+      },
+    });
+
+    const res = await buyCredits(buildApp(platform), 20);
+
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: 'mastra_platform_unavailable',
+      message:
+        'Mastra did not confirm the purchase, and the payment may have gone through. Check your balance before you try again.',
+    });
+  });
+
   it('charges nothing for an amount the platform does not sell', async () => {
     const platform = fakePlatform();
     const app = buildApp(platform);
