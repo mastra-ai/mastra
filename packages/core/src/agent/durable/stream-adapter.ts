@@ -13,6 +13,7 @@ import { safeClose, safeEnqueue, safeError } from '../../stream/base';
 import { createDestructurableOutput, MastraModelOutput } from '../../stream/base/output';
 import { markChunkOutputProcessed } from '../../stream/base/output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
+import { stripNestedModelSnapshots } from '../../stream/strip-model-snapshots';
 import { ChunkFrom } from '../../stream/types';
 import type {
   ChunkType,
@@ -1181,7 +1182,10 @@ export async function emitChunkEvent<OUTPUT = undefined>(
   await pubsub.publish(topic, {
     type: AgentStreamEventTypes.CHUNK,
     runId,
-    data: chunk,
+    // Delegated sub-agent chunks carry the sub-agent's full prompt, history and
+    // steps; drop them so every forwarded chunk doesn't repeat them in the run
+    // stream and replay cache. Top-level chunks are published unchanged.
+    data: stripNestedModelSnapshots(chunk),
     // The chunk crosses the pubsub as JSON; keep when it was produced.
     producedAt: getChunkProducedAt(chunk) ?? Date.now(),
     ...(outputProcessed ? { outputProcessed } : {}),

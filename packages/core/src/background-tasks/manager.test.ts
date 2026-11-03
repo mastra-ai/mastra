@@ -2,10 +2,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage';
+import { slimProgressChunk } from '../stream/strip-model-snapshots';
 import { createBackgroundTask } from './create';
 import { BackgroundTaskManager } from './manager';
 import type { BackgroundTaskManagerConfig, TaskContext } from './types';
-import { slimProgressChunk } from './workflow';
 
 /** Create a per-task context with the given execute function */
 function ctx(executeFn: (args: any, opts?: any) => Promise<any>): TaskContext {
