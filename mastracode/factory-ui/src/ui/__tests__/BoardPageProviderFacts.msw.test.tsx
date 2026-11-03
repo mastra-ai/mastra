@@ -87,6 +87,9 @@ it.each(['board', 'list'])(
       http.get(`${TEST_BASE_URL}/web/github/projects/:id/issues`, () =>
         HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 }),
       ),
+      http.get(`${TEST_BASE_URL}/web/github/projects/:id/prs`, () =>
+        HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 }),
+      ),
       http.get(`${TEST_BASE_URL}/web/github/projects/*`, ({ request }) => {
         providerRequests.push(request.url);
         return HttpResponse.json({ error: 'Provider unavailable' }, { status: 503 });
@@ -114,6 +117,6 @@ it.each(['board', 'list'])(
       'href',
       providerFactsCard.workItem.url,
     );
-    expect(providerRequests).toEqual([]);
+    expect(providerRequests, JSON.stringify(providerRequests)).toEqual([]);
   },
 );
