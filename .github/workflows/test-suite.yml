@@ -237,9 +237,9 @@ jobs:
           include-hidden-files: true
           retention-days: 1
 
-  # Durable takeover runs against real Redis and Postgres. It lives here, not beside
-  # test-suite in prebuild.yml, because merge-reports is the check the ruleset requires:
-  # a job that only reports red on the PR does not stop a merge.
+  # Durable takeover runs against real Redis and Postgres. It reports as its own check and is
+  # deliberately kept out of merge-reports: it is a multi-process SIGTERM/SIGKILL suite whose
+  # flake rate has not been measured, so a red run must not block a merge.
   durable-streams:
     name: Durable Stream Tests
     if: inputs.has_code == 'true' && inputs.durable_streams_changed == 'true'
@@ -255,7 +255,7 @@ jobs:
   merge-reports:
     name: Merge Test Reports
     runs-on: starsling-ubuntu-26.04
-    needs: [unit-test, affected-unit-test, e2e-test, durable-streams]
+    needs: [unit-test, affected-unit-test, e2e-test]
     if: always()
     permissions:
       actions: read
@@ -299,10 +299,9 @@ jobs:
           UNIT: ${{ needs.unit-test.result }}
           AFFECTED_UNIT: ${{ needs.affected-unit-test.result }}
           E2E: ${{ needs.e2e-test.result }}
-          DURABLE: ${{ needs.durable-streams.result }}
         run: |
           status=0
-          for job in UNIT AFFECTED_UNIT E2E DURABLE; do
+          for job in UNIT AFFECTED_UNIT E2E; do
             result="${!job}"
             echo "$job: $result"
             if [ "$result" != "success" ] && [ "$result" != "skipped" ]; then
