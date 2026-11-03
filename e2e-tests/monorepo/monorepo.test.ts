@@ -1760,7 +1760,7 @@ class AliasDeployer extends Deployer {
     // `mastra dev` and `mastra build` import options extracted from the Mastra config. Chunks split from them were
     // written as `.js`, which an app without "type": "module" treats as CommonJS, and tsx 4.21 then loads them
     // without their named exports. Newer tsx releases load them on Node 24, so the app pins tsx 4.21.0.
-    const tsxEnv = { NODE_OPTIONS: '--import tsx' };
+    const tsxEnv = { NODE_OPTIONS: '--import tsx', LOAD_OPTIONAL: 'true' };
     const getAppDir = () => join(fixturePath, 'apps', 'typeless');
 
     it(
@@ -1814,7 +1814,7 @@ class AliasDeployer extends Deployer {
 
           const res = await fetch(`http://localhost:${port}/typeless`);
           expect(res.status).toBe(200);
-          await expect(res.json()).resolves.toEqual({ message: 'typeless app' });
+          await expect(res.json()).resolves.toEqual({ message: 'typeless app (optional)' });
         } finally {
           controller.abort();
           await Promise.race([proc.catch(() => {}), new Promise(resolve => setTimeout(resolve, 5_000))]);
