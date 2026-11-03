@@ -33,22 +33,40 @@ Knowledge is in alpha. Its API may change between releases.
 
 Arguments named `page` (and `into`, `parent`, `from`) take any of these:
 
-- a page ID;
-- a scope address, such as `org:acme`, for the scope's own page;
-- a page path, `<scope>#<key>[/<key>…]`, such as `policy:acme#refund-policy` or `org:acme#policies/refund`. A `/` before the `#` names a child scope; after it, a child page. Leading, trailing and doubled slashes in the page part are dropped, so `org:acme#policies/` and `org:acme#policies` are the same page. Paths resolve when used. A moved page answers only to its new path;
-- an exact page name.
+- A page ID.
+- A scope address, such as `org:acme`, for the scope's own page.
+- A page path, `<scope>#<key>[/<key>…]`, such as `policy:acme#refund-policy` or `org:acme#policies/refund`.
+- An exact page name.
+
+In a page path, a `/` before the `#` names a child scope, and a `/` after it names a child page. Leading, trailing and doubled slashes in the page part are dropped, so `org:acme#policies/` and `org:acme#policies` are the same page. Paths resolve when used. A moved page answers only to its new path.
 
 A name that matches more than one readable page is refused with the candidates' refs:
-
-Tool results name each page by `ref`, which any of these arguments accepts: the scope address for a scope's page, the full path for a page with a key on every level, such as `docs:acme#guides/observability/logging`, and otherwise the page ID. A read of a page that doesn't exist lists up to three close matches by `ref`.
 
 ```text
 Knowledge page name "Chargeback Playbook" is ambiguous; use one of these refs: team:acme:billing#chargeback-playbook, team:acme:support#chargeback-playbook.
 ```
 
+Tool results name each page by `ref`, which any of these arguments accepts:
+
+- The scope address, for a scope's page.
+- The full path, for a page with a key on every level, such as `docs:acme#guides/observability/logging`.
+- The page ID, otherwise.
+
+A read of a page that doesn't exist lists up to three close matches by `ref`.
+
 ## `knowledge_search`
 
-Searches the pages and notes the run can read. The query is split into words, quote marks are ignored, and each word matches case-insensitively as part of any word (`refund` matches `refunds`). A page matches when its name, description or body contains at least one of the words, and a note when its own text does. Keyword results list pages first. A page whose name contains the whole query comes first. The rest are ranked by how many of the query's words they contain, then by where those words are (a word in the name counts for more than one in the description, and one in the description for more than one in the body), then most recently updated first. Notes come after the pages, ranked by how many words they contain, then newest first. Access checks and `scope` filter results before ranking, and `limit` applies after it. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are merged by rank, so that order no longer holds.
+Searches the pages and notes the run can read.
+
+The query is split into words, and quote marks are ignored. Each word matches case-insensitively as part of any word, so `refund` matches `refunds`. A page matches when its name, description or body contains at least one of the words. A note matches when its own text does.
+
+Keyword results are ranked in this order:
+
+1. Pages whose name contains the whole query.
+1. Other pages, by how many query words they contain, then by where the words are (name over description, description over body), then most recently updated.
+1. Notes, by how many query words they contain, then newest.
+
+Access checks and `scope` filter results before ranking. `limit` applies after it. With `vector` and `embedder` on the Knowledge instance, keyword and semantic results are merged by rank, so this order no longer holds.
 
 <PropertiesTable
   content={[
@@ -63,15 +81,17 @@ Searches the pages and notes the run can read. The query is split into words, qu
 ]}
 />
 
-Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`. A search that finds nothing also returns `more`, which suggests different key words or `knowledge_list`:
+Returns `{ results }`, each `{ type: 'page', page }` or `{ type: 'note', page, note }`. These searches also return `more`:
 
-```text
-results: no page or note contains any word of "enterprise pricing tiers". Search again with different key words, or browse with knowledge_list.
-```
+- A search that finds nothing suggests different key words or `knowledge_list`:
 
-`scope` takes scope addresses. A page ref such as `docs:acme#billing` is refused with a pointer to `knowledge_list`.
+  ```text
+  results: no page or note contains any word of "enterprise pricing tiers". Search again with different key words, or browse with knowledge_list.
+  ```
 
-A search that fills `limit` also returns `more`, saying how many results were shown and to narrow the query or raise `limit` (up to 50) when none of them fits.
+- A search that fills `limit` says how many results were shown, and to narrow the query or raise `limit` (up to 50) when none of them fits.
+
+`scope` takes scope addresses only. A page ref such as `docs:acme#billing` is refused with a pointer to `knowledge_list`.
 
 ## `knowledge_list`
 
@@ -203,7 +223,7 @@ knowledge_read: read notes or mentionedIn on their own, without outline, section
 
 ## `knowledge_page`
 
-Creates, edits, moves, merges and deletes pages. `scope` only names the destination: the home scope on create, the target scope on move. Edits and merges take no `scope`: they act on the page's own scope. A delete acts on the page's own scope and ignores `scope`.
+Creates, edits, moves, merges and deletes pages. `scope` only names the destination: the home scope on create, the target scope on move. Edits and merges take no `scope`, and a delete ignores it. All three act on the page's own scope.
 
 <PropertiesTable
   content={[

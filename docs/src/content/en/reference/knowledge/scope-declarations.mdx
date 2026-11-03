@@ -102,7 +102,7 @@ A key such as `team:$orgId:$teamId` is a pattern. The text before the first `:` 
 
 The last param takes the rest of the value, so `resource:$resourceId` matches `resource:user:123` with `$resourceId = user:123`. Memory ids that contain `:` keep working.
 
-A type can have several patterns only when no address can match two of them, which means at some position both have different literals:
+A type can have several patterns only when no address can match two of them. Each pair must have different literal text at the same position:
 
 ```typescript oxfmt:false
 scopes: {
@@ -167,7 +167,7 @@ Every principal must also be a declared type:
 Knowledge rule principal "org:$orgId" on "policy:$orgId" is not a declared scope type; declare it or fix the typo.
 ```
 
-Rules reach one hop. A run holding `org:acme` reads `team:acme:support` through its `org:$orgId` viewer rule, but `team:acme:support` doesn't then pass its own grants on to that run. There's no inheritance either: a role on `org:acme` gives nothing on scopes placed under it unless a rule says so.
+Roles don't carry over. A run holding `org:acme` reads `team:acme:support` through its `org:$orgId` viewer rule, but it doesn't get the roles `team:acme:support` gives to other scopes. There's no inheritance either. A role on `org:acme` gives nothing on scopes placed under it unless a rule says so.
 
 ## Place scopes with `belongsTo`
 
@@ -183,7 +183,9 @@ Rules reach one hop. A run holding `org:acme` reads `team:acme:support` through 
 },
 ```
 
-The address `project:p1` has no `$orgId`, so the `org:$orgId` rule binds it from the project's place in the tree. The first run to use `project:p1` places it under the one `org:` scope that run holds, and the placement sticks. After that, a run holding `org:acme` can read `project:p1`, and a run holding `org:globex` can't.
+The address `project:p1` has no `$orgId`, so the `org:$orgId` rule binds it from the project's place in the tree. The first run that uses `project:p1` while holding exactly one `org:` scope places it under that scope, and the placement sticks. After that, a run holding `org:acme` can read `project:p1`, and a run holding `org:globex` can't.
+
+Until it's placed, the `org:$orgId` rule gives nothing on `project:p1`. A run that holds several `org:` scopes logs a warning and leaves the placement unchanged. A run that holds a different `org:` scope from the stored placement also logs a warning, and the placement stays.
 
 ## Child scopes and keyed pages
 
@@ -273,7 +275,7 @@ A run's scopes come from host code: the `MASTRA_SCOPES_KEY` request context key,
 
 With Knowledge attached, every scope a run holds must match a declared type. A type that only names who a run is still needs a declaration, even an empty one such as `'role:$orgId:support': {}`.
 
-A run has exactly one Memory resource and one thread. `knowledgeMemoryScopes()` places a user's `resource:` scope under the org it first runs with, and that placement doesn't change, so give a user who works in several orgs a resource ID per org, such as `acme-dana` and `globex-dana`.
+A run has exactly one Memory resource and one thread. `knowledgeMemoryScopes()` places a user's `resource:` scope under the org it first runs with, and that placement doesn't change. Give a user who works in several orgs a resource ID per org, such as `acme-dana` and `globex-dana`.
 
 `MASTRA_SCOPES_KEY` is reserved: the server ignores it in request bodies. It needs a `@mastra/server` release that reserves it.
 
@@ -306,7 +308,7 @@ await knowledge.renameScopeDeclaration('team:$org:$team', 'team:$orgId:$teamId')
 
 The rename happens in one step and changes nothing when it's refused: when the old key is still in `scopes`, the new key isn't, or a stored address doesn't match the new pattern.
 
-During a rolling deploy, instances with the new config refuse to run until the rename happens, and instances still on the old config lose those scopes' prefix and `belongsTo` reach after it. Deploy the new config, then run the rename straight away.
+During a rolling deploy, instances with the new config refuse to run until the rename happens. After the rename, instances still on the old config lose the prefix and `belongsTo` rules on those scopes. Deploy the new config, then run the rename straight away.
 
 To retire a type without moving its scopes, keep its key in `scopes` with no `access` rules. Its scopes stay stored, and no rule reaches them.
 
