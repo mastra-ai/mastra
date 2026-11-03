@@ -729,6 +729,7 @@ export function KnowledgePageExplorer({
   // The selected page's own links: its notes' mentions and `[[links]]` in its body going out, notes
   // elsewhere that mention it coming in. Each end is a page id or a ref; the ends the explorer holds
   // resolve at once, the rest are fetched (up to twice FOCUS_LINK_CAP keys each way, outranking sibling dots).
+  const focusLinkList = (source.usePageLinks ?? noLinkQuery)(view === 'graph' ? selectedPageId : null).data;
   const linkEnds = useMemo(() => {
     const detail = selected.data;
     if (!detail || detail.page.id !== selectedPageId) return null;
@@ -740,7 +741,13 @@ export function KnowledgePageExplorer({
       .map(ref => ref.trim())
       .filter(key => key && key !== own);
     const out = [...mentions, ...refs];
-    const into = (detail.mentionedBy ?? []).map(note => note.pageId).filter(id => id !== own);
+    // Notes that mention this page, and (when the host lists links) bodies that link to it.
+    const into = [
+      ...new Set([
+        ...(detail.mentionedBy ?? []).map(note => note.pageId),
+        ...(focusLinkList?.edges ?? []).filter(edge => edge.toPageId === own).map(edge => edge.fromPageId),
+      ]),
+    ].filter(id => id !== own);
     const lookup = (key: string) => known.get(key) ?? index.resolve(key);
     const missing = (keys: string[]) => [...new Set(keys.filter(key => !lookup(key)))];
     const resolvedCount = (keys: string[]) => new Set(keys.flatMap(key => lookup(key)?.id ?? [])).size;
@@ -760,7 +767,7 @@ export function KnowledgePageExplorer({
         in: Math.max(0, wantIn.length - room(into)),
       },
     };
-  }, [selected.data, selectedPageId, lazy.pages]);
+  }, [selected.data, selectedPageId, lazy.pages, focusLinkList]);
   const fetchKeys = linkEnds?.fetchKeys ?? noKeys;
   const fetchedStates = (source.useLinkedPages ?? noLinkedPages)(fetchKeys);
   const fetchedSignature = fetchKeys

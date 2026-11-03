@@ -65,6 +65,7 @@ function render(options: {
   mentionedBy?: KnowledgeNotePayload[];
   reachable: Record<string, KnowledgePagePayload>;
   requested?: string[][];
+  linksIn?: string[];
 }) {
   const focus = options.wardPage ?? ward;
   const detail: KnowledgeExplorerPageDetail = {
@@ -77,6 +78,19 @@ function render(options: {
   const source: KnowledgeExplorerSource = {
     usePage: pageId => (pageId === focus.id ? ok(detail) : idle),
     useSearch: () => ({ data: { results: [] } }),
+    usePageLinks: pageId =>
+      pageId === focus.id && options.linksIn
+        ? ok({
+            edges: options.linksIn.map(from => ({
+              fromPageId: from,
+              toPageId: focus.id,
+              kind: 'body' as const,
+              count: 1,
+            })),
+            pages: [],
+            truncated: false,
+          })
+        : idle,
     useLinkedPages: keys => {
       options.requested?.push(keys);
       return keys.map(key => {
@@ -257,5 +271,14 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     });
     expect(drawnIds(container)).toEqual(expect.arrayContaining(targets.map(t => t.id)));
     expect(container.textContent ?? '').not.toMatch(/not drawn/);
+  });
+
+  it('draws pages whose bodies link to the focus when the host lists its links', () => {
+    const { container } = render({
+      reachable: { 'body-author': page('body-author', 'blog') },
+      linksIn: ['body-author'],
+    });
+    expect(drawnIds(container)).toContain('body-author');
+    expect(edgeIds(container).some(id => id.includes('body-author') && id.includes('ward'))).toBe(true);
   });
 });
