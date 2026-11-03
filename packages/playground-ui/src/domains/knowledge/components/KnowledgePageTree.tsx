@@ -24,6 +24,12 @@ function scrollingBox(element: HTMLElement | null): DOMRect | undefined {
   return (overflowing ?? element)?.getBoundingClientRect();
 }
 
+/** Where in the scroller a row focused from elsewhere lands, as a fraction of its height from the top. */
+const SCROLL_ROW_AT = 1 / 3;
+/** A row between these fractions of the scroller is comfortably in view and is not moved. */
+const COMFORT_TOP = 0.1;
+const COMFORT_BOTTOM = 0.7;
+
 /** The key {@link KnowledgePageTree}'s `loadMore` uses for the root level. */
 export const KNOWLEDGE_TREE_ROOT = '';
 
@@ -99,8 +105,8 @@ export function KnowledgePageTree({
   );
   // Bring the selected row into view when it is selected, as soon as it exists, and again if rows that load
   // later push it out of view (a deep page's levels arrive one after another). Once the user scrolls, presses a key or
-  // a pointer in the tree it is left alone. `nearest` leaves a row already on screen where it is; keyboard focus
-  // is not moved.
+  // a pointer in the tree it is left alone. The row goes a third of the way down the scroller, middle-top, not
+  // hard against its bottom edge; keyboard focus is not moved.
   const scroller = useRef<HTMLDivElement>(null);
   const scrolledTo = useRef<string | null>(null);
   const userScrolled = useRef(false);
@@ -115,12 +121,19 @@ export function KnowledgePageTree({
     if (first) {
       scrolledTo.current = selectedPageId;
       userScrolled.current = false;
-    } else {
-      const box = scrollingBox(scroller.current);
-      const at = element.getBoundingClientRect();
-      if (userScrolled.current || !box || (at.top >= box.top && at.bottom <= box.bottom)) return;
+    } else if (userScrolled.current) return;
+    const box = scrollingBox(scroller.current);
+    const at = element.getBoundingClientRect();
+    if (!first && !box) return;
+    if (!first && box && box.height === 0 && at.top >= box.top && at.bottom <= box.bottom) return;
+    if (box && box.height > 0) {
+      // A row already well inside the scroller stays where it is.
+      const inView = at.top >= box.top + box.height * COMFORT_TOP && at.bottom <= box.top + box.height * COMFORT_BOTTOM;
+      if (inView) return;
+      // Otherwise it lands a third of the way down; the browser clamps this at the top and bottom of the list.
+      element.style.scrollMarginTop = `${box.height * SCROLL_ROW_AT}px`;
     }
-    element.scrollIntoView?.({ block: 'nearest', behavior: first && prefersMotion() ? 'smooth' : 'auto' });
+    element.scrollIntoView?.({ block: 'start', behavior: first && prefersMotion() ? 'smooth' : 'auto' });
   }, [rows, selectedPageId]);
   const activeId =
     focusedId && rows.some(row => row.page.id === focusedId)

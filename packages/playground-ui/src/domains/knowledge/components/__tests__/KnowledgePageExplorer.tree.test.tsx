@@ -175,7 +175,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
     });
 
-    it('opens its ancestors, highlights its row and scrolls the nearest way to it', () => {
+    it('opens its ancestors, highlights its row and scrolls it to the start of the view', () => {
       renderWithProviders(<Host requested={[]} />);
       expect(within(tree().getByRole('treeitem', { name: /^site:mastra/ })).queryByText('Second article')).toBeNull();
       const dot = document.querySelector('.react-flow__node [data-page-id="second"]')?.closest('.react-flow__node');
@@ -183,7 +183,7 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       fireEvent.click(dot);
       expect(row('Second article').getAttribute('aria-selected')).toBe('true');
       const hit = scrolled.find(entry => entry.id?.startsWith('Second article'));
-      expect(hit?.options).toMatchObject({ block: 'nearest' });
+      expect(hit?.options).toMatchObject({ block: 'start' });
     });
 
     // The tree is 100px tall; every row sits below it, as a deep row does while rows above it are still loading.
@@ -201,6 +201,45 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       };
     };
     const selectedScrolls = () => scrolled.filter(entry => entry.id?.startsWith('Second article')).length;
+
+    describe('where the row lands', () => {
+      const withRowAt = (top: number) => {
+        const original = HTMLElement.prototype.getBoundingClientRect;
+        const rect = (from: number, to: number) =>
+          ({ top: from, bottom: to, left: 0, right: 100, width: 100, height: to - from }) as DOMRect;
+        HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect(this: HTMLElement) {
+          if (this.getAttribute('role') === 'tree') return rect(0, 300);
+          if (this.getAttribute('role') === 'treeitem') return rect(top, top + 32);
+          return original.call(this);
+        };
+        return () => {
+          HTMLElement.prototype.getBoundingClientRect = original;
+        };
+      };
+      const focusSecond = () => {
+        renderWithProviders(<Host requested={[]} />);
+        fireEvent.click(row('Articles'));
+        fireEvent.click(row('Second article'));
+      };
+
+      it('puts a row at the bottom edge a third of the way down the scroller instead', () => {
+        const restore = withRowAt(260);
+        focusSecond();
+        expect(selectedScrolls()).toBeGreaterThan(0);
+        expect(row('Second article').style.scrollMarginTop).toBe('100px');
+        expect(scrolled.find(entry => entry.id?.startsWith('Second article'))?.options).toMatchObject({
+          block: 'start',
+        });
+        restore();
+      });
+
+      it('leaves a row that is already comfortably in view where it is', () => {
+        const restore = withRowAt(80);
+        focusSecond();
+        expect(selectedScrolls()).toBe(0);
+        restore();
+      });
+    });
 
     it('scrolls again when more rows load and leave the selected row out of view', () => {
       const restore = stubLayout();
