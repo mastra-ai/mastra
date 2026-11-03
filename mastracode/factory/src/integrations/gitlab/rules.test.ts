@@ -1581,21 +1581,19 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(cards[0]!.metadata).toMatchObject({ openPullRequestNumber: 17 });
     });
 
-    it('keeps a card open while a second merge request is open, and moves it to Done when that one merges', async () => {
+    it('gives a second merge request its own card once the first is under review, and moves the card to Done when the first merges', async () => {
       const h = await harness();
       const issue = await h.issueCard('intake');
       await h.ingest(mergeRequest(17, 'Closes #42'));
       await h.ingest(mergeRequest(18, 'Closes #42'));
 
-      await h.ingest(mergeRequest(17, 'Closes #42', { deliveryId: 'd-close-17', action: 'close' }));
-      let [card] = await h.cards();
-      expect(card).toMatchObject({ id: issue.id, stages: ['pr-review'] });
-      expect(card!.workItem.sources.slice(1).map(source => source.state)).toEqual(['closed', 'open']);
+      expect(await h.cards()).toHaveLength(2);
+      expect(sourceTypes((await h.cards()).find(card => card.id === issue.id)!)).toEqual(['issue', 'pull-request']);
 
-      await h.ingest(mergeRequest(18, 'Closes #42', { deliveryId: 'd-merge-18', action: 'merge' }));
-      [card] = await h.cards();
-      expect(card).toMatchObject({ id: issue.id, stages: ['done'] });
-      expect(card!.workItem.sources[2]).toMatchObject({ state: 'merged' });
+      await h.ingest(mergeRequest(17, 'Closes #42', { deliveryId: 'd-merge-17', action: 'merge' }));
+      const card = (await h.cards()).find(item => item.id === issue.id)!;
+      expect(card).toMatchObject({ stages: ['done'] });
+      expect(card.workItem.sources[1]).toMatchObject({ state: 'merged' });
     });
 
     it("gives someone else's merge request its own card when the issue has been in Building, even with no session left", async () => {

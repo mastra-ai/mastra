@@ -4,7 +4,7 @@
 
 A pull request or merge request for an issue that is already on the Work board now joins that issue's card instead of opening a second card. The built-in Review board is removed; Work's PR review phase does its job.
 
-**One card per issue.** A pull request Factory opens for one of its cards stays on that card. A pull request from a trusted author whose description says it closes an issue in the same repository (for example `Fixes #12`) is added to that issue's card, as long as nobody has started building that issue yet. Once a builder session is working on the card, someone else's pull request gets its own card. The card shows the pull request's status, the reviewer checks it out on its own branch, and merging it moves the card to Done. A pull request with no matching card still gets its own card, as before.
+**One card per issue.** A pull request Factory opens for one of its cards stays on that card. A pull request from a trusted author whose description says it closes an issue in the same repository (for example `Fixes #12`) is added to that issue's card, as long as no session has started working on that card yet. Once a triage, planning, building or review session has worked on the card, someone else's pull request gets its own card. The card shows the pull request's status, the reviewer checks it out on its own branch, and merging it moves the card to Done. A pull request with no matching card still gets its own card, as before.
 
 **Outside authors.** A pull request from an author without write access never joins another card, even when it says it fixes an issue. It gets its own card and waits in Intake.
 
