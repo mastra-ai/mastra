@@ -1549,7 +1549,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (await this.#listCached(orgId, factoryProjectId)).items;
   }
 
-  /** `cached` is true when `items` is the cache's own array, which callers that mutate must clone. */
+  /** `cached` is true when `items` is shared with other callers, which callers that mutate must clone. */
   async #listCached(orgId: string, factoryProjectId: string): Promise<{ items: WorkItemRow[]; cached: boolean }> {
     const key = `${orgId}\u0000${factoryProjectId}`;
     // Read the version before the rows: a write that lands in between bumps it again afterwards,
@@ -1570,10 +1570,12 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     this.#listInFlight.set(key, { version, items: read });
     try {
       const items = await read;
-      this.#listCache.delete(key);
-      this.#listCache.set(key, { version, takenAt: Date.now(), items });
-      if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
-        this.#listCache.delete(this.#listCache.keys().next().value!);
+      if (this.#listInFlight.get(key)?.items === read) {
+        this.#listCache.delete(key);
+        this.#listCache.set(key, { version, takenAt: Date.now(), items });
+        if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
+          this.#listCache.delete(this.#listCache.keys().next().value!);
+        }
       }
       return { items, cached: true };
     } finally {

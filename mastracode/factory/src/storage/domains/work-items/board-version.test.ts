@@ -119,6 +119,28 @@ describe('board list cache', () => {
     expect((await before).map(item => item.title)).toEqual(['Fix login']);
   });
 
+  it('keeps the edited board cached when a read begun before the edit finishes last', async () => {
+    const seed = await createFactoryStorageForTests();
+    const card = await seedCard(seed.workItems);
+    const staleRead = holdNextCardRead(seed);
+    const before = poll(seed.workItems);
+    await staleRead.taken;
+    await seed.workItems.update({
+      orgId: ORG,
+      id: card.id,
+      userId: 'user-alice',
+      patch: { title: 'Fix login on Safari' },
+    });
+    await poll(seed.workItems);
+    staleRead.release();
+    await before;
+    vi.restoreAllMocks();
+    const cardReads = countCardReads(seed);
+
+    expect((await poll(seed.workItems)).map(item => item.title)).toEqual(['Fix login on Safari']);
+    expect(cardReads()).toBe(0);
+  });
+
   it('stops serving cards once every card is cleared', async () => {
     const seed = await createFactoryStorageForTests();
     await seedCard(seed.workItems);
