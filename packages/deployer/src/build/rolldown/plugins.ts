@@ -109,7 +109,10 @@ export function stripViteIgnore(): Plugin {
  * Drops chunks that no entry can load through static or dynamic imports. Rolldown 1.2.16 still emits the dynamic
  * import targets of modules it tree-shook away, e.g. the schema vendor loaders of `@standard-community/standard-json`
  * when only a side-effect-free import of it is left. Nothing references those files.
- * https://github.com/rolldown/rolldown/issues/11213
+ *
+ * Workaround for https://github.com/rolldown/rolldown/issues/11213 (our repro:
+ * https://github.com/rolldown/rolldown/issues/11213#issuecomment-6605866851). Remove this plugin once that is fixed in
+ * the Rolldown version we depend on.
  */
 export function pruneUnreachableChunks(): Plugin {
   return {
