@@ -64,6 +64,24 @@ function host(workflow: AnyWorkflow, storage = new MockStore()) {
   return storage;
 }
 
+/**
+ * Asserts a storage v2 result holds no successful payload: every successful step is a stub, and
+ * only `input` and the non-successful results (which readers use synchronously) stay whole.
+ */
+function expectOnlyStubs(result: { steps: unknown }, kept: string[] = []) {
+  const resident = residentStepResults(result.steps)!;
+  expect(resident).toBeDefined();
+  const whole = Object.keys(resident).filter(
+    stepId => stepId !== 'input' && resident[stepId]?.status === 'success' && !isStepResultStub(resident[stepId]),
+  );
+  expect(whole).toEqual([]);
+  const nonSuccess = Object.keys(resident).filter(
+    stepId => stepId !== 'input' && resident[stepId]?.status !== 'success',
+  );
+  expect(nonSuccess.sort()).toEqual([...kept].sort());
+  return resident;
+}
+
 const fullChain = {
   step1: { status: 'success', output: { n: 1 } },
   step2: { status: 'success', output: { n: 2 } },
@@ -93,9 +111,12 @@ describe('storage v2 result steps loader', () => {
     expect(result.result).toEqual({ n: 4 });
     expect(typeof result.steps).toBe('function');
     expect(reads).toEqual([]);
-    const resident = residentStepResults(result.steps)!;
-    const stubbed = Object.keys(resident).filter(stepId => isStepResultStub(resident[stepId]));
-    expect(stubbed.length).toBeGreaterThan(0);
+    const resident = expectOnlyStubs(result);
+    expect(
+      Object.keys(resident)
+        .filter(stepId => isStepResultStub(resident[stepId]))
+        .sort(),
+    ).toEqual(['step1', 'step2', 'step3', 'step4']);
     // The resident results survive spreading the result, as the framework's readers do.
     expect(residentStepResults({ ...result }.steps)).toBe(resident);
   });
@@ -162,12 +183,15 @@ describe('storage v2 result steps loader', () => {
     const run = await workflow.createRun();
     const suspended = await run.start({ inputData: { n: 0 } });
     expect(suspended.status).toBe('suspended');
+    const resident = expectOnlyStubs(suspended, ['gate']);
+    expect(resident.gate).toMatchObject({ status: 'suspended' });
 
     const { reads } = recordStepReads(storage);
     const resumed = await run.resume({ step: 'gate', resumeData: true });
     expect(resumed.status).toBe('success');
     // Only the resumed step's input is read to execute it; returning the result reads nothing more.
     expect(reads).toEqual([['step4']]);
+    expectOnlyStubs(resumed);
 
     await expect((suspended.steps as unknown as () => Promise<unknown>)()).rejects.toMatchObject({
       id: 'WORKFLOW_STORAGE_V2_STEPS_STALE',
@@ -224,6 +248,7 @@ describe('storage v2 result steps loader', () => {
 
     expect(result.status).toBe('failed');
     expect(result.error).toMatchObject({ message: 'boom' });
+    expect(expectOnlyStubs(result, ['boom']).boom).toMatchObject({ status: 'failed' });
     expect(failed).toMatchObject({ ...fullChain, boom: { status: 'failed' } });
     expect(reads).toHaveLength(1);
   });
@@ -240,6 +265,7 @@ describe('storage v2 result steps loader', () => {
     expect(travelled.result).toEqual({ n: 12 });
     expect(typeof travelled.steps).toBe('function');
     expect(reads).toEqual([]);
+    expectOnlyStubs(travelled);
 
     const steps = await (travelled.steps as unknown as () => Promise<Record<string, any>>)();
     expect(steps).toMatchObject({
@@ -269,9 +295,104 @@ describe('storage v2 result steps loader', () => {
 
     expect(result.status).toBe('success');
     expect(result.result).toEqual({ n: 6 });
+    expectOnlyStubs(result);
     expect(reads.flat().filter(stepId => stepId.startsWith('inner'))).toEqual([]);
     const steps = await (result.steps as unknown as () => Promise<Record<string, any>>)();
     expect(steps.inner).toMatchObject({ status: 'success', output: { n: 5 } });
     expect(reads.flat().filter(stepId => stepId.startsWith('inner') && stepId !== 'inner')).toEqual([]);
+  });
+
+  it('restart of a finished run returns a loader that holds only stubs', async () => {
+    const workflow = chain(2);
+    const storage = host(workflow);
+    const run = await workflow.createRun();
+    await run.start({ inputData: { n: 0 } });
+
+    const restarted = await (await workflow.createRun({ runId: run.runId })).restart();
+    expect(restarted.status).toBe('success');
+    expectOnlyStubs(restarted);
+    const { reads } = recordStepReads(storage);
+    expect(await (restarted.steps as unknown as () => Promise<unknown>)()).toMatchObject(fullChain);
+    expect(reads).toHaveLength(1);
+  });
+
+  it('cancel returns a loader that holds only stubs', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
+    let workflow: any = createWorkflow({
+      id: 'cancelled',
+      inputSchema: num,
+      outputSchema: num,
+      options: { storageVersion: 2 },
+    });
+    for (let i = 1; i <= 4; i++) workflow = workflow.then(addOne(`step${i}`));
+    let entered!: () => void;
+    const waiting = new Promise<void>(resolve => (entered = resolve));
+    workflow = workflow
+      .then(
+        createStep({
+          id: 'wait',
+          inputSchema: num,
+          outputSchema: num,
+          execute: async ({ inputData, abortSignal }) => {
+            entered();
+            await Promise.race([gate, new Promise(resolve => abortSignal.addEventListener('abort', resolve))]);
+            return inputData;
+          },
+        }),
+      )
+      .commit();
+    const storage = host(workflow);
+    const run = await workflow.createRun();
+    const started = run.start({ inputData: { n: 0 } });
+    await waiting;
+    await run.cancel();
+    release();
+    const result = await started;
+
+    expect(result.status).toBe('canceled');
+    expectOnlyStubs(result);
+    const { reads } = recordStepReads(storage);
+    expect(await (result.steps as unknown as () => Promise<unknown>)()).toMatchObject(fullChain);
+    expect(reads).toHaveLength(1);
+  });
+
+  it('a perStep run returns its paused result as a loader without reading', async () => {
+    const workflow = chain(2);
+    const storage = host(workflow);
+    const { reads } = recordStepReads(storage);
+    const run = await workflow.createRun();
+
+    const paused = await run.start({ inputData: { n: 0 }, perStep: true });
+    expect(paused.status).toBe('paused');
+    expect(typeof paused.steps).toBe('function');
+    expect(reads).toEqual([]);
+    expect(Object.keys(expectOnlyStubs(paused))).toContain('step1');
+
+    expect(await (paused.steps as unknown as () => Promise<unknown>)()).toMatchObject({ step1: fullChain.step1 });
+    expect(reads).toHaveLength(1);
+  });
+
+  it('time travel stubs the steps it re-ran in its result, and makes an earlier result stale', async () => {
+    const workflow = chain(2);
+    const storage = host(workflow);
+    const run = await workflow.createRun();
+    const original = await run.start({ inputData: { n: 0 } });
+
+    const travelled = await run.timeTravel({ step: 'step3', inputData: { n: 10 } });
+    const resident = expectOnlyStubs(travelled);
+    expect(isStepResultStub(resident.step3)).toBe(true);
+    expect(isStepResultStub(resident.step4)).toBe(true);
+
+    // `original.steps()` was never called before the time travel, so it has nothing cached.
+    await expect((original.steps as unknown as () => Promise<unknown>)()).rejects.toMatchObject({
+      id: 'WORKFLOW_STORAGE_V2_STEPS_STALE',
+    });
+    const { reads } = recordStepReads(storage);
+    expect(await (travelled.steps as unknown as () => Promise<unknown>)()).toMatchObject({
+      step3: { status: 'success', output: { n: 11 } },
+      step4: { status: 'success', output: { n: 12 } },
+    });
+    expect(reads).toHaveLength(1);
   });
 });

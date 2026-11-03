@@ -5899,18 +5899,31 @@ export class Run<
       this.cleanup?.();
       // Match fmtReturnValue: context keeps `input` alongside step results, and `input`
       // is also surfaced as a top-level field on the returned WorkflowResult.
-      const hydratedSteps = hydrateSerializedStepErrors({ ...(snapshot.context ?? {}) }) ?? {};
       // Strip internal bookkeeping (__state, metadata.nestedRunId) from step results so the
       // reconstructed result matches what a live run would have returned via fmtReturnValue.
-      const steps = Object.fromEntries(
-        Object.entries(hydratedSteps).map(([stepId, stepResult]) => [stepId, cleanStepResult(stepResult)]),
-      ) as typeof hydratedSteps;
+      const clean = <T extends Record<string, any>>(context: T): T =>
+        Object.fromEntries(
+          Object.entries(hydrateSerializedStepErrors({ ...context }) ?? {}).map(([stepId, stepResult]) => [
+            stepId,
+            cleanStepResult(stepResult),
+          ]),
+        ) as T;
+      const steps = clean(snapshot.context ?? {});
       const input = (snapshot.context as { input?: TInput } | undefined)?.input as TInput;
+      // On storage v2 the result holds the successful results as stubs, read again by `steps()`.
+      const v2Store =
+        this.storageVersion === 2
+          ? await (this.executionEngine.mastra ?? this.#mastra)?.getStorage()?.getStore('workflows')
+          : undefined;
+      const lastSeq = this.runStorage.storedState(snapshot)?.seq;
       const base = {
-        steps: (this.storageVersion === 2 ? loadedStepResults(steps) : steps) as WorkflowStepResults<
-          typeof steps,
-          TStorageVersion
-        >,
+        steps: (v2Store && lastSeq !== undefined
+          ? loadedStepResults(
+              { store: v2Store, workflowName: this.workflowId, runId: this.runId, lastSeq },
+              steps,
+              clean,
+            )
+          : steps) as WorkflowStepResults<typeof steps, TStorageVersion>,
         input,
         runId: this.runId,
         ...(snapshot.value && Object.keys(snapshot.value).length > 0 ? { state: snapshot.value as TState } : {}),

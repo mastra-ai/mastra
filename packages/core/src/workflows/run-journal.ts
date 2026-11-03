@@ -536,6 +536,11 @@ export class RunJournal {
     }
   }
 
+  /** Whether `result` is what the store holds for `stepId`, as of the writes that have settled. */
+  isStored(stepId: string, result: unknown): boolean {
+    return this.#written.get(stepId) === result;
+  }
+
   /** Swap the stubs among `stepIds` back for their stored results, with one read. */
   async hydrate(stepResults: StepResults, stepIds: readonly string[] = Object.keys(stepResults)): Promise<void> {
     const store = this.store;
@@ -712,8 +717,10 @@ const residentResults = new WeakMap<object, StepResults>();
  * execution ended (e.g. resumed or restarted), since storage then no longer holds what the result
  * describes. A failed read isn't cached, so a later call retries.
  *
- * Holds the stubs and the results that weren't evicted, not the journal. Call it after the run's
- * last write is sent, and close the journal before anything awaits the loader.
+ * Holds the stubs and the results that weren't evicted until the run's writes settle; then the
+ * stored successful results are evicted too, so it holds only stubs, `input` and the results a
+ * reader needs without loading (suspended, failed, running). Call it after the run's last write is
+ * sent, and close the journal before anything awaits the loader.
  *
  * @internal
  */
@@ -722,19 +729,75 @@ export function lazyStepResults(
   stepResults: StepResults,
   format: (stepResults: StepResults) => StepResults,
 ): () => Promise<StepResults> {
-  const { store, workflowName, runId, settledLastSeq } = journal;
   const results = { ...stepResults };
+  evictOnceStored(journal, results);
+  const { store, workflowName, runId, settledLastSeq } = journal;
+  return storedStepResults({ store: store!, workflowName, runId, lastSeq: settledLastSeq }, results, format);
+}
+
+// Kept apart from `lazyStepResults`, so the loader it returns doesn't hold on to the journal.
+function evictOnceStored(journal: RunJournal, results: StepResults): void {
+  void journal.settledLastSeq.then(() => {
+    for (const [stepId, result] of Object.entries(results)) {
+      if (
+        stepId !== 'input' &&
+        result?.status === 'success' &&
+        !isStepResultStub(result) &&
+        journal.isStored(stepId, result)
+      ) {
+        results[stepId] = stubStepResult(result);
+      }
+    }
+  });
+}
+
+/**
+ * The `steps()` of a storage v2 result whose step results were read already, as when `restart()`
+ * returns a finished run's stored result: holds their stubs, and reads them again on the first call
+ * while the run is still at `lastSeq`.
+ *
+ * @internal
+ */
+export function loadedStepResults(
+  {
+    store,
+    workflowName,
+    runId,
+    lastSeq,
+  }: { store: WorkflowsStorage; workflowName: string; runId: string; lastSeq: number },
+  stepResults: StepResults,
+  format: (stepResults: StepResults) => StepResults,
+): () => Promise<StepResults> {
+  const results: StepResults = {};
+  for (const [stepId, result] of Object.entries(stepResults)) {
+    results[stepId] =
+      stepId !== 'input' && result?.status === 'success' && !isStepResultStub(result) ? stubStepResult(result) : result;
+  }
+  return storedStepResults({ store, workflowName, runId, lastSeq: Promise.resolve(lastSeq) }, results, format);
+}
+
+function storedStepResults(
+  {
+    store,
+    workflowName,
+    runId,
+    lastSeq,
+  }: { store: WorkflowsStorage; workflowName: string; runId: string; lastSeq: Promise<number | undefined> },
+  results: StepResults,
+  format: (stepResults: StepResults) => StepResults,
+): () => Promise<StepResults> {
   let loaded: Promise<StepResults> | undefined;
 
   const load = async (): Promise<StepResults> => {
+    const expectedLastSeq = await lastSeq;
     const stubbed = Object.keys(results).filter(stepId => isStepResultStub(results[stepId]));
     if (!stubbed.length) return format(results);
 
-    const stored = await store!.loadWorkflowRunSteps({
+    const stored = await store.loadWorkflowRunSteps({
       workflowName,
       runId,
       stepIds: stubbed,
-      expectedLastSeq: await settledLastSeq,
+      expectedLastSeq,
     });
     if (!stored) {
       throw new MastraError({
@@ -768,18 +831,6 @@ export function lazyStepResults(
     return loaded;
   };
   residentResults.set(steps, results);
-  return steps;
-}
-
-/**
- * The `steps()` of a storage v2 result whose step results were read already, as when `restart()`
- * returns a finished run's stored result.
- *
- * @internal
- */
-export function loadedStepResults(stepResults: StepResults): () => Promise<StepResults> {
-  const steps = async () => stepResults;
-  residentResults.set(steps, stepResults);
   return steps;
 }
 
