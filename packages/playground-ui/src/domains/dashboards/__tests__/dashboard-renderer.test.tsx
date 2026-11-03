@@ -27,7 +27,7 @@ import { DrilldownAction } from '../components/widget-controls';
 import { useViewMenu } from '../hooks/use-widget-views';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { defineWidgetKind } from '../widget-kind';
-import type { AnyWidgetKind } from '../widget-kind';
+import type { AnyWidgetKind, DashboardExpand } from '../widget-kind';
 import { metricsWidget, modelsWidget as models } from './equality-harness';
 import { kpisWidget } from './fixtures/metrics-widgets';
 import { server } from '@/test/msw-server';
@@ -100,9 +100,11 @@ function renderDashboard(
     environment,
     filterTokens = environment ? [{ fieldId: 'environment', value: environment }] : [],
     onDrilldown,
+    expand,
   }: {
     kinds?: AnyWidgetKind[];
     onDrilldown?: OnDashboardDrilldown;
+    expand?: DashboardExpand;
     scope?: { metrics: MetricsScope; dashboard: DashboardScope };
     environment?: string;
     filterTokens?: { fieldId: string; value: string }[];
@@ -126,6 +128,7 @@ function renderDashboard(
         kinds={kinds}
         scope={scope?.dashboard ?? 'project'}
         onDrilldown={onDrilldown}
+        expand={expand}
       />,
     ),
   );
@@ -392,6 +395,29 @@ describe('DashboardRenderer', () => {
       expect(within(cell(container, 'spans')).getByRole('button', { name: 'View in spans' })).toBeDefined();
       fireEvent.click(within(cell(container, 'threads')).getByRole('button', { name: 'View in threads' }));
       expect(onDrilldown).toHaveBeenCalledWith('threads', {});
+    });
+  });
+
+  describe('when the host gives chart cards somewhere to expand to', () => {
+    const RouterLink = ({ href, ...props }: { href: string }) => <a href={`/app${href}`} data-router-link {...props} />;
+    const expand: DashboardExpand = {
+      href: widget => (widget.id === 'agent-runs' ? undefined : `/query?metric=${widget.id}`),
+      LinkComponent: RouterLink,
+    };
+
+    it("links the card's title to the host's page in place of its views menu", async () => {
+      const { container } = renderDashboard(definition(metricsWidget('token-usage')), { expand });
+      const card = cell(container, 'token-usage');
+      const link = await within(card).findByRole('link', { name: 'Token usage' });
+      expect(link.getAttribute('href')).toBe('/app/query?metric=token-usage');
+      expect(within(card).queryByRole('button', { name: 'Token usage' })).toBeNull();
+    });
+
+    it('keeps the views menu on a card the host has nowhere to send', async () => {
+      const { container } = renderDashboard(definition(agentRunsWidget), { expand });
+      const card = cell(container, 'agent-runs');
+      expect(await within(card).findByRole('button', { name: 'Agent runs' })).toBeDefined();
+      expect(within(card).queryByRole('link')).toBeNull();
     });
   });
 

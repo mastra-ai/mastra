@@ -86,6 +86,7 @@ function ScoresView({
     <ChartCard title={title} isUpdating={all.some(r => r.isRefetching)}>
       <ChartArea isEmpty={!isLoading && lines.length === 0} emptyMessage={options.emptyMessage}>
         <MetricsLineChart
+          lineStyle="thin"
           data={isLoading ? [] : buckets}
           series={series}
           height="fill"
