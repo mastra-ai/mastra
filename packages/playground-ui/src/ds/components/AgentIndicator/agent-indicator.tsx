@@ -4,13 +4,12 @@ import type { CSSProperties } from 'react';
 import { animate } from './animate';
 import { MORPH_SECONDS } from './poses';
 import type { AgentIndicatorState } from './poses';
-import { BALLS, LINES, range, TRAIL } from './shapes';
+import { BALLS, LINES, range, RINGS, TRAIL } from './shapes';
 import { cn } from '@/lib/utils';
 import './agent-indicator.css';
 
 export interface AgentIndicatorProps {
   state: AgentIndicatorState;
-  /** Holds idle and waiting without their ambient motion, for a state that is over rather than live. */
   still?: boolean;
   className?: string;
 }
@@ -88,6 +87,11 @@ export function AgentIndicator({ state, still, className }: AgentIndicatorProps)
           {SHAPE}
         </g>
         {TRAIL_INKS}
+        <g fill="none" stroke="currentColor">
+          {range(RINGS).map(i => (
+            <circle key={i} data-part="ring" />
+          ))}
+        </g>
       </svg>
     </span>
   );

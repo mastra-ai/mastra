@@ -61,6 +61,36 @@ Use `variant="subtle"` for a persistent neutral fill, such as a selected view. I
 </Button>
 ```
 
+### Tool icons
+
+`presentTool` from `@mastra/playground-ui/components/ai/tool-call` supplies a tool's
+label, detail, static icon, and animated `AgentIndicator` pose. Use that shared
+presentation in tool rows so the icon stays consistent with live activity.
+
+Tool shapes distinguish file writes, edits, listings, inspection, process output,
+process stopping, web reading, browser interactions, delegation, workflows,
+connections, schedules, notifications, and source-control activity. Knowledge
+updates keep three connected nodes and grow a fourth node with a new link while
+working. Notes, moves, merges, deletions, pins, and unpins use their own action
+shapes. Search and read keep their lens and eye. Website reading scans a browser
+page, typing presses keys, and skill search and skill files have distinct book
+shapes and motions.
+
+`presentTool` uses the operation arguments as well as the tool name. Pass those
+arguments through live activity and completed cards so a page deletion cannot
+look like a page update. Known workspace prefixes, MCP `mcp__server__tool` names,
+`namespace.tool` names, and explicit aliases resolve to the same presentation.
+Unknown names and ambiguous provider verbs keep the generic tool glyph.
+
+The **AI / Activity / Tool Icon Families** Storybook story shows every supported
+family at row size and lets you switch actions during a morph. Shapes share the
+same morph frame, timing, interruption handling, and reduced-motion path. Search
+lenses use circular primitives so their contours stay round throughout motion. Active tool shapes keep their action motion; completed rows use static
+glyphs. Idle and waiting use CSS motion, while completion and error settle and
+stop redrawing. Tool pose animation pauses offscreen; all motion respects reduced motion.
+The painter reuses unchanged contours and only writes changed attributes; fixed
+file and terminal outlines are cached rather than sampled each frame.
+
 ### Tool approvals
 
 `ToolApproval` renders a standalone approval request in the shared activity layout: the tool name

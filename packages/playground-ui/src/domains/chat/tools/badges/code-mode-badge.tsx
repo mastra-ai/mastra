@@ -4,11 +4,13 @@ import type { MessageMetadata } from '../../messages/message-metadata';
 import type { CodeModeResult } from '../code-mode';
 import type { ToolApprovalRequest } from './tool-approval-badge';
 import { ToolApprovalBadge } from './tool-approval-badge';
+import { agentGlyph } from '@/ds/components/AgentIndicator';
 import { Code } from '@/ds/components/Code';
 import { CodeBlock } from '@/ds/components/CodeBlock';
 import { CodeEditor } from '@/ds/components/CodeEditor';
-import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
 import { formatTypeScript } from '@/utils/formatting';
+
+const CodeToolIcon = agentGlyph('inspecting');
 
 export interface CodeModeBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   toolName: string;
@@ -35,9 +37,6 @@ export const CodeModeBadge = ({
 
   const toolCalled = toolCalledProp ?? result !== undefined;
 
-  // The model usually emits the program as a single line; pretty-print it so the
-  // highlighted block is readable. Falls back to the raw code if formatting fails
-  // (e.g. the program is still streaming and not yet syntactically valid).
   const [formattedCode, setFormattedCode] = useState(code);
   useEffect(() => {
     let cancelled = false;
@@ -64,7 +63,7 @@ export const CodeModeBadge = ({
         isGenerateMode: metadata?.mode === 'generate',
       }}
       data-testid="code-mode-badge"
-      icon={<ToolCoinIcon className="text-span-tool" />}
+      icon={<CodeToolIcon className="text-span-tool" />}
       title={toolName}
       initialCollapsed={!toolApprovalMetadata}
     >

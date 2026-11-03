@@ -10,7 +10,6 @@ export interface ActivityWords {
   icon: LucideIcon;
   label: string;
   detail?: string;
-  /** How long settled calls took, to the second: "1m 12s". A lone thought says it in its label. */
   duration?: string;
 }
 
@@ -27,8 +26,6 @@ function secondsDuration(elapsedMs: number | undefined): string | undefined {
   if (elapsedMs === undefined || elapsedMs < 1_000) return undefined;
   return formatDuration(Math.round(elapsedMs / 1_000) * 1_000);
 }
-
-/** "Read files, ran a command": each kind once, in order of first use. */
 function summarize(calls: readonly WordedCall[]): string {
   const counts = new Map<string, number>();
   for (const { toolName, args } of calls) {
@@ -45,17 +42,15 @@ function summarize(calls: readonly WordedCall[]): string {
   return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
-export function callPose(toolName: string): AgentIndicatorState {
-  return presentTool(toolName, undefined).pose;
+export function callPose(toolName: string, args?: unknown): AgentIndicatorState {
+  return presentTool(toolName, args).pose;
 }
 
 export function stretchPose(calls: readonly WordedCall[], live: boolean): AgentIndicatorState {
   if (!live) return 'idle';
   const running = calls.findLast(call => call.status === 'running');
-  return running ? callPose(running.toolName) : 'thinking';
+  return running ? callPose(running.toolName, running.args) : 'thinking';
 }
-
-/** What the stretch is doing now: the latest running call, or thinking between calls. */
 export function liveWords(calls: readonly WordedCall[]): ActivityWords {
   const running = calls.findLast(call => call.status === 'running');
   if (!running) return { icon: agentGlyph('thinking'), label: 'Thinking' };
@@ -63,19 +58,15 @@ export function liveWords(calls: readonly WordedCall[]): ActivityWords {
   if (description) return { icon, label: description };
   return { icon, label: toolPhrases(label).live, detail };
 }
-
-/** What the stretch did: a lone call in the past tense, several as one sentence of kinds. */
 export function settledWords(calls: readonly WordedCall[], elapsedMs?: number): ActivityWords {
   const duration = secondsDuration(elapsedMs);
   const [first] = calls;
   if (!first) return { icon: agentGlyph('idle'), label: duration ? `Thought for ${duration}` : 'Thought' };
   const { icon, label, detail } = presentTool(first.toolName, first.args);
   if (calls.length === 1) return { icon, label: toolPhrases(label).done, detail, duration };
-  const oneKind = new Set(calls.map(call => callPose(call.toolName))).size === 1;
+  const oneKind = new Set(calls.map(call => callPose(call.toolName, call.args))).size === 1;
   return { icon: oneKind ? icon : agentGlyph('tool'), label: summarize(calls), duration };
 }
-
-/** The line's accessible name: what it says, as one phrase. */
 export function wordsName({ label, detail, duration }: ActivityWords): string {
   const said = detail ? `${label} ${detail}` : label;
   return duration ? `${said}, ${duration}` : said;
@@ -87,8 +78,6 @@ export function callsOutcome(calls: readonly WordedCall[]): CallsOutcome {
     incomplete: calls.filter(call => call.status === 'running').length,
   };
 }
-
-/** "1 failed · 2 incomplete" for several calls; a lone call only says it never finished. */
 export function outcomeText({ failed, incomplete }: CallsOutcome, callCount: number): string {
   if (callCount <= 1) return incomplete > 0 ? 'incomplete' : '';
   const counts = [

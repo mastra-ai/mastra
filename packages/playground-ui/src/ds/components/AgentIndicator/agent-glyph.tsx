@@ -17,7 +17,7 @@ function glyph(state: AgentIndicatorState): LucideIcon {
   const Glyph = forwardRef<SVGSVGElement, LucideProps>(
     ({ size = 24, color = 'currentColor', absoluteStrokeWidth: _, ...props }, ref) => {
       const maskId = `agent-glyph-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
-      const { body, balls, cuts, inks, trailCuts, trailInks } = parts();
+      const { body, balls, rings, cuts, inks, trailCuts, trailInks } = parts();
       const cutting = drawn([...cuts, ...trailCuts]);
       const named = Object.keys(props).some(prop => prop.startsWith('aria-') || prop === 'role' || prop === 'title');
 
@@ -59,6 +59,13 @@ function glyph(state: AgentIndicatorState): LucideIcon {
               <path key={d} data-part="ink" d={d} strokeWidth={width} />
             ))}
           </g>
+          <g fill="none" stroke={color}>
+            {rings
+              .filter(ring => Number(ring.r) > 0 && Number(ring.width) > 0)
+              .map(({ width, ...ring }) => (
+                <circle key={`${ring.cx} ${ring.cy}`} data-part="ring" {...ring} strokeWidth={width} />
+              ))}
+          </g>
         </svg>
       );
     },
@@ -69,7 +76,6 @@ function glyph(state: AgentIndicatorState): LucideIcon {
 
 const glyphs = new Map<AgentIndicatorState, LucideIcon>();
 
-/** An indicator pose as a still icon: what a row shows for the work the indicator morphs into. */
 export function agentGlyph(state: AgentIndicatorState): LucideIcon {
   const known = glyphs.get(state);
   if (known) return known;

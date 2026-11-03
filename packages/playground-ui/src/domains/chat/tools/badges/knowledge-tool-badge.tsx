@@ -1,4 +1,3 @@
-import { BookOpen } from 'lucide-react';
 import { createContext, useContext } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
@@ -11,11 +10,10 @@ import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-appro
 import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
 import { KNOWLEDGE_REF_PROPERTY, remarkKnowledgeLinks } from '@/domains/knowledge/lib/remarkKnowledgeLinks';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { ToolCallOutput } from '@/ds/components/ai/tool-call';
+import { presentTool, ToolCallOutput } from '@/ds/components/ai/tool-call';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 import { Txt } from '@/ds/components/Txt';
 
-/** The tools `Knowledge.createTools()` gives an agent. */
 export const KNOWLEDGE_TOOLS = new Set([
   'knowledge_search',
   'knowledge_read',
@@ -30,7 +28,6 @@ interface PageSummary {
   name: string;
   address?: string;
   scope?: string;
-  /** The full readable ref (`docs:mastra#observability/logging`); older cores send only the last `key`. */
   ref?: string;
   key?: string;
   description?: string;
@@ -43,7 +40,6 @@ interface NoteSummary {
   text: string;
   author?: string;
   page?: PageSummary;
-  /** Which `[[ref]]` in `text` links to which page id; refs the server couldn't resolve aren't here. */
   mentions?: Record<string, string>;
 }
 
@@ -60,10 +56,8 @@ function asNotes(value: unknown): NoteSummary[] {
     : [];
 }
 
-/** The collapsed row's detail: the page name, then which part of it was read or written. */
 const withExtent = (name: string, extent: BodyExtent | undefined) => (extent?.row ? `${name} · ${extent.row}` : name);
 
-/** The numbered lines of a part read: a window, or each match, under the range it covers. */
 function ReadLines({ page }: { page: unknown }) {
   if (!isRecord(page)) return null;
   const parts = Array.isArray(page.matches)
@@ -106,14 +100,8 @@ function PageLine({ page, linked = true }: { page: PageSummary; linked?: boolean
 
 const MENTION_LINK_CLASS = 'text-foreground underline decoration-dotted underline-offset-2 hover:decoration-solid';
 
-/** Which page id each `[[ref]]` a card shows answers to, as far as this tool result says. */
 type RefIds = ReadonlyMap<string, string>;
 
-/**
- * The refs a tool result resolves: the page's own id and ref, and every ref a note in the result
- * mentions (the server resolved those to page ids). A page body's links usually reappear in a note's
- * mentions; any that don't stay plain, since a chat has no page store to look them up in.
- */
 function resultRefIds(page: PageSummary | undefined, notes: NoteSummary[]): RefIds {
   const ids = new Map<string, string>();
   if (page) {
@@ -131,7 +119,6 @@ function resultRefIds(page: PageSummary | undefined, notes: NoteSummary[]): RefI
 
 const BodyRefs = createContext<RefIds>(new Map());
 
-/** A `[[ref]]` in a card body: a link when the result resolves it, the ref as quiet text when not. */
 function BodyRef({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
   const refIds = useContext(BodyRefs);
   const raw = node?.properties[KNOWLEDGE_REF_PROPERTY];
@@ -166,7 +153,6 @@ function Body({ markdown, refIds = new Map() }: { markdown: string; refIds?: Ref
 
 const MENTION = /\[\[([^\]]+)\]\]/g;
 
-/** A note's text with each resolved `[[Page Name]]` linking to its page; unresolved names stay plain. */
 function NoteText({ note }: { note: NoteSummary }) {
   const parts: ReactNode[] = [];
   let last = 0;
@@ -214,7 +200,6 @@ function NoteList({ notes }: { notes: NoteSummary[] }) {
   );
 }
 
-/** One entry of a `knowledge_list` result: a page or scope at some depth below the starting point. */
 interface ListEntry {
   ref: string;
   name: string;
@@ -232,7 +217,6 @@ function asListEntry(value: unknown): ListEntry | undefined {
 
 const DEPTH_INDENT = ['', 'pl-4', 'pl-8'] as const;
 
-/** A `knowledge_list` result as an indented tree: each name links to its page (scopes to their scope page), with its ref and child count. */
 function ListTree({ entries }: { entries: ListEntry[] }) {
   return (
     <ul className="flex max-h-64 flex-col gap-1 overflow-auto" data-testid="knowledge-list-entries">
@@ -273,10 +257,6 @@ const FAILED_TITLES: Record<string, string> = {
   knowledge_pin: "Couldn't change pin",
 };
 
-/**
- * What each Knowledge tool's settled result says, or null when the shape isn't one we know.
- * A failed call (`errorText` set) gets a card naming what it tried and the error it got.
- */
 export function knowledgeCard(
   toolName: string,
   input: unknown,
@@ -387,7 +367,6 @@ export function knowledgeCard(
       if (!page) return null;
       const op = str(args.op);
       if (op === 'delete') {
-        // The page no longer exists, so name it without a link.
         return { title: 'Deleted page', detail: page.name, body: <PageLine page={page} linked={false} /> };
       }
       const title =
@@ -474,34 +453,39 @@ export function knowledgeCard(
 
 export interface KnowledgeToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   card: KnowledgeCard;
+  args?: unknown;
   metadata?: MessageMetadata;
   status?: ActivityStatus;
 }
 
 export const KnowledgeToolBadge = ({
   card,
+  args,
   toolName,
   metadata,
   toolCallId,
   toolApprovalMetadata,
   isNetwork,
   status = 'idle',
-}: KnowledgeToolBadgeProps) => (
-  <ToolApprovalBadge
-    approval={{
-      toolCalled: true,
-      toolCallId,
-      toolApprovalMetadata,
-      toolName,
-      isNetwork,
-      isGenerateMode: metadata?.mode === 'generate',
-    }}
-    data-testid="knowledge-tool-badge"
-    icon={<BookOpen aria-hidden />}
-    title={card.title}
-    detail={card.detail}
-    status={status}
-  >
-    {card.body}
-  </ToolApprovalBadge>
-);
+}: KnowledgeToolBadgeProps) => {
+  const { icon: KnowledgeIcon } = presentTool(toolName, args);
+  return (
+    <ToolApprovalBadge
+      approval={{
+        toolCalled: true,
+        toolCallId,
+        toolApprovalMetadata,
+        toolName,
+        isNetwork,
+        isGenerateMode: metadata?.mode === 'generate',
+      }}
+      data-testid="knowledge-tool-badge"
+      icon={<KnowledgeIcon aria-hidden />}
+      title={card.title}
+      detail={card.detail}
+      status={status}
+    >
+      {card.body}
+    </ToolApprovalBadge>
+  );
+};
