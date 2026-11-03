@@ -274,10 +274,13 @@ jobs:
           // ownership, evented delivery, or the workflow store change.
           const durableStreamsChanged = fullSuite || changed(file =>
             file.startsWith('packages/core/src/agent/') ||
+            file.startsWith('packages/core/src/mastra/') ||
             file.startsWith('packages/core/src/workflows/evented/') ||
             file.startsWith('pubsub/redis-streams/') ||
             file.startsWith('stores/pg/') ||
+            file.startsWith('packages/memory/') ||
             file === '.github/workflows/test-durable-streams.yml' ||
+            file === '.github/workflows/test-suite.yml' ||
             file === '.github/workflows/prebuild.yml' ||
             file === 'pnpm-lock.yaml'
           );
