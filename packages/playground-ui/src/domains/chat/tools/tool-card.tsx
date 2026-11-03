@@ -146,7 +146,15 @@ export const ToolCardInner = ({
         }
         break;
       case 'connect_prompt':
-        return <ConnectPromptTool output={output} readOnly={readOnly} />;
+        return (
+          <ConnectPromptTool
+            toolName={toolName}
+            toolCallId={toolCallId}
+            output={output}
+            metadata={metadata}
+            readOnly={readOnly}
+          />
+        );
       case 'submit_plan':
         return (
           <SubmitPlanTool
