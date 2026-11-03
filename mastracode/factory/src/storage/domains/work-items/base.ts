@@ -1271,7 +1271,7 @@ export interface FactoryAttentionScope {
   factoryProjectId: string;
 }
 
-/** A safety net, not the invalidation path: a missed version bump can't hide a change for longer. */
+/** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
 const LIST_CACHE_TTL_MS = 60_000;
 const LIST_CACHE_MAX_PROJECTS = 100;
 
@@ -1279,7 +1279,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   /** Last full card list per project, valid while the project's board version is unchanged. */
   readonly #listCache = new Map<string, { version: string; takenAt: number; items: WorkItemRow[] }>();
   // Joined only at the same board version: a poll after a write must not join a read begun before it.
-  readonly #listInFlight = new Map<string, { version: string; items: Promise<WorkItemRow[]> }>();
+  readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<WorkItemRow[]> }>();
   #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
   // Storage does not know boards. Until the host says which phases are terminal,
   // no card counts as finished, so the boot sweep never supersedes on a guess.
@@ -1565,9 +1565,11 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       return { items, cached: false };
     }
     const inFlight = this.#listInFlight.get(key);
-    if (inFlight?.version === version) return { items: await inFlight.items, cached: true };
+    if (inFlight?.version === version && Date.now() - inFlight.startedAt < LIST_CACHE_TTL_MS) {
+      return { items: await inFlight.items, cached: true };
+    }
     const read = this.#listWithOps(super.ops, orgId, factoryProjectId);
-    this.#listInFlight.set(key, { version, items: read });
+    this.#listInFlight.set(key, { version, startedAt: Date.now(), items: read });
     try {
       const items = await read;
       if (this.#listInFlight.get(key)?.items === read) {

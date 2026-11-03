@@ -308,4 +308,29 @@ describe('board list cache', () => {
       vi.useRealTimers();
     }
   });
+
+  it('stops sharing a card read that has run past the safety window', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const seed = await createFactoryStorageForTests();
+      await seedCard(seed.workItems);
+      const stuck = holdNextCardRead(seed);
+      const first = poll(seed.workItems);
+      await stuck.taken;
+      const cardReads = countCardReads(seed);
+      const readsWhileStuck = cardReads();
+
+      vi.setSystemTime(Date.now() + 61_000);
+      const versionRead = nextVersionRead(seed);
+      const later = poll(seed.workItems);
+      await versionRead;
+      stuck.release();
+
+      expect(cardReads()).toBe(readsWhileStuck + 1);
+      expect((await later).map(item => item.title)).toEqual(['Fix login']);
+      await first;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

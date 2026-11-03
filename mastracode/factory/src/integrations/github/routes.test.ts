@@ -1794,6 +1794,42 @@ describe('prs route', () => {
     }
   });
 
+  it('starts a fresh rules pass once a stuck one has run for two minutes, and boards keep joining it after the stuck one ends', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'] });
+    try {
+      seedMaterializedProject();
+      const stuck = Promise.withResolvers<undefined>();
+      const fresh = Promise.withResolvers<undefined>();
+      const ingestFactoryEvent = vi
+        .fn(async () => undefined)
+        .mockImplementationOnce(() => stuck.promise)
+        .mockImplementationOnce(() => fresh.promise);
+      const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+      const first = app.request('/web/github/projects/p1/prs');
+      await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalledTimes(1));
+      vi.setSystemTime(Date.now() + 121_000);
+      const second = app.request('/web/github/projects/p1/prs');
+      await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalledTimes(2));
+
+      stuck.resolve(undefined);
+      await setImmediate();
+      listRepoOpenPullRequests.mockResolvedValueOnce({
+        pullRequests: [pullRequest34, { ...pullRequest34, number: 35, url: 'https://github.com/octo/hello/pull/35' }],
+        nextPage: null,
+      });
+      const third = app.request('/web/github/projects/p1/prs');
+      await vi.waitFor(() => expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(3));
+      await setImmediate();
+
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+      fresh.resolve(undefined);
+      expect([(await first).status, (await second).status, (await third).status]).toEqual([200, 200, 200]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
     seedMaterializedProject();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
