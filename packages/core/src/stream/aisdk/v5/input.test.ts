@@ -50,12 +50,14 @@ describe('AISDKV5InputStream citation markers', () => {
     const providerMetadata = { test: { signature: 'abc' } };
     const chunks = await collectCitationStream([
       { type: 'tool-input-start', id: 'call-1', toolName: 'reply' },
-      { type: 'tool-input-delta', id: 'call-1', delta: '{"text":"a\uE200cite', providerMetadata },
+      { type: 'tool-input-delta', id: 'call-1', delta: '{"text":"a' },
+      { type: 'tool-input-delta', id: 'call-1', delta: '\uE200cite', providerMetadata },
       { type: 'tool-input-end', id: 'call-1' },
     ]);
     const deltas = chunks.filter(c => c.type === 'tool-call-delta');
     expect(deltas.map(c => c.payload.argsTextDelta).join('')).toBe('{"text":"a\uE200cite');
-    expect(deltas.filter(c => c.payload.providerMetadata === providerMetadata)).toHaveLength(1);
+    expect(deltas.at(-1)?.payload.argsTextDelta).toBe('\uE200cite');
+    expect(deltas.at(-1)?.payload.providerMetadata).toBe(providerMetadata);
   });
 });
 
