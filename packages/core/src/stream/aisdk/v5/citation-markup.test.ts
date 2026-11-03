@@ -151,6 +151,13 @@ describe('agent streams with OpenAI citation markup', () => {
             { type: 'text-start', id: 'text-1' },
             { type: 'text-delta', id: 'text-1', delta: 'Paris is the capital.' },
             { type: 'text-delta', id: 'text-1', delta: marker.slice(0, 6) },
+            {
+              type: 'source',
+              sourceType: 'url',
+              id: 'source-1',
+              url: 'https://example.com/paris',
+              title: 'Paris',
+            },
             { type: 'text-delta', id: 'text-1', delta: marker.slice(6) },
             { type: 'text-delta', id: 'text-1', delta: ' Done.' },
             { type: 'text-end', id: 'text-1' },
@@ -185,9 +192,15 @@ describe('agent streams with OpenAI citation markup', () => {
       memory: { thread: 'thread-1', resource: 'resource-1' },
     });
     const text = await result.text;
+    const sources = await result.sources;
     const toolCalls = await result.toolCalls;
 
     expect(text).toBe('Paris is the capital. Done.');
+    expect(sources).toEqual([
+      expect.objectContaining({
+        payload: expect.objectContaining({ id: 'source-1', url: 'https://example.com/paris' }),
+      }),
+    ]);
     expect(received).toEqual(['Paris is the capital of France.']);
     expect(toolCalls[0]?.payload.args).toEqual({ text: 'Paris is the capital of France.' });
 
