@@ -387,15 +387,14 @@ function titleGenerationTests(version: 'v1' | 'v2') {
                 usage: { promptTokens: 5, completionTokens: 10 },
                 text: `Should not be called`,
               };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 10, completionTokens: 20 },
-                text: `Agent Response`,
-              };
             }
+            agentCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 10, completionTokens: 20 },
+              text: `Agent Response`,
+            };
           },
         });
       } else {
@@ -420,22 +419,21 @@ function titleGenerationTests(version: 'v1' | 'v2') {
                 ],
                 warnings: [],
               };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                text: `Agent Response`,
-                content: [
-                  {
-                    type: 'text',
-                    text: `Agent Response`,
-                  },
-                ],
-                warnings: [],
-              };
             }
+            agentCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: `Agent Response`,
+              content: [
+                {
+                  type: 'text',
+                  text: `Agent Response`,
+                },
+              ],
+              warnings: [],
+            };
           },
           doStream: async options => {
             // Check if this is for title generation based on the prompt
@@ -468,33 +466,32 @@ function titleGenerationTests(version: 'v1' | 'v2') {
                   },
                 ]),
               };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                warnings: [],
-                stream: convertArrayToReadableStream([
-                  {
-                    type: 'stream-start',
-                    warnings: [],
-                  },
-                  {
-                    type: 'response-metadata',
-                    id: 'id-0',
-                    modelId: 'mock-model-id',
-                    timestamp: new Date(0),
-                  },
-                  { type: 'text-start', id: 'text-1' },
-                  { type: 'text-delta', id: 'text-1', delta: 'Agent Response' },
-                  { type: 'text-end', id: 'text-1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                  },
-                ]),
-              };
             }
+            agentCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                {
+                  type: 'stream-start',
+                  warnings: [],
+                },
+                {
+                  type: 'response-metadata',
+                  id: 'id-0',
+                  modelId: 'mock-model-id',
+                  timestamp: new Date(0),
+                },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Agent Response' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
           },
         });
       }
@@ -1048,15 +1045,14 @@ function titleGenerationTests(version: 'v1' | 'v2') {
                 usage: { promptTokens: 5, completionTokens: 10 },
                 text: 'Generated Title',
               };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { promptTokens: 10, completionTokens: 20 },
-                text: 'Agent Response',
-              };
             }
+            agentCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { promptTokens: 10, completionTokens: 20 },
+              text: 'Agent Response',
+            };
           },
         });
       } else {
@@ -1075,17 +1071,16 @@ function titleGenerationTests(version: 'v1' | 'v2') {
                 content: [{ type: 'text', text: 'Generated Title' }],
                 warnings: [],
               };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                finishReason: 'stop',
-                usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                text: 'Agent Response',
-                content: [{ type: 'text', text: 'Agent Response' }],
-                warnings: [],
-              };
             }
+            agentCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              finishReason: 'stop',
+              usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+              text: 'Agent Response',
+              content: [{ type: 'text', text: 'Agent Response' }],
+              warnings: [],
+            };
           },
           doStream: async options => {
             const messages = options.prompt;
@@ -1109,25 +1104,24 @@ function titleGenerationTests(version: 'v1' | 'v2') {
                   },
                 ]),
               };
-            } else {
-              agentCallCount++;
-              return {
-                rawCall: { rawPrompt: null, rawSettings: {} },
-                warnings: [],
-                stream: convertArrayToReadableStream([
-                  { type: 'stream-start', warnings: [] },
-                  { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
-                  { type: 'text-start', id: 'text-1' },
-                  { type: 'text-delta', id: 'text-1', delta: 'Agent Response' },
-                  { type: 'text-end', id: 'text-1' },
-                  {
-                    type: 'finish',
-                    finishReason: 'stop',
-                    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
-                  },
-                ]),
-              };
             }
+            agentCallCount++;
+            return {
+              rawCall: { rawPrompt: null, rawSettings: {} },
+              warnings: [],
+              stream: convertArrayToReadableStream([
+                { type: 'stream-start', warnings: [] },
+                { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+                { type: 'text-start', id: 'text-1' },
+                { type: 'text-delta', id: 'text-1', delta: 'Agent Response' },
+                { type: 'text-end', id: 'text-1' },
+                {
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+                },
+              ]),
+            };
           },
         });
       }

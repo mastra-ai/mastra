@@ -1096,6 +1096,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/frameworks/agents/:path*",
+      "destination": "/docs/agents/overview",
+      "permanent": true
+    },
+    {
       "source": "/docs/guide/tools",
       "destination": "/docs/agents/tools",
       "permanent": true
@@ -2253,6 +2258,11 @@
     {
       "source": "/docs/harness/signal-providers",
       "destination": "/docs/signals/signal-providers",
+      "permanent": true
+    },
+    {
+      "source": "/reference/vectors/:path*",
+      "destination": "/integrations/vectors/:path*",
       "permanent": true
     }
   ]

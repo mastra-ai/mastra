@@ -107,7 +107,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
    * const store = await LanceVectorStore.create('s3://bucket/db', { storageOptions: { timeout: '60s' } });
    * ```
    */
-  public static async create(uri: string, options?: ConnectionOptions & { id: string }): Promise<LanceVectorStore> {
+  public static async create(uri: string, options?: ConnectionOptions & { id?: string }): Promise<LanceVectorStore> {
     const instance = new LanceVectorStore(options?.id || crypto.randomUUID());
     try {
       instance.lanceClient = await connect(uri, options);
@@ -759,9 +759,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         // Table is now empty; index will be created when data is upserted and row count >= 256
         this.logger.debug(`Table ${resolvedTableName} created. Index creation deferred until data is available.`);
         return;
-      } else {
-        table = await this.lanceClient.openTable(resolvedTableName);
       }
+      table = await this.lanceClient.openTable(resolvedTableName);
 
       const metricType = this.mastraMetricToLance(metric);
 

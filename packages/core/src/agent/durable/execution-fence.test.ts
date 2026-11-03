@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import { NoopLeaseProvider } from '../../events/pubsub';
 import type { LeaseProvider } from '../../events/pubsub';
+import { MastraTimeoutError } from '../../loop/timeout';
 import { RequestContext } from '../../request-context';
 import { isRunFenceConflictError } from '../../storage';
 import type { MemoryStorage, WorkflowsStorage } from '../../storage';
@@ -25,6 +26,8 @@ import {
   setExecutionClaim,
   withExecutionFence,
 } from './execution-fence';
+import { deleteRunRegistryEntry, setRunRegistryEntry } from './run-registry';
+import type { RunRegistryEntry } from './run-registry';
 
 const agentId = 'agent-1';
 const key = (runId: string) => executionLeaseKey(agentId, runId);
@@ -290,6 +293,34 @@ describe('assertExecutionOwned', () => {
     ).resolves.toBeUndefined();
   });
 
+  describe('a run without an execution claim', () => {
+    const runId = 'claimless-run';
+    const withAbortReason = (reason: unknown) => {
+      const controller = new AbortController();
+      controller.abort(reason);
+      setRunRegistryEntry(runId, { abortSignal: controller.signal } as unknown as RunRegistryEntry, undefined);
+    };
+    const assertOwned = () =>
+      assertExecutionOwned({ runId, agentId, requestContext: new RequestContext(), mastra: undefined });
+
+    afterEach(() => deleteRunRegistryEntry(runId, undefined));
+
+    // The memory owner decided a run saves everything it did, even past its deadline.
+    it('keeps ownership after its total timeout fires', async () => {
+      withAbortReason(new MastraTimeoutError({ timeoutType: 'total', timeoutMs: 1_000 }));
+      await expect(assertOwned()).resolves.toBeUndefined();
+    });
+
+    it('keeps ownership after an abort that is not a timeout', async () => {
+      withAbortReason(new Error('user stopped the run'));
+      await expect(assertOwned()).resolves.toBeUndefined();
+    });
+
+    it('keeps ownership without a registry entry', async () => {
+      await expect(assertOwned()).resolves.toBeUndefined();
+    });
+  });
+
   it('always passes under NoopLeaseProvider', async () => {
     const fence = await claim(NoopLeaseProvider, 'run-1');
     const requestContext = new RequestContext();
@@ -443,6 +474,110 @@ describe('storage-backed ExecutionFence', () => {
     expect(error.id).toBe(EXECUTION_CONFLICT_ERROR_ID);
     expect(error.details).toMatchObject({ holder: 'foreign' });
     expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.ownerId).toBe('foreign');
+  });
+
+  it('keeps a storage-backed run alive when a queued renewal eventually confirms the same owner (#28879)', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+    let unblock!: () => void;
+    const blocked = new Promise<void>(resolve => (unblock = resolve));
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async args => {
+      await blocked;
+      return renew(args);
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS + EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(fence.isLost()).toBe(false);
+
+    unblock();
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(fence.verify()).resolves.toBeUndefined();
+
+    // The confirmed renewal must move the local deadline far enough for the run to keep renewing.
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_TTL_MS);
+    expect(fence.isLost()).toBe(false);
+    expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
+      ownerId: fence.executionId,
+      live: true,
+    });
+    expect(await fence.settle(async () => {})).toBe('owned');
+  });
+
+  it('marks the fence lost when a storage renewal never returns, so a recovered execution is not split-brain', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const lost = vi.fn();
+    fence.onLost(lost);
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(() => new Promise(() => {}));
+
+    // A pending renewal holds off expiry for one TTL past the lease deadline...
+    await vi.advanceTimersByTimeAsync(2 * EXECUTION_LEASE_TTL_MS - EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(fence.isLost()).toBe(false);
+
+    // ...and no longer.
+    await vi.advanceTimersByTimeAsync(2 * EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    expect(fence.isLost()).toBe(true);
+    expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_UNVERIFIED_ERROR_ID }));
+
+    const successor = await ExecutionFence.claim({
+      leaseProvider: NoopLeaseProvider,
+      workflowsStore,
+      agentId,
+      runId: 'run-1',
+      mode: 'recover',
+    });
+    expect(successor.generation).toBe(fence.generation! + 1);
+    expect(fence.isLost()).toBe(true);
+    await successor.settle(async () => {});
+  });
+
+  it('does not outlive the lease the store granted when a renewal response arrives late', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+    // The store extends the lease when the renewal runs; the response reaches the fence later. Later renewals fail.
+    vi.spyOn(workflowsStore, 'renewRunOwnership')
+      .mockImplementationOnce(async args => {
+        const result = await renew(args);
+        await new Promise(resolve => setTimeout(resolve, EXECUTION_LEASE_RENEW_INTERVAL_MS / 2));
+        return result;
+      })
+      .mockRejectedValue(new Error('store unavailable'));
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS + EXECUTION_LEASE_TTL_MS);
+    expect((await workflowsStore.getRunOwnership({ runId: 'run-1' }))?.live).toBe(false);
+    expect(fence.isLost()).toBe(true);
+  });
+
+  it('rejects a delayed renewal after another execution takes over (#28879)', async () => {
+    vi.useFakeTimers();
+    const { workflowsStore } = await stores();
+    const fence = await storageClaim(workflowsStore, 'run-1');
+    const renew = workflowsStore.renewRunOwnership.bind(workflowsStore);
+    let unblock!: () => void;
+    const blocked = new Promise<void>(resolve => (unblock = resolve));
+    vi.spyOn(workflowsStore, 'renewRunOwnership').mockImplementation(async args => {
+      await blocked;
+      return renew(args);
+    });
+
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+    const successor = await storageClaim(workflowsStore, 'run-1', 'takeover');
+    const lost = vi.fn();
+    fence.onLost(lost);
+    unblock();
+    await vi.advanceTimersByTimeAsync(0);
+
+    // The renewal's own `false` result marks the fence lost, before any verify() read.
+    expect(fence.isLost()).toBe(true);
+    expect(lost).toHaveBeenCalledWith(expect.objectContaining({ id: EXECUTION_SUPERSEDED_ERROR_ID }));
+    await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    expect(await fence.settle(async () => {})).toBe('superseded');
+    await successor.settle(async () => {});
   });
 
   it('a released claim can be acquired again under the next generation', async () => {

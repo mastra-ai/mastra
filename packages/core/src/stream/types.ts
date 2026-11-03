@@ -231,6 +231,8 @@ export interface ToolResultPayload<TResult = unknown, TArgs = unknown> {
   providerMetadata?: ProviderMetadata;
   args?: TArgs;
   dynamic?: boolean;
+  /** Partial provider-executed result (e.g. an in-progress image). A final, non-preliminary result always follows. */
+  preliminary?: boolean;
 }
 
 export type DynamicToolCallPayload = ToolCallPayload<any, any>;
@@ -303,6 +305,11 @@ export interface ThreadHistoryPayload {
   messages: MastraDBMessage[];
   /** Whether older messages exist beyond this page. */
   hasMore: boolean;
+  /**
+   * Run holding the thread lease at hydration, or null when idle. When the lease backend doesn't answer in time,
+   * this is the run this process last saw take the thread, and it can be stale.
+   */
+  activeRunId: string | null;
 }
 
 interface StartPayload {
@@ -825,7 +832,18 @@ interface ToolExecutionAbortPayload {
   primitiveId: string;
 }
 
-interface ToolCallApprovalPayload {
+/**
+ * Set when a supervisor re-raises a pause from a delegated sub-agent. `toolCallId` stays the
+ * supervisor's delegation call, which is what resumes the run.
+ */
+export interface DelegatedPauseIdentity {
+  /** The sub-agent's own tool call that paused. */
+  delegatedToolCallId?: string;
+  /** The name of the sub-agent's tool that paused. */
+  delegatedToolName?: string;
+}
+
+interface ToolCallApprovalPayload extends DelegatedPauseIdentity {
   toolCallId: string;
   toolName: string;
   args: Record<string, any>;
@@ -834,9 +852,11 @@ interface ToolCallApprovalPayload {
   updatedAt?: number;
   /** Token usage of the model step that produced this tool call. */
   usage?: LanguageModelUsage;
+  /** Provider metadata of the model step that produced this tool call. */
+  providerMetadata?: ProviderMetadata;
 }
 
-interface ToolCallSuspendedPayload {
+interface ToolCallSuspendedPayload extends DelegatedPauseIdentity {
   toolCallId: string;
   toolName: string;
   suspendPayload: any;
@@ -844,9 +864,11 @@ interface ToolCallSuspendedPayload {
   resumeSchema: string;
   /** Token usage of the model step that produced this tool call. */
   usage?: LanguageModelUsage;
+  /** Provider metadata of the model step that produced this tool call. */
+  providerMetadata?: ProviderMetadata;
 }
 
-interface ToolCallResumedPayload {
+interface ToolCallResumedPayload extends DelegatedPauseIdentity {
   toolCallId: string;
   toolName: string;
   /** Whether the resumed pause was a `suspend()` call or a tool approval request. */
@@ -919,6 +941,12 @@ export type NetworkChunkType<OUTPUT = undefined> =
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
 /** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
 export type ThreadHistoryChunk = BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload };
+
+/** A thread run's outcome, independent of stored-message replay. Suspension is resumable. */
+export type ThreadRunStatusChunk = BaseChunkType & {
+  type: 'thread-run-status';
+  payload: { status: 'success' | 'failed' | 'aborted' | 'suspended' };
+};
 
 export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
@@ -1195,6 +1223,10 @@ export type MastraOnStepFinishCallback<OUTPUT = undefined> = (
 ) => Promise<void> | void;
 
 export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPUT> & {
+  /** Present when execution ends at a tool suspension boundary. */
+  suspendReason?: 'tool-call-approval' | 'tool-call-suspended';
+  toolCallId?: string;
+  toolName?: string;
   error?: Error | string | { message: string; stack: string };
   object?: OUTPUT;
   /**
@@ -1214,6 +1246,12 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
    * MODEL_GENERATION span of a resumed leg records only its own share.
    */
   generationReportedUsage?: LanguageModelUsage;
+  /**
+   * @internal Provider metadata of each model step this leg of the run ran, so the
+   * MODEL_GENERATION span of a suspended or resumed leg records only its own provider cost.
+   * Absent when no earlier leg reported any step, so every step in `steps` belongs to this leg.
+   */
+  generationStepProviderMetadata?: (ProviderMetadata | undefined)[];
 };
 
 /**

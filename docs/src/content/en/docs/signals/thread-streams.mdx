@@ -55,13 +55,42 @@ Pass `withInitialHistory: true` to begin with a `thread-history` chunk, which ca
 
 Use `runId` to group chunks from the same run. The exception is [`thread-history`](/reference/streaming/ChunkType#thread-history), which has an empty `runId` because its messages can span several runs. The subscription's [`activeRunId()`](/reference/agents/agent#subscribetothreadoptions) returns the active run's ID or `null`.
 
-The public stream uses `AgentChunkType`, with `ThreadHistoryChunk` for stored history. The [ChunkType reference](/reference/streaming/ChunkType) lists the fields for model output, tool calls and results, approvals, aborts, and errors. To observe queue counts, use [`subscribeThreadEvents()`](/reference/signals/thread-events) separately. Internal runtime events aren't part of these public APIs.
+The public subscription stream includes `AgentChunkType`. `withInitialHistory` adds `ThreadHistoryChunk`, and `withRunStatus: true` adds `ThreadRunStatusChunk`. Both options default to `false`. The [ChunkType reference](/reference/streaming/ChunkType) lists the fields for model output, tool calls and results, approvals, aborts, and errors. To observe queue counts, use [`subscribeThreadEvents()`](/reference/signals/thread-events) separately.
+
+### Detect when a run finishes
+
+Pass `withRunStatus: true` to opt in to run outcomes. Existing subscriptions don't receive these chunks by default.
+
+```typescript
+const subscription = await agent.subscribeToThread({
+  resourceId: 'user-123',
+  threadId: 'thread-456',
+  withRunStatus: true,
+})
+```
+
+A [`thread-run-status`](/reference/streaming/ChunkType#thread-run-status) chunk identifies the run's outcome independently of its output:
+
+```typescript
+const chunk = {
+  type: 'thread-run-status',
+  runId: 'run-123',
+  from: 'AGENT',
+  payload: { status: 'success' },
+}
+```
+
+`status` is `success`, `failed`, `aborted`, or `suspended`. Live output arrives before its status. A suspension is resumable: the same run can later produce more output and a final status. A run outcome doesn't close the thread subscription, which continues listening for later runs.
+
+With `withInitialHistory`, the first chunk's payload is `{ messages, hasMore, activeRunId }`. `activeRunId` identifies the run holding thread ownership during hydration, or is `null` when idle. Use `thread-run-status` to determine the outcome. An idle thread alone doesn't indicate success.
+
+With `withRunStatus: true`, retained outcomes are delivered even when a run finished before you subscribed and its text is already in history. A late subscriber using both options receives one status for every still-retained finished run, including runs outside the initial history page. It doesn't receive only the newest run's status. Final outcomes are deduplicated within one subscription. Suspension notifications are deduplicated per execution segment. A reconnect creates a new subscription and may deliver the same outcome again. Group updates by `runId` rather than treating each delivery as a new answer.
 
 ### Approve tool calls
 
 When a run pauses for tool approval, send your decision with [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval) or the [server approval route](/reference/server/routes#subscription-tool-approval-routes). The existing subscription receives output when the run resumes.
 
-A paused run keeps ownership of the thread. Signals that try to start a new run receive an `accepted` action of `blocked` until the paused run resumes or is aborted. Pending approvals and suspensions are replayed when you subscribe again. Completed runs aren't. [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) covers the interrupt and wait rules for input that arrives during a run.
+A paused run keeps ownership of the thread. Signals that try to start a new run receive an `accepted` action of `blocked` until the paused run resumes or is aborted. Pending approvals and suspensions are replayed when you subscribe again. Completed stored output isn't replayed. Retained run outcomes are delivered when `withRunStatus: true`. [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) covers the interrupt and wait rules for input that arrives during a run.
 
 ### Filter signals in a subscription
 
@@ -77,7 +106,9 @@ Use `reconnect: true` for long-lived subscriptions. `processDataStream()` then r
 
 A reconnect can resume output that the shared [PubSub backend](/docs/server/pubsub) still retains. It can't recover events held only in another process's in-memory cache. Use `withInitialHistory` to reload the newest page of stored messages when you need conversation history.
 
-Stored messages aren't a recording of every streamed text fragment. Reconnecting doesn't replay completed stored runs or reconstruct fragments that weren't retained.
+Stored messages aren't a recording of every streamed text fragment. Reconnecting doesn't replay completed stored output or reconstruct fragments that weren't retained.
+
+Outcome recovery is bounded by the PubSub backend's retention, not by the history page size. Redis Streams keeps compact terminal events and execution authority metadata when saved output is trimmed, but its configured stream length and idle TTL can still evict them. This isn't a permanent run audit log or a guaranteed time window. Upgrade both `@mastra/core` and `@mastra/redis-streams` for recovery after trimming. Older adapters may delete terminal events with the output.
 
 ### SSE heartbeats for custom endpoints
 

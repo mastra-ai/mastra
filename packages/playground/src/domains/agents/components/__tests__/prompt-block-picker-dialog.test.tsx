@@ -124,7 +124,7 @@ describe('PromptBlockPickerDialog', () => {
 
       await screen.findByText('Billing tone');
 
-      const searchInput = screen.getByPlaceholderText('Search prompt blocks...');
+      const searchInput = screen.getByPlaceholderText('Search prompt blocks');
       fireEvent.change(searchInput, { target: { value: 'billing' } });
 
       expect(screen.getByText('Billing tone')).not.toBeNull();

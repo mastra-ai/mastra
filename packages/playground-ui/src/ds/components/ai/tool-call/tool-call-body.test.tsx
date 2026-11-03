@@ -44,14 +44,14 @@ describe('Tool call body', () => {
     it('preserves the partial text until structured arguments arrive', () => {
       const { rerender } = render(
         <TooltipProvider>
-          <ToolCallArguments toolName="search" args={undefined} argsText={'{"query":"par'} />
+          <ToolCallArguments toolName="search" args={undefined} argsText='{"query":"par' />
         </TooltipProvider>,
       );
       expect(screen.getByText('{"query":"par')).toBeTruthy();
 
       rerender(
         <TooltipProvider>
-          <ToolCallArguments toolName="search" args={{ query: 'paris' }} argsText={'{"query":"par'} />
+          <ToolCallArguments toolName="search" args={{ query: 'paris' }} argsText='{"query":"par' />
         </TooltipProvider>,
       );
       expect(screen.getByText(/"query": "paris"/)).toBeTruthy();

@@ -939,15 +939,14 @@ export class AIV5Adapter {
     } else if (data instanceof ArrayBuffer) {
       const base64 = Buffer.from(data).toString('base64');
       return `data:${mimeType};base64,${base64}`;
-    } else {
-      throw new MastraError({
-        id: 'MASTRA_AIV5_DATA_PART_INVALID',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'Unrecognized file data in message part',
-        details: { dataType: typeof data },
-      });
     }
+    throw new MastraError({
+      id: 'MASTRA_AIV5_DATA_PART_INVALID',
+      domain: ErrorDomain.AGENT,
+      category: ErrorCategory.USER,
+      text: 'Unrecognized file data in message part',
+      details: { dataType: typeof data },
+    });
   }
 
   /**

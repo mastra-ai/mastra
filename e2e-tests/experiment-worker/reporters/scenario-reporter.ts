@@ -4,6 +4,7 @@ import type { Reporter } from 'vitest/reporters';
 import { scenarios, type ScenarioDefinition } from '../scenarios/index.js';
 
 type TestCase = Parameters<NonNullable<Reporter['onTestCaseResult']>>[0];
+import { E2E_TAG } from '../../_local-registry-setup/publish-roots.js';
 import { writeScenarioReport, type ScenarioReport } from '../helpers/report.js';
 
 interface ScenarioResult {
@@ -86,7 +87,7 @@ export default class ScenarioReporter implements Reporter {
         isolationKey: scenario.isolationKey,
         packageManager: { name: 'scenario-defined', version: process.version },
         registry: {
-          tag: process.env.MASTRA_E2E_REGISTRY_TAG ?? 'local',
+          tag: E2E_TAG,
           artifactDigest: process.env.MASTRA_E2E_REGISTRY_ARTIFACT_DIGEST ?? null,
         },
         assertions: scenario.assertions.map(id => ({

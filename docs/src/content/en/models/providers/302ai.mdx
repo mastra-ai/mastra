@@ -7,7 +7,7 @@ description: "Browse 302.AI model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/302ai.svg" alt="302.AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />302.AI
 
-Access 125 302.AI models through Mastra's model router. Authentication is handled automatically using the `302AI_API_KEY` environment variable.
+Access 126 302.AI models through Mastra's model router. Authentication is handled automatically using the `302AI_API_KEY` environment variable.
 
 Learn more in the [302.AI documentation](https://doc.302.ai).
 
@@ -1256,6 +1256,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 3,
     "outputCost": 15
+  },
+  {
+    "model": "302ai/kimi-k3.1-pro",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 2.4,
+    "outputCost": 12
   },
   {
     "model": "302ai/MiniMax-M1",

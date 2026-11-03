@@ -637,3 +637,34 @@ describe('DurableAgent FGA checks', () => {
     }
   });
 });
+
+describe('Agent FGA with a real Mastra instance', () => {
+  // The agentic loop runs as internal workflows. Its nested iteration workflow
+  // used to be FGA-checked as `workflow:executionWorkflow`, so a user granted
+  // only `agents:execute` on the agent was denied on every call.
+  it('lets a user with only agents:execute on the agent generate a response', async () => {
+    const grants = new Set(['user-1:agent:test-agent:agents:execute']);
+    const fgaProvider: IFGAProvider = {
+      check: vi.fn(),
+      require: vi.fn(async (user: any, { resource, permission }: any) => {
+        if (!grants.has(`${user?.id}:${resource.type}:${resource.id}:${permission}`)) {
+          throw new FGADeniedError(user, resource, permission);
+        }
+      }),
+      filterAccessible: vi.fn(),
+    };
+    const agent = new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'test', model: createMockModel() });
+    const mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      agents: { agent },
+      server: { fga: fgaProvider },
+    });
+
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-1' });
+    const result = await mastra.getAgent('agent').generate('hi', { requestContext });
+
+    expect(result.text).toBe('ok');
+  });
+});

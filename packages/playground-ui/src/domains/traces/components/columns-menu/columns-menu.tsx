@@ -14,12 +14,18 @@ import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
 import { TraceColumnsMenu } from '../trace-columns-menu';
 import { CHECKING_USAGE_REASON, UNSUPPORTED_USAGE_REASON } from '../traces-explorer/traces-explorer-context';
 import type { TracesMetricsSupport } from '../traces-explorer/traces-explorer-context';
-import { useSpanQueryAvailable, useTraceQueryAvailable, useTraceQueryDiscoveryAvailable } from '@/domains/capabilities';
+import {
+  useObservabilityCapabilities,
+  useSpanQueryAvailable,
+  useTraceQueryAvailable,
+  useThreadQueryAvailable,
+  useTraceQueryDiscoveryAvailable,
+} from '@/domains/capabilities';
 
-export type ColumnsMenuScope = TraceColumnScope | 'threads';
+export type ColumnsMenuScope = TraceColumnScope;
 
 export type ColumnsMenuProps = {
-  /** Which list the columns belong to. Each scope offers only the columns its rows carry; threads renders nothing. */
+  /** Which list the columns belong to. Each scope offers only the columns its rows carry. */
   scope: ColumnsMenuScope;
   /** The active column selection. The host owns it (and its persistence). */
   value: TraceColumnPreferences;
@@ -33,30 +39,48 @@ export type ColumnsMenuProps = {
   queryEnabled?: boolean;
 };
 
-type ScopedColumnsMenuProps = Omit<ColumnsMenuProps, 'scope'> & { scope: TraceColumnScope };
-
 const UNSUPPORTED_METRICS: TracesMetricsSupport = { supported: false, isLoading: false };
 
 function useQueryAvailable(scope: TraceColumnScope) {
   const traceQuery = useTraceQueryAvailable();
   const spanQuery = useSpanQueryAvailable();
-  return scope === 'spans' ? spanQuery : traceQuery;
+  const threadQuery = useThreadQueryAvailable();
+  if (scope === 'spans') return spanQuery;
+  if (scope === 'threads') return threadQuery;
+  return traceQuery;
 }
 
-const ScopedColumnsMenu = memo(function ScopedColumnsMenu({
+/**
+ * The "Columns" picker for a trace-style list. Offers the scope's own column catalog, checks
+ * the scope's query capability, and (for traces) discovers the metadata keys observed in the
+ * time range on its own; the host only owns the selection.
+ */
+export const ColumnsMenu = memo(function ColumnsMenu({
   scope,
   value,
   onChange,
   discoveryTimeRange,
   metricsSupport = UNSUPPORTED_METRICS,
   queryEnabled = true,
-}: ScopedColumnsMenuProps) {
+}: ColumnsMenuProps) {
   const catalog = TRACE_COLUMN_CATALOGS[scope];
   const queryAvailable = useQueryAvailable(scope);
   const discoveryAvailable = useTraceQueryDiscoveryAvailable();
+  const { data: capabilities } = useObservabilityCapabilities();
   const [defaultTimeRange] = useState(() => resolveTraceQueryTimeRange(undefined, undefined, new Date()));
 
   const withQuery = queryAvailable.enabled && queryEnabled;
+  const withTimeToFirstChunk = withQuery && (capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false);
+  const withTimeToFirstToken = withQuery && (capabilities?.capabilities.traceQueryTimeToFirstToken ?? false);
+  const offeredCatalog = useMemo(() => {
+    if (withTimeToFirstChunk && withTimeToFirstToken) return catalog;
+    const standardColumns = catalog.standardColumns.filter(
+      column =>
+        (withTimeToFirstChunk || column !== 'timeToFirstChunk') &&
+        (withTimeToFirstToken || column !== 'timeToFirstToken'),
+    );
+    return { ...catalog, standardColumns };
+  }, [catalog, withTimeToFirstChunk, withTimeToFirstToken]);
   const { fields } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange ?? defaultTimeRange,
     queryOptions: { enabled: catalog.metadata && withQuery && discoveryAvailable.enabled },
@@ -81,7 +105,7 @@ const ScopedColumnsMenu = memo(function ScopedColumnsMenu({
   return (
     <TraceColumnsMenu
       preferences={value}
-      catalog={catalog}
+      catalog={offeredCatalog}
       availableMetadataKeys={availableMetadataKeys}
       usageDisabledReason={usageDisabledReason}
       withQueryTrace={withQuery}
@@ -95,13 +119,3 @@ const ScopedColumnsMenu = memo(function ScopedColumnsMenu({
     />
   );
 });
-
-/**
- * The "Columns" picker for a trace-style list. Offers the scope's own column catalog, checks
- * the scope's query capability, and (for traces) discovers the metadata keys observed in the
- * time range on its own; the host only owns the selection.
- */
-export function ColumnsMenu({ scope, ...props }: ColumnsMenuProps) {
-  if (scope === 'threads') return null;
-  return <ScopedColumnsMenu scope={scope} {...props} />;
-}

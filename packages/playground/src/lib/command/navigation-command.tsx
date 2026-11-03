@@ -587,7 +587,7 @@ export const NavigationCommand = () => {
       title="Mastra Studio Search"
       description="Search Studio routes and runtime entities"
     >
-      <CommandPaletteInput placeholder="Search Studio, agents, workflows, tools, paths..." />
+      <CommandPaletteInput placeholder="Search Studio, agents, workflows, tools, paths" />
       <CommandPaletteBody>
         <CommandRail scopeOptions={scopeOptions} activeScope={activeScope} onScopeChange={setActiveScope} />
         <CommandPaletteResults aria-label="Search results" footer={<CommandPaletteFooter label="Studio search" />}>

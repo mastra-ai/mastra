@@ -1,6 +1,5 @@
 export * from './components/scores-list';
 export * from './components/no-scores-info';
-export * from './components/score-dialog';
 export * from './components/scores-tools';
 export * from './components/scorer-combobox';
 export * from './components/scorers-list/scorers-list';

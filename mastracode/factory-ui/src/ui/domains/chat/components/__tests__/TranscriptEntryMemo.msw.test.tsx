@@ -18,8 +18,13 @@ vi.mock('@mastra/playground-ui/components/MarkdownRenderer', async importOrigina
 
 const noop = () => {};
 
-function assistant(id: string, text: string, streaming?: boolean): TimelineEntry {
-  const parts: MastraDBMessage['content']['parts'] = [{ type: 'text', text }];
+function assistant(
+  id: string,
+  text: string,
+  streaming?: boolean,
+  tools: MastraDBMessage['content']['parts'] = [],
+): TimelineEntry {
+  const parts: MastraDBMessage['content']['parts'] = [{ type: 'text', text }, ...tools];
   return {
     kind: 'message',
     id,
@@ -39,6 +44,36 @@ describe('transcript entry rendering', () => {
 
     rerender(
       <TranscriptEntries entries={[settled, assistant('assistant-2', 'writing')]} onApprove={noop} onRespond={noop} />,
+    );
+
+    expect(drawn).toEqual(['writing']);
+  });
+
+  it('leaves a settled step that hosts a line of tool work alone while the next reply streams', () => {
+    const settled = assistant('assistant-1', 'the first answer', false, [
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'result', toolCallId: 'call-1', toolName: 'view', args: {}, result: 'ok' },
+      },
+    ]);
+    const { rerender } = renderWithProviders(
+      <TranscriptEntries
+        entries={[settled, assistant('assistant-2', 'writ')]}
+        running
+        onApprove={noop}
+        onRespond={noop}
+      />,
+    );
+
+    drawn.length = 0;
+
+    rerender(
+      <TranscriptEntries
+        entries={[settled, assistant('assistant-2', 'writing')]}
+        running
+        onApprove={noop}
+        onRespond={noop}
+      />,
     );
 
     expect(drawn).toEqual(['writing']);

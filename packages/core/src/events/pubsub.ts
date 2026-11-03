@@ -69,8 +69,15 @@ export abstract class PubSub {
    * @param options.producedBefore - Only delete entries whose `data.producedAt`
    *   is at or before this epoch ms and that aren't `data.pinned`. Used to drop
    *   the parts of a run that storage already holds while the run continues.
+   * @param options.retainTerminalEvents - Preserve final run-completed, run-failed,
+   *   and run-aborted events, plus run-registered authority metadata, so subscribers
+   *   can recover outcomes without output and reject superseded executions.
+   *   Completion events with status suspended are not final and may be trimmed.
    */
-  trimTopic(_topic: string, _options: { runId: string; producedBefore?: number }): Promise<void> {
+  trimTopic(
+    _topic: string,
+    _options: { runId: string; producedBefore?: number; retainTerminalEvents?: boolean },
+  ): Promise<void> {
     return Promise.resolve();
   }
 

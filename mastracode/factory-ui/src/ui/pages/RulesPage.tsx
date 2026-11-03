@@ -21,7 +21,7 @@ import { useActiveFactory } from '../domains/workspaces/components/FactoryLayout
 import { LoadMoreSentinel } from '../domains/factory/components/LoadMoreSentinel';
 import { DayHeading, RailRow, RAIL_LIST, RAIL_MARK_TONE, RAIL_ROW_BODY } from '../domains/factory/components/Timeline';
 import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../domains/factory/services/decisions';
-import { SkeletonRows } from '../ui/SkeletonRows';
+import { RuleDecisionsSkeleton } from '../domains/factory/components/RuleDecisionsSkeleton';
 
 const DECISION_GROUPS: ReadonlyArray<{
   key: string;
@@ -133,7 +133,7 @@ function RulesContent({ factoryProjectId }: { factoryProjectId: string | undefin
       )}
 
       {decisionsQuery.isPending ? (
-        <SkeletonRows label="Loading rule decisions" rows={4} rowClassName="h-16 w-full" />
+        <RuleDecisionsSkeleton />
       ) : decisions.length === 0 ? (
         <EmptyState
           className="min-h-0 flex-1"

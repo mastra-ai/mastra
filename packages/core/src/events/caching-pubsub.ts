@@ -245,7 +245,25 @@ export class CachingPubSub extends PubSub {
     const cacheKey = this.getCacheKey(topic);
 
     let next = offset;
+    // The id the log stored for its frame 0 when this subscriber attached. With
+    // an offset past the log's end, the cursor sits above the counter, so the
+    // counter cannot tell the transport's retained frame 0 from the first frame
+    // of a new segment; a new segment writes a new entry 0 with a different id.
+    const readFirstId = async () => ((await this.cache.listFromTo(cacheKey, 0, 0)) as Event[])[0]?.id;
+    const logLength = offset > 0 ? await this.cache.get(this.getCounterKey(topic)).catch(() => undefined) : undefined;
+    // When the attach-time id read fails on an existing log, the counter
+    // fallback must compare against the log's end, not a cursor past it, or the
+    // intact log's retained frame 0 reads as a restart.
+    let attachLogEnd: number | undefined;
+    let firstId =
+      typeof logLength === 'number'
+        ? await readFirstId().catch(() => {
+            attachLogEnd = logLength;
+            return undefined;
+          })
+        : undefined;
     let closed = false;
+    let warnedUnnumbered = false;
     // Set only while a backfill (or the initial history read) is in flight.
     // Frames delivered meanwhile must wait, or the cursor could advance past a
     // frame that has not been handed to the consumer yet. In the common case
@@ -256,7 +274,9 @@ export class CachingPubSub extends PubSub {
     let attaching = true;
 
     const emit = (event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => {
-      if (typeof event.index === 'number') next = event.index + 1;
+      if (typeof event.index === 'number') {
+        next = event.index + 1;
+      }
       return cb(event, ack, nack);
     };
 
@@ -282,7 +302,17 @@ export class CachingPubSub extends PubSub {
 
       const seq = event.index;
       if (typeof seq !== 'number') {
-        // No numbering (the frame failed to cache): live-only delivery.
+        // No numbering (the frame failed to cache, or the publisher has no
+        // shared log): live-only delivery.
+        if (offset > 0 && !warnedUnnumbered) {
+          warnedUnnumbered = true;
+          this.logWarn(
+            `[CachingPubSub] Frames on ${topic} are not numbered, so resuming from offset ${offset} cannot ` +
+              `replay or skip them by position. Either the publisher failed to append them to the server cache ` +
+              `(check for cache errors), or it does not share a server cache with this process (configure one ` +
+              `shared by every process, for example RedisServerCache).`,
+          );
+        }
         return cb(event, ack, nack);
       }
 
@@ -291,25 +321,47 @@ export class CachingPubSub extends PubSub {
       if (seq < next) {
         if (seq !== 0) return ack?.();
 
-        // Index 0 while the cursor has already advanced means the log this
-        // subscriber was reading is gone: it expired (or was cleared) and the
-        // run resumed, restarting numbering at 0. Dropping it would swallow
-        // every frame of the new segment, since all of their indices sit below
-        // the stale cursor. Confirm against the counter — it restarts with the
-        // log, so in a continuous log it can never be below our cursor.
+        // Index 0 below the cursor can mean the log this subscriber was reading
+        // is gone: it expired (or was cleared) and the run resumed, restarting
+        // numbering at 0. Dropping it would swallow every frame of the new
+        // segment, since all of their indices sit below the stale cursor.
+        // Confirm by frame 0's id when one was captured on attach; otherwise by
+        // the counter, which restarts with the log and so cannot sit below the
+        // cursor in a continuous log.
         deferred = true;
         return (async () => {
           // A cache read failure must not turn a duplicate into a nack loop;
           // fall through to the drop path in that case.
           const allocated = await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
+          // A failed id read is unknown, not unchanged: fall back to the
+          // counter, which risks re-sending frames rather than losing them.
+          let compareIds = firstId !== undefined;
+          let currentFirstId: string | undefined;
+          if (compareIds) {
+            try {
+              currentFirstId = await readFirstId();
+            } catch {
+              compareIds = false;
+            }
+          }
           if (closed) return ack?.();
 
-          if (typeof allocated === 'number' && allocated < next) {
+          const restarted = compareIds
+            ? currentFirstId !== undefined && currentFirstId !== firstId
+            : typeof allocated === 'number' && allocated < Math.min(next, attachLogEnd ?? next);
+          if (restarted) {
+            attachLogEnd = undefined;
+            firstId = compareIds ? currentFirstId : await readFirstId().catch(() => undefined);
             this.logWarn(
               `[CachingPubSub] Log for ${topic} restarted at 0 while the subscriber cursor was at ${next}; ` +
                 `the retained log expired or was cleared. Resyncing from the start of the new segment.`,
             );
+            // The frame in hand may be a delayed copy of the old log's frame 0,
+            // so deliver the new segment from the log rather than from it.
             next = 0;
+            await backfill(Number.POSITIVE_INFINITY);
+            if (closed) return ack?.();
+            if (next > 0) return ack?.();
             await emit(event, ack, nack);
             return;
           }
@@ -493,7 +545,10 @@ export class CachingPubSub extends PubSub {
   }
 
   /** Forward run trims to the inner transport; the per-process cache is left to its own bounds. */
-  override async trimTopic(topic: string, options: { runId: string; producedBefore?: number }): Promise<void> {
+  override async trimTopic(
+    topic: string,
+    options: { runId: string; producedBefore?: number; retainTerminalEvents?: boolean },
+  ): Promise<void> {
     try {
       await this.inner.trimTopic(topic, options);
     } catch (error) {

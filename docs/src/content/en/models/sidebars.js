@@ -481,6 +481,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/hopper',
+          label: 'Hopper',
+        },
+        {
+          type: 'doc',
           id: 'providers/hpc-ai',
           label: 'HPC-AI',
         },
@@ -698,6 +703,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/modelscope',
           label: 'ModelScope',
+        },
+        {
+          type: 'doc',
+          id: 'providers/modular',
+          label: 'Modular',
         },
         {
           type: 'doc',
@@ -1118,6 +1128,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/wallaby',
           label: 'Wallaby',
+        },
+        {
+          type: 'doc',
+          id: 'providers/wally',
+          label: 'Wally',
         },
         {
           type: 'doc',

@@ -2,12 +2,19 @@ import React, { useRef } from 'react';
 
 export interface UseAutoscrollOptions {
   enabled?: boolean;
+  /** Start pinned to the end. `false` keeps the reader's position until they scroll back to the end. */
+  startFollowing?: boolean;
+  /** Following turned off (the reader scrolled away) or back on (they returned to the end). */
+  onFollowingChange?: (following: boolean) => void;
 }
 
 const SCROLL_END_THRESHOLD = 8;
 
-export const useAutoscroll = (ref: React.RefObject<HTMLElement | null>, { enabled = true }: UseAutoscrollOptions) => {
-  const shouldScrollRef = useRef(enabled);
+export const useAutoscroll = (
+  ref: React.RefObject<HTMLElement | null>,
+  { enabled = true, startFollowing = true, onFollowingChange }: UseAutoscrollOptions,
+) => {
+  const shouldScrollRef = useRef(enabled && startFollowing);
   const scrollFrameRef = useRef<number | null>(null);
   const userScrollIntentRef = useRef(false);
   const userScrollIntentTimeoutRef = useRef<number | null>(null);
@@ -17,6 +24,12 @@ export const useAutoscroll = (ref: React.RefObject<HTMLElement | null>, { enable
     if (!ref?.current) return;
 
     const area = ref.current;
+
+    const setFollowing = (following: boolean) => {
+      if (shouldScrollRef.current === following) return;
+      shouldScrollRef.current = following;
+      onFollowingChange?.(following);
+    };
 
     const scrollToEnd = () => {
       if (!shouldScrollRef.current) return;
@@ -52,7 +65,7 @@ export const useAutoscroll = (ref: React.RefObject<HTMLElement | null>, { enable
     };
 
     const stopFollowing = () => {
-      shouldScrollRef.current = false;
+      setFollowing(false);
       cancelPendingScroll();
     };
 
@@ -92,12 +105,12 @@ export const useAutoscroll = (ref: React.RefObject<HTMLElement | null>, { enable
       const isAtEnd = currentPosition >= totalHeight - SCROLL_END_THRESHOLD;
 
       if (isAtEnd) {
-        shouldScrollRef.current = true;
+        setFollowing(true);
         return;
       }
 
       if (userScrollIntentRef.current) {
-        shouldScrollRef.current = false;
+        setFollowing(false);
         cancelPendingScroll();
       }
     };
@@ -124,5 +137,5 @@ export const useAutoscroll = (ref: React.RefObject<HTMLElement | null>, { enable
         userScrollIntentTimeoutRef.current = null;
       }
     };
-  }, [enabled, ref]);
+  }, [enabled, ref, onFollowingChange]);
 };

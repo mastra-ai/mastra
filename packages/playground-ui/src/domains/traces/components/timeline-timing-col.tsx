@@ -49,7 +49,7 @@ export function TimelineTimingCol({
                 left: `${leftPercent}%`,
                 backgroundColor: color,
               }}
-            ></div>
+            />
           </div>
         </div>
 

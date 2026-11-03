@@ -3,6 +3,9 @@ export const TRACE_OPTIONAL_COLUMNS = [
   'input',
   'output',
   'duration',
+  'traceCount',
+  'timeToFirstChunk',
+  'timeToFirstToken',
   'endTime',
   'environment',
   'model',
@@ -50,7 +53,7 @@ export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
 };
 
 /** A list a column selection belongs to. Each list only offers the columns its rows carry. */
-export type TraceColumnScope = 'traces' | 'spans';
+export type TraceColumnScope = 'traces' | 'spans' | 'threads';
 
 export type TraceColumnCatalog = {
   /** Plain columns offered in the picker, in menu order. */
@@ -62,20 +65,58 @@ export type TraceColumnCatalog = {
   readonly defaults: TraceColumnPreferences;
 };
 
-const TRACE_STANDARD_COLUMNS = ['type', 'input', 'output', 'duration', 'endTime', 'environment'] as const;
-
 export const TRACE_COLUMN_CATALOGS: Record<TraceColumnScope, TraceColumnCatalog> = {
   traces: {
-    standardColumns: TRACE_STANDARD_COLUMNS,
+    standardColumns: [
+      'type',
+      'input',
+      'output',
+      'duration',
+      'timeToFirstChunk',
+      'timeToFirstToken',
+      'endTime',
+      'environment',
+    ],
     usage: true,
     metadata: true,
     defaults: DEFAULT_TRACE_COLUMN_PREFERENCES,
   },
   spans: {
-    standardColumns: [...TRACE_STANDARD_COLUMNS, 'model', 'provider'],
+    standardColumns: [
+      'type',
+      'input',
+      'output',
+      'duration',
+      'timeToFirstChunk',
+      'timeToFirstToken',
+      'endTime',
+      'environment',
+      'model',
+      'provider',
+    ],
     usage: false,
     metadata: false,
     defaults: { visibleColumns: ['type', 'input', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+  },
+  threads: {
+    standardColumns: [
+      'type',
+      'input',
+      'output',
+      'duration',
+      'traceCount',
+      'timeToFirstChunk',
+      'timeToFirstToken',
+      'endTime',
+      'environment',
+    ],
+    usage: false,
+    metadata: false,
+    defaults: {
+      visibleColumns: ['type', 'input', 'output', 'duration', 'traceCount'],
+      customColumns: [],
+      metadataKeys: [],
+    },
   },
 };
 
@@ -154,7 +195,10 @@ export function serializeTraceColumnPreferences(preferences: TraceColumnPreferen
 }
 
 /** Stable key per column of `buildTraceListColumns`, in the same order. Used to persist the column order. */
-export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): string[] {
+export function buildTraceListColumnKeys(
+  preferences: TraceColumnPreferences,
+  { outcomeColumn = true }: { outcomeColumn?: boolean } = {},
+): string[] {
   const visible = new Set(preferences.visibleColumns);
   const keys = ['startTime'];
   if (visible.has('type')) keys.push('type');
@@ -162,7 +206,18 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
   if (visible.has('input')) keys.push('input');
   if (visible.has('output')) keys.push('output');
   keys.push('status');
-  for (const column of ['duration', 'endTime', 'environment', 'model', 'provider', ...TRACE_USAGE_COLUMNS] as const) {
+  if (outcomeColumn) keys.push('stopReason');
+  for (const column of [
+    'duration',
+    'traceCount',
+    'timeToFirstChunk',
+    'timeToFirstToken',
+    'endTime',
+    'environment',
+    'model',
+    'provider',
+    ...TRACE_USAGE_COLUMNS,
+  ] as const) {
     if (visible.has(column)) keys.push(column);
   }
   keys.push(...preferences.customColumns.map(field => `custom:${field}`));
@@ -170,7 +225,10 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
   return keys;
 }
 
-export function buildTraceListColumns(preferences: TraceColumnPreferences): string {
+export function buildTraceListColumns(
+  preferences: TraceColumnPreferences,
+  { outcomeColumn = true }: { outcomeColumn?: boolean } = {},
+): string {
   const visible = new Set(preferences.visibleColumns);
   // Name is bounded when Input or Output is visible so they (1fr each) absorb the free space;
   // without either, Name is the flexible track that fills the grid.
@@ -182,9 +240,13 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   if (visible.has('input')) columns.push('minmax(8rem,1fr)');
   if (visible.has('output')) columns.push('minmax(8rem,1fr)');
 
-  columns.push('6rem');
+  // With outcomes, Status becomes Outcome (room for `Interrupted`) followed by Stop reason.
+  columns.push(...(outcomeColumn ? ['7rem', '9rem'] : ['6rem']));
 
   if (visible.has('duration')) columns.push('7rem');
+  if (visible.has('traceCount')) columns.push('6rem');
+  if (visible.has('timeToFirstChunk')) columns.push('7rem');
+  if (visible.has('timeToFirstToken')) columns.push('7rem');
   if (visible.has('endTime')) columns.push('11rem');
   if (visible.has('environment')) columns.push('8rem');
   if (visible.has('model')) columns.push('10rem');
@@ -234,6 +296,25 @@ export function formatTraceMetadataValue(
 
 export function hasTraceColumn(preferences: TraceColumnPreferences, column: TraceOptionalColumn): boolean {
   return preferences.visibleColumns.includes(column);
+}
+
+/**
+ * The preferences to draw when the store does not record every streaming timing: the
+ * unrecorded timing columns are hidden but stay saved, so they come back on a store that records them.
+ */
+export function withoutUnrecordedStreamingColumns(
+  preferences: TraceColumnPreferences,
+  { withTimeToFirstChunk, withTimeToFirstToken }: { withTimeToFirstChunk: boolean; withTimeToFirstToken: boolean },
+): TraceColumnPreferences {
+  if (withTimeToFirstChunk && withTimeToFirstToken) return preferences;
+  return {
+    ...preferences,
+    visibleColumns: preferences.visibleColumns.filter(
+      column =>
+        (withTimeToFirstChunk || column !== 'timeToFirstChunk') &&
+        (withTimeToFirstToken || column !== 'timeToFirstToken'),
+    ),
+  };
 }
 
 export function toggleTraceColumn(

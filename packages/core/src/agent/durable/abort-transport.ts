@@ -18,7 +18,7 @@ import { subscribeToAbortRequests } from '../streams/abort-transport';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
-export { publishAbortRequest, subscribeToAbortRequests } from '../streams/abort-transport';
+export { publishAbortRequest, requestAcknowledgedAbort, subscribeToAbortRequests } from '../streams/abort-transport';
 
 /**
  * Make the current process responsive to abort requests for `runId`.

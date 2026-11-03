@@ -1082,14 +1082,51 @@ function formatObserverToolArguments(args: unknown, maxCharacters?: number): str
   return formatToolArgumentsForObserver(args, { maxCharacters: maxCharacters || undefined });
 }
 
+const OBSERVER_SIGNAL_ATTRIBUTE_NAME = /^[A-Za-z_][A-Za-z0-9_.-]*$/;
+const OBSERVER_SIGNAL_ATTRIBUTE_MAX_COUNT = 8;
+const OBSERVER_SIGNAL_ATTRIBUTE_MAX_VALUE_LENGTH = 80;
+
+/**
+ * Renders a user signal's attributes (e.g. `name`, `role`) as ` (name="Jim" role="editor")` so
+ * the Observer can tell speakers apart in a shared thread. Attribute data is caller-supplied,
+ * so names must be plain identifiers, values are length-capped and JSON-quoted (no raw quotes
+ * or line breaks), and only the first few attributes are kept to bound the label.
+ */
+function formatObserverSignalAttributes(attributes: unknown): string {
+  if (!isRecord(attributes)) return '';
+
+  const rendered = Object.entries(attributes)
+    .filter(
+      (entry): entry is [string, string | number | boolean] =>
+        OBSERVER_SIGNAL_ATTRIBUTE_NAME.test(entry[0]) &&
+        (typeof entry[1] === 'string' || typeof entry[1] === 'number' || typeof entry[1] === 'boolean'),
+    )
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .slice(0, OBSERVER_SIGNAL_ATTRIBUTE_MAX_COUNT)
+    .map(([key, value]) => {
+      const text = String(value);
+      const clipped =
+        text.length > OBSERVER_SIGNAL_ATTRIBUTE_MAX_VALUE_LENGTH
+          ? `${text.slice(0, OBSERVER_SIGNAL_ATTRIBUTE_MAX_VALUE_LENGTH)}...`
+          : text;
+      return `${key}=${JSON.stringify(clipped)}`;
+    });
+
+  return rendered.length > 0 ? ` (${rendered.join(' ')})` : '';
+}
+
 /**
  * Labels signals and system reminders by their tag instead of as "User", so the Observer
  * does not record runtime instructions as things the user said (#22195).
  */
 function getObserverMessageLabel(msg: MastraDBMessage): string {
   if (msg.role === 'signal') {
-    const signal = msg.content?.metadata?.signal as { type?: string; tagName?: string } | undefined;
-    return signal?.type === 'user' ? 'User' : (signal?.tagName ?? signal?.type ?? 'Signal');
+    const signal = msg.content?.metadata?.signal as
+      | { type?: string; tagName?: string; attributes?: unknown }
+      | undefined;
+    return signal?.type === 'user'
+      ? `User${formatObserverSignalAttributes(signal.attributes)}`
+      : (signal?.tagName ?? signal?.type ?? 'Signal');
   }
 
   if (isSystemReminderMessage(msg)) {

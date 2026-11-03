@@ -21,13 +21,15 @@ export type TracesExplorerErrorRenderArgs = Pick<TracesListContextValue, 'refetc
 export type TracesExplorerBodyProps = {
   /** Controls at the top of the body, above the list (filters, columns…). The loading skeleton stands in for them. */
   toolbar?: ReactNode;
+  /** Full-width chart between the toolbar and the list, e.g. `<TracesExplorer.Histogram />`. Hidden with the error and empty states. */
+  chart?: ReactNode;
   children: ReactNode;
   /** Renders the list-error state (e.g. host-classified errors with a retry). Defaults to `TracesErrorContent`. */
   renderError?: (args: TracesExplorerErrorRenderArgs) => ReactNode;
 };
 
 /** The traces page body without its page frame, for hosts that own the header (e.g. a shared router layout). */
-export function TracesExplorerBody({ toolbar, children, renderError }: TracesExplorerBodyProps) {
+export function TracesExplorerBody({ toolbar, chart, children, renderError }: TracesExplorerBodyProps) {
   const isBodyLoading = useTracesBodyLoading();
   const { rows, isLoading, error, refetch } = useTracesList();
   const { filters, dateFrom, dateTo, contentFiltersApplied } = useTracesFilters();
@@ -65,7 +67,7 @@ export function TracesExplorerBody({ toolbar, children, renderError }: TracesExp
     <>
       <h1 className="sr-only">Traces</h1>
       {/* Spaced like the skeleton's toolbar placeholder, so nothing moves when loading ends. */}
-      <ObservabilityListBody toolbar={toolbar} error={errorNode} empty={empty}>
+      <ObservabilityListBody toolbar={toolbar} chart={chart} error={errorNode} empty={empty}>
         {children}
       </ObservabilityListBody>
     </>

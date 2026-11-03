@@ -336,6 +336,11 @@ const sidebars = {
           label: 'Browser',
         },
         {
+          type: 'doc',
+          id: 'classifier',
+          label: 'Classifier',
+        },
+        {
           type: 'category',
           label: 'Connections',
           link: {
@@ -450,6 +455,11 @@ const sidebars = {
               type: 'doc',
               id: 'studio/auth',
               label: 'Auth',
+            },
+            {
+              type: 'doc',
+              id: 'studio/knowledge',
+              label: 'Knowledge',
             },
             {
               type: 'doc',

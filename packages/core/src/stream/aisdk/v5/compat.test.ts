@@ -91,6 +91,24 @@ describe('convertFullStreamChunkToUIMessageStream', () => {
       messageMetadata: { custom: true },
     });
   });
+
+  it('keeps preliminary on tool-output-available for partial tool results', () => {
+    const toUI = (preliminary?: boolean) =>
+      convertFullStreamChunkToUIMessageStream({
+        part: {
+          type: 'tool-result',
+          toolCallId: 'ig-1',
+          toolName: 'image_generation',
+          output: { result: 'partial' },
+          providerExecuted: true,
+          ...(preliminary ? { preliminary } : {}),
+        } as any,
+        onError: error => `Error: ${error}`,
+      });
+
+    expect(toUI(true)).toMatchObject({ type: 'tool-output-available', toolCallId: 'ig-1', preliminary: true });
+    expect(toUI()).not.toHaveProperty('preliminary');
+  });
 });
 
 describe('isUrlString', () => {

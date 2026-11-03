@@ -249,8 +249,9 @@ describe('BoardPage filters', () => {
     await waitFor(() => expect(screen.queryByText('Card both')).not.toBeInTheDocument());
     expect(screen.getByText('Card bug')).toBeInTheDocument();
     expect(candidateTitles()).toEqual([]);
+    // Work holds pull request cards too, so it filters by who review was requested from.
     await openPropertiesMenu(user, MENU);
-    expect(screen.queryByRole('menuitem', { name: /^Review requested/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: /^Review requested/ })).toBeInTheDocument();
     await closePropertiesMenus(user);
   });
 
@@ -328,6 +329,17 @@ describe('BoardPage filters', () => {
     await user.keyboard('zz');
     expect(screen.queryAllByRole('menuitemcheckbox')).toEqual([]);
     expect(screen.getByText('No matches')).toBeInTheDocument();
+    // Reopen just this submenu, leaving the properties menu mounted.
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.getAllByRole('menu')).toHaveLength(1));
+    await user.keyboard('{ArrowRight}');
+    expect(await screen.findByRole('textbox', { name: 'Search author' })).toHaveValue('');
+    expect(
+      screen
+        .getAllByRole('menuitemcheckbox')
+        .slice(0, 2)
+        .map(option => option.textContent),
+    ).toEqual(expect.arrayContaining(['erin', 'judy']));
     await closePropertiesMenus(user);
     await openPropertySubmenu(user, MENU, 'Author');
     expect(screen.getByRole('textbox', { name: 'Search author' })).toHaveValue('');

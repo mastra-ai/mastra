@@ -15,15 +15,15 @@ import { AppliedSessionsSummary } from './AppliedSessionsSummary';
 import { PersonalThinkingControl } from './PersonalThinkingControl';
 
 export function PersonalDefaultModelPicker({
-  factoryId,
   savedModelId,
   savedThinkingLevel,
   models,
+  fallbackModelId,
 }: {
-  factoryId: string;
   savedModelId: string | undefined;
   savedThinkingLevel: ThinkingLevelSetting | null;
   models: AvailableModelOption[] | undefined;
+  fallbackModelId: string | undefined;
 }) {
   const setDefaultModel = useSetDefaultModel();
   const clearDefaultModel = useClearDefaultModel();
@@ -52,22 +52,18 @@ export function PersonalDefaultModelPicker({
           models={models ?? []}
           value={savedModelId ?? ''}
           onValueChange={saveDefaultModel}
+          fallbackModelId={fallbackModelId}
           placeholder="Select a model"
           aria-label="Personal default model"
           size="sm"
           className="min-w-0 flex-1"
           disabled={busy}
         />
-        <PersonalThinkingControl
-          factoryId={factoryId}
-          savedModelId={savedModelId}
-          savedThinkingLevel={savedThinkingLevel}
-          saving={busy}
-        />
+        <PersonalThinkingControl savedModelId={savedModelId} savedThinkingLevel={savedThinkingLevel} saving={busy} />
       </ButtonsGroup>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={busy || !savedModelId} onClick={() => applyDefaultModel.mutate()}>
-          Apply to running sessions
+          Apply to my running chats
         </Button>
         <Button size="sm" variant="ghost" disabled={busy || !savedModelId} onClick={clearDefault}>
           Clear

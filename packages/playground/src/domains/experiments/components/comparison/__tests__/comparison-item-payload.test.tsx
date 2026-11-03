@@ -21,7 +21,7 @@ describe('ComparisonItemPayload', () => {
   });
 
   it('renders a string payload as markdown', () => {
-    render(<ComparisonItemPayload label="Input" value={'Answer with **one word** only'} />);
+    render(<ComparisonItemPayload label="Input" value="Answer with **one word** only" />);
 
     const region = screen.getByRole('region', { name: 'Input' });
     expect(within(region).getByText('one word').tagName).toBe('STRONG');

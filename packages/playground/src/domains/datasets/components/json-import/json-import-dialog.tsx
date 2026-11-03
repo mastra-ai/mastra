@@ -15,7 +15,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { toast } from '@mastra/playground-ui/utils/toast';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { MAX_IMPORT_BYTES, MAX_IMPORT_LABEL, validateImportJSON } from '../../utils/json-validation';
 import type { JSONImportValidation } from '../../utils/json-validation';
@@ -47,6 +47,8 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   const [pastedText, setPastedText] = useState('');
   const [isImporting, setIsImporting] = useState(false);
   const readIdRef = useRef(0);
+  const resetTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const mountedRef = useRef(false);
 
   const { batchInsertItems } = useDatasetMutations();
 
@@ -98,10 +100,25 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
     setPastedText('');
   }, []);
 
+  // Reset after the close animation. Never schedule or keep the timer once unmounted, or it fires into a torn-down tree.
+  const scheduleReset = useCallback(() => {
+    clearTimeout(resetTimerRef.current);
+    if (!mountedRef.current) return;
+    resetTimerRef.current = setTimeout(resetState, 150);
+  }, [resetState]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearTimeout(resetTimerRef.current);
+    };
+  }, []);
+
   const handleClose = useCallback(() => {
     onOpenChange(false);
-    setTimeout(resetState, 150);
-  }, [onOpenChange, resetState]);
+    scheduleReset();
+  }, [onOpenChange, scheduleReset]);
 
   const handleImport = useCallback(async () => {
     if (validation.status !== 'ready') return;
@@ -112,13 +129,13 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
       toast.success(`Imported ${validation.total} item${validation.total !== 1 ? 's' : ''}`);
       onSuccess?.();
       onOpenChange(false);
-      setTimeout(resetState, 150);
+      scheduleReset();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to import items');
     } finally {
       setIsImporting(false);
     }
-  }, [validation, batchInsertItems, datasetId, onSuccess, onOpenChange, resetState]);
+  }, [validation, batchInsertItems, datasetId, onSuccess, onOpenChange, scheduleReset]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose} pending={isImporting}>

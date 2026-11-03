@@ -145,11 +145,15 @@ function NavigatedPath() {
   );
 }
 
-export function OverlayTestProviders({ children }: { children: ReactNode }) {
+export function OverlayTestProviders({
+  children,
+  initialEntry = `/factories/${OVERLAY_FACTORY_ID}/workspaces/${OVERLAY_SESSION_ID}/threads/thread-test`,
+}: {
+  children: ReactNode;
+  initialEntry?: string;
+}) {
   return (
-    <MemoryRouter
-      initialEntries={[`/factories/${OVERLAY_FACTORY_ID}/workspaces/${OVERLAY_SESSION_ID}/threads/thread-test`]}
-    >
+    <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route
           path="/factories/:factoryId/workspaces/:sessionId/threads/:threadId"
