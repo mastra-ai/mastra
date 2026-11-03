@@ -899,6 +899,17 @@ function applyUpdate({
   input: UpdateWorkItemInput;
   now?: Date;
 }): Partial<WorkItemDbRow> {
+  const metadata = input.metadata ? { ...input.metadata } : input.metadata;
+  const reconciliation = current.metadata?.[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
+  // Clearing an absent reconciliation marker must not invalidate pending rules.
+  if (
+    metadata?.[FACTORY_PULL_REQUEST_RECONCILIATION_KEY] === null &&
+    reconciliation !== 'merged' &&
+    reconciliation !== 'closed' &&
+    reconciliation !== null
+  ) {
+    delete metadata[FACTORY_PULL_REQUEST_RECONCILIATION_KEY];
+  }
   return {
     ...(input.board !== undefined ? { board: input.board } : {}),
     ...(input.parentWorkItemId !== undefined ? { parent_work_item_id: input.parentWorkItemId } : {}),
@@ -912,8 +923,8 @@ function applyUpdate({
     ...(input.sessions !== undefined
       ? { sessions: { ...current.sessions, ...stampSessions(input.sessions, userId) } }
       : {}),
-    ...(input.metadata !== undefined
-      ? { metadata: input.metadata === null ? null : { ...(current.metadata ?? {}), ...input.metadata } }
+    ...(metadata !== undefined
+      ? { metadata: metadata === null ? null : { ...(current.metadata ?? {}), ...metadata } }
       : {}),
     revision: current.revision + 1,
     updated_at: now,

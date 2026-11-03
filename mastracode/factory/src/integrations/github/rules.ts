@@ -1453,7 +1453,7 @@ function githubLabels(names: readonly string[] = []): Array<{ name: string }> {
 
 function reconciledPullRequestMetadata(
   state: ReconcilePullRequestState,
-  reconciliation: 'clear' | 'settled',
+  reconciliation: 'clear' | 'settled' | undefined,
   authorTrusted?: boolean,
 ): Record<string, unknown> {
   return {
@@ -1465,8 +1465,12 @@ function reconciledPullRequestMetadata(
     ...(state.requestedReviewers ? { requestedReviewers: state.requestedReviewers } : {}),
     ...(state.labels ? { labels: state.labels } : {}),
     ...(authorTrusted === undefined ? {} : { authorTrusted }),
-    [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]:
-      reconciliation === 'settled' ? (state.merged ? 'merged' : 'closed') : null,
+    ...(reconciliation === undefined
+      ? {}
+      : {
+          [FACTORY_PULL_REQUEST_RECONCILIATION_KEY]:
+            reconciliation === 'settled' ? (state.merged ? 'merged' : 'closed') : null,
+        }),
   };
 }
 
@@ -1635,7 +1639,11 @@ export function createGithubPullRequestReconciler(
                 id: card.id,
                 userId: 'factory-rule-dispatcher',
                 patch: {
-                  metadata: reconciledPullRequestMetadata(state, 'clear', trustStale ? authorTrusted : undefined),
+                  metadata: reconciledPullRequestMetadata(
+                    state,
+                    reconciliation === 'merged' || reconciliation === 'closed' ? 'clear' : undefined,
+                    trustStale ? authorTrusted : undefined,
+                  ),
                 },
               });
             } catch (error) {

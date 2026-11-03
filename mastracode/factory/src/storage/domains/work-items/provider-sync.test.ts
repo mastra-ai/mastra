@@ -15,7 +15,7 @@ import type { WorkItemSourceDbRecord } from './work-item-schema.js';
 const postgresUrl = process.env.FACTORY_TEST_POSTGRES_URL;
 
 describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync on %s', backend => {
-  async function setup() {
+  async function setup(metadata: Record<string, unknown> = {}, sourceType = 'issue') {
     const storage =
       backend === 'postgres'
         ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
@@ -29,8 +29,8 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
         title: 'Original issue',
         board: 'work',
         stages: ['intake'],
-        externalSource: { integrationId: 'github', type: 'issue', externalId: orgId },
-        metadata: { state: 'open', labels: ['bug'], author: 'reporter', authorTrusted: false },
+        externalSource: { integrationId: 'github', type: sourceType, externalId: orgId },
+        metadata: { state: 'open', labels: ['bug'], author: 'reporter', authorTrusted: false, ...metadata },
       },
     });
     const sync = () =>
@@ -179,6 +179,55 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
       ]);
       expect(outcomes.filter(outcome => outcome.status === 'rejected').map(outcome => outcome.reason)).toEqual([]);
       expect(await workItems.list(scope)).toEqual([]);
+    },
+  );
+
+  it.each([undefined, null, 'merged', 'closed'] as const)(
+    'keeps pending rules valid unless a reconciler clears a settled marker (%s)',
+    async reconciliation => {
+      const { workItems, scope, item } = await setup(
+        reconciliation === undefined ? {} : { factoryPullRequestReconciliation: reconciliation },
+        'pull-request',
+      );
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await workItems.update({
+          ...scope,
+          id: item.id,
+          patch: {
+            metadata: {
+              state: 'open',
+              draft: false,
+              merged: false,
+              author: 'maintainer',
+              labels: ['updated'],
+              factoryPullRequestReconciliation: null,
+            },
+          },
+        });
+      }
+      const commit = await workItems.commitRuleEvaluation({
+        ...scope,
+        workItemId: item.id,
+        expectedRevision: item.revision,
+        ingress: { identity: 'after-pr-reconciliation', triggerType: 'test' },
+        configVersion: '1',
+        actor: null,
+        outcome: { status: 'accepted' },
+        decisions: [],
+        causalChain: [],
+        now: new Date(),
+      });
+      const clearsSettled = reconciliation === 'merged' || reconciliation === 'closed';
+      expect(commit.status).toBe(clearsSettled ? 'stale' : 'committed');
+      const refreshed = await workItems.get({ orgId: scope.orgId, id: item.id });
+      expect(refreshed).toMatchObject({
+        revision: item.revision + (clearsSettled ? 1 : 0),
+        workItem: { state: 'open', author: 'maintainer', labels: ['updated'] },
+        metadata: { draft: false, merged: false, authorTrusted: false },
+      });
+      if (reconciliation === undefined)
+        expect(refreshed!.metadata).not.toHaveProperty('factoryPullRequestReconciliation');
+      else expect(refreshed!.metadata?.factoryPullRequestReconciliation).toBeNull();
     },
   );
 

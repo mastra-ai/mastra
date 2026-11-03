@@ -4530,6 +4530,44 @@ describe('createGithubPullRequestReconciler', () => {
     expect(await context.workItems.listDeferredDecisions('org-1', context.project.id)).toHaveLength(0);
   });
 
+  it.each([undefined, null, 'merged', 'closed'] as const)(
+    'only clears a settled reconciliation marker when refreshing an open PR (%s)',
+    async reconciliation => {
+      const context = await setup('read');
+      const { item } = await createCard(context, {
+        number: 18,
+        metadata: {
+          repository: 'acme/repo',
+          author: 'pr-author',
+          authorTrusted: false,
+          ...(reconciliation === undefined ? {} : { factoryPullRequestReconciliation: reconciliation }),
+        },
+      });
+      const fetchPullRequest = vi.fn(async () => ({
+        ...mergedState(18),
+        state: 'open' as const,
+        draft: false,
+        merged: false,
+      }));
+      const updates = vi.spyOn(context.workItems, 'update');
+      await expect(createReconciler(context, fetchPullRequest)([repositoryTarget])).resolves.toMatchObject({
+        checked: 1,
+        failed: 0,
+      });
+      const refreshPatch = updates.mock.calls.find(([input]) => input.id === item.id)![0].patch.metadata;
+      if (reconciliation === 'merged' || reconciliation === 'closed') {
+        expect(refreshPatch).toHaveProperty('factoryPullRequestReconciliation', null);
+      } else {
+        expect(refreshPatch).not.toHaveProperty('factoryPullRequestReconciliation');
+      }
+      const refreshed = await context.workItems.get({ orgId: 'org-1', id: item.id });
+      const clearsSettled = reconciliation === 'merged' || reconciliation === 'closed';
+      expect(refreshed!.revision).toBe(item.revision + (clearsSettled ? 1 : 0));
+      if (reconciliation === undefined) expect(refreshed!.metadata).not.toHaveProperty('factoryPullRequestReconciliation');
+      else expect(refreshed!.metadata?.factoryPullRequestReconciliation).toBeNull();
+    },
+  );
+
   it('backfills author trust on open cards created before the stamp existed', async () => {
     const context = await setup('write');
     const card = await createCard(context, {
