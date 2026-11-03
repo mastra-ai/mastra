@@ -61,7 +61,7 @@ export const knowledge = new Knowledge({
 })
 ```
 
-[`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) adds three types: `org:` for each organization, plus Memory's `resource:` type for users and `thread:` type for conversations. A run is an editor in each of these scopes that it holds. The FAQ agent in [For one agent](#for-one-agent) reads the `audience:` scope.
+[`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) adds three types: `org:` for each organization, plus Memory's `resource:` type for users and `thread:` type for conversations. A run is the owner of the `resource:` and `thread:` scopes it holds, and an editor of its `org:` scope. The FAQ agent in [For one agent](#for-one-agent) reads the `audience:` scope.
 
 ## Access rules and roles
 
