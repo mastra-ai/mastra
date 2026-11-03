@@ -109,3 +109,74 @@ describe('a tool write reaches the next step on the durable engine', () => {
     );
   }
 });
+
+describe('processor forEach map writes reach tools and the caller', () => {
+  it('keeps callback writes live while hiding the durable carrier', async () => {
+    const caller = new RequestContext([['flag', 'before']]);
+    const seen: unknown[] = [];
+    let calls = 0;
+    const model = new MockLanguageModelV2({
+      doStream: async () => ({
+        stream: convertArrayToReadableStream([
+          { type: 'stream-start', warnings: [] },
+          ...(++calls === 1
+            ? [{ type: 'tool-call', toolCallId: 'inspect-1', toolName: 'inspect', input: '{}' } as const]
+            : [
+                { type: 'text-start', id: 't' } as const,
+                { type: 'text-delta', id: 't', delta: 'done' } as const,
+                { type: 'text-end', id: 't' } as const,
+              ]),
+          { type: 'finish', finishReason: calls === 1 ? 'tool-calls' : 'stop', usage },
+        ]),
+      }),
+    });
+    const agent = new Agent({
+      id: 'foreach-writer',
+      name: 'forEach writer',
+      instructions: 'Inspect then finish.',
+      model,
+      inputProcessors: [
+        {
+          id: 'write-through-map',
+          processInputStep: async ({ requestContext, messageList }) => {
+            requestContext?.forEach((_value, key, map) => {
+              expect(map.has('mastra__durableSegments')).toBe(false);
+              expect([...map.keys()]).not.toContain('mastra__durableSegments');
+              if (key === 'flag') map.set(key, 'after');
+            });
+            seen.push(requestContext?.get('flag'));
+            return messageList;
+          },
+        },
+      ],
+      tools: {
+        inspect: createTool({
+          id: 'inspect',
+          description: 'Read the processed context',
+          inputSchema: z.object({}),
+          execute: async (_input, context) => {
+            const flag = context?.requestContext?.get('flag');
+            seen.push(flag);
+            return { flag };
+          },
+        }),
+      },
+    });
+    const runner = createDurableAgent({ agent });
+    const exporter = new TestExporter({ validateLifecycle: false, logMetricsOnFlush: false });
+    const mastra = new Mastra({
+      agents: { runner },
+      storage: new InMemoryStore(),
+      logger: false,
+      observability: new Observability({ configs: { test: { serviceName: 'foreach', exporters: [exporter] } } }),
+    });
+    try {
+      const result = await runner.generate('Inspect.', { requestContext: caller, maxSteps: 4 });
+      expect(result.finishReason).toBe('stop');
+      expect(seen).toEqual(['after', 'after', 'after']);
+      expect(caller.get('flag')).toBe('after');
+    } finally {
+      await mastra.shutdown();
+    }
+  });
+});

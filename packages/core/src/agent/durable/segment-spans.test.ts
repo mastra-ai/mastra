@@ -412,3 +412,62 @@ describe('engine-private request context keys', () => {
     expect(toolRequestContext(undefined, caller)).toBeUndefined();
   });
 });
+
+describe('a filtered request context keeps mutable values live', () => {
+  it.each(['get', 'getRaw', 'entries', 'values', 'all', 'toJSON'] as const)('%s shares stored objects', method => {
+    const caller = carrying(carriedSecond);
+    caller.set('settings', { flag: 'before' });
+    const context = withoutDurableEngineKeys(caller);
+    const values = {
+      get: () => context.get<string, { flag: string }>('settings'),
+      getRaw: () => context.getRaw('settings'),
+      entries: () => [...context.entries()].find(([key]) => key === 'settings')?.[1],
+      values: () => [...context.values()][0],
+      all: () => context.all.settings,
+      toJSON: () => context.toJSON().settings,
+    };
+    const value = values[method]();
+    if (!value || typeof value !== 'object' || !('flag' in value)) throw new Error('missing settings');
+    value.flag = 'after';
+    expect(caller.get('settings')).toEqual({ flag: 'after' });
+    expect(context.has(SEGMENTS_KEY)).toBe(false);
+  });
+
+  it('forEach exposes a live filtered Map, including nested iteration and later writes', () => {
+    const caller = carrying(carriedSecond);
+    caller.set('flag', 'before');
+    caller.set('remove', true);
+    const context = withoutDurableEngineKeys(caller);
+    let retained: Map<string, unknown> | undefined;
+    const visited: string[] = [];
+    context.forEach((_value, key, map) => {
+      retained = map;
+      visited.push(key);
+      expect(map.size).toBe(context.size());
+      expect([...map]).toEqual([...context.entries()]);
+      expect([...map.values()]).toEqual([...context.values()]);
+      expect(map.get(SEGMENTS_KEY)).toBeUndefined();
+      if (key === 'flag') {
+        expect(map.set(key, 'after')).toBe(map);
+        expect(map.delete('remove')).toBe(true);
+        map.set('added', true);
+        map.set(SEGMENTS_KEY, 'hidden');
+        map.forEach((_nested, nestedKey, nestedMap) => {
+          expect(nestedMap).toBe(map);
+          expect(nestedKey).not.toBe(SEGMENTS_KEY);
+        });
+      }
+    });
+    expect(visited).toEqual(['flag', 'added']);
+    expect(caller.get('flag')).toBe('after');
+    expect(caller.has('remove')).toBe(false);
+    expect(caller.get('added')).toBe(true);
+    expect(caller.get(SEGMENTS_KEY)).toEqual({ [RUN_ID]: carriedSecond });
+    caller.set('later', 1);
+    expect(retained?.get('later')).toBe(1);
+    retained?.set('flag', 'retained');
+    expect(caller.get('flag')).toBe('retained');
+    retained?.clear();
+    expect(caller.size()).toBe(0);
+  });
+});
