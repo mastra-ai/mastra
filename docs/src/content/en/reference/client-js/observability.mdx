@@ -456,22 +456,18 @@ Both create methods accept an optional top-level `contextMode` alongside the `fe
 Omitting `contextMode` uses the server's default: `"provided"` on OSS and `"resolve"` on Platform. The client preserves omission. Select a mode explicitly when the same behavior is required on both servers. Trusted authentication scope takes precedence over supplied context.
 
 ```typescript
-const abortController = new AbortController()
-const result = await mastraClient.createFeedback(
-  {
-    contextMode: 'resolve',
-    feedback: {
-      traceId: 'trace-123',
-      feedbackUserId: 'reviewer-1',
-      feedbackType: 'thumbs',
-      value: 1,
-    },
+const result = await mastraClient.createFeedback({
+  contextMode: 'resolve',
+  feedback: {
+    traceId: 'trace-123',
+    feedbackUserId: 'reviewer-1',
+    feedbackType: 'thumbs',
+    value: 1,
   },
-  { signal: abortController.signal, anchorRetryTimeoutMs: 30_000 },
-)
+})
 ```
 
-The optional second argument accepts `signal`, `headers`, `credentials`, `retries`, and `anchorRetryTimeoutMs`. Network and server errors use the client's transport retry settings. Only 404s with `TRACE_NOT_FOUND` or `SPAN_NOT_FOUND` receive anchor retries, for at most 30 seconds after the first such response. Set `anchorRetryTimeoutMs` to a shorter window or `0` to disable them. Other 404s and authentication or validation errors are terminal. Cancellation stops both retries and active requests.
+Use `retries` and `anchorRetryTimeoutMs` in the optional second argument to control retries. Network and server errors use the client's transport retry settings. Only 404s with `TRACE_NOT_FOUND` or `SPAN_NOT_FOUND` receive anchor retries, for at most 30 seconds after the first such response. Set `anchorRetryTimeoutMs` to a shorter window or `0` to disable them. Other 404s and authentication or validation errors are terminal.
 
 Create responses contain `success` and optional `data` with the generated or supplied `feedbackId`/`scoreId`, `traceId`, nullable `spanId`, and normalized UTC `timestamp`. The client also accepts success-only responses. Platform success confirms publication. The record may not be immediately visible to reads. Direct OSS HTTP callers can omit the ID and timestamp to have the server generate them.
 
