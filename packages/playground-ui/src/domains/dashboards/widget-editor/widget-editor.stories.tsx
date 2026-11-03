@@ -1,24 +1,27 @@
 import type { DashboardDefinition, DashboardWidget } from '@mastra/client-js';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { PencilIcon, PlusIcon } from 'lucide-react';
+import { CheckIcon, PencilIcon, PlusIcon } from 'lucide-react';
+import { nanoid } from 'nanoid';
 import { useState } from 'react';
 import { MockMastraClientProvider } from '../../../../.storybook/mocks/mastra-react';
 import { MetricsProvider } from '../../metrics/hooks/use-metrics';
 import type { DatePreset } from '../../metrics/hooks/use-metrics';
+import { DashboardGrid, DashboardGridCell, DashboardGridRow } from '../components/dashboard-grid';
 import { DashboardRenderer } from '../components/dashboard-renderer';
 import type { DashboardScope } from '../lib/definition';
 import { createFakeMastraClient, FAKE_SCORERS } from './__tests__/fixtures/fake-mastra-client';
 import { draftToWidget, widgetToDraft } from './codec';
-import { emptyView, metricKey } from './draft';
+import { DEFAULT_VIEW_LABEL, emptyView, metricKey } from './draft';
 import type { WidgetDraft } from './draft';
-import { WidgetEditorDialog } from './widget-editor-dialog';
+import { WidgetEditor } from './widget-editor';
+import type { WidgetEditorChange } from './widget-editor';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 
 const SCORERS = FAKE_SCORERS.map(s => ({ scorerId: s.scorerId, name: s.scorerName }));
 
-/** A widget the dialog made: token usage as stacked bars, with a second view for model cost. */
+/** A widget the editor made: token usage as stacked bars, with a second view for model cost. */
 const tokensDraft: WidgetDraft = {
   id: 'tokens-by-model',
   span: 6,
@@ -37,7 +40,7 @@ const tokensDraft: WidgetDraft = {
   ],
 };
 
-/** A table the dialog made: agent runs and latency per entity, compared with the previous period. */
+/** A table the editor made: agent runs and latency per entity, compared with the previous period. */
 const entitiesDraft: WidgetDraft = {
   id: 'runs-by-entity',
   span: 12,
@@ -46,7 +49,7 @@ const entitiesDraft: WidgetDraft = {
   kindPicked: true,
   views: [
     {
-      ...emptyView('Default view'),
+      ...emptyView(DEFAULT_VIEW_LABEL),
       splitBy: 'entityName',
       compare: true,
       metrics: [
@@ -93,10 +96,19 @@ function Harness({ initial, scope, startOpen }: HarnessProps) {
   const [client] = useState(createFakeMastraClient);
   const [preset, setPreset] = useState<DatePreset>('24h');
   const [definition, setDefinition] = useState(initial);
-  const [editing, setEditing] = useState<{ widgetId?: string } | undefined>(
-    startOpen === undefined ? undefined : startOpen === 'create' ? {} : { widgetId: startOpen },
-  );
+  // The page names the widget up front, so a new one has its id before it can be saved.
+  const [editing, setEditing] = useState<string | undefined>(startOpen === 'create' ? nanoid() : startOpen);
+  const [change, setChange] = useState<WidgetEditorChange>();
   const widgets = definition.rows.flatMap(r => r.widgets);
+  const creating = editing !== undefined && !widgets.some(w => w.id === editing);
+
+  const stop = () => {
+    setEditing(undefined);
+    setChange(undefined);
+  };
+  const editor = (widgetId: string) => (
+    <WidgetEditor key={widgetId} definition={definition} widgetId={widgetId} scope={scope} onChange={setChange} />
+  );
 
   return (
     <MockMastraClientProvider client={client}>
@@ -104,33 +116,59 @@ function Harness({ initial, scope, startOpen }: HarnessProps) {
         <MetricsProvider preset={preset} onPresetChange={setPreset} filterTokens={[]} onFilterTokensChange={() => {}}>
           <div className="flex flex-col gap-4 p-6">
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="primary" icon={<PlusIcon />} onClick={() => setEditing({})}>
-                Add widget
-              </Button>
-              {widgets.map(w =>
-                widgetToDraft(w, SCORERS) ? (
-                  <Button key={w.id} icon={<PencilIcon />} onClick={() => setEditing({ widgetId: w.id })}>
-                    Edit {w.title}
+              {editing ? (
+                <>
+                  <Button
+                    variant="primary"
+                    icon={<CheckIcon />}
+                    disabled={!change?.widget}
+                    title={change?.issues[0]}
+                    onClick={() => {
+                      const widget = change?.widget;
+                      if (widget) setDefinition(d => saveWidget(d, widget));
+                      stop();
+                    }}
+                  >
+                    Done
                   </Button>
-                ) : null,
+                  <Button onClick={stop}>Cancel</Button>
+                </>
+              ) : (
+                <>
+                  <Button variant="primary" icon={<PlusIcon />} onClick={() => setEditing(nanoid())}>
+                    Add widget
+                  </Button>
+                  {widgets.map(w =>
+                    widgetToDraft(w, SCORERS) ? (
+                      <Button key={w.id} icon={<PencilIcon />} onClick={() => setEditing(w.id)}>
+                        Edit {w.title}
+                      </Button>
+                    ) : null,
+                  )}
+                </>
               )}
             </div>
-            {widgets.length ? (
-              <DashboardRenderer definition={definition} scope={scope} />
-            ) : (
+            {widgets.length > 0 && (
+              <DashboardRenderer
+                definition={definition}
+                scope={scope}
+                renderWidget={w => (w.id === editing ? editor(w.id) : undefined)}
+              />
+            )}
+            {/* A new widget isn't on the dashboard until it's done, so it gets a row of its own below. */}
+            {creating && (
+              <DashboardGrid>
+                <DashboardGridRow>
+                  <DashboardGridCell span={change?.span ?? 6}>{editor(editing)}</DashboardGridCell>
+                </DashboardGridRow>
+              </DashboardGrid>
+            )}
+            {widgets.length === 0 && !editing && (
               <Txt variant="body" tone="muted">
                 No widgets yet. Add one to see it on the page.
               </Txt>
             )}
           </div>
-          <WidgetEditorDialog
-            open={editing !== undefined}
-            onOpenChange={open => !open && setEditing(undefined)}
-            definition={definition}
-            widgetId={editing?.widgetId}
-            scope={scope}
-            onSave={widget => setDefinition(d => saveWidget(d, widget))}
-          />
         </MetricsProvider>
       </QueryClientProvider>
     </MockMastraClientProvider>
@@ -138,7 +176,7 @@ function Harness({ initial, scope, startOpen }: HarnessProps) {
 }
 
 const meta: Meta<typeof Harness> = {
-  title: 'Dashboards/WidgetEditorDialog',
+  title: 'Dashboards/WidgetEditor',
   component: Harness,
   parameters: { layout: 'fullscreen' },
   args: { scope: 'project' },
@@ -152,22 +190,22 @@ const meta: Meta<typeof Harness> = {
 export default meta;
 type Story = StoryObj<typeof Harness>;
 
-/** An empty page; the dialog opens on a blank widget. */
+/** An empty page; a blank widget opens with its settings open on the metric picker. */
 export const Create: Story = {
   args: { initial: EMPTY, startOpen: 'create' },
 };
 
-/** A page with dialog-made widgets; the dialog opens on the stacked-bar one with two views. */
+/** The editor opens on the stacked-bar widget with two views. */
 export const EditTimeseries: Story = {
   args: { initial: SEEDED, startOpen: tokensDraft.id },
 };
 
-/** The dialog opens on the table, split by entity and compared with the previous period. */
+/** The editor opens on the table, split by entity and compared with the previous period. */
 export const EditTable: Story = {
   args: { initial: SEEDED, startOpen: entitiesDraft.id },
 };
 
-/** The page with dialog-made widgets, the dialog closed: add or edit from the buttons. */
+/** The page with editor-made widgets, nothing open: add or edit from the buttons, then Done or Cancel. */
 export const Page: Story = {
   args: { initial: SEEDED },
 };

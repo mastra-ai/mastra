@@ -73,7 +73,7 @@ export type WidgetDraft = {
 };
 
 export const MAX_METRICS_PER_VIEW = 8;
-export const DEFAULT_VIEW_LABEL = 'Default view';
+export const DEFAULT_VIEW_LABEL = 'Default tab';
 
 export const metricKey = () => `m${nanoid(8)}`;
 export const combineKey = () => `c${nanoid(8)}`;
@@ -120,8 +120,8 @@ export function copyLabel(label: string, views: readonly ViewDraft[]) {
 export function nextViewLabel(views: readonly ViewDraft[]) {
   const used = new Set(views.map(v => v.label));
   let n = views.length + 1;
-  while (used.has(`View ${n}`)) n++;
-  return `View ${n}`;
+  while (used.has(`Tab ${n}`)) n++;
+  return `Tab ${n}`;
 }
 
 /**
@@ -137,9 +137,6 @@ export function suggestKind(view: ViewDraft, scorers: readonly Scorer[]): Editor
   if (entries.length === 1 && aggregationsFor(first, 'kpis')) return 'kpis';
   return 'line';
 }
-
-/** The default span a new widget of a kind takes on the page. */
-export const defaultSpan = (kind: EditorKind): WidgetDraft['span'] => (kind === 'table' || kind === 'kpis' ? 12 : 6);
 
 /** What "Split by" reads as for a kind; `undefined` when the kind can't split. */
 export function splitLabel(kind: EditorKind) {

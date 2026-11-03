@@ -4,6 +4,7 @@ import {
   dashboardDefinitionEnvelopeSchema,
   migrateDashboardDefinition,
 } from '@mastra/core/storage/dashboards';
+import type { ReactNode } from 'react';
 import { useMetrics } from '../../metrics/hooks/use-metrics';
 import { BUILT_IN_WIDGET_KINDS } from '../kinds';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
@@ -24,6 +25,8 @@ export type DashboardRendererProps = {
   onDrilldown?: OnDashboardDrilldown;
   /** Kinds beyond the built-in ones; a kind of the same name replaces the built-in. */
   kinds?: AnyWidgetKind[];
+  /** Draws a widget in place of its card when it returns something, e.g. an editor for the one being edited. */
+  renderWidget?: (widget: StoredWidget) => ReactNode | undefined;
   className?: string;
 };
 
@@ -40,7 +43,14 @@ const spanOf = (widget: StoredWidget) => (isDashboardSpan(widget.span) ? widget.
  * owns the range and filters. Each widget is checked and rendered on its own: one that fails to
  * parse, query or render shows its own error, and the rest of the dashboard still renders.
  */
-export function DashboardRenderer({ definition, scope, onDrilldown, kinds = [], className }: DashboardRendererProps) {
+export function DashboardRenderer({
+  definition,
+  scope,
+  onDrilldown,
+  kinds = [],
+  renderWidget,
+  className,
+}: DashboardRendererProps) {
   // A widget that threw renders again once the page's range or filters change, or the widget does.
   const { datePreset, customRange, filterTokens } = useMetrics();
   const pageKey = JSON.stringify([datePreset, customRange, filterTokens]);
@@ -70,6 +80,14 @@ export function DashboardRenderer({ definition, scope, onDrilldown, kinds = [], 
           {widgets.map(({ widget, prepared }) => {
             // Unparsed, the title may be anything; the error card shows it only when it's text.
             const heading = { id: widget.id, title: typeof widget.title === 'string' ? widget.title : undefined };
+            const replaced = renderWidget?.(widget);
+            if (replaced !== undefined) {
+              return (
+                <DashboardGridCell key={widget.id} id={widget.id} span={spanOf(widget)}>
+                  {replaced}
+                </DashboardGridCell>
+              );
+            }
             return (
               <DashboardGridCell key={widget.id} id={widget.id} span={spanOf(widget)}>
                 <ErrorBoundary

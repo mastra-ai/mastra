@@ -47,13 +47,17 @@ export const seriesColor = (index: number) => SERIES_COLORS[index % SERIES_COLOR
 
 const kindLabel = (kind: EditorKind) => EDITOR_KINDS.find(k => k.value === kind)?.label ?? kind;
 
-const FORMAT_LABELS: Record<ValueFormat, string> = {
-  count: 'counts',
-  usd: 'cost',
-  duration: 'durations',
-  percent: 'percentages',
-  score: 'scores',
+/** How a value reads in a sentence: "Model cost is in $". */
+const FORMAT_PHRASES: Record<ValueFormat, string> = {
+  count: 'a count',
+  usd: 'in $',
+  duration: 'a duration',
+  percent: 'a percentage',
+  score: 'a score',
 };
+
+const oneUnit = (a: { label: string; format: ValueFormat }, b: { label: string; format: ValueFormat }) =>
+  `Line and Stacked bars plot a single unit, but ${a.label} is ${FORMAT_PHRASES[a.format]} and ${b.label} is ${FORMAT_PHRASES[b.format]}.`;
 
 export const defaultMetricLabel = (entry: CatalogueEntry, aggregation: Aggregation | undefined) =>
   entry.source === 'metrics' && entry.aggregations.length > 1 && aggregation
@@ -100,70 +104,52 @@ function resolveMetrics(view: ViewDraft, kind: EditorKind, scorers: readonly Sco
   for (const draft of view.metrics) {
     const entry = findEntry(draft.entry, scorers);
     if (!entry) {
-      flags[draft.key] = 'This metric no longer exists.';
+      flags[draft.key] = `${draft.label?.trim() || draft.entry} no longer exists.`;
       continue;
     }
     const allowed = aggregationsFor(entry, kind);
+    const aggregation = entry.source === 'metrics' ? (draft.aggregation ?? allowed?.[0]) : undefined;
+    const label = draft.label?.trim() || defaultMetricLabel(entry, aggregation);
     if (!allowed) {
-      flags[draft.key] = `Can't be shown as ${kindLabel(kind)}.`;
+      flags[draft.key] = `${kindLabel(kind)} can't show ${label}.`;
       continue;
     }
-    let aggregation: Aggregation | undefined;
-    if (entry.source === 'metrics') {
-      aggregation = draft.aggregation ?? allowed[0];
-      if (!aggregation || !allowed.includes(aggregation)) {
-        const picks = allowed.map(a => AGGREGATION_LABELS[a]).join(', ');
-        flags[draft.key] =
-          `${aggregation ? AGGREGATION_LABELS[aggregation] : 'This'} can't be shown as ${kindLabel(kind)}. Pick ${picks}.`;
-        continue;
-      }
+    if (entry.source === 'metrics' && (!aggregation || !allowed.includes(aggregation))) {
+      flags[draft.key] = `${kindLabel(kind)} can't show ${label}.`;
+      continue;
     }
-    const lock = shown[0]?.format;
-    if (timeseries && lock !== undefined && entry.format !== lock) {
-      flags[draft.key] =
-        `Charts ${FORMAT_LABELS[entry.format]}, not ${FORMAT_LABELS[lock]}. Add another view to chart it.`;
+    const first = shown[0];
+    if (timeseries && first && entry.format !== first.format) {
+      flags[draft.key] = oneUnit(first, { label, format: entry.format });
       continue;
     }
     if (timeseries && view.splitBy && (entry.source !== 'metrics' || isPercentile(aggregation))) {
-      flags[draft.key] = "Can't be split into series.";
+      flags[draft.key] = `${label} can't be split into series.`;
       continue;
     }
     if (kind === 'scores' && shown.length > 0) {
       flags[draft.key] = 'A Scores card shows one scorer.';
       continue;
     }
-    shown.push({
-      draft,
-      entry,
-      aggregation,
-      format: entry.format,
-      label: draft.label?.trim() || defaultMetricLabel(entry, aggregation),
-    });
+    shown.push({ draft, entry, aggregation, format: entry.format, label });
   }
 
   const combos: ShownCombo[] = [];
-  const lock = shown[0]?.format;
+  const first = shown[0];
   for (const draft of view.combos) {
     const a = shown.find(s => s.draft.key === draft.a);
     const b = shown.find(s => s.draft.key === draft.b);
-    if (kind === 'scores') flags[draft.key] = "Can't be shown in a Scores card.";
-    else if (timeseries && view.splitBy) flags[draft.key] = "Can't be combined once split.";
-    else if (!a || !b) flags[draft.key] = 'Needs both metrics shown.';
+    const label = draft.label?.trim() || (a && b ? defaultComboLabel(draft.op, a.label, b.label) : 'A combination');
+    if (kind === 'scores') flags[draft.key] = `Scores can't show ${label}.`;
+    else if (timeseries && view.splitBy) flags[draft.key] = `${label} can't be combined once split.`;
+    else if (!a || !b) flags[draft.key] = `${label} needs both its metrics shown.`;
     else if (a === b) flags[draft.key] = 'Pick two different metrics.';
-    else if (a.format !== b.format) flags[draft.key] = 'Combines metrics with different units.';
+    else if (a.format !== b.format) flags[draft.key] = `${label} combines different units.`;
     else {
       const format: ValueFormat = draft.op === 'minus' ? a.format : 'percent';
-      if (kind === 'kpis' && format !== 'count' && format !== 'usd') flags[draft.key] = "Can't be shown as KPI.";
-      else if (timeseries && lock && format !== lock)
-        flags[draft.key] = `Charts ${FORMAT_LABELS[format]}, not ${FORMAT_LABELS[lock]}. Add another view to chart it.`;
-      else
-        combos.push({
-          draft,
-          a,
-          b,
-          format,
-          label: draft.label?.trim() || defaultComboLabel(draft.op, a.label, b.label),
-        });
+      if (kind === 'kpis' && format !== 'count' && format !== 'usd') flags[draft.key] = `KPI can't show ${label}.`;
+      else if (timeseries && first && format !== first.format) flags[draft.key] = oneUnit(first, { label, format });
+      else combos.push({ draft, a, b, format, label });
     }
   }
   return { shown, combos, flags };
@@ -433,7 +419,7 @@ function encodeScores(view: ViewDraft, shown: Shown): ViewParts {
 export function encodeView(view: ViewDraft, kind: EditorKind, scorers: readonly Scorer[]): EncodedView {
   const { shown, combos } = resolveMetrics(view, kind, scorers);
   const issues = [...filterIssues(view, shown)];
-  if (!view.label.trim()) issues.push('Name this view.');
+  if (!view.label.trim()) issues.push('Name this tab.');
   if (!shown.length) issues.push(view.metrics.length ? 'None of the metrics can be shown here.' : 'Add a metric.');
   let parts: ViewParts | undefined;
   const [first] = shown;
@@ -466,10 +452,10 @@ export function draftToWidget(draft: WidgetDraft, scorers: readonly Scorer[]): E
   const issues: string[] = [];
   if (!draft.title.trim()) issues.push('Add a title.');
   const labels = draft.views.map(v => v.label.trim());
-  if (new Set(labels).size !== labels.length) issues.push('Each view needs its own name.');
+  if (new Set(labels).size !== labels.length) issues.push('Each tab needs its own name.');
   views.forEach((v, i) => {
     for (const issue of v.issues)
-      issues.push(draft.views.length > 1 ? `${labels[i] || `View ${i + 1}`}: ${issue}` : issue);
+      issues.push(draft.views.length > 1 ? `${labels[i] || `Tab ${i + 1}`}: ${issue}` : issue);
   });
   const encoded = views.flatMap(v => v.view ?? []);
   if (issues.length || encoded.length !== views.length) return { views, issues };

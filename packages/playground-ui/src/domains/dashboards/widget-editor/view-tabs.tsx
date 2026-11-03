@@ -1,4 +1,4 @@
-import { CopyIcon, PlusIcon, Trash2Icon } from 'lucide-react';
+import { CopyIcon, Trash2Icon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Button } from '@/ds/components/Button';
 import { Field, FieldError } from '@/ds/components/Field';
@@ -11,17 +11,16 @@ export type ViewTabsProps = {
   labels: string[];
   active: number;
   onActiveChange: (index: number) => void;
-  onAdd: () => void;
   onRename: (index: number, label: string) => void;
   onDuplicate: (index: number) => void;
   onDelete: (index: number) => void;
 };
 
 /**
- * The widget's views as tabs, shown even for one. Like Notion's database views, clicking the active
+ * The widget's views as tabs. Like Notion's database views, clicking the active
  * tab opens its menu: rename in place, duplicate, delete.
  */
-export function ViewTabs({ labels, active, onActiveChange, onAdd, onRename, onDuplicate, onDelete }: ViewTabsProps) {
+export function ViewTabs({ labels, active, onActiveChange, onRename, onDuplicate, onDelete }: ViewTabsProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const anchor = useRef<HTMLSpanElement>(null);
   // Selecting a tab re-renders before its click lands, so remember whether it was already active
@@ -47,16 +46,13 @@ export function ViewTabs({ labels, active, onActiveChange, onAdd, onRename, onDu
                   tooltip={isActive && !menuOpen ? 'Rename, duplicate or delete' : undefined}
                   onClick={() => pressedActive.current && setMenuOpen(true)}
                 >
-                  {label || `View ${i + 1}`}
+                  {label || `Tab ${i + 1}`}
                 </Tab>
               </span>
             );
           })}
         </TabList>
       </Tabs>
-      <Button size="sm" variant="ghost" icon={<PlusIcon />} onClick={onAdd}>
-        Add view
-      </Button>
       <Popover open={menuOpen} onOpenChange={setMenuOpen}>
         {menuOpen && (
           <ViewMenu
@@ -98,11 +94,7 @@ type ViewMenuProps = {
 function ViewMenu({ anchor, label, taken, single, onRename, onDuplicate, onDelete, onClose }: ViewMenuProps) {
   const [name, setName] = useState(label);
   const trimmed = name.trim();
-  const error = !trimmed
-    ? 'Give the view a name.'
-    : taken.includes(trimmed)
-      ? 'Another view has this name.'
-      : undefined;
+  const error = !trimmed ? 'Give the tab a name.' : taken.includes(trimmed) ? 'Another tab has this name.' : undefined;
 
   return (
     <PopoverContent anchor={anchor} align="start" className="flex w-60 flex-col gap-1 p-1.5">
@@ -117,7 +109,7 @@ function ViewMenu({ anchor, label, taken, single, onRename, onDuplicate, onDelet
           <Input
             size="sm"
             autoFocus
-            aria-label="View name"
+            aria-label="Tab name"
             value={name}
             onFocus={event => event.currentTarget.select()}
             onChange={event => {
@@ -145,7 +137,7 @@ function ViewMenu({ anchor, label, taken, single, onRename, onDuplicate, onDelet
       </Button>
       {single && (
         <Txt variant="caption" tone="muted" className="px-2 pb-1">
-          A widget keeps at least one view.
+          A widget keeps at least one tab.
         </Txt>
       )}
     </PopoverContent>

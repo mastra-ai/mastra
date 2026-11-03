@@ -1,13 +1,14 @@
-import { PlusIcon, SigmaIcon, XIcon } from 'lucide-react';
+import { SigmaIcon, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import { chartColor } from '../lib/format';
 import type { Scorer } from '../lib/scores';
 import { CHART_COLOR_NAMES } from '../lib/values';
+import { AddMetricMenu, MetricCommand } from './add-metric-menu';
+import type { MetricCommandProps } from './add-metric-menu';
 import {
   AGGREGATION_LABELS,
   DIMENSIONS,
-  METRIC_GROUPS,
   aggregationsFor,
   catalogue,
   dimensionLabel,
@@ -21,23 +22,7 @@ import type { ChartColor, CombineDraft, KpiIcon, MetricDraft, ViewDraft, WidgetD
 import { HintButton } from './hint-button';
 import { useDimensionSuggestions, useDimensionValues } from './use-dimension-values';
 import { Button } from '@/ds/components/Button';
-import {
-  Combobox,
-  ComboboxCollection,
-  ComboboxContent,
-  ComboboxEmpty,
-  ComboboxGroup,
-  ComboboxItem,
-  ComboboxItemContent,
-  ComboboxItemDescription,
-  ComboboxItemTitle,
-  ComboboxLabel,
-  ComboboxList,
-  ComboboxRoot,
-  ComboboxSearch,
-  ComboboxSeparator,
-  ComboboxTrigger,
-} from '@/ds/components/Combobox';
+import { Combobox } from '@/ds/components/Combobox';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Field, FieldLabel } from '@/ds/components/Field';
 import { FilterBar } from '@/ds/components/FilterBar';
@@ -71,13 +56,17 @@ export type ViewEditorProps = {
   /** The kind the widget draws as, picked or suggested. */
   kind: EditorKind;
   scorers: readonly Scorer[];
+  /** Lets an empty view start from a kind or a ready-made widget: it shows the catalogue search alone. */
+  start?: MetricCommandProps['start'];
 };
 
 /**
- * One view's form: metrics and combinations as chips, filters, then the split. Every choice it
- * offers keeps each metric and combination drawable in the widget's kind; the rest is left out.
+ * One view's query, top to bottom: metrics and combinations as chips, then the split. Filters
+ * have their own editor, `ViewFilterEditor`.
+ * Every choice it offers keeps each metric and combination drawable in the widget's kind; the
+ * rest is left out.
  */
-export function ViewEditor({ index, kind, scorers }: ViewEditorProps) {
+export function ViewEditor({ index, kind, scorers, start }: ViewEditorProps) {
   const { control, getValues, setValue } = useFormContext<WidgetDraft>();
   const draft = useWatch({ control }) as WidgetDraft;
   const view = useWatch({ control, name: `views.${index}` });
@@ -145,8 +134,12 @@ export function ViewEditor({ index, kind, scorers }: ViewEditorProps) {
     set(withMetric({ key: metricKey(), entry: entry.id, aggregation }));
   };
 
+  if (empty && start) {
+    return <MetricCommand entries={pickable.map(p => p.entry)} start={start} onPick={pickMetric} />;
+  }
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       <Section title="Metrics">
         <div className="flex flex-wrap items-center gap-1.5">
           {view.metrics.map((metric, i) => {
@@ -212,7 +205,7 @@ export function ViewEditor({ index, kind, scorers }: ViewEditorProps) {
               />
             </ItemChip>
           ))}
-          <MetricPicker entries={pickable.map(p => p.entry)} disabled={atLimit} onPick={pickMetric} />
+          <AddMetricMenu entries={pickable.map(p => p.entry)} disabled={atLimit} onPick={pickMetric} />
           {view.metrics.length >= 2 && (
             <CombineMenu
               ops={comboStarts.map(c => c.op)}
@@ -236,19 +229,7 @@ export function ViewEditor({ index, kind, scorers }: ViewEditorProps) {
           </Txt>
         )}
       </Section>
-
-      {!empty && (
-        <Section title="Filters">
-          <ViewFilters
-            view={view}
-            entry={shownEntries[0]}
-            hasScores={hasScores}
-            onChange={filters => set({ filters })}
-          />
-        </Section>
-      )}
-
-      {split && !empty && (
+      {!empty && split && (
         <Section title={split}>
           <SplitBy
             view={view}
@@ -280,10 +261,11 @@ function seriesColors(view: ViewDraft) {
   return colors;
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** A labelled group of the settings. */
+export function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="flex flex-col gap-3">
-      <Txt as="h3" variant="subheading" tone="ink">
+    <section className="flex flex-col gap-2">
+      <Txt as="h3" variant="label" tone="muted">
         {title}
       </Txt>
       {children}
@@ -466,56 +448,6 @@ function Presentation({ draft, kind, placeholder, defaultIcon, color, onChange }
   );
 }
 
-type MetricPickerProps = {
-  /** The catalogue entries the view can take as they stand. */
-  entries: CatalogueEntry[];
-  disabled?: boolean;
-  onPick: (entry: CatalogueEntry) => void;
-};
-
-/** The catalogue, grouped, with what the view can't draw left out. */
-export function MetricPicker({ entries: offered, disabled, onPick }: MetricPickerProps) {
-  const groups = METRIC_GROUPS.map(group => ({ value: group, items: offered.filter(e => e.group === group) })).filter(
-    g => g.items.length > 0,
-  );
-  return (
-    <ComboboxRoot
-      items={groups}
-      value={null}
-      onValueChange={(entry: CatalogueEntry | null) => entry && onPick(entry)}
-      itemToStringLabel={(entry: CatalogueEntry) => entry.label}
-      disabled={disabled}
-      autoHighlight
-    >
-      <ComboboxTrigger variant="ghost" size="sm" icon={<PlusIcon />} showChevron={false} className="w-fit">
-        Add metric
-      </ComboboxTrigger>
-      <ComboboxContent>
-        <ComboboxSearch placeholder="Search metrics…" />
-        <ComboboxEmpty>No metric matches.</ComboboxEmpty>
-        <ComboboxList>
-          {(group: (typeof groups)[number], i: number) => (
-            <ComboboxGroup key={group.value} items={group.items}>
-              {i > 0 ? <ComboboxSeparator /> : null}
-              <ComboboxLabel>{group.value}</ComboboxLabel>
-              <ComboboxCollection>
-                {(entry: CatalogueEntry) => (
-                  <ComboboxItem key={entry.id} value={entry}>
-                    <ComboboxItemContent>
-                      <ComboboxItemTitle>{entry.label}</ComboboxItemTitle>
-                      <ComboboxItemDescription>{entry.description}</ComboboxItemDescription>
-                    </ComboboxItemContent>
-                  </ComboboxItem>
-                )}
-              </ComboboxCollection>
-            </ComboboxGroup>
-          )}
-        </ComboboxList>
-      </ComboboxContent>
-    </ComboboxRoot>
-  );
-}
-
 const dimensionsFor = (hasScores: boolean) => DIMENSIONS.filter(d => !(hasScores && d.metricsOnly));
 
 type CombineMenuProps = {
@@ -558,6 +490,23 @@ function CombineMenu({ ops, disabledReason, onPick }: CombineMenuProps) {
         ))}
       </DropdownMenu.Content>
     </DropdownMenu>
+  );
+}
+
+/** The filters of one view, on their own: they narrow every metric of the view alike. */
+export function ViewFilterEditor({ index, scorers }: { index: number; scorers: readonly Scorer[] }) {
+  const { control, getValues, setValue } = useFormContext<WidgetDraft>();
+  const view = useWatch({ control, name: `views.${index}` });
+  const entries = view.metrics.map(m => findEntry(m.entry, scorers));
+  return (
+    <ViewFilters
+      view={view}
+      entry={entries.find(e => e !== undefined)}
+      hasScores={entries.some(e => e?.source === 'scores')}
+      onChange={filters =>
+        setValue(`views.${index}`, { ...getValues(`views.${index}`), filters }, { shouldDirty: true })
+      }
+    />
   );
 }
 

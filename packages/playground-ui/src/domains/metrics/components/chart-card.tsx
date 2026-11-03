@@ -1,4 +1,5 @@
 import { Maximize2Icon } from 'lucide-react';
+import { createContext, useContext } from 'react';
 import type { ElementType, ReactNode } from 'react';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import type { MetricsCardTitleMenuProps, MetricsCardTotalPart } from '@/ds/components/MetricsCard';
@@ -60,6 +61,21 @@ export type ChartCardProps<V extends string = string> = {
   children: ReactNode;
 };
 
+type ChartCardHeader = {
+  /** Drawn in place of the title, e.g. an input to rename the card. */
+  heading: ReactNode;
+  /** Top-bar buttons shown in every state, before the card's own. */
+  actions?: ReactNode;
+};
+
+const ChartCardHeaderContext = createContext<ChartCardHeader | undefined>(undefined);
+
+/**
+ * Overrides the header of every `default` and `compact` card inside, for a host that draws a card
+ * it doesn't render itself, e.g. a widget editor drawing a dashboard widget as it edits it.
+ */
+export const ChartCardHeaderProvider = ChartCardHeaderContext.Provider;
+
 /**
  * Pure layout for a metrics chart card. The body has a fixed height, so the loading,
  * error, empty and loaded states take the same room and nothing shifts around the card.
@@ -84,6 +100,8 @@ export function ChartCard<V extends string = string>({
   const compact = variant === 'compact';
   const hero = variant === 'hero';
   const chart = !hero && bodyHeight === 'fixed';
+  const header = useContext(ChartCardHeaderContext);
+  const override = hero ? undefined : header;
   return (
     <MetricsCard className={cn('min-h-0! min-w-0! grid-cols-1', compact && 'h-84', className)}>
       <MetricsCard.TopBar>
@@ -95,9 +113,12 @@ export function ChartCard<V extends string = string>({
             isLoading={isLoading}
             className={fade}
           />
+        ) : override ? (
+          <div className="min-w-0">{override.heading}</div>
         ) : (
           <ChartCardHeading title={title} href={href} LinkComponent={LinkComponent} titleMenu={titleMenu} />
         )}
+        {override?.actions && <MetricsCard.Actions reveal="always">{override.actions}</MetricsCard.Actions>}
         {actions && (
           <MetricsCard.Actions reveal={hero ? 'always' : 'hover'} className={cn(hero && 'my-0 self-center')}>
             {actions}
