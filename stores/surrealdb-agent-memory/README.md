@@ -8,7 +8,13 @@
 npm install @mastra/surrealdb-agent-memory
 ```
 
-The package also needs `zod` (v3.25 or v4) as a peer dependency.
+The package also needs `zod` (v3.25 or v4) as a peer dependency. The example below keeps verbatim history in SurrealDB, which needs `@mastra/surrealdb` too:
+
+```bash
+npm install @mastra/surrealdb
+```
+
+To keep history in memory instead, leave out `storage`.
 
 ## Usage
 
