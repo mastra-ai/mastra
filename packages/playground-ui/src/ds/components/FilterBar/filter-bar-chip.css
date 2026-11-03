@@ -108,6 +108,28 @@
   }
 }
 
+/* A chip is a pill like a Button, so its two outer ends take the same inset (`--control-px`,
+ * from `controlSpacing`, less the rim the chip reserves), 2px less beside an icon because a
+ * glyph draws inside its box. Seams
+ * between segments keep the segment padding. A trailing × is a cell of its own and keeps its
+ * even inset. Segments are counted with `of` because Base UI interleaves hidden inputs. */
+.filter-bar-chip > .filter-bar-segment:nth-child(1 of .filter-bar-segment) {
+  padding-inline-start: calc(var(--control-px) - var(--control-border));
+}
+
+.filter-bar-chip > .filter-bar-segment:nth-child(1 of .filter-bar-segment):has(> svg:first-child) {
+  padding-inline-start: calc(var(--control-px) - 2px - var(--control-border));
+}
+
+.filter-bar-chip > .filter-bar-segment:nth-last-child(1 of .filter-bar-segment):not(.filter-bar-segment-remove) {
+  padding-inline-end: calc(var(--control-px) - var(--control-border));
+}
+
+.filter-bar-chip
+  > .filter-bar-segment:nth-last-child(1 of .filter-bar-segment):not(.filter-bar-segment-remove):has(> svg:last-child) {
+  padding-inline-end: calc(var(--control-px) - 2px - var(--control-border));
+}
+
 /* Once the value lands, a slanted band in the field's accent colour (the chip sets
  * `--filter-bar-chip-shine`, falling back to the text colour) sweeps across the chip
  * like light catching a surface. Drawn as an overlay so no segment has to know. */

@@ -41,11 +41,14 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "anthropic/claude-sonnet-4.6": [
+    "Qwen/Qwen3.8-Max": [
       {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-Flash": [
+      {
+        "type": "toggle"
       }
     ],
     "anthropic/claude-opus-4.7": [
@@ -67,6 +70,13 @@
         "max": 127999
       }
     ],
+    "anthropic/claude-sonnet-4.6": [
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
     "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
@@ -76,16 +86,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "Qwen/Qwen3.8-Max": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-Flash": [
-      {
-        "type": "toggle"
       }
     ]
   }

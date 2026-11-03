@@ -57,7 +57,7 @@ export const WithInlineStartIcon: Story = {
         <InputGroupAddon>
           <SearchIcon />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Search..." />
+        <InputGroupInput placeholder="Search" />
       </InputGroup>
     </div>
   ),
@@ -116,7 +116,7 @@ export const WithKbd: Story = {
         <InputGroupAddon>
           <SearchIcon />
         </InputGroupAddon>
-        <InputGroupInput placeholder="Search..." />
+        <InputGroupInput placeholder="Search" />
         <InputGroupAddon align="inline-end">
           <Kbd>⌘K</Kbd>
         </InputGroupAddon>
@@ -142,7 +142,7 @@ export const BlockEndAddon: Story = {
   render: () => (
     <div className="w-80">
       <InputGroup>
-        <InputGroupTextarea placeholder="Type a message..." />
+        <InputGroupTextarea placeholder="Type a message" />
         <InputGroupAddon align="block-end">
           <InputGroupButton aria-label="Submit">
             <CheckIcon />
@@ -210,7 +210,7 @@ export const Textarea: Story = {
   render: () => (
     <div className="w-80">
       <InputGroup>
-        <InputGroupTextarea placeholder="Write a comment..." />
+        <InputGroupTextarea placeholder="Write a comment" />
       </InputGroup>
     </div>
   ),
@@ -227,7 +227,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput aria-label="Search agents on the sidebar" placeholder="Search agents..." />
+          <InputGroupInput aria-label="Search agents on the sidebar" placeholder="Search agents" />
         </InputGroup>
       </div>
       <div className="rounded-lg border border-border bg-background p-4">
@@ -238,7 +238,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput aria-label="Search agents on the main canvas" placeholder="Search agents..." />
+          <InputGroupInput aria-label="Search agents on the main canvas" placeholder="Search agents" />
         </InputGroup>
       </div>
       <div className={`${raisedSurfaceStyle} rounded-lg p-4`}>
@@ -249,7 +249,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput aria-label="Search agents on a card" placeholder="Search agents..." />
+          <InputGroupInput aria-label="Search agents on a card" placeholder="Search agents" />
         </InputGroup>
       </div>
       <div className="rounded-lg border border-border bg-popover p-4">
@@ -260,7 +260,7 @@ export const OnDifferentSurfaces: Story = {
           <InputGroupAddon>
             <SearchIcon />
           </InputGroupAddon>
-          <InputGroupInput aria-label="Search agents in a popover" placeholder="Search agents..." />
+          <InputGroupInput aria-label="Search agents in a popover" placeholder="Search agents" />
         </InputGroup>
       </div>
     </div>

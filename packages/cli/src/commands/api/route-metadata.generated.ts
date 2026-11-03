@@ -3880,6 +3880,7 @@ export const API_ROUTE_METADATA = {
       "mcpClients",
       "memory",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -3917,6 +3918,7 @@ export const API_ROUTE_METADATA = {
       "mcpClients",
       "memory",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -3971,6 +3973,7 @@ export const API_ROUTE_METADATA = {
       "memory",
       "metadata",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -4011,6 +4014,7 @@ export const API_ROUTE_METADATA = {
       "memory",
       "metadata",
       "model",
+      "modelList",
       "name",
       "outputProcessors",
       "requestContextSchema",
@@ -6084,6 +6088,23 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [],
     "hasQuery": false,
     "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /background-tasks/:backgroundTaskId/resume": {
+    "method": "POST",
+    "path": "/background-tasks/:backgroundTaskId/resume",
+    "pathParams": [
+      "backgroundTaskId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "resumeData",
+      "suspendedAt"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
     "responseShape": {
       "kind": "single"
     }

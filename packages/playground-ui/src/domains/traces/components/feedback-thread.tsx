@@ -220,7 +220,7 @@ export function FeedbackThread({
         <InputGroup size="sm">
           <InputGroupInput
             aria-label="Leave feedback"
-            placeholder="Leave feedback..."
+            placeholder="Leave feedback"
             value={text}
             onChange={event => setText(event.target.value)}
           />

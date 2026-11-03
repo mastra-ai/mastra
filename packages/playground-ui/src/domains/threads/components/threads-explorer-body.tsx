@@ -89,7 +89,6 @@ export function ThreadsExplorerBody({
             {urlState && <ObservabilitySavedViews page="threads" {...urlState} columns={columns} />}
             <ActionRow>
               <ActionRow.Start>
-                <ColumnsMenu scope="threads" value={columns.preferences} onChange={columns.setPreferences} />
                 <ThreadsFilterBar
                   datePreset={filters.datePreset}
                   dateFrom={filters.dateFrom}
@@ -103,6 +102,9 @@ export function ThreadsExplorerBody({
                   disabled={isLoading}
                 />
               </ActionRow.Start>
+              <ActionRow.End>
+                <ColumnsMenu scope="threads" value={columns.preferences} onChange={columns.setPreferences} />
+              </ActionRow.End>
             </ActionRow>
           </>
         }

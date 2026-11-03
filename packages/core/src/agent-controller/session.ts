@@ -2172,11 +2172,20 @@ export class SessionApproval {
    * every gate. With no filter every gate is released. Returns the ids that were
    * released.
    */
-  cancel(options: ApprovalGateFilter & { declineContext?: { reason?: string; message?: string } } = {}): string[] {
+  cancel(
+    options: ApprovalGateFilter & {
+      declineContext?: { reason?: string; message?: string };
+      requestContext?: RequestContext;
+    } = {},
+  ): string[] {
     const gates = this.#matching(options);
     for (const gate of gates) {
       this.#gates.delete(gate);
-      gate.resolve({ decision: 'decline', declineContext: options.declineContext });
+      gate.resolve({
+        decision: 'decline',
+        requestContext: options.requestContext,
+        declineContext: options.declineContext,
+      });
     }
     return gates.map(gate => gate.toolCallId);
   }
@@ -4837,6 +4846,7 @@ export class Session<TState = unknown> {
       threadId?: string;
       runId?: string;
       declineContext?: { reason?: string; message?: string };
+      requestContext?: RequestContext;
     } = {},
   ): void {
     this.displayState.clearPendingApprovals(this.approval.cancel(filter));
@@ -5172,8 +5182,12 @@ export class Session<TState = unknown> {
       // the message to a run that `completeDeferredAbort()` then terminates.
       if (!submittedAbortRequested && submittedRunId && submittedActiveRunId && submittedIsRunning) {
         if (signal.type === 'user') {
+          // Decline as the sender: a gate re-armed on a reattached run has no
+          // request context of its own, so without this the continuation runs
+          // with no authenticated user and cannot resolve tenant credentials.
           this.#releaseApprovalGates({
             threadId,
+            requestContext: requestContextInput,
             declineContext: {
               reason: 'interrupted_by_user_message',
               message: 'The pending tool approval was declined because the user sent a new message.',

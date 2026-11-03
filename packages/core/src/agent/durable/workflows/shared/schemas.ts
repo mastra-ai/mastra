@@ -122,6 +122,13 @@ export const accumulatedUsageSchema = z.object({
 }) as z.ZodType<AccumulatedUsage>;
 
 /**
+ * Provider id and serving model of one response.
+ */
+export const responseRecordSchema = z.object({ id: z.string().optional(), modelId: z.string().optional() });
+
+export type ResponseRecord = z.infer<typeof responseRecordSchema>;
+
+/**
  * Schema for output from the durable agentic workflow
  */
 export const durableAgenticOutputSchema = z.object({
@@ -210,6 +217,8 @@ export const baseIterationStateSchema = z.object({
   completionStartTime: z.coerce.date().optional(),
   // Time to first token of the inference that streamed that chunk, carried the same way
   timeToFirstTokenMs: z.number().optional(),
+  // Provider id and model of the latest response, carried the same way
+  lastResponse: responseRecordSchema.optional(),
 });
 
 /**
