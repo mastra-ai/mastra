@@ -49,15 +49,20 @@ describe('buildToolGuidance knowledge tools', () => {
     expect(guidance).not.toContain('ask_memory');
     expect(guidance).not.toContain('knowledge_search');
   });
+});
 
-  it('treats the win32 default plans dir as the default in build-mode guidance', () => {
+describe('buildToolGuidance plans directory outside plan mode', () => {
+  // On Windows the SDK resolves the default plans dir with path.join, giving
+  // `.mastracode\plans`. The guidance must still recognise that as the default.
+  // Otherwise it treats it as a custom dir and tells the agent to write plans
+  // under `.mastracode/plans/` and, in the same breath, never under it.
+  it('does not warn against the default dir when it arrives with Windows separators', () => {
     const guidance = buildToolGuidance('build', { plansDir: path.win32.join('.mastracode', 'plans') });
 
     expect(guidance).toContain(
       'Write plan files under `.mastracode/plans/` (e.g. `.mastracode/plans/add-dark-mode.md`).',
     );
-    expect(guidance).not.toContain('never under');
-    expect(guidance).not.toContain('.mastracode\\plans');
+    expect(guidance).not.toContain('never under `.mastracode/plans/`');
   });
 
   it('omits plans guidance in read-only Explore mode', () => {
