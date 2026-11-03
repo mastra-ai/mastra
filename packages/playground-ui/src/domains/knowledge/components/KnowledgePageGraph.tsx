@@ -20,7 +20,7 @@ import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRe
 import type { CSSProperties } from 'react';
 
 import { fitWords } from '../lib/circleText';
-import { fitAllViewport, fitDuration, fitViewport, nudgeAxis } from '../lib/fitViewport';
+import { fitAllViewport, fitDuration, fitViewport, INITIAL_SETTLE_MS, nudgeAxis } from '../lib/fitViewport';
 import {
   KNOWLEDGE_COUNTED_DOT_SIZE,
   KNOWLEDGE_DOT_HIT_MARGIN,
@@ -1394,6 +1394,24 @@ function KnowledgePageGraphInner({
   const selectedHere = useRef<string | null>(null);
   const selectedIsLoaded = !!selectedPageId && pagesById.has(selectedPageId);
   const initialized = useRef(false);
+  // The first view is refitted while the graph is still filling in (ring pages, children, links arrive over the
+  // first moments), until the user does anything or the window closes. After that the view is theirs.
+  const settleUntil = useRef(0);
+  const settledOn = useRef<string | null>(null);
+  // What the last first-view fit was of, so a refetch that draws the same thing doesn't fit again.
+  const fittedLayout = useRef('');
+  const stopSettling = useCallback(() => {
+    settleUntil.current = 0;
+  }, []);
+  useEffect(() => {
+    if (!initialized.current) return;
+    if ((selectedPageId ?? null) !== settledOn.current) settleUntil.current = 0;
+    if (Date.now() >= settleUntil.current) return;
+    const layout = nodes.map(node => `${node.id}@${node.position.x},${node.position.y}`).join('|');
+    if (layout === fittedLayout.current) return;
+    fittedLayout.current = layout;
+    fitInitial();
+  }, [nodes, selectedPageId, fitInitial]);
   useEffect(() => {
     if (!initialized.current || !selectedIsLoaded || !selectedPageId) return;
     const fromGraph = selectedHere.current === selectedPageId;
@@ -1473,7 +1491,9 @@ function KnowledgePageGraphInner({
       data-emphasis={neighbours ? 'on' : undefined}
       data-testid="knowledge-page-graph"
       onKeyDown={onKeyDown}
+      onWheelCapture={stopSettling}
       onPointerDownCapture={event => {
+        stopSettling();
         pressedAt.current = { x: event.clientX, y: event.clientY };
       }}
     >
@@ -1495,6 +1515,11 @@ function KnowledgePageGraphInner({
         edgeTypes={edgeTypes}
         onInit={() => {
           initialized.current = true;
+          settleUntil.current = Date.now() + INITIAL_SETTLE_MS;
+          settledOn.current = fitState.current.selectedPageId ?? null;
+          fittedLayout.current = fitState.current.nodes
+            .map(node => `${node.id}@${node.position.x},${node.position.y}`)
+            .join('|');
           fitInitial();
         }}
         minZoom={0.1}

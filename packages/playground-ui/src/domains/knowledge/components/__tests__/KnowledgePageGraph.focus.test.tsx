@@ -195,6 +195,62 @@ describe('KnowledgePageGraph focus on the selected page', () => {
     });
   });
 
+  describe('while the graph is still filling in after the first view', () => {
+    const early = [page('org', null), page('a', 'org'), page('b', 'org')];
+    const later = [...early, ...Array.from({ length: 40 }, (_, index) => page(`late${index}`, 'org'))];
+    const all = (list: KnowledgePagePayload[]) => list.map(p => p.id);
+
+    it('fits again, every circle in view, as more pages arrive', async () => {
+      const { rerender } = renderWithProviders(
+        <KnowledgePageGraph pages={early} edges={[]} selectedPageId={null} centerId="org" onSelect={() => {}} />,
+      );
+      await screen.findAllByTestId('knowledge-page-node');
+      rerender(
+        <KnowledgePageGraph pages={later} edges={[]} selectedPageId={null} centerId="org" onSelect={() => {}} />,
+      );
+      await screen.findAllByTestId('knowledge-page-node');
+      const box = screenBox(all(later));
+      expect(box.left).toBeGreaterThanOrEqual(0);
+      expect(box.right).toBeLessThanOrEqual(WIDTH);
+      expect(box.top).toBeGreaterThanOrEqual(0);
+      expect(box.bottom).toBeLessThanOrEqual(HEIGHT);
+    });
+
+    it('stops once the user has touched the graph, so later pages never move their view', async () => {
+      const { rerender } = renderWithProviders(
+        <KnowledgePageGraph pages={early} edges={[]} selectedPageId={null} centerId="org" onSelect={() => {}} />,
+      );
+      await screen.findAllByTestId('knowledge-page-node');
+      fireEvent.pointerDown(screen.getByTestId('knowledge-page-graph'));
+      setViewport.mockClear();
+      rerender(
+        <KnowledgePageGraph pages={later} edges={[]} selectedPageId={null} centerId="org" onSelect={() => {}} />,
+      );
+      await screen.findAllByTestId('knowledge-page-node');
+      expect(setViewport).not.toHaveBeenCalled();
+    });
+
+    it('stops when something else is selected, so a refocus keeps the view as it is', async () => {
+      const { rerender } = renderWithProviders(
+        <KnowledgePageGraph pages={later} edges={[]} selectedPageId={null} centerId="org" onSelect={() => {}} />,
+      );
+      await screen.findAllByTestId('knowledge-page-node');
+      rerender(<KnowledgePageGraph pages={later} edges={[]} selectedPageId="a" centerId="org" onSelect={() => {}} />);
+      await screen.findAllByTestId('knowledge-page-node');
+      setViewport.mockClear();
+      rerender(
+        <KnowledgePageGraph
+          pages={[...later, page('x', 'org')]}
+          edges={[]}
+          selectedPageId="a"
+          centerId="org"
+          onSelect={() => {}}
+        />,
+      );
+      expect(setViewport).not.toHaveBeenCalled();
+    });
+  });
+
   describe('Fit view on a page with an outer ring of linked pages', () => {
     const ringIds = Array.from({ length: 12 }, (_, index) => `link${index}`);
     const crowded = [

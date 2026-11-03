@@ -36,6 +36,8 @@ export function fitViewport({ bounds, width, height, ring, anchor }: FitInput): 
 export const INITIAL_FIT_PADDING = 0.05;
 /** The first view never zooms in past the pages' own size, however few there are. */
 export const INITIAL_FIT_MAX_ZOOM = 1;
+/** How long after the first view the graph keeps refitting as pages arrive, unless the user acts first. */
+export const INITIAL_SETTLE_MS = 3000;
 
 type Rect = { x: number; y: number; width: number; height: number };
 
