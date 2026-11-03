@@ -46,6 +46,19 @@ describe('dashboard renderer app', () => {
     });
   });
 
+  describe('when the host forwards the tool output only as JSON text', () => {
+    it('renders the dashboard from the text content', async () => {
+      server.use(http.post(AGGREGATE_API, () => HttpResponse.json(agentRunsAggregate)));
+      const host = await renderWithHost(app);
+
+      await host.sendToolResult({
+        content: [{ type: 'text', text: JSON.stringify({ definition: agentRunsDashboard, baseUrl: BASE_URL }) }],
+      });
+
+      expect(await screen.findByText('693')).toBeTruthy();
+    });
+  });
+
   describe('when the tool result has no server to fetch from', () => {
     it('explains which field is wrong instead of rendering', async () => {
       const host = await renderWithHost(app);

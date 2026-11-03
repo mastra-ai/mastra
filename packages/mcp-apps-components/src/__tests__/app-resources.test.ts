@@ -85,6 +85,16 @@ describe('dashboardRendererApp', () => {
       expect(html).not.toMatch(/<link[^>]+rel="(stylesheet|modulepreload)"/);
       expect(html).not.toMatch(/\bimport\(["'`]\.{0,2}\//);
     });
+
+    it('does not throw at load in documents without a hierarchical URL', async () => {
+      const { contents } = await client.readResource({ uri: 'ui://mastra/dashboard' });
+      const html = contents[0] && 'text' in contents[0] ? contents[0].text : '';
+
+      // Studio loads apps from `blob:` URLs, where `origin + pathname` is not a valid URL.
+      // Building a URL from it unguarded at module load kills the app before it renders.
+      expect(html).toContain('self.location.origin+self.location.pathname');
+      expect(html).not.toMatch(/`null`\?new URL\(self\.location\.origin\+self\.location\.pathname/);
+    });
   });
 
   describe('when loaded from CommonJS', () => {

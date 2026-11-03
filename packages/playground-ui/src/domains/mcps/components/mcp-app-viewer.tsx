@@ -2,6 +2,7 @@ import { AppRenderer } from '@mcp-ui/client';
 import type { AppRendererHandle, SandboxConfig } from '@mcp-ui/client';
 import type { CallToolRequest, CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { useTheme } from '@/ds/components/ThemeProvider';
 
 const SANDBOX_PROXY_HTML = `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><style>html,body{margin:0;padding:0;width:100%;height:100%}</style></head>
@@ -70,6 +71,8 @@ export function McpAppViewer({
   // in AppRenderer. A new object reference triggers bridge recreation → sandbox
   // timeout → toolInput never delivered.
   const hostInfo = useMemo(() => ({ name: 'Mastra Studio', version: '1.0.0' }), []);
+  const { resolvedTheme } = useTheme();
+  const hostContext = useMemo(() => ({ theme: resolvedTheme }), [resolvedTheme]);
 
   const normalizedToolResult: CallToolResult | undefined = useMemo(() => {
     if (toolResult === undefined) return undefined;
@@ -156,7 +159,6 @@ export function McpAppViewer({
         height: `${height}px`,
         overflow: 'hidden',
         borderRadius: '8px',
-        background: 'white',
       }}
     >
       <AppRenderer
@@ -167,6 +169,7 @@ export function McpAppViewer({
         toolInput={toolInput}
         toolResult={normalizedToolResult}
         hostInfo={hostInfo}
+        hostContext={hostContext}
         onCallTool={handleCallTool}
         onMessage={handleMessage}
         onOpenLink={handleOpenLink}

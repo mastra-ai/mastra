@@ -4,3 +4,9 @@
 
 /* Each app builds from its own folder; scan the shared runtime and every app's markup. */
 @source '..';
+
+/* The host draws the surface around the iframe; the app only paints its own cards. */
+html,
+body {
+  background-color: transparent;
+}

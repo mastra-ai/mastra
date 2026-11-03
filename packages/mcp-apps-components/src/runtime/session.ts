@@ -18,9 +18,25 @@ function applyTheme(theme: McpUiTheme | undefined) {
   if (theme) document.documentElement.classList.toggle('light', theme === 'light');
 }
 
-function errorText(content: ReadonlyArray<{ type: string; text?: unknown }>) {
+function firstText(content: ReadonlyArray<{ type: string; text?: unknown }>) {
   const text = content.find(block => block.type === 'text' && typeof block.text === 'string')?.text;
   return typeof text === 'string' ? text : undefined;
+}
+
+// Some hosts forward only `content`; by MCP convention a tool with an output schema also
+// serializes its structured output as JSON in the first text block.
+function structuredOutput(result: {
+  structuredContent?: unknown;
+  content: ReadonlyArray<{ type: string; text?: unknown }>;
+}) {
+  if (result.structuredContent !== undefined) return result.structuredContent;
+  const text = firstText(result.content);
+  if (text === undefined) return undefined;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
 }
 
 /**
@@ -41,10 +57,10 @@ export function createMcpAppSession<Input>(
 
   app.addEventListener('toolresult', result => {
     if (result.isError) {
-      setState({ status: 'failed', message: errorText(result.content) ?? 'The tool call failed.' });
+      setState({ status: 'failed', message: firstText(result.content) ?? 'The tool call failed.' });
       return;
     }
-    const parsed = parse(result.structuredContent);
+    const parsed = parse(structuredOutput(result));
     setState(parsed.success ? { status: 'ready', input: parsed.input } : { status: 'failed', message: parsed.message });
   });
   app.addEventListener('toolcancelled', () => {
