@@ -669,14 +669,22 @@ export interface KnowledgePageStore {
     check: (scopes: KnowledgeScopeDeclarationRename[]) => void;
   }): Promise<number>;
   /**
-   * Scope pages directly under a page (`parentId: null` lists root scopes), unfiltered, by position
-   * then id; core decides which to list and which as restricted.
+   * Scope pages directly under a page (`parentId: null` lists root scopes), by position then id.
+   * Without `read` the list is unfiltered and core decides which to list and which as restricted;
+   * with `read` only the scopes it can read are listed, filtered before the limit and cursor.
    */
   listChildScopes(input: {
     parentId: string | null;
+    read?: KnowledgeReadScope;
     cursor?: string;
     limit?: number;
   }): Promise<KnowledgePageListOutput>;
+  /**
+   * How many readable child scopes each parent has, keyed by parent id; one call for all the
+   * parents. Counts the scopes {@link listChildScopes} would list with the same `read`. Parents with
+   * none map to 0; duplicate ids count once.
+   */
+  countChildScopes(input: { parentIds: string[]; read: KnowledgeReadScope }): Promise<Record<string, number>>;
 
   // Pages
   getPage(input: { id: string; read: KnowledgeReadScope }): Promise<KnowledgePage | null>;

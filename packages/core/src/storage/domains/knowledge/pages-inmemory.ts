@@ -360,7 +360,10 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
 
   async listChildScopes(input: Parameters<Store['listChildScopes']>[0]) {
     const scopes = [...this.#pages.values()]
-      .filter(page => page.isScope && page.parentId === input.parentId)
+      .filter(
+        page =>
+          page.isScope && page.parentId === input.parentId && (!input.read || this.#pageReadable(page, input.read)),
+      )
       .sort(byPosition);
     const { items, nextCursor } = paginate(scopes, input.cursor, input.limit);
     return { pages: items.map(clone), ...(nextCursor ? { nextCursor } : {}) };
@@ -412,6 +415,16 @@ export class InMemoryKnowledgePageStore implements KnowledgePageStore {
       .sort(byPosition);
     const { items, nextCursor } = paginate(pages, input.cursor, input.limit);
     return { pages: items.map(clone), ...(nextCursor ? { nextCursor } : {}) };
+  }
+
+  async countChildScopes(input: Parameters<Store['countChildScopes']>[0]) {
+    const counts = new Map(input.parentIds.map(id => [id, 0]));
+    for (const page of this.#pages.values()) {
+      if (!page.isScope || page.parentId === null || !counts.has(page.parentId)) continue;
+      if (!this.#pageReadable(page, input.read)) continue;
+      counts.set(page.parentId, counts.get(page.parentId)! + 1);
+    }
+    return Object.fromEntries(counts);
   }
 
   async countChildPages(input: Parameters<Store['countChildPages']>[0]) {

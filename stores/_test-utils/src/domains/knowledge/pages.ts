@@ -157,6 +157,51 @@ export function createKnowledgePageStoreTests(createStore: () => Promise<Knowled
         expect(ids(second.pages)).toEqual([roots[2]!.id]);
         expect(second.nextCursor).toBeUndefined();
       });
+
+      it('lists and counts only the child scopes a reader can see, filtered before the limit', async () => {
+        const acme = await scope('org:acme', ORG);
+        const hidden = await scope('team:acme:hidden', TEAM, acme.id);
+        const eng = await scope('team:acme:eng', TEAM, acme.id);
+        const ops = await scope('team:acme:ops', TEAM, acme.id);
+        const reader = read(['org:acme', 'team:acme:eng', 'team:acme:ops']);
+
+        // The unreadable scope comes first by position, so filtering after the limit would drop eng.
+        const first = await store.listChildScopes({ parentId: acme.id, read: reader, limit: 1 });
+        expect(ids(first.pages)).toEqual([eng.id]);
+        const second = await store.listChildScopes({ parentId: acme.id, read: reader, cursor: first.nextCursor });
+        expect(ids(second.pages)).toEqual([ops.id]);
+        expect(second.nextCursor).toBeUndefined();
+        // Prefix and child-of-parent grants read scopes the same way pages do.
+        expect(
+          ids(
+            (
+              await store.listChildScopes({
+                parentId: acme.id,
+                read: read([], [{ declaration: TEAM, prefix: 'team:acme:h' }]),
+              })
+            ).pages,
+          ),
+        ).toEqual([hidden.id]);
+        expect(
+          ids(
+            (
+              await store.listChildScopes({
+                parentId: acme.id,
+                read: read([], [], [{ declaration: TEAM, parentId: acme.id }]),
+              })
+            ).pages,
+          ),
+        ).toEqual([hidden.id, eng.id, ops.id]);
+        // Without `read` the host still sees every child scope.
+        expect(ids((await store.listChildScopes({ parentId: acme.id })).pages)).toEqual([hidden.id, eng.id, ops.id]);
+
+        expect(
+          await store.countChildScopes({ parentIds: [acme.id, acme.id, eng.id, 'missing'], read: reader }),
+        ).toEqual({ [acme.id]: 2, [eng.id]: 0, missing: 0 });
+        expect(await store.countChildScopes({ parentIds: [acme.id], read: 'all' })).toEqual({ [acme.id]: 3 });
+        expect(await store.countChildScopes({ parentIds: [acme.id], read: read([]) })).toEqual({ [acme.id]: 0 });
+        expect(await store.countChildScopes({ parentIds: [], read: reader })).toEqual({});
+      });
     });
 
     describe('scope declaration keys', () => {
