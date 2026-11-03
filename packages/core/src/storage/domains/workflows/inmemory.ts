@@ -533,12 +533,17 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     workflowName,
     runId,
     stepIds,
+    expectedLastSeq,
   }: {
     workflowName: string;
     runId: string;
     stepIds: string[];
-  }): Promise<Record<string, StepResult<any, any, any, any>>> {
-    const entries = this.db.workflowRunEntries.get(this.getWorkflowKey(workflowName, runId)) ?? [];
+    expectedLastSeq?: number;
+  }): Promise<Record<string, StepResult<any, any, any, any>> | null> {
+    const key = this.getWorkflowKey(workflowName, runId);
+    const record = this.db.workflowRunHeaders.get(key);
+    if (!record || (expectedLastSeq !== undefined && record.lastSeq !== expectedLastSeq)) return null;
+    const entries = this.db.workflowRunEntries.get(key) ?? [];
     const steps = Object.fromEntries(latestStepResults(entries, new Set(stepIds)));
     return cloneRunData(steps as Record<string, StepResult<any, any, any, any>>);
   }

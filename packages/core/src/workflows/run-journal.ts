@@ -118,6 +118,17 @@ export class RunJournal {
   #inFlight = 0;
   #boundaryInFlight = false;
   #closed = false;
+  /** The highest `lastSeq` of the run known here: as loaded, or reported by a write or draft. */
+  #lastSeq: number | undefined;
+  /** Store calls (writes and drafts) sent and not yet settled. */
+  #pending = new Set<Promise<unknown>>();
+  #resolveSettledLastSeq!: (seq: number | undefined) => void;
+  /**
+   * The run's `lastSeq` once its execution has ended (`close`) and every write and draft sent has
+   * settled: the version a read of its stored steps must still find to see what the execution left.
+   * Undefined when the run wasn't loaded and nothing was stored.
+   */
+  readonly settledLastSeq: Promise<number | undefined>;
 
   /**
    * @param seed The step results already in storage (a resumed or restarted run's loaded snapshot
@@ -163,6 +174,26 @@ export class RunJournal {
     }
     this.#patchBytes = storedState?.patchBytes ?? 0;
     if (resumed && seed) this.#startStateSeq = storedState?.seq;
+    this.#lastSeq = storedState?.seq;
+    this.settledLastSeq = new Promise(resolve => {
+      this.#resolveSettledLastSeq = resolve;
+    });
+  }
+
+  /**
+   * Sends a store call, keeping it in `#pending` until it settles and noting the run's `lastSeq` it
+   * reports, so `settledLastSeq` cannot resolve before a settled call's seq is noted.
+   */
+  #send<T>(call: Promise<T>, seqOf: (result: T) => number | undefined): Promise<T> {
+    const tracked = call.then(result => {
+      const seq = seqOf(result);
+      if (seq !== undefined && (this.#lastSeq === undefined || seq > this.#lastSeq)) this.#lastSeq = seq;
+      return result;
+    });
+    this.#pending.add(tracked);
+    const settle = () => this.#pending.delete(tracked);
+    tracked.then(settle, settle);
+    return tracked;
   }
 
   /**
@@ -200,11 +231,16 @@ export class RunJournal {
     const chained = own && this.#draftBytes + opsBytes <= next.bytes;
     let seq: number;
     try {
-      ({ seq } = await store.appendWorkflowRunStateDraft({
-        workflowName: this.workflowName,
-        runId: this.runId,
-        ...(chained ? { on: { seq: current!.ref.seq, draft: current!.ref.draft }, ops: ops! } : { state: next.state }),
-      }));
+      ({ seq } = await this.#send(
+        store.appendWorkflowRunStateDraft({
+          workflowName: this.workflowName,
+          runId: this.runId,
+          ...(chained
+            ? { on: { seq: current!.ref.seq, draft: current!.ref.draft }, ops: ops! }
+            : { state: next.state }),
+        }),
+        written => written.seq,
+      ));
     } catch {
       return undefined;
     }
@@ -218,7 +254,10 @@ export class RunJournal {
    * running then (the block's `Promise.all` rejects on the first failure), and its write is dropped.
    */
   close(): void {
+    if (this.#closed) return;
     this.#closed = true;
+    // Nothing is sent once closed, so these are the last calls.
+    void Promise.allSettled(this.#pending).then(() => this.#resolveSettledLastSeq(this.#lastSeq));
   }
 
   /**
@@ -368,9 +407,12 @@ export class RunJournal {
         statePatch,
         ...(expectedStatus ? { expectedStatus } : {}),
       };
-      const written = checkpoint
-        ? await store.writeWorkflowRunCheckpoint({ ...run, stateBase })
-        : await store.appendWorkflowRunEntries({ ...run, ...(patched ? { stepPatches } : {}), startStateSeq });
+      const written = await this.#send(
+        checkpoint
+          ? store.writeWorkflowRunCheckpoint({ ...run, stateBase })
+          : store.appendWorkflowRunEntries({ ...run, ...(patched ? { stepPatches } : {}), startStateSeq }),
+        written => written?.lastSeq,
+      );
       if (written === null) {
         if (checkpoint) this.#needsCheckpoint = true;
         return false;
@@ -512,7 +554,7 @@ export class RunJournal {
       // A result that changed while the read was in flight (e.g. a parallel branch hydrated it)
       // is at least as new as the one read.
       if (stepResults[stepId] !== stub) continue;
-      const result = loaded[stepId];
+      const result = loaded?.[stepId];
       if (!result) {
         throw new MastraError({
           id: 'WORKFLOW_STORAGE_V2_STEP_RESULT_MISSING',
