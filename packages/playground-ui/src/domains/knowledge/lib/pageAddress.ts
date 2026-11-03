@@ -13,7 +13,10 @@ export function pagePath(page: KnowledgePagePayload, byId: ReadonlyMap<string, K
 }
 
 /** How the page is addressed: its scope's address, then the keys down to it. Scopes are just their address. */
-export function pageRef(page: KnowledgePagePayload, byId: ReadonlyMap<string, KnowledgePagePayload>): string | undefined {
+export function pageRef(
+  page: KnowledgePagePayload,
+  byId: ReadonlyMap<string, KnowledgePagePayload>,
+): string | undefined {
   if (page.isScope) return page.address;
   const keys: string[] = [];
   const seen = new Set<string>();

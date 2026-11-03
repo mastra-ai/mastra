@@ -13,6 +13,8 @@ const Anchor = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElem
   (props, ref) => <a ref={ref} {...props} />,
 );
 
+const known = new Set(['docs:mastra#guides/memory']);
+
 const renderText = (text: string, linked = true) => {
   const node = <MessageText text={text} metadata={undefined} />;
   return render(
@@ -21,6 +23,9 @@ const renderText = (text: string, linked = true) => {
         pageHref={id => `/k?page=${id}`}
         refHref={ref => `/k?page=${encodeURIComponent(ref)}`}
         Link={Anchor}
+        usePagePreview={({ pageRef }) =>
+          pageRef && known.has(pageRef) ? { name: 'Memory', kind: 'Page', pageRef } : undefined
+        }
       >
         {node}
       </KnowledgeLinksProvider>
@@ -52,5 +57,15 @@ describe('MessageText Knowledge references', () => {
   it('leaves references as plain text when the host has no Knowledge pages', () => {
     renderText('See [[org:acme#policies/refunds]] and docs:mastra#guides/memory.', false);
     expect(screen.queryAllByRole('link')).toEqual([]);
+  });
+
+  it('leaves text that only looks like an address as text unless the page resolves', () => {
+    renderText('Try localhost:3000#top, git:abc#1, c:1#2, mailto:x#y or note:2024-01-01#todo.');
+    expect(screen.queryAllByRole('link')).toEqual([]);
+  });
+
+  it('links a [[ref]] without checking it resolves', () => {
+    renderText('See [[localhost:3000#top]].');
+    expect(screen.getAllByRole('link')).toHaveLength(1);
   });
 });

@@ -2,11 +2,16 @@ import { CheckCircleIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ComponentProps } from 'react';
 import type { Components, ExtraProps } from 'react-markdown';
-import { KnowledgePageLink, useHasKnowledgeLinks } from '../../knowledge/knowledge-links';
+import { KnowledgePageLink, useHasKnowledgeLinks, useKnowledgeLinksContext } from '../../knowledge/knowledge-links';
+import type { UseKnowledgePagePreview } from '../../knowledge/knowledge-links';
 import type { MessageMetadata } from '../message-metadata';
 import { TripwireNotice } from '../tripwire-notice';
 import { errorMessage, messageTextKind } from './message-text-kind';
-import { KNOWLEDGE_REF_PROPERTY, remarkKnowledgeChatLinks } from '@/domains/knowledge/lib/remarkKnowledgeLinks';
+import {
+  KNOWLEDGE_BARE_PROPERTY,
+  KNOWLEDGE_REF_PROPERTY,
+  remarkKnowledgeChatLinks,
+} from '@/domains/knowledge/lib/remarkKnowledgeLinks';
 import { Badge } from '@/ds/components/Badge';
 import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
@@ -14,12 +19,32 @@ import type { MarkdownExternalLinkTarget } from '@/ds/components/MarkdownRendere
 import { Notice } from '@/ds/components/Notice';
 import { Icon } from '@/ds/icons/Icon';
 
+const REF_LINK_CLASS = 'text-foreground underline underline-offset-2';
+
+/** Text like `localhost:3000#top` looks like an address; it links only if the host finds the page. */
+function BareKnowledgeRef({ pageRef }: { pageRef: string }) {
+  const { usePagePreview } = useKnowledgeLinksContext();
+  return usePagePreview ? <ResolvedBareRef pageRef={pageRef} usePagePreview={usePagePreview} /> : <>{pageRef}</>;
+}
+
+function ResolvedBareRef({ pageRef, usePagePreview }: { pageRef: string; usePagePreview: UseKnowledgePagePreview }) {
+  const card = usePagePreview({ pageRef });
+  return card ? (
+    <KnowledgePageLink pageRef={pageRef} className={REF_LINK_CLASS}>
+      {pageRef}
+    </KnowledgePageLink>
+  ) : (
+    <>{pageRef}</>
+  );
+}
+
 function ChatKnowledgeRef({ node, ...props }: ComponentProps<'span'> & ExtraProps) {
   const raw = node?.properties[KNOWLEDGE_REF_PROPERTY];
   if (typeof raw !== 'string') return <span {...props} />;
   const ref = raw.trim();
+  if (node?.properties[KNOWLEDGE_BARE_PROPERTY] === 'bare') return <BareKnowledgeRef pageRef={ref} />;
   return (
-    <KnowledgePageLink pageRef={ref} className="text-foreground underline underline-offset-2">
+    <KnowledgePageLink pageRef={ref} className={REF_LINK_CLASS}>
       {ref}
     </KnowledgePageLink>
   );

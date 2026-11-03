@@ -55,6 +55,11 @@ export function KnowledgeLinksProvider({
   );
 }
 
+/** What the host gave the provider; for renderers that must decide before drawing a link. */
+export function useKnowledgeLinksContext(): KnowledgeLinks {
+  return useContext(KnowledgeLinksContext);
+}
+
 /** Whether this host mounted a `KnowledgeLinksProvider`, i.e. has Knowledge pages chat prose can link to. */
 export function useHasKnowledgeLinks(): boolean {
   return useContext(KnowledgeLinksContext).provided === true;
