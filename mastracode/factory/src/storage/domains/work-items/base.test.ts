@@ -1219,6 +1219,56 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
       expect(await cards('project-a')).toHaveLength(1);
     });
 
+    it('approves a proposed run without invalidating the board revision', async () => {
+      const { workItems, orgId, upsert } = await setup();
+      const { item } = await upsert('approval');
+      const scope = { orgId, factoryProjectId: item.factoryProjectId };
+      const now = new Date('2030-01-01T00:00:00.000Z');
+      await workItems.commitRuleEvaluation({
+        ...scope,
+        workItemId: item.id,
+        ingress: { identity: 'approval', triggerType: 'test' },
+        configVersion: 'v1',
+        expectedRevision: item.revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: item.id }],
+        causalChain: [],
+        now,
+      });
+      const [claimed] = await workItems.claimDeferredDecisions({
+        ownerId: 'approval-worker',
+        now,
+        leaseExpiresAt: new Date(now.getTime() + 30_000),
+        limit: 1,
+        decisionFilter: decision => decision.idempotencyKey === item.id,
+      });
+      expect(claimed?.workItemId).toBe(item.id);
+      const proposed = await workItems.proposeDeferredDecision(
+        { ...scope, id: claimed!.id, ownerId: 'approval-worker' },
+        now,
+      );
+      expect(proposed?.status).toBe('proposed');
+      const before = (await workItems.get({ orgId, id: item.id }))!;
+      const approved = await workItems.approveDeferredDecision(
+        orgId,
+        item.factoryProjectId,
+        proposed!.id,
+        now,
+        'user-1',
+      );
+      expect(approved?.status).toBe('pending');
+      expect(await workItems.get({ orgId, id: item.id })).toMatchObject({
+        autonomyArmedAt: now,
+        revision: before.revision,
+        updatedAt: before.updatedAt,
+        acceptedAt: before.acceptedAt,
+        plansPreapprovedAt: before.plansPreapprovedAt,
+      });
+      const edited = await workItems.update({ orgId, userId: 'user-1', id: item.id, patch: { stages: ['done'] } });
+      expect(edited?.item.revision).toBe(before.revision + 1);
+    });
+
     it('a claim left on an old card blocks nothing', async () => {
       const { storage, upsert, cards } = await setup();
 

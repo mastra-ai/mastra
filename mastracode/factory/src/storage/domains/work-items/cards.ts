@@ -292,14 +292,20 @@ export class Cards {
         } else if (next) await this.ops.insertOne(SOURCES, next);
         else if (previous) await this.ops.deleteMany(SOURCES, { id: previous.id });
       }
+      const nativeTitleChanged = !current.external_source && patch.title !== undefined && patch.title !== current.title;
       const boardChanged =
-        (!current.external_source && patch.title !== undefined && patch.title !== current.title) ||
+        nativeTitleChanged ||
         Object.entries(columns).some(
           ([key, value]) =>
             !['revision', 'updated_at'].includes(key) && JSON.stringify(row[key]) !== JSON.stringify(value),
         );
       if (!boardChanged) return null;
-      return { ...columns, revision: row.revision + 1, updated_at: patch.updated_at ?? new Date() };
+      return {
+        ...columns,
+        ...(nativeTitleChanged
+          ? { revision: patch.revision ?? row.revision + 1, updated_at: patch.updated_at ?? new Date() }
+          : {}),
+      };
     });
     return board ? (await this.#join([board]))[0]! : null;
   }
