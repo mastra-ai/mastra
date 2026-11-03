@@ -174,6 +174,8 @@ interface InstallOptions extends ArchitectureOptions {
   pnpmNodeLinker?: 'hoisted';
   /** Patch key -> path relative to the output directory. */
   patchedDependencies?: Record<string, string>;
+  /** Source settings that change which packages get installed, already checked to work outside the source workspace. */
+  pnpmResolutionSettings?: Record<string, unknown>;
 }
 
 const PNPM_PATCHES_DIR = 'pnpm-patches';
@@ -191,6 +193,9 @@ const PNPM_CONFIG_KEYS_TO_COPY = new Set([
   'trustPolicyIgnoreAfter',
   'supportedArchitectures',
 ]);
+
+// Specs resolved against the source workspace, which the output directory can't install.
+const SOURCE_WORKSPACE_SPEC = /^(?:file:|link:|portal:|workspace:|catalog:|\.{1,2}(?:[/\\]|$)|[/\\]|~[/\\])/;
 
 // supportedArchitectures is generated from deployer architecture targets, so it can't be set explicitly.
 // neverBuiltDependencies switches pnpm 10 into deny-list mode, which runs every build script it doesn't name.
@@ -362,6 +367,10 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
     blocks.push(architectureBlock.join('\n'));
   }
 
+  for (const [key, value] of Object.entries(options.pnpmResolutionSettings ?? {})) {
+    blocks.push(stringify({ [key]: value }).trimEnd());
+  }
+
   if (options.pnpmOverrides && Object.keys(options.pnpmOverrides).length > 0) {
     blocks.push(
       [
@@ -437,6 +446,113 @@ async function dropPnpmImporterDependencies(lockfilePath: string, packageNames: 
   if (changed) {
     await fsPromises.writeFile(lockfilePath, stringify(lockfile, { lineWidth: 0 }));
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Reads the overrides the source install applied. The lockfile records them with `catalog:` and `$name`
+ * references resolved, wherever they were declared (`pnpm-workspace.yaml`, or the `pnpm` field of
+ * `package.json` on pnpm 10).
+ */
+async function readPnpmLockfileOverrides(
+  lockfilePath: string,
+  warn: (message: string) => void,
+): Promise<Record<string, string>> {
+  let lockfile: unknown;
+  try {
+    lockfile = parse(await fsPromises.readFile(lockfilePath, 'utf-8'));
+  } catch {
+    return {};
+  }
+
+  const overrides = isRecord(lockfile) ? lockfile.overrides : undefined;
+  if (!isRecord(overrides)) return {};
+
+  const portable: Record<string, string> = {};
+  for (const [selector, spec] of Object.entries(overrides)) {
+    if (typeof spec !== 'string') continue;
+    if (SOURCE_WORKSPACE_SPEC.test(spec)) {
+      warn(`Skipping pnpm override "${selector}": "${spec}" can only be resolved from the source workspace.`);
+      continue;
+    }
+    portable[selector] = spec;
+  }
+  return portable;
+}
+
+// `catalog:` reads the top-level `catalog`, or `catalogs.default` when that is where it is declared.
+function resolveCatalogSpec(workspace: Record<string, unknown>, name: string, spec: string): unknown {
+  const catalogName = spec.slice('catalog:'.length) || 'default';
+  const catalogs = isRecord(workspace.catalogs) ? workspace.catalogs : {};
+  const catalog = catalogName === 'default' && isRecord(workspace.catalog) ? workspace.catalog : catalogs[catalogName];
+  return isRecord(catalog) ? catalog[name] : undefined;
+}
+
+/** Returns the extension with catalog specs resolved, or the first spec the output directory can't install. */
+function resolvePackageExtension(
+  workspace: Record<string, unknown>,
+  extension: Record<string, unknown>,
+): { extension: Record<string, unknown> } | { name: string; spec: unknown } {
+  const resolvedExtension: Record<string, unknown> = { ...extension };
+  for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+    const deps = extension[field];
+    if (!isRecord(deps)) continue;
+    const resolvedDeps: Record<string, string> = {};
+    for (const [name, spec] of Object.entries(deps)) {
+      const resolved =
+        typeof spec === 'string' && spec.startsWith('catalog:') ? resolveCatalogSpec(workspace, name, spec) : spec;
+      if (typeof resolved !== 'string' || SOURCE_WORKSPACE_SPEC.test(resolved)) {
+        return { name, spec };
+      }
+      resolvedDeps[name] = resolved;
+    }
+    resolvedExtension[field] = resolvedDeps;
+  }
+  return { extension: resolvedExtension };
+}
+
+/**
+ * Reads the source settings that change which packages get installed. They are copied from the source
+ * workspace only and stay out of `bundler.pnpmWorkspaceSettings`, which accepts install-policy keys only.
+ */
+function getPnpmResolutionSettings(sourceWorkspaceYaml: string, warn: (message: string) => void) {
+  let workspace: unknown;
+  try {
+    workspace = parse(sourceWorkspaceYaml);
+  } catch {
+    return {};
+  }
+  if (!isRecord(workspace)) return {};
+
+  const settings: Record<string, unknown> = {};
+
+  const ignoredOptional = workspace.ignoredOptionalDependencies;
+  if (Array.isArray(ignoredOptional) && ignoredOptional.every(name => typeof name === 'string')) {
+    settings.ignoredOptionalDependencies = ignoredOptional;
+  }
+
+  if (isRecord(workspace.packageExtensions)) {
+    const extensions: Record<string, unknown> = {};
+    for (const [selector, extension] of Object.entries(workspace.packageExtensions)) {
+      if (!isRecord(extension)) continue;
+      const result = resolvePackageExtension(workspace, extension);
+      if ('extension' in result) {
+        extensions[selector] = result.extension;
+      } else {
+        warn(
+          `Skipping pnpm packageExtensions "${selector}": ${JSON.stringify(result.spec)} for "${result.name}" can only be resolved from the source workspace.`,
+        );
+      }
+    }
+    if (Object.keys(extensions).length > 0) {
+      settings.packageExtensions = extensions;
+    }
+  }
+
+  return settings;
 }
 
 export class Deps extends MastraBase {
@@ -553,9 +669,19 @@ export class Deps extends MastraBase {
       ? await this.copyPnpmPatches(sourceWorkspaceYaml, path.dirname(sourceWorkspaceYamlPath), dir)
       : undefined;
 
+    const warn = (message: string) => this.logger.warn(message);
+    const sourceOverrides =
+      this.lockFile?.packageManager === 'pnpm' ? await readPnpmLockfileOverrides(this.lockFile.path, warn) : {};
+
     await fsPromises.writeFile(
       path.join(dir, 'pnpm-workspace.yaml'),
-      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, { ...options, patchedDependencies }),
+      copyPnpmWorkspaceSettings(sourceWorkspaceYaml, {
+        ...options,
+        patchedDependencies,
+        pnpmResolutionSettings: getPnpmResolutionSettings(sourceWorkspaceYaml, warn),
+        // Packed workspace tarballs must win over any source override for the same package.
+        pnpmOverrides: { ...sourceOverrides, ...options.pnpmOverrides },
+      }),
       'utf-8',
     );
   }

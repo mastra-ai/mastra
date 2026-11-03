@@ -223,6 +223,53 @@ describe('DepsService custom pnpm workspace settings', () => {
     });
   });
 
+  it('installs with the overrides the source lockfile was resolved with (#29192)', async () => {
+    // The lockfile holds overrides with catalog and `$name` specs resolved, wherever pnpm read them from.
+    await writeFile(
+      join(sourceRoot, 'pnpm-lock.yaml'),
+      `lockfileVersion: '9.0'\n\noverrides:\n  lodash@<4.18.0: ^4.18.1\n  '@inner/shared': 1.0.0\n  local-fork: link:../forks/local-fork\n\nimporters: {}\n`,
+    );
+
+    await new DepsService(sourceRoot).install({
+      dir: outputDir,
+      pnpmOverrides: { '@inner/shared': 'file:./workspace-module/inner-shared-1.0.0.tgz' },
+    });
+
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace.overrides).toEqual({
+      'lodash@<4.18.0': '^4.18.1',
+      '@inner/shared': 'file:./workspace-module/inner-shared-1.0.0.tgz',
+    });
+  });
+
+  it('copies source package extensions with catalog specs resolved', async () => {
+    await writeFile(
+      join(sourceRoot, 'pnpm-workspace.yaml'),
+      `packages: ["apps/*"]
+catalog:
+  has-flag: 4.0.0
+catalogs:
+  legacy:
+    supports-color: 7.2.0
+packageExtensions:
+  debug@4:
+    dependencies:
+      has-flag: 'catalog:'
+      supports-color: 'catalog:legacy'
+  zod@4:
+    peerDependencies:
+      local: link:../local
+`,
+    );
+
+    await new DepsService(sourceRoot).install({ dir: outputDir });
+
+    const workspace = parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'));
+    expect(workspace.packageExtensions).toEqual({
+      'debug@4': { dependencies: { 'has-flag': '4.0.0', 'supports-color': '7.2.0' } },
+    });
+  });
+
   it('preserves existing behavior when custom settings are omitted', async () => {
     await new DepsService(sourceRoot).install({ dir: outputDir });
     expect(parse(await readFile(join(outputDir, 'pnpm-workspace.yaml'), 'utf8'))).toEqual({
