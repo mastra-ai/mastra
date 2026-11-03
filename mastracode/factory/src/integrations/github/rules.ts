@@ -796,7 +796,8 @@ export class GithubRules {
             pullRequestNumber,
             matchedItem,
             factoryAuthored: pullRequestFactoryAuthored,
-            authorTrusted: actor.type === 'github' && actor.trusted,
+            // Only the author's own trust lets a pull request join another card.
+            authorTrusted: actor.type === 'github' && actor.trusted && login === pullRequestAuthor,
             body: string(pullRequest?.body),
           })
         : undefined;
@@ -1115,6 +1116,18 @@ export class GithubRules {
             ? (reviewCard !== undefined || attached !== undefined) && !['closed', 'merged'].includes(recordedState ?? '')
             : !['closed', 'merged'].includes(recordedState ?? '');
         if (!stillOpen) return;
+        // Only a pull request the card wrote is the one it has out. One filed there because it
+        // closes the issue is someone else's work: recording it would stop the builder's own
+        // self-review and pull request.
+        const headBranch = string(object(pullRequest?.head)?.ref);
+        const ownedByCard =
+          home?.reason === 'authored' ||
+          (home === undefined &&
+            (attached === undefined ||
+              pullRequestFactoryAuthored ||
+              (headBranch !== undefined &&
+                Object.values(authoringItem.sessions).some(session => session.branch === headBranch))));
+        if (!ownedByCard) return;
         // The head comes along so a head recorded for an earlier pull
         // request cannot mark this one's verdict outdated.
         await this.options.storage.update({

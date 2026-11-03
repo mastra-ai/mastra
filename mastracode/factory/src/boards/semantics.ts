@@ -52,13 +52,13 @@ export function hasPullRequest(item: SourcedItem & { readonly source?: string })
   );
 }
 
-/** The provider number (GitHub PR number, GitLab MR IID) a pull request source names. */
 /** A source row's external id without the type/workspace scope storage prefixes it with. */
 export function sourceExternalId(source: Pick<WorkItemSourceRow, 'sourceType' | 'workspaceId' | 'externalId'>): string {
   const prefix = `${source.sourceType}:${source.workspaceId ? `${source.workspaceId}:` : ''}`;
   return source.externalId.startsWith(prefix) ? source.externalId.slice(prefix.length) : source.externalId;
 }
 
+/** The provider number (GitHub PR number, GitLab MR IID) a pull request source names. */
 export function pullRequestSourceNumber(source: Pick<WorkItemSourceRow, 'metadata'>): number | undefined {
   const metadata = source.metadata ?? {};
   const value = metadata.githubPullRequestNumber ?? metadata.gitlabMergeRequestIid ?? metadata.number;
