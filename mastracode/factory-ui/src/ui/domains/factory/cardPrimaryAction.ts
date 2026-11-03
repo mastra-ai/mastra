@@ -15,7 +15,7 @@ export interface CardPrimaryAction {
 
 /** A lane the card can be moved into, named by what the lane's rule then runs. */
 export interface CardMove {
-  label: 'Investigate' | 'Build' | 'Prepare approval' | 'Review' | 'Re-review';
+  label: 'Investigate' | 'Plan' | 'Build' | 'Prepare approval' | 'Review' | 'Re-review';
   /** Session slot the lane's run fills on the card, e.g. `plan` or `work`. */
   role: FactoryRole;
   stage: FactoryRuleStage;
@@ -24,11 +24,18 @@ export interface CardMove {
 }
 
 /** A persisted card or a candidate feed entry: both are moved by the same lane rules. */
-export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> &
-  Partial<Pick<WorkItem, 'board' | 'stages' | 'acceptedAt'>>;
+export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> & Partial<Pick<WorkItem, 'board' | 'stages'>>;
 
 const INVESTIGATE: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
+const PLAN: CardMove = { label: 'Plan', role: 'work', stage: 'planning' };
 const BUILD: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
+
+/** An issue card's moves from each column, following the Work board's `nextPhases`: Building comes only after Planning. */
+function issueMoves(columnStage: BoardStageId): CardMove[] {
+  if (columnStage === 'planning') return [PLAN, BUILD];
+  if (columnStage === 'execute') return [BUILD, PLAN];
+  return [INVESTIGATE, PLAN];
+}
 const PREPARE_APPROVAL: CardMove = {
   label: 'Prepare approval',
   role: 'triage',
@@ -50,14 +57,14 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [reviewMoves(item).reReview] : [];
   if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
-  if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
+  if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : issueMoves(columnStage);
   if (
     item.source === 'gitlab-issue' ||
     item.source === 'linear-issue' ||
     item.source === 'jira-issue' ||
     item.source === 'incidentio-follow-up'
   ) {
-    return [INVESTIGATE, BUILD];
+    return issueMoves(columnStage);
   }
   return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [reviewMoves(item).review] : [];
 }
@@ -80,40 +87,47 @@ const WORKING_LANES: readonly FactoryRuleStage[] = [...Object.values(FACTORY_ROL
  */
 export function resumeStage(
   columnStage: BoardStageId,
-  item: { sessions: Record<string, WorkItemSessionRef>; stageHistory?: readonly { stage: string }[] },
+  item: {
+    /** The card's resolved board (`itemBoard`): a legacy pull request card with no board sits on Review. */
+    board: string;
+    sessions: Record<string, WorkItemSessionRef>;
+    stageHistory?: readonly { stage: string }[];
+  },
 ): FactoryRuleStage | undefined {
   if (columnStage !== 'intake' || Object.keys(item.sessions).length === 0) return undefined;
   const visited = new Set((item.stageHistory ?? []).map(entry => entry.stage));
-  return WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
+  const lane = WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
+  // On Work, Intake leads to neither Building nor its self-review: a card that got that far
+  // resumes in Planning. The Review board has no Planning, and its Intake leads back to Reviewing.
+  return item.board === 'work' && (lane === 'execute' || lane === 'review') ? 'planning' : lane;
 }
 
 /**
- * Triage classified the card as something other than a bug, so the rules hold
- * it until a person moves it forward. The card then asks for that decision
- * instead of offering a run that would only advance it as a side effect.
+ * Triage looked at the card and left it in Intake, so the next move is a
+ * person's decision. The card then asks for that decision instead of offering
+ * a run that would only advance it as a side effect. A card that has been past
+ * Triage since (a parked build, say) resumes instead.
  */
 export function awaitsTriageDecision(
-  item: Pick<WorkItem, 'triageType' | 'acceptedAt'> & Partial<Pick<WorkItem, 'board'>>,
+  item: Pick<WorkItem, 'sessions'> & Partial<Pick<WorkItem, 'board' | 'stageHistory'>>,
   columnStage: BoardStageId,
 ) {
   return (
     (item.board == null || item.board === 'work') &&
-    (columnStage === 'intake' || columnStage === 'triage') &&
-    item.triageType !== null &&
-    item.triageType !== 'bug' &&
-    item.acceptedAt === null
+    columnStage === 'intake' &&
+    item.sessions.triage !== undefined &&
+    (resumeStage(columnStage, { ...item, board: 'work' }) ?? 'triage') === 'triage'
   );
 }
 
 export interface TriageDecision {
   label: string;
-  stage: 'planning' | 'execute' | 'canceled';
+  stage: 'planning' | 'canceled';
 }
 
 /** The maintainer's choices for a held card, the likeliest first. */
 export const TRIAGE_DECISIONS: readonly TriageDecision[] = [
   { label: 'Accept and plan', stage: 'planning' },
-  { label: 'Accept and build', stage: 'execute' },
   { label: 'Close', stage: 'canceled' },
 ];
 

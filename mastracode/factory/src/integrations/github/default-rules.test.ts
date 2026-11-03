@@ -1,37 +1,35 @@
 import { describe, expect, it, vi } from 'vitest';
+import type { FactoryGithubRuleContext } from '../../rules/types.js';
 import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
 
 describe('GitHub issue re-triage', () => {
-  const comment = (stages: string[], board = 'work') =>
+  const events = ['issueEdited', 'issueCommentCreated', 'issueCommentEdited', 'issueCommentDeleted'] as const;
+  const context = (event: (typeof events)[number], stages: string[], board = 'work') =>
     ({
-      event: 'issueCommentCreated',
+      event,
       board,
       ingress: { id: 'ingress-1' },
       actor: { type: 'github', login: 'someone', trusted: true, factoryAuthored: false },
       item: { source: 'github-issue', url: 'https://github.com/mastra-ai/mastra/issues/1', stages },
-    }) as unknown as Parameters<NonNullable<typeof defaultGithubRules.issueCommentCreated>>[0];
+    }) as unknown as FactoryGithubRuleContext;
 
-  it.each([['execute'], ['review']])('does not take over a card in %s', stage => {
-    expect(defaultGithubRules.issueCommentCreated?.(comment([stage]))).toBeUndefined();
-  });
-
-  it('leaves a card resting in Intake for a person to move', () => {
-    expect(defaultGithubRules.issueCommentCreated?.(comment(['intake']))).toBeUndefined();
-  });
-
-  it.each([['triage'], ['planning']])('re-triages a card in %s', stage => {
-    expect(defaultGithubRules.issueCommentCreated?.(comment([stage]))).toMatchObject({
-      type: 'invokeSkill',
-      skillName: 'factory-triage',
+  describe.each(events)('%s', event => {
+    it.each([['execute'], ['review']])('does not take over a card in %s', stage => {
+      expect(defaultGithubRules[event]?.(context(event, [stage]))).toBeUndefined();
     });
-  });
 
-  it.each([['shipping'], ['plan-review'], ['queued'], ['shipped']])(
-    'does not re-triage a custom-board card in %s',
-    stage => {
-      expect(defaultGithubRules.issueCommentCreated?.(comment([stage], 'release'))).toBeUndefined();
-    },
-  );
+    // Triage runs once, when a person moves the card into Triage or starts the run.
+    it.each([['intake'], ['triage'], ['planning']])('does not re-triage a card in %s', stage => {
+      expect(defaultGithubRules[event]?.(context(event, [stage]))).toBeUndefined();
+    });
+
+    it.each([['shipping'], ['plan-review'], ['queued'], ['shipped']])(
+      'does not re-triage a custom-board card in %s',
+      stage => {
+        expect(defaultGithubRules[event]?.(context(event, [stage], 'release'))).toBeUndefined();
+      },
+    );
+  });
 });
 
 describe('GitHub rule resolution', () => {
