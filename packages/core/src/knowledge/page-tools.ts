@@ -758,12 +758,12 @@ function readTool(host: KnowledgePageToolHost) {
   });
 }
 
-const LIST_DEFAULT_LIMIT = 50;
+export const LIST_DEFAULT_LIMIT = 50;
 const LIST_MAX_LIMIT = 100;
 const LIST_MAX_DEPTH = 3;
 
 /** One entry of a `knowledge_list` result. */
-interface ListEntry {
+export interface ListEntry {
   ref: string;
   name: string;
   description?: string;

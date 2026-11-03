@@ -1,8 +1,9 @@
 import { estimateTokenCount, sliceByTokens } from 'tokenx';
-import { parseKnowledgePageRef } from '../storage/domains/knowledge';
+import { knowledgeScopeReadable } from '../storage/domains/knowledge';
 import type { KnowledgeListedPin, KnowledgePage } from '../storage/domains/knowledge';
-import { knowledgeScopeAddress } from './declarations';
-import type { CompiledKnowledgeScopes } from './declarations';
+import { knowledgePinTarget, knowledgeScopeAddress } from './declarations';
+import type { CompiledKnowledgeScopes, KnowledgePinnedList } from './declarations';
+import { LIST_DEFAULT_LIMIT, listKnowledgeTree } from './page-tools';
 import { knowledgePageRefs } from './page-refs';
 import type { KnowledgeRun } from './run';
 
@@ -35,15 +36,61 @@ export interface PinBudget {
   maxTokens: number;
 }
 
-/** A config pin ref with `$params` bound from the held principal, split into scope address and key path. */
-function bindConfigPin(ref: string, params: Record<string, string>): { address: string; path: string[] } | null {
-  const parsed = parseKnowledgePageRef(ref);
+/** A config pin with `$params` bound from the held principal: scope address, key path, and depth for a listing. */
+interface BoundPin {
+  address: string;
+  path: string[];
+  depth?: number;
+}
+
+function bindConfigPin(entry: string | KnowledgePinnedList, params: Record<string, string>): BoundPin | null {
+  const parsed = knowledgePinTarget(entry);
   if (!parsed) return null;
   try {
-    return { address: knowledgeScopeAddress(parsed.scope, params), path: parsed.path };
+    return { ...parsed, address: knowledgeScopeAddress(parsed.scope, params) };
   } catch {
     return null;
   }
+}
+
+/** Prefix of a pinned listing's entry id; the rest is the listed page's id. */
+export const PIN_LIST_ID_PREFIX = 'list:';
+
+/** A config-pinned listing, resolved for this run. */
+interface PinnedListing {
+  origin: KnowledgePage;
+  depth: number;
+  /** `- <ref> — <name> (<n> children)` per entry, indented by depth. */
+  lines: string[];
+  /** Listed entries left out because the listing hit its entry limit. */
+  more: boolean;
+}
+
+async function resolveListing(run: KnowledgeRun, origin: KnowledgePage, depth: number): Promise<PinnedListing> {
+  const listing = await listKnowledgeTree(run, { origin, depth, limit: LIST_DEFAULT_LIMIT });
+  const lines = listing.entries.map(
+    entry =>
+      `${'  '.repeat(entry.depth - 1)}- ${entry.ref} — ${entry.name}${entry.children ? ` (${entry.children} ${entry.children === 1 ? 'child' : 'children'})` : ''}`,
+  );
+  return { origin, depth, lines, more: Boolean(listing.nextCursor) || listing.truncated };
+}
+
+function renderListing(listing: PinnedListing, ref: string, maxTokens: number): string {
+  const head = `Pages under ${listing.origin.name} (${ref}, depth ${listing.depth}):`;
+  if (listing.lines.length === 0) return `${head} none.`;
+  const tail = (left: number) => `…${left > 0 ? `and ${left} more` : 'and more'}; knowledge_list from: "${ref}"`;
+  const all = [head, ...listing.lines, ...(listing.more ? [tail(0)] : [])].join('\n');
+  if (estimateTokenCount(all) <= maxTokens) return all;
+  // Whole lines only, always at least one, then a pointer to the rest.
+  const kept = [head];
+  let used = estimateTokenCount(head) + estimateTokenCount(tail(listing.lines.length)) + 2;
+  for (const line of listing.lines) {
+    const cost = estimateTokenCount(line) + 1;
+    if (kept.length > 1 && used + cost > maxTokens) break;
+    kept.push(line);
+    used += cost;
+  }
+  return [...kept, tail(listing.lines.length - (kept.length - 1))].join('\n');
 }
 
 /** What a pinned entry says about its page besides the body: where to read it, and how many notes it has. */
@@ -81,27 +128,40 @@ function priorityTiers(compiled: CompiledKnowledgeScopes, principals: string[]):
   return [...tiers.entries()].sort(([a], [b]) => b - a).map(([, addresses]) => addresses);
 }
 
-async function configPinPages(run: KnowledgeRun): Promise<KnowledgePage[]> {
-  const bound: { address: string; path: string[] }[] = [];
+async function configPins(run: KnowledgeRun): Promise<{ pages: KnowledgePage[]; listings: PinnedListing[] }> {
+  const bound: BoundPin[] = [];
   for (const principal of run.principals) {
     const match = run.runtime.compiled.match(principal);
     if (!match) continue;
-    for (const ref of [...(match.compiled.declaration.pinnedContext ?? []), ...(match.concrete?.pinnedContext ?? [])]) {
-      const pin = bindConfigPin(ref, match.params);
+    for (const entry of [
+      ...(match.compiled.declaration.pinnedContext ?? []),
+      ...(match.concrete?.pinnedContext ?? []),
+    ]) {
+      const pin = bindConfigPin(entry, match.params);
       if (pin) bound.push(pin);
     }
   }
-  if (bound.length === 0) return [];
+  if (bound.length === 0) return { pages: [], listings: [] };
   const scopes = await run.storage.getScopesByAddress([...new Set(bound.map(pin => pin.address))]);
   const pages = new Map<string, KnowledgePage>();
+  const listings = new Map<string, PinnedListing>();
   for (const pin of bound) {
     const scope = scopes.find(candidate => candidate.address === pin.address);
     if (!scope) continue;
     // Resolved by path every run: a path with no page (not created yet, moved, deleted) delivers nothing.
-    const page = await run.storage.getPageByPath({ scopeId: scope.id, path: pin.path, read: run.read });
-    if (page && !page.deletedAt) pages.set(page.id, page);
+    const page =
+      pin.path.length === 0
+        ? knowledgeScopeReadable(scope, run.read)
+          ? scope
+          : null
+        : await run.storage.getPageByPath({ scopeId: scope.id, path: pin.path, read: run.read });
+    if (!page || page.deletedAt) continue;
+    if (pin.depth === undefined) pages.set(page.id, page);
+    else if ((listings.get(page.id)?.depth ?? 0) < pin.depth) {
+      listings.set(page.id, await resolveListing(run, page, pin.depth));
+    }
   }
-  return [...pages.values()];
+  return { pages: [...pages.values()], listings: [...listings.values()] };
 }
 
 /**
@@ -165,9 +225,11 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
   // Store calls per turn: (pinnedContextPriority tiers the run holds) + 3 (one count, one getPages for pin
   // pages, one countNotes) + one getPages per page-tree level above the pinned pages, plus the config-pin
   // lookups; never one per pin.
-  const configured = (await configPinPages(run)).filter(page => page.body?.trim());
+  const configPinned = await configPins(run);
+  const configured = configPinned.pages.filter(page => page.body?.trim());
+  const listings = configPinned.listings;
 
-  const slots = Math.max(budget.maxPins - configured.length, 0);
+  const slots = Math.max(budget.maxPins - configured.length - listings.length, 0);
   const { pins, total } = await rankedStoredPins(
     run,
     configured.map(page => page.id),
@@ -181,14 +243,38 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
   );
   const { labels, scopes } = await pinLabels(run, [...configured, ...pages.values()]);
   const labelOf = (page: KnowledgePage) => labels.get(page.id)!;
+  const listingRefs = listings.length
+    ? (
+        await knowledgePageRefs(
+          run.storage,
+          run.read,
+          listings.map(listing => listing.origin),
+        )
+      ).refs
+    : new Map<string, string>();
+  for (const listing of listings) {
+    if (!listing.origin.isScope) continue;
+    const scope = listing.origin.address;
+    if (scope) listingRefs.set(listing.origin.id, scope);
+  }
+  const listingRef = (listing: PinnedListing) => listingRefs.get(listing.origin.id) ?? listing.origin.id;
 
+  // Config pages and listings are always delivered: whole when they fit together, else an equal share each.
   const entries: PinEntry[] = [];
-  const full = configured.map(page => render(page, labelOf(page), Number.POSITIVE_INFINITY));
-  if (full.reduce((sum, text) => sum + estimateTokenCount(text), 0) > budget.maxTokens) {
-    const share = Math.max(Math.floor(budget.maxTokens / configured.length), 1);
-    for (const page of configured) entries.push({ id: page.id, text: render(page, labelOf(page), share) });
-  } else {
-    configured.forEach((page, i) => entries.push({ id: page.id, text: full[i]! }));
+  const configCount = configured.length + listings.length;
+  const renderConfig = (room: number) => {
+    for (const page of configured) entries.push({ id: page.id, text: render(page, labelOf(page), room) });
+    for (const listing of listings) {
+      entries.push({
+        id: `${PIN_LIST_ID_PREFIX}${listing.origin.id}`,
+        text: renderListing(listing, listingRef(listing), room),
+      });
+    }
+  };
+  renderConfig(Number.POSITIVE_INFINITY);
+  if (entries.reduce((sum, entry) => sum + estimateTokenCount(entry.text), 0) > budget.maxTokens) {
+    entries.length = 0;
+    renderConfig(Math.max(Math.floor(budget.maxTokens / configCount), 1));
   }
 
   const minimum = estimateTokenCount(PIN_TRUNCATION_MARKER) + 8;
@@ -220,6 +306,7 @@ export async function knowledgeDeliveredPins(run: KnowledgeRun, budget: PinBudge
   }
   entries.push(...delivered);
   const byId = new Map([...configured, ...pages.values()].map(page => [page.id, page]));
+  for (const listing of listings) byId.set(`${PIN_LIST_ID_PREFIX}${listing.origin.id}`, listing.origin);
   for (const entry of entries) {
     const page = byId.get(entry.id)!;
     entry.name = page.name;
