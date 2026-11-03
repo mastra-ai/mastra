@@ -46,11 +46,12 @@ import type {
   FactoryDispatchFailureCode,
   FactoryPendingStartRecord,
   FactoryRunBindingRecord,
-  WorkItemRow,
+  Card,
   WorkItemsStorage,
   UpsertWorkItemResult,
 } from '../storage/domains/work-items/base.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
+import { workItemProviderAdapter } from '../work-items/providers/index.js';
 import { decisionOvertaken } from './decision-applicability.js';
 import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -390,7 +391,7 @@ function factoryRequestContext(input: {
 
 export interface FactoryBindingPreparationInput {
   record: FactoryDeferredDecisionRecord;
-  item: WorkItemRow;
+  item: Card;
   role: string;
 }
 
@@ -541,7 +542,7 @@ function requestsConsent(
 // The Factory reviewing code it wrote is part of the same work, not new work to
 // consent to: a push to a Factory-authored PR re-reviews without a person's click.
 function reviewsFactoryAuthoredCode(
-  item: Pick<WorkItemRow, 'metadata' | 'externalSource'>,
+  item: Pick<Card, 'metadata' | 'externalSource'>,
   decision: FactoryCommitDecision,
 ): boolean {
   if (item.metadata?.factoryAuthored !== true) return false;
@@ -1327,7 +1328,7 @@ export class FactoryDecisionDispatcher {
     if (decision.source !== 'linear-issue' || typeof issueId !== 'string') return null;
     const items = await this.#storage.list({ orgId: record.orgId, factoryProjectId: record.factoryProjectId });
     const cards = items.filter(
-      item => item.externalSource?.integrationId === 'linear' && item.metadata?.linearIssueId === issueId,
+      item => item.externalSource?.integrationId === 'linear' && item.workItem.metadata?.linearIssueId === issueId,
     );
     return cards.find(item => !isTerminalWorkItem(boards, item)) ?? cards[0] ?? null;
   }
@@ -1447,17 +1448,22 @@ export class FactoryDecisionDispatcher {
       // Backfill source facts (e.g. sourceCreatedAt) that older cards were filed
       // without. Fill-only: never overwrite, and never adopt the card as
       // materialized by this decision.
+      const providerKeys = workItemProviderAdapter(result.item.externalSource).providerMetadataKeys;
       const missing = Object.fromEntries(
         Object.entries(decision.metadata ?? {}).filter(
-          ([key]) => key !== FACTORY_RULE_MATERIALIZATION_KEY && result.item.metadata?.[key] === undefined,
+          ([key]) =>
+            key !== FACTORY_RULE_MATERIALIZATION_KEY &&
+            (providerKeys.includes(key) ? result.item.workItem.metadata?.[key] : result.item.metadata?.[key]) ===
+              undefined,
         ),
       );
       if (Object.keys(missing).length > 0) {
-        const filled = await this.#storage.update({
+        const filled = await this.#storage.syncCard({
           orgId: record.orgId,
           id: result.item.id,
           userId: 'factory-rule-dispatcher',
           patch: { metadata: missing },
+          fillOnly: true,
         });
         if (filled) result = { ...result, item: filled.item };
       }
@@ -1571,7 +1577,7 @@ export class FactoryDecisionDispatcher {
    */
   async #resumeRoutedCard(
     record: FactoryDeferredDecisionRecord,
-    existing: WorkItemRow,
+    existing: Card,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     boards: BoardRegistry,
   ): Promise<Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>> {
@@ -1592,7 +1598,7 @@ export class FactoryDecisionDispatcher {
   }
 
   #keepRoutedCard(
-    existing: WorkItemRow,
+    existing: Card,
     decision: Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }>,
     boards: BoardRegistry,
   ): Extract<FactoryCommitDecision, { type: 'upsertLinkedWorkItem' }> {

@@ -253,31 +253,40 @@ ${tasks.map((task, i) => `${i + 1}. [${task.priority.toUpperCase()}] ${task.cont
   },
 });
 
-// Sub-workflow: Planning and Approval Cycle
-export const planningAndApprovalWorkflow = createWorkflow({
-  id: 'planning-and-approval',
-  description: 'Handle iterative planning with questions and task list approval',
-  inputSchema: PlanningIterationInputSchema,
-  outputSchema: TaskApprovalOutputSchema,
-  steps: [planningIterationStep, taskApprovalStep],
-})
-  // Step 1: Planning iteration (with questions suspension)
-  .dountil(planningIterationStep, async ({ inputData }) => {
-    console.info(`Sub-workflow planning check: planComplete=${inputData.planComplete}`);
-    return inputData.planComplete === true;
+/**
+ * Builds a new planning-and-approval sub-workflow on every call. See `createAgentBuilderWorkflows` for when to use
+ * a factory instead of the shared `planningAndApprovalWorkflow`.
+ */
+export function createPlanningAndApprovalWorkflow() {
+  const workflow = createWorkflow({
+    id: 'planning-and-approval',
+    description: 'Handle iterative planning with questions and task list approval',
+    inputSchema: PlanningIterationInputSchema,
+    outputSchema: TaskApprovalOutputSchema,
+    steps: [planningIterationStep, taskApprovalStep],
   })
-  // Map to approval step input format
-  .map(async ({ inputData }) => {
-    // After doUntil completes, inputData contains the final result
-    return {
-      tasks: inputData.tasks || [],
-      success: inputData.success || false,
-      questions: inputData.questions || [],
-      reasoning: inputData.reasoning || '',
-      planComplete: inputData.planComplete || false,
-      message: inputData.message || '',
-    };
-  })
-  // Step 2: Task list approval
-  .then(taskApprovalStep)
-  .commit();
+    // Step 1: Planning iteration (with questions suspension)
+    .dountil(planningIterationStep, async ({ inputData }) => {
+      console.info(`Sub-workflow planning check: planComplete=${inputData.planComplete}`);
+      return inputData.planComplete === true;
+    })
+    // Map to approval step input format
+    .map(async ({ inputData }) => {
+      // After doUntil completes, inputData contains the final result
+      return {
+        tasks: inputData.tasks || [],
+        success: inputData.success || false,
+        questions: inputData.questions || [],
+        reasoning: inputData.reasoning || '',
+        planComplete: inputData.planComplete || false,
+        message: inputData.message || '',
+      };
+    })
+    // Step 2: Task list approval
+    .then(taskApprovalStep)
+    .commit();
+
+  return workflow;
+}
+
+export const planningAndApprovalWorkflow = createPlanningAndApprovalWorkflow();

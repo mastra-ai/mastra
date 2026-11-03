@@ -1,6 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { estimateTokenCount } from 'tokenx';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
@@ -41,7 +41,15 @@ class MemoryVector extends MastraVector {
       .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
       .slice(0, topK);
   }
+  /** Upserts left to fail, like a cold scale-to-zero database timing out the connection; -1 fails them all. */
+  failUpserts = 0;
+  upserts = 0;
   async upsert({ indexName, ids, vectors }: UpsertVectorParams): Promise<string[]> {
+    this.upserts++;
+    if (this.failUpserts !== 0) {
+      if (this.failUpserts > 0) this.failUpserts--;
+      throw new Error('Connection terminated due to connection timeout');
+    }
     const index = this.indexes.get(indexName)!;
     ids!.forEach((id, i) => index.rows.set(id, vectors[i]!));
     return ids!;
@@ -142,6 +150,7 @@ function conceptEmbedder(state: EmbedderState): MastraEmbeddingModel<string> {
 }
 
 type Result = Record<string, any>;
+const RETRY_DELAYS = KnowledgeSemanticIndex.retryDelaysMs;
 
 describe('Knowledge semantic search', () => {
   let store: KnowledgeStorage;
@@ -180,6 +189,10 @@ describe('Knowledge semantic search', () => {
       embedder: conceptEmbedder(embedder),
     });
     (knowledge as any).logger = { warn: (m: string) => warnings.push(m), debug() {}, info() {}, error() {} };
+    KnowledgeSemanticIndex.retryDelaysMs = [1, 1, 1];
+  });
+  afterEach(() => {
+    KnowledgeSemanticIndex.retryDelaysMs = RETRY_DELAYS;
   });
 
   it('finds a page by meaning that keyword search misses', async () => {
@@ -294,7 +307,11 @@ describe('Knowledge semantic search', () => {
     });
     expect(created.page.name).toBe('Refund policy');
     expect(
-      warnings.some(w => w.includes('stays findable by keyword search and is embedded again the next time it changes')),
+      warnings.some(w =>
+        w.includes(
+          `Knowledge couldn't embed page "${created.page.id}" after retrying; it is findable by keyword search only until it is rewritten`,
+        ),
+      ),
     ).toBe(true);
     expect(warnings.some(w => w.includes('reindex'))).toBe(false);
 
@@ -331,7 +348,7 @@ describe('Knowledge semantic search', () => {
     const removals = warnings.filter(w => w.includes('removal failed'));
     expect(removals).toHaveLength(2);
     expect(removals.every(w => w.includes('search skips content that no longer exists'))).toBe(true);
-    expect(warnings.some(w => w.includes('embedded again the next time it changes'))).toBe(false);
+    expect(warnings.some(w => w.includes("couldn't embed"))).toBe(false);
     expect(vector.ids()).toContain(`page:${page.id}`);
     expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))).not.toContain('Refund policy');
   });
@@ -345,7 +362,7 @@ describe('Knowledge semantic search', () => {
       body: 'Refunds within 30 days.',
     });
     expect(first.status).toBe('created');
-    expect(warnings.some(w => w.includes('embedded again the next time it changes'))).toBe(true);
+    expect(warnings.some(w => w.includes('page "org:acme#refunds"') && w.includes('keyword search only'))).toBe(true);
     embedder.fail = false;
 
     // Re-sending the same content writes nothing, so nothing is embedded either.
@@ -501,6 +518,66 @@ describe('Knowledge semantic search', () => {
     expect(chunkIds(page.id).length).toBeLessThan(10);
   });
 
+  it('a vector write that fails while the database wakes is retried, and the page is embedded', async () => {
+    vector.failUpserts = 2;
+    const { page } = await acme()('knowledge_page', {
+      op: 'write',
+      scope: 'org:acme',
+      name: 'Refund policy',
+      body: 'Refunds within 30 days.',
+    });
+    const { status } = await knowledge.upsertPage({ scope: 'org:acme', path: 'desk', name: 'Desk', body: 'Courier.' });
+    expect(status).toBe('created');
+    vector.failUpserts = 2;
+    const note = await knowledge.addNote({ scope: 'org:acme', path: 'desk', text: 'Vacation requests go to HR.' });
+
+    expect(warnings).toEqual([]);
+    expect(vector.ids()).toEqual(expect.arrayContaining([`page:${page.id}`, `note:${note.id}`]));
+    expect(titles(await acme()('knowledge_search', { query: 'reimbursement' }))[0]).toBe('Refund policy');
+  });
+
+  it('retries a chunked page until every chunk is in', async () => {
+    embedder.maxTokens = 3_000;
+    vector.failUpserts = 3;
+    const { page } = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'guides/handbook',
+      name: 'Handbook',
+      body: longBody('Reimbursement goes back to the original card.'),
+    });
+    expect(warnings).toEqual([]);
+    expect(chunkIds(page.id).length).toBeGreaterThan(1);
+    expect(titles(await acme()('knowledge_search', { query: 'refund' }))).toContain('Handbook');
+  });
+
+  it('when every try fails, the write stands and the warning names the page as keyword-only', async () => {
+    vector.failUpserts = -1;
+    const result = await knowledge.upsertPage({
+      scope: 'org:acme',
+      path: 'guides/cli',
+      name: 'CLI',
+      body: 'Refunds within 30 days.',
+    });
+    expect(result.status).toBe('created');
+    // Four tries for the page, after four for the guides parent it created.
+    expect(vector.upserts).toBe(8);
+    const failed = warnings.filter(w => w.includes("couldn't embed"));
+    expect(failed).toEqual([
+      expect.stringContaining('page "org:acme#guides" after retrying'),
+      expect.stringContaining(
+        'page "org:acme#guides/cli" after retrying; it is findable by keyword search only until it is rewritten: Error: Connection terminated',
+      ),
+    ]);
+    expect(titles(await acme()('knowledge_search', { query: 'refund' }))).toEqual(['CLI']);
+  });
+
+  it('does not retry an embed the provider says cannot pass', async () => {
+    embedder.maxTokens = 1;
+    await knowledge.upsertPage({ scope: 'org:acme', path: 'a', name: 'A', body: 'Refunds within 30 days.' });
+    expect(embedder.calls).toBe(1);
+    expect(warnings.filter(w => w.includes('page "org:acme#a"'))).toHaveLength(1);
+  });
+
   it('needs both vector and embedder', () => {
     expect(() => new Knowledge({ scopes: {}, vector })).toThrow(/needs both `vector` and `embedder`/);
   });
@@ -525,30 +602,36 @@ describe('KnowledgeSemanticIndex bounds', () => {
     expect(looked).toBe(1_000);
   });
 
-  it("embeds a long page's chunks a few at a time, not one by one", async () => {
-    let inFlight = 0;
-    let most = 0;
-    const embedder = {
-      specificationVersion: 'v2',
-      provider: 'test',
-      modelId: 'slow',
-      maxEmbeddingsPerCall: 1,
-      supportsParallelCalls: true,
-      doEmbed: async ({ values }: { values: string[] }) => {
-        most = Math.max(most, ++inFlight);
-        await new Promise(resolve => setTimeout(resolve, 5));
-        inFlight--;
-        return { embeddings: values.map(() => [1, 0, 0, 0]) };
-      },
-    } as unknown as MastraEmbeddingModel<string>;
-    const index = new KnowledgeSemanticIndex(new MemoryVector(), embedder);
-    const body = Array.from(
-      { length: 12 },
-      (_, i) => `## Part ${i}\n\n${'Lorem ipsum dolor sit amet. '.repeat(200)}`,
-    ).join('\n\n');
-    await index.indexPage({ id: 'p1', name: 'Long', body, isScope: false } as never);
+  it.each([
+    { parallel: true, atLeast: 2, atMost: 4 },
+    { parallel: false, atLeast: 1, atMost: 1 },
+  ])(
+    "embeds a long page's chunks a few at a time, one at a time when parallel calls is $parallel",
+    async ({ parallel, atLeast, atMost }) => {
+      let inFlight = 0;
+      let most = 0;
+      const embedder = {
+        specificationVersion: 'v2',
+        provider: 'test',
+        modelId: 'slow',
+        maxEmbeddingsPerCall: 1,
+        supportsParallelCalls: parallel,
+        doEmbed: async ({ values }: { values: string[] }) => {
+          most = Math.max(most, ++inFlight);
+          await new Promise(resolve => setTimeout(resolve, 5));
+          inFlight--;
+          return { embeddings: values.map(() => [1, 0, 0, 0]) };
+        },
+      } as unknown as MastraEmbeddingModel<string>;
+      const index = new KnowledgeSemanticIndex(new MemoryVector(), embedder);
+      const body = Array.from(
+        { length: 12 },
+        (_, i) => `## Part ${i}\n\n${'Lorem ipsum dolor sit amet. '.repeat(200)}`,
+      ).join('\n\n');
+      await index.indexPage({ id: 'p1', name: 'Long', body, isScope: false } as never);
 
-    expect(most).toBeGreaterThan(1);
-    expect(most).toBeLessThanOrEqual(4);
-  });
+      expect(most).toBeGreaterThanOrEqual(atLeast);
+      expect(most).toBeLessThanOrEqual(atMost);
+    },
+  );
 });
