@@ -158,8 +158,12 @@ describe('Review Queue page', () => {
       expect(screen.getByText(/flagged question 0\b/)).toBeTruthy();
       expect(requestedPages).toEqual(['0', '1']);
     });
+  });
 
-    it('requests each page once while it looks for a deep-linked result', async () => {
+  describe('when the deep-linked result is on a later page', () => {
+    const { intersect } = useMockIntersectionObserver();
+
+    it('requests each page once while it looks for the result', async () => {
       const many = Array.from({ length: 300 }, (_, index) => ({
         ...results[2],
         id: `res-many-${index}`,
@@ -193,8 +197,10 @@ describe('Review Queue page', () => {
       await screen.findAllByText(/many question 250\b/, undefined, { timeout: 10_000 });
       await waitFor(() => expect(requested).toEqual(['0', '1', '2']));
     });
+  });
 
-    it('keeps loading when no loaded result matches the tag filter yet', async () => {
+  describe('when a tag filter matches no loaded result yet', () => {
+    it('keeps loading until a matching result shows', async () => {
       const taggedFlagged = {
         ...results[2],
         id: 'res-tagged',
