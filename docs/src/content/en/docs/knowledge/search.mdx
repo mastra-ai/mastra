@@ -43,7 +43,7 @@ Pages and notes written through the tools are embedded as they're written. Scope
 
 A page too long for one embedding is embedded as overlapping chunks of about 2,000 tokens, cut between paragraphs and before headings. Each chunk starts with the page's name and description. Search still returns the page once, ranked by its best chunk. A page gets at most 100 chunks, about 200,000 tokens of body. Search finds the rest of a longer body by keyword only. Rewriting a page replaces its chunks, and deleting it removes them.
 
-If embedding fails when a page or note is written, the write still succeeds and Mastra logs a warning. That page or note stays keyword-only until it's written again with a change, which embeds it. An `upsertPage()` call that comes back `unchanged` writes nothing and doesn't embed it.
+If embedding or the vector write fails when a page or note is written, Knowledge tries again after about half a second, 2 seconds and 7.5 seconds. That covers a database that scales to zero and takes a few seconds to wake. Errors the provider marks as not retryable, such as a bad API key, aren't tried again. If every attempt fails, the write still succeeds and Mastra logs a warning. That page or note stays keyword-only until it's written again with a change, which embeds it. An `upsertPage()` call that comes back `unchanged` writes nothing and doesn't embed it.
 
 If the embedder or vector store fails during a search, the search returns keyword results and logs a warning.
 
