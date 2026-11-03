@@ -211,7 +211,9 @@ export class SlackIntegration implements FactoryIntegration {
       throw new Error("SlackIntegration: 'botToken' is required in socket mode — Factory cannot reply without it.");
     }
     this.#config = config;
-    this.#toolSettings = slackToolSettingsSchema.parse({ ...DEFAULT_SLACK_TOOL_SETTINGS, ...config.tools });
+    // An explicit `undefined` means "use the default", not "unset it".
+    const granted = Object.fromEntries(Object.entries(config.tools ?? {}).filter(([, value]) => value !== undefined));
+    this.#toolSettings = slackToolSettingsSchema.parse({ ...DEFAULT_SLACK_TOOL_SETTINGS, ...granted });
     this.#adapterOptions = factoryAdapterOptions(adapterOverrides(config.adapterOptions));
     const textHidden = this.#textHidden;
     this.processors = {

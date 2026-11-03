@@ -262,6 +262,15 @@ describe('Slack tools on a Factory session, with access granted', () => {
     ]);
   });
 
+  it('treats a setting passed as undefined as left at its default', async () => {
+    const { tool } = await slackSession({ channels: undefined, directMessages: 'anyone' });
+
+    expect(tool('sendDirectMessage')).toBeDefined();
+    expect(String((tool('fetchChannelMessages') as { description?: unknown }).description)).toContain(
+      'Channels this session can use: slack:C1.',
+    );
+  });
+
   it('rejects a channel grant that is not a Slack channel id when the integration is set up', () => {
     expect(() => new SlackIntegration({ signingSecret: 'secret', tools: { channels: 'selected', channelIds: ['#eng'] } })).toThrow();
   });
