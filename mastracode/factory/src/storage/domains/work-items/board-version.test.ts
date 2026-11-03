@@ -36,6 +36,32 @@ function countCardReads(seed: Seed) {
   return () => findMany.mock.calls.filter(([collection]) => collection === 'work_items').length;
 }
 
+/** Lets the next card read take its snapshot, then holds that snapshot until released. */
+function holdNextCardRead(seed: Seed) {
+  const findMany = seed.storage.ops.findMany.bind(seed.storage.ops);
+  const taken = Promise.withResolvers<void>();
+  const held = Promise.withResolvers<void>();
+  vi.spyOn(seed.storage.ops, 'findMany').mockImplementationOnce(async (...args: Parameters<typeof findMany>) => {
+    const rows = await findMany(...args);
+    taken.resolve();
+    await held.promise;
+    return rows;
+  });
+  return { taken: taken.promise, release: held.resolve };
+}
+
+/** Resolves once the next board version read has returned to its caller. */
+function nextVersionRead(seed: Seed) {
+  const findOne = seed.storage.ops.findOne.bind(seed.storage.ops);
+  const read = Promise.withResolvers<void>();
+  vi.spyOn(seed.storage.ops, 'findOne').mockImplementationOnce(async (...args: Parameters<typeof findOne>) => {
+    const row = await findOne(...args);
+    setImmediate(read.resolve);
+    return row;
+  });
+  return read.promise;
+}
+
 const poll = (workItems: WorkItemsStorage, factoryProjectId = PROJECT) =>
   workItems.list({ orgId: ORG, factoryProjectId });
 
@@ -57,6 +83,40 @@ describe('board list cache', () => {
     expect(cardReads()).toBe(1);
     expect(second).toEqual(first);
     expect(third.map(item => item.title).sort()).toEqual(['One', 'Two']);
+  });
+
+  it('reads an uncached board once when several tabs poll it at the same moment', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seedCard(seed.workItems);
+    const cardReads = countCardReads(seed);
+
+    const [first, second] = await Promise.all([poll(seed.workItems), poll(seed.workItems)]);
+
+    expect(cardReads()).toBe(1);
+    first[0]!.title = 'mutated by a route';
+    expect(second[0]?.title).toBe('Fix login');
+  });
+
+  it('does not hand a poll made after an edit the cards read before it', async () => {
+    const seed = await createFactoryStorageForTests();
+    const card = await seedCard(seed.workItems);
+    const staleRead = holdNextCardRead(seed);
+    const before = poll(seed.workItems);
+    await staleRead.taken;
+
+    await seed.workItems.update({
+      orgId: ORG,
+      id: card.id,
+      userId: 'user-alice',
+      patch: { title: 'Fix login on Safari' },
+    });
+    const versionRead = nextVersionRead(seed);
+    const after = poll(seed.workItems);
+    await versionRead;
+    staleRead.release();
+
+    expect((await after).map(item => item.title)).toEqual(['Fix login on Safari']);
+    expect((await before).map(item => item.title)).toEqual(['Fix login']);
   });
 
   it('stops serving cards once every card is cleared', async () => {

@@ -953,39 +953,34 @@ export class GithubRules {
         // pull request's Review card still records it open, so a redelivery
         // after the close cannot block the Work item again.
         const trusted = (actor.type === 'github' && actor.trusted) || pullRequestFactoryAuthored;
-        const reviewCard =
-          authoringItem && trusted
-            ? await this.#linkedClosureItem(
-                project.orgId,
-                project.factoryProjectId,
-                repositoryId,
-                repositoryName,
-                pullRequestNumber,
-                authoringItem,
-              )
-            : undefined;
+        if (!authoringItem || !trusted || authoringItem.metadata?.openPullRequestNumber === pullRequestNumber) return;
+        const reviewCard = await this.#linkedClosureItem(
+          project.orgId,
+          project.factoryProjectId,
+          repositoryId,
+          repositoryName,
+          pullRequestNumber,
+          authoringItem,
+        );
         const stillOpen =
           companionStatus === 'replayed'
             ? reviewCard !== undefined && reviewCard.metadata?.state !== 'closed'
             : reviewCard?.metadata?.state !== 'closed';
-        if (authoringItem && trusted && stillOpen) {
-          // The head comes along so a head recorded for an earlier pull
-          // request cannot mark this one's verdict outdated. A replayed opening
-          // of the pull request already recorded keeps the head its pushes left.
-          const rebinding = authoringItem.metadata?.openPullRequestNumber !== pullRequestNumber;
-          const head = rebinding
-            ? {
-                pullRequestHeadSha: string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null,
-                pullRequestHeadAt: timestamp(pullRequest?.updated_at) ?? null,
-              }
-            : {};
-          await this.options.storage.update({
-            orgId: authoringItem.orgId,
-            id: authoringItem.id,
-            userId: 'factory-rule-dispatcher',
-            patch: { metadata: { openPullRequestNumber: pullRequestNumber, ...head } },
-          });
-        }
+        if (!stillOpen) return;
+        // The head comes along so a head recorded for an earlier pull
+        // request cannot mark this one's verdict outdated.
+        await this.options.storage.update({
+          orgId: authoringItem.orgId,
+          id: authoringItem.id,
+          userId: 'factory-rule-dispatcher',
+          patch: {
+            metadata: {
+              openPullRequestNumber: pullRequestNumber,
+              pullRequestHeadSha: string(object(pullRequest?.head)?.sha)?.toLowerCase() ?? null,
+              pullRequestHeadAt: timestamp(pullRequest?.updated_at) ?? null,
+            },
+          },
+        });
         return;
       }
       if (event !== 'pullRequestMerged' && event !== 'pullRequestClosed') return;

@@ -381,6 +381,24 @@ async function ingestPolledEvents(
   }
 }
 
+// Under the board's 30 s pull request poll, so a lone open board still reaches the rules on every poll.
+const POLLED_PAGE_INGEST_WINDOW_MS = 20_000;
+
+/**
+ * One rules pass per listed page per window, whichever board asked: each pass reads the whole
+ * project, and every open board polls the same pages. A board inside the window joins or skips it.
+ */
+function createPolledPageIngest() {
+  const passes = new Map<string, { startedAt: number; done: Promise<void> }>();
+  return (key: string, run: () => Promise<void>): Promise<void> => {
+    const last = passes.get(key);
+    if (last && Date.now() - last.startedAt < POLLED_PAGE_INGEST_WINDOW_MS) return last.done;
+    const done = run();
+    passes.set(key, { startedAt: Date.now(), done });
+    return done;
+  };
+}
+
 const LINKED_BACKLOG_MAX_PAGES = 5;
 
 function listedIssueOf(issue: Awaited<ReturnType<GithubIntegration['intake']['listIssues']>>['issues'][number]) {
@@ -479,6 +497,7 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
   } = options;
   const diagnostics = () =>
     getGithubFeatureDiagnostics({ github, auth, appDbConfigured: storage !== undefined, stateSigner, sandbox });
+  const ingestPolledPage = createPolledPageIngest();
 
   // The status route is always registered so the SPA can detect the disabled state.
   routes.push(
@@ -909,9 +928,13 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
             createdAt: pr.createdAt,
             updatedAt: pr.updatedAt,
           }));
-          await ingestPolledEvents(
-            responsePullRequests.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
-            options.ingestFactoryEvent,
+          await ingestPolledPage(
+            `${loaded.project.installation.externalId}:${loaded.project.repository.externalId}:${page}`,
+            () =>
+              ingestPolledEvents(
+                responsePullRequests.map(pullRequest => listedPullRequestEvent(loaded.project, pullRequest)),
+                options.ingestFactoryEvent,
+              ),
           );
           return c.json({
             pullRequests: responsePullRequests,

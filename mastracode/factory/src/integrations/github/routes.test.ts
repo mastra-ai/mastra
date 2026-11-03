@@ -1,4 +1,5 @@
 import { createHmac } from 'node:crypto';
+import { setImmediate } from 'node:timers/promises';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ListIntakeIssuesInput } from '../../capabilities/intake.js';
@@ -1672,6 +1673,65 @@ describe('prs route', () => {
     expect(ingestFactoryEvent).toHaveBeenCalledWith(
       expect.objectContaining({ payload: expect.objectContaining({ pull_request: listedPullRequestPayload }) }),
     );
+  });
+
+  it('runs the rules once per page while several boards poll inside the window', async () => {
+    seedMaterializedProject();
+    const ingestFactoryEvent = vi.fn(async () => undefined);
+    const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+    for (const path of ['prs', 'prs', 'prs?page=2']) {
+      const res = await app.request(`/web/github/projects/p1/${path}`);
+      expect((await res.json()).pullRequests).toHaveLength(1);
+    }
+
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+  });
+
+  it('runs the rules again for a page once the window has passed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      seedMaterializedProject();
+      const ingestFactoryEvent = vi.fn(async () => undefined);
+      const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+      await app.request('/web/github/projects/p1/prs');
+      vi.setSystemTime(Date.now() + 19_000);
+      await app.request('/web/github/projects/p1/prs');
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(1);
+
+      vi.setSystemTime(Date.now() + 2_000);
+      await app.request('/web/github/projects/p1/prs');
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('answers a board that polls during a rules pass once that pass is done, without starting another', async () => {
+    seedMaterializedProject();
+    const pass = Promise.withResolvers<void>();
+    const order: string[] = [];
+    const ingestFactoryEvent = vi.fn(async () => {
+      await pass.promise;
+      order.push('rules done');
+    });
+    const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+
+    const first = app.request('/web/github/projects/p1/prs');
+    await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
+    const second = Promise.resolve(app.request('/web/github/projects/p1/prs')).then(res => {
+      order.push('second answered');
+      return res;
+    });
+    await vi.waitFor(() => expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(2));
+    await setImmediate();
+    pass.resolve();
+
+    expect((await second).status).toBe(200);
+    expect((await first).status).toBe(200);
+    expect(ingestFactoryEvent).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['rules done', 'second answered']);
   });
 
   it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {
