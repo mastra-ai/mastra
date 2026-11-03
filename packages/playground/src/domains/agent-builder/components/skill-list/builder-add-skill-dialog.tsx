@@ -183,7 +183,7 @@ export function BuilderAddSkillDialog({
         <DialogBody layout="fill">
           <SearchInput
             label={`Search ${registryLabel}`}
-            placeholder={`Search ${registryLabel}...`}
+            placeholder={`Search ${registryLabel}`}
             value={searchQuery}
             onValueChange={handleSearch}
             data-testid="builder-add-skill-search"

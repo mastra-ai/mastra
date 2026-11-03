@@ -301,6 +301,7 @@ export const ACTIVE_RUN_BINDING_STAGES: ReadonlySet<string> = new Set([
   'planning',
   'execute',
   'review',
+  'pr-review',
 ]);
 
 interface SetAttentionReceiptInput {

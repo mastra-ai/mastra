@@ -48,7 +48,7 @@ import {
 import { applyThemePreference, normalizeThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
-import { getCurrentVersion } from './version.js';
+import { getCurrentVersion, isVersionCommand } from './version.js';
 
 let controller: Awaited<ReturnType<typeof createMastraCode>>['controller'];
 let mcpManager: Awaited<ReturnType<typeof createMastraCode>>['mcpManager'];
@@ -396,14 +396,18 @@ process.on('exit', () => {
   }
   // Belt-and-suspenders: always write terminal reset sequences directly,
   // regardless of whether tui.stop() succeeded. Writing them twice is harmless
-  // but missing them leaves the terminal in a corrupted state.
+  // but missing them leaves the terminal in a corrupted state. Skipped when
+  // stdout isn't a terminal, so piped output (`mastracode --version | cat`)
+  // stays clean.
   try {
-    process.stdout.write(
-      '\x1b[?2004l' + // disable bracketed paste
-        '\x1b[<u' + // pop kitty keyboard protocol
-        '\x1b[>4;0m' + // disable modifyOtherKeys
-        '\x1b[?25h', // show cursor
-    );
+    if (process.stdout.isTTY) {
+      process.stdout.write(
+        '\x1b[?2004l' + // disable bracketed paste
+          '\x1b[<u' + // pop kitty keyboard protocol
+          '\x1b[>4;0m' + // disable modifyOtherKeys
+          '\x1b[?25h', // show cursor
+      );
+    }
     if (process.stdin.setRawMode) {
       process.stdin.setRawMode(false);
     }
@@ -521,6 +525,11 @@ const handleFatalError = createOneShotFatalErrorHandler((error: unknown): void =
 });
 
 async function main() {
+  if (isVersionCommand(process.argv)) {
+    process.stdout.write(`${getCurrentVersion()}\n`);
+    return;
+  }
+
   if (process.argv[2] === 'plugin') {
     return pluginMain(process.argv.slice(3));
   }

@@ -231,7 +231,7 @@ export const ToolCardInner = ({
       break;
     }
     case 'knowledge': {
-      const card = knowledgeCard(toolName, input, output);
+      const card = knowledgeCard(toolName, input, output, state === 'output-error' ? (errorText ?? '') : undefined);
       if (card) {
         return (
           <KnowledgeToolBadge

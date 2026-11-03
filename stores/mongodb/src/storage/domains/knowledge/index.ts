@@ -85,6 +85,12 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     return this.#pages.listChildScopes(input);
   }
 
+  override countChildScopes(
+    input: Parameters<KnowledgePageStore['countChildScopes']>[0],
+  ): ReturnType<KnowledgePageStore['countChildScopes']> {
+    return this.#pages.countChildScopes(input);
+  }
+
   override getPages(input: Parameters<KnowledgePageStore['getPages']>[0]): ReturnType<KnowledgePageStore['getPages']> {
     return this.#pages.getPages(input);
   }
@@ -153,6 +159,36 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
     input: Parameters<KnowledgePageStore['listNotes']>[0],
   ): ReturnType<KnowledgePageStore['listNotes']> {
     return this.#pages.listNotes(input);
+  }
+
+  override replacePageBodyLinks(
+    input: Parameters<KnowledgePageStore['replacePageBodyLinks']>[0],
+  ): ReturnType<KnowledgePageStore['replacePageBodyLinks']> {
+    return this.#pages.replacePageBodyLinks(input);
+  }
+
+  override listPageBodyLinkSources(
+    input: Parameters<KnowledgePageStore['listPageBodyLinkSources']>[0],
+  ): ReturnType<KnowledgePageStore['listPageBodyLinkSources']> {
+    return this.#pages.listPageBodyLinkSources(input);
+  }
+
+  override countPageLinks(
+    input: Parameters<KnowledgePageStore['countPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['countPageLinks']> {
+    return this.#pages.countPageLinks(input);
+  }
+
+  override listPageLinks(
+    input: Parameters<KnowledgePageStore['listPageLinks']>[0],
+  ): ReturnType<KnowledgePageStore['listPageLinks']> {
+    return this.#pages.listPageLinks(input);
+  }
+
+  override countChildPages(
+    input: Parameters<KnowledgePageStore['countChildPages']>[0],
+  ): ReturnType<KnowledgePageStore['countChildPages']> {
+    return this.#pages.countChildPages(input);
   }
 
   override countNotes(
