@@ -6,7 +6,7 @@ import type { ReactNode } from 'react';
 import { Link, useMatch, useParams } from 'react-router';
 
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useLookedUpWorkItems } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
@@ -64,7 +64,8 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const userSessionId = sessionId ?? threadId;
   const sessionQuery = useUserSessionQuery(userSessionId);
   const projectRepositoryId = sessionQuery.data?.projectRepositoryId;
-  const items = useWorkItemsQuery(factoryId);
+  // The session's card with its related cards, read by session id instead of the whole board.
+  const items = useLookedUpWorkItems(factoryId, sessionId ? { kind: 'session', ids: [sessionId] } : undefined);
   const workspaces = useWorkspacesQuery(factoryId);
 
   const allItems = items.data ?? [];

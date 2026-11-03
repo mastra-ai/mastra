@@ -1,16 +1,28 @@
-import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useMemo } from 'react';
 
-/** Board cards: they title the session results and are searchable on their own before a session exists. */
+import { mergeCards, useLookedUpWorkItems, useUnstartedWorkItems } from '../../../../hooks/useWorkItems';
+import { allSessionRows, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
+
+/**
+ * The cards search needs, without the full board: each listed session's card, which titles the session
+ * results — the same lookup the sidebar makes — plus the open cards with no session yet, searchable on their own.
+ */
 export function useGlobalSearchWorkItems(factoryId: string | undefined) {
-  const query = useWorkItemsQuery(factoryId);
+  const workspaces = useWorkspacesQuery(factoryId);
+  const sessions = useLookedUpWorkItems(factoryId, {
+    kind: 'session',
+    ids: allSessionRows(workspaces.data).map(session => session.sessionId),
+  });
+  const unstarted = useUnstartedWorkItems(factoryId);
+  const items = useMemo(() => mergeCards(sessions.data, unstarted.data ?? []), [sessions.data, unstarted.data]);
 
   return {
-    items: query.data ?? [],
-    refetch: query.refetch,
-    pending: query.isLoading,
-    failed: query.isError,
+    items,
+    pending: sessions.isLoading || unstarted.isLoading,
+    failed: sessions.isError || unstarted.isError,
     retry: () => {
-      void query.refetch();
+      void sessions.refetch();
+      void unstarted.refetch();
     },
   };
 }

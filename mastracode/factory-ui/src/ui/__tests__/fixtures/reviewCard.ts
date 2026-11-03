@@ -39,6 +39,7 @@ export const reviewItem: WorkItemRow = {
   createdBy: 'user-1',
   createdAt: new Date(reviewCandidate.createdAt),
   updatedAt: new Date(reviewCandidate.updatedAt),
+  changedAt: new Date(reviewCandidate.updatedAt),
 };
 
 export const reviewDecision: FactoryDecisionSummary = {

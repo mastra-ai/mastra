@@ -530,6 +530,351 @@ describe('work item read wire', () => {
     expect((await listed.json()).workItems[0].metadata).toEqual({ number: 43 });
   });
 
+  it('pages, filters, counts and finds cards without sending the whole board', async () => {
+    // Each card gets its own second, so created-at order never falls back to the random-id tiebreak.
+    vi.useFakeTimers({ now: new Date('2026-10-29T12:00:00.000Z'), toFake: ['Date'] });
+    const seedCard = async (n: number, stage: string, title = `Card ${n}`) => {
+      vi.setSystemTime(new Date(Date.UTC(2026, 9, 29, 12, 0, n)));
+      return (
+        await seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: PROJECT_ID,
+          input: {
+            externalSource: {
+              integrationId: 'github',
+              type: 'issue',
+              externalId: String(n),
+              url: `https://github.com/acme/app/issues/${n}`,
+            },
+            title,
+            stages: [stage],
+            sessions: {},
+            metadata: { number: n, githubRepositoryId: 9, labels: ['bug'], selfReviewFindings: ['finding'] },
+          },
+        })
+      ).item;
+    };
+    const done = await seedCard(1, 'done');
+    await seedCard(2, 'intake');
+    await seedCard(3, 'intake', 'Login is broken');
+    await seedCard(4, 'intake');
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const titles = async (path: string) => {
+      const body = await (await json('GET', path)).json();
+      return { titles: body.workItems.map((item: { title: string }) => item.title), nextCursor: body.nextCursor };
+    };
+
+    const first = await titles(`${base}?stage=intake&sort=created-newest&limit=2`);
+    expect(first.titles).toEqual(['Card 4', 'Login is broken']);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    const second = await titles(`${base}?stage=intake&sort=created-newest&limit=2&cursor=${first.nextCursor}`);
+    expect(second).toEqual({ titles: ['Card 2'], nextCursor: undefined });
+    expect((await titles(`${base}?stage=intake&sort=created-oldest&limit=1`)).titles).toEqual(['Card 2']);
+    expect((await titles(`${base}?sort=created-oldest`)).titles).toEqual([
+      'Card 1',
+      'Card 2',
+      'Login is broken',
+      'Card 4',
+    ]);
+    // Sorting alone keeps the full card shape; only filtered or paged board reads drop review findings.
+    const sortedOnly = await (await json('GET', `${base}?sort=created-oldest`)).json();
+    expect(sortedOnly.workItems[0].metadata.selfReviewFindings).toEqual(['finding']);
+    const pagedOnly = await (await json('GET', `${base}?limit=1`)).json();
+    expect(pagedOnly.workItems[0].metadata.selfReviewFindings).toBeUndefined();
+    expect((await titles(`${base}?q=login`)).titles).toEqual(['Login is broken']);
+    expect((await titles(base)).titles).toHaveLength(4);
+
+    expect((await json('GET', `${base}?cursor=nope`)).status).toBe(400);
+    expect((await json('GET', `${base}?sort=sideways`)).status).toBe(400);
+
+    expect(await (await json('GET', `${base}/counts`)).json()).toEqual({
+      total: 4,
+      boards: { work: { done: 1, intake: 3 } },
+    });
+
+    const sources = (await (await json('GET', `${base}/sources`)).json()).sources;
+    expect(sources).toHaveLength(4);
+    expect(sources).toContainEqual({
+      board: 'work',
+      externalSource: {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: '1',
+        url: 'https://github.com/acme/app/issues/1',
+      },
+      metadata: { number: 1, githubRepositoryId: 9 },
+    });
+
+    const found = await json('GET', `${base}/${done.id}`);
+    expect((await found.json()).workItem.title).toBe('Card 1');
+    expect((await json('GET', `${base}/00000000-0000-4000-8000-000000000000`)).status).toBe(404);
+  });
+
+  it('filters and counts by source, label and person the way the board does', async () => {
+    const seedCard = (title: string, stage: string, externalSource: Record<string, unknown> | null, metadata = {}) =>
+      seed.workItems.upsert({
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: PROJECT_ID,
+        input: { externalSource, title, stages: [stage], sessions: {}, metadata },
+      });
+    const issue = (n: number) => ({
+      integrationId: 'github',
+      type: 'issue',
+      externalId: String(n),
+      url: `https://github.com/acme/app/issues/${n}`,
+    });
+    await seedCard('Ada bug', 'intake', issue(1), { author: 'Ada', assignees: ['grace'], labels: ['Bug', 'urgent'] });
+    await seedCard('Grace chore', 'execute', issue(2), { author: 'grace', labels: ['chore'] });
+    await seedCard('Ada done', 'done', issue(3), { author: 'ada', labels: ['bug'] });
+    await seedCard(
+      'Linear thing',
+      'intake',
+      { integrationId: 'linear', type: 'issue', externalId: 'FACT-1' },
+      {
+        creator: 'Ada',
+        linearProjectId: 'p1',
+      },
+    );
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const titles = async (query: string) =>
+      (await (await json('GET', `${base}?${query}`)).json()).workItems
+        .map((item: { title: string }) => item.title)
+        .sort();
+
+    expect(await titles('author=github:ada')).toEqual(['Ada bug', 'Ada done']);
+    expect(await titles('teammate=github:grace')).toEqual(['Ada bug', 'Grace chore']);
+    expect(await titles('assignee=github:grace')).toEqual(['Ada bug']);
+    expect(await titles('author=linear:ada')).toEqual(['Linear thing']);
+    expect(await titles('source=linear')).toEqual(['Linear thing']);
+    expect(await titles('linearProject=p1')).toEqual(['Linear thing']);
+    expect(await titles('label=BUG')).toEqual(['Ada bug', 'Ada done']);
+    expect(await titles('label=bug&stage=intake')).toEqual(['Ada bug']);
+    expect(await titles('label=bug,URGENT')).toEqual(['Ada bug']);
+    expect(await titles('label=bug,chore')).toEqual([]);
+    expect(await titles('author=github:ada&assignee=github:grace')).toEqual(['Ada bug']);
+
+    expect(await (await json('GET', `${base}/counts?author=github:ada&stage=intake`)).json()).toEqual({
+      total: 2,
+      boards: { work: { intake: 1, done: 1 } },
+    });
+  });
+
+  it('finds the cards holding given sessions or threads, Done ones included, in the board shape', async () => {
+    const seedCard = (title: string, stage: string, sessions: Record<string, unknown>, metadata = {}) =>
+      seed.workItems.upsert({
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: PROJECT_ID,
+        input: { externalSource: null, title, stages: [stage], sessions, metadata },
+      });
+    const ref = (n: number) => ({ sessionId: `/sb/s${n}`, branch: `b${n}`, threadId: `t${n}`, startedBy: 'u1' });
+    await seedCard('Open', 'execute', { work: ref(1) });
+    await seedCard('Shipped', 'done', { work: ref(2), review: ref(3) }, { selfReviewFindings: [{ note: 'big' }] });
+    await seedCard('Unrelated', 'done', { work: ref(4) });
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const read = async (query: string) => (await (await json('GET', `${base}?${query}`)).json()).workItems;
+    const titles = async (query: string) => (await read(query)).map((item: { title: string }) => item.title).sort();
+
+    expect(await titles(`session=${encodeURIComponent('/sb/s1,/sb/s3')}`)).toEqual(['Open', 'Shipped']);
+    expect(await titles('thread=t2')).toEqual(['Shipped']);
+    expect(await titles('session=/sb/nope')).toEqual([]);
+    const [shipped] = await read('thread=t3');
+    expect(shipped.metadata.selfReviewFindings).toBeUndefined();
+  });
+
+  it('narrows to open cards, and to cards with or without a session', async () => {
+    const seedCard = (title: string, stage: string, sessions: Record<string, unknown>) =>
+      seed.workItems.upsert({
+        orgId: 'org1',
+        userId: 'u1',
+        factoryProjectId: PROJECT_ID,
+        input: { externalSource: null, title, stages: [stage], sessions, metadata: {} },
+      });
+    const ref = { sessionId: '/sb/s1', branch: 'b1', threadId: 't1', startedBy: 'u1' };
+    await seedCard('Idle', 'intake', {});
+    await seedCard('Running', 'execute', { work: ref });
+    await seedCard('Shipped', 'done', {});
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const titles = async (query: string) =>
+      (await (await json('GET', `${base}?${query}`)).json()).workItems
+        .map((item: { title: string }) => item.title)
+        .sort();
+
+    expect(await titles('open=1')).toEqual(['Idle', 'Running']);
+    expect(await titles('started=0')).toEqual(['Idle', 'Shipped']);
+    expect(await titles('started=1')).toEqual(['Running']);
+    expect(await titles('open=1&started=0')).toEqual(['Idle']);
+  });
+
+  it("counts the New page's starters, failed runs by each card's latest effect", async () => {
+    const create = async (title: string, externalId: string) =>
+      (
+        await (
+          await json(
+            'POST',
+            `/web/factory/projects/${PROJECT_ID}/work-items`,
+            createBody({ title, externalSource: { integrationId: 'github', type: 'issue', externalId } }),
+          )
+        ).json()
+      ).workItem;
+    const stillFailed = await create('Still failed', '1');
+    const retried = await create('Retried', '2');
+    await create('Untriaged', '3');
+    const now = new Date('2030-01-01T00:00:00.000Z');
+    for (const [minute, [item, key]] of (
+      [
+        [stillFailed, 'starter-failed'],
+        [retried, 'starter-retried-old'],
+        [retried, 'starter-retried-new'],
+      ] as const
+    ).entries()) {
+      await seed.workItems.commitRuleEvaluation({
+        orgId: 'org1',
+        factoryProjectId: PROJECT_ID,
+        workItemId: item.id,
+        ingress: { identity: key, triggerType: 'test' },
+        configVersion: 'rules-v1',
+        expectedRevision: (await seed.workItems.get({ orgId: 'org1', id: item.id }))!.revision,
+        actor: { type: 'system', id: 'rules' },
+        outcome: { status: 'accepted' },
+        decisions: [{ type: 'invokeSkill', role: 'work', skillName: 'factory-plan', idempotencyKey: key }],
+        causalChain: [],
+        now: new Date(now.getTime() + minute * 60_000),
+      });
+    }
+    const byKey = new Map(
+      (await seed.workItems.listDeferredDecisions('org1', PROJECT_ID)).map(decision => [
+        decision.idempotencyKey,
+        decision,
+      ]),
+    );
+    await seed.storage.ops.updateMany(
+      'factory_deferred_decisions',
+      { id: { in: [byKey.get('starter-failed')!.id, byKey.get('starter-retried-old')!.id] } },
+      { status: 'failed', last_error: 'Broke.', completed_at: now, updated_at: now },
+    );
+
+    const response = await json('GET', `/web/factory/projects/${PROJECT_ID}/work-items/starters`);
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ failed: 1, untriaged: 3, review: { count: 0 } });
+  });
+
+  it("adds a looked-up card's parent, children and branch pull requests when asked", async () => {
+    const seedCard = async (title: string, input: Record<string, unknown> = {}) =>
+      (
+        await seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: PROJECT_ID,
+          input: { externalSource: null, title, stages: ['done'], sessions: {}, metadata: {}, ...input },
+        })
+      ).item;
+    const pullRequest = (number: number) => ({
+      integrationId: 'github',
+      type: 'pull-request',
+      externalId: `acme/app#${number}`,
+    });
+    const parent = await seedCard('Parent', {
+      sessions: { work: { sessionId: 's1', threadId: 't1', branch: 'feat/x' } },
+    });
+    await seedCard('Linked PR', { parentWorkItemId: parent.id, externalSource: pullRequest(1) });
+    await seedCard('Branch PR', { externalSource: pullRequest(2), metadata: { headBranch: 'feat/x' } });
+    await seedCard('Other PR', { externalSource: pullRequest(3), metadata: { headBranch: 'feat/y' } });
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const titles = async (query: string) =>
+      (await (await json('GET', `${base}?${query}`)).json()).workItems.map((item: { title: string }) => item.title);
+
+    expect(await titles('session=s1')).toEqual(['Parent']);
+    expect((await titles('session=s1&related=1')).toSorted()).toEqual(['Branch PR', 'Linked PR', 'Parent']);
+  });
+
+  it('reports when cards came in and shipped without sending the cards', async () => {
+    vi.useFakeTimers({ now: new Date('2026-10-01T00:00:00.000Z'), toFake: ['Date'] });
+    try {
+      const seedCard = (title: string, stage: string) =>
+        seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: PROJECT_ID,
+          input: { externalSource: null, title, stages: [stage], sessions: {}, metadata: {} },
+        });
+      await seedCard('Old', 'done');
+      vi.setSystemTime(new Date('2026-10-20T00:00:00.000Z'));
+      await seedCard('New open', 'intake');
+      await seedCard('New shipped', 'done');
+      const base = `/web/factory/projects/${PROJECT_ID}/work-items/activity`;
+
+      expect(await (await json('GET', `${base}?since=2026-10-10T00:00:00.000Z`)).json()).toEqual({
+        total: 3,
+        createdAt: ['2026-10-20T00:00:00.000Z', '2026-10-20T00:00:00.000Z'],
+        doneAt: ['2026-10-20T00:00:00.000Z'],
+      });
+      expect((await json('GET', `${base}?since=nope`)).status).toBe(400);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('starts a board from its open cards and then sends only what changed', async () => {
+    const t0 = new Date('2026-10-29T12:00:00.000Z');
+    vi.useFakeTimers({ now: t0, toFake: ['Date'] });
+    try {
+      const seedCard = async (title: string, stage: string, metadata: Record<string, unknown> = {}) =>
+        (
+          await seed.workItems.upsert({
+            orgId: 'org1',
+            userId: 'u1',
+            factoryProjectId: PROJECT_ID,
+            input: { externalSource: null, title, stages: [stage], sessions: {}, metadata },
+          })
+        ).item;
+      const open = await seedCard('Open', 'intake', { selfReviewFindings: ['long review text'], labels: ['bug'] });
+      const doomed = await seedCard('Doomed', 'intake');
+      await seedCard('Finished', 'done');
+      const base = `/web/factory/projects/${PROJECT_ID}/work-items/sync`;
+      const sync = async (cursor?: string) => (await json('GET', cursor ? `${base}?cursor=${cursor}` : base)).json();
+
+      const start = await sync();
+      expect(start.reset).toBe(true);
+      expect(start.workItems.map((item: { title: string }) => item.title).sort()).toEqual(['Doomed', 'Open']);
+      expect(start.workItems.find((item: { id: string }) => item.id === open.id).metadata).toEqual({ labels: ['bug'] });
+      expect(start.counts).toEqual({ total: 3, boards: { work: { intake: 2, done: 1 } } });
+      expect(start.deletedIds).toEqual([]);
+
+      vi.setSystemTime(new Date(t0.getTime() + 60_000));
+      // The first delta re-sends writes from just before the cursor; after that a quiet board gets nothing.
+      const caughtUp = await sync(start.cursor);
+      expect(caughtUp.reset).toBe(false);
+      expect(caughtUp.workItems).toHaveLength(3);
+      const quiet = await sync(caughtUp.cursor);
+      expect(quiet).toMatchObject({ reset: false, workItems: [], deletedIds: [] });
+
+      expect((await json('PATCH', `/web/factory/work-items/${open.id}`, { title: 'Renamed' })).status).toBe(200);
+      expect((await json('DELETE', `/web/factory/work-items/${doomed.id}`)).status).toBe(200);
+      const changed = await sync(quiet.cursor);
+      expect(changed.reset).toBe(false);
+      expect(changed.workItems.map((item: { title: string }) => item.title)).toEqual(['Renamed']);
+      expect(changed.deletedIds).toEqual([doomed.id]);
+      expect(changed.counts.total).toBe(2);
+
+      vi.setSystemTime(new Date(t0.getTime() + 8 * 24 * 60 * 60 * 1000));
+      expect((await sync(changed.cursor)).reset).toBe(true);
+      expect((await json('GET', `${base}?cursor=nope`)).status).toBe(400);
+
+      // A board that pages its own columns starts from the counts and cursor alone.
+      const lean = await (await json('GET', `${base}?cards=changed`)).json();
+      expect(lean).toMatchObject({ reset: true, workItems: [], counts: { total: 2 } });
+      expect((await json('PATCH', `/web/factory/work-items/${open.id}`, { title: 'Again' })).status).toBe(200);
+      const leanDelta = await (await json('GET', `${base}?cards=changed&cursor=${lean.cursor}`)).json();
+      expect(leanDelta.workItems.map((item: { title: string }) => item.title)).toEqual(['Again']);
+      expect((await json('GET', `${base}?cards=all`)).status).toBe(400);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('drops internal tokens from browser writes', async () => {
     const created = await json(
       'POST',

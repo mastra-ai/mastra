@@ -7,7 +7,10 @@ import type { BoardStageId } from '../stages';
 import { BoardColumnEmptyState } from './BoardColumnEmptyState';
 import { IntakeColumnExtras } from './IntakeColumnExtras';
 import { IntakeFeedNotice } from './IntakeFeedNotice';
+import type { BoardColumn } from '../hooks/useBoardColumns';
 import { BoardItemsSkeleton } from './BoardItemsSkeleton';
+import { LoadMoreSentinel } from './LoadMoreSentinel';
+import { OpenOnView } from './OpenOnView';
 
 export function BoardStageCards({
   stage,
@@ -16,6 +19,7 @@ export function BoardStageCards({
   kind,
   loading,
   taskCount,
+  loadedCount,
   feed,
   intakeSource,
   hasIntakeSource,
@@ -23,6 +27,7 @@ export function BoardStageCards({
   alreadyMaterialized,
   composer,
   emptyStateActions,
+  archive,
   children,
 }: {
   stage: { id: BoardStageId; label: string };
@@ -31,6 +36,8 @@ export function BoardStageCards({
   kind: BoardKind;
   loading: boolean;
   taskCount: number;
+  /** Cards and candidates the column holds now, which grows as pages load. */
+  loadedCount: number;
   feed?: IntakeFeed;
   intakeSource?: IntakeSource;
   hasIntakeSource: boolean;
@@ -38,14 +45,17 @@ export function BoardStageCards({
   alreadyMaterialized: number;
   composer?: ReactNode;
   emptyStateActions?: ReactNode;
+  /** A Done or Canceled column: its older cards load as it scrolls. */
+  archive?: BoardColumn;
   children: ReactNode;
 }) {
   const showEmptyState = !loading && !composer && taskCount === 0 && !feed?.error;
+  const skeleton = loading && <BoardItemsSkeleton label={`Loading ${stage.label} column`} layout={layout} />;
   return (
     <>
       {composer}
       {children}
-      {loading && <BoardItemsSkeleton label={`Loading ${stage.label} column`} layout={layout} />}
+      {archive && !archive.opened ? <OpenOnView onOpen={archive.open}>{skeleton}</OpenOnView> : skeleton}
       {showEmptyState && (
         <BoardColumnEmptyState
           stage={stage.id}
@@ -59,7 +69,17 @@ export function BoardStageCards({
         />
       )}
       {feed && <IntakeFeedNotice source={intakeSource} feed={feed} />}
-      {feed && <IntakeColumnExtras feed={feed} currentColumnLength={taskCount} layout={layout} />}
+      {feed && <IntakeColumnExtras feed={feed} currentColumnLength={loadedCount} layout={layout} />}
+      {archive && (
+        <LoadMoreSentinel
+          hasNextPage={archive.hasNextPage}
+          isFetchingNextPage={archive.isFetchingNextPage}
+          onLoadMore={archive.loadMore}
+          itemCount={loadedCount}
+          label={`Load more ${stage.label} cards`}
+          loadingIndicator={<BoardItemsSkeleton label={`Loading more ${stage.label} cards`} rows={1} layout={layout} />}
+        />
+      )}
     </>
   );
 }

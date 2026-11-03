@@ -9,6 +9,7 @@ import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { MAX_INTAKE_ROUTES } from '../storage/domains/boards/base.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
+import { WORK_ITEM_SORTS, decodeWorkItemCursor, decodeWorkItemSyncCursor } from './work-item-cursor.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
@@ -459,6 +460,71 @@ const decisionCursorSchema = z
     }
   });
 
+const commaListSchema = z
+  .string()
+  .optional()
+  .transform(value =>
+    value
+      ?.split(',')
+      .map(part => part.trim())
+      .filter(Boolean),
+  );
+
+/** Board filters, as the board UI names them; each list is comma-separated. */
+export const workItemFilterQuerySchema = z.object({
+  board: commaListSchema,
+  stage: commaListSchema,
+  q: z.string().max(200).optional(),
+  source: commaListSchema,
+  linearProject: commaListSchema,
+  label: commaListSchema,
+  teammate: commaListSchema,
+  author: commaListSchema,
+  assignee: commaListSchema,
+  reviewer: commaListSchema,
+  worked: commaListSchema,
+  /** Cards holding any of these sessions, so a session list can find its cards without reading every card. */
+  session: commaListSchema,
+  /** Cards holding a session on any of these threads. */
+  thread: commaListSchema,
+});
+
+export const workItemListQuerySchema = workItemFilterQuerySchema.extend({
+  /** `1` adds the matched cards' parents, children and pull requests after the page. */
+  related: z
+    .enum(['0', '1'])
+    .optional()
+    .transform(value => value === '1'),
+  /** `1`: only cards on a non-terminal phase, as the board's sync holds them. */
+  open: z
+    .enum(['0', '1'])
+    .optional()
+    .transform(value => value === '1'),
+  /** `0`: only cards with no session yet; `1`: only cards with one. */
+  started: z
+    .enum(['0', '1'])
+    .optional()
+    .transform(value => (value === undefined ? undefined : value === '1')),
+  sort: z.enum(WORK_ITEM_SORTS).optional().default('recent'),
+  limit: z
+    .string()
+    .regex(/^\d+$/)
+    .optional()
+    .transform(value => (value === undefined ? undefined : Math.max(1, Math.min(200, Number(value))))),
+  cursor: z
+    .string()
+    .optional()
+    .transform((value, context) => {
+      if (!value) return undefined;
+      const cursor = decodeWorkItemCursor(value);
+      if (!cursor) {
+        context.addIssue({ code: 'custom', message: 'Invalid cursor' });
+        return z.NEVER;
+      }
+      return cursor;
+    }),
+});
+
 export const decisionQuerySchema = z.object({
   statuses: z
     .string()
@@ -836,13 +902,119 @@ export const FACTORY_ROUTE_CONTRACTS = {
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',
-    description: 'List Factory work items and running sessions',
+    description:
+      'List Factory work items and running sessions. Without filters or a limit every card comes back; with `limit` the response pages by `nextCursor`.',
     pathSchema: projectPathSchema,
+    querySchema: workItemListQuerySchema,
     responseSchema: z.object({
       workItems: z.array(entitySchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
+      nextCursor: z.string().optional(),
     }),
+  },
+  workItemSync: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/sync',
+    description:
+      'Keep a board current. Without a cursor (or with one older than deletes are kept), returns every open card with `reset`; with one, only cards written or deleted since. With `cards=changed` a reset carries no cards, for a board that pages its columns itself. Feed events named `board` say when to ask again.',
+    pathSchema: projectPathSchema,
+    querySchema: z.object({
+      /** `changed`: a reset carries no cards, only the cursor, counts and sessions. */
+      cards: z.enum(['open', 'changed']).optional(),
+      cursor: z
+        .string()
+        .optional()
+        .transform((value, context) => {
+          if (!value) return undefined;
+          const at = decodeWorkItemSyncCursor(value);
+          if (!at) {
+            context.addIssue({ code: 'custom', message: 'Invalid cursor' });
+            return z.NEVER;
+          }
+          return at;
+        }),
+    }),
+    responseSchema: z.object({
+      cursor: z.string(),
+      reset: z.boolean(),
+      workItems: z.array(entitySchema),
+      deletedIds: z.array(z.string()),
+      counts: z.object({
+        total: z.number().int(),
+        boards: z.record(z.string(), z.record(z.string(), z.number().int())),
+      }),
+      runningSessionIds: z.array(z.string()),
+      parkedSessionIds: z.array(z.string()),
+    }),
+  },
+  workItemCounts: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/counts',
+    description: 'Count Factory work items per board and stage, under the same filters as the list',
+    pathSchema: projectPathSchema,
+    querySchema: workItemFilterQuerySchema,
+    responseSchema: z.object({
+      total: z.number().int(),
+      boards: z.record(z.string(), z.record(z.string(), z.number().int())),
+    }),
+  },
+  workItemActivity: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/activity',
+    description:
+      'When cards came in and shipped since a time, without the cards: what the activity chart counts over periods longer than the board holds',
+    pathSchema: projectPathSchema,
+    querySchema: z.object({ since: z.iso.datetime() }),
+    responseSchema: z.object({
+      total: z.number().int(),
+      createdAt: z.array(z.string()),
+      doneAt: z.array(z.string()),
+    }),
+  },
+  workItemStarters: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/starters',
+    description:
+      "What the New page's starter cards count over every card, without the cards: failed runs, review feedback, waiting pull requests, undecided, untriaged and unplanned cards, the largest area backlog and stale pull requests",
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      failed: z.number().int(),
+      changesRequested: z.number().int(),
+      review: z.object({ count: z.number().int(), oldestOpenedAt: z.string().optional() }),
+      undecided: z.number().int(),
+      untriaged: z.number().int(),
+      unplannedBugs: z.number().int(),
+      sweep: z.object({ area: z.string(), count: z.number().int() }).optional(),
+      stale: z.number().int(),
+    }),
+  },
+  workItemSources: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/sources',
+    description: 'List the external source of every Factory work item, for intake de-duplication',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      sources: z.array(
+        z.object({
+          board: z.string(),
+          externalSource: z.object({
+            integrationId: z.string(),
+            type: z.string(),
+            externalId: z.string(),
+            url: z.string().optional(),
+          }),
+          metadata: z.record(z.string(), z.unknown()),
+        }),
+      ),
+    }),
+  },
+  workItemGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/:workItemId',
+    description: 'Read one Factory work item',
+    pathSchema: transitionPathSchema,
+    responseSchema: workItemResponseSchema,
   },
   workItemCreate: {
     method: 'POST',

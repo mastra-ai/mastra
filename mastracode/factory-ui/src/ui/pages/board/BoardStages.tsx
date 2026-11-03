@@ -10,15 +10,15 @@ import { BoardColumn, BoardColumnHeader } from '../../domains/factory/components
 import { BoardDetailsDock } from '../../domains/factory/components/BoardDetailsDock';
 import { BoardList, BoardListGroup } from '../../domains/factory/components/BoardList';
 import { BoardOpenCardContext } from '../../domains/factory/context/BoardOpenCardContext';
+import type { BoardOpenCard } from '../../domains/factory/context/BoardOpenCardContext';
 import { BoardScrollContext } from '../../domains/factory/context/BoardScrollContext';
-import { useOpenCardState } from '../../domains/factory/hooks/useOpenCardState';
-import type { LinkedComment } from '../../domains/factory/hooks/useOpenCardState';
 
 export interface BoardStageView {
   stage: { id: string; label: string };
   phaseKind?: BoardPhaseKind;
   taskCount: number;
-  loading: boolean;
+  /** True until the board sync answers; it carries every column's count, so headers wait on nothing else. */
+  countLoading: boolean;
   collapsed: boolean;
   groupOpen: boolean;
   onGroupOpenChange: (open: boolean) => void;
@@ -30,20 +30,18 @@ export function BoardStages({
   layout,
   stages: stageViews,
   totalTaskCount,
-  linkedComment,
+  openCard,
   onDrop,
   toolbar,
 }: {
   layout: BoardLayout;
   stages: BoardStageView[];
   totalTaskCount: number;
-  /** A `?item&comment` link, which opens its card. */
-  linkedComment: LinkedComment | undefined;
+  openCard: BoardOpenCard;
   onDrop: (payload: DragPayload, stage: string) => void;
   toolbar: ReactNode;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const openCard = useOpenCardState(linkedComment);
   return (
     <BoardScrollContext value={scrollRef}>
       <BoardOpenCardContext value={openCard}>
@@ -62,7 +60,7 @@ export function BoardStages({
                         label={stageView.stage.label}
                         taskCount={stageView.taskCount}
                         totalTaskCount={totalTaskCount}
-                        loading={stageView.loading}
+                        loading={stageView.countLoading}
                         collapsed={stageView.collapsed}
                         headerAction={stageView.createButton}
                       />
@@ -99,7 +97,7 @@ export function BoardStages({
                           label={stageView.stage.label}
                           phaseKind={stageView.phaseKind}
                           count={stageView.taskCount}
-                          loading={stageView.loading}
+                          loading={stageView.countLoading}
                           open={stageView.groupOpen}
                           onOpenChange={stageView.onGroupOpenChange}
                           action={stageView.createButton}

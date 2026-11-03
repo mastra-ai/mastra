@@ -234,24 +234,211 @@ export interface BoardSnapshot {
   runningSessionIds: string[];
   /** Sessions parked on a tool until someone answers, read live with the cards. */
   parkedSessionIds: string[];
+  /** Set when the board came from a sync: what the next sync passes back to get only the changes. */
+  cursor?: string;
+  /** When the last full (non-delta) sync landed; the board resyncs from scratch once it is old. */
+  resetAt?: number;
+  /** Server-side cards per board and phase, counting the Done and Canceled cards the board never loaded. */
+  counts?: WorkItemCounts;
+  /** Cards deleted since the last full sync, so readers holding their own copies drop them too. */
+  deletedIds?: string[];
 }
 
-/** List the org's work items for a Factory project. */
-export async function listWorkItems(
+/** Cards per board and phase, counted by the server over every card including the ones never loaded. */
+export interface WorkItemCounts {
+  total: number;
+  boards: Record<string, Record<string, number>>;
+}
+
+export interface WorkItemSync {
+  /** Opaque; the next sync passes it back to get only what changed after it. */
+  cursor: string;
+  /** True when the server sent the whole open board rather than a delta, so the client replaces its cards. */
+  reset: boolean;
+  workItems: WorkItem[];
+  deletedIds: string[];
+  counts: WorkItemCounts;
+  runningSessionIds: string[];
+  parkedSessionIds: string[];
+}
+
+const projectWorkItemsUrl = (baseUrl: string, factoryProjectId: string, suffix = '') =>
+  `${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items${suffix}`;
+
+/**
+ * Sync the board: without a cursor the server sends every open card, with one only the cards written or
+ * deleted since. `cards: 'changed'` drops the open cards from a reset too, for a reader that pages its
+ * cards with {@link listWorkItemPage} and only needs to hear what changed.
+ */
+export async function syncWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  cursor: string | undefined,
+  signal?: AbortSignal,
+  options: { cards?: 'open' | 'changed' } = {},
+): Promise<WorkItemSync> {
+  const params = new URLSearchParams();
+  if (cursor) params.set('cursor', cursor);
+  if (options.cards) params.set('cards', options.cards);
+  const query = params.size > 0 ? `?${params.toString()}` : '';
+  const data = await requestJson<{
+    cursor: string;
+    reset: boolean;
+    workItems: WireWorkItem[];
+    deletedIds: string[];
+    counts: WorkItemCounts;
+    runningSessionIds: string[];
+    parkedSessionIds: string[];
+  }>(projectWorkItemsUrl(baseUrl, factoryProjectId, `/sync${query}`), { signal });
+  return { ...data, workItems: data.workItems.map(fromWireWorkItem) };
+}
+
+export type WorkItemPageSort = 'recent' | 'recent-mine' | 'created-newest' | 'created-oldest';
+
+/** Server-side filters, named after the query parameters of the paged list. */
+export interface WorkItemPageQuery extends WorkItemFilterQuery {
+  board?: string;
+  stage?: string;
+  q?: string;
+  sort?: WorkItemPageSort;
+  limit?: number;
+  cursor?: string;
+  /** Comma-separated session ids: the cards holding any of them. */
+  session?: string;
+  /** Comma-separated thread ids: the cards holding a session on any of them. */
+  thread?: string;
+  /** Also return the matched cards' parents, children and pull requests. */
+  related?: '1';
+  /** `1`: only cards on a non-terminal phase. */
+  open?: '1';
+  /** `0`: only cards with no session yet; `1`: only cards with one. */
+  started?: '0' | '1';
+}
+
+/** The board's own filters, each a comma-separated list; the server matches them as the board does. */
+export interface WorkItemFilterQuery {
+  source?: string;
+  linearProject?: string;
+  label?: string;
+  teammate?: string;
+  author?: string;
+  assignee?: string;
+  reviewer?: string;
+  worked?: string;
+}
+
+export interface WorkItemPage {
+  workItems: WorkItem[];
+  nextCursor?: string;
+}
+
+/** One page of cards matching a filter, in the given sort; `nextCursor` reads the page after it. */
+export async function listWorkItemPage(
+  baseUrl: string,
+  factoryProjectId: string,
+  query: WorkItemPageQuery,
+  signal?: AbortSignal,
+): Promise<WorkItemPage> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  }
+  const data = await requestJson<{ workItems: WireWorkItem[]; nextCursor?: string }>(
+    projectWorkItemsUrl(baseUrl, factoryProjectId, `?${params.toString()}`),
+    { signal },
+  );
+  return {
+    workItems: data.workItems.map(fromWireWorkItem),
+    ...(data.nextCursor ? { nextCursor: data.nextCursor } : {}),
+  };
+}
+
+/** Cards per board and phase matching a filter; stage filters aside, every column is counted. */
+export async function countWorkItems(
+  baseUrl: string,
+  factoryProjectId: string,
+  query: WorkItemFilterQuery & { board?: string; q?: string },
+  signal?: AbortSignal,
+): Promise<WorkItemCounts> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== '') params.set(key, String(value));
+  }
+  return requestJson(projectWorkItemsUrl(baseUrl, factoryProjectId, `/counts?${params.toString()}`), { signal });
+}
+
+/** When the project's cards came in and shipped since a time, and how many cards it has: the activity chart's input. */
+export async function getWorkItemActivity(
+  baseUrl: string,
+  factoryProjectId: string,
+  since: Date,
+  signal?: AbortSignal,
+): Promise<{ total: number; createdAt: string[]; doneAt: string[] }> {
+  const params = new URLSearchParams({ since: since.toISOString() });
+  return requestJson(projectWorkItemsUrl(baseUrl, factoryProjectId, `/activity?${params.toString()}`), { signal });
+}
+
+/** What the New page's starter cards count, counted by the server over every card of the project. */
+export interface WorkItemStarters {
+  /** Open cards whose latest run failed. */
+  failed: number;
+  /** Factory's open pull requests whose current review asked for changes. */
+  changesRequested: number;
+  /** Open pull requests waiting in Review Intake that were opened in the last month. */
+  review: { count: number; oldestOpenedAt?: string };
+  /** Cards triage looked at and left in Work Intake for a person to decide on. */
+  undecided: number;
+  /** Cards in Work Intake that triage has not run on. */
+  untriaged: number;
+  /** Bugs not started that have no plan. */
+  unplannedBugs: number;
+  /** The area label with the most cards not started, when it has enough of them. */
+  sweep?: { area: string; count: number };
+  /** Open pull requests waiting in Review Intake for over a month. */
+  stale: number;
+}
+
+export async function getWorkItemStarters(
   baseUrl: string,
   factoryProjectId: string,
   signal?: AbortSignal,
-): Promise<BoardSnapshot> {
+): Promise<WorkItemStarters> {
+  return requestJson(projectWorkItemsUrl(baseUrl, factoryProjectId, '/starters'), { signal });
+}
+
+/** One card by id, Done and Canceled included: what a deep link to a card the board never loaded reads. */
+export async function getWorkItem(
+  baseUrl: string,
+  factoryProjectId: string,
+  workItemId: string,
+  signal?: AbortSignal,
+): Promise<WorkItem> {
+  const data = await requestJson<{ workItem: WireWorkItem }>(
+    projectWorkItemsUrl(baseUrl, factoryProjectId, `/${encodeURIComponent(workItemId)}`),
+    { signal },
+  );
+  return fromWireWorkItem(data.workItem);
+}
+
+/** What Intake needs to recognise an issue that already has a card: the card's source, never the card. */
+export type WorkItemSourceRef = Pick<WorkItem, 'board' | 'source' | 'sourceKey' | 'url' | 'metadata'>;
+
+/** The source of every card on the project, Done and Canceled included, for Intake's dedupe. */
+export async function listWorkItemSources(
+  baseUrl: string,
+  factoryProjectId: string,
+  signal?: AbortSignal,
+): Promise<WorkItemSourceRef[]> {
   const data = await requestJson<{
-    workItems: WireWorkItem[];
-    runningSessionIds?: string[];
-    parkedSessionIds?: string[];
-  }>(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}/work-items`, { signal });
-  return {
-    workItems: data.workItems.map(fromWireWorkItem),
-    runningSessionIds: data.runningSessionIds ?? [],
-    parkedSessionIds: data.parkedSessionIds ?? [],
-  };
+    sources: { board: string; externalSource: ExternalWorkItemSource; metadata: Record<string, unknown> }[];
+  }>(projectWorkItemsUrl(baseUrl, factoryProjectId, '/sources'), { signal });
+  return data.sources.map(({ board, externalSource, metadata }) => ({
+    board,
+    source: sourceFromExternalSource(externalSource),
+    sourceKey: externalSource.externalId,
+    url: externalSourceUrl(externalSource),
+    metadata,
+  }));
 }
 
 /** Create a work item; the server upserts on its external source identity so repeats reuse the card. */

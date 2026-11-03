@@ -227,3 +227,64 @@ describe('board list cache', () => {
     }
   });
 });
+
+describe('board change signals', () => {
+  it('stamps every card write so a board syncing by write time sees it', async () => {
+    const seed = await createFactoryStorageForTests();
+    const card = await seedCard(seed.workItems);
+    const later = new Date(card.updatedAt.getTime() + 60_000);
+    vi.useFakeTimers({ now: later, toFake: ['Date'] });
+    try {
+      // A raw bookkeeping write, like the autonomy arm on a plan approval.
+      await seed.workItems['ops'].updateAtomic('work_items', { id: card.id }, () => ({ claim_key: 'claimed' }));
+    } finally {
+      vi.useRealTimers();
+    }
+    const [stored] = await poll(seed.workItems);
+    expect(stored?.changedAt).toEqual(later);
+    // Bookkeeping is not an edit: the card's own last-updated time stays put.
+    expect(stored?.updatedAt).toEqual(card.updatedAt);
+  });
+
+  it('tells the board after each committed write to its cards, and records deletes', async () => {
+    const seed = await createFactoryStorageForTests();
+    const changed: string[] = [];
+    seed.workItems.onBoardChanged(scope => changed.push(scope.factoryProjectId));
+    const card = await seedCard(seed.workItems);
+    await seed.workItems.update({ orgId: ORG, id: card.id, userId: 'user-alice', patch: { title: 'Renamed' } });
+    await seed.workItems['ops'].updateAtomic('work_items', { id: card.id }, () => null);
+    await seed.workItems.delete({ orgId: ORG, id: card.id });
+
+    expect(changed).toEqual([PROJECT, PROJECT, PROJECT]);
+    const deleted = await seed.workItems.listDeletedSince({
+      orgId: ORG,
+      factoryProjectId: PROJECT,
+      since: card.createdAt,
+    });
+    expect(deleted.map(entry => entry.id)).toEqual([card.id]);
+  });
+
+  it('reads only the deletes inside a sync window, including one at its edge', async () => {
+    const seed = await createFactoryStorageForTests();
+    vi.useFakeTimers({ now: new Date('2026-10-29T12:00:00.000Z'), toFake: ['Date'] });
+    try {
+      const old = await seedCard(seed.workItems);
+      const edge = await seedCard(seed.workItems);
+      const late = await seedCard(seed.workItems);
+      await seed.workItems.delete({ orgId: ORG, id: old.id });
+      vi.setSystemTime(new Date('2026-10-29T12:01:00.000Z'));
+      await seed.workItems.delete({ orgId: ORG, id: edge.id });
+      vi.setSystemTime(new Date('2026-10-29T12:02:00.000Z'));
+      await seed.workItems.delete({ orgId: ORG, id: late.id });
+
+      const deleted = await seed.workItems.listDeletedSince({
+        orgId: ORG,
+        factoryProjectId: PROJECT,
+        since: new Date('2026-10-29T12:01:00.000Z'),
+      });
+      expect(deleted.map(entry => entry.id)).toEqual([edge.id, late.id]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

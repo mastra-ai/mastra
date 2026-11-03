@@ -1,11 +1,5 @@
-import { hasLabel, metadataLabels, pullRequestStatusForItem, sourceCreatedAt } from './boardItems';
-import { belongsToBoard, itemAppearsInStage, itemStageOptions } from './boardStages';
-import { awaitsTriageDecision, TRIAGE_DECISIONS } from './cardPrimaryAction';
-import { reviewVerdict } from './reviewVerdict';
-import type { FactoryDecisionSummary } from './services/decisions';
-import { isPullRequestSource } from './services/workItems';
-import type { WorkItem } from './services/workItems';
-import { BOARD_STAGES, isTerminalStage } from './stages';
+import { TRIAGE_DECISIONS } from './cardPrimaryAction';
+import type { WorkItemStarters } from './services/workItems';
 
 export type StarterKind = 'unblock' | 'feedback' | 'review' | 'decide' | 'triage' | 'bug' | 'sweep' | 'stale';
 
@@ -23,20 +17,7 @@ export interface StarterPrompt extends StarterFact {
 
 const SHOWN = 6;
 const BATCH = 5;
-const SWEEP_MIN = 3;
 const DAY_MS = 24 * 60 * 60 * 1000;
-const MONTH_MS = 30 * DAY_MS;
-const GITHUB_TYPE_LABELS = new Set([
-  'bug',
-  'documentation',
-  'duplicate',
-  'enhancement',
-  'good first issue',
-  'help wanted',
-  'invalid',
-  'question',
-  'wontfix',
-]);
 const TRIAGE_CHOICES = new Intl.ListFormat('en', { type: 'disjunction' }).format(
   TRIAGE_DECISIONS.map(({ label }) => label),
 );
@@ -61,142 +42,57 @@ function theBatch(total: number, verb: string, which: string): string {
   return total === 1 ? `${verb} it` : `${verb} the ${Math.min(BATCH, total)} ${which}`;
 }
 
-function openedAt(item: WorkItem): number {
-  return Date.parse(sourceCreatedAt(item.metadata) ?? item.createdAt);
-}
-
-function isOpen(item: WorkItem): boolean {
-  return !item.stages.some(isTerminalStage);
-}
-
-function inIntake(item: WorkItem): boolean {
-  return (
-    belongsToBoard(item, 'work') &&
-    !isPullRequestSource(item.source) &&
-    itemAppearsInStage(item, 'intake', BOARD_STAGES)
-  );
-}
-
-function notStarted(item: WorkItem): boolean {
-  return (
-    inIntake(item) ||
-    (belongsToBoard(item, 'work') && !isPullRequestSource(item.source) && item.stages.includes('triage'))
-  );
-}
-
-/** A pull request's own card, on Work or on the Review board it used to be filed on. */
-function reviewedPullRequest(item: WorkItem): boolean {
-  return isPullRequestSource(item.source) && (belongsToBoard(item, 'work') || belongsToBoard(item, 'review'));
-}
-
-function waitsForReview(item: WorkItem): boolean {
-  return (
-    reviewedPullRequest(item) &&
-    itemAppearsInStage(item, 'intake', itemStageOptions(item)) &&
-    pullRequestStatusForItem(item) === 'open'
-  );
-}
-
-function areaLabels(item: WorkItem): string[] {
-  return metadataLabels(item.metadata).filter(
-    label => !label.includes(':') && !GITHUB_TYPE_LABELS.has(label.toLowerCase()),
-  );
-}
-
-function unblock(cards: readonly WorkItem[], effectByItem: ReadonlyMap<string, FactoryDecisionSummary>) {
-  const failed = cards.filter(item => effectByItem.get(item.id)?.status === 'failed' && isOpen(item)).length;
-  if (failed === 0) return undefined;
-  return { label: 'Failed runs', value: failed, action: upTo(failed, 'Debug and retry') };
-}
-
-function feedback(cards: readonly WorkItem[]) {
-  const changesRequested = cards.filter(item => {
-    if (!reviewedPullRequest(item) || item.metadata.factoryAuthored !== true) return false;
-    if (pullRequestStatusForItem(item) !== 'open') return false;
-    const verdict = reviewVerdict(item.metadata);
-    return verdict !== undefined && !verdict.approved && !verdict.outdated;
-  }).length;
-  if (changesRequested === 0) return undefined;
-  return { label: 'Changes requested', value: changesRequested, action: 'Make the changes' };
-}
-
-function review(cards: readonly WorkItem[], now: number) {
-  const since = now - MONTH_MS;
-  const opened = cards
-    .filter(waitsForReview)
-    .map(openedAt)
-    .filter(time => time >= since);
-  if (opened.length === 0) return undefined;
-  const days = Math.floor((now - Math.min(...opened)) / DAY_MS);
+function review({ count, oldestOpenedAt }: WorkItemStarters['review'], now: number): StarterFact | undefined {
+  if (count === 0 || oldestOpenedAt === undefined) return undefined;
+  const days = Math.max(0, Math.floor((now - Date.parse(oldestOpenedAt)) / DAY_MS));
   return {
     label: 'Longest review wait',
     value: days,
     unit: days === 1 ? 'day' : 'days',
-    action: theBatch(opened.length, 'Review', 'oldest'),
+    action: theBatch(count, 'Review', 'oldest'),
   };
 }
 
-function decide(cards: readonly WorkItem[]) {
-  const undecided = cards.filter(item => inIntake(item) && awaitsTriageDecision(item, 'intake')).length;
-  if (undecided === 0) return undefined;
-  return { label: 'Triaged, waiting for you', value: undecided, action: 'Help me decide' };
-}
-
-function triage(cards: readonly WorkItem[]) {
-  const untriaged = cards.filter(item => inIntake(item) && item.sessions.triage === undefined).length;
-  if (untriaged === 0) return undefined;
-  return { label: 'Untriaged in Intake', value: untriaged, action: theBatch(untriaged, 'Triage', 'newest') };
-}
-
-function bug(cards: readonly WorkItem[]) {
-  const unplanned = cards.filter(
-    item => notStarted(item) && hasLabel(metadataLabels(item.metadata), 'bug') && item.sessions.plan === undefined,
-  ).length;
-  if (unplanned === 0) return undefined;
-  return {
-    label: 'Bugs with no plan',
-    value: unplanned,
-    action: unplanned === 1 ? 'Plan a fix' : 'Plan a fix for one',
-  };
-}
-
-function sweep(cards: readonly WorkItem[]) {
-  const byArea = new Map<string, number>();
-  for (const item of cards.filter(notStarted)) {
-    for (const area of areaLabels(item)) byArea.set(area, (byArea.get(area) ?? 0) + 1);
-  }
-  const largest = [...byArea].sort(([a, x], [b, y]) => y - x || a.localeCompare(b))[0];
-  if (largest === undefined || largest[1] < SWEEP_MIN) return undefined;
-  const [area, waiting] = largest;
-  return { label: `${area} backlog`, value: waiting, action: 'Group by root cause' };
-}
-
-function stale(cards: readonly WorkItem[], now: number) {
-  const before = now - MONTH_MS;
-  const forgotten = cards.filter(item => waitsForReview(item) && openedAt(item) < before).length;
-  if (forgotten === 0) return undefined;
-  return { label: 'Stale pull requests', value: forgotten, action: 'Flag what to close' };
-}
-
-export function starterPrompts({
-  cards,
-  effectByItem,
-  now,
-}: {
-  cards: readonly WorkItem[];
-  effectByItem: ReadonlyMap<string, FactoryDecisionSummary>;
-  now: Date;
-}): StarterPrompt[] {
-  const at = now.getTime();
+/** Turns the server's starter counts into the New page's starter cards, most urgent first. */
+export function starterPrompts({ starters, now }: { starters: WorkItemStarters; now: Date }): StarterPrompt[] {
+  const { failed, changesRequested, undecided, untriaged, unplannedBugs, sweep, stale } = starters;
   const facts: Array<[StarterKind, StarterFact | undefined]> = [
-    ['unblock', unblock(cards, effectByItem)],
-    ['feedback', feedback(cards)],
-    ['review', review(cards, at)],
-    ['decide', decide(cards)],
-    ['triage', triage(cards)],
-    ['bug', bug(cards)],
-    ['sweep', sweep(cards)],
-    ['stale', stale(cards, at)],
+    [
+      'unblock',
+      failed > 0 ? { label: 'Failed runs', value: failed, action: upTo(failed, 'Debug and retry') } : undefined,
+    ],
+    [
+      'feedback',
+      changesRequested > 0
+        ? { label: 'Changes requested', value: changesRequested, action: 'Make the changes' }
+        : undefined,
+    ],
+    ['review', review(starters.review, now.getTime())],
+    [
+      'decide',
+      undecided > 0 ? { label: 'Triaged, waiting for you', value: undecided, action: 'Help me decide' } : undefined,
+    ],
+    [
+      'triage',
+      untriaged > 0
+        ? { label: 'Untriaged in Intake', value: untriaged, action: theBatch(untriaged, 'Triage', 'newest') }
+        : undefined,
+    ],
+    [
+      'bug',
+      unplannedBugs > 0
+        ? {
+            label: 'Bugs with no plan',
+            value: unplannedBugs,
+            action: unplannedBugs === 1 ? 'Plan a fix' : 'Plan a fix for one',
+          }
+        : undefined,
+    ],
+    [
+      'sweep',
+      sweep ? { label: `${sweep.area} backlog`, value: sweep.count, action: 'Group by root cause' } : undefined,
+    ],
+    ['stale', stale > 0 ? { label: 'Stale pull requests', value: stale, action: 'Flag what to close' } : undefined],
   ];
   return facts
     .flatMap(([kind, fact]) => (fact === undefined ? [] : [{ kind, prompt: PROMPTS[kind], ...fact }]))

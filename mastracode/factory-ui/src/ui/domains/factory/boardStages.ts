@@ -33,7 +33,7 @@ export function boardStages(kind: BoardKind): ReadonlyArray<BoardStage> {
   return kind === 'review' ? REVIEW_BOARD_STAGES : BOARD_STAGES;
 }
 
-export function belongsToBoard(item: WorkItem, kind: BoardKind): boolean {
+export function belongsToBoard(item: Pick<WorkItem, 'board' | 'source'>, kind: BoardKind): boolean {
   return itemBoard(item) === kind;
 }
 
@@ -66,7 +66,7 @@ export function boardLoadingStages({
   return loading;
 }
 
-export function itemBoard(item: WorkItem): string {
+export function itemBoard(item: Pick<WorkItem, 'board' | 'source'>): string {
   return item.board ?? (item.source === 'github-pr' || item.source === 'gitlab-pr' ? 'review' : 'work');
 }
 

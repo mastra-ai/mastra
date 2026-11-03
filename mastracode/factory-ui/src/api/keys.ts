@@ -97,6 +97,40 @@ export const queryKeys = {
     ['intake', 'label-routes', factoryProjectId ?? null] as const,
   channelAccounts: () => ['channel-accounts'] as const,
   workItems: (factoryProjectId: string | undefined) => ['factory', 'work-items', factoryProjectId ?? null] as const,
+  /** Kept apart from `workItems` so invalidating the board never refetches the cards looked up beside it. */
+  workItemLookupRoot: (factoryProjectId: string | undefined) =>
+    ['factory', 'work-item-lookup', factoryProjectId ?? null] as const,
+  workItemLookup: (factoryProjectId: string | undefined, kind: 'session' | 'thread', ids: string) =>
+    [...queryKeys.workItemLookupRoot(factoryProjectId), kind, ids] as const,
+  /** Open cards no session has started yet; under the lookup root so deletes and resyncs reach it. */
+  workItemsUnstarted: (factoryProjectId: string | undefined) =>
+    [...queryKeys.workItemLookupRoot(factoryProjectId), 'unstarted'] as const,
+  /**
+   * The board page's lean sync: the cursor, counts and sessions, plus only the cards changed since its
+   * last reset. Nested under `workItems` so every board invalidation reaches it too.
+   */
+  workItemChanges: (factoryProjectId: string | undefined) =>
+    [...queryKeys.workItems(factoryProjectId), 'changes'] as const,
+  /** Every column page and filtered count a board has read; deletes and resyncs invalidate it. */
+  workItemColumnsRoot: (factoryProjectId: string | undefined) =>
+    ['factory', 'work-item-columns', factoryProjectId ?? null] as const,
+  workItemColumn: (
+    factoryProjectId: string | undefined,
+    board: string,
+    stage: string,
+    sort: string,
+    filters: string,
+    cursor: string | null,
+  ) => [...queryKeys.workItemColumnsRoot(factoryProjectId), board, stage, sort, filters, cursor] as const,
+  workItemColumnCounts: (factoryProjectId: string | undefined, filters: string) =>
+    [...queryKeys.workItemColumnsRoot(factoryProjectId), 'counts', filters] as const,
+  /** The New page's starter counts. Apart from `workItems`, whose snapshots card patches assume. */
+  workItemStarters: (factoryProjectId: string | undefined) =>
+    ['factory', 'work-item-starters', factoryProjectId ?? null] as const,
+  workItemActivity: (factoryProjectId: string | undefined, depth: string) =>
+    ['factory', 'work-item-activity', factoryProjectId ?? null, depth] as const,
+  workItemSources: (factoryProjectId: string | undefined) =>
+    ['factory', 'work-item-sources', factoryProjectId ?? null] as const,
   /** Every comment read, all work items — the catch-up target after a stream drop. */
   workItemCommentsAll: () => ['factory', 'work-item-comments'] as const,
   /** Every comment read for a work item — the invalidation target for a feed event. */

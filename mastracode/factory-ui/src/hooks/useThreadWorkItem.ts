@@ -1,13 +1,9 @@
-import { useQuery } from '@tanstack/react-query';
-
-import { useApiConfig } from '../api/config';
-import type { BoardSnapshot, WorkItem } from '../ui/domains/factory/services/workItems';
-import { boardQueryOptions } from './useWorkItems';
+import type { WorkItem } from '../ui/domains/factory/services/workItems';
+import { useLookedUpWorkItems } from './useWorkItems';
 
 /**
- * Threads carry no work-item ref of their own, so the card is found in the
- * board snapshot by its session's threadId — the board query is already
- * mounted and polling on both thread routes, so this adds no request.
+ * Threads carry no work-item ref of their own, so the card is found by its
+ * session's threadId.
  */
 export function findThreadWorkItem(
   items: WorkItem[],
@@ -30,9 +26,7 @@ export function useThreadWorkItem(
   threadId: string | undefined,
   sessionId?: string,
 ) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
-    ...boardQueryOptions(baseUrl, factoryProjectId),
-    select: (board: BoardSnapshot) => findThreadWorkItem(board.workItems, threadId, sessionId),
-  });
+  // The thread's card, Done and Canceled included, read by thread id instead of the whole board.
+  const items = useLookedUpWorkItems(factoryProjectId, threadId ? { kind: 'thread', ids: [threadId] } : undefined);
+  return { ...items, data: items.data && findThreadWorkItem(items.data, threadId, sessionId) };
 }

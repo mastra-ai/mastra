@@ -7,7 +7,7 @@ import {
   useTransitionWorkItemMutation,
   useUpdateWorkItemMutation,
   useUpsertWorkItemMutation,
-  useWorkItemsQuery,
+  useWorkItemSources,
 } from '../../../../hooks/useWorkItems';
 import type { DragPayload } from '../boardDrag';
 import { persistedSourceKeys } from '../boardItems';
@@ -24,21 +24,23 @@ interface MoveOptions {
   repositorySlug?: string;
 }
 
-/** The board's persisted cards: the query behind them and the moves that rewrite them. */
+/** The moves that rewrite a reader's persisted cards: the board page's columns or the search palette's hits. */
 export function useBoardItems({
   factoryProjectId,
   kind,
   currentUserId,
+  board,
   onFailure,
 }: {
   factoryProjectId: string | undefined;
   kind: BoardKind;
   currentUserId?: string;
+  /** The cards this reader loaded; moves and drops act only on these. */
+  board: { items: WorkItem[]; isPending: boolean; error: unknown };
   /** Where a failure goes when no card is on screen to carry it, e.g. the search palette. */
   onFailure?: (message: string) => void;
 }) {
   const { baseUrl } = useApiConfig();
-  const items = useWorkItemsQuery(factoryProjectId);
   const catalog = useBoardCatalog(factoryProjectId);
   const upsert = useUpsertWorkItemMutation(factoryProjectId);
   const update = useUpdateWorkItemMutation(factoryProjectId);
@@ -48,10 +50,12 @@ export function useBoardItems({
   const [dropError, setDropError] = useState<Error>();
   const movingRef = useRef<Set<string>>(new Set());
 
-  const all = useMemo(() => items.data ?? [], [items.data]);
-  const knownSourceKeys = useMemo(() => persistedSourceKeys(all), [all]);
+  const sources = useWorkItemSources(factoryProjectId);
+  const all = board.items;
+  // The board holds only open cards, so an issue whose card closed long ago is known by its source.
+  const knownSourceKeys = useMemo(() => persistedSourceKeys([...all, ...sources]), [all, sources]);
   // Sources whose card sits on another board: the only withheld feed items worth explaining.
-  const elsewhereSourceKeys = persistedSourceKeys(all.filter(item => !belongsToBoard(item, kind)));
+  const elsewhereSourceKeys = persistedSourceKeys([...all, ...sources].filter(item => !belongsToBoard(item, kind)));
   const visible = all.filter(item => belongsToBoard(item, kind));
 
   const requestTransition = (item: WorkItem, toStage: string, options: MoveOptions = {}, onSettled?: () => void) => {
@@ -158,12 +162,11 @@ export function useBoardItems({
     visible,
     knownSourceKeys,
     elsewhereSourceKeys,
-    isPending: items.isPending,
-    error: items.isError ? items.error : undefined,
+    isPending: board.isPending,
+    error: board.error ?? undefined,
     mutationError: [upsert, transition, remove].find(mutation => mutation.isError)?.error ?? dropError,
     evaluatingStages: new Map(transition.pendingTransitions.map(({ itemId, stage }) => [itemId, stage])),
     transitionReasons,
-    refetch: items.refetch,
     move,
     remove: (id: string) => remove.mutate(id),
     handleDrop,

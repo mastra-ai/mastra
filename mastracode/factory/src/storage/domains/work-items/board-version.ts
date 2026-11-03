@@ -18,6 +18,24 @@ export const FACTORY_BOARD_VERSIONS_SCHEMA: CollectionSchema = {
   uniqueIndexes: [{ name: 'factory_board_versions_scope_unique', columns: ['org_id', 'factory_project_id'] }],
 };
 
+/**
+ * One row per deleted card, so a board that synced before the delete learns to drop it. Board
+ * syncs older than {@link WORK_ITEM_TOMBSTONE_TTL_MS} reload instead of reading these.
+ */
+export const FACTORY_WORK_ITEM_TOMBSTONES_SCHEMA: CollectionSchema = {
+  name: 'factory_work_item_tombstones',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
+    work_item_id: { type: 'text' },
+    deleted_at: { type: 'timestamp' },
+  },
+  indexes: [{ name: 'factory_work_item_tombstones_scope', columns: ['org_id', 'factory_project_id', 'deleted_at'] }],
+};
+
+export const WORK_ITEM_TOMBSTONE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** A project, or every project in an org when a write's filter only names the org. */
 export interface BoardScope {
   orgId: string;
@@ -41,8 +59,19 @@ function scopeOfWhere(where: CollectionWhere): BoardScope | undefined {
 }
 
 /**
+ * A card write that changes something moves `changed_at`, so board syncs can ask for what
+ * changed since. It is not `updated_at`: counter recounts and other bookkeeping change the
+ * board without counting as an edit to the card.
+ */
+function stamped(patch: unknown): unknown {
+  if (patch === null || typeof patch !== 'object' || Object.keys(patch).length === 0) return patch;
+  return { ...(patch as Record<string, unknown>), changed_at: new Date() };
+}
+
+/**
  * Wrap `ops` so every write to `work_items` reports the board it changed, once the write has
- * resolved. Writes outside any tenant (`dangerouslyClearAll`) report nothing.
+ * resolved, and stamps `changed_at` on every card it writes. Writes outside any tenant
+ * (`dangerouslyClearAll`) report nothing.
  */
 export function trackBoardWrites(
   ops: FactoryStorageOps,
@@ -66,7 +95,7 @@ export function trackBoardWrites(
               async (current: unknown) => {
                 const patch = await updater(current);
                 patched = patch != null;
-                return patch;
+                return collection === 'work_items' ? stamped(patch) : patch;
               },
               ...args,
             );
@@ -76,6 +105,10 @@ export function trackBoardWrites(
         case 'insertOne':
         case 'upsertOne':
           return async (collection: string, ...args: unknown[]) => {
+            if (collection === 'work_items') {
+              const at = property === 'insertOne' ? 0 : 1;
+              args[at] = stamped(args[at]);
+            }
             const row = await value.call(target, collection, ...args);
             if (collection === 'work_items') await report(scopeOfRow(row));
             return row;
@@ -83,6 +116,7 @@ export function trackBoardWrites(
         case 'updateMany':
         case 'deleteMany':
           return async (collection: string, where: CollectionWhere, ...args: unknown[]) => {
+            if (property === 'updateMany' && collection === 'work_items') args[0] = stamped(args[0]);
             const count: number = await value.call(target, collection, where, ...args);
             if (collection === 'work_items' && count > 0) await report(scopeOfWhere(where));
             return count;

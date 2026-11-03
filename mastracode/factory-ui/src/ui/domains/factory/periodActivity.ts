@@ -1,5 +1,4 @@
 import { sessionRowStatus } from '../workspaces/services/sessionStatus';
-import { doneAt } from './boardItems';
 import type { WorkItem } from './services/workItems';
 
 export type ActivityPeriod = 'today' | 'week' | 'month';
@@ -82,28 +81,34 @@ function activitySlots(period: ActivityPeriod, now: number, runsCompleteAfter: n
   }
 }
 
+/** When cards came in and when they shipped, without the cards themselves. */
+export interface CardTimes {
+  cameIn: readonly number[];
+  shipped: readonly number[];
+}
+
 export function periodActivity({
   period,
   now,
-  cards,
+  cardTimes,
   runStarts,
 }: {
   period: ActivityPeriod;
   now: number;
-  cards: readonly WorkItem[];
+  cardTimes: CardTimes;
   runStarts: RunStarts;
 }): Activity {
   const from = activityStart(period, now);
   const slots = activitySlots(period, now, runStarts.completeAfter);
   const totals = noCounts();
-  const times: Record<ActivityKind, ReadonlyArray<number | undefined>> = {
-    cameIn: cards.map(card => Date.parse(card.createdAt)),
+  const times: Record<ActivityKind, readonly number[]> = {
+    cameIn: cardTimes.cameIn,
     ran: runStarts.starts,
-    shipped: cards.map(doneAt),
+    shipped: cardTimes.shipped,
   };
   for (const kind of ACTIVITY_KIND_ORDER) {
     for (const time of times[kind]) {
-      if (time === undefined || time < from) continue;
+      if (time < from) continue;
       const slot = slots.findLast(candidate => candidate.start <= Math.min(time, now));
       if (!slot) continue;
       slot.counts[kind] += 1;

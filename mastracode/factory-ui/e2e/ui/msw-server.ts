@@ -1,7 +1,31 @@
+import { workItemStarters } from '@mastra/factory/routes/work-item-starters';
 import { http, HttpResponse } from 'msw';
 import { setupServer } from 'msw/node';
 
 import { builtinBoardCatalog } from './board-catalog';
+
+interface StubbedCard {
+  id: string;
+  createdAt?: string;
+  stages?: string[];
+  stageHistory?: { stage: string; enteredAt: string }[];
+  board?: string | null;
+  externalSource?: unknown;
+  metadata?: Record<string, unknown> | null;
+  acceptedAt?: string | null;
+}
+
+/** The plain `/work-items` list the running test stubbed, read through MSW so its handler answers. */
+async function readStubbedList(url: string): Promise<{
+  workItems: StubbedCard[];
+  runningSessionIds?: string[];
+  parkedSessionIds?: string[];
+}> {
+  const listUrl = url.replace(/\/work-items\/.*$/, '/work-items');
+  const response = await fetch(listUrl);
+  if (!response.ok) throw HttpResponse.json(await response.json().catch(() => ({})), { status: response.status });
+  return response.json();
+}
 
 /**
  * Shared MSW server for the jsdom web-ui test suite. The global setup
@@ -57,6 +81,78 @@ export const server = setupServer(
   http.get('*/web/factory/projects/:id/source-control-connections', () => HttpResponse.json({ connections: [] })),
   http.get('*/web/factory/projects/:id/audit', () => HttpResponse.json({ events: [], actors: {} })),
   http.get('*/web/factory/projects/:id/decisions', () => HttpResponse.json({ decisions: [] })),
+  // The board reads its cards through `/work-items/sync`, card sources and single cards through their own
+  // routes. Tests stub the plain list, so these answer from it: every sync is a full one carrying all of
+  // the test's cards, sources are those cards' sources, and a single card is looked up in the list.
+  // A `cards=changed` sync, like the server's, resets with no cards: that reader pages its cards itself.
+  http.get('*/web/factory/projects/:id/work-items/sync', async ({ request }) => {
+    const list = await readStubbedList(request.url);
+    const openCards = new URL(request.url).searchParams.get('cards') !== 'changed';
+    return HttpResponse.json({
+      cursor: 'test-cursor',
+      reset: true,
+      workItems: openCards ? list.workItems : [],
+      deletedIds: [],
+      counts: { total: list.workItems.length, boards: {} },
+      runningSessionIds: list.runningSessionIds ?? [],
+      parkedSessionIds: list.parkedSessionIds ?? [],
+    });
+  }),
+  http.get('*/web/factory/projects/:id/work-items/sources', async ({ request }) => {
+    const list = await readStubbedList(request.url);
+    return HttpResponse.json({
+      sources: list.workItems.flatMap(item =>
+        item.externalSource
+          ? [{ board: item.board ?? 'work', externalSource: item.externalSource, metadata: item.metadata ?? {} }]
+          : [],
+      ),
+    });
+  }),
+  http.get('*/web/factory/projects/:id/work-items/counts', () => HttpResponse.json({ total: 0, boards: {} })),
+  // The New page's starters, counted from the test's cards and decisions by the server's own counter.
+  // Decisions list newest first, so a card's first one is its latest effect.
+  http.get('*/web/factory/projects/:id/work-items/starters', async ({ request }) => {
+    const list = await readStubbedList(request.url);
+    const decisionsUrl = request.url.replace(/\/work-items\/.*$/, '/decisions');
+    const { decisions } = (await (await fetch(decisionsUrl)).json()) as {
+      decisions: { workItemId: string | null; status: string }[];
+    };
+    const latest = new Map<string, string>();
+    for (const decision of decisions) {
+      if (decision.workItemId && !latest.has(decision.workItemId)) latest.set(decision.workItemId, decision.status);
+    }
+    const failed = new Set([...latest].filter(([, status]) => status === 'failed').map(([id]) => id));
+    const rows = list.workItems.map(item => ({
+      ...item,
+      createdAt: new Date(item.createdAt ?? 0),
+      acceptedAt: item.acceptedAt ? new Date(item.acceptedAt) : null,
+    })) as unknown as Parameters<typeof workItemStarters>[0];
+    return HttpResponse.json(workItemStarters(rows, failed, new Date()));
+  }),
+  // The activity chart reads when cards came in and shipped; answered from the test's cards like the server does.
+  http.get('*/web/factory/projects/:id/work-items/activity', async ({ request }) => {
+    const since = Date.parse(new URL(request.url).searchParams.get('since') ?? '');
+    const list = await readStubbedList(request.url);
+    const inWindow = (time: string | undefined): time is string => time !== undefined && Date.parse(time) >= since;
+    return HttpResponse.json({
+      total: list.workItems.length,
+      createdAt: list.workItems.map(item => item.createdAt).filter(inWindow),
+      doneAt: list.workItems
+        .map(item =>
+          item.stages?.includes('done')
+            ? item.stageHistory?.findLast(entry => entry.stage === 'done')?.enteredAt
+            : undefined,
+        )
+        .filter(inWindow),
+    });
+  }),
+  http.get('*/web/factory/projects/:id/work-items/:workItemId', async ({ request, params }) => {
+    const list = await readStubbedList(request.url);
+    const workItem = list.workItems.find(item => item.id === params.workItemId);
+    return workItem
+      ? HttpResponse.json({ workItem })
+      : HttpResponse.json({ error: 'Work item not found' }, { status: 404 });
+  }),
   http.get('*/web/factory/projects/:id/work-items', () => HttpResponse.json({ workItems: [] })),
   http.get('*/web/factory/projects/:id/mention-roster', () => HttpResponse.json({ members: [] })),
   // Ambient feed stream: `FactoryLayout` mounts it on every routed surface. It

@@ -9,9 +9,14 @@ import { server } from '../../../../../e2e/ui/msw-server';
 import { releaseBoard } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../api/keys';
-import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
+import {
+  boardChangesQueryOptions,
+  unstartedWorkItemsQueryOptions,
+  workItemLookupQueryOptions,
+  workItemSourcesQueryOptions,
+} from '../../../../hooks/useWorkItems';
+import { allSessionRows, workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
-import { listWorkItems } from '../../factory/services/workItems';
 import type { WorkItem } from '../../factory/services/workItems';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { createAppRoutes } from '../../../router';
@@ -121,8 +126,9 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       }
       return HttpResponse.json({ connections: factoryConnections[OTHER_FACTORY_ID] });
     }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, ({ params }) => {
-      state.workItemRequests += 1;
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, ({ params, request }) => {
+      // The shared sync and sources stubs read the bare list for their own answers; count only card reads.
+      if (new URL(request.url).search) state.workItemRequests += 1;
       if (options.failWorkItems) return HttpResponse.json({ error: 'work items unavailable' }, { status: 500 });
       const factoryProjectId = String(params.factoryProjectId);
       return HttpResponse.json({
@@ -304,11 +310,13 @@ function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/setti
 async function warmSessionsAndWorkItems(client: ReturnType<typeof createQueryClient>) {
   await Promise.all([
     client.prefetchQuery(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
-    client.prefetchQuery({
-      queryKey: queryKeys.workItems(ACTIVE_FACTORY_ID),
-      queryFn: ({ signal }) => listWorkItems(TEST_BASE_URL, ACTIVE_FACTORY_ID, signal),
-    }),
+    client.prefetchQuery(boardChangesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
+    client.prefetchQuery(unstartedWorkItemsQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
+    client.prefetchQuery(workItemSourcesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
   ]);
+  const sessions = client.getQueryData(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID).queryKey);
+  const ids = allSessionRows(sessions).map(session => session.sessionId);
+  await client.prefetchQuery(workItemLookupQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID, { kind: 'session', ids }));
 }
 
 async function openWithShortcut() {
@@ -577,13 +585,13 @@ describe('Global search', () => {
 
     await warmSessionsAndWorkItems(client);
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
-    expect(requests.workItemRequests).toBe(1);
+    const warmWorkItemRequests = requests.workItemRequests;
 
     await openWithShortcut();
     await screen.findByText('Review command palette PR');
 
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
-    expect(requests.workItemRequests).toBe(1);
+    expect(requests.workItemRequests).toBe(warmWorkItemRequests);
   });
 
   it('keeps search open while choosing a repository for an unattributed work item', async () => {
