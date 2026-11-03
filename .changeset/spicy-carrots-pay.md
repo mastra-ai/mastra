@@ -1,5 +1,4 @@
 ---
-"@internal/core": minor
 "@mastra/core": minor
 ---
 
