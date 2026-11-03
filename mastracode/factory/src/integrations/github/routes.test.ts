@@ -1708,30 +1708,36 @@ describe('prs route', () => {
     }
   });
 
-  it('answers a board that polls during a rules pass once that pass is done, without starting another', async () => {
-    seedMaterializedProject();
-    const pass = Promise.withResolvers<void>();
-    const order: string[] = [];
-    const ingestFactoryEvent = vi.fn(async () => {
-      await pass.promise;
-      order.push('rules done');
-    });
-    const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
+  it('answers a board that polls during a slow rules pass once that pass is done, without starting another', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      seedMaterializedProject();
+      const pass = Promise.withResolvers<void>();
+      const order: string[] = [];
+      const ingestFactoryEvent = vi.fn(async () => {
+        await pass.promise;
+        order.push('rules done');
+      });
+      const app = buildApp({ workosId: 'u1' }, { ingestFactoryEvent });
 
-    const first = app.request('/web/github/projects/p1/prs');
-    await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
-    const second = Promise.resolve(app.request('/web/github/projects/p1/prs')).then(res => {
-      order.push('second answered');
-      return res;
-    });
-    await vi.waitFor(() => expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(2));
-    await setImmediate();
-    pass.resolve();
+      const first = app.request('/web/github/projects/p1/prs');
+      await vi.waitFor(() => expect(ingestFactoryEvent).toHaveBeenCalled());
+      vi.setSystemTime(Date.now() + 25_000);
+      const second = Promise.resolve(app.request('/web/github/projects/p1/prs')).then(res => {
+        order.push('second answered');
+        return res;
+      });
+      await vi.waitFor(() => expect(listRepoOpenPullRequests).toHaveBeenCalledTimes(2));
+      await setImmediate();
+      pass.resolve();
 
-    expect((await second).status).toBe(200);
-    expect((await first).status).toBe(200);
-    expect(ingestFactoryEvent).toHaveBeenCalledTimes(1);
-    expect(order).toEqual(['rules done', 'second answered']);
+      expect((await second).status).toBe(200);
+      expect((await first).status).toBe(200);
+      expect(ingestFactoryEvent).toHaveBeenCalledTimes(1);
+      expect(order).toEqual(['rules done', 'second answered']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each(['issues', 'prs'])('still lists %s when ingesting the polled events fails', async resource => {

@@ -386,15 +386,19 @@ const POLLED_PAGE_INGEST_WINDOW_MS = 20_000;
 
 /**
  * One rules pass per listed page per window, whichever board asked: each pass reads the whole
- * project, and every open board polls the same pages. A board inside the window joins or skips it.
+ * project, and every open board polls the same pages. A board joins a running pass, however old.
  */
 function createPolledPageIngest() {
-  const passes = new Map<string, { startedAt: number; done: Promise<void> }>();
+  const running = new Map<string, Promise<void>>();
+  const startedAt = new Map<string, number>();
   return (key: string, run: () => Promise<void>): Promise<void> => {
-    const last = passes.get(key);
-    if (last && Date.now() - last.startedAt < POLLED_PAGE_INGEST_WINDOW_MS) return last.done;
-    const done = run();
-    passes.set(key, { startedAt: Date.now(), done });
+    const pending = running.get(key);
+    if (pending) return pending;
+    const last = startedAt.get(key);
+    if (last !== undefined && Date.now() - last < POLLED_PAGE_INGEST_WINDOW_MS) return Promise.resolve();
+    startedAt.set(key, Date.now());
+    const done = run().finally(() => running.delete(key));
+    running.set(key, done);
     return done;
   };
 }
