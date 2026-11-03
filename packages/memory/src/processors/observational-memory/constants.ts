@@ -56,8 +56,9 @@ Any messages following this reminder are newer and should take priority.`;
 
 /**
  * Preamble that introduces the observations block.
- * Use before `<observations>`, with instructions after.
- * Full pattern: `${OBSERVATION_CONTEXT_PROMPT}\n\n<observations>\n${obs}\n</observations>\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`
+ * Context layout: `${prompt}\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}`, then `<observations>`,
+ * one entry per observation chunk, `</observations>`, then optional current-task and
+ * suggested-response blocks.
  */
 export const OBSERVATION_CONTEXT_PROMPT = `The following observations block contains your memory of past conversations with this user.`;
 
@@ -78,7 +79,7 @@ export function getObservationContextPrompt(scope: 'thread' | 'resource' = 'thre
 
 /**
  * Instructions that tell the model how to interpret and use observations.
- * Place AFTER the `<observations>` block so the model sees the data before the rules.
+ * Placed with the observations preamble, before the `<observations>` block.
  */
 export const OBSERVATION_CONTEXT_INSTRUCTIONS = `IMPORTANT: When responding, reference specific details from these observations. Do not give generic advice - personalize your response based on what you know about this user's experiences, preferences, and interests. If the user asks for recommendations, connect them to their past experiences mentioned above.
 

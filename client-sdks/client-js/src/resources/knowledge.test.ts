@@ -44,6 +44,17 @@ describe('Knowledge resource', () => {
     expect(url(fetchMock, 1)).toBe('http://localhost:4111/api/knowledge/kb/activity?pageId=p1&cursor=c1&limit=10');
   });
 
+  it('reads link counts with repeated page ids and a page links', async () => {
+    const fetchMock = mockFetch({ counts: {} });
+    const kb = client.getKnowledge('kb');
+    await kb.linkCounts(['a', 'b/c']);
+    await kb.pageLinks('p/1', { direction: 'out' });
+    expect(fetchMock.mock.calls.map(call => call[0])).toEqual([
+      'http://localhost:4111/api/knowledge/kb/link-counts?pageId=a&pageId=b%2Fc',
+      'http://localhost:4111/api/knowledge/kb/pages/p%2F1/links?direction=out',
+    ]);
+  });
+
   it('streams change notices from the events route', async () => {
     const body = ': connected\n\ndata: {"kind":"page","op":"update","pageId":"p1","at":"t"}\n\ndata: [DONE]\n\n';
     const fetchMock = vi.fn(

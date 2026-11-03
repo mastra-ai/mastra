@@ -1,3 +1,4 @@
+import { isExecutionFenceError, isStorageFencedExecution } from '../../agent/durable/execution-fence';
 import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
@@ -15,10 +16,11 @@ import type { TracingContext, TracingPolicy } from '../../observability';
 import { EntityType, SpanType, createObservabilityContext } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
+import type { StepExecutionParentWorkflow } from '../../worker/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
 import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
-import { getStepResult } from '../step';
+import { getStepResult, getStepResultAsync } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
 import { getEntryComponent, getEntryId, getEntrySchemas } from '../step-entry';
 import type { SingleStepEntry, StepFlowEntry, StepResult } from '../types';
@@ -115,6 +117,7 @@ export class StepExecutor extends MastraBase {
     stepResults: Record<string, StepResult<any, any, any, any>>;
     state: Record<string, any>;
     requestContext: RequestContext;
+    parentWorkflow?: StepExecutionParentWorkflow;
     /** Caller identity, forwarded to step/tool/agent execution contexts (parity with the default engine). */
     actor?: ActorSignal;
     retryCount?: number;
@@ -253,6 +256,7 @@ export class StepExecutor extends MastraBase {
               suspendData: suspendDataToUse,
               getInitData: () => stepResults?.input as any,
               getStepResult: getStepResult.bind(this, stepResults),
+              getStepResultAsync: getStepResultAsync.bind(this, stepResults),
               suspend: async (suspendPayload: unknown, suspendOptions?: SuspendOptions): Promise<InnerOutput> => {
                 const { suspendData, validationError } = await validateStepSuspendData({
                   suspendData: suspendPayload,
@@ -412,6 +416,14 @@ export class StepExecutor extends MastraBase {
         },
       });
 
+      if (
+        isExecutionFenceError(error) &&
+        this.mastra &&
+        !(this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub)
+      ) {
+        if (isStorageFencedExecution(requestContext, runId, params.parentWorkflow)) throw error;
+      }
+
       // Log the error for observability (matching default engine behavior)
       const mastraError = new MastraError(
         {
@@ -555,6 +567,7 @@ export class StepExecutor extends MastraBase {
           resumeData: resumeData,
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
+          getStepResultAsync: getStepResultAsync.bind(this, stepResults),
           bail: (() => {}) as () => InnerOutput,
           writer: new ToolStream(
             {
@@ -632,6 +645,7 @@ export class StepExecutor extends MastraBase {
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
+            getStepResultAsync: getStepResultAsync.bind(this, stepResults),
             suspend: async (_suspendPayload: any): Promise<any> => {
               throw new Error('Not implemented');
             },
@@ -717,6 +731,7 @@ export class StepExecutor extends MastraBase {
             resumeData: params.resumeData,
             getInitData: () => stepResults?.input as any,
             getStepResult: getStepResult.bind(this, stepResults),
+            getStepResultAsync: getStepResultAsync.bind(this, stepResults),
             suspend: async (_suspendPayload: any): Promise<any> => {
               throw new Error('Not implemented');
             },

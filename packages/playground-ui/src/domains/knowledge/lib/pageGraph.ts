@@ -1,6 +1,6 @@
 /**
  * Pure page-graph logic for the schema-4 explorer: parent links plus resolved
- * mentions between loaded pages → React Flow nodes and edges. Every scope is
+ * mentions and body links between loaded pages → React Flow nodes and edges. Every scope is
  * one size and every page another, so a circle's size says what it is and its
  * name always fits inside.
  */
@@ -11,12 +11,12 @@ import type { KnowledgePageEdge, KnowledgePagePayload, KnowledgeScopeGrantPayloa
 
 /**
  * Edges among loaded, live pages: a parent edge for every loaded parent, and
- * the given mention edges merged per source → target (counts summed). Self
- * mentions and edges to unloaded pages are dropped.
+ * the given mention and body-link edges merged per kind and source → target
+ * (counts summed). Self links and edges to unloaded pages are dropped.
  */
 export function pageGraphEdges(
   pages: KnowledgePagePayload[],
-  mentionEdges: KnowledgePageEdge[] = [],
+  linkEdges: KnowledgePageEdge[] = [],
 ): KnowledgePageEdge[] {
   const live = new Set(pages.filter(page => !page.deletedAt && !page.mergedInto).map(page => page.id));
   const edges: KnowledgePageEdge[] = [];
@@ -25,17 +25,17 @@ export function pageGraphEdges(
       edges.push({ source: page.parentId, target: page.id, kind: 'parent' });
     }
   }
-  const mentions = new Map<string, KnowledgePageEdge>();
-  for (const edge of mentionEdges) {
-    if (edge.kind !== 'mention' || edge.source === edge.target) continue;
+  const links = new Map<string, KnowledgePageEdge>();
+  for (const edge of linkEdges) {
+    if ((edge.kind !== 'mention' && edge.kind !== 'link') || edge.source === edge.target) continue;
     if (!live.has(edge.source) || !live.has(edge.target)) continue;
-    const key = `${edge.source}\u0000${edge.target}`;
-    const existing = mentions.get(key);
+    const key = `${edge.kind}\u0000${edge.source}\u0000${edge.target}`;
+    const existing = links.get(key);
     const count = edge.count ?? 1;
     if (existing) existing.count = (existing.count ?? 1) + count;
-    else mentions.set(key, { source: edge.source, target: edge.target, kind: 'mention', count });
+    else links.set(key, { source: edge.source, target: edge.target, kind: edge.kind, count });
   }
-  return [...edges, ...mentions.values()];
+  return [...edges, ...links.values()];
 }
 
 /** Id of the placeholder circle for a declared principal that has no scope page yet. */

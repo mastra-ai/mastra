@@ -29,7 +29,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@chat-adapter/teams": "~4.40.0"
+    "@chat-adapter/teams": "catalog:"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
