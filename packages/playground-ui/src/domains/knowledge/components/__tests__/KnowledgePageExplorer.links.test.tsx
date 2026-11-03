@@ -186,4 +186,53 @@ describe('KnowledgePageExplorer body links', () => {
       expect(screen.getByTestId('knowledge-legend-link')).toBeTruthy();
     });
   });
+  describe('the graph toggles', () => {
+    it('float over the graph, beside Back, and not in the toolbar', () => {
+      renderWithProviders(<Host initial={null} initialView="graph" />);
+      const canvas = screen.getByTestId('knowledge-graph-container');
+      const back = screen.getByTestId('knowledge-graph-back');
+      for (const name of ['All links', 'Link counts']) {
+        const toggle = screen.getByRole('button', { name });
+        expect(canvas.contains(toggle)).toBe(true);
+        expect(toggle.parentElement).toBe(back.parentElement);
+        expect(toggle.getAttribute('title')).toContain(name);
+      }
+    });
+
+    it('are not shown in page view', () => {
+      renderWithProviders(<Host initial="overview" initialView="page" />);
+      expect(screen.queryByRole('button', { name: 'All links' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Link counts' })).toBeNull();
+    });
+
+    it('flip aria-pressed and say whether they are on when clicked', () => {
+      renderWithProviders(<Host initial={null} initialView="graph" />);
+      const toggle = screen.getByRole('button', { name: 'All links' });
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+      expect(toggle.getAttribute('title')).toContain('off');
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+      expect(toggle.getAttribute('title')).toContain('on');
+    });
+
+    it('have a solid fill when on that the off state lacks', () => {
+      renderWithProviders(<Host initial={null} initialView="graph" />);
+      const toggle = screen.getByRole('button', { name: 'All links' });
+      expect(toggle.className).toContain('aria-pressed:bg-fill-inverse');
+      expect(toggle.className).toContain('aria-pressed:text-background');
+    });
+  });
+
+  describe('the Graph and Page toggle', () => {
+    it('gives the selected segment a solid fill and full-strength text, the others muted text', () => {
+      renderWithProviders(<Host initial={null} initialView="graph" />);
+      const graph = screen.getByRole('button', { name: 'Graph' });
+      const page = screen.getByRole('button', { name: 'Page' });
+      expect(graph.getAttribute('aria-pressed')).toBe('true');
+      expect(page.getAttribute('aria-pressed')).toBe('false');
+      expect(graph.className).toContain('aria-pressed:bg-fill-inverse');
+      expect(graph.className).toContain('aria-pressed:text-background');
+      expect(graph.className).toContain('text-muted-foreground');
+    });
+  });
 });

@@ -1,4 +1,4 @@
-import { ArrowLeft, X } from 'lucide-react';
+import { ArrowLeft, Hash, Link2, X } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { REST_BATCH, isChildPlaceholder, isRestCircle, isScopeGroup, lazyGraph } from '../lib/graphShape';
@@ -180,6 +180,10 @@ function visibleLinks(
   }
   return { edges: [...unique.values()].filter(edge => shown.has(edgeKey(edge))), hidden, more };
 }
+/** The round buttons floating over the graph: muted when off or idle, a solid fill when pressed. */
+const FLOAT_BUTTON =
+  'flex size-9 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-muted-foreground shadow-overlay transition-colors hover:bg-fill-subtle hover:text-foreground aria-pressed:border-transparent aria-pressed:bg-fill-inverse aria-pressed:text-background aria-pressed:hover:bg-fill-inverse disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card';
+
 /** How many earlier focuses Back remembers. */
 const FOCUS_HISTORY_CAP = 50;
 const noTreeLevels = () => [];
@@ -855,31 +859,7 @@ export function KnowledgePageExplorer({
     <div className="flex min-h-0 flex-1 flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
         <SearchBox source={source} onSelect={openAnywhere} />
-        {!showPage ? (
-          <button
-            type="button"
-            aria-pressed={allLinks}
-            data-testid="knowledge-graph-all-links"
-            title="Draw every link between the pages in the graph, not only the selected page's"
-            className="text-ui-md rounded border border-border px-3 py-1 aria-pressed:bg-muted"
-            onClick={() => setAllLinks(current => !current)}
-          >
-            All links
-          </button>
-        ) : null}
-        {!showPage ? (
-          <button
-            type="button"
-            aria-pressed={dotCounts}
-            data-testid="knowledge-graph-dot-counts"
-            title="Write how many links go in and out of each dot inside it"
-            className="text-ui-md rounded border border-border px-3 py-1 aria-pressed:bg-muted"
-            onClick={() => setDotCounts(current => !current)}
-          >
-            Link counts
-          </button>
-        ) : null}
-        <div role="group" aria-label="View" className="flex rounded border border-border">
+        <div role="group" aria-label="View" className="flex overflow-hidden rounded border border-border">
           {views.map(option => (
             <button
               key={option.value}
@@ -892,7 +872,7 @@ export function KnowledgePageExplorer({
                     : view === 'tree'
               }
               disabled={option.value === 'page' && !selectedPageId}
-              className={`text-ui-md px-3 py-1 disabled:opacity-50 aria-pressed:bg-muted ${option.narrowOnly ? 'lg:hidden' : ''}`}
+              className={`text-ui-md px-3 py-1 text-muted-foreground disabled:opacity-50 aria-pressed:bg-fill-inverse aria-pressed:text-background ${option.narrowOnly ? 'lg:hidden' : ''}`}
               onClick={() => onViewChange(option.value)}
             >
               {option.label}
@@ -990,17 +970,41 @@ export function KnowledgePageExplorer({
             data-testid="knowledge-graph-container"
           >
             {graphShown ? (
-              <button
-                type="button"
-                data-testid="knowledge-graph-back"
-                aria-label="Back"
-                title={backTo ? 'Back to the page you focused before this one' : 'Back (nothing to go back to yet)'}
-                disabled={!backTo}
-                className="absolute top-3 right-3 z-10 flex size-9 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-foreground shadow-overlay transition-colors hover:bg-fill-subtle disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-card"
-                onClick={goBack}
-              >
-                <ArrowLeft aria-hidden className="size-4" />
-              </button>
+              <div className="absolute top-3 right-3 z-10 flex flex-col gap-2">
+                <button
+                  type="button"
+                  data-testid="knowledge-graph-back"
+                  aria-label="Back"
+                  title={backTo ? 'Back to the page you focused before this one' : 'Back (nothing to go back to yet)'}
+                  disabled={!backTo}
+                  className={FLOAT_BUTTON}
+                  onClick={goBack}
+                >
+                  <ArrowLeft aria-hidden className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="All links"
+                  aria-pressed={allLinks}
+                  data-testid="knowledge-graph-all-links"
+                  title={`All links: ${allLinks ? 'on' : 'off'}. Draw every link between the pages in the graph, not only the selected page's`}
+                  className={FLOAT_BUTTON}
+                  onClick={() => setAllLinks(current => !current)}
+                >
+                  <Link2 aria-hidden className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  aria-label="Link counts"
+                  aria-pressed={dotCounts}
+                  data-testid="knowledge-graph-dot-counts"
+                  title={`Link counts: ${dotCounts ? 'on' : 'off'}. Write how many links go in and out of each dot inside it`}
+                  className={FLOAT_BUTTON}
+                  onClick={() => setDotCounts(current => !current)}
+                >
+                  <Hash aria-hidden className="size-4" />
+                </button>
+              </div>
             ) : null}
             {graphShown ? (
               <KnowledgePageGraph
