@@ -73,10 +73,15 @@ function partToBlock(part: unknown, toolName: string, index: number): ContentBlo
   return { type: 'text', text: stringify(part) };
 }
 
-function mediaBlock(data: string, mimeType: string, toolName: string, index: number): ContentBlock {
-  const kind = mimeType.toLowerCase();
-  if (kind.startsWith('image/')) return { type: 'image', data, mimeType };
-  if (kind.startsWith('audio/')) return { type: 'audio', data, mimeType };
+function mediaBlock(data: string, mediaType: string, toolName: string, index: number): ContentBlock {
+  // Type and subtype are case-insensitive, but some clients match them exactly; parameters keep their case.
+  const separator = mediaType.indexOf(';');
+  const mimeType =
+    separator === -1
+      ? mediaType.toLowerCase()
+      : mediaType.slice(0, separator).toLowerCase() + mediaType.slice(separator);
+  if (mimeType.startsWith('image/')) return { type: 'image', data, mimeType };
+  if (mimeType.startsWith('audio/')) return { type: 'audio', data, mimeType };
   return {
     type: 'resource',
     resource: { uri: `mastra://tool-output/${encodeURIComponent(toolName)}/${index}`, mimeType, blob: data },

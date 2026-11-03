@@ -148,20 +148,25 @@ describe('modelOutputToMcpContent', () => {
     ]);
   });
 
-  it('classifies media types case-insensitively and keeps them as given', () => {
+  it('lowercases media type and subtype, keeping parameters as given', () => {
     const result = modelOutputToMcpContent(
       {
         type: 'content',
         value: [
           { type: 'media', data: PNG, mediaType: 'IMAGE/PNG' },
           { type: 'media', data: PNG, mediaType: 'Audio/Wav' },
+          { type: 'media', data: PNG, mediaType: 'Text/Plain; Charset=UTF-8' },
         ],
       },
       't',
     );
     expect(result?.content).toEqual([
-      { type: 'image', data: PNG, mimeType: 'IMAGE/PNG' },
-      { type: 'audio', data: PNG, mimeType: 'Audio/Wav' },
+      { type: 'image', data: PNG, mimeType: 'image/png' },
+      { type: 'audio', data: PNG, mimeType: 'audio/wav' },
+      {
+        type: 'resource',
+        resource: { uri: 'mastra://tool-output/t/2', mimeType: 'text/plain; Charset=UTF-8', blob: PNG },
+      },
     ]);
   });
 
