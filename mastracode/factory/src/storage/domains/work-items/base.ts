@@ -15,6 +15,7 @@ import type { CollectionSchema, CollectionWhere, FactoryStorageOps } from '@mast
 import { factoryDispatchFailureMetadata } from '../../../rules/dispatch-errors.js';
 import { externalSourceForWorkItem, FACTORY_TRIAGE_TYPES } from '../../../rules/types.js';
 import type { FactoryTriageType, WorkItemSource } from '../../../rules/types.js';
+import { splitCardMetadata, workItemProviderAdapter } from '../../../work-items/providers/index.js';
 import { migrateWorkItemSplit } from '../../../work-items/split-migration.js';
 import {
   WORK_ITEM_ACTIVITY_SCHEMA,
@@ -774,7 +775,7 @@ function toWorkItem(row: WorkItemDbRow): Card {
     stages: row.stages,
     stageHistory: row.stage_history,
     sessions: row.sessions,
-    metadata: row.metadata,
+    metadata: splitCardMetadata(row.metadata, workItemProviderAdapter(row.external_source).providerMetadataKeys).board,
     triageType: row.triage_type ?? null,
     autonomyArmedAt: row.autonomy_armed_at ?? null,
     acceptedAt: row.accepted_at ?? null,
@@ -1297,6 +1298,10 @@ export interface FactoryAttentionScope {
 const LIST_CACHE_TTL_MS = 60_000;
 const LIST_CACHE_MAX_PROJECTS = 100;
 
+type WorkItemSourceSyncPatch = Partial<
+  Pick<WorkItemSourceRow, 'state' | 'labels' | 'author' | 'url' | 'key' | 'metadata'>
+>;
+
 export class WorkItemsStorage extends FactoryStorageDomain {
   /** Last full card list per project, valid while the project's board version is unchanged. */
   readonly #listCache = new Map<string, { version: string; takenAt: number; items: Card[] }>();
@@ -1366,54 +1371,142 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   }
 
   /** Refresh source evidence without changing work identity or board concurrency tokens. */
-  async syncWorkItemSource({
-    orgId,
-    factoryProjectId,
-    provider,
-    externalId,
-    patch,
-  }: {
+  async syncWorkItemSource(params: {
     orgId: string;
     factoryProjectId: string;
     provider: string;
     externalId: string;
-    patch: Partial<Pick<WorkItemSourceRow, 'state' | 'labels' | 'author' | 'url' | 'key' | 'metadata'>>;
+    patch: WorkItemSourceSyncPatch | ((current: WorkItemSourceDbRecord) => WorkItemSourceSyncPatch | null);
+    expectedRevision?: number;
   }): Promise<void> {
-    await this.#withTransaction(async ops => {
-      await ops.updateAtomic<WorkItemSourceDbRecord>(
-        FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
-        { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId },
-        current => {
-          const { metadata, ...facts } = patch;
-          // Raw provider state can be 'closed' while normalized state is 'merged'.
-          const nextMetadata =
-            metadata === null
-              ? null
-              : {
-                  ...current.metadata,
-                  ...metadata,
-                  ...(patch.labels !== undefined && !Object.hasOwn(metadata ?? {}, 'labels')
-                    ? { labels: patch.labels }
-                    : {}),
-                  ...(patch.state !== undefined && !Object.hasOwn(metadata ?? {}, 'state')
-                    ? { state: patch.state }
-                    : {}),
-                  ...(patch.author !== undefined && !Object.hasOwn(metadata ?? {}, 'author')
-                    ? { author: patch.author }
-                    : {}),
-                  ...(patch.key !== undefined && !Object.hasOwn(metadata ?? {}, 'identifier')
-                    ? { identifier: patch.key }
-                    : {}),
-                };
-          return {
-            ...facts,
-            metadata: nextMetadata,
-            revision: current.revision + 1,
-            synced_at: new Date(),
-            updated_at: new Date(),
-          };
-        },
-      );
+    await this.#withTransaction(ops => this.#syncWorkItemSource(ops, params));
+  }
+
+  async #syncWorkItemSource(
+    ops: FactoryStorageOps,
+    {
+      orgId,
+      factoryProjectId,
+      provider,
+      externalId,
+      patch,
+      expectedRevision,
+    }: Parameters<WorkItemsStorage['syncWorkItemSource']>[0],
+  ): Promise<void> {
+    await ops.updateAtomic<WorkItemSourceDbRecord>(
+      FACTORY_WORK_ITEM_SOURCES_SCHEMA.name,
+      { org_id: orgId, factory_project_id: factoryProjectId, provider, external_id: externalId },
+      current => {
+        if (expectedRevision !== undefined && current.revision !== expectedRevision) {
+          throw new WorkItemUpdateConflictError('revision');
+        }
+        const next = typeof patch === 'function' ? patch(current) : patch;
+        if (!next) return null;
+        const { metadata, ...facts } = next;
+        // Raw provider state can be 'closed' while normalized state is 'merged'.
+        const nextMetadata =
+          metadata === null
+            ? null
+            : {
+                ...current.metadata,
+                ...metadata,
+                ...(next.labels !== undefined && !Object.hasOwn(metadata ?? {}, 'labels')
+                  ? { labels: next.labels }
+                  : {}),
+                ...(next.state !== undefined && !Object.hasOwn(metadata ?? {}, 'state') ? { state: next.state } : {}),
+                ...(next.author !== undefined && !Object.hasOwn(metadata ?? {}, 'author')
+                  ? { author: next.author }
+                  : {}),
+                ...(next.key !== undefined && !Object.hasOwn(metadata ?? {}, 'identifier')
+                  ? { identifier: next.key }
+                  : {}),
+              };
+        return {
+          ...facts,
+          metadata: nextMetadata,
+          revision: current.revision + 1,
+          synced_at: new Date(),
+          updated_at: new Date(),
+        };
+      },
+    );
+  }
+
+  /** Apply source facts and their process stamps in one transaction. */
+  async syncCard({
+    orgId,
+    id,
+    userId,
+    patch,
+    expectedSourceRevision,
+    fillOnly = false,
+  }: {
+    orgId: string;
+    id: string;
+    userId: string;
+    patch: { title?: string; metadata?: Record<string, unknown> | null };
+    expectedSourceRevision?: number;
+    fillOnly?: boolean;
+  }): Promise<{ item: Card; previous: WorkItemPriorState } | null> {
+    return this.#withTransaction(async ops => {
+      let previous = emptyPrior();
+      const row = await new Cards(ops, this.#legacyMode).updateAtomic({ org_id: orgId, id }, async current => {
+        previous = priorState(current);
+        const item = toWorkItem(current);
+        const source = primarySource(item);
+        if (this.#legacyMode || !source) {
+          const metadata = fillOnly
+            ? Object.fromEntries(
+                Object.entries(patch.metadata ?? {}).filter(([key]) => current.metadata?.[key] === undefined),
+              )
+            : patch.metadata;
+          if (fillOnly && patch.title === undefined && Object.keys(metadata ?? {}).length === 0) return null;
+          return applyUpdate({ current, userId, input: { ...patch, metadata } });
+        }
+        const adapter = workItemProviderAdapter(item.externalSource);
+        const split = splitCardMetadata(patch.metadata, adapter.providerMetadataKeys);
+        if (Object.keys(split.provider ?? {}).length > 0) {
+          await this.#syncWorkItemSource(ops, {
+            orgId,
+            factoryProjectId: item.factoryProjectId,
+            provider: source.provider,
+            externalId: source.externalId,
+            expectedRevision: expectedSourceRevision,
+            patch: currentSource => {
+              const providerPatch = fillOnly
+                ? Object.fromEntries(
+                    Object.entries(split.provider ?? {}).filter(([key]) => currentSource.metadata?.[key] === undefined),
+                  )
+                : split.provider;
+              if (fillOnly && Object.keys(providerPatch ?? {}).length === 0) return null;
+              const facts = adapter.toSource(item.externalSource, { ...currentSource.metadata, ...providerPatch });
+              if (!facts) throw new Error('An external source must produce provider facts.');
+              return {
+                key: facts.key,
+                url: facts.url,
+                state: facts.state,
+                labels: facts.labels,
+                author: facts.author,
+                metadata: facts.metadata,
+              };
+            },
+          });
+        }
+        const boardPatch = Object.fromEntries(
+          Object.entries(split.board ?? {}).filter(([key, value]) =>
+            fillOnly
+              ? item.metadata?.[key] === undefined
+              : JSON.stringify(item.metadata?.[key]) !== JSON.stringify(value),
+          ),
+        );
+        if (patch.title === undefined && Object.keys(boardPatch).length === 0) return null;
+        return applyUpdate({
+          current,
+          userId,
+          input: { ...(patch.title !== undefined ? { title: patch.title } : {}), metadata: boardPatch },
+        });
+      });
+      return row ? { item: toWorkItem(row), previous } : null;
     });
   }
 

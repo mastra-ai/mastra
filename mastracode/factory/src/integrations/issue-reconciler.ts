@@ -148,7 +148,7 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
       for (const item of items) {
         summary.checked += 1;
         try {
-          const missingAt = item.metadata?.[EXTERNAL_SOURCE_MISSING_KEY];
+          const missingAt = item.workItem.metadata?.[EXTERNAL_SOURCE_MISSING_KEY];
           const missingTime = typeof missingAt === 'string' ? Date.parse(missingAt) : Number.NaN;
           const missingAge = now().getTime() - missingTime;
           if (Number.isFinite(missingTime) && missingAge >= 0 && missingAge < MISSING_RECHECK_MS) {
@@ -161,11 +161,11 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
             externalSource: options.externalSource?.(item) ?? item.externalSource!,
           });
           if (!resolved) {
-            await options.storage.update({
+            await options.storage.syncCard({
               orgId: project.orgId,
               id: item.id,
               userId: 'factory-rule-dispatcher',
-              patch: { metadata: { ...(item.metadata ?? {}), [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
+              patch: { metadata: { [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
             });
             summary.missing += 1;
             continue;
@@ -173,24 +173,24 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
           const issueId = options.issueId(item) ?? resolved.issueId;
           const issue = await options.intake.getIssue({ ...resolved, issueId });
           if (!issue) {
-            await options.storage.update({
+            await options.storage.syncCard({
               orgId: project.orgId,
               id: item.id,
               userId: 'factory-rule-dispatcher',
-              patch: { metadata: { ...(item.metadata ?? {}), [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
+              patch: { metadata: { [EXTERNAL_SOURCE_MISSING_KEY]: now().toISOString() } },
             });
             summary.missing += 1;
             continue;
           }
 
           const hadMissingMarker = typeof missingAt === 'string';
-          const baseMetadata = withoutMissingMarker(item.metadata);
+          const baseMetadata = withoutMissingMarker({ ...item.workItem.metadata, ...item.metadata });
           // Close detection for Linear: replay through rules ingress if closed
           const isClosed = issue.stateType === 'completed' || issue.stateType === 'canceled';
           if (isClosed && !options.isTerminal(item) && options.onClosed) {
             const closedMetadata = withoutUndefined((await options.onClosed(item, issue, project, resolved)) ?? {});
             if (hadMissingMarker || !metadataMatches(baseMetadata, closedMetadata)) {
-              await options.storage.update({
+              await options.storage.syncCard({
                 orgId: project.orgId,
                 id: item.id,
                 userId: 'factory-rule-dispatcher',
@@ -210,7 +210,7 @@ export function createIssueReconciler<TScope = void>(options: IssueReconcilerOpt
 
           const metadata = withoutUndefined(await options.metadata(item, issue, resolved));
           if (!hadMissingMarker && metadataMatches(baseMetadata, metadata)) continue;
-          await options.storage.update({
+          await options.storage.syncCard({
             orgId: project.orgId,
             id: item.id,
             userId: 'factory-rule-dispatcher',

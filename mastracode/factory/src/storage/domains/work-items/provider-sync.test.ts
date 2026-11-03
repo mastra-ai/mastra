@@ -68,6 +68,136 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     return replica;
   }
 
+  it('checks source revisions independently from board moves and work identity revisions', async () => {
+    const { workItems, scope, item } = await setup();
+    const source = item.workItem.sources[0]!;
+    const refreshed = await workItems.syncCard({
+      ...scope,
+      id: item.id,
+      expectedSourceRevision: source.revision,
+      patch: { title: 'Refreshed title', metadata: { labels: ['fixed'], state: 'closed' } },
+    });
+    expect(refreshed?.item).toMatchObject({
+      title: 'Refreshed title',
+      revision: item.revision,
+      workItem: { revision: item.workItem.revision + 1, labels: ['fixed'], state: 'closed' },
+    });
+    expect(refreshed?.item.workItem.sources[0]?.revision).toBe(source.revision + 1);
+    const moved = await workItems.update({ ...scope, id: item.id, patch: { stages: ['planning'] } });
+    const next = await workItems.syncCard({
+      ...scope,
+      id: item.id,
+      expectedSourceRevision: source.revision + 1,
+      patch: { metadata: { author: 'maintainer' } },
+    });
+    expect(next?.item).toMatchObject({
+      revision: moved?.item.revision,
+      workItem: { revision: item.workItem.revision + 1, labels: ['fixed'], state: 'closed', author: 'maintainer' },
+    });
+    await expect(
+      workItems.syncCard({
+        ...scope,
+        id: item.id,
+        expectedSourceRevision: source.revision + 1,
+        patch: { metadata: { labels: ['stale'] } },
+      }),
+    ).rejects.toMatchObject({ code: 'work_item_update_conflict', reason: 'revision' });
+    expect((await workItems.get({ ...scope, id: item.id }))?.workItem.labels).toEqual(['fixed']);
+  });
+
+  it.each([
+    { title: 'Retitled issue' },
+    { title: 'Retitled issue', metadata: { labels: ['fixed'] } },
+    { metadata: { labels: ['fixed'] } },
+  ])('returns the persisted sourced card after a facts-only refresh: %j', async patch => {
+    const { workItems, scope, item } = await setup();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const refreshed = await workItems.syncCard({ ...scope, id: item.id, patch });
+      expect(refreshed?.item).toMatchObject({
+        id: item.id,
+        title: patch.title ?? item.title,
+        workItem: { labels: patch.metadata?.labels ?? item.workItem.labels },
+      });
+      expect(refreshed?.item).toEqual(await workItems.get({ ...scope, id: item.id }));
+    }
+  });
+
+  it('rolls back provider facts when the matching trust-stamp write fails, then permits a revision-checked retry', async () => {
+    const { storage, workItems, scope, item } = await setup();
+    const database = storage.authDatabase?.();
+    if (!database) throw new Error('Expected a real test database');
+    const before = await workItems.get({ ...scope, id: item.id });
+    if (database.dialect === 'postgres') {
+      await database.pool.query(`CREATE FUNCTION reject_trust_update() RETURNS trigger LANGUAGE plpgsql AS $$
+        BEGIN RAISE EXCEPTION 'trust write rejected'; END; $$`);
+      await database.pool.query(`CREATE TRIGGER reject_trust_update BEFORE UPDATE ON factory_board_items
+        FOR EACH ROW EXECUTE FUNCTION reject_trust_update()`);
+    } else {
+      await database.client.execute(`CREATE TRIGGER reject_trust_update BEFORE UPDATE ON factory_board_items
+        BEGIN SELECT RAISE(ABORT, 'trust write rejected'); END`);
+    }
+    const refresh = () =>
+      workItems.syncCard({
+        ...scope,
+        id: item.id,
+        expectedSourceRevision: item.workItem.sources[0]!.revision,
+        patch: { metadata: { author: 'maintainer', authorTrusted: true } },
+      });
+    await expect(refresh()).rejects.toThrow('trust write rejected');
+    if (database.dialect === 'postgres')
+      await database.pool.query('DROP TRIGGER reject_trust_update ON factory_board_items');
+    else await database.client.execute('DROP TRIGGER reject_trust_update');
+    expect(await workItems.get({ ...scope, id: item.id })).toEqual(before);
+    const retried = await refresh();
+    expect(retried?.item).toMatchObject({ metadata: { authorTrusted: true }, workItem: { author: 'maintainer' } });
+    expect(retried?.item.workItem.sources[0]?.revision).toBe(item.workItem.sources[0]!.revision + 1);
+  });
+
+  it('fills only still-missing source and placement facts and leaves revisions unchanged on replay', async () => {
+    const { workItems, scope, item } = await setup();
+    const refresh = await workItems.syncCard({
+      ...scope,
+      id: item.id,
+      patch: { metadata: { author: 'latest-author', labels: [] } },
+    });
+    const patch = {
+      metadata: {
+        author: 'stale-author',
+        labels: ['stale'],
+        authorTrusted: true,
+        sourceCreatedAt: '2029-12-01T00:00:00Z',
+      },
+    };
+    const filled = await workItems.syncCard({ ...scope, id: item.id, patch, fillOnly: true });
+    expect(filled?.item).toMatchObject({
+      id: item.id,
+      board: item.board,
+      stages: item.stages,
+      revision: item.revision,
+      metadata: { authorTrusted: false },
+      workItem: { author: 'latest-author', labels: [], metadata: { sourceCreatedAt: '2029-12-01T00:00:00Z' } },
+    });
+    expect(filled?.item.workItem.sources[0]?.revision).toBe(refresh!.item.workItem.sources[0]!.revision + 1);
+    const replay = await workItems.syncCard({ ...scope, id: item.id, patch, fillOnly: true });
+    expect(replay?.item).toEqual(filled?.item);
+  });
+
+  it('refreshes Factory-native work without manufacturing an external source', async () => {
+    const { storage, workItems, scope } = await setup();
+    const { item } = await workItems.upsert({ ...scope, input: { title: 'Manual task', stages: ['intake'] } });
+    const refreshed = await workItems.syncCard({
+      ...scope,
+      id: item.id,
+      patch: { title: 'Updated manual task', metadata: { repository: 'acme/app' } },
+    });
+    expect(refreshed?.item).toMatchObject({
+      title: 'Updated manual task',
+      metadata: { repository: 'acme/app' },
+      workItem: { sources: [], provider: 'factory' },
+    });
+    expect(await storage.ops.findMany('factory_work_item_sources', { work_item_id: item.workItem.id })).toEqual([]);
+  });
+
   it('refuses to boot Factory in dry-run mode over migrated cards even though domains initialize fail-soft', async () => {
     const storage =
       backend === 'postgres'
@@ -192,7 +322,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
         'pull-request',
       );
       for (let attempt = 0; attempt < 2; attempt++) {
-        await workItems.update({
+        await workItems.syncCard({
           ...scope,
           id: item.id,
           patch: {
@@ -224,14 +354,46 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
       const refreshed = await workItems.get({ orgId: scope.orgId, id: item.id });
       expect(refreshed).toMatchObject({
         revision: item.revision + (clearsSettled ? 1 : 0),
-        workItem: { state: 'open', author: 'maintainer', labels: ['updated'] },
-        metadata: { draft: false, merged: false, authorTrusted: false },
+        workItem: {
+          state: 'open',
+          author: 'maintainer',
+          labels: ['updated'],
+          metadata: { draft: false, merged: false },
+        },
+        metadata: { authorTrusted: false },
       });
       if (reconciliation === undefined)
         expect(refreshed!.metadata).not.toHaveProperty('factoryPullRequestReconciliation');
       else expect(refreshed!.metadata?.factoryPullRequestReconciliation).toBeNull();
     },
   );
+
+  it('still invalidates pending rules when a provider refresh changes a real trust stamp', async () => {
+    const { workItems, scope, item } = await setup();
+    const refreshed = await workItems.syncCard({
+      ...scope,
+      id: item.id,
+      patch: { metadata: { author: 'maintainer', authorTrusted: true, factoryPullRequestReconciliation: null } },
+    });
+    expect(refreshed?.item).toMatchObject({
+      revision: item.revision + 1,
+      metadata: { authorTrusted: true },
+      workItem: { author: 'maintainer' },
+    });
+    const commit = await workItems.commitRuleEvaluation({
+      ...scope,
+      workItemId: item.id,
+      expectedRevision: item.revision,
+      ingress: { identity: 'after-trust-change', triggerType: 'test' },
+      configVersion: '1',
+      actor: null,
+      outcome: { status: 'accepted' },
+      decisions: [],
+      causalChain: [],
+      now: new Date(),
+    });
+    expect(commit.status).toBe('stale');
+  });
 
   it.each(['update', 'non-stage upsert'] as const)(
     'keeps a pending rule valid through a provider %s and refreshes cached facts',
@@ -538,7 +700,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     );
     expect(await workItems.get({ orgId: scope.orgId, id: item.id })).toMatchObject({
       revision: item.revision,
-      metadata: { labels: ['fixed'], state: 'closed' },
+      metadata: { authorTrusted: false },
       workItem: { labels: ['fixed'], state: 'closed', metadata: { labels: ['fixed'], state: 'closed' } },
     });
   });
@@ -669,8 +831,11 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('provider sync o
     const read = await workItems.get({ orgId: scope.orgId, id: item.id });
     expect(read).toMatchObject({
       revision: item.revision + 1,
-      metadata: { state: 'closed', labels: ['fixed'], author: 'maintainer', identifier: 'acme/app#42' },
-      workItem: { sources: [{ state: 'closed', labels: ['fixed'], author: 'maintainer', key: 'acme/app#42' }] },
+      metadata: { authorTrusted: false, reviewVerdict: 'approved' },
+      workItem: {
+        metadata: { state: 'closed', labels: ['fixed'], author: 'maintainer', identifier: 'acme/app#42' },
+        sources: [{ state: 'closed', labels: ['fixed'], author: 'maintainer', key: 'acme/app#42' }],
+      },
     });
   });
 

@@ -190,7 +190,7 @@ async function holdsLiveCardFor(
   if (byIdentifier && isLive(byIdentifier)) return true;
   if (!issueId) return false;
   const items = await options.workItems.listShared({ orgId, factoryProjectId });
-  return items.some(item => item.metadata?.linearIssueId === issueId && isLive(item));
+  return items.some(item => item.workItem.metadata?.linearIssueId === issueId && isLive(item));
 }
 
 /** Map a Linear read failure to the API response for the SPA. */

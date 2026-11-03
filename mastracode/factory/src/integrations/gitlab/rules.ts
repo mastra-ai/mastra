@@ -586,6 +586,7 @@ export class GitLabRules {
               title: input.item.title,
               url: input.item.externalSource?.url ?? null,
               stages: input.item.stages,
+              workItem: input.item.workItem,
               acceptedAt: input.item.acceptedAt,
               metadata: input.item.metadata,
             },
