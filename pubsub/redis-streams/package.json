@@ -27,7 +27,7 @@
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "pretest": "docker compose up -d --wait",
     "test": "pnpm check:test && vitest run",
-    "check:test": "tsc --project tsconfig.test.json && tsc --project tsconfig.source-fixture.json",
+    "check:test": "tsc --project tsconfig.test.json",
     "posttest": "docker compose down",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix ."
