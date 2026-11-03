@@ -1,13 +1,24 @@
 ---
-title: "Pinned context"
+title: 'Pinned context'
 description: "Keep Knowledge pages in an agent's context every turn, pinned in config for every run of a scope or by agents at runtime."
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Pinned context
 
-Pinned context puts a Knowledge page into the context of every run in an audience, on every turn, without the agent searching for it. Use pins for standing instructions, firm constraints and durable preferences that apply whether or not anyone asks. Everything else belongs in pages the agent finds with `knowledge_search` and `knowledge_read`: pinned pages cost tokens on every turn.
+Pinned context keeps chosen Knowledge pages in an agent's context on every turn, so the agent doesn't have to search for them. Use it for standing instructions, firm rules and lasting preferences that apply whether or not anyone asks. Pinned pages cost tokens on every turn. Keep everything else in pages the agent searches and reads when it needs them.
+
+You can pin a page in two ways:
+
+| | Pinned in config | Pinned by an agent |
+| - | - | - |
+| Set by | You, in a scope declaration | An agent, with the pin tool |
+| Delivered to | Every run that holds a scope of that type | Every run that holds a scope in the pin's audience |
+| When the budget is full | Always delivered, shortened if needed | Listed by name so the agent can open it |
+| Removed by | Changing the declaration | An agent unpinning it |
+
+Either way, a run gets a pinned page only if it can read the page. A pin never gives access to a page.
 
 :::alpha
 
@@ -17,7 +28,7 @@ Knowledge is in alpha. Its API may change between releases.
 
 ## Turn on pinned context
 
-Set `pinnedContext` on the `Knowledge` instance and give the agent Memory:
+Pinned context needs Memory on the agent. Set `pinnedContext` on the `Knowledge` instance:
 
 ```typescript title="src/mastra/knowledge.ts"
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
@@ -35,95 +46,88 @@ export const knowledge = new Knowledge({
 })
 ```
 
-`pinnedContext: true` uses the defaults: at most 20 pinned pages and 500 tokens per turn. Raise `maxTokens` for models with large context windows, for example `pinnedContext: { maxTokens: 8000 }`. The whole budget can be spent on every turn.
+`pinnedContext: true` allows up to 20 pinned pages and 500 tokens per turn. Raise `maxTokens` for models with large context windows. Knowledge can use the whole budget on every turn.
 
-`pinnedContext` adds the `knowledge_pin` tool and delivers pinned pages to the agent as a [state signal](/docs/signals/state-signals). The first turn gets the whole set, and later turns get only what changed, so an edit to a pinned page reaches running agents on their next step and the prompt cache stays warm. The signal rides on the agent's Memory thread, so pins need Memory on the agent. An agent with `pinnedContext` and no Memory logs a warning once and gets no pinned pages. Its `knowledge_pin` calls still store the pin for agents that do have Memory.
+Pinned pages reach the agent as a [state signal](/docs/signals/state-signals). The first turn gets every pinned page, and later turns get only what changed. An edit to a pinned page reaches running agents before their next model call, and the prompt cache stays warm. An agent without Memory gets no pinned pages and logs a warning once.
 
-A pinned page reaches a run only when the run holds one of the pin's audience scopes **and** can read the page. A pin never grants access to a page. Pins point at the page rather than copying its text, so edits to the page show up on the next turn.
+## Pin pages in config
 
-## Pinned context in config
+A scope declaration's `pinnedContext` lists pages that every run holding that scope gets. Here, every support run gets its org's refund policy:
 
-A scope declaration's `pinnedContext` lists pages that every run holding a scope of that type gets. It's separate from the `pinnedContext` option on `Knowledge`, which turns pinning on and sets the per-turn budget. These pages count toward that budget. Use them for pages a role must always see, such as the refund policy for support agents:
-
-```typescript title="src/mastra/knowledge.ts"
-const knowledge = new Knowledge({
-  id: 'acme',
-  storage,
-  tools: true,
-  pinnedContext: { maxTokens: 1000 },
-  scopes: {
-    ...knowledgeMemoryScopes(),
-    'role:$orgId:policy-admin': { description: 'Edits company policy' },
-    'role:$orgId:support': {
-      description: 'Customer support agents',
-      access: [{ principal: 'role:$orgId:policy-admin', role: 'editor' }],
-      pinnedContext: ['policy:$orgId#refund-policy'],
-      pinnedContextPriority: 10,
-    },
-    'policy:$orgId': {
-      description: 'Company policies',
-      access: [
-        { principal: 'org:$orgId', role: 'viewer' },
-        { principal: 'role:$orgId:policy-admin', role: 'owner' },
-      ],
-      pages: [
-        { key: 'refund-policy', name: 'Refund Policy', description: 'Refund limits and approvals' },
-      ],
-    },
+```typescript title="src/mastra/knowledge.ts" oxfmt:false
+scopes: {
+  ...knowledgeMemoryScopes(),
+  'role:$orgId:support': {
+    description: 'Customer support agents',
+    pinnedContext: ['policy:$orgId#refund-policy'],
   },
-})
+  'policy:$orgId': {
+    description: 'Company policies',
+    access: [{ principal: 'org:$orgId', role: 'viewer' }],
+    pages: [
+      { key: 'refund-policy', name: 'Refund Policy', description: 'Refund limits and approvals' },
+    ],
+  },
+},
 ```
 
-A `pinnedContext` entry is a page path, `<scope>#<key>[/<key>…]`, such as `policy:$orgId#refund-policy` or `org:$orgId#policies/refund`. Its `$params` bind from the scope the run holds: a run holding `role:acme:support` gets `policy:acme#refund-policy`, and a run holding `role:globex:support` gets Globex's own `policy:globex#refund-policy`. A malformed path fails at startup.
+Each entry is a page path. Its placeholders take their values from the scope the run holds. A run holding `role:acme:support` gets `policy:acme#refund-policy`, and a run holding `role:globex:support` gets `policy:globex#refund-policy`. The run must also be able to read the page, here through its `org:` scope:
 
-Knowledge resolves the path on every run. Point it at a template page from the target scope's `pages`, which tools can't move away. A pin at an ordinary page stops delivering if the page is moved, so update the pin when you move it. Until the page exists and has a body, the pin delivers nothing, without an error or a log.
+| Run holds | Gets the refund policy pinned |
+| - | - |
+| `org:acme`, `role:acme:support` | Yes |
+| `org:acme`, `role:acme:sales` | No, but it can read the page with the tools |
+| `org:globex`, `role:globex:support` | No, it gets `policy:globex#refund-policy` instead |
 
-| Run holds | Gets Refund Policy pinned | Can unpin |
-| - | - | - |
-| `org:acme`, `role:acme:support` | Yes, in `pinnedContext` | No |
-| `org:acme`, `role:acme:sales` | No, though it can read the page with the tools | No |
-| `org:globex`, `role:globex:support` | Only `policy:globex#refund-policy` | No |
+Knowledge looks up the path on every run. Point it at a template page declared in the target scope's `pages`, as in the example. Because tools can't move template pages, the pin keeps working. A pin whose page doesn't exist yet, or has no body, delivers nothing and reports no error.
 
-Pages in `pinnedContext` are always delivered and never dropped for budget. Tools can't remove them: `knowledge_pin` with `op: "unpin"` leaves them in place. Change the declaration instead.
+Pages pinned in config are always delivered, even over budget. An agent can't unpin them. To remove one, change the declaration.
 
-## Stored pins
+## Let agents pin pages
 
-Agents add and remove stored pins at runtime with `knowledge_pin`. `audience` lists the scopes whose runs receive the pin:
+Agents pin and unpin pages at runtime with the [`knowledge_pin`](/reference/knowledge/knowledge-tools#knowledge_pin) tool. Each pin has an **audience**: the scopes whose runs get the page. For example, an agent can pin the refund policy for `role:acme:support`. A pin an agent stores follows its page when the page moves.
 
-```json
-{ "op": "pin", "page": "policy:acme#refund-policy", "audience": ["role:acme:support"] }
-```
-
-`op: "unpin"` takes the same arguments and removes those audience entries. `page` takes a page ID, a path or an exact page name, as the other tools do. A stored pin keeps the page's ID, so it follows the page when the page moves.
-
-Pinning and unpinning need two things:
+To pin or unpin a page, the run needs both of these:
 
 - `editor` on the page's scope.
-- Authority over every audience entry: the run holds that scope, or has `editor` or higher on it through a declared rule.
+- For each scope in the audience, either holding it or having `editor` on it through a rule.
 
-In the config under [Pinned context in config](#pinned-context-in-config), `role:$orgId:support` gives `role:$orgId:policy-admin` the `editor` role, so a policy admin can pin pages for support. The rule binds `$orgId`, so an Acme policy admin can pin for `role:acme:support` but never for `role:globex:support`. Audience authority only decides whose context a page goes into. The audience must still be able to read the page to receive it.
+Here, policy admins can pin pages for support runs in their own org:
 
-Refusals come back to the model as tool errors:
-
-```text
-Pinning a page needs editor on "policy:acme"; this run has viewer there.
-Pinning for "role:acme:sales" needs holding it or editor on it; this run has neither.
+```typescript title="src/mastra/knowledge.ts" oxfmt:false
+scopes: {
+  ...knowledgeMemoryScopes(),
+  'role:$orgId:policy-admin': { description: 'Edits company policy' },
+  'role:$orgId:support': {
+    description: 'Customer support agents',
+    access: [{ principal: 'role:$orgId:policy-admin', role: 'editor' }],
+  },
+  'policy:$orgId': {
+    description: 'Company policies',
+    access: [
+      { principal: 'org:$orgId', role: 'viewer' },
+      { principal: 'role:$orgId:policy-admin', role: 'owner' },
+    ],
+  },
+},
 ```
 
-`editor` on a role scope also lets the pinner create pages there, which nobody can read without a `self` rule. Keep pages in content scopes such as `policy:` and use role scopes only as audiences.
+An Acme policy admin can pin for `role:acme:support`, but not for `role:globex:support`. Support runs still need to be able to read the page to get it.
+
+`editor` on a role scope also lets the run create pages there, and no one can read those pages without a `self` rule. Keep pages in content scopes such as `policy:`, and use role scopes only as audiences.
 
 ## What a run receives
 
-Each turn, Knowledge builds the run's pinned context in this order:
+On each turn, Knowledge builds the run's pinned context in this order:
 
-1. `pinnedContext` pages for every scope the run holds. If they alone exceed `maxTokens`, each gets an equal share of the budget and is truncated, never dropped. Knowledge warns at startup when a scope declares more `pinnedContext` pages than the budget can hold.
-1. Stored pins aimed at any scope the run holds, highest `pinnedContextPriority` first, then newest first. A stored pin ranks by the highest `pinnedContextPriority` among the run's scopes in its audience. A page that's already in `pinnedContext` isn't repeated.
-1. Stored pins that don't fit within `maxPins` or `maxTokens` are listed by name in one line, `Also pinned (open with knowledge_read): ...`, so the agent can open them.
+1. Pages pinned in config for every scope the run holds. If they're over budget, each one is shortened to an equal share.
+1. Pages pinned by agents for any scope the run holds, highest priority first, then newest first. A page already pinned in config isn't repeated.
+1. Pinned pages that don't fit are listed by name, so the agent can open them with the read tools.
 
-A page body longer than its share is cut and ends with `[truncated — knowledge_read for the rest]`. Pages with an empty body aren't delivered.
+A shortened page ends with a note that tells the agent to read the rest.
 
-`pinnedContextPriority` defaults to `0`. `knowledgeMemoryScopes()` sets `thread:` to `2`, `resource:` to `1` and `org:` to `0`, so a pin aimed at a single user's resource ranks above one aimed at the whole org.
+A scope's `pinnedContextPriority` sets its priority, `0` by default. `knowledgeMemoryScopes()` gives `thread:` a priority of 2, `resource:` 1 and `org:` 0, so a pin for one user ranks above a pin for the whole org.
 
 ## Next steps
 
-Next, see how [search](/docs/knowledge/search) finds the pages that aren't pinned. For the tool agents use to pin pages, see [`knowledge_pin`](/reference/knowledge/knowledge-tools#knowledge_pin).
+Next, see how [search](/docs/knowledge/search) finds the pages that aren't pinned. For the exact limits and the text agents see when pages are cut, see [Limits](/reference/knowledge/limits).

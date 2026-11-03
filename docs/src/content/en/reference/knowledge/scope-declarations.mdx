@@ -83,7 +83,7 @@ export const knowledge = new Knowledge({
     name: 'pinnedContext',
     type: 'string[]',
     description:
-      'Page paths every run holding a scope of this type gets pinned, such as `policy:$orgId#refund-policy`. See [Pinned context](/docs/knowledge/pinned-context).',
+      'Page paths every run holding a scope of this type gets pinned, such as `policy:$orgId#refund-policy`. Each entry is a [page path](/reference/knowledge/knowledge-tools#page-references) whose `$params` bind from the holding scope. A malformed path, an undeclared scope type, or a `$param` the holding scope lacks fails at startup. See [Pinned context](/docs/knowledge/pinned-context).',
     isOptional: true,
   },
   {
@@ -269,7 +269,7 @@ A concrete address can add `description`, `displayLabel`, `access`, `pinnedConte
 
 ## Run scopes
 
-A run's scopes come from host code: the `MASTRA_SCOPES_KEY` request context key, the `scopes` option on a call, and the agent's `scopes` option. A list on the agent adds to the others. A function on the agent receives them and returns the final set. With Memory, a run also holds `resource:<resourceId>` and `thread:<threadId>`. See [set who a run is](/docs/knowledge/scopes-and-access#set-who-a-run-is).
+A run's scopes come from host code: the `MASTRA_SCOPES_KEY` request context key, the `scopes` option on a call, and the agent's `scopes` option. A list on the agent adds to the others. A function on the agent receives them and returns the final set. With Memory, a run also holds `resource:<resourceId>` and `thread:<threadId>`. See [set a run's scopes](/docs/knowledge/scopes-and-access#set-a-runs-scopes).
 
 With Knowledge attached, every scope a run holds must match a declared type. A type that only names who a run is still needs a declaration, even an empty one such as `'role:$orgId:support': {}`.
 

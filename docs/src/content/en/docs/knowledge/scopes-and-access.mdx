@@ -7,25 +7,26 @@ packages:
 
 # Scopes and access
 
-Knowledge keeps three things apart:
-
-- **Who a run is**, set at runtime by your server code.
-- **What each scope allows**, set in your Knowledge config.
-- **What's stored**, the pages and notes the model reads and writes.
-
-The model works only with what's stored. It can't change who the run is or what a scope allows.
+Scopes control what an agent can see and change in Knowledge. You decide what each kind of scope allows. Your server decides which scopes each run, or agent call, holds. The model works only with the pages and notes those scopes give it, and it can't change either decision.
 
 :::alpha
 
-Knowledge is in alpha. Its API may change between releases.
+Knowledge is in alpha. Its API may change between releases. Access is checked on every tool call, but the alpha doesn't guarantee isolation between scopes yet. Don't store anything in Knowledge that must never reach another customer or user.
 
 :::
 
-## Scopes
+## Declare scopes
 
-A **scope** is a place content lives, written as an address such as `org:acme`, `team:acme:support` or `resource:dana`. The first segment is the scope's type, and the rest are its values. Every scope is also a page: reading `org:acme` lists the pages in it and the scopes placed under it, so the model can browse the scopes as a tree.
+A **scope** is an area of Knowledge that holds pages and notes. Each scope has an address, such as `org:acme`, `team:acme:support` or `resource:dana`. The part before the first colon is the scope's type, such as `team`. The rest identifies one scope of that type.
 
-You name the types. Knowledge has none built in, and the `scopes` option on `Knowledge` declares each type a run can hold, as a pattern with `$params`:
+Knowledge has no built-in scope types. You declare the types you need in the `scopes` option on `Knowledge`. Each type is a pattern, such as `team:$orgId:$teamId`. A `$name` segment is a placeholder that matches any value. The address `team:acme:support` matches that pattern with `$orgId = acme` and `$teamId = support`.
+
+The example sets up these rules:
+
+- Members of a support team can edit their team's pages.
+- Everyone in the org can read the team's pages and the company policies.
+- Org members can write public pages, which a public FAQ agent reads.
+- Other orgs can't see any of it.
 
 ```typescript title="src/mastra/knowledge.ts"
 import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
@@ -49,35 +50,46 @@ export const knowledge = new Knowledge({
       description: 'Company policies',
       access: [{ principal: 'org:$orgId', role: 'viewer' }],
     },
+    'audience:$orgId:public': {
+      description: 'Pages for public visitors',
+      access: [
+        { principal: 'self', role: 'viewer' },
+        { principal: 'org:$orgId', role: 'editor' },
+      ],
+    },
   },
 })
 ```
 
-[`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) declares Memory's `resource:` and `thread:` scopes and an `org:$orgId` tenant scope, and makes each run an editor on the ones it holds.
+[`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) adds three types: `org:` for each organization, plus Memory's `resource:` type for users and `thread:` type for conversations. A run is an editor in each of these scopes that it holds. The FAQ agent in [For one agent](#for-one-agent) reads the `audience:` scope.
 
-## Rules and roles
+## Access rules and roles
 
-Each declaration lists `access` **rules**. A rule gives a role on scopes of this type to a **principal**: the run scope that has to be in a run for the rule to apply. A principal is written as a declared scope pattern, such as `org:$orgId`, or as `self`, which stands for the scope being accessed. Any run holding a scope that matches the principal gets the role:
+Each declaration's `access` list says who gets which role on scopes of that type. Each entry is a **rule** with a `principal` and a `role`. The principal says which runs the rule applies to. A rule applies to a run when the run holds a scope that matches the principal. A principal is either `self` or one of your declared patterns. In the `team:$orgId:$teamId` declaration:
 
-- `self` means the same scope: a run holding `team:acme:support` is an editor there.
-- `org:$orgId` binds `$orgId` from the team's address, so a run holding `org:acme` can read `team:acme:support` but never `team:globex:support`.
+- `self` means the team scope that's being accessed. A run holding `team:acme:support` is an editor there.
+- `org:$orgId` means the team's own org, because it reuses the team's `$orgId`. A run holding `org:acme` can read `team:acme:support`, but not `team:globex:support`.
 
-Each role includes the ones before it:
+Each role can do everything the roles above it can:
 
 | Role | Can |
 | - | - |
 | `viewer` | Search and read pages and notes |
 | `contributor` | Create pages and add notes |
-| `editor` | Edit pages, move them within a scope, restamp and remove notes, and pin pages |
-| `owner` | Move pages to another scope, merge pages away and delete pages |
+| `editor` | Edit pages, move them within a scope, change who can see a note, remove notes, and pin pages |
+| `owner` | Move pages to another scope, merge a page into another page, and delete pages |
 
-`belongsTo` places a scope under another one in the tree. It grants nothing by itself. Declarations can also give each scope template pages, child scopes and a label for UIs. See [Scope declarations](/reference/knowledge/scope-declarations) for every field, how params bind, and the startup errors.
+`belongsTo` puts a scope under another scope in the tree, like a folder inside a folder. It doesn't give any access on its own. Declarations can also add template pages, child scopes and a display label. [Scope declarations](/reference/knowledge/scope-declarations) lists every field and the errors Knowledge reports at startup.
 
-## Set who a run is
+## Set a run's scopes
 
-A run's **run scopes** say who it is. They always come from host code. The model can't add to them or change them, and a client can't send them in a request body.
+**Run scopes** are the scopes a run holds. They identify the user, team or conversation the run works for. Only your server code sets them. The model can't change them, and a client can't send them in a request body.
 
-Your server knows who the user is, so set their scopes in middleware, as plain `<type>:<value>` strings on the `MASTRA_SCOPES_KEY` request context key:
+A run gets a role in a scope only when a rule gives it one. Every run scope must also match a declared type, or the Knowledge tools fail.
+
+### From your server
+
+Your server knows who the user is. Set the user's scopes in middleware, on the `MASTRA_SCOPES_KEY` request context key, as strings such as `org:acme`. In this example, `getUser()` is your app's own login lookup, and `support` is an agent with Knowledge attached:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core/mastra'
@@ -105,9 +117,11 @@ export const mastra = new Mastra({
 })
 ```
 
-Set `MASTRA_RESOURCE_ID_KEY` alongside the scopes so the server's thread ownership checks use the same user. See [request context](/docs/server/request-context#reserved-keys).
+Also set `MASTRA_RESOURCE_ID_KEY` to the user's ID. The server then checks thread ownership against the same user. See [request context](/docs/server/request-context#reserved-keys).
 
-In code that calls the agent directly, pass the same list as `scopes` on the call:
+### In a direct agent call
+
+When your code calls the agent directly, pass the scopes in the `scopes` option:
 
 ```typescript
 await support.generate('How do I handle a chargeback?', {
@@ -116,13 +130,11 @@ await support.generate('How do I handle a chargeback?', {
 })
 ```
 
-With Memory, a run also holds `resource:<resourceId>` and `thread:<threadId>`. A run has one of each, and a `resource:` scope that disagrees with `memory.resource` fails the run. Pass raw IDs: Knowledge encodes them, so a user ID of `acme/dana` becomes `resource:acme%2Fdana`.
+With Memory, the run also holds the `resource:` and `thread:` scopes from the `memory` option, here `resource:dana` and `thread:ticket-91`. A run can hold only one of each. If you pass a `resource:` scope that differs from `memory.resource`, the run fails. Pass raw IDs. Knowledge encodes them for you.
 
-Holding a scope grants nothing by itself, and every run scope must match a declared type. An undeclared one fails the tools with `Knowledge run scope "project:x" does not match a declared scope type.`
+### For one agent
 
-### Add or narrow scopes per agent
-
-A list in the agent's `scopes` option adds to the scopes from the request context and the call. A function receives the incoming scopes and returns the run's final set, which lets you give an agent less than the user has. Here a public FAQ agent swaps the org for a public audience scope that rules grant narrowly:
+An agent's `scopes` option changes the scopes for that agent's runs. A list adds to the scopes from the request context and the call. A function receives those scopes and returns the final list, so it can give an agent less access than the user has. This public FAQ agent replaces the user's `org:` scope with the org's `audience:` scope, so it reads only public pages:
 
 ```typescript
 export const faq = new Agent({
@@ -141,54 +153,41 @@ export const faq = new Agent({
 })
 ```
 
-The function has to keep every `resource:` and `thread:` scope it receives. They're the run's Memory identity, and dropping one fails the run.
+The function must return every `resource:` and `thread:` scope it receives. Memory uses them to identify the user and thread. The run fails if one is missing.
 
-## What a run can reach
+## How access is decided
 
-Knowledge works out a run's reach each time a tool runs:
+Each time a tool runs, Knowledge works out which scopes the run can reach and with which role:
 
-1. Start with the run scopes.
-1. Find every rule whose principal matches one of them, and give the run that rule's role on the scopes it covers.
-1. Stop there. A scope reached through a rule doesn't act as a principal itself, so access never chains through a second hop.
+1. It starts with the run scopes.
+1. It finds every rule whose principal matches one of those scopes, and gives the run that rule's role.
+1. It stops there. A role from a rule doesn't lead to more roles.
 
-For a run holding `org:acme` and `team:acme:support`:
+For example, for a run holding `org:acme` and `team:acme:support`:
 
 ```mermaid
 flowchart LR
-  A["Run scopes<br/>org:acme, team:acme:support"] --> B["Rules<br/>self → editor<br/>org:$orgId → viewer"]
-  B --> C["Reach<br/>team:acme:support: editor<br/>policy:acme: viewer"]
+  A["Run scopes<br/>org:acme, team:acme:support"] --> B["Rules that match<br/>those scopes"]
+  B --> C["Reach<br/>org:acme: editor<br/>team:acme:support: editor<br/>policy:acme: viewer<br/>audience:acme:public: editor"]
   C --> D["Pages and notes<br/>in those scopes"]
 ```
 
-There's no inheritance either. A role on `org:acme` gives nothing on scopes placed under it unless a rule says so.
+Scopes don't inherit access either. A role in `org:acme` gives nothing in the scopes placed under it unless a rule says so.
 
-Anything outside a run's reach looks absent. A page the run can't read comes back as `Knowledge page "Chargeback Playbook" not found.`, the same as a page that doesn't exist. A write that's in reach but needs a stronger role names the role it needs:
+To a run, anything outside its reach looks like it doesn't exist. A hidden page looks the same as a missing one. When the run can reach a scope but its role is too weak, the error says which role it needs.
 
-```text
-Editing a page needs editor on "policy:acme"; this run has viewer there.
-```
+### Note visibility
 
-## Pages and notes
+Each note is **stamped** with one or more scopes. A run sees a note only when it can read the page and holds at least one of the note's stamps. For example, on a team page:
 
-A **page** has a name, a short description and a markdown body. It has one home scope and can sit under a parent page. The pages in a scope form a tree. Tools refer to a page by its ID, its exact name, or its path: the scope address, `#`, then the page keys from the top down, as in `org:acme#policies/refund`.
+- A note stamped `resource:dana` is visible only to Dana's runs.
+- A note stamped `resource:dana` and `team:acme:support` is visible to Dana and her team.
 
-A **note** is a short fact added to a page, with its author. Contributors can add notes without being able to edit the page body. Every note is **stamped** with one or more scopes, and a run sees it when it can read the page and holds at least one stamp. A note on a team page stamped `resource:dana` reaches only Dana's runs. A note stamped with both `resource:dana` and `team:acme:support` reaches Dana and her team.
+### Test access with `explainAccess()`
 
-A note can link another page as `[[org:acme#policies/refund]]` or `[[Page Name]]`, and reading the linked page lists the notes that mention it.
+[`explainAccess()`](/reference/knowledge/knowledge-class#explainaccess) takes a list of run scopes and a scope or page. It returns the role those run scopes have there, and the rules that give it.
 
-## Check what a run can reach
-
-`explainAccess()` takes raw run scopes and a scope or page, and returns the role those scopes have there and the rule that grants it:
-
-```typescript
-await knowledge.explainAccess(['org:acme'], { scope: 'team:acme:support' })
-// { role: 'viewer', reasons: [{ principal: 'org:acme', role: 'viewer', rule: 'team:$orgId:$teamId', via: 'rule' }] }
-
-await knowledge.explainAccess(['org:globex'], { scope: 'team:acme:support' })
-// { role: null, reasons: [], reason: 'no-rule' }
-```
-
-Access comes from config, so a test can check each rule without running a model or writing pages:
+Access depends only on your declarations, so a test can check each rule without calling a model or writing pages:
 
 ```typescript title="src/mastra/knowledge.test.ts"
 import { describe, expect, it } from 'vitest'
@@ -212,10 +211,10 @@ describe('team access', () => {
 
 :::warning
 
-`explainAccess()` is for host code only. It tells a missing page from a hidden one, which a run must never learn. Never expose it through an agent tool, or through a server route without admin-level auth.
+Use `explainAccess()` only in server code. It shows whether a page is missing or hidden, and a run must never learn that. Don't expose it through an agent tool, or through a server route without admin-level auth.
 
 :::
 
 ## Next steps
 
-Next, [give an agent the Knowledge tools](/docs/knowledge/agents-and-tools) so it can search, read and write in the scopes its runs hold. To debug a refusal, call [`explainAccess()`](/reference/knowledge/knowledge-class#explainaccess).
+Next, [give an agent the Knowledge tools](/docs/knowledge/agents-and-tools) so it can search, read and write in the scopes its runs hold.

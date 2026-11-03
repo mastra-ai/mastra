@@ -99,7 +99,7 @@ const answer = await agent.generate('How long is our refund window?', {
 console.log(answer.text)
 ```
 
-The `resource:` and `thread:` scopes also tell Memory which user and thread the conversation belongs to. In a real app, scopes come from your server code for the authenticated user, never from the model or the request body. To set them for every request, see [Set who a run is](/docs/knowledge/scopes-and-access#set-who-a-run-is).
+The `resource:` and `thread:` scopes also tell Memory which user and thread the conversation belongs to. In a real app, scopes come from your server code for the authenticated user, never from the model or the request body. To set them for every request, see [Set a run's scopes](/docs/knowledge/scopes-and-access#set-a-runs-scopes).
 
 On Dana's run, the agent calls `knowledge_page` to save a page in the `org:acme` scope and gets back a result such as `{ "page": { "name": "Refund window", "ref": "org:acme#refunds", "scope": "org:acme", "version": 1 } }`. On Bea's run, it calls `knowledge_search`, finds `org:acme#refunds`, reads it with `knowledge_read` and answers that the window is 30 days. Search only returns pages the run can read, so a run that holds a different `org:` scope doesn't find Acme's page.
 
@@ -107,10 +107,10 @@ To see the page, run `mastra dev`, open Studio and select **Knowledge**. The `or
 
 ## Next steps
 
-- [Scopes and access](/docs/knowledge/scopes-and-access): declare scopes, set who a run is, and check what it can reach.
+- [Scopes and access](/docs/knowledge/scopes-and-access): declare scopes, set a run's scopes, and test what it can access.
 - [Agents and tools](/docs/knowledge/agents-and-tools): the tools agents get and how they read and write pages.
 - [Pinned context](/docs/knowledge/pinned-context): keep a page in an agent's context every turn.
 - [Search](/docs/knowledge/search): add search by meaning, and see how results are ranked.
 - [Load your content](/docs/knowledge/load-your-content): write your docs or policies into Knowledge from your server.
-- [Knowledge in Studio](/docs/knowledge/studio): browse what your agents know as a tree and a graph.
+- [Knowledge in Studio](/docs/studio/knowledge): browse what your agents know as a tree and a graph.
 - [What you can build](/docs/knowledge/patterns): nine patterns, from a docs agent to agent hand-offs.

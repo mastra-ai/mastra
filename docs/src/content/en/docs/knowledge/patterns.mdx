@@ -1,13 +1,13 @@
 ---
 title: "What you can build with Knowledge"
-description: "What you can build with Knowledge: a docs agent, one agent for many customers, pinned policies, coding conventions, runbooks, department scopes, personal notes and agent hand-offs."
+description: "What you can build with Knowledge: a docs agent, one agent for many customers, pinned policies, coding conventions, organizing pages, runbooks, department scopes, personal notes and agent hand-offs."
 packages:
   - "@mastra/core"
 ---
 
 # What you can build with Knowledge
 
-These nine patterns show what you can build with Knowledge. Each one says who the agents are, which scopes hold what, and the config or tool calls that make it work. Scope kinds such as `tenant:`, `repo:` or `handbook:` are names each config chooses. Knowledge has no built-in kinds. Only `resource:` and `thread:` come from Memory, and [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) declares them plus a tenant scope.
+These nine patterns show what you can build with Knowledge. Each one says who the agents are, which scopes hold what, and the config or tool calls that make it work. Knowledge has no built-in scope kinds. Only `resource:` and `thread:` come from Memory, and [`knowledgeMemoryScopes()`](/reference/knowledge/knowledge-memory-scopes) declares them plus a tenant scope.
 
 :::alpha
 
@@ -56,7 +56,7 @@ await agent.generate(message, {
 })
 ```
 
-A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, because the run doesn't hold `tenant:acme`. The prompt has nothing to do with it. With Memory on the agent, the `resource:` and `thread:` scopes also tell Memory which user and thread the run is. Test the rules with [`explainAccess()`](/docs/knowledge/scopes-and-access#check-what-a-run-can-reach).
+A Globex user's search for "renewal" doesn't return `tenant:acme#renewals`, because the run doesn't hold `tenant:acme`. The prompt has nothing to do with it. With Memory on the agent, the `resource:` and `thread:` scopes also tell Memory which user and thread the run is. Test the rules with [`explainAccess()`](/docs/knowledge/scopes-and-access#test-access-with-explainaccess). As the warning at the top says, Knowledge doesn't yet guarantee this isolation, so don't rely on it for sensitive customer data.
 
 ## A policy every agent follows
 
@@ -75,25 +75,11 @@ Declare the page on the account scope and pin it in config:
 },
 ```
 
-Once compliance writes the page, every run holding `account:umbrella` starts with it in context:
-
-```text
-<pinned-knowledge count="1">
-  • Data handling rules (account:umbrella#data-handling, v2, no notes): Never paste customer card numbers into chat. Ask for the last four digits only.
-</pinned-knowledge>
-```
-
-When compliance edits the page, agents that are already running get only the change on their next turn:
-
-```text
-<pinned-knowledge-update changes="1">
-  ~ changed Data handling rules (account:umbrella#data-handling, v3, no notes): Never paste customer card numbers into chat. Ask for the last four digits only. Never read a full card number back.
-</pinned-knowledge-update>
-```
+Once compliance writes the page, every run holding `account:umbrella` starts with it in context. When compliance edits the page, agents that are already running get only the change on their next model call.
 
 The policy stays where compliance put it:
 
-- **Agents can read it but not change it.** The account's runs are viewers. A sales agent that tries to edit the page is refused with `Editing a page needs editor on "account:umbrella"; this run has viewer there.`
+- **Agents can read it but not change it.** The account's runs are viewers. A sales agent that tries to edit the page is refused, because the run is only a viewer.
 - **Agents can't unpin it.** A pin in config comes from your declaration, not from storage, so the pin tool can't remove it.
 - **It can't be moved or deleted.** Pages declared in `pages` belong to the config.
 - **It reaches only runs that can read it.** A run on another account gets nothing, and pinning never widens who can read a page.
@@ -112,16 +98,7 @@ Developers' coding agents share one scope per repo. The conventions page is pinn
 },
 ```
 
-An agent records a decision as a note on the conventions page:
-
-```json
-{
-  "op": "add",
-  "page": "repo:api#conventions",
-  "scope": ["repo:api"],
-  "text": "Decided: pnpm workspaces, not npm. See [[repo:api#tooling]]."
-}
-```
+An agent records a decision, such as "pnpm workspaces, not npm", as a note on the conventions page, with a `[[repo:api#tooling]]` link to the page it concerns.
 
 The next session in `repo:api` sees the conventions with "1 note" beside them. A session in `repo:web` sees none of it.
 
@@ -141,7 +118,7 @@ On-call engineers are contributors on their service's scope: their agents add no
 },
 ```
 
-An on-call agent that tries to edit the page gets `Editing a page needs editor on "oncall:globex:payments"; this run has contributor there.`
+An on-call agent that tries to edit the page is refused, because it's only a contributor. It can still add a note.
 
 ## Organize pages like folders
 
@@ -151,13 +128,7 @@ Pages nest inside a scope. A handbook declares `refunds` with `damaged-items` un
 { "from": "handbook:acme", "depth": 2 }
 ```
 
-It gets back the tree:
-
-```text
-handbook:acme#refunds                Refund policy        (1 child)
-handbook:acme#refunds/damaged-items  Damaged items
-handbook:acme#escalation             Escalation process
-```
+It gets back each page's ref, name and number of child pages, such as `handbook:acme#refunds/damaged-items`, and reads the one it needs.
 
 ## One scope per department
 
@@ -192,16 +163,7 @@ Bea, on the support squad, sees the second note and not the first. Sam, in sales
 
 ## Hand work between agents
 
-Research, planning and coding agents on one initiative share a scope. Research writes a page, planning writes a plan nested under it, and the coding agent reads the plan and adds a note when a step is done:
-
-```json
-{
-  "op": "add",
-  "page": "initiative:checkout#research/plan",
-  "scope": ["initiative:checkout"],
-  "text": "Step 1 done in PR 412."
-}
-```
+Research, planning and coding agents on one initiative share a scope. Research writes a page, planning writes a plan nested under it, and the coding agent reads the plan and adds a note to it when a step is done, such as "Step 1 done in PR 412."
 
 None of the agents talk to each other. They share pages, under the same access rules.
 
