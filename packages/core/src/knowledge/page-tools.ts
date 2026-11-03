@@ -11,6 +11,7 @@ import type { ToolAction } from '../tools';
 import { createTool } from '../tools';
 import { knowledgeRoleOn } from './access';
 import { knowledgeRoleAtLeast } from './declarations';
+import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import {
   KNOWLEDGE_READ_BODY_TOKENS,
   KNOWLEDGE_READ_INLINE_TOKENS,
@@ -26,7 +27,6 @@ import {
 import type { KnowledgeLinePosition, KnowledgeLineRange } from './page-body';
 import { knowledgePageRefs } from './page-refs';
 import type { KnowledgePageRefs } from './page-refs';
-import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
 import { KnowledgeNotFoundError, KnowledgeRun } from './run';
 import type { KnowledgeRunContext } from './run';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
