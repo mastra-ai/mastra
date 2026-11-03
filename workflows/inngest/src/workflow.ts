@@ -5,7 +5,7 @@ import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { ExecutionDeadline } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType, getOrCreateSpan, getResumeTracingContext } from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan, getWorkflowResumeTracingContext } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
 import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
@@ -756,7 +756,7 @@ export class InngestWorkflow<
                   result: result.status === 'success' ? toSnapshotResult(result.result) : undefined,
                   error: result.status === 'failed' ? result.error : undefined,
                   requestContext: requestContext.toJSON(),
-                  tracingContext: getResumeTracingContext(workflowSpanData),
+                  tracingContext: getWorkflowResumeTracingContext(workflowSpanData),
                   timestamp: Date.now(),
                 };
 

@@ -9,7 +9,7 @@ import type { LeaseProvider, PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
-import { SpanType, getResumeTracingContext } from '../../../observability';
+import { SpanType, getWorkflowResumeTracingContext } from '../../../observability';
 import { RequestContext } from '../../../request-context/';
 import { coverNestedRun } from '../../../storage/run-fencing';
 import { assertWorkflowStepGuard, isWorkflowStepConflictError } from '../../../storage/workflow-step-guard';
@@ -590,7 +590,7 @@ export class WorkflowEventProcessor extends EventProcessor {
    * events), so we resolve it via runId here.
    */
   private resolveSuspendTracingContext(runId: string): WorkflowStateTracingContext | undefined {
-    return getResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);
+    return getWorkflowResumeTracingContext(this.resolveRunTracingContext(runId)?.currentSpan);
   }
 
   /**

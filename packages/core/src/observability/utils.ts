@@ -138,31 +138,41 @@ const NO_OP_TRACE_ID = 'no-op-trace';
 const NO_OP_SPAN_ID = 'no-op';
 
 /**
- * The context a suspending run saves so that its resume continues it (see `resumeFrom`).
+ * The lineage a suspending run saves so that its resume continues it (see `resumeFrom`).
  * Takes the run's live span, or its exported span when another process persisted it.
- * An unsampled run saves only that decision: its no-op span has no trace for a resume to
- * join, and the resume must stay unrecorded rather than sample again.
+ * An unsampled run saves nothing: its no-op span has no real trace for a resume to join.
  */
 export function getResumeTracingContext(span: AnySpan | AnyExportedSpan | undefined): ResumeTracingContext | undefined {
   if (!span) return undefined;
   const live = 'exportSpan' in span;
-  if (live ? !span.isValid : span.id === NO_OP_SPAN_ID) return { sampled: false };
+  if (live ? !span.isValid : span.id === NO_OP_SPAN_ID) return undefined;
   const exported = live ? span.exportSpan(span.observabilityInstance?.getConfig?.().includeInternalSpans) : span;
-  const context: ResumeTracingContext = {
+  return {
     traceId: span.traceId,
     spanId: live ? resolveExportedSpanId(span) : span.id,
     parentSpanId: exported?.parentSpanId,
     resumedFromSpanId: exported && (exported.resumedFromSpanId ?? exported.id),
     externalParentSpanId: exported?.externalParentSpanId,
-    sampled: true,
   };
-  const traceState = live ? span.traceState : (span as SpanSnapshot<SpanType>).traceState;
-  if (traceState) {
-    // `nestedUnderParent` describes the original call's own parent; a resume supplies its own.
-    const { nestedUnderParent: _nested, ...ownTraceState } = traceState;
-    context.traceState = ownTraceState;
-  }
-  return context;
+}
+
+/**
+ * The context a suspending workflow run saves: its lineage plus the trace's sampling decision and
+ * state, so a resume continues the trace as it was instead of deciding again. An unsampled run
+ * saves only that decision, since its no-op span has no trace for a resume to join. Agent runs
+ * save `getResumeTracingContext` alone and decide on resume.
+ */
+export function getWorkflowResumeTracingContext(
+  span: AnySpan | AnyExportedSpan | undefined,
+): ResumeTracingContext | undefined {
+  if (!span) return undefined;
+  const lineage = getResumeTracingContext(span);
+  if (!lineage) return { sampled: false };
+  const traceState = 'exportSpan' in span ? span.traceState : (span as SpanSnapshot<SpanType>).traceState;
+  if (!traceState) return { ...lineage, sampled: true };
+  // `nestedUnderParent` describes the original call's own parent; a resume supplies its own.
+  const { nestedUnderParent: _nested, ...ownTraceState } = traceState;
+  return { ...lineage, sampled: true, traceState: ownTraceState };
 }
 
 function resumeInSavedTrace(saved: ResumeTracingContext | undefined, targetTraceId: string | undefined) {

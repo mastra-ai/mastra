@@ -24,8 +24,8 @@ import {
   SpanType,
   createObservabilityContext,
   getOrCreateSpan,
-  getResumeTracingContext,
   getRootExportSpan,
+  getWorkflowResumeTracingContext,
   resolveObservabilityContext,
 } from '../../observability';
 import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
@@ -2084,7 +2084,8 @@ export class EventedRun<
       suspendedPaths: {},
       resumeLabels: {},
       waitingPaths: {},
-      tracingContext: this.executionEngine.options.resumeTracingContext ?? getResumeTracingContext(workflowSpan),
+      tracingContext:
+        this.executionEngine.options.resumeTracingContext ?? getWorkflowResumeTracingContext(workflowSpan),
       timestamp: Date.now(),
     };
 
@@ -2646,7 +2647,7 @@ export class EventedRun<
     if (workflowSpan) this.mastra.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     // A worker in another process that suspends this segment has no live span to save, so
     // save the resumed root's context now; its next resume then continues this segment.
-    const resumeTracingContext = getResumeTracingContext(workflowSpan);
+    const resumeTracingContext = getWorkflowResumeTracingContext(workflowSpan);
     if (resumeTracingContext) {
       await workflowsStore.updateWorkflowState({
         workflowName: this.workflowId,
