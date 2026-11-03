@@ -2,7 +2,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // A nav row is a control: same rhythm as a button or a field, from the same rungs, so a
@@ -64,7 +64,8 @@ export const navItemLayoutClasses = ({ isCollapsed, level = 0, size }: NavItemLa
   cn(
     navItemVariants({ size }),
     'w-full justify-start',
-    controlStateColorTransition,
+    // Rows in a list switch instantly, like menu rows: neither the fill nor the label fades.
+    'transition-none before:transition-none',
     '[&_svg]:size-4 [&_svg]:shrink-0',
     focusRing,
     !isCollapsed && nestedExpandedItemClasses(level),
