@@ -1294,7 +1294,7 @@ export interface FactoryAttentionScope {
   factoryProjectId: string;
 }
 
-/** A safety net, not the invalidation path: a missed version bump can't hide a change for longer. */
+/** A safety net, not the invalidation path: bounds how long a missed version bump or a stuck read can last. */
 const LIST_CACHE_TTL_MS = 60_000;
 const LIST_CACHE_MAX_PROJECTS = 100;
 
@@ -1305,6 +1305,8 @@ type WorkItemSourceSyncPatch = Partial<
 export class WorkItemsStorage extends FactoryStorageDomain {
   /** Last full card list per project, valid while the project's board version is unchanged. */
   readonly #listCache = new Map<string, { version: string; takenAt: number; items: Card[] }>();
+  // Joined only at the same board version: a poll after a write must not join a read begun before it.
+  readonly #listInFlight = new Map<string, { version: string; startedAt: number; items: Promise<Card[]> }>();
   #attentionChanged: (scope: FactoryAttentionScope) => void = () => {};
   // Storage does not know boards. Until the host says which phases are terminal,
   // no card counts as finished, so the boot sweep never supersedes on a guess.
@@ -1740,7 +1742,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return (await this.#listCached(orgId, factoryProjectId)).items;
   }
 
-  /** `cached` is true when `items` is the cache's own array, which callers that mutate must clone. */
+  /** `cached` is true when `items` is shared with other callers, which callers that mutate must clone. */
   async #listCached(orgId: string, factoryProjectId: string): Promise<{ items: Card[]; cached: boolean }> {
     const key = `${orgId}\u0000${factoryProjectId}`;
     // Read the version before the rows: a write that lands in between bumps it again afterwards,
@@ -1750,14 +1752,30 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     if (version && hit?.version === version && Date.now() - hit.takenAt < LIST_CACHE_TTL_MS) {
       return { items: hit.items, cached: true };
     }
-    const items = await this.#listWithOps(super.ops, orgId, factoryProjectId);
-    this.#listCache.delete(key);
-    if (!version) return { items, cached: false };
-    this.#listCache.set(key, { version, takenAt: Date.now(), items });
-    if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
-      this.#listCache.delete(this.#listCache.keys().next().value!);
+    if (!version) {
+      const items = await this.#listWithOps(super.ops, orgId, factoryProjectId);
+      this.#listCache.delete(key);
+      return { items, cached: false };
     }
-    return { items, cached: true };
+    const inFlight = this.#listInFlight.get(key);
+    if (inFlight?.version === version && Date.now() - inFlight.startedAt < LIST_CACHE_TTL_MS) {
+      return { items: await inFlight.items, cached: true };
+    }
+    const read = this.#listWithOps(super.ops, orgId, factoryProjectId);
+    this.#listInFlight.set(key, { version, startedAt: Date.now(), items: read });
+    try {
+      const items = await read;
+      if (this.#listInFlight.get(key)?.items === read) {
+        this.#listCache.delete(key);
+        this.#listCache.set(key, { version, takenAt: Date.now(), items });
+        if (this.#listCache.size > LIST_CACHE_MAX_PROJECTS) {
+          this.#listCache.delete(this.#listCache.keys().next().value!);
+        }
+      }
+      return { items, cached: true };
+    } finally {
+      if (this.#listInFlight.get(key)?.items === read) this.#listInFlight.delete(key);
+    }
   }
 
   async listByIds({
