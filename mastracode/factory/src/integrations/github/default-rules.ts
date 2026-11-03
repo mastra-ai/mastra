@@ -177,22 +177,8 @@ function pullRequestOpened(context: FactoryGithubRuleContext) {
   // feedback — the builder is woken in place — until the merge closes it.
   if (context.item && context.pullRequestIntake !== true) {
     if (!authoringCard(context) || context.pullRequest.state !== 'open') return;
-    // A trusted person's pull request for an issue the Factory is already working on: the
-    // builder decides whether to stop or adjust, so the card stays where it is.
-    if (context.pullRequestHome?.reason === 'closes') {
-      const stage = context.item.stages[0];
-      if (stage === 'intake' || stage === 'canceled' || stage === 'done') return;
-      return {
-        type: 'sendMessage',
-        idempotencyKey: `${context.ingress.id}:pull-request-attached`,
-        role: 'work',
-        priority: 'high',
-        message:
-          `${context.pullRequest.author ?? 'Someone'} opened pull request #${context.pullRequest.number} ` +
-          `(${context.pullRequest.url}), which says it closes this issue; it is now on this card. ` +
-          'Read it, then decide whether your work is still needed, should build on it, or should stop.',
-      } as const;
-    }
+    // Someone else's pull request only joins a card nobody is building, and never moves it here.
+    if (context.pullRequestHome?.reason === 'closes') return;
     if (!context.item.stages.includes('execute')) return;
     // Someone else's pull request attached to the issue does not mean this card's build is out.
     if (attachedPullRequest(context) && !context.pullRequest.factoryAuthored) return;
