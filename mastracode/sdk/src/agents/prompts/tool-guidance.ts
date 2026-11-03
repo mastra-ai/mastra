@@ -230,12 +230,16 @@ ${patchToolGuidance}
 - Takes one argument: \`path\` (the plan markdown file you wrote under \`${plansDir}/\`). Do NOT pass the plan body — it lives in the file.`);
   }
 
-  // Outside plan mode the only path hint is the submit_plan tool's own example
-  // (`.mastracode/plans/`), so name the real directory when the host moved it.
-  if (modeId !== 'plan' && !denied.has('submit_plan') && plansDir !== DEFAULT_PLANS_DIR) {
+  // Outside plan mode nothing else names the plans directory (the submit_plan
+  // tool example is directory-neutral), so state it here.
+  if (modeId !== 'plan' && !denied.has('submit_plan')) {
+    const elsewhere =
+      plansDir === DEFAULT_PLANS_DIR
+        ? ''
+        : `, never under \`${DEFAULT_PLANS_DIR}/\`. Plans anywhere else cannot be shown to the user`;
     sections.push(`
 **submit_plan** — Submit a plan for user review
-- Write plan files under \`${plansDir}/\` (e.g. \`${plansDir}/add-dark-mode.md\`), never under \`${DEFAULT_PLANS_DIR}/\`. Plans anywhere else cannot be shown to the user.
+- Write plan files under \`${plansDir}/\` (e.g. \`${plansDir}/add-dark-mode.md\`)${elsewhere}.
 - Pass that file's \`path\` to \`submit_plan\`. Do NOT pass the plan body — it lives in the file.`);
   }
 

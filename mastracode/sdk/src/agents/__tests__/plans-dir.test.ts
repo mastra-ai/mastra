@@ -41,10 +41,11 @@ describe('host-configured plansDir', () => {
     expect(prompt).not.toContain('.mastracode/plans/');
   });
 
-  it('adds no build-mode plan path guidance when the default plans dir is in use', async () => {
+  it('names the default plans dir in build mode when the host does not move it', async () => {
     const prompt = await getDynamicInstructions({ requestContext: requestContextFor('build') });
 
-    expect(prompt).not.toContain('Write plan files under');
+    expect(prompt).toContain('Write plan files under `.mastracode/plans/` (e.g. `.mastracode/plans/add-dark-mode.md`).');
+    expect(prompt).not.toContain('never under');
   });
 
   it('omits the build-mode plan path guidance when submit_plan is disabled', async () => {
