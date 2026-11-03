@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { PlatformMemoryClient } from './client';
 import { PlatformMemory } from './platform-memory';
 
-type StoredMessage = { id: string; role: string; content: string; createdAt: string };
+type StoredMessage = { id: string; role: string; content: string; parts?: { type: string; text?: string }[]; createdAt: string };
 
 /** In-memory stand-in for `/v1/memory/:instanceId/*`, with the server's observation already applied. */
 function fakeMemoryApi() {
@@ -41,8 +41,39 @@ function fakeMemoryApi() {
       return json({ messages: body.messages }, 201);
     }
     if (path === '/working-memory' && method === 'PUT') return json({ ok: true });
-    if (path.match(/^\/threads\/[^/]+\/processors$/) && method === 'POST') {
-      return json({ aborted: null, chunks: [], rotations: 0, messageList: body.messageList });
+    if ((m = path.match(/^\/threads\/([^/]+)\/processors$/)) && method === 'POST') {
+      const id = decodeURIComponent(m[1]!);
+      const list = body.messageList;
+      if (body.phase === 'inputStep') {
+        const saved = messages.get(id) ?? [];
+        list.messages = [
+          ...saved.map(msg => ({
+            ...msg,
+            threadId: id,
+            resourceId: body.resourceId,
+            content: { format: 2, parts: msg.parts ?? [{ type: 'text', text: msg.content }] },
+          })),
+          ...list.messages,
+        ];
+        if (observations) list.systemMessages.push({ role: 'system', content: observations });
+      } else if (body.phase === 'output') {
+        const saved = messages.get(id) ?? [];
+        for (const msg of list.messages) {
+          if (msg.role !== 'user' && msg.role !== 'assistant') continue;
+          const stored = {
+            id: msg.id,
+            role: msg.role,
+            content: msg.content.content ?? msg.content.parts?.filter((part: { type: string }) => part.type === 'text').map((part: { text: string }) => part.text).join('\n') ?? '',
+            parts: msg.content.parts,
+            createdAt: msg.createdAt,
+          };
+          const index = saved.findIndex(existing => existing.id === msg.id);
+          if (index < 0) saved.push(stored);
+          else saved[index] = stored;
+        }
+        messages.set(id, saved);
+      }
+      return json({ aborted: null, chunks: [], rotations: 0, messageList: list });
     }
     if ((m = path.match(/^\/threads\/([^/]+)\/context$/))) {
       const id = decodeURIComponent(m[1]!);
@@ -103,7 +134,6 @@ describe('PlatformMemory', () => {
 
     await agent.generate('My name is Ada.', { memory });
     await agent.generate('What is my name?', { memory });
-
     expect(api.messages.get('thread_1')!.map(m => [m.role, m.content])).toEqual([
       ['user', 'My name is Ada.'],
       ['assistant', 'Noted.'],
@@ -124,8 +154,7 @@ describe('PlatformMemory', () => {
 
     const system = prompts[0].filter((m: any) => m.role === 'system').map((m: any) => m.content);
     expect(system.join('\n')).toContain('User prefers TypeScript.');
-    const ctx = api.requests.find(r => r.path === '/threads/thread_2/context')!;
-    expect(ctx).toBeDefined();
+    expect(api.requests.some(r => r.path === '/threads/thread_2/processors' && r.body.phase === 'inputStep')).toBe(true);
   });
 
   it('maps thread lookups and recall onto the API', async () => {

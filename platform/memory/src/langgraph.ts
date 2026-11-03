@@ -61,6 +61,7 @@ export function platformMemoryAgentMiddleware(options: PlatformMemoryAgentMiddle
       const messages = (request.state as { messages?: BaseMessage[] }).messages ?? request.messages;
       const saved = await turns.beforeStep(threadId, resourceId, toItems(messages));
       const context = await client.getContext(threadId, resourceId);
+      turns.noteContext(threadId, toItems(messages), context.observedAt);
       // The current turn: the last run of human messages and everything after. Earlier turns come from memory.
       let first = messages.findLastIndex(m => m.getType() === 'human');
       while (first > 0 && messages[first - 1]!.getType() === 'human') first--;
