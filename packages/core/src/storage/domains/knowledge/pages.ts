@@ -13,7 +13,7 @@
  *
  * The body-link table came after schema 4 shipped and is additive: adapters create it with idempotent
  * DDL in `init()` (as the pin-audience index was), without a schema version change, so existing
- * stores keep their data. Links for pages written before it fill in on `knowledge.reindex()` or the
+ * stores keep their data. Links for pages written before it fill in on `knowledge.reindexLinks()` or the
  * page's next write.
  *
  * @experimental Knowledge APIs are experimental and may change without notice.
