@@ -27,6 +27,7 @@ import type {
 import { ACTIVE_RUN_BINDING_STAGES } from '../storage/domains/work-items/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
+import type { ProjectListRepository } from './contracts.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
@@ -324,6 +325,42 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
     return null;
   }
 
+  /**
+   * The projects' connections across every integration, each with its installation and linked repositories.
+   * Orphaned connections, whose installation was pruned when the GitHub App was uninstalled, are left out: one
+   * of them must not fail the read, since the web UI cannot leave its page loader until it succeeds.
+   */
+  async #connectionsWithRepositories(orgId: string, factoryProjectIds: string[]) {
+    if (factoryProjectIds.length === 0 || this.#versionControlIntegrationIds.size === 0) return [];
+    const perIntegration = await Promise.all(
+      (await this.#handles()).map(handle => handle.connections.listWithRepositories({ orgId, factoryProjectIds })),
+    );
+    return perIntegration.flat();
+  }
+
+  /** Each project's linked repositories, in connection order, without the installation behind them. */
+  async #linkedRepositoriesByProject(orgId: string, factoryProjectIds: string[]) {
+    const byProject = new Map<string, ProjectListRepository[]>();
+    for (const connection of await this.#connectionsWithRepositories(orgId, factoryProjectIds)) {
+      const repositories = byProject.get(connection.factoryProjectId) ?? [];
+      for (const link of connection.repositories) {
+        repositories.push({
+          projectRepositoryId: link.id,
+          connectionId: connection.id,
+          integrationId: connection.integrationId,
+          repositoryId: link.repositoryId,
+          externalId: link.repository?.externalId ?? null,
+          slug: link.repository?.slug ?? null,
+          defaultBranch: link.repository?.defaultBranch ?? null,
+          branch: link.branch,
+          sandboxWorkdir: link.sandboxWorkdir,
+        });
+      }
+      byProject.set(connection.factoryProjectId, repositories);
+    }
+    return byProject;
+  }
+
   async #repositoryPayload(handle: SourceControlStorageHandle, orgId: string, projectRepository: ProjectRepository) {
     const repository = await handle.repositories.get({ orgId, id: projectRepository.repositoryId });
     return { ...projectRepository, repository };
@@ -537,7 +574,16 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const context = loose(routeContext);
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
-          return context.json({ projects: await (await this.#projects()).list({ orgId: tenant.orgId }) });
+          const projects = await (await this.#projects()).list({ orgId: tenant.orgId });
+          // The web UI waits for this list before it renders anything, so the repositories come with it instead
+          // of from one source-control-connections request per project.
+          const repositories = await this.#linkedRepositoriesByProject(
+            tenant.orgId,
+            projects.map(project => project.id),
+          );
+          return context.json({
+            projects: projects.map(project => ({ ...project, repositories: repositories.get(project.id) ?? [] })),
+          });
         },
       }),
       registerApiRoute(FACTORY_ROUTE_CONTRACTS.projectCreate.path, {
@@ -743,33 +789,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const projectId = context.req.param('id');
           if (!projectId || !UUID_RE.test(projectId) || !(await this.#project(tenant.orgId, projectId)))
             return context.json({ error: 'Project not found' }, 404);
-          const connections = [];
-          for (const handle of await this.#handles()) {
-            for (const connection of await handle.connections.list({
-              orgId: tenant.orgId,
-              factoryProjectId: projectId,
-            })) {
-              const installation = await handle.installations.get({
-                orgId: tenant.orgId,
-                id: connection.installationId,
-              });
-              // Skip orphaned connections whose installation was pruned (e.g.
-              // the user uninstalled the GitHub App). Otherwise
-              // `projectRepositories.list` throws `requireConnection` and the
-              // whole endpoint 500s, which hangs the web UI on the page
-              // loader for every project. New code cascade-deletes these on
-              // installation removal, but this defensive skip lets already-
-              // orphaned rows in existing databases self-heal on read.
-              if (!installation) continue;
-              const links = await handle.projectRepositories.list({ orgId: tenant.orgId, connectionId: connection.id });
-              connections.push({
-                ...connection,
-                installation,
-                repositories: await Promise.all(links.map(link => this.#repositoryPayload(handle, tenant.orgId, link))),
-              });
-            }
-          }
-          return context.json({ connections });
+          return context.json({ connections: await this.#connectionsWithRepositories(tenant.orgId, [projectId]) });
         },
       }),
       registerApiRoute('/web/factory/projects/:id/source-control-connections', {
