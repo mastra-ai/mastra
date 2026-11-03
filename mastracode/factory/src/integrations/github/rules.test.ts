@@ -2913,7 +2913,7 @@ describe('GithubRules', () => {
     expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBeNull();
   });
 
-  it('leaves the Work item untouched when a board poll replays the opening of the pull request it records', async () => {
+  it('leaves the authoring card untouched when a board poll replays the opening of the pull request it records', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await workItems.upsert({
       orgId: 'org-1',
