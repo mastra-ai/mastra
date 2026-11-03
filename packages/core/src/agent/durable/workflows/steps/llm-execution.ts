@@ -83,7 +83,7 @@ import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
-import { currentSegment } from '../../segment-spans';
+import { currentSegment, withoutDurableEngineKeys } from '../../segment-spans';
 import { createStepStartChunk, emitChunkEvent, publishStepStartChunk } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
@@ -296,6 +296,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
     outputSchema: durableLLMOutputSchema,
     execute: withStepLifetime(async (params: LLMExecutionParams, stepLifetime) => {
       const { inputData, mastra, tracingContext, requestContext, abortSignal } = params;
+      // What a processor sees: the run's values without the engine's claim and segment carrier.
+      // A live view of the step's context, so a value a processor writes reaches the next step.
+      const userRequestContext = withoutDurableEngineKeys(requestContext);
       const ownership = getExecutionOwnershipGuard(params);
 
       // Access pubsub via symbol
@@ -1012,7 +1015,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   stepNumber: stepIndex,
                   steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-                  requestContext,
+                  requestContext: userRequestContext,
                   memory: registryEntry?.memory,
                   resourceId: typedInput.state?.resourceId,
                   threadId: typedInput.state?.threadId,
@@ -1286,7 +1289,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   stepNumber: inputData.stepIndex ?? 0,
                   steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   retryCount: processorRetryCount,
-                  requestContext,
+                  requestContext: userRequestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: requestStepWriter,
                   abortSignal: runAbortSignal,
@@ -1762,7 +1765,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               options: {
                 runId,
                 tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
-                requestContext,
+                requestContext: userRequestContext,
               },
             });
 
@@ -1904,7 +1907,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         // processor spans. A model-step context here would end the
                         // consumer's span and open one under the model step.
                         observabilityContext: createObservabilityContext(),
-                        requestContext,
+                        requestContext: userRequestContext,
                         messageList,
                         streamWriter: outputStreamWriter,
                         emitChunk: async chunk => {
@@ -2007,7 +2010,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         toolArgs: resultPayload.args,
                         result: resultPayload.result,
                         providerExecuted: resultProviderExecuted,
-                        requestContext,
+                        requestContext: userRequestContext,
                         retryCount: processorRetryCount,
                         tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                         writer: toolResultChunkWriter,
@@ -2195,7 +2198,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         observabilityContext: createObservabilityContext(
                           modelSpanTracker?.getTracingContext() ?? tracingContext,
                         ),
-                        requestContext,
+                        requestContext: userRequestContext,
                         messageList,
                         streamWriter: outputStreamWriter,
                         emitChunk: async chunk => {
@@ -2521,7 +2524,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 const released = await getToolResultRunner().flushHeldParts(
                   registryEntry.processorStates,
                   createObservabilityContext(modelSpanTracker?.getTracingContext() ?? tracingContext),
-                  requestContext,
+                  userRequestContext,
                   messageList,
                   0,
                   outputStreamWriter,
@@ -2658,7 +2661,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     stepNumber: inputData.stepIndex ?? 0,
                     steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                     retryCount: processorRetryCount,
-                    requestContext,
+                    requestContext: userRequestContext,
                   });
                   ownership?.throwIfLost();
                   if (retry && canRetryErrorInner) {
@@ -2788,7 +2791,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   rawResponse,
                   fromCache: false,
                   retryCount: processorRetryCount,
-                  requestContext,
+                  requestContext: userRequestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: requestStepWriter,
                   abortSignal: runAbortSignal,
@@ -2920,7 +2923,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   toolCalls: toolCallInfos.length > 0 ? toolCallInfos : undefined,
                   text: textDeltas.join(''),
                   usage,
-                  requestContext,
+                  requestContext: userRequestContext,
                   tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
                   writer: outputStepWriter,
                   retryCount: processorRetryCount,
@@ -3168,7 +3171,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   stepNumber: inputData.stepIndex ?? 0,
                   steps: expandDurableSteps(inputData.accumulatedSteps ?? []),
                   retryCount: processorRetryCount,
-                  requestContext,
+                  requestContext: userRequestContext,
                   tracingContext,
                 });
                 ownership?.throwIfLost();

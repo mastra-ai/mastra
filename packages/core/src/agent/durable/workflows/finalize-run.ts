@@ -23,6 +23,7 @@ import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { getRunRegistryEntry } from '../run-registry';
+import { withoutDurableEngineKeys } from '../segment-spans';
 import type { DurableAgenticWorkflowInput, RunRegistryEntry } from '../types';
 import { resolveRuntimeDependencies } from '../utils/resolve-runtime';
 
@@ -270,7 +271,7 @@ export async function runDurableFinishSideEffects({
       await runner.runOutputProcessors(
         messageList,
         createObservabilityContext(tracingContext),
-        effectiveRequestContext,
+        withoutDurableEngineKeys(effectiveRequestContext),
         0,
         undefined,
         outputResult,
