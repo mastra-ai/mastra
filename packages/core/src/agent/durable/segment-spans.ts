@@ -208,11 +208,12 @@ export function currentSegment(args: {
     },
     clocks(...candidates) {
       const owner = data.modelSpanData?.id;
-      const hit = candidates.find(candidate => {
-        if (!candidate?.completionStartTime) return false;
-        const measuredUnder = clockOwner(candidate);
-        return measuredUnder === undefined || measuredUnder === owner;
-      });
+      // State that cannot say where it measured predates `clockSpanId`: it was measured under
+      // the loop-state segment, so only that segment may use it.
+      const legacyOwner = (state.modelSpanData as { id?: string } | undefined)?.id;
+      const hit = candidates.find(
+        candidate => !!candidate?.completionStartTime && (clockOwner(candidate) ?? legacyOwner) === owner,
+      );
       return hit && toClockAttributes(hit);
     },
   };
@@ -221,7 +222,8 @@ export function currentSegment(args: {
 /**
  * Clocks for the next loop state. The first inference wins within a segment; a new segment's first
  * inference replaces the previous segment's clocks. An output without `clockSpanId` (memoized
- * before this field existed) counts as the current segment's.
+ * before this field existed) was measured under the loop-state segment: it is stamped as that
+ * segment's, and ignored once the state carries a later segment's clocks.
  */
 export function nextSegmentClocks<TClock extends Date | string | undefined>(
   current: SegmentState & { completionStartTime?: TClock },
