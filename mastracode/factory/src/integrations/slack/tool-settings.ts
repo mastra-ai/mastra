@@ -14,7 +14,7 @@ export const slackToolSettingsSchema = z.object({
   channels: z.enum(['session', 'selected', 'all']),
   /** Slack channel ids, e.g. `C0123456`, used when `channels` is `selected`. */
   channelIds: z.array(z.string().regex(/^[CG][A-Z0-9]+$/)),
-  /** `read`: other channels are read only; posting stays in the session's own thread. */
+  /** `read`: other channels are read only; posting stays in the session's own channel. */
   channelAccess: z.enum(['read', 'post']),
   /** Who sessions may DM. */
   directMessages: z.enum(['none', 'anyone']),

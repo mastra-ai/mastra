@@ -242,18 +242,24 @@ describe('Slack tools on a Factory session, with access granted', () => {
     );
   });
 
-  it('reads other channels but posts only in its own thread when access is read only', async () => {
-    const { run, tool } = await slackSession({ channels: 'all', channelAccess: 'read' });
+  it('reads other channels but posts only in its own channel when access is read only', async () => {
+    const { run } = await slackSession({ channels: 'all', channelAccess: 'read' });
 
     const read = await run('fetchChannelMessages', { channelId: 'slack:C2', limit: 5, direction: 'backward' });
     expect(read.messages.map((m: { text: string }) => m.text)).toContain('Deploy is green again');
 
-    expect(tool('postChannelMessage')).toBeUndefined();
+    await expect(run('postChannelMessage', { channelId: 'slack:C2', message: 'Hi' })).rejects.toThrow(
+      '"slack:C2" is read only for this session: it can only post in its own channel, slack:C1.',
+    );
     await expect(run('postMessage', { threadId: 'slack:C2:1700000200.000200', message: 'Hi' })).rejects.toThrow(
       'is read only for this session',
     );
     await run('postMessage', { threadId: 'slack:C1:171.1', message: 'Read #eng, all green.' });
-    expect(sent('chat.postMessage')).toEqual([expect.objectContaining({ channel: 'C1', text: 'Read #eng, all green.' })]);
+    await run('postChannelMessage', { channelId: 'slack:C1', message: 'Summary of #eng: all green.' });
+    expect(sent('chat.postMessage').map(m => [m.channel, m.text])).toEqual([
+      ['C1', 'Read #eng, all green.'],
+      ['C1', 'Summary of #eng: all green.'],
+    ]);
   });
 
   it('rejects a channel grant that is not a Slack channel id when the integration is set up', () => {

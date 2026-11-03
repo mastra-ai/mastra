@@ -13,7 +13,7 @@ new SlackIntegration({
   signingSecret,
   tools: {
     channels: 'all', // or 'selected' with channelIds: ['C0123456']
-    channelAccess: 'post', // or 'read' to post only in the session's own thread
+    channelAccess: 'post', // or 'read' to post only in the session's own channel
     directMessages: 'anyone',
   },
 });

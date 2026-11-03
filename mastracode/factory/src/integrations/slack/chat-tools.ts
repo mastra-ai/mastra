@@ -82,18 +82,19 @@ export function createSlackChatTools({
       throw new Error(`"${id}" is outside the channels this session can use: ${scope}.`);
     }
   };
+  const ownChannel = channelOf(chat, sessionThreadId);
   const postGuard =
     settings.channelAccess === 'read'
       ? (id: string) => {
-          if (id !== sessionThreadId) {
-            throw new Error(`"${id}" is read only for this session: it can only post in its own thread, ${sessionThreadId}.`);
+          if (channelOf(chat, id) !== ownChannel) {
+            throw new Error(`"${id}" is read only for this session: it can only post in its own channel, ${ownChannel}.`);
           }
         }
       : guard;
   const note = <T extends { description?: unknown }>(tool: T): T => ({
     ...tool,
     description: `${String(tool.description)} Channels this session can use: ${scope}${
-      settings.channelAccess === 'read' ? " (read only: post only in this session's own thread)" : ''
+      settings.channelAccess === 'read' ? " (read only: post only in this session's own channel)" : ''
     }. This session's thread is ${sessionThreadId}.`,
   });
 
@@ -105,24 +106,19 @@ export function createSlackChatTools({
     getThreadParticipants: getThreadParticipants(chat, guard),
     getChannelInfo: getChannelInfo(chat, guard),
     postMessage: note(postMessage(chat, { needsApproval: false, guard: postGuard })),
-    // Read only leaves nowhere for a new top-level post to go. Given a thread
-    // id, Slack would silently post a new top-level message instead of
-    // replying in that thread.
-    ...(settings.channelAccess === 'read'
-      ? {}
-      : {
-          postChannelMessage: note(
-            postChannelMessage(chat, {
-              needsApproval: false,
-              guard: id => {
-                if (id.split(':').length > 2) {
-                  throw new Error(`"${id}" is a thread, not a channel. Use postMessage to reply in a thread.`);
-                }
-                guard(id);
-              },
-            }),
-          ),
-        }),
+    // Given a thread id, Slack would silently post a new top-level message
+    // instead of replying in that thread.
+    postChannelMessage: note(
+      postChannelMessage(chat, {
+        needsApproval: false,
+        guard: id => {
+          if (id.split(':').length > 2) {
+            throw new Error(`"${id}" is a thread, not a channel. Use postMessage to reply in a thread.`);
+          }
+          postGuard(id);
+        },
+      }),
+    ),
     findChannel: createTool({
       id: 'findChannel',
       description:
