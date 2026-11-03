@@ -234,8 +234,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   async function handleInput(text: string, sentQuotes: readonly ChatQuote[]) {
     // What the agent reads; the draft keeps only what was typed, since failed annotations come back on their own.
-    const quoted = sentQuotes.map(quote => quote.text);
-    const message = formatQuotedMessage(text, quoted);
+    const message = formatQuotedMessage(text, sentQuotes);
     if (planFeedback.pending) {
       await planFeedback.submitFeedback(message);
       setImages([]);

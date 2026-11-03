@@ -112,10 +112,10 @@ interface ThreadAnnotationsProps {
  * in the message column, so the marks scroll with the text; adding one focuses the composer.
  */
 const ThreadAnnotations = ({ containerRef, composerInputRef }: ThreadAnnotationsProps) => {
-  const { quotes, addQuote } = useChatQuotes();
+  const { quotes, addQuote, removeQuote, setQuoteComment } = useChatQuotes();
   return (
     <>
-      <QuoteMarkers quotes={quotes} />
+      <QuoteMarkers quotes={quotes} onRemove={removeQuote} onCommentChange={setQuoteComment} />
       <QuoteSelectionToolbar
         containerRef={containerRef}
         onQuote={quote => {
@@ -472,8 +472,7 @@ const AgentComposer = ({
       }
       for (const quote of submittedQuotes) removeQuote(quote.id);
       setSendPulseKey(k => k + 1);
-      const quoted = submittedQuotes.map(quote => quote.text);
-      const message = formatQuotedMessage(text, quoted);
+      const message = formatQuotedMessage(text, submittedQuotes);
       void Promise.resolve(send({ message, attachments: coreUserMessages })).then(delivered => {
         if (delivered === false) restoreSubmission();
       });

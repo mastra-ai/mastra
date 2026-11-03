@@ -27,7 +27,7 @@ function revealSource(quote: ChatQuote): boolean {
 
 /**
  * The quotes waiting for the next message, as one chip at the top of `ComposerBox`. It opens their
- * numbered list, where each one can be found in the transcript or removed. Renders nothing while
+ * numbered list with their comments, where each one can be found in the transcript or removed. Renders nothing while
  * no quote is waiting.
  */
 export function ComposerQuotes({ quotes, onRemove }: ComposerQuotesProps) {
@@ -46,25 +46,30 @@ export function ComposerQuotes({ quotes, onRemove }: ComposerQuotesProps) {
             {quotes.map((quote, index) => (
               <li key={quote.id} className="flex items-start gap-2 rounded-lg p-1.5">
                 <QuoteNumber className="mt-px">{index + 1}</QuoteNumber>
-                {quote.source ? (
-                  <button
-                    type="button"
-                    title="Show in chat"
-                    className={cn(
-                      'line-clamp-3 min-w-0 flex-1 cursor-pointer rounded-xs text-left text-body-sm whitespace-pre-line text-muted-foreground hover:text-foreground',
-                      focusRing,
-                    )}
-                    onClick={() => {
-                      if (revealSource(quote)) setOpen(false);
-                    }}
-                  >
-                    {quote.text}
-                  </button>
-                ) : (
-                  <p className="line-clamp-3 min-w-0 flex-1 text-body-sm whitespace-pre-line text-muted-foreground">
-                    {quote.text}
-                  </p>
-                )}
+                <div className="flex min-w-0 flex-1 flex-col gap-1">
+                  {quote.source ? (
+                    <button
+                      type="button"
+                      title="Show in chat"
+                      className={cn(
+                        'line-clamp-3 cursor-pointer rounded-xs text-left text-body-sm whitespace-pre-line text-muted-foreground hover:text-foreground',
+                        focusRing,
+                      )}
+                      onClick={() => {
+                        if (revealSource(quote)) setOpen(false);
+                      }}
+                    >
+                      {quote.text}
+                    </button>
+                  ) : (
+                    <p className="line-clamp-3 text-body-sm whitespace-pre-line text-muted-foreground">{quote.text}</p>
+                  )}
+                  {quote.comment?.trim() && (
+                    <p className="line-clamp-2 text-body-sm whitespace-pre-line text-foreground">
+                      {quote.comment.trim()}
+                    </p>
+                  )}
+                </div>
                 <Button
                   type="button"
                   variant="ghost"

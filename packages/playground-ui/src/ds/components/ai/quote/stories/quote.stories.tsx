@@ -27,7 +27,7 @@ const FOLLOW_UP = `Opened the pull request with the approved styling for Factory
 function QuotingChat() {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { quotes, addQuote, removeQuote } = useChatQuotes();
+  const { quotes, addQuote, removeQuote, setQuoteComment } = useChatQuotes();
   const [draft, setDraft] = useState('');
   const [sent, setSent] = useState<string>();
 
@@ -36,7 +36,7 @@ function QuotingChat() {
       {/* The marks are placed in the scrolled content, so they travel with the text. */}
       <div className="h-96 overflow-y-auto rounded-xl" data-testid="story-transcript">
         <div ref={transcriptRef} className="relative flex flex-col gap-4 py-4">
-          <QuoteMarkers quotes={quotes} />
+          <QuoteMarkers quotes={quotes} onRemove={removeQuote} onCommentChange={setQuoteComment} />
           <Message from="user">Can we make the tables look more like a DataList without its container?</Message>
           <Message from="assistant">
             <MarkdownRenderer>{REPLY}</MarkdownRenderer>
@@ -63,8 +63,7 @@ function QuotingChat() {
         onSubmit={event => {
           event.preventDefault();
           if (!draft.trim()) return;
-          const quoted = quotes.map(quote => quote.text);
-          setSent(formatQuotedMessage(draft, quoted));
+          setSent(formatQuotedMessage(draft, quotes));
           for (const quote of quotes) removeQuote(quote.id);
           setDraft('');
         }}
@@ -107,7 +106,7 @@ const meta: Meta<typeof QuoteSelectionToolbar> = {
     docs: {
       description: {
         component:
-          'Annotate parts of the transcript for the next message, the same way in Studio and Factory. `QuoteSelectionToolbar` floats Add to chat over text selected inside one message of the transcript it watches; a drag that runs past the message is trimmed back to it, and a selection that reaches a second message offers nothing. `QuoteMarkers` numbers each annotation where it was selected and tints its text; render it inside the scrolled content, below a positioned ancestor, so the marks travel with the text. `ComposerQuotes` shows them as one chip in `ComposerBox` that opens their numbered list, to find or remove each one. `ChatQuotesProvider` and `useChatQuotes` hold them between the transcript and the composer; mount the provider once per conversation, below whatever remounts when the thread changes. `formatQuotedMessage` turns them and the typed text into the Markdown blockquotes the agent receives. Apps own sending, clearing annotations once a message is accepted, and `restoreQuotes` when it is not.',
+          'Annotate parts of the transcript for the next message, the same way in Studio and Factory. `QuoteSelectionToolbar` floats Add to chat over text selected inside one message of the transcript it watches; a drag that runs past the message is trimmed back to it, and a selection that reaches a second message offers nothing. `QuoteMarkers` marks each annotation with a numbered comment bubble where it was selected and tints its text; hovering a bubble deepens the tint, and clicking it opens a card to comment on the passage or remove it. Render it inside the scrolled content, below a positioned ancestor, so the bubbles travel with the text. `ComposerQuotes` shows them as one chip in `ComposerBox` that opens their numbered list, to find or remove each one. `ChatQuotesProvider` and `useChatQuotes` hold them between the transcript and the composer; mount the provider once per conversation, below whatever remounts when the thread changes. `formatQuotedMessage` turns them, their comments and the typed text into the numbered Markdown list the agent receives. Apps own sending, clearing annotations once a message is accepted, and `restoreQuotes` when it is not.',
       },
     },
   },
@@ -131,7 +130,11 @@ export const WaitingAnnotations: Story = {
         <ComposerBox>
           <ComposerQuotes
             quotes={[
-              { id: 'open', text: 'Open rows: no frame or lines; subtle rounded hover and selection.' },
+              {
+                id: 'open',
+                text: 'Open rows: no frame or lines; subtle rounded hover and selection.',
+                comment: 'Make this the default for chat tables.',
+              },
               {
                 id: 'soft',
                 text: 'Soft rows: faint rounded backgrounds with small gaps, a quieter surface that still separates each record from the next one when the list grows long.\n\nA second paragraph that stays hidden behind the clamp.',

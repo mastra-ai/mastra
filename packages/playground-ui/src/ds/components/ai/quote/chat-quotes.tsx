@@ -14,9 +14,11 @@ export interface ChatQuote {
   text: string;
   /** Where it was selected, so the transcript can mark it. */
   source?: QuoteSource;
+  /** What the person said about the passage; it goes out with it. */
+  comment?: string;
 }
 
-export type NewChatQuote = Omit<ChatQuote, 'id'>;
+export type NewChatQuote = Pick<ChatQuote, 'text' | 'source'>;
 
 export interface ChatQuotesApi {
   /** Quotes waiting for the next message, in the order they were added. Their number is their position. */
@@ -24,6 +26,7 @@ export interface ChatQuotesApi {
   /** Adds a quote. Blank text, and a passage already waiting, are ignored. */
   addQuote: (quote: NewChatQuote) => void;
   removeQuote: (id: string) => void;
+  setQuoteComment: (id: string, comment: string) => void;
   /** Puts quotes from a message that failed to send back, ahead of any added since. */
   restoreQuotes: (quotes: readonly ChatQuote[]) => void;
 }
@@ -53,6 +56,8 @@ export function ChatQuotesProvider({ children }: { children: ReactNode }) {
       );
     },
     removeQuote: id => setQuotes(current => current.filter(quote => quote.id !== id)),
+    setQuoteComment: (id, comment) =>
+      setQuotes(current => current.map(quote => (quote.id === id ? { ...quote, comment } : quote))),
     restoreQuotes: restored =>
       setQuotes(current => [...restored.filter(quote => !current.some(kept => kept.id === quote.id)), ...current]),
   };

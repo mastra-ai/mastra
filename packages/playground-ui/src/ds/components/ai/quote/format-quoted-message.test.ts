@@ -3,37 +3,65 @@ import { describe, expect, it } from 'vitest';
 import { formatQuotedMessage, normalizeQuote } from './format-quoted-message';
 
 describe('formatQuotedMessage', () => {
-  describe('when no quotes were added', () => {
+  describe('when no annotations were added', () => {
     it('sends the typed text unchanged', () => {
       expect(formatQuotedMessage('  keep my spacing ', [])).toBe('  keep my spacing ');
     });
   });
 
-  describe('when one quote spans several paragraphs', () => {
-    it('keeps every line inside one blockquote, blank lines included', () => {
-      expect(formatQuotedMessage('Why?', ['First line\nsecond line\n\nNew paragraph'])).toBe(
-        '> First line\n> second line\n>\n> New paragraph\n\nWhy?',
+  describe('when one annotation spans several paragraphs', () => {
+    it('keeps every line inside the numbered item, blank lines included', () => {
+      expect(formatQuotedMessage('Why?', [{ text: 'First line\nsecond line\n\nNew paragraph' }])).toBe(
+        '1. > First line\n   > second line\n   >\n   > New paragraph\n\nWhy?',
       );
     });
   });
 
-  describe('when two quotes are added', () => {
-    it('sends them as separate blockquotes in the order they were added', () => {
-      expect(formatQuotedMessage('Compare these', ['Open rows', 'Soft rows'])).toBe(
-        '> Open rows\n\n> Soft rows\n\nCompare these',
+  describe('when two annotations are added', () => {
+    it('numbers them in the order added, as the transcript marks show them', () => {
+      expect(formatQuotedMessage('Compare these', [{ text: 'Open rows' }, { text: 'Soft rows' }])).toBe(
+        '1. > Open rows\n\n2. > Soft rows\n\nCompare these',
       );
+    });
+  });
+
+  describe('when an annotation carries a comment', () => {
+    it('puts the comment inside that item, so it stays apart from the typed message', () => {
+      expect(
+        formatQuotedMessage('Anything else?', [
+          { text: 'Open rows', comment: 'Make this the default.' },
+          { text: 'Soft rows', comment: 'Drop it.\n\nWe never ship it.' },
+        ]),
+      ).toBe(
+        '1. > Open rows\n\n   Make this the default.\n\n2. > Soft rows\n\n   Drop it.\n\n   We never ship it.\n\nAnything else?',
+      );
+    });
+  });
+
+  describe('when there are ten or more annotations', () => {
+    it('indents continuation lines past the wider number', () => {
+      const quotes = Array.from({ length: 10 }, (_, index) => ({ text: `Line ${index + 1}` }));
+      quotes[9] = { text: 'Ten\nstill ten' };
+
+      expect(formatQuotedMessage('', quotes).split('\n\n').at(-1)).toBe('10. > Ten\n    > still ten');
     });
   });
 
   describe('when the person typed nothing', () => {
-    it('sends only the quotes, without a trailing blank line', () => {
-      expect(formatQuotedMessage('  ', ['Open rows'])).toBe('> Open rows');
+    it('sends only the annotations, without a trailing blank line', () => {
+      expect(formatQuotedMessage('  ', [{ text: 'Open rows' }])).toBe('1. > Open rows');
     });
   });
 
-  describe('when a quote holds only whitespace', () => {
-    it('drops it instead of sending an empty blockquote', () => {
-      expect(formatQuotedMessage('Hi', [' \n\t'])).toBe('Hi');
+  describe('when an annotation holds only whitespace', () => {
+    it('drops it instead of sending an empty item', () => {
+      expect(formatQuotedMessage('Hi', [{ text: ' \n\t' }])).toBe('Hi');
+    });
+  });
+
+  describe('when a comment holds only whitespace', () => {
+    it('sends the passage without an empty comment', () => {
+      expect(formatQuotedMessage('Hi', [{ text: 'Open rows', comment: '  \n ' }])).toBe('1. > Open rows\n\nHi');
     });
   });
 });

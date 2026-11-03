@@ -30,13 +30,13 @@ const SECOND = 'Soft rows add faint backgrounds.';
 function QuotingChat({ onSend, showReply = true }: { onSend: (message: string) => void; showReply?: boolean }) {
   const transcriptRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const { quotes, addQuote, removeQuote } = useChatQuotes();
+  const { quotes, addQuote, removeQuote, setQuoteComment } = useChatQuotes();
   const [draft, setDraft] = useState('');
 
   return (
     <>
       <div ref={transcriptRef} data-testid="transcript" className="relative">
-        <QuoteMarkers quotes={quotes} />
+        <QuoteMarkers quotes={quotes} onRemove={removeQuote} onCommentChange={setQuoteComment} />
         <Message from="user">Which table style should we use?</Message>
         {showReply && (
           <Message
@@ -64,8 +64,7 @@ function QuotingChat({ onSend, showReply = true }: { onSend: (message: string) =
         aria-label="Message composer"
         onSubmit={event => {
           event.preventDefault();
-          const quoted = quotes.map(quote => quote.text);
-          onSend(formatQuotedMessage(draft, quoted));
+          onSend(formatQuotedMessage(draft, quotes));
           for (const quote of quotes) removeQuote(quote.id);
           setDraft('');
         }}
@@ -145,7 +144,7 @@ describe('QuoteSelectionToolbar', () => {
 
       typeAndSend('Why this one?');
 
-      expect(sent).toEqual(['> Open rows\n\nWhy this one?']);
+      expect(sent).toEqual(['1. > Open rows\n\nWhy this one?']);
       expect(markers()).toHaveLength(0);
       expect(screen.queryByRole('button', { name: /annotation/ })).toBeNull();
     });
@@ -169,7 +168,7 @@ describe('QuoteSelectionToolbar', () => {
 
       typeAndSend('Compare them');
 
-      expect(sent).toEqual(['> Soft rows\n\n> Open rows\n\nCompare them']);
+      expect(sent).toEqual(['1. > Soft rows\n\n2. > Open rows\n\nCompare them']);
     });
   });
 
@@ -184,7 +183,48 @@ describe('QuoteSelectionToolbar', () => {
 
       expect(markers().map(marker => marker.textContent)).toEqual(['1']);
       typeAndSend('Only this one');
-      expect(sent).toEqual(['> Open rows\n\nOnly this one']);
+      expect(sent).toEqual(['1. > Open rows\n\nOnly this one']);
+    });
+  });
+
+  describe('when the person clicks an annotation and comments on it', () => {
+    it('opens a card on the passage and sends the comment with that annotation', async () => {
+      layOutLines();
+      const { sent } = renderChat();
+      await annotate(SECOND, 'Soft rows'.length);
+      await annotate(REPLY, 'Open rows'.length);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Annotation 1' }));
+      const card = await screen.findByRole('dialog', { name: 'Annotation 1' });
+      expect(within(card).getByText('Soft rows')).toBeTruthy();
+      const comment = within(card).getByRole('textbox', { name: 'Comment on annotation 1' });
+      await waitFor(() => expect(document.activeElement).toBe(comment));
+
+      fireEvent.change(comment, { target: { value: 'Drop this one.' } });
+      fireEvent.click(within(card).getByRole('button', { name: 'Done' }));
+      await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Annotation 1' })).toBeNull());
+
+      expect(screen.getByRole('button', { name: 'Annotation 1, with a comment' })).toBeTruthy();
+      typeAndSend('Thoughts?');
+      expect(sent).toEqual(['1. > Soft rows\n\n   Drop this one.\n\n2. > Open rows\n\nThoughts?']);
+    });
+  });
+
+  describe('when the person removes an annotation from its card', () => {
+    it('closes the card and renumbers the rest', async () => {
+      layOutLines();
+      const { sent } = renderChat();
+      await annotate(SECOND, 'Soft rows'.length);
+      await annotate(REPLY, 'Open rows'.length);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Annotation 1' }));
+      const card = await screen.findByRole('dialog', { name: 'Annotation 1' });
+      fireEvent.click(within(card).getByRole('button', { name: 'Remove annotation 1' }));
+
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(markers().map(marker => marker.textContent)).toEqual(['1']);
+      typeAndSend('Just this');
+      expect(sent).toEqual(['1. > Open rows\n\nJust this']);
     });
   });
 
@@ -207,13 +247,14 @@ describe('QuoteSelectionToolbar', () => {
 
       const [marker] = markers();
       expect(marker?.hidden).toBe(false);
-      expect([marker?.style.left, marker?.style.top]).toEqual(['100px', '120px']);
+      // The bubble's tail sits just inside the top of the passage's last letter: 1px in, 7px down.
+      expect([marker?.style.left, marker?.style.top]).toEqual(['99px', '127px']);
 
       hideReply();
 
       expect(markers().map(mark => mark.hidden)).toEqual([true]);
       typeAndSend('Still relevant?');
-      expect(sent).toEqual(['> Open rows\n\nStill relevant?']);
+      expect(sent).toEqual(['1. > Open rows\n\nStill relevant?']);
     });
   });
 
@@ -225,7 +266,7 @@ describe('QuoteSelectionToolbar', () => {
       fireEvent.click(await screen.findByRole('button', { name: 'Add to chat' }));
       typeAndSend('More?');
 
-      expect(sent).toEqual(['> faint backgrounds.\n\nMore?']);
+      expect(sent).toEqual(['1. > faint backgrounds.\n\nMore?']);
     });
   });
 

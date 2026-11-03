@@ -1,4 +1,10 @@
-/* Quoted text in the transcript. The indicator flips with the theme, so one mix reads on both. */
+/* Quoted text in the transcript. The indicator flips with the theme, so one mix reads on both.
+ * `--info-indicator` itself: the theme declares `--color-*` inline, so those never exist at runtime. */
 ::highlight(chat-quote) {
-  background-color: color-mix(in oklab, var(--color-info-indicator) 24%, transparent);
+  background-color: color-mix(in oklab, var(--info-indicator) 20%, transparent);
+}
+
+/* The passage whose bubble is hovered, focused or open. */
+::highlight(chat-quote-active) {
+  background-color: color-mix(in oklab, var(--info-indicator) 42%, transparent);
 }

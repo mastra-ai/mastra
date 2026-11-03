@@ -8,12 +8,12 @@ import { useChatCommands } from '../context/ChatCommandsProvider';
  * sit in the scrolled chat content, so they move with the text; adding one focuses the composer.
  */
 export function TranscriptAnnotations({ containerRef }: { containerRef: RefObject<HTMLElement | null> }) {
-  const { quotes, addQuote } = useChatQuotes();
+  const { quotes, addQuote, removeQuote, setQuoteComment } = useChatQuotes();
   const { composerInputRef } = useChatCommands();
 
   return (
     <>
-      <QuoteMarkers quotes={quotes} />
+      <QuoteMarkers quotes={quotes} onRemove={removeQuote} onCommentChange={setQuoteComment} />
       <QuoteSelectionToolbar
         containerRef={containerRef}
         onQuote={quote => {

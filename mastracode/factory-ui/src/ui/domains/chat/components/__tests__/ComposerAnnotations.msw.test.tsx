@@ -86,7 +86,7 @@ describe('Composer annotations', () => {
       await user.keyboard('Why this one?');
       await user.click(screen.getByRole('button', { name: 'Send message' }));
 
-      await waitFor(() => expect(session.delivered).toEqual(['> Open rows\n\nWhy this one?']));
+      await waitFor(() => expect(session.delivered).toEqual(['1. > Open rows\n\nWhy this one?']));
       expect(screen.queryByRole('button', { name: /annotation/ })).not.toBeInTheDocument();
       expect(markers()).toEqual([]);
     });
@@ -114,7 +114,7 @@ describe('Composer annotations', () => {
       await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Only this one');
       await user.click(screen.getByRole('button', { name: 'Send message' }));
 
-      await waitFor(() => expect(session.delivered).toEqual(['> Open rows\n\nOnly this one']));
+      await waitFor(() => expect(session.delivered).toEqual(['1. > Open rows\n\nOnly this one']));
     });
   });
 
@@ -127,7 +127,7 @@ describe('Composer annotations', () => {
       await user.type(screen.getByRole('textbox', { name: 'Message' }), 'Why this one?');
       await user.click(screen.getByRole('button', { name: 'Send message' }));
 
-      await waitFor(() => expect(session.posted).toEqual(['> Open rows\n\nWhy this one?']));
+      await waitFor(() => expect(session.posted).toEqual(['1. > Open rows\n\nWhy this one?']));
       expect(await screen.findByRole('button', { name: '1 annotation' })).toBeInTheDocument();
       expect(markers()).toEqual(['1']);
     });

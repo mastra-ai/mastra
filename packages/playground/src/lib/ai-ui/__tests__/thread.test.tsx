@@ -1382,7 +1382,7 @@ describe('Thread annotations', () => {
 
       await waitFor(() => expect(captured).toHaveLength(1));
       expect(JSON.stringify(captured[0].body.messages)).toContain(
-        JSON.stringify('> Open rows\n\nWhy this one?').slice(1, -1),
+        JSON.stringify('1. > Open rows\n\nWhy this one?').slice(1, -1),
       );
       expect(screen.queryByRole('button', { name: '1 annotation' })).toBeNull();
       expect(markers()).toEqual([]);
