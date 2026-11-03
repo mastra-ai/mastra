@@ -15,8 +15,6 @@ export const dashboardMcpServer = new MCPServer({
   id: DASHBOARD_SERVER_ID,
   name: 'Dashboard MCP Server',
   version: '1.0.0',
-  // Lets 2025-era clients such as Codex connect too.
-  legacy: 'stateless',
   appResources: {
     [DASHBOARD_APP_URI]: dashboardRendererApp(),
   },
