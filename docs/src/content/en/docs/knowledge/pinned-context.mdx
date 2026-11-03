@@ -159,7 +159,7 @@ A listing follows the same rules as a pinned page:
 
 A listing that doesn't fit fills a level at a time: every first-level page that fits, then second-level pages, down to `depth`. When pages are left out, it ends with a pointer that tells the agent to continue with `knowledge_list`. With the default 500-token budget, a large scope may show only its first level, so raise `maxTokens` to show deeper levels. See [Limits](/reference/knowledge/limits) for the listing caps.
 
-Agents pin listings at runtime with `knowledge_pin` and `kind: "list"`, which needs the same roles as pinning a page:
+Agents pin listings at runtime with `knowledge_pin` and `kind: "list"`, which needs the same roles as pinning a page. The `site:` runs above are only viewers, so this call needs a run with an `editor` rule on `site:mastra`:
 
 ```json
 { "op": "pin", "kind": "list", "depth": 2, "page": "site:mastra#docs", "audience": ["site:mastra"] }
