@@ -12,6 +12,7 @@ import {
   currentSegment,
   nextSegmentClocks,
   openSegment,
+  toolRequestContext,
   segmentEndedBeforeCrash,
   segmentFromSnapshot,
   withCarriedSegments,
@@ -340,7 +341,7 @@ describe('openSegment', () => {
 });
 
 describe('engine-private request context keys', () => {
-  it('hands the engine a copy carrying the opened segment and leaves the caller instance without it', () => {
+  it('hands the engine the caller instance read through, with the opened segment on top and never on the caller', () => {
     const caller = new RequestContext();
     caller.set('tenant', 'acme');
     caller.setRaw(SEGMENTS_KEY, { 'run-2': carriedSecond });
@@ -356,22 +357,58 @@ describe('engine-private request context keys', () => {
       carryInto: carrier,
     });
     const forwarded = withCarriedSegments(caller, carrier);
+    const carried = { 'run-2': carriedSecond, [RUN_ID]: { v: 1, agent: null, model: null } };
+    expect(forwarded).toBeInstanceOf(RequestContext);
     expect(forwarded.get('tenant')).toBe('acme');
-    expect(forwarded.getRaw(SEGMENTS_KEY)).toEqual({
-      'run-2': carriedSecond,
-      [RUN_ID]: { v: 1, agent: null, model: null },
-    });
+    expect(forwarded.getRaw(SEGMENTS_KEY)).toEqual(carried);
+    expect(forwarded.toJSON()).toEqual({ tenant: 'acme', [SEGMENTS_KEY]: carried });
+    expect([...forwarded.entries()]).toEqual([
+      ['tenant', 'acme'],
+      [SEGMENTS_KEY, carried],
+    ]);
     expect(caller.getRaw(SEGMENTS_KEY)).toEqual({ 'run-2': carriedSecond });
+
+    // The engine and the caller share one instance: a write on either side is read on the other.
+    forwarded.set('fromEngine', 1);
+    caller.set('fromCaller', 2);
+    expect(caller.get('fromEngine')).toBe(1);
+    expect(forwarded.get('fromCaller')).toBe(2);
+    expect(forwarded.size()).toBe(4);
   });
 
-  it('gives user code the run values without the claim and the segment carrier', () => {
+  it('gives user code a live view of the run values without the claim and the segment carrier', () => {
     const step = new RequestContext();
     step.set('tenant', 'acme');
     step.setRaw('mastra__authToken', 'token');
     step.setRaw('mastra__durableExecutions', { [RUN_ID]: { executionId: 'exec-1' } });
     step.setRaw(SEGMENTS_KEY, { [RUN_ID]: carriedSecond });
     const forUser = withoutDurableEngineKeys(step);
+    expect(forUser).toBeInstanceOf(RequestContext);
     expect([...forUser.keys()]).toEqual(['tenant', 'mastra__authToken']);
+    expect(Object.keys(forUser.toJSON())).toEqual(['tenant', 'mastra__authToken']);
+    expect(forUser.get(SEGMENTS_KEY)).toBeUndefined();
+    expect(forUser.has('mastra__durableExecutions')).toBe(false);
     expect(step.hasRaw(SEGMENTS_KEY)).toBe(true);
+
+    // A value user code writes lands on the step's context, where the next step reads it.
+    forUser.set('fromTool', 'written');
+    expect(step.get('fromTool')).toBe('written');
+    forUser.setRaw(SEGMENTS_KEY, 'overwritten');
+    expect(step.getRaw(SEGMENTS_KEY)).toEqual({ [RUN_ID]: carriedSecond });
+  });
+
+  it('hands a tool the instance it was built over when the engine context is or reads through to it', () => {
+    const caller = new RequestContext();
+    caller.set('tenant', 'acme');
+    caller.setRaw('mastra__durableExecutions', { [RUN_ID]: { executionId: 'exec-1' } });
+    const engine = withCarriedSegments(caller, { [SEGMENTS_KEY]: { [RUN_ID]: carriedSecond } });
+    expect(toolRequestContext(caller, caller)).toBe(caller);
+    expect(toolRequestContext(engine, caller)).toBe(caller);
+
+    const rehydrated = new RequestContext(Object.entries(engine.toJSON()));
+    const forTool = toolRequestContext(rehydrated, caller)!;
+    expect(forTool).not.toBe(caller);
+    expect([...forTool.keys()]).toEqual(['tenant']);
+    expect(toolRequestContext(undefined, caller)).toBeUndefined();
   });
 });

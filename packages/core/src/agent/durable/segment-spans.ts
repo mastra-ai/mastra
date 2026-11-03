@@ -43,31 +43,153 @@ const MASTRA_DURABLE_SEGMENTS_KEY = 'mastra__durableSegments';
 const DURABLE_ENGINE_KEYS: ReadonlySet<string> = new Set([MASTRA_DURABLE_EXECUTIONS_KEY, MASTRA_DURABLE_SEGMENTS_KEY]);
 
 /**
- * The request context user code (a tool, an approval policy) receives from a durable step: the
- * run's values without the engine's own keys, which are plumbing rather than caller data. A copy,
- * so the step's own context keeps them for the engine.
+ * A request context layered over another. Every read and write goes to `backing`, except for the
+ * keys it keeps to itself (`own`, held here and never written to `backing`) and the keys it hides
+ * (`hidden`, absent from every read; a write to one is dropped). It is a `RequestContext`, so it
+ * goes wherever one does, while `backing` stays the one instance everything built over it shares.
  */
-export function withoutDurableEngineKeys<T extends RequestContext | undefined>(requestContext: T): T {
-  if (!requestContext) return requestContext;
-  return new RequestContext<unknown>(
-    [...requestContext.entries()].filter(([key]) => !DURABLE_ENGINE_KEYS.has(key)) as [string, unknown][],
-  ) as T;
+class LayeredRequestContext extends RequestContext<unknown> {
+  private readonly ownKeys: ReadonlySet<string>;
+  private readonly ownValues = new Map<string, unknown>();
+
+  constructor(
+    readonly backing: RequestContext,
+    own: Record<string, unknown>,
+    private readonly hidden: ReadonlySet<string>,
+  ) {
+    super();
+    this.ownKeys = new Set(Object.keys(own));
+    for (const [key, value] of Object.entries(own)) this.ownValues.set(key, value);
+  }
+
+  private *visibleEntries(): IterableIterator<[string, unknown]> {
+    for (const [key, value] of this.backing.entries()) {
+      if (!this.hidden.has(key) && !this.ownKeys.has(key)) yield [key, value];
+    }
+    for (const [key, value] of this.ownValues) {
+      if (!this.hidden.has(key)) yield [key, value];
+    }
+  }
+
+  override getRaw(key: string): unknown {
+    if (this.hidden.has(key)) return undefined;
+    return this.ownKeys.has(key) ? this.ownValues.get(key) : this.backing.getRaw(key);
+  }
+  override get<K extends string, R = unknown>(key: K): R {
+    return this.getRaw(key) as R;
+  }
+  override setRaw(key: string, value: unknown): void {
+    if (this.hidden.has(key)) return;
+    if (this.ownKeys.has(key)) this.ownValues.set(key, value);
+    else this.backing.setRaw(key, value);
+  }
+  override set<K extends string>(key: K, value: unknown): void {
+    this.setRaw(key, value);
+  }
+  override hasRaw(key: string): boolean {
+    if (this.hidden.has(key)) return false;
+    return this.ownKeys.has(key) ? this.ownValues.has(key) : this.backing.hasRaw(key);
+  }
+  override has<K extends string>(key: K): boolean {
+    return this.hasRaw(key);
+  }
+  override deleteRaw(key: string): boolean {
+    if (this.hidden.has(key)) return false;
+    return this.ownKeys.has(key) ? this.ownValues.delete(key) : this.backing.deleteRaw(key);
+  }
+  override delete<K extends string>(key: K): boolean {
+    return this.deleteRaw(key);
+  }
+  override clear(): void {
+    this.backing.clear();
+    this.ownValues.clear();
+  }
+  override keys(): IterableIterator<string> {
+    return [...this.visibleEntries()].map(([key]) => key)[Symbol.iterator]();
+  }
+  override values(): IterableIterator<unknown> {
+    return [...this.visibleEntries()].map(([, value]) => value)[Symbol.iterator]();
+  }
+  override entries(): IterableIterator<[string, unknown]> {
+    return this.visibleEntries();
+  }
+  override size(): number {
+    return [...this.visibleEntries()].length;
+  }
+  override forEach<K extends string>(callbackfn: (value: unknown, key: K, map: Map<string, unknown>) => void): void {
+    const map = new Map(this.visibleEntries());
+    for (const [key, value] of map) callbackfn(value, key as K, map);
+  }
+  override toJSON(): Record<string, any> {
+    const json = this.backing.toJSON();
+    for (const key of Object.keys(json)) {
+      if (this.hidden.has(key) || this.ownKeys.has(key)) delete json[key];
+    }
+    for (const [key, value] of this.ownValues) {
+      if (!this.hidden.has(key)) json[key] = value;
+    }
+    return json;
+  }
+  override serializeForSpan(): Record<string, unknown> {
+    const safe = this.backing.serializeForSpan();
+    for (const key of Object.keys(safe)) {
+      if (this.hidden.has(key) || this.ownKeys.has(key)) delete safe[key];
+    }
+    return safe;
+  }
+  override get all(): Record<string, any> {
+    return Object.fromEntries(this.visibleEntries());
+  }
 }
 
 /**
- * The request context a resume or recovery hands the workflow engine: a copy of the caller's
- * context carrying the segments `openSegment` wrote into `carrier`. The caller's own instance,
- * which this segment's tools and processors close over, never holds the carrier.
+ * The request context user code (a tool, an approval policy, a processor) receives from a durable
+ * step: the run's values without the engine's own keys, which are plumbing rather than caller
+ * data. A live view of the step's context, so a value user code writes reaches the next step as
+ * the engine's own values do.
+ */
+export function withoutDurableEngineKeys<T extends RequestContext | undefined>(requestContext: T): T {
+  if (!requestContext) return requestContext;
+  return new LayeredRequestContext(requestContext, {}, DURABLE_ENGINE_KEYS) as unknown as T;
+}
+
+/**
+ * The request context a durable step hands a tool. A tool keeps its build-time context when the
+ * step hands it that same instance, and gets a merged copy otherwise (see `mergeRequestContexts`
+ * in the tool builder). So the instance the tool was built over is handed back when the engine's
+ * context is that instance or reads through to it: the tool then writes where the next step reads.
+ * Any other context, a worker's rehydrated copy or a rebuilt one, is handed over without the
+ * engine's keys, as the copy the tool would get anyway.
+ */
+export function toolRequestContext(
+  requestContext: RequestContext | undefined,
+  builtWith: RequestContext | undefined,
+): RequestContext | undefined {
+  const sameInstance =
+    !!builtWith &&
+    (requestContext === builtWith ||
+      (requestContext instanceof LayeredRequestContext && requestContext.backing === builtWith));
+  return sameInstance ? builtWith : withoutDurableEngineKeys(requestContext);
+}
+
+/**
+ * The request context a resume or recovery hands the workflow engine: the caller's own instance,
+ * read and written through, plus the segments `openSegment` wrote into `carrier` under the
+ * reserved key. The caller's instance, which this segment's tools and processors close over,
+ * never holds the carrier, while the engine persists and forwards it with everything else.
  */
 export function withCarriedSegments(requestContext: RequestContext, carrier: Record<string, unknown>): RequestContext {
-  const forwarded = new RequestContext<unknown>([...requestContext.entries()] as [string, unknown][]);
-  const segments = carrier[MASTRA_DURABLE_SEGMENTS_KEY];
-  if (segments && typeof segments === 'object') {
-    for (const [runId, carried] of Object.entries(segments)) {
-      writeCarriedSegment(forwarded, runId, carried as CarriedSegment);
-    }
-  }
-  return forwarded;
+  const asRecord = (value: unknown) => (value && typeof value === 'object' ? (value as object) : {});
+  return new LayeredRequestContext(
+    requestContext,
+    {
+      [MASTRA_DURABLE_SEGMENTS_KEY]: {
+        ...asRecord(requestContext.getRaw(MASTRA_DURABLE_SEGMENTS_KEY)),
+        ...asRecord(carrier[MASTRA_DURABLE_SEGMENTS_KEY]),
+      },
+    },
+    new Set(),
+  );
 }
 
 /**

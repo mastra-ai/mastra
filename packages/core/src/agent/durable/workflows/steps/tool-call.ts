@@ -61,7 +61,7 @@ import {
 } from '../../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../../memory-fga';
 import { clearResumeInFlight, getRunRegistryEntry, globalRunRegistry, markRunActive } from '../../run-registry';
-import { currentSegment, withoutDurableEngineKeys } from '../../segment-spans';
+import { currentSegment, toolRequestContext, withoutDurableEngineKeys } from '../../segment-spans';
 import { emitSuspendedEvent, emitChunkEvent } from '../../stream-adapter';
 import type {
   DurableToolCallInput,
@@ -1400,8 +1400,10 @@ export function createDurableToolCallStep() {
         messages: isAgentTool ? (delegationMessages ?? []) : (contextMessageList?.get.input.aiV5.model() ?? []),
         getMessages: messageList ? () => messageList.get.all.db() : undefined,
         workspace,
-        // The tool sees the run's values, not the engine's claim and segment carrier.
-        requestContext: withoutDurableEngineKeys(requestContext),
+        // The instance the tool was built over when this execution's context is or reads through
+        // to it, so a value the tool writes reaches the next step; otherwise the run's values
+        // without the engine's claim and segment carrier.
+        requestContext: toolRequestContext(requestContext, registryEntry?.requestContext ?? rebuiltRequestContext),
         mcp: registryEntry?.mcp,
         tracingContext: toolTracingContext,
         // Use the actor supplied for this workflow segment. A resumed segment
