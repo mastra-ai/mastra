@@ -1,6 +1,5 @@
 ---
 '@mastra/factory': minor
-'mastra': patch
 ---
 
 Added separate provider work item and board item storage so source refreshes do not invalidate pending board moves. Existing card IDs stay unchanged. Migration skips conflicting sources instead of blocking startup.
