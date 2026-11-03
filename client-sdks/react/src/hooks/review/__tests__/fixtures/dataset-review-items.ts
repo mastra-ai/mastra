@@ -61,10 +61,15 @@ export const resultsResponse: { results: DatasetExperimentResult[]; pagination: 
   pagination,
 };
 
-export const manyResults = (count: number, needsReviewIndexes: number[]): DatasetExperimentResult[] =>
+export const manyResults = (
+  count: number,
+  needsReviewIndexes: number[],
+  experimentId: string = EXPERIMENT_ID,
+): DatasetExperimentResult[] =>
   Array.from({ length: count }, (_, index) => ({
     ...needsReviewResultWithComment,
-    id: `result-${index}`,
+    id: `${experimentId}-result-${index}`,
+    experimentId,
     itemId: `item-${index}`,
     status: needsReviewIndexes.includes(index) ? 'needs-review' : 'complete',
   }));
