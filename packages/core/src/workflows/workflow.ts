@@ -86,6 +86,7 @@ import type { ClassifierStepOutput } from './entry-executors';
 import { withoutAuthToken } from './evented/helpers';
 import type { ExecutionEngine, ExecutionGraph } from './execution-engine';
 import { validateTemplate } from './mapping-template';
+import { cancelNestedRun, nestedRunParentOf, nestedRunRecoveryAction, nestedRunStatusOf } from './nested-run-recovery';
 import { copyState, toJsonState } from './nested-state';
 import { derivePredicateLabel, evaluatePredicate } from './predicate';
 import type { Predicate } from './predicate';
@@ -3688,11 +3689,55 @@ export class Workflow<
       return;
     }
     const activeRuns = await this.listActiveWorkflowRuns();
-    if (activeRuns.runs.length > 0) {
-      this.logger.debug('Restarting active workflow runs', { count: activeRuns.runs.length });
+    const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
+    const runs: typeof activeRuns.runs = [];
+    for (const runSnapshot of activeRuns.runs) {
+      const parent = nestedRunParentOf(runSnapshot.snapshot);
+      if (!parent) {
+        runs.push(runSnapshot);
+        continue;
+      }
+      // Restarting a nested run standalone while its parent drives it runs the item twice, and
+      // after the parent finished nothing collects the result, so the item runs a second time.
+      try {
+        const parentStatus = (await workflowsStore?.loadWorkflowRunStatus(parent)) ?? null;
+        const recovery = nestedRunRecoveryAction(parentStatus);
+        if (recovery === 'restart') {
+          runs.push(runSnapshot);
+        } else if (recovery === 'cancel' && workflowsStore) {
+          await cancelNestedRun({
+            store: workflowsStore,
+            workflowName: this.id,
+            runId: runSnapshot.runId,
+            expectedStatus: nestedRunStatusOf(runSnapshot.snapshot),
+            logger: this.logger,
+          });
+        } else if (recovery === 'skip') {
+          // The parent can still drive this run, so there is nothing to do here. Logged because a
+          // nested run left waiting on a parent that never restarts is otherwise only visible in
+          // the nested workflow's own active runs.
+          this.logger.debug('Left a nested workflow run for its parent to drive', {
+            workflowId: this.id,
+            runId: runSnapshot.runId,
+            parentWorkflow: parent.workflowName,
+            parentRunId: parent.runId,
+            parentStatus,
+          });
+        }
+      } catch (error) {
+        // One nested run's lookup must not stop the sweep, or unrelated runs go unrecovered.
+        this.logger.error('Failed to recover nested workflow run', {
+          workflowId: this.id,
+          runId: runSnapshot.runId,
+          error,
+        });
+      }
+    }
+    if (runs.length > 0) {
+      this.logger.debug('Restarting active workflow runs', { count: runs.length });
     }
     const concurrency = this.#mastra?.recoveryConfig?.workflowConcurrency ?? DEFAULT_RESTART_CONCURRENCY;
-    await runWithConcurrency(activeRuns.runs, concurrency, async runSnapshot => {
+    await runWithConcurrency(runs, concurrency, async runSnapshot => {
       try {
         const run = await this.createRun({ runId: runSnapshot.runId });
         await run.restart();
