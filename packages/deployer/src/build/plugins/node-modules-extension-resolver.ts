@@ -89,7 +89,7 @@ export function nodeModulesExternals({
       order: 'post',
       filter: { id: BARE_SPECIFIER_FILTER },
       async handler(id, importer, { isEntry }) {
-        if (isEntry || !importer || importer.startsWith('\0') || !isBareModuleSpecifier(id)) {
+        if (isEntry || !importer || !isBareModuleSpecifier(id)) {
           return null;
         }
 
@@ -113,7 +113,8 @@ export function nodeModulesExternals({
           return { id, external: true };
         }
 
-        if (id === pkgName) {
+        // Virtual importers (e.g. the generated server entry) have no directory to resolve from.
+        if (id === pkgName || importer.startsWith('\0')) {
           return { id, external: true };
         }
 
