@@ -48,6 +48,8 @@ import {
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
 } from './auth.js';
+import { BoardWriteError, BoardWrites } from './boards/board-writes.js';
+import type { BoardWriter } from './boards/board-writes.js';
 import { isDefinedBoard } from './boards/define-board.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
@@ -137,6 +139,7 @@ import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
 import { StoredBoardsStorage } from './storage/domains/boards/base.js';
+import type { StoredBoardInput, StoredBoardRecord, StoredBoardScope } from './storage/domains/boards/base.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import { CommentsDomain } from './storage/domains/comments/domain.js';
@@ -316,11 +319,10 @@ export interface MastraFactoryConfig {
    */
   configVersion?: string;
   /**
-   * Boards served to every project, read-only, next to the boards each project stored.
+   * Boards copied into every project, next to the boards each project stored.
    *
-   * @deprecated Boards are stored per project; manage them with `/web/factory/projects/:id/boards`
-   * (README § Stored boards). Boards passed here still work: code boards are read-only and served
-   * alongside each project's stored boards.
+   * @deprecated Store the board with factory.upsertBoard(); see the README "Stored boards" section.
+   * Boards passed here still work: each project gets a copy once, and is served from that copy.
    */
   boards?: readonly InstalledBoard[];
   /**
@@ -331,10 +333,8 @@ export interface MastraFactoryConfig {
    */
   skills?: readonly InlineSkill[];
   /**
-   * Whether every project gets the built-in Work and Review boards, read-only. Default: true.
-   *
-   * @deprecated Will be replaced by a one-time copy of the built-in boards into each project's
-   * database (mastra-ai/mastra#28920). It still decides whether projects get them until then.
+   * Whether projects get the built-in Work board, copied into each project's database, and the
+   * legacy read-only Review board. Default: true.
    */
   includeDefaultBoards?: boolean;
 
@@ -454,7 +454,7 @@ function warnDefinedBoards(boards: BoardRegistry): void {
   if (warnedDefinedBoards || ![...boards.values()].some(isDefinedBoard)) return;
   warnedDefinedBoards = true;
   console.warn(
-    '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and each project gets an editable copy of these definitions next to the boards it stores. Manage boards through the boards API; see the README "Stored boards" section.',
+    '[Mastra Factory] MastraFactory({ boards }) and defineBoard() are deprecated: boards now live in the database, and each project gets an editable copy of these definitions once. Store boards with factory.upsertBoard() or the boards API; see the README "Stored boards" section.',
   );
 }
 
@@ -496,6 +496,10 @@ export class MastraFactory {
   readonly #boards: BoardRegistry;
   /** Each project's boards: the code boards plus the boards it stored. Undefined until `prepare()` or when the boards domain is down. */
   #projectBoards: ProjectBoardCache | undefined;
+  /** Writes to stored boards for `upsertBoard()`; undefined until `prepare()` or when the boards domain is down. */
+  #boardStore:
+    | { writes: BoardWrites; storage: StoredBoardsStorage; projects: FactoryProjectsStorage; audit: AuditDomain }
+    | undefined;
   readonly #skills: readonly InlineSkill[];
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
@@ -549,6 +553,75 @@ export class MastraFactory {
     if (!this.#sandbox) return undefined;
     this.#sandboxDescription ??= describeFactorySandbox(this.#sandbox);
     return this.#sandboxDescription;
+  }
+
+  /**
+   * Stores a board in a project, for apps that keep board config in code. Creates the board when
+   * the project has none under its key, otherwise replaces it; an unchanged board writes nothing.
+   * It goes through the same checks, cache invalidation and audit as the boards API: the built-in
+   * Work board and app boards can be changed within their code behaviour, the legacy Review board
+   * can't be changed, and a refused write throws a `BoardWriteError` with the API's error code.
+   * Available after `prepare()`.
+   *
+   * @example
+   * ```ts
+   * await factory.upsertBoard(
+   *   { orgId, factoryProjectId },
+   *   {
+   *     key: 'bugs',
+   *     name: 'Bugs',
+   *     phases: [
+   *       { key: 'reported', name: 'Reported', kind: 'resting', nextPhases: ['fixing'] },
+   *       { key: 'fixing', name: 'Fixing', kind: 'working', runner: { context: 'work' }, nextPhases: ['fixed'] },
+   *       { key: 'fixed', name: 'Fixed', kind: 'terminal' },
+   *     ],
+   *   },
+   * );
+   * ```
+   */
+  async upsertBoard(
+    scope: StoredBoardScope,
+    board: StoredBoardInput,
+    options: { actor?: string } = {},
+  ): Promise<StoredBoardRecord> {
+    const store = this.#boardStore;
+    if (!store) {
+      throw new Error(
+        this.#preparing
+          ? "MastraFactory.upsertBoard(): the boards storage isn't available, so boards can't be stored."
+          : 'MastraFactory.upsertBoard() needs prepare() first.',
+      );
+    }
+    const { writes, storage, projects, audit } = store;
+    await projects.ensureReady();
+    if (!(await projects.get({ orgId: scope.orgId, id: scope.factoryProjectId }))) {
+      throw new BoardWriteError(404, {
+        error: 'project_not_found',
+        message: `Project "${scope.factoryProjectId}" does not exist.`,
+      });
+    }
+    const actorId = options.actor ?? 'factory';
+    const writer: BoardWriter = {
+      id: actorId,
+      audit: async input => {
+        await audit.record({ orgId: scope.orgId, actorId, actorType: 'system', ...input });
+      },
+    };
+    const { key, ...definition } = writes.validate(board);
+    writes.refuseCodeBoard(key, 'edit');
+    // One retry when another writer gets in between reading the board and writing it.
+    for (let attempt = 0; ; attempt++) {
+      // The project's first load stores its code boards' copies.
+      await this.#projectBoards!.describe(scope);
+      const row = await storage.get(scope, key);
+      try {
+        if (!row) return await writes.create(scope, { key, ...definition }, writer);
+        return (await writes.replace(scope, key, definition, { expectedRevision: row.revision, writer })).row;
+      } catch (error) {
+        const raced = error instanceof BoardWriteError && ['revision_mismatch', 'board_exists'].includes(error.code);
+        if (!raced || attempt > 0) throw error;
+      }
+    }
   }
 
   /**
@@ -784,6 +857,12 @@ export class MastraFactory {
         codeSkills: this.#skills,
       });
       this.#projectBoards = projectBoards;
+      this.#boardStore = {
+        writes: new BoardWrites({ storage: storedBoardsStorage, boards: projectBoards, workItems: workItemsStorage }),
+        storage: storedBoardsStorage,
+        projects: factoryProjectsStorage,
+        audit: auditDomain,
+      };
       await timedPhase('prepare.boards.preload', () =>
         projectBoards
           .preload()

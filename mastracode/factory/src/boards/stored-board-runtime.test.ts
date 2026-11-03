@@ -16,6 +16,7 @@ import { MastraFactory } from '../factory.js';
 import { GithubIntegration } from '../integrations/github/integration.js';
 import { mountApiRoutes } from '../routes/test-utils.js';
 import { createFactorySecretEncryption } from '../secret-encryption.js';
+import type { AuditStorage } from '../storage/domains/audit/base.js';
 import type { StoredBoardInput, StoredBoardsStorage } from '../storage/domains/boards/base.js';
 import type { ModelCredentialsStorage } from '../storage/domains/credentials/base.js';
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
@@ -176,6 +177,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         return { status: response.status, json: (await response.json()) as any };
       };
       return {
+        factory,
         storage,
         github,
         send,
@@ -763,6 +765,107 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])(
         });
         expect(runsOf(requests, 'factory-triage', after.title)[0]).not.toContain(TRIAGE_NOTE);
       }, 120_000);
+
+      describe('upsertBoard()', () => {
+        it('stores a board from code: served at once, moved through, revised only when it changes, and audited', async () => {
+          stubModel();
+          const orgId = `org-${randomUUID()}`;
+          const replica = await boot(database(), orgId);
+          const projectId = await createProject(replica, 'Bugs from code');
+          const scope = { orgId, factoryProjectId: projectId };
+
+          const created = await replica.factory.upsertBoard(scope, bugsBoard);
+          expect(created).toMatchObject({ key: 'bugs', revision: 1 });
+          // Served at once on this replica, not after the recheck window.
+          expect((await catalog(replica, projectId)).map(board => [board.id, board.source])).toContainEqual([
+            'bugs',
+            'stored',
+          ]);
+          const card = await replica.send('POST', `/web/factory/projects/${projectId}/work-items`, {
+            board: 'bugs',
+            title: 'Crash on save',
+          });
+          expect(card.status).toBe(200);
+          const fixing = await transition(replica, projectId, card.json.workItem, 'fixing');
+          expect(fixing.json.result).toMatchObject({ status: 'accepted', stage: 'fixing' });
+
+          const renamed = {
+            ...bugsBoard,
+            phases: bugsBoard.phases.map(phase => (phase.key === 'fixing' ? { ...phase, name: 'Patching' } : phase)),
+          };
+          expect(await replica.factory.upsertBoard(scope, renamed)).toMatchObject({ revision: 2 });
+          expect(
+            (await catalog(replica, projectId)).find(board => board.id === 'bugs')!.phases.map(phase => phase.name),
+          ).toContain('Patching');
+          const version = await replica.boards.readVersion(scope);
+          expect(await replica.factory.upsertBoard(scope, renamed)).toMatchObject({ revision: 2 });
+          expect(await replica.boards.readVersion(scope)).toBe(version);
+
+          const audit = await replica.storage.getDomain<AuditStorage>('audit').list({
+            orgId,
+            factoryProjectId: projectId,
+            actions: ['factory.board.created', 'factory.board.updated'],
+          });
+          expect(audit.events.map(event => [event.action, event.actorType, event.actorId])).toEqual([
+            ['factory.board.updated', 'system', 'factory'],
+            ['factory.board.created', 'system', 'factory'],
+          ]);
+        }, 30_000);
+
+        it("changes what Work runs, and refuses a change Work's code behaviour can't honour", async () => {
+          const requests = stubModel();
+          const orgId = `org-${randomUUID()}`;
+          const replica = await boot(database(), orgId);
+          const projectId = await runnableProject(replica, orgId);
+          const scope = { orgId, factoryProjectId: projectId };
+          const read = await replica.send('GET', `/web/factory/projects/${projectId}/boards/work`);
+          const work = read.json.board as { name: string; phases: StoredPhase[] };
+
+          await replica.factory.upsertBoard(scope, {
+            key: 'work',
+            name: work.name,
+            phases: work.phases.map(phase =>
+              phase.key === 'planning'
+                ? {
+                    ...phase,
+                    runner: { ...phase.runner, instructions: PLAN_NOTE },
+                    autoStart: true,
+                    autoStartWhen: EFFORT_LOW,
+                  }
+                : phase,
+            ) as StoredPhase[],
+          });
+
+          // A rule moves both cards to Planning: the labelled card's plan run starts with no one
+          // approving it; the other waits for a person.
+          const quick = await githubIssue(replica, projectId, 'Quick fix', { trusted: false, labels: ['effort:low'] });
+          const large = await githubIssue(replica, projectId, 'Large rewrite', { trusted: false, labels: [] });
+          await ruleMoves(replica, orgId, projectId, quick, 'planning');
+          await ruleMoves(replica, orgId, projectId, large, 'planning');
+          await vi.waitFor(() => expect(runsOf(requests, 'factory-plan', 'Quick fix')).not.toEqual([]), {
+            timeout: 20_000,
+          });
+          expect(runsOf(requests, 'factory-plan', 'Quick fix')[0]).toContain(PLAN_NOTE);
+          const largePlan = (
+            await replica.workItems.listDeferredDecisions(orgId, projectId, { workItemId: large.id })
+          ).find(record => record.decision.type === 'invokeSkill');
+          expect(largePlan?.status).toBe('proposed');
+
+          const conflicting = replica.factory.upsertBoard(scope, {
+            key: 'work',
+            name: work.name,
+            phases: work.phases.map(phase =>
+              phase.key === 'triage' ? { ...phase, runner: { ...phase.runner, context: 'work' } } : phase,
+            ) as StoredPhase[],
+          });
+          await expect(conflicting).rejects.toMatchObject({
+            code: 'code_behaviour',
+            message: 'Phase "triage" runs its code handlers in the "triage" context; keep runner.context.',
+          });
+          const review = replica.factory.upsertBoard(scope, { ...bugsBoard, key: 'review' });
+          await expect(review).rejects.toMatchObject({ code: 'code_board' });
+        }, 60_000);
+      });
     });
   },
 );
