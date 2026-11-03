@@ -2,7 +2,10 @@ import { KnowledgeNotFoundError } from '../storage/domains/knowledge/base';
 import type { KnowledgeStorage } from '../storage/domains/knowledge/base';
 import { assertKnowledgeNoteTextWithinBound, knowledgePagePath } from '../storage/domains/knowledge/pages';
 import type { KnowledgeNote, KnowledgePage, KnowledgeProvenance } from '../storage/domains/knowledge/pages';
+import { refreshKnowledgeLinksTo, syncKnowledgePageBodyLinks, updateKnowledgeLinks } from './links';
+import { knowledgePageRefs } from './page-refs';
 import type { KnowledgeScopeRuntime } from './scope-runtime';
+import { knowledgeEmbedFailedWarning } from './semantic';
 import type { KnowledgeSemanticIndex } from './semantic';
 
 /**
@@ -89,8 +92,6 @@ function splitPath(path: string): string[] {
   return keys;
 }
 
-const EMBED_FAILED =
-  'Knowledge semantic index update failed; the content stays findable by keyword search and is embedded again the next time it changes';
 /** Search re-reads every vector hit, so a vector left behind by a removed page or note never surfaces. */
 const UNEMBED_FAILED =
   'Knowledge semantic index removal failed; the removed content may keep its vectors, but search skips content that no longer exists';
@@ -98,14 +99,22 @@ const UNEMBED_FAILED =
 async function embed(
   host: KnowledgeHostWriter,
   work: (index: KnowledgeSemanticIndex) => Promise<void>,
-  failure = EMBED_FAILED,
+  failure: string | (() => Promise<string>),
 ) {
   if (!host.semantic) return;
   try {
     await work(host.semantic);
   } catch (error) {
-    host.warn(`${failure}: ${String(error)}`);
+    host.warn(`${typeof failure === 'string' ? failure : await failure()}: ${String(error)}`);
   }
+}
+
+/** The embed-failure warning for `page`, naming its ref; only looked up when every try failed. */
+function pageEmbedFailed(storage: KnowledgeStorage, page: KnowledgePage): () => Promise<string> {
+  return async () => {
+    const { refs } = await knowledgePageRefs(storage, 'all', [page]).catch(() => ({ refs: new Map<string, string>() }));
+    return knowledgeEmbedFailedWarning(`page "${refs.get(page.id) ?? page.id}"`);
+  };
 }
 
 /** Creates or updates the page at `path` in `scopeId`; `overwrite: false` only fills a missing page. */
@@ -117,7 +126,7 @@ async function upsertAt(
   fields: { name: string; description?: string; body?: string },
   provenance: KnowledgeProvenance,
   overwrite: boolean,
-): Promise<KnowledgeUpsertPageResult> {
+): Promise<KnowledgeUpsertPageResult & { renamed?: boolean }> {
   for (let attempt = 1; ; attempt++) {
     const existing = await storage.getPageByPath({ scopeId, path, read: 'all' });
     try {
@@ -139,7 +148,7 @@ async function upsertAt(
         ...fields,
         provenance,
       });
-      return { page, status: 'updated' };
+      return { page, status: 'updated', renamed: page.name !== existing.name };
     } catch (error) {
       // By name: an adapter may load its own copy of core, where instanceof fails.
       const name = (error as Error | undefined)?.name;
@@ -163,10 +172,13 @@ export async function upsertKnowledgePage(
   for (let depth = 1; depth < keys.length; depth++) {
     const path = keys.slice(0, depth);
     const parent = await upsertAt(storage, scope.id, parentId, path, { name: path.at(-1)! }, provenance, false);
-    if (parent.status === 'created') await embed(host, index => index.indexPage(parent.page));
+    if (parent.status === 'created') {
+      await embed(host, index => index.indexPage(parent.page), pageEmbedFailed(storage, parent.page));
+      await updateKnowledgeLinks(host.warn, () => refreshKnowledgeLinksTo(storage, [parent.page]));
+    }
     parentId = parent.page.id;
   }
-  const result = await upsertAt(
+  const { renamed, ...result } = await upsertAt(
     storage,
     scope.id,
     parentId,
@@ -175,7 +187,14 @@ export async function upsertKnowledgePage(
     provenance,
     true,
   );
-  if (result.status !== 'unchanged') await embed(host, index => index.indexPage(result.page));
+  if (result.status !== 'unchanged') {
+    await embed(host, index => index.indexPage(result.page), pageEmbedFailed(storage, result.page));
+    await updateKnowledgeLinks(host.warn, async () => {
+      await syncKnowledgePageBodyLinks(storage, result.page);
+      // An update keeps the page's id and path, so only a new name changes what links can reach it.
+      if (result.status === 'created' || renamed) await refreshKnowledgeLinksTo(storage, [result.page]);
+    });
+  }
   return result;
 }
 
@@ -207,6 +226,10 @@ export async function removeKnowledgePage(
     throw error;
   }
   await embed(host, index => index.removePage(page.id), UNEMBED_FAILED);
+  await updateKnowledgeLinks(host.warn, async () => {
+    await syncKnowledgePageBodyLinks(storage, deleted);
+    await refreshKnowledgeLinksTo(storage, [deleted]);
+  });
   return deleted;
 }
 
@@ -253,7 +276,7 @@ export async function addKnowledgeNote(
     mentions: await resolveMentions(storage, input.text),
     provenance,
   });
-  await embed(host, index => index.indexNote(note));
+  await embed(host, index => index.indexNote(note), knowledgeEmbedFailedWarning(`note ${note.id}`));
   return note;
 }
 
@@ -285,10 +308,14 @@ export async function updateKnowledgeNote(
     }
     throw error;
   }
-  await embed(host, async index => {
-    await index.remove([`note:${old.id}`]);
-    await index.indexNote(note);
-  });
+  await embed(
+    host,
+    async index => {
+      await index.remove([`note:${old.id}`]);
+      await index.indexNote(note);
+    },
+    knowledgeEmbedFailedWarning(`note ${note.id}`),
+  );
   return note;
 }
 

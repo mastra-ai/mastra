@@ -106,7 +106,7 @@ describe('CommentsDomain routes', () => {
 
     const updated = await seed.workItems.get({ orgId: ORG, id: item.id });
     expect(updated?.commentCount).toBe(1);
-    expect(updated?.feedActivityAt).toBeInstanceOf(Date);
+    expect(updated).not.toHaveProperty('feedActivityAt');
     expect(updated?.revision).toBe(item.revision);
   });
 

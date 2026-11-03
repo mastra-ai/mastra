@@ -65,14 +65,14 @@
         "type": "budget_tokens"
       }
     ],
-    "moonshotai/Kimi-K2.6": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
     "google/gemma-4-26B-A4B-it": [
       {
         "type": "toggle"
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "budget_tokens"
       }
     ],
     "zai-org/GLM-5.2": [

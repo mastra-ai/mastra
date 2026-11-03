@@ -6,6 +6,8 @@ import { knowledgeBodyChunks, KNOWLEDGE_EMBED_CHUNK_TOKENS } from './page-body';
 
 /** How many distinct pages and notes one semantic search looks at before it stops refilling. */
 const MAX_CANDIDATES = 1000;
+/** Chunk embeddings one page requests at once, when the embedder supports parallel calls. */
+const EMBED_CONCURRENCY = 4;
 /** Largest vector query one search sends (Pinecone's topK ceiling); chunks share it with whole pages. */
 const MAX_TOP_K = 10_000;
 /** Most of a chunk the page's name and description may take, so a long name can't crowd out the body. */
@@ -17,6 +19,21 @@ const OVERFETCH = 4;
  * which every vector store supports, without knowing how many there were.
  */
 export const KNOWLEDGE_MAX_PAGE_CHUNKS = 100;
+
+/**
+ * The warning for content left out of the semantic index after every try failed, naming it (`page
+ * "docs:acme#guides"`, `note <id>`) so it can be rewritten.
+ * @internal
+ */
+export function knowledgeEmbedFailedWarning(subject: string): string {
+  return `Knowledge couldn't embed ${subject} after retrying; it is findable by keyword search only until it is rewritten`;
+}
+
+/** Whether an error says trying again can't help, like an input over the embedder's limit. */
+function notRetryable(error: unknown): boolean {
+  const e = error as { isRetryable?: boolean; lastError?: { isRetryable?: boolean } } | undefined;
+  return e?.isRetryable === false || e?.lastError?.isRetryable === false;
+}
 
 /**
  * Vector ids for a page's chunks: the first keeps the plain `page:<id>` every page had before
@@ -41,6 +58,12 @@ export type KnowledgeSemanticCandidate = { kind: 'page' | 'note'; id: string };
  * @internal
  */
 export class KnowledgeSemanticIndex {
+  /**
+   * Waits between tries of an embed or vector write that fails, about 10s in all: long enough for a
+   * scale-to-zero database (Neon, Lakebase) to wake, short enough not to hold a write up for long.
+   */
+  static retryDelaysMs: readonly number[] = [500, 2_000, 7_500];
+
   constructor(
     private readonly vector: MastraVector,
     private readonly embedder: MastraEmbeddingModel<string>,
@@ -56,14 +79,21 @@ export class KnowledgeSemanticIndex {
     );
     const chunks = page.body ? knowledgeBodyChunks(page.body, room).slice(0, KNOWLEDGE_MAX_PAGE_CHUNKS) : [''];
     const ids = pageChunkIds(page.id, 0, chunks.length);
-    const embeddings: number[][] = [];
-    for (const chunk of chunks) embeddings.push(await this.#embed([head, chunk].filter(Boolean).join('\n')));
-    await this.#store(
-      ids,
-      embeddings,
-      ids.map((_, chunk) => ({ kind: 'page', pageId: page.id, chunk })),
-      // A shorter rewrite leaves the old tail chunks behind; drop them.
-      pageChunkIds(page.id, chunks.length),
+    const pMap = (await import('p-map')).default;
+    const parallel = 'supportsParallelCalls' in this.embedder ? await this.embedder.supportsParallelCalls : true;
+    const embeddings = await pMap(
+      chunks,
+      chunk => this.#retry(() => this.#embed([head, chunk].filter(Boolean).join('\n'))),
+      { concurrency: parallel ? EMBED_CONCURRENCY : 1 },
+    );
+    await this.#retry(() =>
+      this.#store(
+        ids,
+        embeddings,
+        ids.map((_, chunk) => ({ kind: 'page', pageId: page.id, chunk })),
+        // A shorter rewrite leaves the old tail chunks behind; drop them.
+        pageChunkIds(page.id, chunks.length),
+      ),
     );
   }
 
@@ -74,7 +104,8 @@ export class KnowledgeSemanticIndex {
 
   async indexNote(note: KnowledgeNote): Promise<void> {
     if (note.deletedAt) return this.remove([`note:${note.id}`]);
-    await this.#store([`note:${note.id}`], [await this.#embed(note.text)], [{ kind: 'note', noteId: note.id }]);
+    const embedding = await this.#retry(() => this.#embed(note.text));
+    await this.#retry(() => this.#store([`note:${note.id}`], [embedding], [{ kind: 'note', noteId: note.id }]));
   }
 
   async remove(ids: string[]): Promise<void> {
@@ -103,6 +134,7 @@ export class KnowledgeSemanticIndex {
         // A page's chunks share one candidate, ranked at the best of them (the first to come back).
         const candidate = result.id.replace(/#\d+$/, '');
         if (seen.has(candidate)) continue;
+        if (seen.size >= MAX_CANDIDATES) return accepted;
         seen.add(candidate);
         const colon = candidate.indexOf(':');
         const kind = candidate.slice(0, colon);
@@ -113,6 +145,19 @@ export class KnowledgeSemanticIndex {
       }
       if (results.length < topK || topK >= MAX_TOP_K || seen.size >= MAX_CANDIDATES) return accepted;
     }
+  }
+
+  /** Tries `work` again after each of `retryDelaysMs` while it fails with an error that may pass. */
+  async #retry<T>(work: () => Promise<T>): Promise<T> {
+    for (const delay of KnowledgeSemanticIndex.retryDelaysMs) {
+      try {
+        return await work();
+      } catch (error) {
+        if (notRetryable(error)) throw error;
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+    return work();
   }
 
   /** Through the SDK's `embed`, so `maxRetries`, `headers`, `providerOptions` and `telemetry` mean what they do elsewhere. */

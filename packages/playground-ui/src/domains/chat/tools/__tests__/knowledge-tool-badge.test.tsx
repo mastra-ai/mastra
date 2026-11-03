@@ -108,6 +108,183 @@ describe('Knowledge tool cards', () => {
     });
   });
 
+  describe('when a read page body links other pages with [[scope#path]]', () => {
+    const pricing = { id: 'page-pricing', name: 'Pricing', ref: 'site:mastra#pricing', scope: 'site:mastra' };
+    const read = (body: string) =>
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'site:mastra#pricing' },
+        output: {
+          page: { ...pricing, body },
+          notes: [
+            {
+              id: 'n-links',
+              text: 'Links:\n[[site:mastra#contact]]\n[[site:mastra#customers/salesforce]]',
+              author: 'site-sync',
+              mentions: {
+                'site:mastra#contact': 'page-contact',
+                'site:mastra#customers/salesforce': 'page-salesforce',
+              },
+            },
+          ],
+          children: [],
+          mentionedIn: [],
+        },
+      });
+
+    it('links each ref the result resolves to its page in the Knowledge viewer', () => {
+      read('Get a demo ([[site:mastra#contact]])\n\nRead →\n\n([[site:mastra#customers/salesforce]])');
+      const body = within(open()).getByTestId('knowledge-tool-body');
+      expect(within(body).getByRole('link', { name: 'site:mastra#contact' }).getAttribute('href')).toBe(
+        '/knowledge?page=page-contact&view=page',
+      );
+      expect(within(body).getByRole('link', { name: 'site:mastra#customers/salesforce' }).getAttribute('href')).toBe(
+        '/knowledge?page=page-salesforce&view=page',
+      );
+      expect(body.textContent).not.toContain('[[');
+    });
+
+    it('shows a ref nothing in the result resolves as plain text, named like an Object member or not', () => {
+      read('See [[site:mastra#careers]] and [[constructor]].');
+      const body = within(open()).getByTestId('knowledge-tool-body');
+      expect(
+        within(body)
+          .getAllByTestId('knowledge-unresolved-mention')
+          .map(span => span.textContent),
+      ).toEqual(['site:mastra#careers', 'constructor']);
+      expect(within(body).queryByRole('link')).toBeNull();
+    });
+
+    it('leaves refs in code as they were written', () => {
+      read('Write `[[site:mastra#contact]]` like this:\n\n```\n[[site:mastra#contact]]\n```');
+      const body = within(open()).getByTestId('knowledge-tool-body');
+      expect(within(body).queryByRole('link')).toBeNull();
+      expect(body.querySelectorAll('code')[0]?.textContent).toBe('[[site:mastra#contact]]');
+    });
+  });
+
+  describe('when knowledge_page writes a body that links pages', () => {
+    it('links the page to itself and shows other refs as plain text', () => {
+      renderCard({
+        toolName: 'knowledge_page',
+        input: { page: 'site:mastra#pricing', body: 'This is [[site:mastra#pricing]]; see [[site:mastra#contact]].' },
+        output: { page: { id: 'page-pricing', name: 'Pricing', ref: 'site:mastra#pricing', scope: 'site:mastra' } },
+      });
+      const body = within(open()).getByTestId('knowledge-tool-body');
+      expect(within(body).getByRole('link', { name: 'site:mastra#pricing' }).getAttribute('href')).toBe(
+        '/knowledge?page=page-pricing&view=page',
+      );
+      expect(within(body).getByTestId('knowledge-unresolved-mention').textContent).toBe('site:mastra#contact');
+    });
+  });
+
+  describe('when knowledge_read returns part of a page', () => {
+    const deployer = { id: 'page-cf', name: 'CloudflareDeployer', scope: 'docs:mastra', key: 'cloudflare-deployer' };
+    const at = (line: number) => ({ line });
+    const row = () => screen.getByTestId('knowledge-tool-badge').textContent ?? '';
+
+    it('puts the lines in the collapsed row, so two reads of one page do not look the same', () => {
+      const first = renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'docs:mastra#cloudflare-deployer', from: at(60) },
+        output: {
+          page: { ...deployer, lines: '60│a\n61│b', range: { start: at(60), end: at(95) }, lineCount: 133 },
+          more: ['body: showing lines 60–95 of 133. Read on with from: {"line":96}.'],
+        },
+      });
+      expect(row()).toContain('CloudflareDeployer · lines 60–95 of 133');
+      first.unmount();
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'docs:mastra#cloudflare-deployer', from: at(120) },
+        output: { page: { ...deployer, lines: '120│z', range: { start: at(120), end: at(133) }, lineCount: 133 } },
+      });
+      expect(row()).toContain('CloudflareDeployer · lines 120–133 of 133');
+    });
+
+    it('shows the lines it read, the range and where to read on when opened', () => {
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'docs:mastra#cloudflare-deployer', from: at(60) },
+        output: {
+          page: {
+            ...deployer,
+            lines: '60│first line\n61│second line',
+            range: { start: at(60), end: at(95) },
+            lineCount: 133,
+          },
+        },
+      });
+      const body = open();
+      expect(body.textContent).toContain('Lines 60–95 of 133 · continues at line 96');
+      expect(body.textContent).toContain('60│first line');
+    });
+
+    it('says nothing extra in the row for a whole page, and "Whole page" when opened', () => {
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'Refunds' },
+        output: { page: { ...refunds, body: 'Short page.' } },
+      });
+      expect(row()).not.toContain('·');
+      expect(open().textContent).toContain('Whole page');
+    });
+
+    it('says a long first read was cut to an overview of its headings', () => {
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'docs:mastra#cloudflare-deployer' },
+        output: { page: { ...deployer, lines: '1│# Cloudflare\n⋯ lines 2–40', lineCount: 400 } },
+      });
+      expect(row()).toContain('CloudflareDeployer · overview of 400 lines');
+    });
+
+    it('names the terms and context of a match read and the lines each match covers', () => {
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'docs:mastra#cloudflare-deployer', match: ['kv'], context: 2 },
+        output: {
+          page: {
+            ...deployer,
+            lineCount: 133,
+            matches: [{ range: { start: at(10), end: at(16) }, lines: '10│kv namespace' }],
+          },
+        },
+      });
+      expect(row()).toContain('CloudflareDeployer · matches "kv" ±2');
+      const body = open();
+      expect(body.textContent).toContain('1 match for "kv" with 2 lines of context: lines 10–16 of 133');
+      expect(body.textContent).toContain('10│kv namespace');
+    });
+
+    it('names the section a read was limited to', () => {
+      renderCard({
+        toolName: 'knowledge_read',
+        input: { page: 'docs:mastra#cloudflare-deployer', section: 'Setup' },
+        output: { page: { ...deployer, lines: '5│x', range: { start: at(5), end: at(12) }, lineCount: 133 } },
+      });
+      expect(row()).toContain('section "Setup" · lines 5–12 of 133');
+    });
+  });
+
+  describe('when knowledge_page writes a range of the body', () => {
+    it('names the lines replaced in the row and the body', () => {
+      renderCard({
+        toolName: 'knowledge_page',
+        input: {
+          op: 'write',
+          page: 'page-refunds',
+          body: 'Refunds within 14 days.',
+          range: { start: { line: 12 }, end: { line: 14 } },
+          expectedVersion: 3,
+        },
+        output: { page: { ...refunds, version: 4 } },
+      });
+      expect(screen.getByTestId('knowledge-tool-badge').textContent).toContain('Refunds · lines 12–14');
+      expect(open().textContent).toContain('Replaced lines 12–14');
+    });
+  });
+
   describe('when knowledge_list lists the scopes a run can read', () => {
     it('names each scope with its child count', () => {
       renderCard({

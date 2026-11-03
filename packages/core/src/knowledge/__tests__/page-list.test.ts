@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage';
@@ -49,8 +49,12 @@ async function site() {
   await write('guides/deploy', 'Deploy');
   await write('reference', 'Reference');
   for (let i = 0; i < 12; i++) await write(`reference/api-${String(i).padStart(2, '0')}`, `API ${i}`);
-  // A run holding both places the team scope under docs:acme; only its members can read it.
-  await call([...ORG, 'docs:acme', 'team:acme:secret'], 'knowledge_read', { page: 'team:acme:secret' });
+  // A writing run holding both places the team scope under docs:acme; only its members can read it.
+  await call([...ORG, 'docs:acme', 'team:acme:secret'], 'knowledge_page', {
+    op: 'write',
+    page: 'team:acme:secret',
+    body: 'Team notes.',
+  });
   await knowledge.upsertPage({ scope: 'team:acme:secret', path: 'plans', name: 'Secret plans' });
   return env;
 }
@@ -109,6 +113,42 @@ describe('knowledge_list', () => {
     ]);
   });
 
+  it('has the store leave out child scopes the run cannot read, instead of reading them all', async () => {
+    const { call, storage } = await site();
+    for (let i = 0; i < 30; i++) {
+      const team = `team:acme:t${String(i).padStart(2, '0')}`;
+      await call([...ORG, 'docs:acme', team], 'knowledge_page', { op: 'write', page: team, body: 'Team notes.' });
+    }
+    const store = (await storage.getStore('knowledge'))!;
+    const listed = vi.spyOn(store, 'listChildScopes');
+
+    const member = await call([...ORG, 'team:acme:secret'], 'knowledge_list', { from: 'docs:acme', depth: 2 });
+    expect(member.entries.slice(0, 3).map((entry: any) => entry.ref)).toEqual([
+      'team:acme:secret',
+      'team:acme:secret#plans',
+      'docs:acme#guides',
+    ]);
+    expect(member.entries.filter((entry: any) => entry.scope)).toHaveLength(1);
+    // Every scope page the store handed back was one the run can read.
+    const returned = await Promise.all(listed.mock.results.map(result => result.value));
+    expect(listed.mock.calls.every(([input]) => input.read !== undefined)).toBe(true);
+    expect(returned.flatMap(result => result.pages).map(scope => scope.address)).toEqual(['team:acme:secret']);
+  });
+
+  it('leaves out unreadable child scopes even when a store ignores read', async () => {
+    const { call, storage } = await site();
+    for (const team of ['team:acme:secret', 'team:acme:other']) {
+      await call([...ORG, 'docs:acme', team], 'knowledge_page', { op: 'write', page: team, body: 'Team notes.' });
+    }
+    const store = (await storage.getStore('knowledge'))!;
+    const list = store.listChildScopes.bind(store);
+    vi.spyOn(store, 'listChildScopes').mockImplementation(({ read: _read, ...input }) => list(input));
+
+    const member = await call([...ORG, 'team:acme:secret'], 'knowledge_list', { from: 'docs:acme', depth: 2 });
+    const scopes = member.entries.filter((entry: any) => entry.scope).map((entry: any) => entry.ref);
+    expect(scopes).toEqual(['team:acme:secret']);
+  });
+
   it('pages through a wide level by cursor without repeats', async () => {
     const { call } = await site();
     const seen: string[] = [];
@@ -133,7 +173,7 @@ describe('knowledge_list', () => {
     const held = ['org:acme', 'docs:acme'];
     for (let i = 0; i < 4; i++) {
       held.push(`team:acme:t${i}`);
-      await call([...held], 'knowledge_read', { page: `team:acme:t${i}` });
+      await call([...held], 'knowledge_page', { op: 'write', page: `team:acme:t${i}`, body: 'Team notes.' });
     }
     for (let i = 0; i < 3; i++) await knowledge.upsertPage({ scope: 'docs:acme', path: `p${i}`, name: `P${i}` });
     const seen: string[] = [];
@@ -172,7 +212,7 @@ describe('knowledge_list', () => {
     const held = ['org:acme', 'docs:acme'];
     for (let i = 0; i < 3; i++) {
       held.push(`team:acme:t${i}`);
-      await call([...held], 'knowledge_read', { page: `team:acme:t${i}` });
+      await call([...held], 'knowledge_page', { op: 'write', page: `team:acme:t${i}`, body: 'Team notes.' });
     }
     await knowledge.upsertPage({ scope: 'docs:acme', path: 'p0', name: 'P0' });
     const first = await call(held, 'knowledge_list', { from: 'docs:acme', limit: 3 });

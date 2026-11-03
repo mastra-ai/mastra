@@ -152,8 +152,8 @@ import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
 import { SkillOverridesStorage } from './storage/domains/skill-overrides/base.js';
 import { SourceControlStorage } from './storage/domains/source-control/base.js';
-import { WorkItemsStorage } from './storage/domains/work-items/base.js';
-import type { FactoryRunBindingRecord, WorkItemRow } from './storage/domains/work-items/base.js';
+import { WorkItemSplitModeError, WorkItemsStorage } from './storage/domains/work-items/base.js';
+import type { FactoryRunBindingRecord, Card } from './storage/domains/work-items/base.js';
 import { createRequestTimingMiddleware, factoryTimingEnabled, instrumentAsyncMethods, timedPhase } from './timing.js';
 import { deliverFactorySessionNotification } from './tools/deliver.js';
 import { applyFactoryToolPermissions, createFactoryTools, resolveFactoryToolScope } from './tools/index.js';
@@ -756,6 +756,8 @@ export class MastraFactory {
     // Single init path: backend connection failure is a hard boot error;
     // registered app domains initialize fail-soft inside FactoryStorage.
     await timedPhase('prepare.storage.init', () => storage.init());
+    const workItemsInitError = storage.domainInitError('work-items');
+    if (workItemsInitError instanceof WorkItemSplitModeError) throw workItemsInitError;
 
     // Each project's boards are the code boards plus the boards it stored. Load every project
     // before anything reads its boards; without the boards domain the code boards serve directly.
@@ -778,6 +780,25 @@ export class MastraFactory {
       );
     }
     const boards: BoardRegistry | ProjectBoardSource = this.#projectBoards ?? this.#boards;
+
+    // Triage no longer holds a non-bug in Triage until someone accepts it; it sends it
+    // back to Intake. Move the cards the old rule left there, once.
+    if (storage.isDomainReady('work-items')) {
+      await timedPhase('prepare.workItems.heldTriageCards', () =>
+        workItemsStorage
+          .returnHeldTriageCards()
+          .then(moved => {
+            if (moved.length > 0) {
+              console.info(`[factory] moved ${moved.length} card(s) held for triage acceptance back to Intake`);
+            }
+          })
+          .catch(error =>
+            console.warn(
+              `[factory] moving cards held for triage acceptance back to Intake failed: ${error instanceof Error ? error.message : error}`,
+            ),
+          ),
+      );
+    }
 
     // Per-tenant model credentials: once the credentials domain is up, model
     // resolution goes through the caller's own store and the SDK stops
@@ -1044,11 +1065,6 @@ export class MastraFactory {
           boards: boards,
           storage: workItemsStorage,
           audit: auditDomain,
-          autoApprovePlans: async ({ orgId, factoryProjectId }) => {
-            await factoryProjectsStorage.ensureReady();
-            const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-            return project?.autoApprovePlans ?? false;
-          },
           selfReviewEnabled: async ({ orgId, factoryProjectId }) => {
             await factoryProjectsStorage.ensureReady();
             const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
@@ -1061,7 +1077,7 @@ export class MastraFactory {
           }),
           ...(githubIntegration
             ? {
-                onAccepted: (args: { orgId: string; factoryProjectId: string; item: WorkItemRow }) =>
+                onAccepted: (args: { orgId: string; factoryProjectId: string; item: Card }) =>
                   reconcileGithubAcceptanceLabels(
                     githubIntegration,
                     sourceControlStorage.forIntegration(githubIntegration.id),
@@ -1807,11 +1823,6 @@ export class MastraFactory {
                   await factoryProjectsStorage.ensureReady();
                   const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
                   return project?.autoRunEnabled ?? false;
-                },
-                autoApprovePlans: async ({ orgId, factoryProjectId }) => {
-                  await factoryProjectsStorage.ensureReady();
-                  const project = await factoryProjectsStorage.get({ orgId, id: factoryProjectId });
-                  return project?.autoApprovePlans ?? false;
                 },
                 factoryProjectExists: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
