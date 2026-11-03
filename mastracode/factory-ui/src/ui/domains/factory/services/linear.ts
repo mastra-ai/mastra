@@ -10,7 +10,12 @@
 import { RequestError } from './request';
 
 export type LinearStatusReason =
-  'missing_config' | 'auth_required' | 'organization_required' | 'not_connected' | 'ready' | 'unavailable';
+  | 'missing_config'
+  | 'auth_required'
+  | 'organization_required'
+  | 'not_connected'
+  | 'ready'
+  | 'unavailable';
 
 export interface LinearStatus {
   enabled: boolean;

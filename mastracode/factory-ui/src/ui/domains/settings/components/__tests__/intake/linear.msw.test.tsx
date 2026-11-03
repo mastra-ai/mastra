@@ -362,6 +362,17 @@ describe('IntakeSection linear', () => {
       expect(screen.queryByText(deletedProject)).not.toBeInTheDocument();
       expect(screen.queryByRole('list', { name: 'Disconnected Linear workspaces' })).not.toBeInTheDocument();
     });
+
+    it('numbers missing sources so each Remove targets a distinct one', async () => {
+      const otherDeleted = encode('linear-project:', { workspaceId: 'ws-live', projectId: 'p-deleted-2' });
+      const saved = useWorkspaceHandlers([liveProject, deletedProject, otherDeleted]);
+
+      renderIntakeSection();
+      expect(await screen.findByRole('button', { name: 'Remove Unknown Linear project 1' })).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Remove Unknown Linear project 2' }));
+
+      await waitFor(() => expect(saved.at(-1)?.linear.sourceIds).toEqual([liveProject, deletedProject]));
+    });
   });
 
   describe('given Linear is connected', () => {

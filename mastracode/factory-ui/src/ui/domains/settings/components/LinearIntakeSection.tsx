@@ -4,7 +4,7 @@ import { RotateCcw } from 'lucide-react';
 import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIntakeBindingsQuery } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
-import { isLinearReauthError, linearTeamSourceId } from '../../factory/services/linear';
+import { isLinearReauthError, isLinearTeamSourceId, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearStatus } from '../../factory/services/linear';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
@@ -37,7 +37,15 @@ export function LinearIntakeSection({
   const sourcesLoaded = projectsQuery.isSuccess && teamsQuery.isSuccess;
   const sources = sourcesLoaded
     ? partitionLinearSources(config.linear.sourceIds, groups)
-    : { selectedIds: config.linear.sourceIds, disconnected: [] };
+    : { selectedIds: config.linear.sourceIds ?? [], disconnected: [] };
+  const listedIds = new Set(groups.flatMap(group => group.items.map(item => item.id)));
+  const missingIds = sources.selectedIds.filter(id => !listedIds.has(id));
+  function missingSourceLabel(id: string) {
+    const team = isLinearTeamSourceId(id);
+    const sameKind = missingIds.filter(missing => isLinearTeamSourceId(missing) === team);
+    const label = team ? 'Unknown Linear team' : 'Unknown Linear project';
+    return sameKind.length > 1 ? `${label} ${sameKind.indexOf(id) + 1}` : label;
+  }
   const description = connectionDescription();
   function connectionDescription() {
     if (statusQuery.isError) return "Couldn't load Linear status.";
@@ -115,7 +123,7 @@ export function LinearIntakeSection({
           itemIcon={<SettingsIntegrationIcon provider="linear" />}
           groups={groups}
           selectedIds={projectsQuery.isPending || teamsQuery.isPending ? [] : sources.selectedIds}
-          fallbackLabel={id => (id.startsWith('linear-team:') ? 'Unknown Linear team' : 'Unknown Linear project')}
+          fallbackLabel={missingSourceLabel}
           pending={busy}
           loading={projectsQuery.isPending}
           error={sourceError ? "Couldn't load Linear projects and teams." : undefined}
