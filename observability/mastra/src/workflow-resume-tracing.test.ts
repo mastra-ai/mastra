@@ -1,6 +1,7 @@
 import { Mastra } from '@mastra/core/mastra';
 import { SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
 import type { AnyExportedSpan } from '@mastra/core/observability';
+import { RequestContext } from '@mastra/core/request-context';
 import { MockStore } from '@mastra/core/storage';
 import { createStep, createWorkflow, createEventedWorkflow } from '@mastra/core/workflows';
 import type { WorkflowOptions } from '@mastra/core/workflows';
@@ -369,6 +370,81 @@ describe('workflow resume span linkage', () => {
       expect(roots).toHaveLength(2);
       // The trace hid its inputs when it started; the resumed segment belongs to that trace.
       expect(roots.map(span => span.input)).toEqual([undefined, undefined]);
+    } finally {
+      await host.shutdown();
+    }
+  });
+
+  // The resume call's own tracing options win over the saved trace state, field by field.
+  it.each([
+    ['input', { hideOutput: true }, { hideInput: true }],
+    ['output', { hideInput: true }, { hideOutput: true }],
+  ] as const)(
+    'default resume hides the %s its own call hides and keeps what the original run hid',
+    async (field, startOptions, resumeOptions) => {
+      const { workflow, host } = buildSampledHost('default', { type: SamplingStrategyType.ALWAYS });
+      try {
+        const run = await workflow.createRun();
+        expect((await run.start({ inputData: {}, tracingOptions: startOptions })).status).toBe('suspended');
+
+        const resumed = await workflow.createRun({ runId: run.runId });
+        expect((await resumed.resume({ resumeData: { approved: true }, tracingOptions: resumeOptions })).status).toBe(
+          'success',
+        );
+
+        const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+        expect(roots).toHaveLength(2);
+        expect(roots[1]![field], `resumed ${field} hidden by the resume call`).toBeUndefined();
+        const other = field === 'input' ? 'output' : 'input';
+        expect(roots[1]![other], `resumed ${other} hidden by the original run`).toBeUndefined();
+      } finally {
+        await host.shutdown();
+      }
+    },
+  );
+
+  it("default resume keeps the original run's request context keys without repeating them", async () => {
+    const approve = (id: string) =>
+      createStep({
+        id,
+        inputSchema: empty,
+        outputSchema: empty,
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute: async ({ resumeData, suspend }) => {
+          if (!resumeData?.approved) await suspend({});
+          return {};
+        },
+      });
+    const workflow = createWorkflow({ id: 'resume-tracing-workflow', inputSchema: empty, outputSchema: empty })
+      .then(approve('first'))
+      .then(approve('second'))
+      .commit();
+    const storage = new MockStore();
+    const host = new Mastra({
+      logger: false,
+      storage,
+      workflows: { [workflow.id]: workflow },
+      observability: new Observability({
+        configs: { default: { serviceName: 'workflow-resume-keys', exporters: [exporter] } },
+      }),
+    });
+    try {
+      const requestContext = new RequestContext([['userId', 'u1']]);
+      const run = await workflow.createRun();
+      expect(
+        (await run.start({ inputData: {}, requestContext, tracingOptions: { requestContextKeys: ['userId'] } })).status,
+      ).toBe('suspended');
+
+      const resumed = await workflow.createRun({ runId: run.runId });
+      expect((await resumed.resume({ step: 'first', resumeData: { approved: true }, requestContext })).status).toBe(
+        'suspended',
+      );
+      const saved = (await readTracingContext(storage, run.runId)) as { traceState?: { requestContextKeys: string[] } };
+      expect(saved.traceState?.requestContextKeys).toEqual(['userId']);
+
+      const roots = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+      expect(roots).toHaveLength(2);
+      expect(roots[1]!.metadata?.userId).toBe('u1');
     } finally {
       await host.shutdown();
     }
