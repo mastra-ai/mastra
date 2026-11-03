@@ -889,10 +889,13 @@ export class WorkflowsPG extends WorkflowsStorage {
     runId: string;
   }): Promise<StoredWorkflowRunHeader | null> {
     try {
-      return await this.#db.client.oneOrNone<StoredWorkflowRunHeader>(
-        `SELECT ${HEADER_COLUMNS} FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2`,
+      const row = await this.#db.client.oneOrNone<StoredWorkflowRunHeader & { resourceId: string | null }>(
+        `SELECT ${HEADER_COLUMNS}, "resourceId" FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2`,
         [workflowName, runId],
       );
+      if (!row) return null;
+      const { resourceId, ...header } = row;
+      return resourceId === null ? header : { ...header, resourceId };
     } catch (error) {
       throw this.#runError('LOAD_WORKFLOW_RUN_HEADER', workflowName, runId, error);
     }

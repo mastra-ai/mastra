@@ -343,6 +343,13 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(run!.createdAt).toEqual(createdAt);
         expect(run!.updatedAt.getTime()).toBeGreaterThan(createdAt.getTime());
         expect(run!.resourceId).toBe('res');
+        expect((await store.loadWorkflowRunHeader({ workflowName, runId: id }))!.resourceId).toBe('res');
+      });
+
+      it('loads the header without a resource id when none was written', async () => {
+        const id = runId();
+        await checkpoint(id, makeSnapshot(id));
+        expect(await store.loadWorkflowRunHeader({ workflowName, runId: id })).not.toHaveProperty('resourceId');
       });
     });
 

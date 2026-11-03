@@ -1,6 +1,8 @@
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import type { StateRef, StepResultSummary, WorkflowRunHeader } from '../storage/domains/workflows/journal';
+import { pickStateKeys } from '../storage/domains/workflows/journal';
 import { getSnapshotMemoryInfo } from '../storage/domains/workflows/snapshot-memory-info';
+import type { StatePatchOp } from '../storage/domains/workflows/state-patch';
 import type { UpdateWorkflowStateOptions } from '../storage/types';
 import { stubStepResult } from './run-journal';
 import type { StepResult, WorkflowRunState } from './types';
@@ -39,30 +41,45 @@ export interface RunStorage {
    */
   loadDriveStartState(): Promise<Record<string, any> | undefined>;
 
-  // The evented engine's operations. Storage v2 doesn't implement them yet.
+  // The evented engine's operations.
 
   loadResourceId(): Promise<string | undefined>;
   /** The header and `stepId`'s result. v1 loads every step. */
-  loadStep(stepId: string): Promise<WorkflowRunState | null>;
+  loadStep(stepId: string): Promise<StepSnapshot | null>;
   /**
-   * Returns every step's result after the write: `{}` when the run isn't stored, undefined
-   * without a store. `state` is written in the same write.
+   * The latest results of `stepIds` (steps without one left out), among the run's writes up to
+   * `upToSeq` (a `seq` a write returned) on v2. v1 loads every step and ignores `upToSeq`.
    */
-  writeStepResult(write: StepResultWrite): Promise<StepResults | undefined>;
+  loadSteps(stepIds: string[], opts?: { upToSeq?: number }): Promise<StepResults>;
+  /** The run's latest stored state, with only the top-level `keys` when given. `{}` when the run isn't stored. */
+  loadState(keys?: string[]): Promise<Record<string, any>>;
+  /** `state` (v1) or `statePatch` (v2) is written in the same write. */
+  writeStepResult(write: StepResultWrite): Promise<StepWriteResult | undefined>;
   /** A foreach step's write: the store merges `result.output` into the stored array by index. */
-  mergeStepResult(write: StepResultWrite): Promise<StepResults | undefined>;
-  writeState(state: Record<string, any>, requestContext: Record<string, any>): Promise<void>;
+  mergeStepResult(write: StepResultWrite): Promise<StepWriteResult | undefined>;
+  writeState(write: StateWrite & { requestContext: Record<string, any> }): Promise<void>;
   delete(): Promise<void>;
 }
 
 type StepResults = Record<string, StepResult<any, any, any, any>>;
 
-type StepResultWrite = {
+type StepSnapshot = WorkflowRunHeader & { context: WorkflowRunState['context'] };
+
+/** v1 writes the full state, v2 a patch on the stored state, so concurrent writers keep each other's keys. */
+type StateWrite = { state?: Record<string, any>; statePatch?: StatePatchOp[] };
+
+type StepResultWrite = StateWrite & {
   stepId: string;
   result: StepResult<any, any, any, any>;
   requestContext: Record<string, any>;
-  state?: Record<string, any>;
 };
+
+/**
+ * After a step write: v1 returns every step's result, v2 the written step's (merged, for
+ * `mergeStepResult`) and the run's `lastSeq`. `results` is `{}` when the run isn't stored; the
+ * whole result is undefined without a store.
+ */
+type StepWriteResult = { results: StepResults; seq?: number };
 
 type RunStorageArgs = {
   workflowName: string;
@@ -173,13 +190,31 @@ class RunStorageV1 implements RunStorage {
     return run?.resourceId;
   }
 
-  async loadStep(): Promise<WorkflowRunState | null> {
+  async loadStep(): Promise<StepSnapshot | null> {
     return this.#load(await this.#getStore());
   }
 
-  async writeStepResult({ stepId, result, requestContext, state }: StepResultWrite): Promise<StepResults | undefined> {
+  async loadSteps(stepIds: string[]): Promise<StepResults> {
+    const context = (await this.#load(await this.#getStore()))?.context ?? {};
+    return Object.fromEntries(stepIds.filter(id => context[id]).map(id => [id, context[id] as StepResults[string]]));
+  }
+
+  async loadState(keys?: string[]): Promise<Record<string, any>> {
+    const snapshot = await this.#load(await this.#getStore());
+    // The evented engine keeps a v1 run's latest state in its `__state` pseudo-step.
+    return pickStateKeys((snapshot?.context?.__state as Record<string, any>) ?? snapshot?.value ?? {}, keys);
+  }
+
+  async writeStepResult({
+    stepId,
+    result,
+    requestContext,
+    state,
+    statePatch,
+  }: StepResultWrite): Promise<StepWriteResult | undefined> {
+    if (statePatch) throw new Error('Storage v1 runs write the whole state, not a patch');
     const store = await this.#getStore();
-    return store?.updateWorkflowResults({
+    const results = await store?.updateWorkflowResults({
       workflowName: this.#workflowName,
       runId: this.#runId,
       stepId,
@@ -187,14 +222,16 @@ class RunStorageV1 implements RunStorage {
       requestContext,
       ...(state !== undefined ? { state } : {}),
     });
+    return results && { results };
   }
 
-  mergeStepResult(write: StepResultWrite): Promise<StepResults | undefined> {
+  mergeStepResult(write: StepResultWrite): Promise<StepWriteResult | undefined> {
     // v1 stores already merge a foreach result's array by index.
     return this.writeStepResult(write);
   }
 
-  async writeState(state: Record<string, any>, requestContext: Record<string, any>): Promise<void> {
+  async writeState({ state, statePatch, requestContext }: StateWrite & { requestContext: Record<string, any> }) {
+    if (statePatch) throw new Error('Storage v1 runs write the whole state, not a patch');
     await this.writeStepResult({ stepId: '__state', result: state as StepResult<any, any, any, any>, requestContext });
   }
 
@@ -336,30 +373,94 @@ class RunStorageV2 implements RunStorage {
   }
 
   async loadResourceId(): Promise<string | undefined> {
-    throw notOnV2('loadResourceId');
+    const store = await this.#getStore();
+    return (await store?.loadWorkflowRunHeader({ workflowName: this.#workflowName, runId: this.#runId }))?.resourceId;
   }
 
-  async loadStep(): Promise<WorkflowRunState | null> {
-    throw notOnV2('loadStep');
+  async loadStep(stepId: string): Promise<StepSnapshot | null> {
+    const store = await this.#getStore();
+    const args = { workflowName: this.#workflowName, runId: this.#runId };
+    const stored = await store?.loadWorkflowRunHeader(args);
+    if (!stored) return null;
+    // Bounded by the header's `lastSeq`, so a write landing between the two reads isn't half-seen.
+    const context = await store!.loadWorkflowRunSteps({ ...args, stepIds: [stepId], upToSeq: stored.lastSeq });
+    return { ...stored.header, context } as StepSnapshot;
   }
 
-  async writeStepResult(): Promise<StepResults | undefined> {
-    throw notOnV2('writeStepResult');
+  async loadSteps(stepIds: string[], { upToSeq }: { upToSeq?: number } = {}): Promise<StepResults> {
+    const store = await this.#getStore();
+    return (
+      (await store?.loadWorkflowRunSteps({ workflowName: this.#workflowName, runId: this.#runId, stepIds, upToSeq })) ??
+      {}
+    );
   }
 
-  async mergeStepResult(): Promise<StepResults | undefined> {
-    throw notOnV2('mergeStepResult');
+  async loadState(keys?: string[]): Promise<Record<string, any>> {
+    const store = await this.#getStore();
+    return (await store?.loadWorkflowRunState({ workflowName: this.#workflowName, runId: this.#runId, keys })) ?? {};
   }
 
-  async writeState(): Promise<void> {
-    throw notOnV2('writeState');
+  async writeStepResult({
+    stepId,
+    result,
+    requestContext,
+    state,
+    statePatch,
+  }: StepResultWrite): Promise<StepWriteResult | undefined> {
+    if (state) throw wholeStateOnV2();
+    const store = await this.#getStore();
+    if (!store) return undefined;
+    const written = await store.appendWorkflowRunEntries({
+      workflowName: this.#workflowName,
+      runId: this.#runId,
+      steps: { [stepId]: result },
+      requestContext,
+      ...(statePatch?.length ? { statePatch } : {}),
+    });
+    return written ? { results: { [stepId]: result }, seq: written.lastSeq } : { results: {} };
+  }
+
+  async mergeStepResult({
+    stepId,
+    result,
+    requestContext,
+    state,
+    statePatch,
+  }: StepResultWrite): Promise<StepWriteResult | undefined> {
+    if (state) throw wholeStateOnV2();
+    const store = await this.#getStore();
+    if (!store) return undefined;
+    const merged = await store.mergeWorkflowRunStepResult({
+      workflowName: this.#workflowName,
+      runId: this.#runId,
+      stepId,
+      result,
+      requestContext,
+      ...(statePatch?.length ? { statePatch } : {}),
+    });
+    return merged ? { results: { [stepId]: merged.result }, seq: merged.lastSeq } : { results: {} };
+  }
+
+  async writeState({ state, statePatch, requestContext }: StateWrite & { requestContext: Record<string, any> }) {
+    if (state) throw wholeStateOnV2();
+    if (!statePatch?.length) return;
+    const store = await this.#getStore();
+    await store?.appendWorkflowRunEntries({
+      workflowName: this.#workflowName,
+      runId: this.#runId,
+      steps: {},
+      requestContext,
+      statePatch,
+    });
   }
 
   async delete(): Promise<void> {
-    throw notOnV2('delete');
+    const store = await this.#getStore();
+    await store?.deleteWorkflowRunById({ workflowName: this.#workflowName, runId: this.#runId });
   }
 }
 
-function notOnV2(operation: string): Error {
-  return new Error(`RunStorage.${operation} doesn't support storage v2 runs yet`);
+function wholeStateOnV2(): Error {
+  // A whole state would drop the keys a concurrent step (a parallel arm, a foreach iteration) wrote.
+  return new Error('Storage v2 runs write state as a patch, not the whole state');
 }

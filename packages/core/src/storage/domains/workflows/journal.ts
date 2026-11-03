@@ -61,6 +61,8 @@ export type StoredWorkflowRunHeader = {
    * Undefined when the store doesn't track it.
    */
   startStateSeq?: number;
+  /** The run's resource id. Only `loadWorkflowRunHeader` returns it. */
+  resourceId?: string;
 } & StoredStateColumns;
 
 /**

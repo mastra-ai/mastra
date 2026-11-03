@@ -2495,7 +2495,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           workflowStatus: 'suspended',
         }) ?? true;
       if (shouldPersist) {
-        await runStorage.writeState(currentState, withoutAuthToken(requestContext));
+        await runStorage.writeState({ state: currentState, requestContext: withoutAuthToken(requestContext) });
         const suspendTracingContext = this.resolveSuspendTracingContext(runId);
         await runStorage.updateHeader({
           status: 'suspended',
@@ -2532,7 +2532,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     // All branches finished: record the merged state (branches skip recording their
     // full state), drop the internal per-branch deltas and forward the merged state
     // so downstream steps resolve it from stepResults.__state.
-    await this.#runStorage(workflow.id, runId).writeState(currentState, withoutAuthToken(requestContext));
+    await this.#runStorage(workflow.id, runId).writeState({
+      state: currentState,
+      requestContext: withoutAuthToken(requestContext),
+    });
     const cleanedStepResults: Record<string, any> = { ...stepResults, __state: currentState };
     for (const [key, res] of Object.entries(cleanedStepResults)) {
       if (res && typeof res === 'object' && '__stateDelta' in res) {
@@ -2760,12 +2763,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       // next iteration / the step after the foreach would re-read the stale `__state`
       // from storage instead of `state` (see resolveCurrentState's priority order).
       // This is what makes setState() inside a foreach body propagate across iterations.
-      const newStepResults = await runStorage.mergeStepResult({
-        stepId: getEntryId(step.step),
-        result: newResult,
-        requestContext: withoutAuthToken(requestContext),
-        state: currentState,
-      });
+      const newStepResults = (
+        await runStorage.mergeStepResult({
+          stepId: getEntryId(step.step),
+          result: newResult,
+          requestContext: withoutAuthToken(requestContext),
+          state: currentState,
+        })
+      )?.results;
 
       // Same fallback as the regular step path: when no run record was
       // persisted (shouldPersistSnapshot opted out of running) the store
@@ -2921,7 +2926,7 @@ export class WorkflowEventProcessor extends EventProcessor {
 
           if (shouldPersist) {
             // Persist state to snapshot context before suspending
-            await runStorage.writeState(currentState, withoutAuthToken(requestContext));
+            await runStorage.writeState({ state: currentState, requestContext: withoutAuthToken(requestContext) });
 
             const suspendTracingContext = this.resolveSuspendTracingContext(runId);
             await runStorage.updateHeader({
@@ -3037,12 +3042,14 @@ export class WorkflowEventProcessor extends EventProcessor {
       // restart after this point resumes with the state this step produced. Branches of a
       // parallel/conditional entry skip it: their full state would clobber sibling updates;
       // aggregateBranchResults records the merged state instead.
-      const newStepResults = await runStorage.writeStepResult({
-        stepId,
-        result: persistedResult,
-        requestContext: withoutAuthToken(requestContext),
-        state: isParallelBranch ? undefined : currentState,
-      });
+      const newStepResults = (
+        await runStorage.writeStepResult({
+          stepId,
+          result: persistedResult,
+          requestContext: withoutAuthToken(requestContext),
+          state: isParallelBranch ? undefined : currentState,
+        })
+      )?.results;
 
       // When the Mastra has no storage configured, the write returns
       // undefined. When it has storage but no run record yet
@@ -3154,7 +3161,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       if (shouldPersist) {
         // Persist state to snapshot context before suspending
         // We use a special '__state' key to store state at the context level
-        await runStorage.writeState(currentState, withoutAuthToken(requestContext));
+        await runStorage.writeState({ state: currentState, requestContext: withoutAuthToken(requestContext) });
 
         const suspendTracingContext = this.resolveSuspendTracingContext(runId);
         await runStorage.updateHeader({

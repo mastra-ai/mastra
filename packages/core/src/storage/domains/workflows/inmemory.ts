@@ -496,7 +496,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId: string;
   }): Promise<StoredWorkflowRunHeader | null> {
     const record = this.db.workflowRunHeaders.get(this.getWorkflowKey(workflowName, runId));
-    return record ? storedHeader(record) : null;
+    if (!record) return null;
+    return { ...storedHeader(record), ...(record.resourceId !== undefined && { resourceId: record.resourceId }) };
   }
 
   async loadWorkflowRun({

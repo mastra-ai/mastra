@@ -596,11 +596,13 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
   }): Promise<StoredWorkflowRunHeader | null> {
     try {
       const result = await this.#client.execute({
-        sql: `SELECT ${HEADER_COLUMNS} FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?`,
+        sql: `SELECT ${HEADER_COLUMNS}, resourceId FROM ${TABLE_WORKFLOW_RUNS} WHERE workflow_name = ? AND run_id = ?`,
         args: [workflowName, runId],
       });
       const row = result.rows[0];
-      return row ? storedHeader(row) : null;
+      if (!row) return null;
+      const header = storedHeader(row);
+      return row.resourceId == null ? header : { ...header, resourceId: String(row.resourceId) };
     } catch (error) {
       throw this.#runError('LOAD_WORKFLOW_RUN_HEADER', workflowName, runId, error);
     }
