@@ -3,6 +3,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
 import { buildPageTree, childCountLabel, pageAncestorIds, visiblePageRows } from '../lib/pageTree';
+import { prefersMotion } from '../lib/useLeavingNodes';
 import type { KnowledgePagePayload } from '../pageTypes';
 
 import { cn } from '@/utils/cn';
@@ -80,6 +81,20 @@ export function KnowledgePageTree({
       ),
     [roots, expanded, mayHaveChildren],
   );
+  // Bring the selected row into view once per selection, as soon as it exists (its levels may still be
+  // loading). `nearest` leaves a row already on screen where it is; keyboard focus is not moved.
+  const scrolledTo = useRef<string | null>(null);
+  useEffect(() => {
+    if (!selectedPageId) {
+      scrolledTo.current = null;
+      return;
+    }
+    if (scrolledTo.current === selectedPageId) return;
+    const element = itemRefs.current.get(selectedPageId);
+    if (!element) return;
+    scrolledTo.current = selectedPageId;
+    element.scrollIntoView?.({ block: 'nearest', behavior: prefersMotion() ? 'smooth' : 'auto' });
+  }, [rows, selectedPageId]);
   const activeId =
     focusedId && rows.some(row => row.page.id === focusedId)
       ? focusedId

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, within } from '@testing-library/react';
 import { useState } from 'react';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../test/render';
 import type { KnowledgePagePayload } from '../../pageTypes';
@@ -160,6 +160,38 @@ describe('KnowledgePageExplorer tree with child counts', () => {
       expect(row('Articles').getAttribute('aria-expanded')).toBe('true');
       expect(row('Articles').getAttribute('aria-selected')).toBe('true');
       expect(row('First article')).toBeTruthy();
+    });
+  });
+
+  describe('when a page is focused in the graph while its row is out of sight', () => {
+    const scrolled: Array<{ id: string | null; options: unknown }> = [];
+    beforeEach(() => {
+      scrolled.length = 0;
+      Element.prototype.scrollIntoView = function scrollIntoView(this: Element, options?: unknown) {
+        scrolled.push({ id: this.getAttribute('aria-selected') === 'true' ? this.textContent : null, options });
+      };
+    });
+    afterEach(() => {
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    });
+
+    it('opens its ancestors, highlights its row and scrolls the nearest way to it', () => {
+      renderWithProviders(<Host requested={[]} />);
+      expect(within(tree().getByRole('treeitem', { name: /^site:mastra/ })).queryByText('Second article')).toBeNull();
+      const dot = document.querySelector('.react-flow__node [data-page-id="second"]')?.closest('.react-flow__node');
+      if (!dot) throw new Error('no second dot');
+      fireEvent.click(dot);
+      expect(row('Second article').getAttribute('aria-selected')).toBe('true');
+      const hit = scrolled.find(entry => entry.id?.startsWith('Second article'));
+      expect(hit?.options).toMatchObject({ block: 'nearest' });
+    });
+
+    it('scrolls once per selection, not on every refresh', () => {
+      renderWithProviders(<Host requested={[]} />);
+      fireEvent.click(row('Pricing'));
+      const count = scrolled.length;
+      fireEvent.click(row('Pricing'));
+      expect(scrolled.length).toBe(count);
     });
   });
 
