@@ -340,6 +340,87 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake route ma
     expect(await list(replicaA.send, base)).toEqual([expect.objectContaining({ name: 'Ok' })]);
   });
 
+  it('saves the events a route handles, and lets a route for later events target a terminal phase', async () => {
+    const { base, replicaA } = await setup();
+    const canceled = {
+      operator: 'AND',
+      conditions: [{ field: 'event.reason', operator: 'equals', value: 'canceled' }],
+    };
+
+    const created = await replicaA.send('POST', base, {
+      name: 'Closed as not planned',
+      on: ['work_item.closed'],
+      when: canceled,
+      target: { boardKey: 'work', phaseKey: 'canceled' },
+    });
+    expect(created).toMatchObject({
+      status: 201,
+      body: { intakeRoute: { on: ['work_item.closed'], allowWorkingPhase: false, when: canceled, problems: [] } },
+    });
+    const route = created.body.intakeRoute as Route;
+    const bare = (await replicaA.send('POST', base, { name: 'New cards', target: WORK })).body.intakeRoute;
+    expect(bare).toMatchObject({ on: ['work_item.created'], allowWorkingPhase: false });
+
+    const reopened = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      on: ['work_item.reopened'],
+      when: null,
+      target: { boardKey: 'work', phaseKey: 'triage' },
+      allowWorkingPhase: true,
+      expectedRevision: 1,
+    });
+    expect(reopened).toMatchObject({
+      status: 200,
+      body: { intakeRoute: { on: ['work_item.reopened'], allowWorkingPhase: true, revision: 2 } },
+    });
+    // A route that places new cards still can't name a terminal phase, whether it is created that way or narrowed to it.
+    expect(
+      await replicaA.send('POST', base, {
+        name: 'Both',
+        on: ['work_item.created', 'work_item.closed'],
+        target: { boardKey: 'work', phaseKey: 'done' },
+      }),
+    ).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
+    const done = await replicaA.send('PATCH', `${base}/${route.id}`, {
+      target: { boardKey: 'work', phaseKey: 'done' },
+      expectedRevision: 2,
+    });
+    expect(done.status).toBe(200);
+    expect(
+      await replicaA.send('PATCH', `${base}/${route.id}`, { on: ['work_item.created'], expectedRevision: 3 }),
+    ).toMatchObject({ status: 422, body: { error: 'terminal_phase' } });
+  });
+
+  it('refuses a route that names no event, an unknown or repeated one, activity, or event conditions it cannot test', async () => {
+    const { base, replicaA } = await setup();
+    const bodies = [
+      { on: [] },
+      { on: ['work_item.deleted'] },
+      { on: ['work_item.closed', 'work_item.closed'] },
+      { on: ['work_item.commented'] },
+      { on: 'work_item.closed' },
+      { allowWorkingPhase: 'yes' },
+    ];
+    for (const body of bodies) {
+      expect(
+        await replicaA.send('POST', base, { name: 'Bad', target: WORK, ...body }),
+        JSON.stringify(body),
+      ).toMatchObject({
+        status: 422,
+        body: { error: 'invalid_intake_route' },
+      });
+    }
+    const activity = await replicaA.send('POST', base, { name: 'Bad', target: WORK, on: ['work_item.commented'] });
+    expect(activity.body.message).toMatch(/activity/);
+    // `event.reason` can't be tested on a route that only places new cards; storage refuses it.
+    const placement = await replicaA.send('POST', base, {
+      name: 'Bad',
+      target: WORK,
+      when: { operator: 'AND', conditions: [{ field: 'event.reason', operator: 'equals', value: 'completed' }] },
+    });
+    expect(placement).toMatchObject({ status: 422, body: { error: 'invalid_intake_route' } });
+    expect(await list(replicaA.send, base)).toEqual([]);
+  });
+
   it('accepts a stored board as a target and reports the route once that board is gone', async () => {
     const { projectPath, base, replicaA } = await setup();
     expect((await replicaA.send('POST', `${projectPath}/boards`, docsBoard)).status).toBe(201);

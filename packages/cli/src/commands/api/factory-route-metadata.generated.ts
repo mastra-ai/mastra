@@ -430,9 +430,11 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "allowWorkingPhase",
       "enabled",
       "expectedRevision",
       "name",
+      "on",
       "target",
       "when"
     ],
@@ -691,8 +693,10 @@ export const FACTORY_API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "allowWorkingPhase",
       "enabled",
       "name",
+      "on",
       "target",
       "when"
     ],
@@ -2593,6 +2597,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "phaseKey"
                 ]
               },
+              "on": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "work_item.created",
+                    "work_item.closed",
+                    "work_item.reopened"
+                  ]
+                }
+              },
+              "allowWorkingPhase": {
+                "type": "boolean"
+              },
               "revision": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -2624,6 +2642,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "position",
               "when",
               "target",
+              "on",
+              "allowWorkingPhase",
               "revision",
               "createdBy",
               "createdAt",
@@ -2697,7 +2717,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.author",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "event.type",
+            "event.reason"
           ]
         },
         "__schema3": {
@@ -2874,6 +2896,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "phaseKey"
               ]
             },
+            "on": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "work_item.created",
+                  "work_item.closed",
+                  "work_item.reopened"
+                ]
+              }
+            },
+            "allowWorkingPhase": {
+              "type": "boolean"
+            },
             "revision": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -2905,6 +2941,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "position",
             "when",
             "target",
+            "on",
+            "allowWorkingPhase",
             "revision",
             "createdBy",
             "createdAt",
@@ -2977,7 +3015,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.author",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "event.type",
+            "event.reason"
           ]
         },
         "__schema3": {
@@ -4543,8 +4583,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
         "target": {
           "$ref": "#/$defs/__schema10"
         },
-        "expectedRevision": {
+        "on": {
           "$ref": "#/$defs/__schema12"
+        },
+        "allowWorkingPhase": {
+          "$ref": "#/$defs/__schema14"
+        },
+        "expectedRevision": {
+          "$ref": "#/$defs/__schema15"
         }
       },
       "required": [
@@ -4651,7 +4697,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.author",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "event.type",
+            "event.reason"
           ]
         },
         "__schema6": {
@@ -4759,6 +4807,23 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "pattern": "^[a-z0-9][a-z0-9_-]*$"
         },
         "__schema12": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema13"
+          }
+        },
+        "__schema13": {
+          "type": "string",
+          "enum": [
+            "work_item.created",
+            "work_item.closed",
+            "work_item.reopened"
+          ]
+        },
+        "__schema14": {
+          "type": "boolean"
+        },
+        "__schema15": {
           "type": "integer",
           "minimum": 1,
           "maximum": 9007199254740991
@@ -4836,6 +4901,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "phaseKey"
               ]
             },
+            "on": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "work_item.created",
+                  "work_item.closed",
+                  "work_item.reopened"
+                ]
+              }
+            },
+            "allowWorkingPhase": {
+              "type": "boolean"
+            },
             "revision": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -4867,6 +4946,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "position",
             "when",
             "target",
+            "on",
+            "allowWorkingPhase",
             "revision",
             "createdBy",
             "createdAt",
@@ -4939,7 +5020,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.author",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "event.type",
+            "event.reason"
           ]
         },
         "__schema3": {
@@ -6936,6 +7019,15 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "boardKey"
           ],
           "additionalProperties": false
+        },
+        "on": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/__schema8"
+          }
+        },
+        "allowWorkingPhase": {
+          "type": "boolean"
         }
       },
       "required": [
@@ -7003,7 +7095,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.author",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "event.type",
+            "event.reason"
           ]
         },
         "__schema3": {
@@ -7087,6 +7181,14 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
           "type": "string",
           "maxLength": 128,
           "pattern": "^[a-z0-9][a-z0-9_-]*$"
+        },
+        "__schema8": {
+          "type": "string",
+          "enum": [
+            "work_item.created",
+            "work_item.closed",
+            "work_item.reopened"
+          ]
         }
       }
     },
@@ -7161,6 +7263,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                 "phaseKey"
               ]
             },
+            "on": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "work_item.created",
+                  "work_item.closed",
+                  "work_item.reopened"
+                ]
+              }
+            },
+            "allowWorkingPhase": {
+              "type": "boolean"
+            },
             "revision": {
               "type": "integer",
               "minimum": -9007199254740991,
@@ -7192,6 +7308,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "position",
             "when",
             "target",
+            "on",
+            "allowWorkingPhase",
             "revision",
             "createdBy",
             "createdAt",
@@ -7264,7 +7382,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.author",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "event.type",
+            "event.reason"
           ]
         },
         "__schema3": {
@@ -7458,6 +7578,20 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
                   "phaseKey"
                 ]
               },
+              "on": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "work_item.created",
+                    "work_item.closed",
+                    "work_item.reopened"
+                  ]
+                }
+              },
+              "allowWorkingPhase": {
+                "type": "boolean"
+              },
               "revision": {
                 "type": "integer",
                 "minimum": -9007199254740991,
@@ -7489,6 +7623,8 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
               "position",
               "when",
               "target",
+              "on",
+              "allowWorkingPhase",
               "revision",
               "createdBy",
               "createdAt",
@@ -7562,7 +7698,9 @@ export const FACTORY_API_ROUTE_SCHEMAS = {
             "item.author",
             "author.trusted",
             "source.kind",
-            "source.integration"
+            "source.integration",
+            "event.type",
+            "event.reason"
           ]
         },
         "__schema3": {

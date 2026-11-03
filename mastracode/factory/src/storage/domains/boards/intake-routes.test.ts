@@ -7,6 +7,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
+import { createIsolatedFactoryPostgresForTests } from '../../test-utils.js';
 import { DEFAULT_INTAKE_ROUTE, MAX_INTAKE_ROUTES, PULL_REQUEST_INTAKE_ROUTE, StoredBoardsStorage } from './base.js';
 import type { StoredBoardScope, StoredIntakeRouteInput } from './base.js';
 
@@ -276,6 +277,138 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('intake routes o
       target: { boardKey: 'docs', phaseKey: null },
       enabled: false,
       revision: 3,
+    });
+  });
+
+  describe('the events a route handles', () => {
+    const CANCELED = {
+      operator: 'AND' as const,
+      conditions: [{ field: 'event.reason', operator: 'equals' as const, value: 'canceled' }],
+    };
+
+    it('reads back the events and working-phase permission it was saved with, and defaults to new cards', async () => {
+      const { boards, scope } = await setup();
+      const closes = await boards.createIntakeRoute(
+        scope,
+        route('Closed as not planned', {
+          on: ['work_item.closed', 'work_item.reopened'],
+          when: CANCELED,
+          allowWorkingPhase: true,
+          target: { boardKey: 'work', phaseKey: 'canceled' },
+        }),
+        'u',
+      );
+      const bare = await boards.createIntakeRoute(scope, route('New cards'), 'u');
+
+      expect(closes).toMatchObject({ on: ['work_item.closed', 'work_item.reopened'], allowWorkingPhase: true });
+      expect(bare).toMatchObject({ on: ['work_item.created'], allowWorkingPhase: false });
+      expect(await boards.listIntakeRoutes(scope)).toEqual([closes, bare]);
+    });
+
+    it('changes the events a route handles as a new revision', async () => {
+      const { boards, scope } = await setup();
+      const created = await boards.createIntakeRoute(scope, route('Route'), 'u');
+
+      const changed = await boards.updateIntakeRoute(
+        scope,
+        created.id,
+        { on: ['work_item.reopened'], allowWorkingPhase: true },
+        { expectedRevision: 1, actor: 'u2' },
+      );
+      expect(changed).toMatchObject({ on: ['work_item.reopened'], allowWorkingPhase: true, revision: 2 });
+      // A patch that leaves `on` alone keeps it.
+      const renamed = await boards.updateIntakeRoute(
+        scope,
+        created.id,
+        { name: 'Renamed' },
+        { expectedRevision: 2, actor: 'u2' },
+      );
+      expect(renamed).toMatchObject({ on: ['work_item.reopened'], allowWorkingPhase: true, revision: 3 });
+    });
+
+    it.each([
+      ['no event', []],
+      ['an unknown event', ['work_item.deleted']],
+      ['an event twice', ['work_item.closed', 'work_item.closed']],
+      ['activity, which never moves a card', ['work_item.commented']],
+    ])('refuses a route that names %s, and stores nothing', async (_, on) => {
+      const { boards, scope } = await setup();
+      await expect(
+        boards.createIntakeRoute(scope, route('Bad', { on: on as StoredIntakeRouteInput['on'] }), 'u'),
+      ).rejects.toMatchObject({ code: 'invalid_intake_route' });
+      expect(await boards.listIntakeRoutes(scope)).toEqual([]);
+
+      const created = await boards.createIntakeRoute(scope, route('Good'), 'u');
+      await expect(
+        boards.updateIntakeRoute(
+          scope,
+          created.id,
+          { on: on as StoredIntakeRouteInput['on'] },
+          { expectedRevision: 1, actor: 'u' },
+        ),
+      ).rejects.toMatchObject({ code: 'invalid_intake_route' });
+      expect(await boards.getIntakeRoute(scope, created.id)).toEqual(created);
+    });
+
+    it('refuses event conditions on a route that only places new cards, including after a patch', async () => {
+      const { boards, scope } = await setup();
+      await expect(boards.createIntakeRoute(scope, route('New', { when: CANCELED }), 'u')).rejects.toMatchObject({
+        code: 'invalid_intake_route',
+      });
+      const closes = await boards.createIntakeRoute(
+        scope,
+        route('Closes', { on: ['work_item.closed'], when: CANCELED }),
+        'u',
+      );
+      // Narrowing `on` back to new cards would leave a condition that can never be tested.
+      await expect(
+        boards.updateIntakeRoute(scope, closes.id, { on: ['work_item.created'] }, { expectedRevision: 1, actor: 'u' }),
+      ).rejects.toMatchObject({ code: 'invalid_intake_route' });
+      expect(await boards.getIntakeRoute(scope, closes.id)).toEqual(closes);
+    });
+
+    it('reads a route stored before routes named events as one that places new cards', async () => {
+      const storage =
+        backend === 'postgres'
+          ? await createIsolatedFactoryPostgresForTests(postgresUrl!)
+          : new LibSQLFactoryStorage({ id: `intake-routes-${randomUUID()}`, url: ':memory:' });
+      const boards = storage.registerDomain(new StoredBoardsStorage());
+      await storage.init();
+      onTestFinished(() => storage.close());
+      // The table as it was: without the columns this release adds.
+      const database = storage.authDatabase!()!;
+      for (const column of ['on_events', 'allow_working_phase']) {
+        const sql = `ALTER TABLE factory_intake_routes DROP COLUMN ${column}`;
+        if (database.dialect === 'postgres') await database.pool.query(sql);
+        else await database.client.execute(sql);
+      }
+      const scope = { orgId: 'org-1', factoryProjectId: 'project-1' };
+      const id = randomUUID();
+      await storage.ops.insertOne('factory_intake_routes', {
+        id,
+        org_id: scope.orgId,
+        factory_project_id: scope.factoryProjectId,
+        name: 'Old route',
+        enabled: true,
+        position: 0,
+        when_condition: TRUSTED,
+        board_key: 'work',
+        phase_key: 'triage',
+        revision: 1,
+        created_by: 'u',
+        created_at: new Date(),
+        updated_by: 'u',
+        updated_at: new Date(),
+      });
+
+      // Starting up again adds the columns, empty, to the existing row.
+      await boards.init();
+      expect(await boards.getIntakeRoute(scope, id)).toMatchObject({
+        name: 'Old route',
+        when: TRUSTED,
+        on: ['work_item.created'],
+        allowWorkingPhase: false,
+      });
     });
   });
 

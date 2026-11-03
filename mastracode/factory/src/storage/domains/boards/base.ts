@@ -3,6 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
 import type { FactoryStorageOps } from '@mastra/core/storage';
 
+import { DEFAULT_ROUTE_EVENTS, routeEventsProblem } from '../../../boards/board-events.js';
+import type { StatusEvent } from '../../../boards/board-events.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
 import {
   FACTORY_BOARD_DEFINITION_VERSIONS_SCHEMA,
@@ -102,6 +104,10 @@ export interface StoredIntakeRouteInput {
   /** Null matches every card. */
   when?: RuleGroup | null;
   target: IntakeRouteTarget;
+  /** The status events the route handles; unset handles new cards (`work_item.created`). */
+  on?: StatusEvent[];
+  /** Lets an event move an existing card into a working phase, such as Triage. Off by default. */
+  allowWorkingPhase?: boolean;
 }
 
 export interface StoredIntakeRouteRecord {
@@ -113,6 +119,8 @@ export interface StoredIntakeRouteRecord {
   position: number;
   when: RuleGroup | null;
   target: { boardKey: string; phaseKey: string | null };
+  on: StatusEvent[];
+  allowWorkingPhase: boolean;
   revision: number;
   createdBy: string;
   createdAt: Date;
@@ -126,7 +134,8 @@ export type StoredBoardErrorCode =
   | 'revision_mismatch'
   | 'intake_route_not_found'
   | 'intake_route_set_mismatch'
-  | 'intake_route_limit';
+  | 'intake_route_limit'
+  | 'invalid_intake_route';
 
 /** A project's most intake routes; a reorder names every one of them. */
 export const MAX_INTAKE_ROUTES = 100;
@@ -232,6 +241,9 @@ interface IntakeRouteRow extends Record<string, unknown> {
   when_condition: RuleGroup | null;
   board_key: string;
   phase_key: string | null;
+  /** Null on rows written before routes named events: they place new cards. */
+  on_events: StatusEvent[] | null;
+  allow_working_phase: boolean | null;
   revision: number;
   created_by: string;
   created_at: Date;
@@ -497,6 +509,7 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     actor: string,
   ): Promise<StoredIntakeRouteRecord> {
     const id = randomUUID();
+    checkRouteEvents(input.on ?? DEFAULT_ROUTE_EVENTS, input.when ?? null);
     await this.#ensureIntakeRoutes(scope);
     await this.#transact(async ops => {
       const rows = await lockIntakeRoutes(ops, scope);
@@ -526,7 +539,10 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     await this.#transact(async ops => {
       const row = await findIntakeRoute(ops, scope, id);
       checkIntakeRouteRevision(row, options.expectedRevision);
+      checkRouteEvents(patch.on ?? routeEvents(row), patch.when !== undefined ? patch.when : row.when_condition);
       await updateIntakeRouteRow(ops, row, {
+        ...(patch.on !== undefined && { on_events: patch.on }),
+        ...(patch.allowWorkingPhase !== undefined && { allow_working_phase: patch.allowWorkingPhase }),
         ...(patch.name !== undefined && { name: patch.name }),
         ...(patch.enabled !== undefined && { enabled: patch.enabled }),
         ...(patch.when !== undefined && { when_condition: patch.when }),
@@ -779,6 +795,15 @@ async function writeBoard(
   await insertPhases(ops, scope, { ...input, key: row.board_key });
 }
 
+function routeEvents(row: IntakeRouteRow): StatusEvent[] {
+  return row.on_events ?? [...DEFAULT_ROUTE_EVENTS];
+}
+
+function checkRouteEvents(on: readonly string[], when: RuleGroup | null): void {
+  const problem = routeEventsProblem(on, when);
+  if (problem) throw new StoredBoardError('invalid_intake_route', problem);
+}
+
 function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
   return {
     id: row.id,
@@ -789,6 +814,8 @@ function toIntakeRouteRecord(row: IntakeRouteRow): StoredIntakeRouteRecord {
     position: row.position,
     when: row.when_condition,
     target: { boardKey: row.board_key, phaseKey: row.phase_key },
+    on: routeEvents(row),
+    allowWorkingPhase: row.allow_working_phase ?? false,
     revision: row.revision,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -852,6 +879,8 @@ async function insertIntakeRoute(
     when_condition: route.input.when ?? null,
     board_key: route.input.target.boardKey,
     phase_key: route.input.target.phaseKey ?? null,
+    on_events: route.input.on ?? null,
+    allow_working_phase: route.input.allowWorkingPhase ?? false,
     revision: 1,
     created_by: route.actor,
     created_at: now,
