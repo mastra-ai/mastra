@@ -216,7 +216,9 @@ export async function setupSharedTestInfrastructure({
   backgroundTasks,
   retries,
   fastRetries = false,
+  workflows,
 }: {
+  workflows?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['workflows'];
   observability?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['observability'];
   backgroundTasks?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['backgroundTasks'];
   retries?: InngestFlowControlConfig['retries'];
@@ -262,6 +264,7 @@ export async function setupSharedTestInfrastructure({
     }),
     workflows: {
       [workflow.id]: workflow,
+      ...workflows,
     },
     ...(observability ? { observability } : {}),
     ...(backgroundTasks ? { backgroundTasks } : {}),

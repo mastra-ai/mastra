@@ -1,4 +1,4 @@
-import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
+import { FACTORY_ROLE_STAGES, needsApproval } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
@@ -35,13 +35,20 @@ const PREPARE_APPROVAL: CardMove = {
   stage: 'triage',
   awaitsHumanDecision: true,
 };
-const REVIEW: CardMove = { label: 'Review', role: 'review', stage: 'review' };
-const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review' };
+/** A pull request's own card is reviewed in Work's PR review, or in Reviewing on the Review board it was filed on. */
+function reviewMoves(item: MovableCard): { review: CardMove; reReview: CardMove } {
+  // Pull request cards with no board predate persisted boards and sit on Review.
+  const stage = (item.board ?? 'review') === 'review' ? 'review' : 'pr-review';
+  return {
+    review: { label: 'Review', role: 'review', stage },
+    reReview: { label: 'Re-review', role: 'review', stage },
+  };
+}
 
 /** Where a card's button can send it, likeliest first; the lane's rule decides what runs there. */
 export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMove[] {
   if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
-  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
+  if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [reviewMoves(item).reReview] : [];
   if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
   if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
   if (
@@ -52,7 +59,7 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   ) {
     return [INVESTIGATE, BUILD];
   }
-  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [REVIEW] : [];
+  return item.source === 'github-pr' || item.source === 'gitlab-pr' ? [reviewMoves(item).review] : [];
 }
 
 function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): boolean {
@@ -63,21 +70,21 @@ function openPullRequestInDone(item: MovableCard, columnStage: BoardStageId): bo
   );
 }
 
-function seatDepth(role: string): number {
-  return Object.keys(FACTORY_ROLE_STAGES).indexOf(role);
-}
+// PR review carries a pull request card's reviewer, after the builder's lanes.
+const WORKING_LANES: readonly FactoryRuleStage[] = [...Object.values(FACTORY_ROLE_STAGES), 'pr-review'];
 
-/** Resume re-enters the lane of the deepest seat the card has used, and lets that lane's rule dispatch. */
+/**
+ * Resume re-enters the deepest working lane a card parked in Intake has been in, and lets
+ * that lane's rule dispatch. Phases can share a session, so the lane comes from the card's
+ * stage history; a card that never had a session is a fresh arrival with nothing to resume.
+ */
 export function resumeStage(
   columnStage: BoardStageId,
-  sessions: Record<string, WorkItemSessionRef>,
+  item: { sessions: Record<string, WorkItemSessionRef>; stageHistory?: readonly { stage: string }[] },
 ): FactoryRuleStage | undefined {
-  if (columnStage !== 'intake') return undefined;
-  const deepest = Object.keys(sessions)
-    .filter(isFactoryRole)
-    .sort((left, right) => seatDepth(left) - seatDepth(right))
-    .at(-1);
-  return deepest === undefined ? undefined : FACTORY_ROLE_STAGES[deepest];
+  if (columnStage !== 'intake' || Object.keys(item.sessions).length === 0) return undefined;
+  const visited = new Set((item.stageHistory ?? []).map(entry => entry.stage));
+  return WORKING_LANES.filter(lane => visited.has(lane)).at(-1);
 }
 
 /**

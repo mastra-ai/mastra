@@ -67,7 +67,7 @@ describe('TraceThreadItemView', () => {
       const { queryClient } = renderWithProviders(<TraceThreadItemView traceId={TRACE_THREAD_ITEM_ID} />);
 
       expect(await screen.findByText('Plan a weekend in Paris')).not.toBeNull();
-      expect(screen.queryByPlaceholderText('Leave feedback...')).toBeNull();
+      expect(screen.queryByPlaceholderText('Leave feedback')).toBeNull();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
     });
   });

@@ -673,6 +673,17 @@ export interface ChannelConfig {
    */
   inlineLinks?: InlineLinkEntry[];
 
+  /**
+   * Total bytes of channel attachments the agent may store under
+   * `channel-attachments/` in its workspace. Binary attachments that need an
+   * authenticated download (e.g. Slack files) are saved there so workspace
+   * tools can open them. When saving a file would go over this limit, the
+   * agent gets the attachment URL instead and nothing is written.
+   *
+   * @default 104857600 (100 MiB)
+   */
+  maxAttachmentStorageBytes?: number;
+
   /** State adapter for deduplication, locking, and subscriptions. Defaults to in-memory. */
   state?: StateAdapter;
 

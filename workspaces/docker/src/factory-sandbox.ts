@@ -46,7 +46,13 @@ const SETTINGS_SCHEMA = {
   additionalProperties: false,
 } as const satisfies PublicSchema;
 
-export interface DockerFactorySandboxOptions extends Omit<DockerSandboxOptions, 'id' | 'template'> {
+export interface DockerFactorySandboxOptions extends Omit<DockerSandboxOptions, 'id' | 'template' | 'env'> {
+  /**
+   * Environment variables of every session sandbox. A function receives each
+   * session's context, so a credential can go to one factory's sessions only:
+   * `ctx => (ctx.factoryId === id ? { TOKEN } : {})`.
+   */
+  env?: Record<string, string> | ((ctx: FactorySandboxContext) => Record<string, string>);
   /** Options for the environment's repo template. */
   template?: Pick<DockerRepoTemplateOptions, 'buildEnv' | 'dockerOptions'>;
   /** Provider-side defaults used when a setting is unset. Never stored by factory. */
@@ -150,12 +156,13 @@ export class DockerFactorySandbox extends FactorySandbox<DockerFactorySandboxSet
   }
 
   create(ctx: FactorySandboxContext, settings: DockerFactorySandboxSettings): DockerSandbox {
-    const { defaults: _defaults, template: _template, image, ...options } = this.#options;
+    const { defaults: _defaults, template: _template, image, env, ...options } = this.#options;
     const template = this.template(ctx, settings);
     // `DockerSandbox` rejects `image` next to `template`; with a repository
     // the image has already become the template's base image.
     return new DockerSandbox({
       ...options,
+      ...(env ? { env: typeof env === 'function' ? env(ctx) : env } : {}),
       ...(template === undefined && image !== undefined ? { image } : {}),
       id: ctx.sessionId,
       template,

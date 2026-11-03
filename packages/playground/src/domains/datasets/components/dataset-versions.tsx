@@ -72,7 +72,7 @@ export function DatasetVersions({
         onValueChange(nextVersion === latestVersion ? null : nextVersion);
       }}
       placeholder={isLoading ? 'Loading versions...' : 'Select version'}
-      searchPlaceholder="Search versions..."
+      searchPlaceholder="Search versions"
       emptyText="No versions found."
       className={className}
       disabled={isLoading || options.length === 0}

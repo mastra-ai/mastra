@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
 import { useContext, useMemo } from 'react';
-import { useParams } from 'react-router';
+import { useLocation, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
@@ -12,6 +12,8 @@ import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
+import { opensWithPrompt } from '../hooks/useHandoffPrompt';
+import { readFailedDraft } from '../services/handoffFiles';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
 import { ChatModelsProvider } from './ChatModelsProvider';
@@ -42,6 +44,7 @@ export function ChatSessionConfigProvider({
   draftSessionId?: string;
 }) {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
+  const location = useLocation();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
   const isUserDraft = userScoped && Boolean(draftSessionId);
@@ -116,7 +119,10 @@ export function ChatSessionConfigProvider({
   // for an in-session mount. Distinct from `!sandboxReady`, which is also
   // false outside any session. Track the pending query (not `!sandboxReady`)
   // so a denied/missing session cannot keep the preparing loader up forever.
-  const sandboxPreparing = resolvingSession && !addressOverride;
+  // A thread opened with its first prompt is mid-create: it shows that prompt,
+  // not the preparing steps, and sends it once the session exists.
+  const openingWithPrompt = userScoped && opensWithPrompt(location.state);
+  const sandboxPreparing = resolvingSession && !addressOverride && !openingWithPrompt;
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one it becomes addressable as soon as
   // session metadata resolves — same as `resourceReady`.
@@ -174,7 +180,9 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { sessionId, resourceReady, baseUrl, sessionThreadId } = useChatSessionContext();
+  const { sessionId, resourceReady, baseUrl, sessionThreadId, draftSessionId } = useChatSessionContext();
+  const location = useLocation();
+  const failedDraft = readFailedDraft(location.state, draftSessionId);
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
     sessionId,
@@ -210,10 +218,10 @@ export function ChatSessionBoundary({
         isLoadingMoreHistory={messagesQuery.isLoadingMore}
         loadMoreHistory={messagesQuery.loadMore}
       >
-        <ChatModelsProvider>
-          <ChatThinkingProvider>
-            <ChatCommandsProvider>
-              <ComposerImagesProvider>{children}</ComposerImagesProvider>
+        <ChatModelsProvider initialDraftModelId={failedDraft?.modelId}>
+          <ChatThinkingProvider initialDraftThinkingLevel={failedDraft?.thinkingLevel}>
+            <ChatCommandsProvider initialDraft={failedDraft?.prompt}>
+              <ComposerImagesProvider initialImages={failedDraft?.files}>{children}</ComposerImagesProvider>
             </ChatCommandsProvider>
           </ChatThinkingProvider>
         </ChatModelsProvider>

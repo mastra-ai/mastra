@@ -248,6 +248,20 @@ describe('StreamErrorRetryProcessor', () => {
     expect(isBadRequestError({ statusCode: 400, message: 'Incorrect API key provided.' })).toBe(false);
   });
 
+  it('isBadRequestError never matches a 400 that rejects the model, since a retry fails identically', () => {
+    const message = "The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account.";
+    const error = new APICallError({
+      message,
+      url: 'https://chatgpt.com/backend-api/codex/responses',
+      requestBodyValues: {},
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { type: 'invalid_request_error', code: 'model_not_found', message } }),
+      isRetryable: false,
+    });
+
+    expect(isBadRequestError(error)).toBe(false);
+  });
+
   it('isBadRequestError returns false for non-400 errors', () => {
     const error = new APICallError({
       message: 'server failed',

@@ -26,8 +26,8 @@ const STRING_FORMATS: Record<string, (s: z.ZodString) => z.ZodString> = {
   uri: s => s.url(),
   url: s => s.url(),
   uuid: s => s.uuid(),
-  ipv4: s => s.ip({ version: 'v4' }),
-  ipv6: s => s.ip({ version: 'v6' }),
+  ipv4: s => s.ipv4(),
+  ipv6: s => s.ipv6(),
 };
 
 function buildString(schema: JsonSchema): z.ZodTypeAny {
@@ -75,10 +75,10 @@ function buildObject(schema: JsonSchema): z.ZodTypeAny {
   // collapse into an empty object — that would silently discard every entry.
   if (!properties || Object.keys(properties).length === 0) {
     if (additional && typeof additional === 'object') {
-      return z.record(convert(additional));
+      return z.record(z.string(), convert(additional));
     }
     if (additional === true) {
-      return z.record(z.any());
+      return z.record(z.string(), z.any());
     }
     return z.object({});
   }

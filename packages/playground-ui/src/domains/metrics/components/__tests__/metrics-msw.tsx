@@ -5,6 +5,7 @@ import type {
 } from '@mastra/client-js';
 import { planTraceAggregate, spanAggregateRequestSchema, traceAggregateRequestSchema } from '@mastra/core/storage';
 import type { NormalizedSpanAggregateRequest, NormalizedTraceAggregateRequest } from '@mastra/core/storage';
+import { fireEvent, screen } from '@testing-library/react';
 import { http, HttpResponse, delay } from 'msw';
 import type { ReactNode } from 'react';
 import { MetricsProvider } from '../../hooks/use-metrics';
@@ -218,4 +219,17 @@ export function renderInMetrics(ui: ReactNode, { scope }: { scope?: MetricsScope
       {ui}
     </MetricsProvider>,
   );
+}
+
+/** Opens a card's view menu from its title, which names the open view, and returns the views it offers. */
+export async function openViewMenu(current: string) {
+  fireEvent.click(screen.getByRole('button', { name: current }));
+  const views = await screen.findAllByRole('menuitemradio');
+  return views.map(view => view.textContent);
+}
+
+/** Switches a card to another view from the menu on its title. */
+export async function pickView(current: string, next: string) {
+  fireEvent.click(screen.getByRole('button', { name: current }));
+  fireEvent.click(await screen.findByRole('menuitemradio', { name: next }));
 }

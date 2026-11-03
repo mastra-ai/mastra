@@ -383,7 +383,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
         expect.fail('Expected error to be thrown');
       } catch (error) {
         expect((error as any)?.stack).toContain(
-          'Error: Invalid input data: \n- nested.value: Expected number, received string',
+          'Error: Invalid input data: \n- nested.value: Invalid input: expected number, received string',
         );
       }
     });
@@ -413,7 +413,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
         expect.fail('Expected error to be thrown');
       } catch (error) {
         expect((error as any)?.stack).toContain(
-          'Error: Invalid input data: \n- start: Expected string, received number',
+          'Error: Invalid input data: \n- start: Invalid input: expected string, received number',
         );
       }
     });
@@ -473,7 +473,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
         if (result.status === 'failed') {
           expect(result.error).toBeDefined();
           expect((result.error as any).message).toContain('Step input validation failed');
-          expect((result.error as any).message).toContain('start: Expected string, received number');
+          expect((result.error as any).message).toContain('start: Invalid input: expected string, received number');
         }
       },
     );
@@ -486,7 +486,7 @@ export function createSchemaValidationTests(ctx: WorkflowTestContext, registry?:
         expect(result.status).toBe('failed');
         if (result.status === 'failed') {
           expect(result.error).toBeDefined();
-          expect((result.error as any).message).toContain('Expected string, received number');
+          expect((result.error as any).message).toContain('Invalid input: expected string, received number');
         }
       },
     );

@@ -234,6 +234,26 @@ describe('starterPrompts', () => {
     expect(unblock).toMatchObject({ label: 'Failed runs', value: 1, action: 'Debug and retry it' });
   });
 
+  it('counts pull request cards on the Work board as pull requests, not as untriaged intake', () => {
+    const onWork = (number: number, stages: string[], metadata: Record<string, unknown> = {}) => ({
+      ...pullRequest(number, stages, metadata),
+      board: 'work',
+    });
+    const cards = [
+      onWork(1, ['intake'], { sourceCreatedAt: daysAgo(3) }),
+      onWork(2, ['pr-review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
+    ];
+
+    expect(promptFor('review', cards)).toMatchObject({ value: 3, unit: 'days' });
+    expect(promptFor('review', cards).prompt).toContain('Intake on the Work board');
+    expect(promptFor('feedback', cards)).toMatchObject({ value: 1 });
+    const stale = [onWork(3, ['intake'], { sourceCreatedAt: daysAgo(40) })];
+    expect(promptFor('stale', stale).prompt).toContain('Intake on the Work board');
+    const kinds = build(cards).map(({ kind }) => kind);
+    expect(kinds).not.toContain('triage');
+    expect(kinds).not.toContain('decide');
+  });
+
   it('fixes review feedback only on open Factory pull requests whose verdict is still current', () => {
     const feedback = promptFor('feedback', [
       pullRequest(1, ['review'], {

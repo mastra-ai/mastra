@@ -20,18 +20,35 @@ beforeEach(() => {
   server.use(http.get(`${TEST_BASE_URL}/api/tools`, () => HttpResponse.json(registeredTools)));
 });
 
-const LAYOUTS = [
-  ['data panel', (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
-  ['details', (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
-] as const;
-
-const toolsSection = () => {
-  const found = screen.getByText(/^Available tools \(\d+\)$/).closest('[data-slot="span-payload-section"]');
-  if (!(found instanceof HTMLElement)) throw new Error('Missing Tools section');
+const section = (selector: string, name: string) => () => {
+  const found = screen.getByText(name).closest(selector);
+  if (!(found instanceof HTMLElement)) throw new Error(`Missing ${name} section`);
   return found;
 };
 
-describe.each(LAYOUTS)('Tools section (%s)', (_layout, renderSpan) => {
+const LAYOUTS = [
+  {
+    layout: 'data panel',
+    // Tools sit in the Input tab, under the input they were offered with.
+    renderSpan: (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} activeTab="input" />,
+    toolsSection: () => screen.getByRole('region', { name: 'Available tools' }),
+    toolsHeading: (count: number) => `Available tools · ${count}`,
+    inputSection: () => screen.getByRole('tabpanel', { name: 'Input' }),
+  },
+  {
+    layout: 'details',
+    renderSpan: (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />,
+    toolsSection: () => {
+      const found = screen.getByText(/^Available tools \(\d+\)$/).closest('[data-slot="span-payload-section"]');
+      if (!(found instanceof HTMLElement)) throw new Error('Missing Tools section');
+      return found;
+    },
+    toolsHeading: (count: number) => `Available tools (${count})`,
+    inputSection: section('[data-slot="span-payload-section"]', 'Input'),
+  },
+] as const;
+
+describe.each(LAYOUTS)('Tools section ($layout)', ({ renderSpan, toolsSection, toolsHeading, inputSection }) => {
   const renderWithLinks = (span: SpanRecord) => {
     const view = renderWithProviders(<TestLinkProvider>{renderSpan(span)}</TestLinkProvider>);
     return view;
@@ -41,10 +58,10 @@ describe.each(LAYOUTS)('Tools section (%s)', (_layout, renderSpan) => {
     it('lists each tool with its description', () => {
       renderWithLinks(processorToolsSpan);
 
-      const section = toolsSection();
-      expect(within(section).getByText('Available tools (2)')).toBeTruthy();
-      expect(within(section).getByText('Suggests a recipe from what is in the fridge.')).toBeTruthy();
-      expect(within(section).getByText('Reads a workspace file.')).toBeTruthy();
+      const tools = toolsSection();
+      expect(tools.textContent).toContain(toolsHeading(2));
+      expect(within(tools).getByText('Suggests a recipe from what is in the fridge.')).toBeTruthy();
+      expect(within(tools).getByText('Reads a workspace file.')).toBeTruthy();
     });
 
     it('links a registered tool to its page, and leaves a tool the registry does not know as text', async () => {
@@ -59,9 +76,8 @@ describe.each(LAYOUTS)('Tools section (%s)', (_layout, renderSpan) => {
     it('leaves the tools and tool choice out of the input, since the Tools section shows them', () => {
       renderWithLinks(processorToolsSpan);
 
-      const input = screen.getByText('Input').closest('[data-slot="span-payload-section"]');
-      if (!(input instanceof HTMLElement)) throw new Error('Missing Input section');
-      expect(within(input).queryByText(/^Available tools/)).toBeNull();
+      const input = inputSection();
+      expect(within(input).queryByText(/^Available tools \(/)).toBeNull();
       expect(within(input).queryByText('Tool choice')).toBeNull();
       expect(within(input).getByText('What should I cook tonight?')).toBeTruthy();
     });
@@ -80,7 +96,7 @@ describe.each(LAYOUTS)('Tools section (%s)', (_layout, renderSpan) => {
     it('has no Tools section', () => {
       renderWithLinks(makeSpan({ spanId: 'span-no-tools', input: { prompt: 'hi' } }));
 
-      expect(screen.queryByText(/^Available tools \(\d+\)$/)).toBeNull();
+      expect(screen.queryByText(/^Available tools/)).toBeNull();
     });
   });
 });

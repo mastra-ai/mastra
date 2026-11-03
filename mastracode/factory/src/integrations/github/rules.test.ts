@@ -14,6 +14,7 @@ import {
   GithubRules,
   polledPullRequestEvent,
   reconciledClosedEvent,
+  reconciledIssueRelabeledEvent,
 } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
@@ -69,6 +70,7 @@ async function setup(permission: string | undefined, rules?: GithubRuleOverrides
     workItems,
     projects: seeded.projects,
     intake: seeded.intake,
+    boards: seeded.boards,
     project,
     projectRepository,
     github,
@@ -1262,7 +1264,7 @@ describe('GithubRules', () => {
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(card).toMatchObject({
       title: 'PR 17',
-      stages: ['review'],
+      stages: ['pr-review'],
       metadata: {
         author: 'pr-author',
         authorTrusted: true,
@@ -1319,7 +1321,7 @@ describe('GithubRules', () => {
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(card).toMatchObject({
       title: 'PR 17',
-      stages: ['review'],
+      stages: ['pr-review'],
       metadata: { author: 'pr-author', authorTrusted: true, factoryAuthored: false, autoStartCandidate: true },
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
@@ -3016,7 +3018,7 @@ describe('GithubRules', () => {
     await service.ingest(pullRequest('opened', 'delivery-two-cards'));
 
     // Both decisions are committed against the authoring item — that binding is
-    // what links the Review card to it — but they come from separate
+    // what links the pull request's card to it — but they come from separate
     // evaluations: the arrival under the delivery's own identity, and the item
     // under one suffixed with its id.
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
@@ -3028,7 +3030,7 @@ describe('GithubRules', () => {
           decision: expect.objectContaining({
             type: 'upsertLinkedWorkItem',
             source: 'github-pr',
-            board: 'review',
+            board: 'work',
             idempotencyKey: '7:delivery-two-cards:pull-request-intake',
           }),
         }),
@@ -3132,7 +3134,7 @@ describe('GithubRules', () => {
     ]);
     // The pull request still gets its own card, linked to that item.
     expect(cards.find(card => card.externalSource?.type === 'pull-request')).toMatchObject({
-      board: 'review',
+      board: 'work',
       stages: ['intake'],
       parentWorkItemId: work.item.id,
     });
@@ -3374,7 +3376,7 @@ describe('GithubRules label routes', () => {
 
   async function setupRoutes(
     route: string | undefined,
-    binding?: { board: string | null; sourceId?: 'id' | 'slug'; factoryProjectId?: string },
+    binding?: { board: string | null; sourceId?: 'id' | 'slug'; otherProject?: boolean },
   ) {
     const base = await setup('write');
     const intake = base.intake;
@@ -3389,11 +3391,14 @@ describe('GithubRules label routes', () => {
       });
     }
     if (binding) {
+      const factoryProjectId = binding.otherProject
+        ? (await base.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Project 2' } })).id
+        : base.project.id;
       await intake.setBinding({
         orgId: 'org-1',
         integrationId: 'github',
         sourceId: binding.sourceId === 'slug' ? 'acme/repo' : base.projectRepository.repositoryId,
-        factoryProjectId: binding.factoryProjectId ?? base.project.id,
+        factoryProjectId,
         board: binding.board,
         userId: 'user-1',
       });
@@ -3486,7 +3491,7 @@ describe('GithubRules label routes', () => {
   it.each([
     ['has no board', { board: null }],
     ['names a board that is not installed', { board: 'missing' }],
-    ['belongs to another project', { board: 'release', factoryProjectId: 'other-project' }],
+    ['belongs to another project', { board: 'release', otherProject: true }],
   ])('keeps the issue on Work › Intake when the binding %s', async (_, binding) => {
     const { service, workItems, project } = await setupRoutes(undefined, binding);
     await expect(service.ingest(issueOpened('binding-fallback'))).resolves.toEqual({ status: 'committed' });
@@ -3506,25 +3511,29 @@ describe('GithubRules label routes', () => {
     });
   });
 
-  it('leaves a card a run owns where it is but still records the labels', async () => {
-    const { service, workItems, project } = await setupRoutes('release');
-    const item = await createLinkedIssue(workItems, project.id);
-    await workItems.update({
-      orgId: 'org-1',
-      id: item.id,
-      userId: 'user-1',
-      patch: {
-        // Sessions are keyed by the phase's role (`plan`), not the phase id (`planning`).
-        sessions: { plan: { sessionId: 'session-1', branch: 'b', threadId: 'thread-1', startedBy: 'user-1' } },
-      },
-    });
-    await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'committed' });
-    expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
-      board: item.board,
-      stages: ['planning'],
-      metadata: { labels: ['release'] },
-    });
-  });
+  it.each(['work', 'plan'])(
+    'leaves a card a run owns (session %s) where it is but still records the labels',
+    async role => {
+      const { service, workItems, project } = await setupRoutes('release');
+      const item = await createLinkedIssue(workItems, project.id);
+      await workItems.update({
+        orgId: 'org-1',
+        id: item.id,
+        userId: 'user-1',
+        patch: {
+          // Sessions are keyed by the phase's context (`work`), not the phase id (`planning`);
+          // cards planned before Planning shared `work` keep the planner under `plan`.
+          sessions: { [role]: { sessionId: 'session-1', branch: 'b', threadId: 'thread-1', startedBy: 'user-1' } },
+        },
+      });
+      await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'committed' });
+      expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        board: item.board,
+        stages: ['planning'],
+        metadata: { labels: ['release'] },
+      });
+    },
+  );
 
   it('ignores label changes for issues without a card and label events on pull requests', async () => {
     const { service } = await setupRoutes('release');
@@ -3619,6 +3628,259 @@ describe('GithubRules label routes', () => {
     (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
     await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
   });
+});
+
+describe('GithubRules with intake routes', () => {
+  const TRUSTED = {
+    operator: 'AND',
+    conditions: [{ field: 'author.trusted', operator: 'equals', value: true }],
+  } as const;
+
+  /**
+   * GitHub rules, a real dispatcher and transition service, the old label routes and the new intake
+   * routes. The project's default routes are removed unless a test asks for them.
+   */
+  async function setupIntake(permission: string, { withDefaultRoute = false } = {}) {
+    const base = await setup(permission);
+    const boards = createBoardRegistry({ boards: [createTestBoard()] });
+    const configVersion = 'intake-routes';
+    await base.intake.setLabelRoute({
+      orgId: 'org-1',
+      factoryProjectId: base.project.id,
+      integrationId: 'github',
+      label: 'release',
+      board: 'release',
+      userId: 'user-1',
+    });
+    const service = new GithubRules({
+      github: base.github,
+      sourceControl: base.sourceControl,
+      integrationStorage: base.integrationStorage,
+      projects: base.projects,
+      storage: base.workItems,
+      boards,
+      configVersion,
+      intake: base.intake,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      transitionService: new FactoryTransitionService({ storage: base.workItems, configVersion, boards }),
+      storage: base.workItems,
+      boards,
+      intakeRoutes: base.boards,
+      isAutoRunEnabled: async () => false,
+      ownerId: 'worker-intake-routes',
+    });
+    const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
+    if (!withDefaultRoute) {
+      // Last first, so no delete moves (and re-revisions) a route still to delete.
+      for (const defaultRoute of (await base.boards.listIntakeRoutes(scope)).toReversed()) {
+        await base.boards.deleteIntakeRoute(scope, defaultRoute.id, { expectedRevision: defaultRoute.revision });
+      }
+    }
+    await base.boards.createIntakeRoute(
+      scope,
+      { name: 'Trusted to triage', when: TRUSTED, target: { boardKey: 'work', phaseKey: 'triage' } },
+      'admin',
+    );
+    const open = async (deliveryId: string, labels: string[] = []) => {
+      const ingress = issueOpened(deliveryId);
+      (ingress.payload.issue as Record<string, unknown>).labels = labels.map(name => ({ name }));
+      await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      const [item] = await base.workItems.list(scope);
+      return item;
+    };
+    /** GitHub reports a label change on issue 42: not a rule event, the label route re-files the card. */
+    const relabel = async (deliveryId: string, labels: string[]) => {
+      const ingress = issueOpened(deliveryId);
+      ingress.payload.action = 'labeled';
+      (ingress.payload.issue as Record<string, unknown>).labels = labels.map(name => ({ name }));
+      await service.ingest(ingress);
+      const [item] = await base.workItems.list(scope);
+      return item;
+    };
+    /** The reconcile sweep saw issue 42's labels drift and replays it as "opened". */
+    const replayLabels = async (labels: string[]) => {
+      const repository = { id: 10, fullName: 'acme/repo', installationId: 7 };
+      const state = { title: 'Issue 42', url: 'https://github.com/acme/repo/issues/42', state: 'open' as const, labels };
+      await expect(service.ingest(reconciledIssueRelabeledEvent(repository, 42, state))).resolves.toEqual({
+        status: 'committed',
+      });
+      await dispatcher.runOnce(new Date('2030-01-01T00:01:00Z'));
+      const [item] = await base.workItems.list(scope);
+      return item;
+    };
+    return { ...base, scope, open, relabel, replayLabels };
+  }
+
+  it("files a trusted maintainer's issue in Work › Triage, through Intake", async () => {
+    const { open } = await setupIntake('write');
+    const item = await open('trusted-routed');
+    expect(item).toMatchObject({ board: 'work', stages: ['triage'], metadata: { authorTrusted: true } });
+    expect(item?.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'triage']);
+  });
+
+  it("leaves an outside author's issue in Work › Intake", async () => {
+    const { open } = await setupIntake('read');
+    expect(await open('untrusted-unrouted')).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      metadata: { authorTrusted: false },
+    });
+  });
+
+  it('still files on the label route board when no intake route matches', async () => {
+    const { open } = await setupIntake('read');
+    expect(await open('label-routed', ['release'])).toMatchObject({ board: 'release', stages: ['queued'] });
+  });
+
+  it("keeps a routed card on the route's board when GitHub reports a label change", async () => {
+    const { open, relabel } = await setupIntake('write');
+    await open('routed-then-labeled');
+    expect(await relabel('labeled-release', ['release'])).toMatchObject({
+      board: 'work',
+      stages: ['triage'],
+      metadata: { labels: ['release'] },
+    });
+  });
+
+  it('still moves a card no intake route placed when GitHub reports a label change', async () => {
+    const { open, relabel } = await setupIntake('read');
+    await open('unrouted-then-labeled');
+    expect(await relabel('labeled-release', ['release'])).toMatchObject({ board: 'release', stages: ['queued'] });
+  });
+
+  it("keeps a routed card on the route's board when the reconcile sweep replays its labels", async () => {
+    const { open, replayLabels, workItems, scope } = await setupIntake('write');
+    await open('routed-then-replayed');
+    expect(await replayLabels(['release'])).toMatchObject({ board: 'work', stages: ['triage'] });
+    const decisions = await workItems.listDeferredDecisions(scope.orgId, scope.factoryProjectId);
+    const upserts = decisions.filter(decision => decision.decision.type === 'upsertLinkedWorkItem');
+    expect(upserts.map(decision => [decision.status, decision.lastError])).toEqual([
+      ['succeeded', null],
+      ['succeeded', null],
+    ]);
+  });
+
+  it('lets a matching intake route win over the label route', async () => {
+    const { open } = await setupIntake('write');
+    expect(await open('intake-over-label', ['release'])).toMatchObject({ board: 'work', stages: ['triage'] });
+  });
+
+  it("keeps an outside author's labelled issue in Work › Intake by the default route, through later label changes", async () => {
+    const { open, relabel } = await setupIntake('read', { withDefaultRoute: true });
+    expect(await open('outsider-labelled', ['release'])).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      metadata: { authorTrusted: false, intakeRouteId: expect.any(String) },
+    });
+    expect(await relabel('outsider-relabelled', ['release', 'bug'])).toMatchObject({ board: 'work', stages: ['intake'] });
+  });
+});
+
+describe('GithubRules with outside work in Intake', () => {
+  const AUTHORS = [
+    ['an outsider', { authorTrusted: false }],
+    ['an unstamped author', {}],
+    ['a maintainer', { authorTrusted: true }],
+  ] as const;
+
+  /** A card already on the board, real GitHub rules, and a dispatcher with auto-run on. */
+  async function setupCard(input: {
+    permission: string;
+    source: 'issue' | 'pull-request';
+    stage: string;
+    metadata: Record<string, unknown>;
+  }) {
+    const base = await setup(input.permission);
+    const configVersion = 'outside-work';
+    const boards = createBoardRegistry();
+    const number = input.source === 'issue' ? 42 : 17;
+    const card = (
+      await base.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: base.project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: input.source,
+            externalId: input.source === 'issue' ? `github-issue:${number}` : `github-pr:${number}`,
+            url: `https://github.com/acme/repo/${input.source === 'issue' ? 'issues' : 'pull'}/${number}`,
+          },
+          title: input.source === 'issue' ? 'Issue 42' : 'PR 17',
+          stages: [input.stage],
+          sessions: {},
+          metadata: input.metadata,
+        },
+      })
+    ).item;
+    const service = new GithubRules({
+      github: base.github,
+      sourceControl: base.sourceControl,
+      integrationStorage: base.integrationStorage,
+      projects: base.projects,
+      storage: base.workItems,
+      boards,
+      configVersion,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: base.workItems, configVersion, boards }),
+      storage: base.workItems,
+      boards,
+      intakeRoutes: base.boards,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-outside',
+    });
+    const deliver = async (ingress: Parameters<GithubRules['ingest']>[0]) => {
+      await service.ingest(ingress);
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      return {
+        decisions: await base.workItems.listDeferredDecisions('org-1', base.project.id),
+        item: await base.workItems.get({ orgId: 'org-1', id: card.id }),
+      };
+    };
+    return { deliver };
+  }
+
+  for (const [author, metadata] of AUTHORS) {
+    it(`starts nothing when a maintainer pushes to ${author}'s pull request resting in Intake`, async () => {
+      const { deliver } = await setupCard({ permission: 'write', source: 'pull-request', stage: 'intake', metadata });
+      const { decisions, item } = await deliver(pullRequest('synchronize', 'delivery-push'));
+      expect(decisions).toEqual([]);
+      expect(item?.stages).toEqual(['intake']);
+    });
+
+    it(`starts nothing when someone comments on ${author}'s issue resting in Intake`, async () => {
+      const { deliver } = await setupCard({ permission: 'read', source: 'issue', stage: 'intake', metadata });
+      const { decisions, item } = await deliver(issueComment('created', 'delivery-comment', { body: 'Any update?' }));
+      expect(decisions).toEqual([]);
+      expect(item?.stages).toEqual(['intake']);
+    });
+
+    // Accepted change: trust decides only where a card arrives. Once a person has moved a card out of
+    // Intake, later input on it runs as on any card, whoever wrote it.
+    it(`re-reviews ${author}'s pull request a person finished when a maintainer pushes`, async () => {
+      const { deliver } = await setupCard({ permission: 'write', source: 'pull-request', stage: 'done', metadata });
+      const { decisions, item } = await deliver(pullRequest('synchronize', 'delivery-push'));
+      const [transition] = decisions.filter(entry => entry.decision.type === 'transition');
+      expect(transition).toMatchObject({ status: 'succeeded', decision: { board: 'review', stage: 'review' } });
+      expect(item?.stages).toEqual(['review']);
+    });
+
+    it(`re-triages ${author}'s issue a person moved to Triage when someone comments`, async () => {
+      const { deliver } = await setupCard({ permission: 'read', source: 'issue', stage: 'triage', metadata });
+      const { decisions } = await deliver(issueComment('created', 'delivery-comment', { body: 'Any update?' }));
+      expect(decisions).toHaveLength(1);
+      expect(decisions[0]).toMatchObject({
+        decision: { type: 'invokeSkill', skillName: 'factory-triage' },
+        // Not parked for a person: the dispatcher tries to start it (and retries, as this harness has no sessions).
+        status: 'retry',
+      });
+    });
+  }
 });
 
 describe('polledPullRequestEvent', () => {
@@ -4755,5 +5017,356 @@ describe('GithubRules push hand-off', () => {
       configVersion: 'v1',
     });
     await expect(withoutHook.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
+  });
+});
+
+/** Where a pull request's own card is reviewed: Work's PR review, or Review's Reviewing. */
+function reviewPhase(board: 'work' | 'review'): 'pr-review' | 'review' {
+  return board === 'work' ? 'pr-review' : 'review';
+}
+
+describe('pull request cards on the Work board', () => {
+  /** Pass `withRoutes` to place arrivals by the default intake routes every project starts with. */
+  async function workBoardHarness(permission: string | undefined, { withRoutes = false } = {}) {
+    const harness = await setup(permission);
+    const configVersion = 'factory-config-v1';
+    const service = new GithubRules({
+      github: harness.github,
+      sourceControl: harness.sourceControl,
+      integrationStorage: harness.integrationStorage,
+      projects: harness.projects,
+      storage: harness.workItems,
+      boards: createBoardRegistry(),
+      configVersion,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({
+        storage: harness.workItems,
+        configVersion,
+        boards: createBoardRegistry(),
+      }),
+      storage: harness.workItems,
+      boards: createBoardRegistry(),
+      ...(withRoutes ? { intakeRoutes: harness.boards } : {}),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+    let tick = 0;
+    const dispatch = async () => {
+      for (let pass = 0; pass < 2; pass++) {
+        await dispatcher.runOnce(new Date(Date.parse('2030-01-01T00:00:00Z') + 1000 * tick++));
+      }
+    };
+    const cards = () => harness.workItems.list({ orgId: 'org-1', factoryProjectId: harness.project.id });
+    const decisions = () => harness.workItems.listDeferredDecisions('org-1', harness.project.id);
+    return { ...harness, service, dispatch, cards, decisions };
+  }
+
+  async function authoredPullRequest(harness: Awaited<ReturnType<typeof workBoardHarness>>) {
+    const work = await harness.workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: harness.project.id,
+      input: {
+        board: 'work',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await harness.integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: harness.project.id, workItemId: work.item.id },
+    });
+    await harness.service.ingest(pullRequest('opened', 'delivery-open'));
+    await harness.dispatch();
+    const pullRequestCard = (await harness.cards()).find(card => card.externalSource?.type === 'pull-request')!;
+    return { workId: work.item.id, pullRequestCard };
+  }
+
+  async function lonePullRequestCard(
+    harness: Awaited<ReturnType<typeof workBoardHarness>>,
+    board: 'work' | 'review',
+    stage: string,
+    metadata: Record<string, unknown> = {},
+  ) {
+    return (
+      await harness.workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: harness.project.id,
+        input: {
+          board,
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github-pr:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          title: 'PR 17',
+          stages: [stage],
+          sessions: {},
+          metadata: { authorTrusted: true, ...metadata },
+        },
+      })
+    ).item;
+  }
+
+  it.each([
+    ['work', 'intake'],
+    ['review', 'intake'],
+    ['review', 'review'],
+    ['review', 'done'],
+  ] as const)(
+    'refiles a pull request opened again onto the %s card it already has in %s, leaving it there',
+    async (board, stage) => {
+      const harness = await workBoardHarness('write');
+      const card = await lonePullRequestCard(harness, board, stage);
+
+      // A feed listing or backlog ingest re-emits "opened" under a new delivery id.
+      await harness.service.ingest(pullRequest('opened', 'poll:10:pull-request:17'));
+      await harness.dispatch();
+
+      const cards = await harness.cards();
+      expect(cards).toHaveLength(1);
+      expect(cards[0]).toMatchObject({ id: card.id, board, stages: [stage] });
+      const upserts = (await harness.decisions()).filter(entry => entry.decision.type === 'upsertLinkedWorkItem');
+      expect(upserts.map(entry => entry.status)).toEqual(['succeeded']);
+    },
+  );
+
+  it('files an untrusted pull request in Work intake without starting a review', async () => {
+    const harness = await workBoardHarness('read');
+    await expect(harness.service.ingest(pullRequest('opened', 'delivery-open'))).resolves.toEqual({
+      status: 'committed',
+    });
+    await harness.dispatch();
+
+    const [card, ...rest] = await harness.cards();
+    expect(rest).toEqual([]);
+    expect(card).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      metadata: { authorTrusted: false, factoryAuthored: false, autoStartCandidate: false },
+    });
+    expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+  });
+
+  it("files a maintainer's pull request straight into PR review by the default routes, and reviews it", async () => {
+    const harness = await workBoardHarness('write', { withRoutes: true });
+    await harness.service.ingest(pullRequest('opened', 'delivery-open'));
+    await harness.dispatch();
+
+    const [card, ...rest] = await harness.cards();
+    expect(rest).toEqual([]);
+    expect(card).toMatchObject({ board: 'work', stages: ['pr-review'], metadata: { authorTrusted: true } });
+    expect(card?.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'pr-review']);
+    expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([
+      expect.objectContaining({ decision: expect.objectContaining({ role: 'review', skillName: 'factory-review' }) }),
+    ]);
+  });
+
+  it("leaves an outside author's pull request in Intake by the default routes, without starting a review", async () => {
+    const harness = await workBoardHarness('read', { withRoutes: true });
+    await harness.service.ingest(pullRequest('opened', 'delivery-open'));
+    await harness.dispatch();
+
+    expect(await harness.cards()).toEqual([
+      expect.objectContaining({ board: 'work', stages: ['intake'], metadata: expect.objectContaining({ authorTrusted: false }) }),
+    ]);
+    expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+  });
+
+  it('leaves a Factory-authored pull request card in Intake beside its authoring card, which the routes never place', async () => {
+    const harness = await workBoardHarness('read', { withRoutes: true });
+    const { workId, pullRequestCard } = await authoredPullRequest(harness);
+
+    // Filed by the authoring card's own evaluation, so no intake route places it: the authoring
+    // card goes out for review instead, and the pull request is not reviewed twice.
+    expect(pullRequestCard).toMatchObject({ board: 'work', stages: ['intake'], parentWorkItemId: workId });
+    expect(pullRequestCard.metadata).not.toHaveProperty('intakeRouteId');
+    expect((await harness.decisions()).filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+  });
+
+  it('files a Factory-authored pull request on Work beside the card that authored it, and closes both on merge', async () => {
+    const harness = await workBoardHarness('read');
+    const { workId, pullRequestCard } = await authoredPullRequest(harness);
+
+    expect(pullRequestCard).toMatchObject({
+      board: 'work',
+      stages: ['intake'],
+      parentWorkItemId: workId,
+      metadata: { factoryAuthored: true },
+    });
+    expect(await harness.workItems.get({ orgId: 'org-1', id: workId })).toMatchObject({
+      board: 'work',
+      metadata: { openPullRequestNumber: 17 },
+    });
+    // The authoring card is the one sent out for review; the pull request's own
+    // card waits in intake, and neither starts a review on its own.
+    const opened = await harness.decisions();
+    expect(opened.filter(entry => entry.decision.type === 'transition')).toEqual([
+      expect.objectContaining({
+        workItemId: workId,
+        decision: expect.objectContaining({ board: 'work', stage: 'review' }),
+      }),
+    ]);
+    expect(opened.filter(entry => entry.decision.type === 'invokeSkill')).toEqual([]);
+
+    await harness.service.ingest(pullRequest('closed', 'delivery-merge', true));
+    await harness.dispatch();
+
+    const cards = await harness.cards();
+    expect(cards.find(card => card.id === workId)).toMatchObject({ board: 'work', stages: ['done'] });
+    expect(cards.find(card => card.id === pullRequestCard.id)).toMatchObject({ board: 'work', stages: ['done'] });
+  });
+
+  it('cancels the pull request card and clears the authoring mark when the pull request closes unmerged', async () => {
+    const harness = await workBoardHarness('read');
+    const { workId, pullRequestCard } = await authoredPullRequest(harness);
+
+    await harness.service.ingest(pullRequest('closed', 'delivery-close'));
+    await harness.dispatch();
+
+    const cards = await harness.cards();
+    expect(cards.find(card => card.id === pullRequestCard.id)).toMatchObject({ board: 'work', stages: ['canceled'] });
+    const authoring = cards.find(card => card.id === workId);
+    expect(authoring).toMatchObject({ board: 'work' });
+    expect(authoring?.stages).not.toEqual(['canceled']);
+    expect(authoring?.metadata?.openPullRequestNumber).toBeNull();
+  });
+
+  it('sends a comment on the pull request to the authoring card, never to the pull request card', async () => {
+    const harness = await workBoardHarness('read');
+    const { workId, pullRequestCard } = await authoredPullRequest(harness);
+
+    await harness.service.ingest(
+      pullRequestComment('delivery-feedback', { sender: 'reviewer', body: 'This needs a null check.' }),
+    );
+
+    const messages = (await harness.decisions()).filter(entry => entry.decision.type === 'sendMessage');
+    expect(messages).toEqual([
+      expect.objectContaining({
+        workItemId: workId,
+        decision: expect.objectContaining({ role: 'work', priority: 'high' }),
+      }),
+    ]);
+    expect(messages.some(entry => entry.workItemId === pullRequestCard.id)).toBe(false);
+  });
+
+  it.each(['work', 'review'] as const)(
+    'ignores a comment on a pull request whose only card is on the %s board',
+    async board => {
+      const harness = await workBoardHarness('read');
+      await lonePullRequestCard(harness, board, reviewPhase(board));
+
+      await harness.service.ingest(
+        pullRequestComment('delivery-feedback', { sender: 'reviewer', body: 'This needs a null check.' }),
+      );
+
+      expect((await harness.decisions()).filter(entry => entry.decision.type === 'sendMessage')).toEqual([]);
+    },
+  );
+
+  it.each(['work', 'review'] as const)('re-reviews a push to a reviewed pull request card on %s', async board => {
+    const harness = await workBoardHarness('write');
+    const card = await lonePullRequestCard(harness, board, reviewPhase(board), { reviewVerdict: 'approve' });
+
+    await harness.service.ingest(pullRequest('synchronize', 'delivery-push'));
+    await harness.dispatch();
+
+    expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
+      board,
+      stages: [reviewPhase(board)],
+    });
+    const decisions = await harness.decisions();
+    expect(decisions.find(entry => entry.decision.type === 'transition')?.decision).toMatchObject({
+      board,
+      stage: reviewPhase(board),
+      reenter: true,
+    });
+    expect(decisions.find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
+      role: 'review',
+      skillName: 'factory-rereview',
+      cancelInFlight: true,
+    });
+  });
+
+  it.each(['work', 'review'] as const)('does not re-review a push to a %s pull request card in intake', async board => {
+    const harness = await workBoardHarness('write');
+    const card = await lonePullRequestCard(harness, board, 'intake');
+
+    await harness.service.ingest(pullRequest('synchronize', 'delivery-push'));
+    await harness.dispatch();
+
+    expect(await harness.decisions()).toEqual([]);
+    expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({ board, stages: ['intake'] });
+  });
+
+  it.each(['work', 'review'] as const)(
+    'moves a merged pull request card to Done on %s, and a closed one to Canceled',
+    async board => {
+      const merged = await workBoardHarness('read');
+      const mergedCard = await lonePullRequestCard(merged, board, reviewPhase(board));
+      await merged.service.ingest(pullRequest('closed', 'delivery-merge', true));
+      await merged.dispatch();
+      expect(await merged.workItems.get({ orgId: 'org-1', id: mergedCard.id })).toMatchObject({
+        board,
+        stages: ['done'],
+      });
+
+      const closed = await workBoardHarness('read');
+      const closedCard = await lonePullRequestCard(closed, board, 'intake');
+      await closed.service.ingest(pullRequest('closed', 'delivery-close'));
+      await closed.dispatch();
+      expect(await closed.workItems.get({ orgId: 'org-1', id: closedCard.id })).toMatchObject({
+        board,
+        stages: ['canceled'],
+      });
+    },
+  );
+
+  it.each(['work', 'review'] as const)(
+    "re-enters review when Factory's review command lands on a reviewed %s card",
+    async board => {
+      const harness = await workBoardHarness('write');
+      const card = await lonePullRequestCard(harness, board, 'done', { reviewVerdict: 'approve' });
+
+      await harness.service.ingest(pullRequestComment('delivery-command'));
+      await harness.dispatch();
+
+      expect(await harness.workItems.get({ orgId: 'org-1', id: card.id })).toMatchObject({
+        board,
+        stages: [reviewPhase(board)],
+      });
+      expect(
+        (await harness.decisions()).find(entry => entry.decision.type === 'invokeSkill')?.decision,
+      ).toMatchObject({ role: 'review', skillName: 'factory-rereview' });
+    },
+  );
+
+  it("files a pull request a maintainer asks Factory to review straight into Work's PR review phase", async () => {
+    const harness = await workBoardHarness('write');
+
+    await harness.service.ingest(pullRequestComment('delivery-command'));
+    await harness.dispatch();
+
+    const [card] = await harness.cards();
+    expect(card).toMatchObject({ board: 'work', stages: ['pr-review'] });
+    expect((await harness.decisions()).find(entry => entry.decision.type === 'invokeSkill')?.decision).toMatchObject({
+      role: 'review',
+      skillName: 'factory-review',
+    });
   });
 });
