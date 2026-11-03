@@ -5068,7 +5068,7 @@ describe('plain Agent resumable streams', () => {
     expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.FINISH]);
   });
 
-  it('ends the observation when a plain Agent run suspends for approval', async () => {
+  it('keeps observing a plain Agent run across an approval suspension until it finishes', async () => {
     const pubsub = new EventEmitterPubSub();
     const agent = new Agent({
       id: 'plain-agent',
@@ -5100,22 +5100,43 @@ describe('plain Agent resumable streams', () => {
     } as any)) as ReadableStream<any>;
     const reader = stream.getReader();
     const events: any[] = [];
+    const reading = (async () => {
+      while (true) {
+        const result = await reader.read();
+        if (result.done) return;
+        events.push(result.value);
+      }
+    })();
+    let ended = false;
+    void reading.finally(() => {
+      ended = true;
+    });
+    // Suspension is an event, not the end of the run.
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(ended).toBe(false);
+    expect(events.map(event => event.type)).toEqual(['tool-call-approval']);
+
+    // The approved run resumes on the same topic.
+    await bus.publish(AGENT_STREAM_TOPIC(runId), {
+      runId,
+      type: AgentStreamEventTypes.CHUNK,
+      data: { type: 'text-delta', runId, payload: { id: 't1', text: 'Done.' } },
+    });
+    await bus.publish(AGENT_STREAM_TOPIC(runId), {
+      runId,
+      type: AgentStreamEventTypes.FINISH,
+      data: { output: { text: 'Done.', steps: [] }, stepResult: { reason: 'stop' } },
+    });
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
-      (async () => {
-        while (true) {
-          const result = await reader.read();
-          if (result.done) return;
-          events.push(result.value);
-        }
-      })(),
+      reading,
       new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error('Observation did not close after the run suspended')), 1_000);
+        timer = setTimeout(() => reject(new Error('Observation did not close after the resumed run finished')), 1_000);
       }),
     ]).finally(() => clearTimeout(timer));
 
-    // The route sends public chunk frames; the suspended envelope ends the stream without a frame of its own.
-    expect(events.map(event => event.type)).toEqual(['tool-call-approval']);
+    // The route sends public chunk frames; the suspended envelope has no frame of its own.
+    expect(events.map(event => event.type)).toEqual(['tool-call-approval', 'text-delta', 'finish']);
   });
 
   describe('observe authorization', () => {

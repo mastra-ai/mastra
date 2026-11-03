@@ -12409,8 +12409,9 @@ export class Agent<
       onFinish: options?.onFinish,
       onError: options?.onError ? ({ error }) => options.onError!({ error }) : undefined,
       onSuspended: options?.onSuspended,
-      // A plain agent publisher ends its stream at suspension, so the observation ends here too.
-      closeOnSuspend: true,
+      // Suspension is an event, not the end: the resumed run publishes on the
+      // same topic, so the observation follows it to its finish (as for
+      // DurableAgent). Detach to stop observing a parked run.
       logger: this.logger,
     });
     const { output, detach } = stream;

@@ -185,12 +185,13 @@ describe('Agent streams option', () => {
       expect(tail.types.at(-1)).toBe('finish');
     });
 
-    it('ends when the observed run suspends for tool approval', async () => {
+    it('stays open across a tool-approval suspension and follows the approved run to its finish', async () => {
       const pubsub = new RecordingPubSub();
       getMock().on(
-        { endpoint: 'chat' },
+        { endpoint: 'chat', hasToolResult: false },
         { toolCalls: [{ id: 'call-1', name: 'lookup', arguments: JSON.stringify({ q: 'x' }) }] },
       );
+      getMock().on({ endpoint: 'chat', hasToolResult: true }, { content: 'Looked it up.' });
       const lookup = createTool({
         id: 'lookup',
         description: 'Look something up.',
@@ -207,16 +208,28 @@ describe('Agent streams option', () => {
 
       const onSuspended = vi.fn();
       const observed = await agent.observe(output.runId, { onSuspended });
+      let ended = false;
+      const collecting = collect(observed.fullStream).finally(() => {
+        ended = true;
+      });
+      // Suspension is an event, not the end of the run.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      expect(ended).toBe(false);
+      expect(onSuspended).toHaveBeenCalledWith(expect.objectContaining({ type: 'approval', toolName: 'lookup' }));
+
+      const resumed = await agent.approveToolCall({ runId: output.runId, toolCallId: 'call-1' });
+      await resumed.consumeStream();
       let timer: ReturnType<typeof setTimeout> | undefined;
-      const { types } = await Promise.race([
-        collect(observed.fullStream),
+      const { types, text } = await Promise.race([
+        collecting,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error('observe() did not end after the run suspended')), 2_000);
+          timer = setTimeout(() => reject(new Error('observe() did not follow the approved run to its finish')), 5_000);
         }),
       ]).finally(() => clearTimeout(timer));
       expect(types).toContain('tool-call-approval');
-      expect(types).not.toContain('finish');
-      expect(onSuspended).toHaveBeenCalledWith(expect.objectContaining({ type: 'approval', toolName: 'lookup' }));
+      expect(types.at(-1)).toBe('finish');
+      expect(text).toBe('Looked it up.');
+      expect(onSuspended).toHaveBeenCalledTimes(1);
     });
 
     it('keeps throwing for a standalone agent without streams', async () => {

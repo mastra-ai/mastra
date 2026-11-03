@@ -3079,11 +3079,9 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
                   for (const chunk of toAgentStreamChunks(event)) {
                     controller.enqueue(chunk);
                   }
-                  // A plain agent publisher ends its stream at suspension; the resume is
-                  // a new stream that clients observe again. Durable observers stay
-                  // attached across suspension and end via onComplete.
-                  const suspendedPlainRun = type === 'suspended' && !durableAgent;
-                  if (type === 'finish' || event.type === 'error' || type === 'abort' || suspendedPlainRun) {
+                  // Suspension is an event, not the end: a resumed run publishes on the
+                  // same topic, so observers of every agent stay attached through it.
+                  if (type === 'finish' || event.type === 'error' || type === 'abort') {
                     cleanup(controller);
                   } else {
                     resetIdleTimer(controller);
