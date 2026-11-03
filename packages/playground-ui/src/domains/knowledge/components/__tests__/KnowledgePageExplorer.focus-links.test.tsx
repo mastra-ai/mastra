@@ -159,13 +159,34 @@ describe('KnowledgePageExplorer focused page links to pages the graph has not lo
     expect(drawnIds(container)).not.toContain('other-out');
   });
 
-  it(`fetches at most ${FOCUS_LINK_CAP} ends each way and counts the rest as more`, () => {
+  it(`draws at most ${FOCUS_LINK_CAP} links each way and counts the rest as more`, () => {
     const many = Array.from({ length: FOCUS_LINK_CAP + 5 }, (_, index) => `ref-${index}`);
     const heavy = page('ward', 'authors', { body: many.map(ref => `[[${ref}]]`).join(' ') });
     const requested: string[][] = [];
     const reachableMany = Object.fromEntries(many.map(ref => [ref, page(`id-${ref}`, 'blog')]));
     render({ wardPage: heavy, reachable: reachableMany, requested });
-    expect((requested[requested.length - 1] ?? []).length).toBe(FOCUS_LINK_CAP);
+    expect((requested[requested.length - 1] ?? []).length).toBe(FOCUS_LINK_CAP + 5);
     expect(screen.getByText(/\+5 more links of this page not drawn \(0 in, 5 out\)/)).toBeTruthy();
+  });
+
+  it('counts a page linked by both a note and the body once, not once per kind', () => {
+    const targets = Array.from({ length: 12 }, (_, index) => page(`t${index}`, 'blog', { key: `post-${index}` }));
+    const heavy = page('ward', 'authors', { body: targets.map(t => `[[site:mastra#blog/${t.key}]]`).join(' ') });
+    const both = Object.fromEntries(
+      targets.flatMap(t => [[t.id, t] as const, [`site:mastra#blog/${t.key}`, t] as const]),
+    );
+    const { container } = render({
+      wardPage: heavy,
+      notes: [
+        note(
+          'n1',
+          'ward',
+          targets.map(t => t.id),
+        ),
+      ],
+      reachable: both,
+    });
+    expect(drawnIds(container)).toEqual(expect.arrayContaining(targets.map(t => t.id)));
+    expect(container.textContent ?? '').not.toMatch(/not drawn/);
   });
 });

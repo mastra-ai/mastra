@@ -108,6 +108,8 @@ export interface KnowledgePageExplorerProps {
 const MIN_SEARCH_LENGTH = 2;
 /** Links of the selected page drawn at most in each direction; the rest are counted. */
 export const FOCUS_LINK_CAP = 20;
+/** Keys fetched per direction: a page reached by a note and by the body is two keys but one link, so this is twice the cap. */
+const FOCUS_LINK_FETCH_CAP = FOCUS_LINK_CAP * 2;
 
 function edgeKey(edge: KnowledgePageEdge) {
   return `${edge.kind}\u0000${edge.source}\u0000${edge.target}`;
@@ -135,20 +137,27 @@ function visibleLinks(
   if (all) {
     for (const [key, edge] of unique) if (drawn.has(edge.source) && drawn.has(edge.target)) shown.add(key);
   } else if (selectedId) {
+    // The cap counts pages linked, not lines: a page reached by a note and by the body is one link.
+    const admitted = new Set<string>();
+    const over = new Set<string>();
     let ins = 0;
     let outs = 0;
     for (const [key, edge] of unique) {
       if (!drawn.has(edge.source) || !drawn.has(edge.target)) continue;
       const side = edge.source === selectedId ? 'out' : edge.target === selectedId ? 'in' : null;
       if (!side) continue;
-      const count = side === 'out' ? outs : ins;
-      if (count >= FOCUS_LINK_CAP) {
-        more[side]++;
-        continue;
+      const pair = `${edge.source}\u0000${edge.target}`;
+      if (!admitted.has(pair) && !over.has(pair)) {
+        if ((side === 'out' ? outs : ins) >= FOCUS_LINK_CAP) {
+          over.add(pair);
+          more[side]++;
+        } else {
+          admitted.add(pair);
+          if (side === 'out') outs++;
+          else ins++;
+        }
       }
-      shown.add(key);
-      if (side === 'out') outs++;
-      else ins++;
+      if (admitted.has(pair)) shown.add(key);
     }
   }
   const drawnPairs = new Set(
@@ -670,7 +679,7 @@ export function KnowledgePageExplorer({
 
   // The selected page's own links: its notes' mentions and `[[links]]` in its body going out, notes
   // elsewhere that mention it coming in. Each end is a page id or a ref; the ends the explorer holds
-  // resolve at once, the rest are fetched (up to FOCUS_LINK_CAP each way, outranking sibling dots).
+  // resolve at once, the rest are fetched (up to twice FOCUS_LINK_CAP keys each way, outranking sibling dots).
   const linkEnds = useMemo(() => {
     const detail = selected.data;
     if (!detail || detail.page.id !== selectedPageId) return null;
@@ -686,7 +695,7 @@ export function KnowledgePageExplorer({
     const lookup = (key: string) => known.get(key) ?? index.resolve(key);
     const missing = (keys: string[]) => [...new Set(keys.filter(key => !lookup(key)))];
     const resolvedCount = (keys: string[]) => new Set(keys.flatMap(key => lookup(key)?.id ?? [])).size;
-    const room = (keys: string[]) => Math.max(0, FOCUS_LINK_CAP - resolvedCount(keys));
+    const room = (keys: string[]) => Math.max(0, FOCUS_LINK_FETCH_CAP - resolvedCount(keys));
     const wantOut = missing(out);
     const wantIn = missing(into);
     return {
